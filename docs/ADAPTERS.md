@@ -28,6 +28,11 @@ stop()
 send(message)
 ```
 
+Channel adapters emit `InboundMessage` and accept `OutboundMessage`. The two
+shapes intentionally differ: inbound native identity and sender are
+observations, while outbound `deliveryId` is a delivery request identity.
+Adapters populate a native message ID only in `DeliveryReceipt`.
+
 Optional behavior is advertised by capabilities:
 
 ```text

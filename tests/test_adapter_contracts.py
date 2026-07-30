@@ -11,8 +11,8 @@ from imagent.applications import (
     ZenApplicationAdapter,
 )
 from imagent.contracts import (
-    ChannelMessage,
     ConversationRef,
+    InboundMessage,
     ProjectMode,
     TextContent,
 )
@@ -29,7 +29,7 @@ class ChannelAdapterContractKitTests(unittest.IsolatedAsyncioTestCase):
         adapter = FakeChannelAdapter()
         report = await verify_channel_adapter(
             adapter,
-            ChannelMessage(
+            InboundMessage(
                 message_id="message-1",
                 conversation_ref=ConversationRef("fake-channel", "direct-1"),
                 sender="user-1",

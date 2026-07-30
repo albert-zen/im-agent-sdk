@@ -28,6 +28,7 @@ from imagent.contracts import (
     ProjectRef,
     ThreadRef,
 )
+from imagent.controllers import SlashController
 from imagent.gateway import ImAgentGateway
 
 
@@ -344,6 +345,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             channels=[channel],
             applications=[application],
             bindings=bindings,
+            controller=SlashController(),
         )
 
         await gateway.start()
@@ -447,6 +449,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             channels=[channel],
             applications=[application],
             bindings=bindings,
+            controller=SlashController(),
         )
 
         await gateway.start()
@@ -604,6 +607,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             channels=[channel],
             applications=[application],
             bindings=InMemoryBindingRepository(),
+            controller=SlashController(),
         )
 
         await gateway.start()

@@ -1,0 +1,182 @@
+from __future__ import annotations
+
+import unittest
+from datetime import UTC, datetime
+
+from imagent.bindings import InMemoryBindingRepository
+from imagent.contracts import (
+    ApplicationRef,
+    ConversationBound,
+    ConversationRef,
+    InboundMessage,
+    OutboundMessage,
+    ProjectMode,
+    SelectApplication,
+    TextContent,
+    TextFormat,
+)
+from imagent.controllers import SlashController
+from imagent.gateway import ImAgentGateway
+from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
+
+
+class ButtonController:
+    async def handle(self, message, actions):
+        if message.metadata.get("interaction") != "select-second-app":
+            return None
+        result = await actions.execute_gateway(
+            SelectApplication(
+                operation_id=f"button:{message.message_id}:application.select",
+                conversation_ref=message.conversation_ref,
+                actor=message.sender,
+                application_ref=ApplicationRef("fake-agent-2"),
+                created_at=message.created_at,
+            )
+        )
+        assert isinstance(result, ConversationBound)
+        return (
+            OutboundMessage(
+                delivery_id=f"button:{message.message_id}:response",
+                conversation_ref=message.conversation_ref,
+                content=(TextContent("Selected from button", TextFormat.MARKDOWN),),
+                created_at=datetime.now(UTC),
+                reply_to=message.message_id,
+            ),
+        )
+
+
+class OptionalControllerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_gateway_does_not_parse_slash_when_controller_is_omitted(self) -> None:
+        channel = FakeChannelAdapter()
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=InMemoryBindingRepository(),
+        )
+        await gateway.start()
+        try:
+            await channel.on_message(_message("/help"))
+        finally:
+            await gateway.stop()
+
+        self.assertEqual(len(application._inputs), 1)
+        agent_input = application._inputs[0][1]
+        self.assertEqual(agent_input.content, (TextContent("/help"),))
+        self.assertEqual(channel.sent, [])
+
+    async def test_default_slash_controller_consumes_common_command(self) -> None:
+        channel = FakeChannelAdapter()
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=InMemoryBindingRepository(),
+            controller=SlashController(),
+        )
+        await gateway.start()
+        try:
+            await channel.on_message(_message("/help"))
+        finally:
+            await gateway.stop()
+
+        self.assertEqual(application._inputs, [])
+        self.assertEqual(len(channel.sent), 1)
+        text = channel.sent[0].content[0]
+        self.assertIsInstance(text, TextContent)
+        assert isinstance(text, TextContent)
+        self.assertIn("## IM Agent commands", text.text)
+
+    async def test_non_slash_controller_invokes_same_typed_gateway_action(self) -> None:
+        channel = FakeChannelAdapter()
+        bindings = InMemoryBindingRepository()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[
+                FakeAgentApplicationAdapter("fake-agent-1", ProjectMode.FLAT),
+                FakeAgentApplicationAdapter("fake-agent-2", ProjectMode.FLAT),
+            ],
+            bindings=bindings,
+            controller=ButtonController(),
+        )
+        await gateway.start()
+        try:
+            await channel.on_message(
+                _message(
+                    "button payload",
+                    metadata={"interaction": "select-second-app"},
+                )
+            )
+        finally:
+            await gateway.stop()
+
+        binding = await bindings.get(ConversationRef("fake-channel", "conversation-1"))
+        self.assertIsNotNone(binding)
+        assert binding is not None
+        self.assertEqual(binding.application_ref, ApplicationRef("fake-agent-2"))
+        self.assertEqual(channel.sent[0].delivery_id, "button:message-1:response")
+
+    async def test_default_controller_preserves_common_command_workflow(self) -> None:
+        channel = FakeChannelAdapter()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[FakeAgentApplicationAdapter()],
+            bindings=InMemoryBindingRepository(),
+            controller=SlashController(),
+        )
+        commands = (
+            "/apps",
+            "/app 1",
+            "/projects",
+            "/use 1",
+            "/new Controller task",
+            "/status",
+            "/threads",
+            "/pick 1",
+            "/delete",
+        )
+        await gateway.start()
+        try:
+            for index, command in enumerate(commands, start=1):
+                await channel.on_message(_message(command, message_id=f"command-{index}"))
+        finally:
+            await gateway.stop()
+
+        rendered = tuple(
+            part.text
+            for outbound in channel.sent
+            for part in outbound.content
+            if isinstance(part, TextContent)
+        )
+        self.assertEqual(len(rendered), len(commands))
+        for expected in (
+            "## Agent applications",
+            "Selected application",
+            "## Projects",
+            "Selected project",
+            "Created thread",
+            "is **idle**",
+            "## Threads",
+            "Selected thread",
+            "Deleted thread",
+        ):
+            self.assertTrue(
+                any(expected in text for text in rendered),
+                f"missing rendered command result: {expected}",
+            )
+
+
+def _message(
+    text: str,
+    *,
+    message_id: str = "message-1",
+    metadata=None,
+) -> InboundMessage:
+    return InboundMessage(
+        message_id=message_id,
+        conversation_ref=ConversationRef("fake-channel", "conversation-1"),
+        sender="user-1",
+        content=(TextContent(text),),
+        created_at=datetime.now(UTC),
+        metadata=metadata or {},
+    )

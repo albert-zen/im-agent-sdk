@@ -8,7 +8,6 @@ from imagent.contracts import (
     ActivateNativeThread,
     AgentInput,
     ApplicationOperationFailed,
-    ChannelMessage,
     CreateThread,
     DeleteThread,
     GetProject,
@@ -16,9 +15,11 @@ from imagent.contracts import (
     GetThreadHistory,
     GetThreadStatus,
     GetTurnCatchup,
+    InboundMessage,
     ListProjects,
     ListThreads,
     NativeThreadActivated,
+    OutboundMessage,
     ProjectMode,
     ProjectRead,
     ProjectsListed,
@@ -57,7 +58,7 @@ class ContractReport:
 
 async def verify_channel_adapter(
     adapter: ChannelAdapter,
-    sample_message: ChannelMessage | None = None,
+    sample_message: InboundMessage | None = None,
 ) -> ContractReport:
     checks: list[ContractCheck] = []
     first_identity = adapter.channel_instance_id
@@ -89,7 +90,14 @@ async def verify_channel_adapter(
     checks.append(ContractCheck("start and stop lifecycle"))
 
     if sample_message is not None:
-        receipt = await adapter.send(sample_message)
+        outbound = OutboundMessage(
+            delivery_id=f"contract:{sample_message.message_id}",
+            conversation_ref=sample_message.conversation_ref,
+            content=sample_message.content,
+            created_at=sample_message.created_at,
+            reply_to=sample_message.message_id,
+        )
+        receipt = await adapter.send(outbound)
         if receipt.status not in {
             "accepted_by_platform",
             "rejected_by_platform",

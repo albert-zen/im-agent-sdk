@@ -177,15 +177,23 @@ class MessageRole(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class ChannelMessage:
+class InboundMessage:
     message_id: str
     conversation_ref: ConversationRef
     sender: str
     content: tuple[Content, ...]
     created_at: datetime
-    role: MessageRole | None = None
     reply_to: str | None = None
-    client_message_id: str | None = None
+    metadata: Metadata = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class OutboundMessage:
+    delivery_id: str
+    conversation_ref: ConversationRef
+    content: tuple[Content, ...]
+    created_at: datetime
+    reply_to: str | None = None
     metadata: Metadata = field(default_factory=dict)
 
 

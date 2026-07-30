@@ -17,7 +17,6 @@ from imagent.contracts import (
     ApplicationRef,
     ApplicationSummary,
     ChannelCapabilities,
-    ChannelMessage,
     CreateThread,
     DeleteThread,
     DeliveryReceipt,
@@ -30,6 +29,7 @@ from imagent.contracts import (
     ListProjects,
     ListThreads,
     NativeThreadActivated,
+    OutboundMessage,
     Page,
     ProjectCapabilities,
     ProjectMode,
@@ -98,7 +98,7 @@ class FakeChannelAdapter:
         self._channel_instance_id = channel_instance_id
         self._capabilities = ChannelCapabilities()
         self.started = False
-        self.sent: list[ChannelMessage] = []
+        self.sent: list[OutboundMessage] = []
 
     @property
     def channel_instance_id(self) -> str:
@@ -116,7 +116,7 @@ class FakeChannelAdapter:
     async def stop(self) -> None:
         self.started = False
 
-    async def send(self, message: ChannelMessage) -> DeliveryReceipt:
+    async def send(self, message: OutboundMessage) -> DeliveryReceipt:
         self.sent.append(message)
         return DeliveryReceipt(
             status="accepted_by_platform",

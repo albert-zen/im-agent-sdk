@@ -75,3 +75,13 @@ application. Native activation is a separate optional application operation.
 
 Free-form Metadata remains an extension surface, not a place for common
 operation arguments or success values.
+
+## D-007: Default Slash UX is an optional Controller
+
+The Gateway may compose an inbound Controller but does not parse Slash syntax
+or render command panels. The SDK ships a default `SlashController` and
+Markdown presenter over typed operations. Products may replace or extend that
+Controller, and non-text interactions invoke the same typed actions directly.
+
+Inbound channel observations use `InboundMessage`; outbound delivery requests
+use `OutboundMessage` with a stable `deliveryId`.

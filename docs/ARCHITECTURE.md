@@ -89,6 +89,18 @@ It does not own:
 - model, provider, workspace, or sandbox configuration;
 - Agent tool-approval truth.
 
+The Gateway accepts an optional inbound Controller. A Controller may consume an
+inbound message and invoke the same typed application/Gateway operations that
+native buttons or other interactions invoke. If no Controller consumes the
+message, the Gateway routes its content as normal Agent input. The Gateway does
+not know Slash grammar, command aliases, selection-list caches, or fixed command
+presentation.
+
+The SDK-distributed `SlashController` provides the default common Slash UX. It
+is a replaceable composition choice, not a Gateway dependency. Its Markdown
+presenter owns the default English help, lists, errors, history, and catch-up
+views.
+
 Application operations and Gateway operations are separate typed families.
 The Gateway may route an application operation to the referenced adapter, but
 it does not reinterpret that operation as a binding mutation. Conversely,

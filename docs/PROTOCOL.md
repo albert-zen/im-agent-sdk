@@ -32,14 +32,23 @@ behavior cannot depend on undocumented metadata.
 
 Message represents content, not control intent.
 
-The common content model is used by two envelopes:
+The common content model is used by distinct inbound, outbound, and Agent
+envelopes:
 
 ```text
-ChannelMessage {
+InboundMessage {
   messageId
   conversationRef
   sender
-  role?
+  content[]
+  replyTo?
+  createdAt
+  metadata
+}
+
+OutboundMessage {
+  deliveryId
+  conversationRef
   content[]
   replyTo?
   createdAt
@@ -57,9 +66,15 @@ AgentMessage {
 }
 ```
 
-The Gateway translates `ChannelMessage` into `AgentInput`. The application
-emits authoritative `AgentMessage` objects. They share content semantics but do
-not pretend an IM Conversation and an Agent Thread are the same address.
+The Gateway translates `InboundMessage` into `AgentInput`. `messageId` is an
+observed native identity; `deliveryId` is a stable outbound request identity.
+An outbound delivery does not pretend to already have a native message ID,
+sender, or Agent role. A Channel adapter returns the eventual native message
+identity in `DeliveryReceipt`.
+
+The application emits authoritative `AgentMessage` objects. These envelopes
+share content semantics but do not pretend an IM Conversation, an outbound
+delivery request, and an Agent Thread are the same resource.
 
 Initial content parts:
 
@@ -262,6 +277,14 @@ Slash commands are one expression of these typed operations:
 /catchup [messages]
 /history [turns] [--page N]
 ```
+
+The official optional Slash Controller parses and presents those commands.
+Its handler returns `None` when it does not consume an inbound message, or a
+tuple of `OutboundMessage` deliveries when it does. A replacement Controller
+receives only the typed `ControllerActions` surface: execute an application
+operation, execute a Gateway operation, and read the current Conversation
+binding. Buttons and channel-native interactions can invoke those same typed
+actions directly without manufacturing Slash text.
 
 ## Operation results
 

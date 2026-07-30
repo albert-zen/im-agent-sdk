@@ -12,10 +12,10 @@ from ..adapters import MessageHandler, OperationHandler
 from ..contracts import (
     AttachmentContent,
     ChannelCapabilities,
-    ChannelMessage,
     ConversationRef,
     DeliveryReceipt,
-    MessageRole,
+    InboundMessage,
+    OutboundMessage,
     SupportLevel,
     TextContent,
     TextFormat,
@@ -111,7 +111,7 @@ class ImcodexChannelAdapter:
         if native is not None:
             await native.stop()
 
-    async def send(self, message: ChannelMessage) -> DeliveryReceipt:
+    async def send(self, message: OutboundMessage) -> DeliveryReceipt:
         native = self._native
         if native is None:
             raise RuntimeError("channel is not started")
@@ -246,7 +246,7 @@ class _InboundMiddleware:
                     },
                 )
             )
-        message = ChannelMessage(
+        message = InboundMessage(
             message_id=str(inbound.message_id),
             conversation_ref=ConversationRef(
                 channel_instance_id=self._channel_instance_id,
@@ -255,7 +255,6 @@ class _InboundMiddleware:
             sender=str(inbound.user_id),
             content=tuple(content),
             created_at=_parse_datetime(getattr(inbound, "sent_at", None)),
-            role=MessageRole.USER,
             reply_to=(
                 str(reply_to_message_id)
                 if reply_to_message_id is not None
@@ -280,7 +279,7 @@ class _InboundMiddleware:
         )
 
 
-def _to_native_outbound(*, channel_id: str, message: ChannelMessage):
+def _to_native_outbound(*, channel_id: str, message: OutboundMessage):
     text_parts = [item.text for item in message.content if isinstance(item, TextContent)]
     markdown = any(
         isinstance(item, TextContent) and item.format is TextFormat.MARKDOWN
@@ -297,7 +296,7 @@ def _to_native_outbound(*, channel_id: str, message: ChannelMessage):
         text="\n".join(text_parts),
         metadata={
             **dict(message.metadata),
-            "delivery_id": message.client_message_id or message.message_id,
+            "delivery_id": message.delivery_id,
             "reply_to_message_id": message.reply_to,
         },
     )

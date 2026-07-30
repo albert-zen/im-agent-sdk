@@ -48,7 +48,7 @@
         { "$ref": "#/$defs/AttachmentContent" }
       ]
     },
-    "ChannelMessage": {
+    "InboundMessage": {
       "type": "object",
       "required": [
         "messageId",
@@ -61,9 +61,6 @@
         "messageId": { "$ref": "common.schema.json#/$defs/Identifier" },
         "conversationRef": { "$ref": "#/$defs/ConversationRef" },
         "sender": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "role": {
-          "enum": ["user", "assistant", "system", "tool", null]
-        },
         "content": {
           "type": "array",
           "items": { "$ref": "#/$defs/Content" },
@@ -76,12 +73,33 @@
           ]
         },
         "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
-        "clientMessageId": {
+        "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
+      },
+      "additionalProperties": false
+    },
+    "OutboundMessage": {
+      "type": "object",
+      "required": [
+        "deliveryId",
+        "conversationRef",
+        "content",
+        "createdAt"
+      ],
+      "properties": {
+        "deliveryId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "conversationRef": { "$ref": "#/$defs/ConversationRef" },
+        "content": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Content" },
+          "minItems": 1
+        },
+        "replyTo": {
           "oneOf": [
             { "$ref": "common.schema.json#/$defs/Identifier" },
             { "type": "null" }
           ]
         },
+        "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
         "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
       },
       "additionalProperties": false

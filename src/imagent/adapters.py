@@ -11,15 +11,16 @@ from .contracts import (
     ApplicationOperationResult,
     ApplicationSummary,
     ChannelCapabilities,
-    ChannelMessage,
     ConversationBinding,
     ConversationRef,
     DeliveryReceipt,
     GatewayOperation,
+    InboundMessage,
+    OutboundMessage,
     ThreadRef,
 )
 
-MessageHandler = Callable[[ChannelMessage], Awaitable[None]]
+MessageHandler = Callable[[InboundMessage], Awaitable[None]]
 OperationHandler = Callable[[GatewayOperation], Awaitable[None]]
 
 
@@ -38,7 +39,7 @@ class ChannelAdapter(Protocol):
 
     async def stop(self) -> None: ...
 
-    async def send(self, message: ChannelMessage) -> DeliveryReceipt: ...
+    async def send(self, message: OutboundMessage) -> DeliveryReceipt: ...
 
 
 class AgentApplicationAdapter(Protocol):
