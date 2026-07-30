@@ -58,6 +58,12 @@ class ThreadDeletionCapability(StrEnum):
     PERMANENT = "permanent"
 
 
+class AttachmentSourceKind(StrEnum):
+    LOCAL_PATH = "local_path"
+    REMOTE_URL = "remote_url"
+    ATTACHMENT_HANDLE = "attachment_handle"
+
+
 @dataclass(frozen=True, slots=True)
 class ProjectCapabilities:
     mode: ProjectMode
@@ -90,6 +96,7 @@ class ApplicationCapabilities:
     projects: ProjectCapabilities
     threads: ThreadCapabilities
     runtime: RuntimeCapabilities
+    attachment_sources: tuple[AttachmentSourceKind, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,12 +164,42 @@ class TextContent:
 
 
 @dataclass(frozen=True, slots=True)
+class LocalPath:
+    path: str
+    kind: AttachmentSourceKind = field(
+        init=False,
+        default=AttachmentSourceKind.LOCAL_PATH,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class RemoteUrl:
+    url: str
+    kind: AttachmentSourceKind = field(
+        init=False,
+        default=AttachmentSourceKind.REMOTE_URL,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class AttachmentHandle:
+    handle_id: str
+    kind: AttachmentSourceKind = field(
+        init=False,
+        default=AttachmentSourceKind.ATTACHMENT_HANDLE,
+    )
+
+
+AttachmentSource: TypeAlias = LocalPath | RemoteUrl | AttachmentHandle
+
+
+@dataclass(frozen=True, slots=True)
 class AttachmentContent:
     attachment_id: str
     media_type: str
+    source: AttachmentSource
     filename: str | None = None
     size_bytes: int | None = None
-    url: str | None = None
     metadata: Metadata = field(default_factory=dict)
 
 

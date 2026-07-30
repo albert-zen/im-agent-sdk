@@ -21,11 +21,14 @@ from imagent.contracts import (
     AgentInput,
     ApplicationRef,
     AttachmentContent,
+    AttachmentSourceKind,
     BindConversationToThread,
     ConversationBinding,
     ConversationBound,
     ConversationRef,
+    LocalPath,
     ProjectRef,
+    RemoteUrl,
     ThreadRef,
 )
 from imagent.controllers import SlashController
@@ -50,14 +53,14 @@ class NativeQQChannel:
         self.sent.append(message)
         self.delivered.set()
 
-    async def receive(self, text: str, *, message_id: str) -> None:
+    async def receive(self, text: str, *, message_id: str, attachments=()) -> None:
         inbound = SimpleNamespace(
             channel_id="qq",
             conversation_id="c2c:user-1",
             user_id="user-1",
             message_id=message_id,
             text=text,
-            attachments=(),
+            attachments=attachments,
             quote=None,
             input_error=None,
             reply_to_message_id=None,
@@ -475,9 +478,9 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             attachment = AttachmentContent(
                 attachment_id="image-1",
                 media_type="image/png",
+                source=LocalPath(str(image_path)),
                 filename="image.png",
                 size_bytes=3,
-                metadata={"local_path": str(image_path)},
             )
 
             codex_client = NativeZenClient()
@@ -485,6 +488,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
                 application_instance_id="codex-main",
                 client=codex_client,
                 cwd="/repo",
+                shared_filesystem_root=directory,
             )
             await codex.send_input(
                 ThreadRef("codex-main", "codex-thread"),
@@ -512,6 +516,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             t3 = T3ApplicationAdapter(
                 application_instance_id="t3-main",
                 client=t3_client,
+                shared_filesystem_root=directory,
             )
             await t3.send_input(
                 t3_thread,
@@ -522,9 +527,93 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertIn("localImage", codex_client.started_turns[0][1])
+        self.assertEqual(
+            codex.summary.capabilities.attachment_sources,
+            (AttachmentSourceKind.LOCAL_PATH,),
+        )
+        self.assertEqual(
+            t3.summary.capabilities.attachment_sources,
+            (AttachmentSourceKind.LOCAL_PATH,),
+        )
         t3_attachment = t3_client.commands[-1]["message"]["attachments"][0]
         self.assertEqual(t3_attachment["mimeType"], "image/png")
         self.assertEqual(t3_attachment["dataUrl"], "data:image/png;base64,cG5n")
+
+    async def test_attachment_sources_require_explicit_trust_and_support(self) -> None:
+        local = AttachmentContent(
+            attachment_id="local-image",
+            media_type="image/png",
+            source=LocalPath(str(Path.cwd() / "untrusted.png")),
+        )
+        remote = AttachmentContent(
+            attachment_id="remote-image",
+            media_type="image/png",
+            source=RemoteUrl("https://media.example/image.png"),
+        )
+        codex = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=NativeZenClient(),
+            cwd="/repo",
+        )
+
+        with self.assertRaisesRegex(ValueError, "shared_filesystem_root"):
+            await codex.send_input(
+                ThreadRef("codex-main", "codex-thread"),
+                AgentInput(client_message_id="local-untrusted", content=(local,)),
+            )
+        with self.assertRaisesRegex(NotImplementedError, "remote_url"):
+            await codex.send_input(
+                ThreadRef("codex-main", "codex-thread"),
+                AgentInput(client_message_id="remote-unsupported", content=(remote,)),
+            )
+        self.assertEqual(codex.summary.capabilities.attachment_sources, ())
+
+    async def test_imcodex_channel_emits_explicit_local_path_source(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            image_path = Path(directory) / "from-channel.png"
+            image_path.write_bytes(b"png")
+            native_channel = NativeQQChannel()
+            channel = ImcodexChannelAdapter(
+                channel_instance_id="qq-main",
+                channel_id="qq",
+                native_factory=lambda middleware: self._bind_channel(
+                    native_channel,
+                    middleware,
+                ),
+            )
+            received = []
+
+            async def on_message(message) -> None:
+                received.append(message)
+
+            async def on_operation(_operation) -> None:
+                return None
+
+            await channel.start(on_message, on_operation)
+            try:
+                await native_channel.receive(
+                    "",
+                    message_id="qq-image-1",
+                    attachments=(
+                        SimpleNamespace(
+                            source_message_id="source-image-1",
+                            content_type="image/png",
+                            filename="from-channel.png",
+                            size_bytes=3,
+                            kind="image",
+                            local_path=image_path,
+                        ),
+                    ),
+                )
+            finally:
+                await channel.stop()
+
+        self.assertEqual(len(received), 1)
+        attachment = received[0].content[0]
+        self.assertIsInstance(attachment, AttachmentContent)
+        assert isinstance(attachment, AttachmentContent)
+        self.assertEqual(attachment.source, LocalPath(str(image_path)))
+        self.assertNotIn("local_path", attachment.metadata)
 
     async def test_codex_and_zen_are_distinct_native_applications(self) -> None:
         codex_client = NativeZenClient()

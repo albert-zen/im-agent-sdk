@@ -15,6 +15,7 @@ from ..contracts import (
     ConversationRef,
     DeliveryReceipt,
     InboundMessage,
+    LocalPath,
     OutboundMessage,
     SupportLevel,
     TextContent,
@@ -240,9 +241,9 @@ class _InboundMiddleware:
                     media_type=str(attachment.content_type),
                     filename=str(getattr(attachment, "filename", "") or "") or None,
                     size_bytes=int(attachment.size_bytes),
+                    source=LocalPath(str(attachment.local_path)),
                     metadata={
                         "kind": str(attachment.kind),
-                        "local_path": str(attachment.local_path),
                     },
                 )
             )

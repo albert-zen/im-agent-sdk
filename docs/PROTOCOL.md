@@ -89,13 +89,26 @@ Attachment {
   mediaType
   filename?
   sizeBytes?
-  url?
+  source
   metadata
 }
+
+AttachmentSource =
+  LocalPath { path }
+  | RemoteUrl { url }
+  | AttachmentHandle { handleId }
 ```
 
 The common object preserves Markdown source. Channel adapters decide how to
 escape, chunk, render, edit, or fall back to plain text.
+
+Attachment location is never passed through Metadata. `LocalPath` states only
+where a Channel adapter staged bytes; it does not grant trust. An application
+adapter accepts it only when deployment configuration has explicitly proven a
+shared-filesystem boundary. `RemoteUrl` requires adapter-owned URL policy,
+network fetching, size/type validation, and redirect controls. The
+`AttachmentHandle` variant reserves a future resolver/upload boundary and is
+unsupported until one is configured.
 
 ### Stable client message ID
 

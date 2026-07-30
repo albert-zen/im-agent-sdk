@@ -85,3 +85,14 @@ Controller, and non-text interactions invoke the same typed actions directly.
 
 Inbound channel observations use `InboundMessage`; outbound delivery requests
 use `OutboundMessage` with a stable `deliveryId`.
+
+## D-008: Attachment location is a typed, capability-gated source
+
+`AttachmentContent` contains a discriminated `AttachmentSource`: `LocalPath`,
+`RemoteUrl`, or reserved `AttachmentHandle`. Behavior-critical locations are
+not carried in Metadata.
+
+Application capabilities declare accepted source kinds. `LocalPath` is usable
+only when deployment configuration explicitly trusts a shared filesystem;
+messages cannot grant that trust. `RemoteUrl` requires adapter-owned fetch and
+SSRF/size/type policy rather than an unrestricted common downloader.

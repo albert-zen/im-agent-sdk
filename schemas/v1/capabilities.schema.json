@@ -6,6 +6,9 @@
     "SupportLevel": {
       "enum": ["native", "fallback", "unsupported"]
     },
+    "AttachmentSourceKind": {
+      "enum": ["local_path", "remote_url", "attachment_handle"]
+    },
     "ChannelCapabilities": {
       "type": "object",
       "required": [
@@ -80,11 +83,16 @@
     },
     "ApplicationCapabilities": {
       "type": "object",
-      "required": ["projects", "threads", "runtime"],
+      "required": ["projects", "threads", "runtime", "attachmentSources"],
       "properties": {
         "projects": { "$ref": "#/$defs/ProjectCapabilities" },
         "threads": { "$ref": "#/$defs/ThreadCapabilities" },
-        "runtime": { "$ref": "#/$defs/RuntimeCapabilities" }
+        "runtime": { "$ref": "#/$defs/RuntimeCapabilities" },
+        "attachmentSources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/AttachmentSourceKind" },
+          "uniqueItems": true
+        }
       },
       "additionalProperties": false
     }

@@ -26,18 +26,52 @@
       },
       "additionalProperties": false
     },
+    "LocalPath": {
+      "type": "object",
+      "required": ["kind", "path"],
+      "properties": {
+        "kind": { "const": "local_path" },
+        "path": { "$ref": "common.schema.json#/$defs/NonEmptyString" }
+      },
+      "additionalProperties": false
+    },
+    "RemoteUrl": {
+      "type": "object",
+      "required": ["kind", "url"],
+      "properties": {
+        "kind": { "const": "remote_url" },
+        "url": { "type": "string", "format": "uri" }
+      },
+      "additionalProperties": false
+    },
+    "AttachmentHandle": {
+      "type": "object",
+      "required": ["kind", "handleId"],
+      "properties": {
+        "kind": { "const": "attachment_handle" },
+        "handleId": { "$ref": "common.schema.json#/$defs/Identifier" }
+      },
+      "additionalProperties": false
+    },
+    "AttachmentSource": {
+      "oneOf": [
+        { "$ref": "#/$defs/LocalPath" },
+        { "$ref": "#/$defs/RemoteUrl" },
+        { "$ref": "#/$defs/AttachmentHandle" }
+      ]
+    },
     "AttachmentContent": {
       "type": "object",
-      "required": ["type", "attachmentId", "mediaType"],
+      "required": ["type", "attachmentId", "mediaType", "source"],
       "properties": {
         "type": { "const": "attachment" },
         "attachmentId": {
           "$ref": "common.schema.json#/$defs/Identifier"
         },
         "mediaType": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+        "source": { "$ref": "#/$defs/AttachmentSource" },
         "filename": { "type": ["string", "null"] },
         "sizeBytes": { "type": ["integer", "null"], "minimum": 0 },
-        "url": { "type": ["string", "null"], "format": "uri" },
         "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
       },
       "additionalProperties": false

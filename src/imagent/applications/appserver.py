@@ -5,8 +5,10 @@ import hashlib
 import inspect
 from collections.abc import AsyncIterator, Mapping
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Protocol
 
+from ..attachments import configure_shared_filesystem_root, resolve_local_attachment
 from ..contracts import (
     AcceptedTurn,
     ActivateNativeThread,
@@ -21,6 +23,7 @@ from ..contracts import (
     ApplicationRef,
     ApplicationSummary,
     AttachmentContent,
+    AttachmentSourceKind,
     CreateThread,
     DeleteThread,
     GetProject,
@@ -110,10 +113,12 @@ class _AppServerApplicationAdapter:
         display_name: str,
         client: AppServerClient,
         cwd: str,
+        shared_filesystem_root: str | Path | None = None,
     ) -> None:
         self._application_instance_id = application_instance_id
         self._client = client
         self._cwd = cwd
+        self._shared_filesystem_root = configure_shared_filesystem_root(shared_filesystem_root)
         self._sequence = 0
         self._events: dict[str, asyncio.Queue[AgentEvent]] = {}
         self._client.add_notification_handler(self._handle_notification)
@@ -136,6 +141,11 @@ class _AppServerApplicationAdapter:
                 interruption=SupportLevel.NATIVE,
                 interactive_requests=SupportLevel.UNSUPPORTED,
                 native_thread_activation=SupportLevel.NATIVE,
+            ),
+            attachment_sources=(
+                (AttachmentSourceKind.LOCAL_PATH,)
+                if self._shared_filesystem_root is not None
+                else ()
             ),
         )
         self._summary = ApplicationSummary(
@@ -449,10 +459,12 @@ class _AppServerApplicationAdapter:
             for attachment in attachments:
                 if not attachment.media_type.casefold().startswith("image/"):
                     raise ValueError("Codex App Server supports image attachments only")
-                local_path = str(attachment.metadata.get("local_path") or "")
-                if not local_path:
-                    raise ValueError("Codex App Server image requires a local_path")
-                input_items.append({"type": "localImage", "path": local_path})
+                local_path = resolve_local_attachment(
+                    attachment.source,
+                    shared_filesystem_root=self._shared_filesystem_root,
+                    consumer="Codex App Server",
+                )
+                input_items.append({"type": "localImage", "path": str(local_path)})
             result = await self._client.start_turn(
                 thread_ref.native_thread_id,
                 input_items=input_items,
@@ -620,6 +632,7 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
         application_instance_id: str,
         client: AppServerClient,
         cwd: str,
+        shared_filesystem_root: str | Path | None = None,
     ) -> None:
         super().__init__(
             application_instance_id=application_instance_id,
@@ -627,6 +640,7 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
             display_name="Zen",
             client=client,
             cwd=cwd,
+            shared_filesystem_root=shared_filesystem_root,
         )
 
 
@@ -637,6 +651,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
         application_instance_id: str,
         client: AppServerClient,
         cwd: str,
+        shared_filesystem_root: str | Path | None = None,
     ) -> None:
         super().__init__(
             application_instance_id=application_instance_id,
@@ -644,6 +659,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
             display_name="Codex",
             client=client,
             cwd=cwd,
+            shared_filesystem_root=shared_filesystem_root,
         )
 
 

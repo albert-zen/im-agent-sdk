@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
+from ..attachments import configure_shared_filesystem_root, resolve_local_attachment
 from ..contracts import (
     AcceptedTurn,
     ActivateNativeThread,
@@ -24,6 +25,7 @@ from ..contracts import (
     ApplicationRef,
     ApplicationSummary,
     AttachmentContent,
+    AttachmentSourceKind,
     CreateThread,
     DeleteThread,
     GetProject,
@@ -95,12 +97,14 @@ class T3ApplicationAdapter:
         runtime_mode: str = "full-access",
         interaction_mode: str = "default",
         poll_interval: float = 0.25,
+        shared_filesystem_root: str | Path | None = None,
     ) -> None:
         self._application_instance_id = application_instance_id
         self._client = client
         self._runtime_mode = runtime_mode
         self._interaction_mode = interaction_mode
         self._poll_interval = poll_interval
+        self._shared_filesystem_root = configure_shared_filesystem_root(shared_filesystem_root)
         self._sequence = 0
         self._turn_baselines: dict[tuple[str, str], frozenset[str]] = {}
         self._summary = ApplicationSummary(
@@ -126,6 +130,11 @@ class T3ApplicationAdapter:
                     interruption=SupportLevel.NATIVE,
                     interactive_requests=SupportLevel.UNSUPPORTED,
                     native_thread_activation=SupportLevel.UNSUPPORTED,
+                ),
+                attachment_sources=(
+                    (AttachmentSourceKind.LOCAL_PATH,)
+                    if self._shared_filesystem_root is not None
+                    else ()
                 ),
             ),
             metadata={
@@ -524,7 +533,10 @@ class T3ApplicationAdapter:
                     "messageId": _stable_id(message.client_message_id, "message"),
                     "role": "user",
                     "text": text,
-                    "attachments": _encode_t3_attachments(attachments),
+                    "attachments": _encode_t3_attachments(
+                        attachments,
+                        shared_filesystem_root=self._shared_filesystem_root,
+                    ),
                 },
                 "runtimeMode": self._runtime_mode,
                 "interactionMode": self._interaction_mode,
@@ -886,6 +898,8 @@ def _t3_turn_error(
 
 def _encode_t3_attachments(
     attachments: tuple[AttachmentContent, ...],
+    *,
+    shared_filesystem_root: Path | None,
 ) -> list[dict[str, object]]:
     if len(attachments) > 8:
         raise ValueError("T3 accepts at most 8 image attachments")
@@ -894,10 +908,11 @@ def _encode_t3_attachments(
         media_type = attachment.media_type.strip().casefold()
         if not media_type.startswith("image/"):
             raise ValueError("T3 supports image attachments only")
-        local_path = str(attachment.metadata.get("local_path") or "")
-        if not local_path:
-            raise ValueError("T3 image requires a local_path")
-        path = Path(local_path)
+        path = resolve_local_attachment(
+            attachment.source,
+            shared_filesystem_root=shared_filesystem_root,
+            consumer="T3",
+        )
         try:
             data = path.read_bytes()
         except OSError as error:

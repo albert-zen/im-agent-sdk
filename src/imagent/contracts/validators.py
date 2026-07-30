@@ -72,6 +72,8 @@ def validate_thread_ref(thread: ThreadRef) -> None:
 
 
 def validate_application_capabilities(capabilities: ApplicationCapabilities) -> None:
+    if len(set(capabilities.attachment_sources)) != len(capabilities.attachment_sources):
+        raise ContractViolation("application attachment source capabilities must be unique")
     projects = capabilities.projects
     project_operations = (
         projects.discovery,

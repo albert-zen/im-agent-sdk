@@ -89,6 +89,12 @@ It does not own:
 - model, provider, workspace, or sandbox configuration;
 - Agent tool-approval truth.
 
+Attachment bytes cross the Channel/Application boundary only through an
+explicit source form. Shared-filesystem trust is deployment configuration, not
+message Metadata and not a claim supplied by an inbound attachment. Remote URL
+materialization belongs to the accepting Application adapter and its network
+security policy.
+
 The Gateway accepts an optional inbound Controller. A Controller may consume an
 inbound message and invoke the same typed application/Gateway operations that
 native buttons or other interactions invoke. If no Controller consumes the

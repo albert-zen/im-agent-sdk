@@ -77,6 +77,24 @@ fallback must not be advertised as native support.
 Deduplication and access checks happen before expensive attachment work and
 before Agent mutation.
 
+### Attachment sources and trust
+
+Channel adapters put the staged location in the typed `AttachmentSource`, not
+Metadata. Application capabilities list the source kinds actually accepted.
+An adapter must reject every undeclared source kind.
+
+`LocalPath` is valid only when deployment configuration explicitly establishes
+that the Channel adapter's staging directory and the Application adapter share
+a trusted filesystem namespace. The attachment cannot opt itself into that
+trust. Adapters must treat paths as untrusted input, enforce their configured
+root/policy where applicable, and validate file type and size before use.
+
+`RemoteUrl` is not an instruction to perform an unrestricted server-side
+request. An accepting adapter owns allowlists, scheme and address checks,
+redirect policy, download limits, media validation, and credential handling.
+Remote App Server configurations that cannot fetch/materialize or upload a
+source reject it with an explicit unsupported-source error.
+
 ### Outbound behavior
 
 The adapter owns:
@@ -132,6 +150,8 @@ Project and Thread capabilities use `reading` for authoritative resource
 lookup. Conversation selection is a Gateway capability, so application
 capabilities do not advertise `selection` or `switching`. Mutable native UI
 selection is advertised separately as `nativeThreadActivation`.
+`attachmentSources` lists accepted `local_path`, `remote_url`, and/or
+`attachment_handle` source forms.
 
 ### Required runtime surface
 
