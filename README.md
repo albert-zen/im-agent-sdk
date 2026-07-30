@@ -34,7 +34,8 @@ The accepted design now has runnable vertical slices:
 - production QQ, Telegram, Feishu, and Weixin adapters reuse the pinned
   IMCodex implementations;
 - distinct Codex, Zen, and T3 Code application adapters;
-- slash-command project/thread navigation and normal Agent input;
+- slash-command project/thread navigation, `/catchup`, `/history`, and normal
+  Agent input;
 - Markdown-first outbound messages and image attachment mapping;
 - durable SQLite conversation bindings and delivery/inbound idempotency.
 

@@ -17,7 +17,10 @@ from imagent.bindings import InMemoryBindingRepository
 from imagent.channels import ImcodexChannelAdapter
 from imagent.contracts import (
     AgentInput,
+    ApplicationRef,
     AttachmentContent,
+    ConversationBinding,
+    ConversationRef,
     ProjectRef,
     ThreadRef,
 )
@@ -74,6 +77,53 @@ class NativeZenClient:
 
     async def list_threads(self, **_params):
         return {"data": []}
+
+    async def list_thread_turns(self, thread_id: str, **_params):
+        return {
+            "data": [
+                {
+                    "id": "turn-live",
+                    "status": "inProgress",
+                    "items": [
+                        {
+                            "id": "user-live",
+                            "type": "userMessage",
+                            "text": "Refactor the adapters",
+                        },
+                        {
+                            "id": "progress-1",
+                            "type": "agentMessage",
+                            "phase": "commentary",
+                            "text": "Inspecting the existing adapters.",
+                        },
+                        {
+                            "id": "progress-2",
+                            "type": "agentMessage",
+                            "phase": "commentary",
+                            "text": "Running the focused tests.",
+                        },
+                    ],
+                },
+                {
+                    "id": "turn-old",
+                    "status": "completed",
+                    "items": [
+                        {
+                            "id": "user-old",
+                            "type": "userMessage",
+                            "text": "Design the SDK",
+                        },
+                        {
+                            "id": "assistant-old",
+                            "type": "agentMessage",
+                            "phase": "final_answer",
+                            "text": "The SDK design is complete.",
+                        },
+                    ],
+                },
+            ],
+            "nextCursor": None,
+        }
 
     async def start_thread(self, **params):
         self.started_threads.append(params)
@@ -220,6 +270,157 @@ class NativeT3Client:
 
 
 class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_appserver_catchup_and_history_restore_user_context(self) -> None:
+        native_channel = NativeQQChannel()
+        channel = ImcodexChannelAdapter(
+            channel_instance_id="qq-main",
+            channel_id="qq",
+            native_factory=lambda middleware: self._bind_channel(
+                native_channel,
+                middleware,
+            ),
+        )
+        application = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=NativeZenClient(),
+            cwd="/repo",
+        )
+        bindings = InMemoryBindingRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=ConversationRef(
+                    "qq-main",
+                    "c2c:user-1",
+                ),
+                application_ref=ApplicationRef("codex-main"),
+                thread_ref=ThreadRef("codex-main", "codex-thread"),
+            )
+        )
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=bindings,
+        )
+
+        await gateway.start()
+        try:
+            await native_channel.receive("/catchup 2", message_id="catchup-1")
+            await native_channel.receive("/history 2", message_id="history-1")
+        finally:
+            await gateway.stop()
+
+        catchup, history = [message.text for message in native_channel.sent]
+        self.assertIn("## Recent Activity", catchup)
+        self.assertIn("Inspecting the existing adapters.", catchup)
+        self.assertIn("Running the focused tests.", catchup)
+        self.assertNotIn("Design the SDK", catchup)
+        self.assertIn("## Thread History", history)
+        self.assertIn("Design the SDK", history)
+        self.assertIn("The SDK design is complete.", history)
+        self.assertIn("Refactor the adapters", history)
+
+    async def test_t3_catchup_and_history_use_native_turn_grouping(self) -> None:
+        native_channel = NativeQQChannel()
+        channel = ImcodexChannelAdapter(
+            channel_instance_id="qq-main",
+            channel_id="qq",
+            native_factory=lambda middleware: self._bind_channel(
+                native_channel,
+                middleware,
+            ),
+        )
+        native_app = NativeT3Client()
+        native_app.threads["t3-thread"] = {
+            "id": "t3-thread",
+            "projectId": "project-1",
+            "title": "SDK",
+            "modelSelection": {"instanceId": "codex", "model": "gpt"},
+            "runtimeMode": "full-access",
+            "latestTurn": {
+                "turnId": "turn-live",
+                "state": "running",
+                "assistantMessageId": "assistant-live",
+            },
+            "messages": [
+                {
+                    "id": "user-old",
+                    "role": "user",
+                    "text": "Create the first adapter",
+                    "turnId": "turn-old",
+                },
+                {
+                    "id": "assistant-old",
+                    "role": "assistant",
+                    "text": "The first adapter works.",
+                    "turnId": "turn-old",
+                    "streaming": False,
+                },
+                {
+                    "id": "user-live",
+                    "role": "user",
+                    "text": "Add history support",
+                    "turnId": "turn-live",
+                },
+                {
+                    "id": "assistant-live",
+                    "role": "assistant",
+                    "text": "Inspecting the T3 read model.",
+                    "turnId": "turn-live",
+                    "streaming": True,
+                },
+            ],
+            "activities": [
+                {
+                    "id": "activity-live",
+                    "kind": "task.progress",
+                    "summary": "Mapping messages by turn",
+                    "payload": {"detail": "Grouping native messages by turnId."},
+                    "turnId": "turn-live",
+                }
+            ],
+            "checkpoints": [{"turnId": "turn-old"}],
+            "archivedAt": None,
+            "deletedAt": None,
+        }
+        application = T3ApplicationAdapter(
+            application_instance_id="t3-main",
+            client=native_app,
+        )
+        bindings = InMemoryBindingRepository()
+        project = ProjectRef("t3-main", "project-1")
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=ConversationRef(
+                    "qq-main",
+                    "c2c:user-1",
+                ),
+                application_ref=ApplicationRef("t3-main"),
+                project_ref=project,
+                thread_ref=ThreadRef("t3-main", "t3-thread", project),
+            )
+        )
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=bindings,
+        )
+
+        await gateway.start()
+        try:
+            await native_channel.receive("/catchup 2", message_id="catchup-t3")
+            await native_channel.receive("/history 2", message_id="history-t3")
+        finally:
+            await gateway.stop()
+
+        catchup, history = [message.text for message in native_channel.sent]
+        self.assertIn("## Recent Activity", catchup)
+        self.assertIn("Inspecting the T3 read model.", catchup)
+        self.assertIn("Grouping native messages by turnId.", catchup)
+        self.assertIn("## Thread History", history)
+        self.assertIn("Create the first adapter", history)
+        self.assertIn("The first adapter works.", history)
+        self.assertIn("Add history support", history)
+
     async def test_image_messages_map_to_native_codex_and_t3_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             image_path = Path(directory) / "image.png"

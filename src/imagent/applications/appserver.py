@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import inspect
 from collections.abc import AsyncIterator, Mapping
 from datetime import UTC, datetime
@@ -31,9 +32,13 @@ from ..contracts import (
     TextFormat,
     ThreadCapabilities,
     ThreadDeletionCapability,
+    ThreadHistory,
     ThreadRef,
     ThreadStatus,
     ThreadSummary,
+    TurnCatchup,
+    TurnHistoryEntry,
+    TurnStatus,
 )
 
 
@@ -41,6 +46,12 @@ class AppServerClient(Protocol):
     def add_notification_handler(self, handler) -> None: ...
 
     async def list_threads(self, **params) -> Mapping[str, object]: ...
+
+    async def list_thread_turns(
+        self,
+        thread_id: str,
+        **params,
+    ) -> Mapping[str, object]: ...
 
     async def start_thread(self, **params) -> Mapping[str, object]: ...
 
@@ -180,6 +191,55 @@ class _AppServerApplicationAdapter:
                 return summary.status
             await self._client.resume_thread(threadId=thread_ref.native_thread_id)
             return summary
+        if operation.type is OperationType.TURN_CATCHUP:
+            thread_ref = _required_thread(operation)
+            self._require_own_thread(thread_ref)
+            limit = _operation_limit(operation, default=5)
+            turns, _has_older = await self._read_turn_page(
+                thread_ref,
+                limit=1,
+                page=1,
+            )
+            if not turns:
+                return TurnCatchup(
+                    thread_ref=thread_ref,
+                    turn_id=None,
+                    status=TurnStatus.IDLE,
+                    messages=(),
+                )
+            turn = turns[-1]
+            commentary = tuple(
+                message
+                for item in _turn_items(turn)
+                if _is_agent_item(item)
+                and str(item.get("phase") or "").casefold() == "commentary"
+                and (message := self._item_message(thread_ref, item)) is not None
+            )
+            return TurnCatchup(
+                thread_ref=thread_ref,
+                turn_id=_turn_id(turn),
+                status=_turn_status(turn.get("status")),
+                messages=commentary[-limit:],
+                updated_at=_turn_updated_at(turn),
+                metadata={"native_application": self._summary.kind},
+            )
+        if operation.type is OperationType.THREAD_HISTORY:
+            thread_ref = _required_thread(operation)
+            self._require_own_thread(thread_ref)
+            limit = _operation_limit(operation, default=3)
+            page = _operation_page(operation)
+            turns, has_older = await self._read_turn_page(
+                thread_ref,
+                limit=limit,
+                page=page,
+            )
+            return ThreadHistory(
+                thread_ref=thread_ref,
+                turns=tuple(self._history_entry(thread_ref, turn) for turn in turns),
+                page=page,
+                has_older=has_older,
+                metadata={"native_application": self._summary.kind},
+            )
         if operation.type is OperationType.TURN_INTERRUPT:
             thread_ref = _required_thread(operation)
             turn_id = str(operation.arguments.get("turn_id") or "")
@@ -194,6 +254,123 @@ class _AppServerApplicationAdapter:
         }:
             raise NotImplementedError(f"{operation.type.value} is unsupported by this application")
         raise NotImplementedError(f"unsupported operation: {operation.type.value}")
+
+    async def _read_turn_page(
+        self,
+        thread_ref: ThreadRef,
+        *,
+        limit: int,
+        page: int,
+    ) -> tuple[tuple[Mapping[str, object], ...], bool]:
+        list_turns = getattr(self._client, "list_thread_turns", None)
+        if callable(list_turns):
+            cursor: str | None = None
+            seen_cursors: set[str] = set()
+            for page_number in range(1, page + 1):
+                parameters: dict[str, object] = {
+                    "limit": limit,
+                    "items_view": "full",
+                    "sort_direction": "desc",
+                }
+                if cursor is not None:
+                    parameters["cursor"] = cursor
+                try:
+                    payload = list_turns(
+                        thread_ref.native_thread_id,
+                        **parameters,
+                    )
+                    result = await payload if inspect.isawaitable(payload) else payload
+                except Exception as error:
+                    if not _is_unsupported_method_error(error):
+                        raise
+                    break
+                if not isinstance(result, Mapping):
+                    raise RuntimeError("thread/turns/list returned an invalid result")
+                turns = _turn_list(result)
+                next_cursor = _optional_string(
+                    result.get("nextCursor") or result.get("next_cursor")
+                )
+                if page_number == page:
+                    return tuple(reversed(turns)), next_cursor is not None
+                if next_cursor is None:
+                    return (), False
+                if next_cursor in seen_cursors:
+                    raise RuntimeError("thread history returned a repeated pagination cursor")
+                seen_cursors.add(next_cursor)
+                cursor = next_cursor
+        result = await self._client.read_thread(
+            thread_ref.native_thread_id,
+            include_turns=True,
+        )
+        turns = _turn_list(result)
+        end = max(0, len(turns) - ((page - 1) * limit))
+        start = max(0, end - limit)
+        return turns[start:end], start > 0
+
+    def _history_entry(
+        self,
+        thread_ref: ThreadRef,
+        turn: Mapping[str, object],
+    ) -> TurnHistoryEntry:
+        user_message: AgentMessage | None = None
+        latest_agent: AgentMessage | None = None
+        final_agent: AgentMessage | None = None
+        had_compaction = False
+        for item in _turn_items(turn):
+            item_type = _normalized_item_type(item)
+            if item_type == "contextcompaction":
+                had_compaction = True
+            message = self._item_message(thread_ref, item)
+            if message is None:
+                continue
+            if message.role is MessageRole.USER and user_message is None:
+                user_message = message
+            if message.role is MessageRole.ASSISTANT:
+                latest_agent = message
+                if str(item.get("phase") or "").casefold() == "final_answer":
+                    final_agent = message
+        return TurnHistoryEntry(
+            turn_id=_turn_id(turn),
+            status=_turn_status(turn.get("status")),
+            user_message=user_message,
+            agent_message=final_agent or latest_agent,
+            error=_turn_error(turn),
+            had_compaction=had_compaction,
+            metadata={"native_application": self._summary.kind},
+        )
+
+    def _item_message(
+        self,
+        thread_ref: ThreadRef,
+        item: Mapping[str, object],
+    ) -> AgentMessage | None:
+        item_type = _normalized_item_type(item)
+        if "user" in item_type:
+            role = MessageRole.USER
+        elif "agent" in item_type or "assistant" in item_type:
+            role = MessageRole.ASSISTANT
+        else:
+            return None
+        text = _item_text(item)
+        if not text:
+            return None
+        item_id = str(item.get("id") or item.get("itemId") or "")
+        if not item_id:
+            digest = hashlib.sha256(
+                (f"{thread_ref.native_thread_id}\x1f{role.value}\x1f{text}").encode()
+            ).hexdigest()
+            item_id = f"imagent:appserver-item:{digest}"
+        return AgentMessage(
+            agent_item_id=item_id,
+            thread_ref=thread_ref,
+            role=role,
+            content=(TextContent(text, TextFormat.MARKDOWN),),
+            created_at=_parse_datetime(item.get("createdAt") or item.get("updatedAt")),
+            metadata={
+                "phase": str(item.get("phase") or ""),
+                "native_application": self._summary.kind,
+            },
+        )
 
     async def send_input(
         self,
@@ -455,3 +632,139 @@ def _thread_status(value: object) -> ThreadStatus:
         "failed": ThreadStatus.FAILED,
         "interrupted": ThreadStatus.INTERRUPTED,
     }.get(normalized, ThreadStatus.UNKNOWN)
+
+
+def _turn_status(value: object) -> TurnStatus:
+    if isinstance(value, Mapping):
+        value = value.get("type") or value.get("status")
+    normalized = str(value or "").replace("-", "_").casefold()
+    return {
+        "idle": TurnStatus.IDLE,
+        "running": TurnStatus.RUNNING,
+        "active": TurnStatus.RUNNING,
+        "inprogress": TurnStatus.RUNNING,
+        "in_progress": TurnStatus.RUNNING,
+        "working": TurnStatus.RUNNING,
+        "completed": TurnStatus.COMPLETED,
+        "failed": TurnStatus.FAILED,
+        "error": TurnStatus.FAILED,
+        "interrupted": TurnStatus.INTERRUPTED,
+        "cancelled": TurnStatus.INTERRUPTED,
+        "canceled": TurnStatus.INTERRUPTED,
+    }.get(normalized, TurnStatus.UNKNOWN)
+
+
+def _turn_list(
+    payload: Mapping[str, object],
+) -> tuple[Mapping[str, object], ...]:
+    for key in ("turns", "data"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            return tuple(item for item in value if isinstance(item, Mapping))
+    thread = payload.get("thread")
+    if isinstance(thread, Mapping):
+        turns = thread.get("turns")
+        if isinstance(turns, list):
+            return tuple(item for item in turns if isinstance(item, Mapping))
+    return ()
+
+
+def _turn_items(
+    turn: Mapping[str, object],
+) -> tuple[Mapping[str, object], ...]:
+    items = turn.get("items")
+    if not isinstance(items, list):
+        return ()
+    return tuple(item for item in items if isinstance(item, Mapping))
+
+
+def _turn_id(turn: Mapping[str, object]) -> str:
+    turn_id = str(turn.get("id") or turn.get("turnId") or "")
+    if not turn_id:
+        raise RuntimeError("native turn did not contain an id")
+    return turn_id
+
+
+def _normalized_item_type(item: Mapping[str, object]) -> str:
+    return (
+        str(item.get("type") or item.get("kind") or "").replace("_", "").replace("-", "").casefold()
+    )
+
+
+def _is_agent_item(item: Mapping[str, object]) -> bool:
+    item_type = _normalized_item_type(item)
+    return "agent" in item_type or "assistant" in item_type
+
+
+def _item_text(item: Mapping[str, object]) -> str:
+    text = item.get("text")
+    if isinstance(text, str):
+        return text.strip()
+    content = item.get("content")
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        return "\n".join(
+            str(part.get("text") or "")
+            for part in content
+            if isinstance(part, Mapping) and part.get("text")
+        ).strip()
+    return ""
+
+
+def _turn_error(turn: Mapping[str, object]) -> str | None:
+    error = turn.get("error")
+    if isinstance(error, Mapping):
+        return _optional_string(error.get("message") or error.get("error"))
+    return _optional_string(error)
+
+
+def _turn_updated_at(turn: Mapping[str, object]) -> datetime | None:
+    value = turn.get("updatedAt") or turn.get("completedAt") or turn.get("createdAt")
+    return _parse_optional_datetime(value)
+
+
+def _parse_datetime(value: object) -> datetime:
+    return _parse_optional_datetime(value) or datetime.now(UTC)
+
+
+def _parse_optional_datetime(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _operation_limit(operation: Operation, *, default: int) -> int:
+    raw = operation.arguments.get("limit")
+    limit = int(str(raw)) if raw is not None else default
+    if limit < 1 or limit > 20:
+        raise ValueError("limit must be between 1 and 20")
+    return limit
+
+
+def _operation_page(operation: Operation) -> int:
+    page = int(str(operation.arguments.get("page") or 1))
+    if page < 1:
+        raise ValueError("page must be positive")
+    return page
+
+
+def _is_unsupported_method_error(error: Exception) -> bool:
+    if getattr(error, "code", None) == -32601:
+        return True
+    message = str(error).casefold()
+    return any(
+        marker in message
+        for marker in (
+            "method not found",
+            "unknown method",
+            "not implemented",
+            "unsupported method",
+            "requires experimentalapi",
+            "experimentalapi capability",
+            "no handler",
+        )
+    )

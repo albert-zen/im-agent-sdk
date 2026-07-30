@@ -26,13 +26,14 @@ Implemented vertical slices:
 - all four pinned IMCodex channels behind one Channel seam;
 - distinct Zen, Codex, and T3 Code application adapters;
 - create/list/switch/delete/status slash-command flow;
+- catch-up for the latest active Turn and paginated Thread history;
 - message send, final Agent-event projection, and image attachments;
 - Markdown-first projection and T3 Full Access as adapter configuration;
 - durable bindings, inbound idempotency, and delivery idempotency.
 
-Live edit-in-place delta projection and authoritative snapshot reconciliation
-remain the next recovery slice; final messages already use the application as
-the sole transcript authority.
+Edit-in-place token streaming is not a default IM requirement. Application
+snapshot reconciliation remains an internal reliability concern and is
+separate from the user-facing `/catchup` and `/history` experiences.
 
 ## Milestone 3: deepen migrated channel work
 

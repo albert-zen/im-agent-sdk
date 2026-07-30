@@ -28,10 +28,14 @@ from imagent.contracts import (
     SupportLevel,
     ThreadCapabilities,
     ThreadDeletionCapability,
+    ThreadHistory,
     ThreadRef,
     ThreadSnapshot,
     ThreadStatus,
     ThreadSummary,
+    TurnCatchup,
+    TurnHistoryEntry,
+    TurnStatus,
 )
 
 
@@ -163,6 +167,31 @@ class FakeAgentApplicationAdapter:
             if operation.target.thread_ref is None:
                 raise ValueError("thread.status requires thread_ref")
             value = await self.get_thread_status(operation.target.thread_ref)
+        elif operation.type is OperationType.TURN_CATCHUP:
+            if operation.target.thread_ref is None:
+                raise ValueError("turn.catchup requires thread_ref")
+            value = TurnCatchup(
+                thread_ref=operation.target.thread_ref,
+                turn_id=(f"turn-{len(self._inputs)}" if self._inputs else None),
+                status=(TurnStatus.RUNNING if self._inputs else TurnStatus.IDLE),
+                messages=(),
+            )
+        elif operation.type is OperationType.THREAD_HISTORY:
+            if operation.target.thread_ref is None:
+                raise ValueError("thread.history requires thread_ref")
+            value = ThreadHistory(
+                thread_ref=operation.target.thread_ref,
+                turns=(
+                    (
+                        TurnHistoryEntry(
+                            turn_id=f"turn-{len(self._inputs)}",
+                            status=TurnStatus.RUNNING,
+                        ),
+                    )
+                    if self._inputs
+                    else ()
+                ),
+            )
         elif operation.type is OperationType.TURN_INTERRUPT:
             if operation.target.thread_ref is None:
                 raise ValueError("turn.interrupt requires thread_ref")

@@ -28,10 +28,13 @@ from .contracts import (
     ProjectSummary,
     TextContent,
     TextFormat,
+    ThreadHistory,
     ThreadStatus,
     ThreadSummary,
+    TurnCatchup,
     derive_client_message_id,
 )
+from .history_rendering import render_thread_history, render_turn_catchup
 from .storage import InMemoryIdempotencyRepository
 
 logger = logging.getLogger(__name__)
@@ -259,6 +262,12 @@ class ImAgentGateway:
             return
         if command.name == "status":
             await self._thread_status(message, binding, application)
+            return
+        if command.name == "catchup":
+            await self._turn_catchup(message, command, binding, application)
+            return
+        if command.name == "history":
+            await self._thread_history(message, command, binding, application)
             return
         await self._deliver_error(
             message,
@@ -548,6 +557,74 @@ class ImAgentGateway:
             f"Thread `{binding.thread_ref.native_thread_id}` is **{status}**.",
         )
 
+    async def _turn_catchup(
+        self,
+        message: ChannelMessage,
+        command: SlashCommand,
+        binding: ConversationBinding,
+        application: AgentApplicationAdapter,
+    ) -> None:
+        if binding.thread_ref is None:
+            await self._deliver_error(message, "No thread is selected.")
+            return
+        try:
+            limit = _positive_limit(command.arguments, default=5)
+        except ValueError as error:
+            await self._deliver_error(message, str(error))
+            return
+        result = await application.execute(
+            self._operation(
+                message,
+                OperationType.TURN_CATCHUP,
+                OperationTarget(
+                    application_ref=application.summary.ref,
+                    project_ref=binding.project_ref,
+                    thread_ref=binding.thread_ref,
+                ),
+                {"limit": limit},
+            )
+        )
+        if result.status is not OperationResultStatus.SUCCEEDED or not isinstance(
+            result.value, TurnCatchup
+        ):
+            await self._deliver_operation_error(message, result)
+            return
+        await self._deliver_text(message, render_turn_catchup(result.value))
+
+    async def _thread_history(
+        self,
+        message: ChannelMessage,
+        command: SlashCommand,
+        binding: ConversationBinding,
+        application: AgentApplicationAdapter,
+    ) -> None:
+        if binding.thread_ref is None:
+            await self._deliver_error(message, "No thread is selected.")
+            return
+        try:
+            limit, page = _history_options(command.arguments)
+        except ValueError as error:
+            await self._deliver_error(message, str(error))
+            return
+        result = await application.execute(
+            self._operation(
+                message,
+                OperationType.THREAD_HISTORY,
+                OperationTarget(
+                    application_ref=application.summary.ref,
+                    project_ref=binding.project_ref,
+                    thread_ref=binding.thread_ref,
+                ),
+                {"limit": limit, "page": page},
+            )
+        )
+        if result.status is not OperationResultStatus.SUCCEEDED or not isinstance(
+            result.value, ThreadHistory
+        ):
+            await self._deliver_operation_error(message, result)
+            return
+        await self._deliver_text(message, render_thread_history(result.value))
+
     async def _ensure_application_binding(
         self,
         message: ChannelMessage,
@@ -792,4 +869,46 @@ _HELP = """## IM Agent commands
 - `/new [title]` — create and select a thread
 - `/delete` — archive/delete the selected thread
 - `/status` — show the selected thread status
+- `/catchup [messages]` — show recent progress in the latest Turn
+- `/history [turns] [--page N]` — restore context from recent Turns
 """
+
+
+def _positive_limit(arguments: tuple[str, ...], *, default: int) -> int:
+    if not arguments:
+        return default
+    if len(arguments) != 1 or not arguments[0].isdigit():
+        raise ValueError("Use `/catchup [positive-number]`.")
+    value = int(arguments[0])
+    if value < 1 or value > 20:
+        raise ValueError("The message limit must be between 1 and 20.")
+    return value
+
+
+def _history_options(arguments: tuple[str, ...]) -> tuple[int, int]:
+    limit = 3
+    page = 1
+    positional: list[str] = []
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument == "--page":
+            index += 1
+            if index >= len(arguments) or not arguments[index].isdigit():
+                raise ValueError("Use `/history [turns] [--page N]`.")
+            page = int(arguments[index])
+        elif argument.startswith("--page="):
+            value = argument.partition("=")[2]
+            if not value.isdigit():
+                raise ValueError("Use `/history [turns] [--page N]`.")
+            page = int(value)
+        else:
+            positional.append(argument)
+        index += 1
+    if len(positional) > 1 or (positional and not positional[0].isdigit()):
+        raise ValueError("Use `/history [turns] [--page N]`.")
+    if positional:
+        limit = int(positional[0])
+    if limit < 1 or limit > 20 or page < 1:
+        raise ValueError("History turns must be between 1 and 20 and page must be positive.")
+    return limit, page

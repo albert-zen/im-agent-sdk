@@ -13,6 +13,8 @@
         "thread.switch",
         "thread.delete",
         "thread.status",
+        "thread.history",
+        "turn.catchup",
         "turn.interrupt",
         "request.respond"
       ]

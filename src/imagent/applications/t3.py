@@ -37,9 +37,13 @@ from ..contracts import (
     TextFormat,
     ThreadCapabilities,
     ThreadDeletionCapability,
+    ThreadHistory,
     ThreadRef,
     ThreadStatus,
     ThreadSummary,
+    TurnCatchup,
+    TurnHistoryEntry,
+    TurnStatus,
 )
 
 _ID_NAMESPACE = uuid.UUID("15440f13-a923-4a4c-8791-637914777e5e")
@@ -228,6 +232,58 @@ class T3ApplicationAdapter:
             if summary is None:
                 raise ValueError("T3 thread is archived or deleted")
             return summary.status if operation.type is OperationType.THREAD_STATUS else summary
+        if operation.type is OperationType.TURN_CATCHUP:
+            thread_ref = _required_thread(operation)
+            self._require_own_thread(thread_ref)
+            limit = _operation_limit(operation, default=5)
+            detail = await self._client.thread_detail(thread_ref.native_thread_id)
+            thread = _object(detail.get("thread"), "thread")
+            latest_turn = _optional_object(thread.get("latestTurn"))
+            if latest_turn is None:
+                return TurnCatchup(
+                    thread_ref=thread_ref,
+                    turn_id=None,
+                    status=TurnStatus.IDLE,
+                    messages=(),
+                )
+            turn_id = str(latest_turn.get("turnId") or latest_turn.get("id") or "")
+            if not turn_id:
+                raise RuntimeError("T3 latestTurn did not contain a turn id")
+            messages = self._t3_catchup_messages(
+                thread_ref,
+                thread,
+                turn_id,
+            )
+            return TurnCatchup(
+                thread_ref=thread_ref,
+                turn_id=turn_id,
+                status=_turn_status(latest_turn.get("state") or latest_turn.get("status")),
+                messages=messages[-limit:],
+                updated_at=_parse_optional_datetime(
+                    latest_turn.get("completedAt")
+                    or latest_turn.get("startedAt")
+                    or latest_turn.get("requestedAt")
+                    or thread.get("updatedAt")
+                ),
+                metadata={"native_application": "t3"},
+            )
+        if operation.type is OperationType.THREAD_HISTORY:
+            thread_ref = _required_thread(operation)
+            self._require_own_thread(thread_ref)
+            limit = _operation_limit(operation, default=3)
+            page = _operation_page(operation)
+            detail = await self._client.thread_detail(thread_ref.native_thread_id)
+            thread = _object(detail.get("thread"), "thread")
+            turns = self._t3_history_entries(thread_ref, thread)
+            end = max(0, len(turns) - ((page - 1) * limit))
+            start = max(0, end - limit)
+            return ThreadHistory(
+                thread_ref=thread_ref,
+                turns=turns[start:end],
+                page=page,
+                has_older=start > 0,
+                metadata={"native_application": "t3"},
+            )
         if operation.type is OperationType.THREAD_DELETE:
             thread_ref = _required_thread(operation)
             self._require_own_thread(thread_ref)
@@ -254,6 +310,116 @@ class T3ApplicationAdapter:
             await self._client.dispatch(command)
             return None
         raise NotImplementedError(f"{operation.type.value} is unsupported by T3")
+
+    def _t3_catchup_messages(
+        self,
+        thread_ref: ThreadRef,
+        thread: Mapping[str, object],
+        turn_id: str,
+    ) -> tuple[AgentMessage, ...]:
+        ordered: list[tuple[str, int, AgentMessage]] = []
+        sequence = 0
+        for message in _object_list(thread.get("messages")):
+            if (
+                str(message.get("turnId") or "") != turn_id
+                or str(message.get("role") or "") != "assistant"
+            ):
+                continue
+            projected = _t3_agent_message(thread_ref, message)
+            if projected is not None:
+                ordered.append(
+                    (
+                        str(message.get("updatedAt") or message.get("createdAt") or ""),
+                        sequence,
+                        projected,
+                    )
+                )
+                sequence += 1
+        for activity in _object_list(thread.get("activities")):
+            if str(activity.get("turnId") or "") != turn_id:
+                continue
+            projected = _t3_activity_message(thread_ref, activity)
+            if projected is not None:
+                ordered.append(
+                    (
+                        str(activity.get("createdAt") or ""),
+                        sequence,
+                        projected,
+                    )
+                )
+                sequence += 1
+        ordered.sort(key=lambda item: (item[0], item[1]))
+        return tuple(item[2] for item in ordered)
+
+    def _t3_history_entries(
+        self,
+        thread_ref: ThreadRef,
+        thread: Mapping[str, object],
+    ) -> tuple[TurnHistoryEntry, ...]:
+        grouped: dict[str, list[Mapping[str, object]]] = {}
+        order: list[str] = []
+        for message in _object_list(thread.get("messages")):
+            turn_id = str(message.get("turnId") or "")
+            if not turn_id:
+                continue
+            if turn_id not in grouped:
+                grouped[turn_id] = []
+                order.append(turn_id)
+            grouped[turn_id].append(message)
+        for activity in _object_list(thread.get("activities")):
+            turn_id = str(activity.get("turnId") or "")
+            if turn_id and turn_id not in grouped:
+                grouped[turn_id] = []
+                order.append(turn_id)
+        latest_turn = _optional_object(thread.get("latestTurn"))
+        latest_id = (
+            str(latest_turn.get("turnId") or latest_turn.get("id") or "")
+            if latest_turn is not None
+            else ""
+        )
+        checkpoints = {
+            str(item.get("turnId") or "")
+            for item in _object_list(thread.get("checkpoints"))
+            if item.get("turnId")
+        }
+        entries: list[TurnHistoryEntry] = []
+        for turn_id in order:
+            messages = grouped[turn_id]
+            user_message = next(
+                (
+                    projected
+                    for item in messages
+                    if str(item.get("role") or "") == "user"
+                    and (projected := _t3_agent_message(thread_ref, item)) is not None
+                ),
+                None,
+            )
+            agent_messages = [
+                projected
+                for item in messages
+                if str(item.get("role") or "") == "assistant"
+                and (projected := _t3_agent_message(thread_ref, item)) is not None
+            ]
+            status = (
+                _turn_status(latest_turn.get("state") or latest_turn.get("status"))
+                if latest_turn is not None and turn_id == latest_id
+                else (
+                    TurnStatus.COMPLETED
+                    if turn_id in checkpoints or agent_messages
+                    else TurnStatus.UNKNOWN
+                )
+            )
+            entries.append(
+                TurnHistoryEntry(
+                    turn_id=turn_id,
+                    status=status,
+                    user_message=user_message,
+                    agent_message=(agent_messages[-1] if agent_messages else None),
+                    error=_t3_turn_error(thread, turn_id, status),
+                    metadata={"native_application": "t3"},
+                )
+            )
+        return tuple(entries)
 
     async def send_input(
         self,
@@ -548,6 +714,127 @@ def _thread_status(value: object) -> ThreadStatus:
         "waiting_for_approval": ThreadStatus.WAITING_FOR_APPROVAL,
         "waiting_for_input": ThreadStatus.WAITING_FOR_INPUT,
     }.get(normalized, ThreadStatus.UNKNOWN)
+
+
+def _turn_status(value: object) -> TurnStatus:
+    normalized = str(value or "").replace("-", "_").casefold()
+    return {
+        "idle": TurnStatus.IDLE,
+        "running": TurnStatus.RUNNING,
+        "active": TurnStatus.RUNNING,
+        "in_progress": TurnStatus.RUNNING,
+        "completed": TurnStatus.COMPLETED,
+        "failed": TurnStatus.FAILED,
+        "error": TurnStatus.FAILED,
+        "interrupted": TurnStatus.INTERRUPTED,
+        "cancelled": TurnStatus.INTERRUPTED,
+        "canceled": TurnStatus.INTERRUPTED,
+    }.get(normalized, TurnStatus.UNKNOWN)
+
+
+def _t3_agent_message(
+    thread_ref: ThreadRef,
+    message: Mapping[str, object],
+) -> AgentMessage | None:
+    role_value = str(message.get("role") or "")
+    role = {
+        "user": MessageRole.USER,
+        "assistant": MessageRole.ASSISTANT,
+        "system": MessageRole.SYSTEM,
+    }.get(role_value)
+    text = str(message.get("text") or "").strip()
+    message_id = _message_id(message)
+    if role is None or not text or not message_id:
+        return None
+    return AgentMessage(
+        agent_item_id=message_id,
+        thread_ref=thread_ref,
+        role=role,
+        content=(TextContent(text, TextFormat.MARKDOWN),),
+        created_at=_parse_datetime(message.get("createdAt") or message.get("updatedAt")),
+        metadata={
+            "turn_id": str(message.get("turnId") or ""),
+            "streaming": bool(message.get("streaming")),
+            "native_application": "t3",
+        },
+    )
+
+
+def _t3_activity_message(
+    thread_ref: ThreadRef,
+    activity: Mapping[str, object],
+) -> AgentMessage | None:
+    kind = str(activity.get("kind") or "")
+    if kind in {
+        "approval.requested",
+        "approval.resolved",
+        "user-input.requested",
+        "user-input.resolved",
+    }:
+        return None
+    summary = str(activity.get("summary") or "").strip()
+    payload = _optional_object(activity.get("payload")) or {}
+    detail = str(
+        payload.get("detail") or payload.get("message") or payload.get("summary") or ""
+    ).strip()
+    text = "\n\n".join(part for part in (summary, detail) if part)
+    activity_id = str(activity.get("id") or "")
+    if not text or not activity_id:
+        return None
+    return AgentMessage(
+        agent_item_id=activity_id,
+        thread_ref=thread_ref,
+        role=MessageRole.ASSISTANT,
+        content=(TextContent(text, TextFormat.MARKDOWN),),
+        created_at=_parse_datetime(activity.get("createdAt")),
+        metadata={
+            "kind": kind,
+            "turn_id": str(activity.get("turnId") or ""),
+            "native_application": "t3",
+            "source": "activity",
+        },
+    )
+
+
+def _t3_turn_error(
+    thread: Mapping[str, object],
+    turn_id: str,
+    status: TurnStatus,
+) -> str | None:
+    if status is TurnStatus.FAILED:
+        session = _optional_object(thread.get("session"))
+        if session is not None:
+            error = _optional_string(session.get("lastError"))
+            if error:
+                return error
+    for activity in reversed(_object_list(thread.get("activities"))):
+        if str(activity.get("turnId") or "") != turn_id:
+            continue
+        if str(activity.get("tone") or "") != "error" and str(activity.get("kind") or "") not in {
+            "runtime.error",
+            "turn.error",
+        }:
+            continue
+        payload = _optional_object(activity.get("payload")) or {}
+        return _optional_string(
+            payload.get("message") or payload.get("detail") or activity.get("summary")
+        )
+    return None
+
+
+def _operation_limit(operation: Operation, *, default: int) -> int:
+    raw = operation.arguments.get("limit")
+    limit = int(str(raw)) if raw is not None else default
+    if limit < 1 or limit > 20:
+        raise ValueError("limit must be between 1 and 20")
+    return limit
+
+
+def _operation_page(operation: Operation) -> int:
+    page = int(str(operation.arguments.get("page") or 1))
+    if page < 1:
+        raise ValueError("page must be positive")
+    return page
 
 
 def _encode_t3_attachments(

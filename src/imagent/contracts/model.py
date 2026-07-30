@@ -207,6 +207,45 @@ class AgentMessage:
     metadata: Metadata = field(default_factory=dict)
 
 
+class TurnStatus(StrEnum):
+    IDLE = "idle"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    INTERRUPTED = "interrupted"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True, slots=True)
+class TurnCatchup:
+    thread_ref: ThreadRef
+    turn_id: str | None
+    status: TurnStatus
+    messages: tuple[AgentMessage, ...]
+    updated_at: datetime | None = None
+    metadata: Metadata = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class TurnHistoryEntry:
+    turn_id: str
+    status: TurnStatus
+    user_message: AgentMessage | None = None
+    agent_message: AgentMessage | None = None
+    error: str | None = None
+    had_compaction: bool = False
+    metadata: Metadata = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class ThreadHistory:
+    thread_ref: ThreadRef
+    turns: tuple[TurnHistoryEntry, ...]
+    page: int = 1
+    has_older: bool = False
+    metadata: Metadata = field(default_factory=dict)
+
+
 @dataclass(frozen=True, slots=True)
 class ThreadSnapshot:
     thread: ThreadSummary
@@ -230,6 +269,8 @@ class OperationType(StrEnum):
     THREAD_SWITCH = "thread.switch"
     THREAD_DELETE = "thread.delete"
     THREAD_STATUS = "thread.status"
+    THREAD_HISTORY = "thread.history"
+    TURN_CATCHUP = "turn.catchup"
     TURN_INTERRUPT = "turn.interrupt"
     REQUEST_RESPOND = "request.respond"
 

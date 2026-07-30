@@ -104,6 +104,8 @@ def validate_operation(operation: Operation) -> None:
         OperationType.THREAD_SWITCH: ("thread",),
         OperationType.THREAD_DELETE: ("thread",),
         OperationType.THREAD_STATUS: ("thread",),
+        OperationType.THREAD_HISTORY: ("thread",),
+        OperationType.TURN_CATCHUP: ("thread",),
         OperationType.TURN_INTERRUPT: ("thread",),
         OperationType.REQUEST_RESPOND: ("application",),
     }

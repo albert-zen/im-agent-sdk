@@ -17,8 +17,10 @@ from imagent.contracts import (
     SupportLevel,
     TextContent,
     ThreadDeletionCapability,
+    ThreadHistory,
     ThreadStatus,
     ThreadSummary,
+    TurnCatchup,
     derive_client_message_id,
     validate_application_capabilities,
     validate_thread_ref,
@@ -200,6 +202,35 @@ async def verify_application_adapter(
     if accepted.client_message_id != client_message_id:
         raise AssertionError("client message ID was not preserved")
     checks.append(ContractCheck("stable client message ID round-trip"))
+
+    if capabilities.runtime.history is not SupportLevel.UNSUPPORTED:
+        catchup = succeeded_value(
+            await adapter.execute(
+                operation(
+                    OperationType.TURN_CATCHUP,
+                    adapter,
+                    project_ref=project_ref,
+                    thread_ref=created.ref,
+                    arguments={"limit": 5},
+                )
+            ),
+            TurnCatchup,
+        )
+        history = succeeded_value(
+            await adapter.execute(
+                operation(
+                    OperationType.THREAD_HISTORY,
+                    adapter,
+                    project_ref=project_ref,
+                    thread_ref=created.ref,
+                    arguments={"limit": 3, "page": 1},
+                )
+            ),
+            ThreadHistory,
+        )
+        if catchup.thread_ref != created.ref or history.thread_ref != created.ref:
+            raise AssertionError("history result belongs to a different thread")
+        checks.append(ContractCheck("catch-up and history result scoping"))
 
     if capabilities.threads.deletion is not ThreadDeletionCapability.UNSUPPORTED:
         succeeded_value(

@@ -125,6 +125,8 @@ The initial operations are:
 | `thread.switch` | Validate, subscribe to, and select a thread |
 | `thread.delete` | Delete or archive according to explicit capability |
 | `thread.status` | Read normalized status |
+| `thread.history` | Read recent Turns to restore an old Thread's context |
+| `turn.catchup` | Read recent Agent progress from the latest Turn |
 | `turn.interrupt` | Interrupt a running turn when supported |
 | `request.respond` | Respond to approval or user-input request |
 
@@ -190,6 +192,35 @@ ListResult<T> {
 
 `thread.list` may be scoped to one project or to the whole application when
 supported.
+
+### Catch-up and history
+
+These are user-facing context restoration operations, not streaming-token
+delivery:
+
+```text
+turn.catchup {
+  threadRef
+  limit
+}
+
+thread.history {
+  threadRef
+  limit
+  page
+}
+```
+
+`TurnCatchup` contains the latest Turn status and recent meaningful Agent
+progress messages. `ThreadHistory` contains recent Turn entries with the user
+goal, final/latest Agent result, terminal status, error, and compaction marker.
+
+Slash commands are one expression of these typed operations:
+
+```text
+/catchup [messages]
+/history [turns] [--page N]
+```
 
 ## Operation result
 

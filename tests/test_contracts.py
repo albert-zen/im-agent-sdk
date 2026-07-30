@@ -145,6 +145,30 @@ class MessageIdentityTests(unittest.TestCase):
 
 
 class OperationTests(unittest.TestCase):
+    def test_history_operations_require_thread_reference(self) -> None:
+        for operation_type in (
+            OperationType.TURN_CATCHUP,
+            OperationType.THREAD_HISTORY,
+        ):
+            with self.subTest(operation_type=operation_type):
+                operation = Operation(
+                    operation_id=f"op-{operation_type.value}",
+                    conversation_ref=ConversationRef(
+                        "qq-primary",
+                        "c2c:user-1",
+                    ),
+                    actor="user-1",
+                    type=operation_type,
+                    target=OperationTarget(),
+                    arguments={},
+                    created_at=datetime.now(UTC),
+                )
+                with self.assertRaisesRegex(
+                    ContractViolation,
+                    "requires thread_ref",
+                ):
+                    validate_operation(operation)
+
     def test_thread_switch_requires_thread_reference(self) -> None:
         operation = Operation(
             operation_id="op-1",

@@ -78,13 +78,14 @@ The adapter owns:
 
 - Markdown conversion and escaping;
 - length-aware segmentation;
-- edit-in-place streaming when supported;
+- optional edit-in-place delivery when a product explicitly enables it;
 - throttling and platform rate limits;
 - native idempotency keys where available;
 - conservative retry when native idempotency is unavailable.
 
-Streaming tokens are normally coalesced. QQ and Telegram should not receive one
-native message per token.
+Streaming tokens are not an IM UX requirement. The default behavior sends
+meaningful completed messages; QQ and Telegram do not receive one native
+message per token.
 
 ## Agent application adapter
 
@@ -100,6 +101,11 @@ execute(Operation) -> OperationResult
 The deliberately small `execute` seam owns project/thread control operations;
 the adapter maps each typed Operation to its native application API. This is a
 deep module boundary rather than a method-per-resource mirror.
+
+History-capable adapters implement both `turn.catchup` and `thread.history`.
+Codex/Zen map these to native App Server Turn items; T3 groups its native
+messages and activities by `turnId`. The Gateway owns the shared Markdown
+presentation while Channel adapters retain platform escaping and segmentation.
 
 Project creation or deletion may be optional. Project listing is part of the
 managed application model. An adapter declares `projectMode`:
