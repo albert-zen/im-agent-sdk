@@ -11,10 +11,10 @@ from .adapters import (
     BindingRepository,
     ChannelAdapter,
     IdempotencyRepository,
+    ProjectionRouteRepository,
 )
 from .bindings import BindingConflict
 from .contracts import (
-    AcceptedTurn,
     AgentEvent,
     AgentEventType,
     AgentInput,
@@ -36,17 +36,26 @@ from .contracts import (
     GatewayOperationResult,
     GetProject,
     GetThread,
+    GetThreadHistory,
+    GetTurnCatchup,
     InboundMessage,
     ListApplications,
+    ObserveThread,
     OperationErrorCode,
     OutboundMessage,
+    ProjectionPolicy,
     ProjectMode,
     ProjectRead,
     SelectApplication,
     TextContent,
     TextFormat,
     ThreadCreated,
+    ThreadHistoryRead,
+    ThreadObserved,
+    ThreadProjectionRoute,
     ThreadRead,
+    ThreadRef,
+    TurnCatchupRead,
     derive_client_message_id,
     operation_error,
     validate_application_operation,
@@ -55,6 +64,12 @@ from .contracts import (
     validate_gateway_operation_result,
 )
 from .controllers import ControllerActions, InboundController
+from .projections import (
+    InMemoryProjectionRouteRepository,
+    derive_projection_delivery_id,
+    derive_projection_route_id,
+)
+from .recovery import ThreadRecovery, recover_thread
 from .storage import InMemoryIdempotencyRepository
 
 logger = logging.getLogger(__name__)
@@ -70,6 +85,8 @@ class ImAgentGateway:
         applications: list[AgentApplicationAdapter],
         bindings: BindingRepository,
         idempotency: IdempotencyRepository | None = None,
+        projections: ProjectionRouteRepository | None = None,
+        projection_policy: ProjectionPolicy = ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
         controller: InboundController | None = None,
     ) -> None:
         self._channels = {channel.channel_instance_id: channel for channel in channels}
@@ -79,24 +96,40 @@ class ImAgentGateway:
         }
         self._bindings = bindings
         self._idempotency = idempotency or InMemoryIdempotencyRepository()
+        self._projections = projections or InMemoryProjectionRouteRepository()
+        self._projection_policy = projection_policy
         self._controller = controller
         self._locks: dict[object, asyncio.Lock] = {}
-        self._tasks: set[asyncio.Task[None]] = set()
+        self._projection_tasks: dict[ThreadRef, asyncio.Task[None]] = {}
+        self._projection_ready: dict[ThreadRef, asyncio.Event] = {}
 
     async def start(self) -> None:
         for application in self._applications.values():
             await application.start()
         for channel in self._channels.values():
             await channel.start(self._handle_message, self._handle_operation)
+        restored_routes = await self._projections.list_projection_routes()
+        if self._projection_policy is ProjectionPolicy.FOREGROUND_ONLY:
+            active_routes: list[ThreadProjectionRoute] = []
+            for route in restored_routes:
+                binding = await self._bindings.get(route.conversation_ref)
+                if binding is not None and binding.thread_ref == route.thread_ref:
+                    active_routes.append(route)
+            restored_routes = tuple(active_routes)
+        restored_threads = {route.thread_ref for route in restored_routes}
+        for thread_ref in restored_threads:
+            await self._ensure_projection(thread_ref, recover_existing=True)
 
     async def stop(self) -> None:
-        for channel in reversed(tuple(self._channels.values())):
-            await channel.stop()
-        tasks = tuple(self._tasks)
+        tasks = tuple(self._projection_tasks.values())
         for task in tasks:
             task.cancel()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
+        self._projection_tasks.clear()
+        self._projection_ready.clear()
+        for channel in reversed(tuple(self._channels.values())):
+            await channel.stop()
         for application in reversed(tuple(self._applications.values())):
             await application.stop()
 
@@ -239,6 +272,32 @@ class ImAgentGateway:
                 completed_at=completed_at,
                 binding=binding,
             )
+        if isinstance(operation, ObserveThread):
+            application = self._require_application(operation.thread_ref.application_instance_id)
+            read = await self.execute_application(
+                GetThread(
+                    operation_id=f"{operation.operation_id}:validate-thread",
+                    application_ref=application.summary.ref,
+                    thread_ref=operation.thread_ref,
+                    created_at=operation.created_at,
+                )
+            )
+            if isinstance(read, ApplicationOperationFailed):
+                raise _GatewayActionError(read.error)
+            if not isinstance(read, ThreadRead):
+                raise RuntimeError("thread.get returned an incompatible result")
+            route, _created = await self._remember_projection_route(
+                read.thread.ref,
+                operation.conversation_ref,
+                reply_to_message_id=operation.reply_to_message_id,
+            )
+            await self._ensure_projection(route.thread_ref)
+            await self._reconcile_route(application, route)
+            return ThreadObserved(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                route=route,
+            )
         if isinstance(operation, ClearConversationThread):
             current = await self._bindings.get(operation.conversation_ref)
             if current is None:
@@ -274,6 +333,7 @@ class ImAgentGateway:
     async def _process_message(self, message: InboundMessage) -> None:
         lock = self._locks.setdefault(message.conversation_ref, asyncio.Lock())
         async with lock:
+            thread_was_created = False
             if self._controller is not None:
                 outputs = await self._controller.handle(
                     message,
@@ -345,38 +405,39 @@ class ImAgentGateway:
                     await self._deliver_operation_error(message, bound)
                     return
                 binding = bound.binding
+                thread_was_created = True
             thread_ref = binding.thread_ref
             if thread_ref is None:
                 raise RuntimeError("thread binding was not established")
-            events = application.subscribe_thread(thread_ref)
-            try:
-                accepted = await application.send_input(
-                    thread_ref,
-                    AgentInput(
-                        client_message_id=derive_client_message_id(
-                            message.conversation_ref,
-                            message.message_id,
-                        ),
-                        content=message.content,
-                        sender=message.sender,
-                        metadata={"channel_message_id": message.message_id},
-                    ),
-                )
-            except BaseException:
-                await _close_subscription(events)
-                raise
-            task = asyncio.create_task(
-                self._project_turn(
-                    message=message,
-                    accepted=accepted,
-                    events=events,
-                )
+            route, created = await self._remember_projection_route(
+                thread_ref,
+                message.conversation_ref,
+                reply_to_message_id=message.message_id,
             )
-            self._tasks.add(task)
-            task.add_done_callback(self._finish_task)
+            await self._ensure_projection(thread_ref)
+            if created and not thread_was_created:
+                await self._reconcile_route(application, route)
+            await application.send_input(
+                thread_ref,
+                AgentInput(
+                    client_message_id=derive_client_message_id(
+                        message.conversation_ref,
+                        message.message_id,
+                    ),
+                    content=message.content,
+                    sender=message.sender,
+                    metadata={"channel_message_id": message.message_id},
+                ),
+            )
 
-    def _finish_task(self, task: asyncio.Task[None]) -> None:
-        self._tasks.discard(task)
+    def _finish_projection_task(
+        self,
+        thread_ref: ThreadRef,
+        task: asyncio.Task[None],
+    ) -> None:
+        if self._projection_tasks.get(thread_ref) is task:
+            self._projection_tasks.pop(thread_ref, None)
+            self._projection_ready.pop(thread_ref, None)
         if task.cancelled():
             return
         error = task.exception()
@@ -395,43 +456,229 @@ class ImAgentGateway:
                 result.error.message,
             )
 
-    async def _project_turn(
+    async def _remember_projection_route(
         self,
+        thread_ref: ThreadRef,
+        conversation_ref: ConversationRef,
         *,
-        message: InboundMessage,
-        accepted: AcceptedTurn,
-        events: AsyncIterator[AgentEvent],
+        reply_to_message_id: str | None,
+    ) -> tuple[ThreadProjectionRoute, bool]:
+        existing = await self._projections.list_projection_routes(thread_ref)
+        created = not any(route.conversation_ref == conversation_ref for route in existing)
+        route = ThreadProjectionRoute(
+            route_id=derive_projection_route_id(thread_ref, conversation_ref),
+            thread_ref=thread_ref,
+            conversation_ref=conversation_ref,
+            reply_to_message_id=reply_to_message_id,
+            updated_at=datetime.now(UTC),
+        )
+        if self._projection_policy is ProjectionPolicy.REMEMBERED_LAST_RECIPIENT:
+            stored = await self._projections.replace_thread_projection_routes(route)
+        else:
+            stored = await self._projections.put_projection_route(route)
+        return stored, created
+
+    async def _ensure_projection(
+        self,
+        thread_ref: ThreadRef,
+        *,
+        recover_existing: bool = False,
     ) -> None:
+        task = self._projection_tasks.get(thread_ref)
+        if task is None or task.done():
+            ready = asyncio.Event()
+            task = asyncio.create_task(
+                self._project_thread(
+                    thread_ref,
+                    ready,
+                    recover_existing=recover_existing,
+                )
+            )
+            self._projection_tasks[thread_ref] = task
+            self._projection_ready[thread_ref] = ready
+            task.add_done_callback(
+                lambda completed, ref=thread_ref: self._finish_projection_task(
+                    ref,
+                    completed,
+                )
+            )
+        ready = self._projection_ready[thread_ref]
+        await ready.wait()
+        if task.done():
+            await task
+
+    async def _project_thread(
+        self,
+        thread_ref: ThreadRef,
+        ready: asyncio.Event,
+        *,
+        recover_existing: bool,
+    ) -> None:
+        recovery: ThreadRecovery | None = None
+        events: AsyncIterator[AgentEvent] | None = None
+        application = self._require_application(thread_ref.application_instance_id)
         try:
+            if recover_existing:
+                recovery = await recover_thread(
+                    application,
+                    thread_ref,
+                    recovery_id=derive_projection_route_id(
+                        thread_ref,
+                        ConversationRef("gateway", "projection-recovery"),
+                    ),
+                )
+                events = recovery.events
+            else:
+                events = application.subscribe_thread(thread_ref)
+            ready.set()
+            if recovery is not None:
+                await self._reconcile_recovery(application, recovery)
             async for event in events:
-                if event.turn_id not in {None, accepted.turn_id}:
-                    continue
                 if event.type is AgentEventType.MESSAGE_COMPLETED:
                     agent_message = event.data.get("message")
                     if isinstance(agent_message, AgentMessage):
-                        await self._deliver_agent_message(message, agent_message)
-                if event.type in {
-                    AgentEventType.TURN_COMPLETED,
-                    AgentEventType.TURN_FAILED,
-                    AgentEventType.TURN_INTERRUPTED,
-                }:
-                    return
+                        await self._deliver_to_active_routes(agent_message)
         finally:
-            await _close_subscription(events)
+            ready.set()
+            if events is not None:
+                await _close_subscription(events)
+
+    async def _reconcile_recovery(
+        self,
+        application: AgentApplicationAdapter,
+        recovery: ThreadRecovery,
+    ) -> None:
+        thread_ref = (
+            recovery.history.thread_ref
+            if recovery.history is not None
+            else recovery.catchup.thread_ref
+            if recovery.catchup is not None
+            else None
+        )
+        routes = await self._active_projection_routes(thread_ref)
+        if not routes:
+            return
+        if thread_ref is None:
+            return
+        messages = await self._read_authoritative_messages(
+            application,
+            thread_ref,
+        )
+        for route in routes:
+            await self._deliver_messages(route, messages)
+
+    async def _reconcile_route(
+        self,
+        application: AgentApplicationAdapter,
+        route: ThreadProjectionRoute,
+    ) -> None:
+        messages = await self._read_authoritative_messages(
+            application,
+            route.thread_ref,
+        )
+        await self._deliver_messages(route, messages)
+
+    async def _read_authoritative_messages(
+        self,
+        application: AgentApplicationAdapter,
+        thread_ref: ThreadRef,
+    ) -> tuple[AgentMessage, ...]:
+        history_pages: list[tuple[AgentMessage, ...]] = []
+        recovery_scope = derive_projection_route_id(
+            thread_ref,
+            ConversationRef("gateway", "authoritative-recovery"),
+        )
+        page = 1
+        while True:
+            history_result = await self.execute_application(
+                GetThreadHistory(
+                    operation_id=f"{recovery_scope}:thread.history:{page}",
+                    application_ref=application.summary.ref,
+                    thread_ref=thread_ref,
+                    limit=20,
+                    page=page,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            if not isinstance(history_result, ThreadHistoryRead):
+                break
+            history_pages.append(
+                tuple(
+                    message
+                    for turn in history_result.history.turns
+                    for message in turn.agent_messages
+                )
+            )
+            if not history_result.history.has_older:
+                break
+            page += 1
+        catchup_result = await self.execute_application(
+            GetTurnCatchup(
+                operation_id=f"{recovery_scope}:turn.catchup",
+                application_ref=application.summary.ref,
+                thread_ref=thread_ref,
+                limit=20,
+                created_at=datetime.now(UTC),
+            )
+        )
+        messages: list[AgentMessage] = []
+        for history_page in reversed(history_pages):
+            messages.extend(history_page)
+        if isinstance(catchup_result, TurnCatchupRead):
+            messages.extend(catchup_result.catchup.messages)
+        return tuple(messages)
+
+    async def _deliver_to_active_routes(
+        self,
+        agent_message: AgentMessage,
+    ) -> None:
+        routes = await self._active_projection_routes(agent_message.thread_ref)
+        await asyncio.gather(
+            *(self._deliver_agent_message(route, agent_message) for route in routes)
+        )
+
+    async def _active_projection_routes(
+        self,
+        thread_ref: ThreadRef | None,
+    ) -> tuple[ThreadProjectionRoute, ...]:
+        if thread_ref is None:
+            return ()
+        routes = await self._projections.list_projection_routes(thread_ref)
+        if self._projection_policy is not ProjectionPolicy.FOREGROUND_ONLY:
+            return routes
+        active: list[ThreadProjectionRoute] = []
+        for route in routes:
+            binding = await self._bindings.get(route.conversation_ref)
+            if binding is not None and binding.thread_ref == thread_ref:
+                active.append(route)
+        return tuple(active)
+
+    async def _deliver_messages(
+        self,
+        route: ThreadProjectionRoute,
+        messages: tuple[AgentMessage, ...],
+    ) -> None:
+        seen: set[str] = set()
+        for message in messages:
+            if message.agent_item_id in seen:
+                continue
+            seen.add(message.agent_item_id)
+            await self._deliver_agent_message(route, message)
 
     async def _deliver_agent_message(
         self,
-        inbound: InboundMessage,
+        route: ThreadProjectionRoute,
         agent_message: AgentMessage,
     ) -> None:
-        delivery_id = (
-            f"imagent:delivery:{agent_message.thread_ref.native_thread_id}:"
-            f"{agent_message.agent_item_id}"
+        delivery_id = derive_projection_delivery_id(
+            route.conversation_ref,
+            agent_message.thread_ref,
+            agent_message.agent_item_id,
         )
         await self._deliver_outbound(
             OutboundMessage(
                 delivery_id=delivery_id,
-                conversation_ref=inbound.conversation_ref,
+                conversation_ref=route.conversation_ref,
                 content=tuple(
                     TextContent(item.text, TextFormat.MARKDOWN)
                     if isinstance(item, TextContent)
@@ -439,7 +686,7 @@ class ImAgentGateway:
                     for item in agent_message.content
                 ),
                 created_at=agent_message.created_at,
-                reply_to=inbound.message_id,
+                reply_to=route.reply_to_message_id,
             )
         )
 

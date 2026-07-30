@@ -23,6 +23,7 @@ from ..contracts import (
     ListApplications,
     ListProjects,
     ListThreads,
+    ObserveThread,
     OutboundMessage,
     ProjectMode,
     ProjectsListed,
@@ -34,6 +35,7 @@ from ..contracts import (
     ThreadDeletionCapability,
     ThreadDeletionMode,
     ThreadHistoryRead,
+    ThreadObserved,
     ThreadsListed,
     ThreadStatusRead,
     ThreadSummary,
@@ -347,6 +349,18 @@ class SlashController:
             )
         )
         _require_bound(result)
+        _require_observed(
+            await actions.execute_gateway(
+                ObserveThread(
+                    operation_id=_operation_id(message, "thread.observe"),
+                    conversation_ref=message.conversation_ref,
+                    actor=message.sender,
+                    thread_ref=thread.ref,
+                    reply_to_message_id=message.message_id,
+                    created_at=message.created_at,
+                )
+            )
+        )
         return (
             f"Selected thread **{thread.title or thread.ref.native_thread_id}** "
             f"(`{thread.ref.native_thread_id}`)."
@@ -389,6 +403,18 @@ class SlashController:
             )
         )
         _require_bound(bound)
+        _require_observed(
+            await actions.execute_gateway(
+                ObserveThread(
+                    operation_id=_operation_id(message, "thread.observe"),
+                    conversation_ref=message.conversation_ref,
+                    actor=message.sender,
+                    thread_ref=thread.ref,
+                    reply_to_message_id=message.message_id,
+                    created_at=message.created_at,
+                )
+            )
+        )
         self._thread_views.pop(message.conversation_ref, None)
         return (
             f"Created thread **{thread.title or thread.ref.native_thread_id}** "
@@ -528,6 +554,13 @@ def _require_bound(result) -> ConversationBinding:
     if not isinstance(result, ConversationBound):
         raise _CommandError("Binding operation returned an incompatible result.")
     return result.binding
+
+
+def _require_observed(result) -> None:
+    if isinstance(result, GatewayOperationFailed):
+        raise _CommandError(result.error.message)
+    if not isinstance(result, ThreadObserved):
+        raise _CommandError("Thread observation returned an incompatible result.")
 
 
 def _operation_id(message: InboundMessage, operation_type: str) -> str:

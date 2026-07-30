@@ -52,6 +52,12 @@ class EventSequenceScope(StrEnum):
     APPLICATION = "application"
 
 
+class ProjectionPolicy(StrEnum):
+    FOREGROUND_ONLY = "foreground_only"
+    REMEMBERED_LAST_RECIPIENT = "remembered_last_recipient"
+    ALL_OBSERVERS = "all_observers"
+
+
 class ProjectMode(StrEnum):
     MANAGED = "managed"
     FLAT = "flat"
@@ -285,7 +291,7 @@ class TurnHistoryEntry:
     turn_id: str
     status: TurnStatus
     user_message: AgentMessage | None = None
-    agent_message: AgentMessage | None = None
+    agent_messages: tuple[AgentMessage, ...] = ()
     error: str | None = None
     had_compaction: bool = False
     metadata: Metadata = field(default_factory=dict)
@@ -361,6 +367,15 @@ class ConversationBinding:
     project_ref: ProjectRef | None = None
     thread_ref: ThreadRef | None = None
     revision: int = 0
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ThreadProjectionRoute:
+    route_id: str
+    thread_ref: ThreadRef
+    conversation_ref: ConversationRef
+    reply_to_message_id: str | None = None
     updated_at: datetime | None = None
 
 

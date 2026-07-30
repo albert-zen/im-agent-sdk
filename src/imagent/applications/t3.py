@@ -495,12 +495,11 @@ class T3ApplicationAdapter:
                 ),
                 None,
             )
-            agent_messages = [
-                projected
-                for item in messages
-                if str(item.get("role") or "") == "assistant"
-                and (projected := _t3_agent_message(thread_ref, item)) is not None
-            ]
+            agent_messages = self._t3_catchup_messages(
+                thread_ref,
+                thread,
+                turn_id,
+            )
             status = (
                 _turn_status(latest_turn.get("state") or latest_turn.get("status"))
                 if latest_turn is not None and turn_id == latest_id
@@ -515,7 +514,7 @@ class T3ApplicationAdapter:
                     turn_id=turn_id,
                     status=status,
                     user_message=user_message,
-                    agent_message=(agent_messages[-1] if agent_messages else None),
+                    agent_messages=agent_messages,
                     error=_t3_turn_error(thread, turn_id, status),
                     metadata={"native_application": "t3"},
                 )

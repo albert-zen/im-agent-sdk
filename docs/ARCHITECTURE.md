@@ -148,6 +148,7 @@ The core never depends on how the operation was expressed.
 | Thread transcript | Agent application | Projection/cache only |
 | Turn and request state | Agent application | Projection/cache only |
 | Conversation selection | Gateway | Yes |
+| Thread projection routes | Gateway | Yes, routing fields only |
 | Inbound idempotency | Gateway | Yes |
 | Outbound delivery correlation | Gateway | Yes |
 | Reconnect cursor | Gateway | Yes |
@@ -186,6 +187,39 @@ Some group-chat products may eventually require per-user selection:
 That is a product policy and remains an open extension. The initial common
 contract uses conversation-level binding.
 
+## Thread projection routing
+
+Input selection and output observation are separate Gateway-owned resources.
+A `ConversationBinding` answers where the next inbound message goes. A
+`ThreadProjectionRoute` answers which Conversation may receive completed
+messages observed from one application Thread:
+
+```text
+routeId
+threadRef
+conversationRef
+replyToMessageId?
+updatedAt
+```
+
+Routes contain no transcript, Turn status, execution status, or message
+content. A deployment selects one projection policy:
+
+```text
+foreground_only
+remembered_last_recipient
+all_observers
+```
+
+`foreground_only` delivers only while the destination Conversation is
+currently bound to the route's Thread. `remembered_last_recipient` keeps one
+last destination per Thread even if that Conversation selects another input
+Thread. `all_observers` retains every explicitly observed destination.
+
+`conversation.bind_thread`, `thread.activate_native`, and `thread.observe` are
+three distinct mutations. Default UX may compose them, but none implies either
+of the others in the Core contract.
+
 ## Message flow
 
 1. A Channel adapter verifies and normalizes a native inbound message.
@@ -194,12 +228,14 @@ contract uses conversation-level binding.
    interaction into a typed operation; normal content continues unchanged.
 4. The Gateway derives a stable client message ID from the native identity.
 5. The Gateway resolves the conversation binding.
-6. The selected Agent application adapter sends the input to the selected
+6. The Gateway records or refreshes an explicit projection route and
+   establishes the Thread subscription before sending input.
+7. The selected Agent application adapter sends the input to the selected
    thread.
-7. The Agent application broadcasts the canonical user item and subsequent
+8. The Agent application broadcasts the canonical user item and subsequent
    Agent events.
-8. The Gateway projects those events into the capabilities of each subscribed
-   channel.
+9. The Gateway resolves current projection routes at delivery time and
+   projects events into the capabilities of each subscribed channel.
 
 The canonical user-item event is required even when the originating client
 already displayed an optimistic local message. Clients deduplicate by stable
@@ -207,8 +243,9 @@ ID.
 
 Native notification producers fan out into independent subscriber streams and
 return without waiting for Channel delivery. Slow IM projection therefore
-cannot stall an application socket read path. Projection exits only on an
-explicit terminal Turn event, never merely on `message.completed`.
+cannot stall an application socket read path. Thread projection exits only on
+Gateway shutdown; a terminal event ends its Turn, not observation of the
+durable Thread.
 
 ## Recovery flow
 
@@ -230,6 +267,11 @@ When native replay is unavailable, the honest path is subscribe first, read
 authoritative history/catch-up, reconcile stable IDs, then drain live events.
 The SDK never manufactures a restart-unsafe counter and presents it as a
 recoverable sequence.
+
+At bridge restart, durable routes select the Threads whose live subscriptions
+must be rebuilt. Authoritative history/catch-up plus outbound idempotency
+reconstruct visible delivery without persisting an SDK transcript. Explicitly
+observing a Thread again uses the same reconciliation path.
 
 ## Concurrency
 

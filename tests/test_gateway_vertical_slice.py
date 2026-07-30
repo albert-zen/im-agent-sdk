@@ -367,6 +367,8 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Design the SDK", history)
         self.assertIn("The SDK design is complete.", history)
         self.assertIn("Refactor the adapters", history)
+        self.assertIn("Inspecting the existing adapters.", history)
+        self.assertIn("Running the focused tests.", history)
 
     async def test_t3_catchup_and_history_use_native_turn_grouping(self) -> None:
         native_channel = NativeQQChannel()
@@ -705,8 +707,12 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             await native_channel.receive("/use 1", message_id="t3-2")
             await native_channel.receive("/new SDK task", message_id="t3-3")
             await native_channel.receive("Build it", message_id="t3-4")
-            await asyncio.wait_for(native_channel.delivered.wait(), timeout=1)
-            await asyncio.sleep(0)
+            async with asyncio.timeout(1):
+                while not any(
+                    message.text == "## T3 done\n\nThe same pipeline works."
+                    for message in native_channel.sent
+                ):
+                    await asyncio.sleep(0)
         finally:
             await gateway.stop()
 

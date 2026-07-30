@@ -11,6 +11,7 @@ from .model import (
     EventSequenceScope,
     ProjectMode,
     SupportLevel,
+    ThreadProjectionRoute,
     ThreadRef,
 )
 from .operations import (
@@ -38,6 +39,7 @@ from .operations import (
     ListProjects,
     ListThreads,
     NativeThreadActivated,
+    ObserveThread,
     ProjectRead,
     ProjectsListed,
     RequestResponded,
@@ -46,6 +48,7 @@ from .operations import (
     ThreadCreated,
     ThreadDeleted,
     ThreadHistoryRead,
+    ThreadObserved,
     ThreadRead,
     ThreadsListed,
     ThreadStatusRead,
@@ -162,6 +165,21 @@ def validate_binding(
         )
 
 
+def validate_projection_route(route: ThreadProjectionRoute) -> None:
+    require_identifier(route.route_id, "route_id")
+    validate_thread_ref(route.thread_ref)
+    require_identifier(
+        route.conversation_ref.channel_instance_id,
+        "channel_instance_id",
+    )
+    require_identifier(
+        route.conversation_ref.native_conversation_id,
+        "native_conversation_id",
+    )
+    if route.reply_to_message_id is not None:
+        require_identifier(route.reply_to_message_id, "reply_to_message_id")
+
+
 def validate_application_operation(operation: ApplicationOperation) -> None:
     require_identifier(operation.operation_id, "operation_id")
     application_id = operation.application_ref.application_instance_id
@@ -224,6 +242,10 @@ def validate_gateway_operation(operation: GatewayOperation) -> None:
         require_identifier(operation.project_ref.native_project_id, "native_project_id")
     if isinstance(operation, BindConversationToThread):
         validate_thread_ref(operation.thread_ref)
+    if isinstance(operation, ObserveThread):
+        validate_thread_ref(operation.thread_ref)
+        if operation.reply_to_message_id is not None:
+            require_identifier(operation.reply_to_message_id, "reply_to_message_id")
 
 
 def validate_application_operation_result(
@@ -356,6 +378,17 @@ def validate_gateway_operation_result(
     if isinstance(operation, ListApplications):
         if not isinstance(result, ApplicationsListed):
             raise ContractViolation("application.list must return ApplicationsListed")
+        return
+    if isinstance(operation, ObserveThread):
+        if not isinstance(result, ThreadObserved):
+            raise ContractViolation("thread.observe must return ThreadObserved")
+        validate_projection_route(result.route)
+        if result.route.thread_ref != operation.thread_ref:
+            raise ContractViolation("thread.observe returned a different Thread")
+        if result.route.conversation_ref != operation.conversation_ref:
+            raise ContractViolation("thread.observe returned a different Conversation")
+        if result.route.reply_to_message_id != operation.reply_to_message_id:
+            raise ContractViolation("thread.observe returned different reply correlation")
         return
     if not isinstance(
         operation,

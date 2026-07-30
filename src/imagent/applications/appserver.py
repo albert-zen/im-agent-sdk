@@ -386,8 +386,7 @@ class _AppServerApplicationAdapter:
         turn: Mapping[str, object],
     ) -> TurnHistoryEntry:
         user_message: AgentMessage | None = None
-        latest_agent: AgentMessage | None = None
-        final_agent: AgentMessage | None = None
+        agent_messages: list[AgentMessage] = []
         had_compaction = False
         for item in _turn_items(turn):
             item_type = _normalized_item_type(item)
@@ -399,14 +398,12 @@ class _AppServerApplicationAdapter:
             if message.role is MessageRole.USER and user_message is None:
                 user_message = message
             if message.role is MessageRole.ASSISTANT:
-                latest_agent = message
-                if str(item.get("phase") or "").casefold() == "final_answer":
-                    final_agent = message
+                agent_messages.append(message)
         return TurnHistoryEntry(
             turn_id=_turn_id(turn),
             status=_turn_status(turn.get("status")),
             user_message=user_message,
-            agent_message=final_agent or latest_agent,
+            agent_messages=tuple(agent_messages),
             error=_turn_error(turn),
             had_compaction=had_compaction,
             metadata={"native_application": self._summary.kind},

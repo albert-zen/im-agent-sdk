@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.imagent.dev/v1/projections.schema.json",
+  "title": "IM Agent Thread projection routing",
+  "$defs": {
+    "ProjectionPolicy": {
+      "enum": [
+        "foreground_only",
+        "remembered_last_recipient",
+        "all_observers"
+      ]
+    },
+    "ThreadProjectionRoute": {
+      "type": "object",
+      "required": [
+        "routeId",
+        "threadRef",
+        "conversationRef",
+        "replyToMessageId",
+        "updatedAt"
+      ],
+      "properties": {
+        "routeId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "threadRef": {
+          "$ref": "resources.schema.json#/$defs/ThreadRef"
+        },
+        "conversationRef": {
+          "$ref": "messages.schema.json#/$defs/ConversationRef"
+        },
+        "replyToMessageId": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "updatedAt": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Timestamp" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

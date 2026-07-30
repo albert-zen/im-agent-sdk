@@ -156,6 +156,7 @@ class FakeAgentApplicationAdapter:
             self._projects[ref] = ProjectSummary(ref=ref, display_name="Contract Project")
         self._threads: dict[ThreadRef, ThreadSummary] = {}
         self._inputs: list[tuple[ThreadRef, AgentInput]] = []
+        self._turn_history: dict[ThreadRef, list[TurnHistoryEntry]] = {}
         self._events = EventBroadcaster[ThreadRef, AgentEvent]()
         self._event_epoch = str(uuid.uuid4())
         self._event_history_limit = event_history_limit
@@ -259,33 +260,30 @@ class FakeAgentApplicationAdapter:
                 thread_status=await self.get_thread_status(operation.thread_ref),
             )
         if isinstance(operation, GetTurnCatchup):
+            turns = self._turn_history.get(operation.thread_ref, [])
+            latest = turns[-1] if turns else None
             return TurnCatchupRead(
                 operation_id=operation.operation_id,
                 completed_at=now,
                 catchup=TurnCatchup(
                     thread_ref=operation.thread_ref,
-                    turn_id=(f"turn-{len(self._inputs)}" if self._inputs else None),
-                    status=(TurnStatus.COMPLETED if self._inputs else TurnStatus.IDLE),
-                    messages=(),
+                    turn_id=latest.turn_id if latest is not None else None,
+                    status=latest.status if latest is not None else TurnStatus.IDLE,
+                    messages=latest.agent_messages if latest is not None else (),
                 ),
             )
         if isinstance(operation, GetThreadHistory):
+            turns = self._turn_history.get(operation.thread_ref, [])
+            end = max(0, len(turns) - ((operation.page - 1) * operation.limit))
+            start = max(0, end - operation.limit)
             return ThreadHistoryRead(
                 operation_id=operation.operation_id,
                 completed_at=now,
                 history=ThreadHistory(
                     thread_ref=operation.thread_ref,
-                    turns=(
-                        (
-                            TurnHistoryEntry(
-                                turn_id=f"turn-{len(self._inputs)}",
-                                status=TurnStatus.COMPLETED,
-                            ),
-                        )
-                        if self._inputs
-                        else ()
-                    ),
+                    turns=tuple(turns[start:end]),
                     page=operation.page,
+                    has_older=start > 0,
                 ),
             )
         if isinstance(operation, InterruptTurn):
@@ -331,6 +329,7 @@ class FakeAgentApplicationAdapter:
             updated_at=datetime.now(UTC),
         )
         self._threads[ref] = summary
+        self._turn_history[ref] = []
         return summary
 
     async def get_thread(self, thread_ref: ThreadRef) -> ThreadSummary:
@@ -350,6 +349,7 @@ class FakeAgentApplicationAdapter:
             status=ThreadStatus.RUNNING,
             updated_at=datetime.now(UTC),
         )
+        agent_messages: list[AgentMessage] = []
         for index, phase in enumerate(("commentary", "final_answer"), start=1):
             agent_message = AgentMessage(
                 agent_item_id=f"{turn_id}:message:{index}",
@@ -359,6 +359,7 @@ class FakeAgentApplicationAdapter:
                 created_at=datetime.now(UTC),
                 metadata={"phase": phase},
             )
+            agent_messages.append(agent_message)
             self._publish(
                 thread_ref,
                 AgentEventType.MESSAGE_COMPLETED,
@@ -375,6 +376,21 @@ class FakeAgentApplicationAdapter:
             self._threads[thread_ref],
             status=ThreadStatus.COMPLETED,
             updated_at=datetime.now(UTC),
+        )
+        self._turn_history[thread_ref].append(
+            TurnHistoryEntry(
+                turn_id=turn_id,
+                status=TurnStatus.COMPLETED,
+                user_message=AgentMessage(
+                    agent_item_id=f"{turn_id}:user",
+                    thread_ref=thread_ref,
+                    role=MessageRole.USER,
+                    content=message.content,
+                    created_at=datetime.now(UTC),
+                    client_message_id=message.client_message_id,
+                ),
+                agent_messages=tuple(agent_messages),
+            )
         )
         return AcceptedTurn(
             thread_ref=thread_ref,

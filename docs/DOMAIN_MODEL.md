@@ -207,6 +207,30 @@ Invariants:
 - native activation, when supported, is an explicit application operation and
   does not mutate a Conversation binding.
 
+## Thread projection route
+
+A Thread projection route is minimal Gateway-owned delivery state:
+
+```text
+ThreadProjectionRoute {
+  routeId
+  threadRef
+  conversationRef
+  replyToMessageId?
+  updatedAt
+}
+```
+
+It does not select future input and does not activate a native application
+Thread. It contains no Agent message, transcript, Turn state, or execution
+state. Those values are always recovered from the Agent application.
+
+Route IDs are stable for a `(ThreadRef, ConversationRef)` pair. A product
+chooses `foreground_only`, `remembered_last_recipient`, or `all_observers`
+policy. The first policy filters delivery through the current input binding;
+the second replaces the remembered destination for that Thread; the third
+keeps multiple explicit observers.
+
 ## Thread status
 
 The initial normalized states are:

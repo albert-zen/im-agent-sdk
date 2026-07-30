@@ -25,7 +25,8 @@
         "application.select",
         "conversation.bind_project",
         "conversation.bind_thread",
-        "conversation.clear_thread"
+        "conversation.clear_thread",
+        "thread.observe"
       ]
     },
     "ApplicationOperationIdentity": {
@@ -386,13 +387,36 @@
       ],
       "unevaluatedProperties": false
     },
+    "ObserveThread": {
+      "allOf": [
+        { "$ref": "#/$defs/GatewayOperationIdentity" },
+        {
+          "type": "object",
+          "required": ["type", "threadRef", "replyToMessageId"],
+          "properties": {
+            "type": { "const": "thread.observe" },
+            "threadRef": {
+              "$ref": "resources.schema.json#/$defs/ThreadRef"
+            },
+            "replyToMessageId": {
+              "oneOf": [
+                { "$ref": "common.schema.json#/$defs/Identifier" },
+                { "type": "null" }
+              ]
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
     "GatewayOperation": {
       "oneOf": [
         { "$ref": "#/$defs/ListApplications" },
         { "$ref": "#/$defs/SelectApplication" },
         { "$ref": "#/$defs/BindConversationToProject" },
         { "$ref": "#/$defs/BindConversationToThread" },
-        { "$ref": "#/$defs/ClearConversationThread" }
+        { "$ref": "#/$defs/ClearConversationThread" },
+        { "$ref": "#/$defs/ObserveThread" }
       ]
     },
     "ProjectPage": {
@@ -704,6 +728,22 @@
       ],
       "unevaluatedProperties": false
     },
+    "ThreadObserved": {
+      "allOf": [
+        { "$ref": "#/$defs/GatewaySuccessIdentity" },
+        {
+          "type": "object",
+          "required": ["type", "route"],
+          "properties": {
+            "type": { "const": "thread.observe" },
+            "route": {
+              "$ref": "projections.schema.json#/$defs/ThreadProjectionRoute"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
     "GatewayOperationFailed": {
       "type": "object",
       "required": ["operationId", "type", "status", "error", "completedAt"],
@@ -720,6 +760,7 @@
       "oneOf": [
         { "$ref": "#/$defs/ApplicationsListed" },
         { "$ref": "#/$defs/ConversationBound" },
+        { "$ref": "#/$defs/ThreadObserved" },
         { "$ref": "#/$defs/GatewayOperationFailed" }
       ]
     }

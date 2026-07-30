@@ -117,3 +117,19 @@ Capabilities separately declare replay, gap detection, and sequence scope.
 Cursor expiration is explicit. Unsupported replay falls back to a fresh live
 subscription plus authoritative history/catch-up reconciliation, not a
 synthetic SDK event log.
+
+## D-011: Input selection, native activation, and output projection are separate
+
+`ConversationBinding` selects the destination of future input.
+`thread.activate_native` optionally changes native application UI state.
+`ThreadProjectionRoute` selects IM output destinations for an application
+Thread. No one of these mutations implies another.
+
+Projection routes persist only stable Thread and Conversation references,
+optional reply correlation, and update time. They never store transcript,
+Turn, or execution truth. Gateway projection workers are Thread-scoped and
+rebuild after restart from routes plus authoritative history/catch-up.
+
+Built-in policy supports `foreground_only`, `remembered_last_recipient`, and
+`all_observers`. Default UX may explicitly compose binding and observation
+operations.

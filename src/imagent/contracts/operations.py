@@ -17,6 +17,7 @@ from .model import (
     ProjectRef,
     ProjectSummary,
     ThreadHistory,
+    ThreadProjectionRoute,
     ThreadRef,
     ThreadStatus,
     ThreadSummary,
@@ -50,6 +51,7 @@ class GatewayOperationType(StrEnum):
     CONVERSATION_BIND_PROJECT = "conversation.bind_project"
     CONVERSATION_BIND_THREAD = "conversation.bind_thread"
     CONVERSATION_CLEAR_THREAD = "conversation.clear_thread"
+    THREAD_OBSERVE = "thread.observe"
 
 
 class ThreadDeletionMode(StrEnum):
@@ -275,12 +277,23 @@ class ClearConversationThread(_GatewayOperation):
     )
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ObserveThread(_GatewayOperation):
+    thread_ref: ThreadRef
+    reply_to_message_id: str | None = None
+    type: GatewayOperationType = field(
+        init=False,
+        default=GatewayOperationType.THREAD_OBSERVE,
+    )
+
+
 GatewayOperation: TypeAlias = (
     ListApplications
     | SelectApplication
     | BindConversationToProject
     | BindConversationToThread
     | ClearConversationThread
+    | ObserveThread
 )
 
 
@@ -460,6 +473,15 @@ class ConversationBound(_GatewayOperationSucceeded):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class ThreadObserved(_GatewayOperationSucceeded):
+    route: ThreadProjectionRoute
+    type: GatewayOperationType = field(
+        init=False,
+        default=GatewayOperationType.THREAD_OBSERVE,
+    )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class GatewayOperationFailed:
     operation_id: str
     type: GatewayOperationType
@@ -471,4 +493,6 @@ class GatewayOperationFailed:
     )
 
 
-GatewayOperationResult: TypeAlias = ApplicationsListed | ConversationBound | GatewayOperationFailed
+GatewayOperationResult: TypeAlias = (
+    ApplicationsListed | ConversationBound | ThreadObserved | GatewayOperationFailed
+)

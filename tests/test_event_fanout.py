@@ -17,6 +17,7 @@ from imagent.contracts import (
     ConversationBinding,
     ConversationRef,
     InboundMessage,
+    ProjectionPolicy,
     ProjectMode,
     TextContent,
     ThreadRef,
@@ -140,6 +141,7 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
             channels=[channel],
             applications=[application],
             bindings=bindings,
+            projection_policy=ProjectionPolicy.ALL_OBSERVERS,
         )
         await gateway.start()
         try:
@@ -148,15 +150,15 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
                 channel.on_message(_inbound(second_conversation, "second-message")),
             )
             async with asyncio.timeout(1):
-                while len(channel.sent) < 4:
+                while len(channel.sent) < 8:
                     await asyncio.sleep(0)
         finally:
             await gateway.stop()
 
         replies = [message.reply_to for message in channel.sent]
-        self.assertEqual(replies.count("first-message"), 2)
-        self.assertEqual(replies.count("second-message"), 2)
-        self.assertEqual(len({message.delivery_id for message in channel.sent}), 4)
+        self.assertEqual(replies.count("first-message"), 4)
+        self.assertEqual(replies.count("second-message"), 4)
+        self.assertEqual(len({message.delivery_id for message in channel.sent}), 8)
 
 
 def _inbound(conversation: ConversationRef, message_id: str) -> InboundMessage:

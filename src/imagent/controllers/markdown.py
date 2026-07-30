@@ -127,7 +127,9 @@ class MarkdownSlashPresenter:
                         _blockquote(_compact_text(user_text, _HISTORY_TEXT_LIMIT)),
                     ]
                 )
-            agent_text = _message_text(turn.agent_message)
+            agent_text = "\n\n".join(
+                text for message in turn.agent_messages if (text := _message_text(message))
+            )
             if agent_text:
                 lines.extend(
                     [

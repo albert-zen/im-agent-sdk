@@ -132,6 +132,8 @@ History-capable adapters implement both `turn.catchup` and `thread.history`.
 Codex/Zen map these to native App Server Turn items; T3 groups its native
 messages and activities by `turnId`. The Gateway owns the shared Markdown
 presentation while Channel adapters retain platform escaping and segmentation.
+History preserves all completed Agent messages for a Turn; it does not collapse
+the Turn to one final message.
 
 Project creation or deletion may be optional. Project listing is part of the
 managed application model. An adapter declares `projectMode`:
@@ -173,6 +175,12 @@ activateNativeThread
 selection. It is expressed as the explicit `thread.activate_native`
 application operation. The Gateway's `conversation.bind_thread` operation
 never invokes it implicitly and it does not replace the Conversation binding.
+
+Thread projection routing is also outside the application adapter. The
+Gateway's `thread.observe` operation persists only a Thread-to-Conversation
+delivery route. It neither changes input selection nor invokes native
+activation. Application adapters continue to expose authoritative history and
+fan-out-safe live events for route reconstruction.
 
 ### Snapshot and subscription
 
@@ -218,6 +226,11 @@ Native socket/read callbacks publish into subscriber queues without awaiting
 IM delivery. Queue consumption and Channel delivery run downstream. The SDK
 does not create a second transcript to implement this fan-out; authoritative
 recovery still comes from the application snapshot/history surface.
+
+Gateway projection workers subscribe by Thread rather than by inbound Turn.
+They resolve destinations at delivery time. Durable routes rebuild those
+workers after restart, while authoritative history/catch-up and delivery
+idempotency rebuild visible output.
 
 `message.completed` is a complete Message only. Adapters preserve every such
 event and emit a separate explicit terminal Turn event.

@@ -11,8 +11,10 @@ from .contracts import (
     ConversationBinding,
     ConversationRef,
     ProjectRef,
+    ThreadProjectionRoute,
     ThreadRef,
     validate_binding,
+    validate_projection_route,
 )
 
 
@@ -43,7 +45,7 @@ class InMemoryIdempotencyRepository:
 
 
 class SQLiteGatewayState:
-    """Durable bindings and idempotency without storing Agent transcripts."""
+    """Durable bindings, projection routes, and idempotency without Agent truth."""
 
     def __init__(
         self,
@@ -78,6 +80,23 @@ class SQLiteGatewayState:
                 status TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (scope, record_key)
+            );
+            CREATE TABLE IF NOT EXISTS thread_projection_routes (
+                route_id TEXT NOT NULL PRIMARY KEY,
+                application_instance_id TEXT NOT NULL,
+                project_id TEXT NOT NULL,
+                thread_id TEXT NOT NULL,
+                channel_instance_id TEXT NOT NULL,
+                native_conversation_id TEXT NOT NULL,
+                reply_to_message_id TEXT,
+                updated_at TEXT NOT NULL,
+                UNIQUE (
+                    application_instance_id,
+                    project_id,
+                    thread_id,
+                    channel_instance_id,
+                    native_conversation_id
+                )
             );
             """
         )
@@ -223,6 +242,96 @@ class SQLiteGatewayState:
                 self._connection.rollback()
                 raise
 
+    async def list_projection_routes(
+        self,
+        thread_ref: ThreadRef | None = None,
+    ) -> tuple[ThreadProjectionRoute, ...]:
+        async with self._lock:
+            if thread_ref is None:
+                rows = self._connection.execute(
+                    "SELECT * FROM thread_projection_routes ORDER BY updated_at"
+                ).fetchall()
+            else:
+                rows = self._connection.execute(
+                    """
+                    SELECT * FROM thread_projection_routes
+                    WHERE application_instance_id = ?
+                      AND project_id = ?
+                      AND thread_id = ?
+                    ORDER BY updated_at
+                    """,
+                    _thread_storage_key(thread_ref),
+                ).fetchall()
+        return tuple(_projection_route_from_row(row) for row in rows)
+
+    async def put_projection_route(
+        self,
+        route: ThreadProjectionRoute,
+    ) -> ThreadProjectionRoute:
+        validate_projection_route(route)
+        async with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._write_projection_route(route)
+                self._connection.commit()
+            except BaseException:
+                self._connection.rollback()
+                raise
+        return route
+
+    async def replace_thread_projection_routes(
+        self,
+        route: ThreadProjectionRoute,
+    ) -> ThreadProjectionRoute:
+        validate_projection_route(route)
+        async with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.execute(
+                    """
+                    DELETE FROM thread_projection_routes
+                    WHERE application_instance_id = ?
+                      AND project_id = ?
+                      AND thread_id = ?
+                    """,
+                    _thread_storage_key(route.thread_ref),
+                )
+                self._write_projection_route(route)
+                self._connection.commit()
+            except BaseException:
+                self._connection.rollback()
+                raise
+        return route
+
+    def _write_projection_route(self, route: ThreadProjectionRoute) -> None:
+        updated_at = route.updated_at or datetime.now(UTC)
+        self._connection.execute(
+            """
+            INSERT INTO thread_projection_routes (
+                route_id,
+                application_instance_id,
+                project_id,
+                thread_id,
+                channel_instance_id,
+                native_conversation_id,
+                reply_to_message_id,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(route_id)
+            DO UPDATE SET
+                reply_to_message_id = excluded.reply_to_message_id,
+                updated_at = excluded.updated_at
+            """,
+            (
+                route.route_id,
+                *_thread_storage_key(route.thread_ref),
+                route.conversation_ref.channel_instance_id,
+                route.conversation_ref.native_conversation_id,
+                route.reply_to_message_id,
+                updated_at.isoformat(),
+            ),
+        )
+
     async def claim(self, scope: str, key: str) -> bool:
         async with self._lock:
             now = datetime.now(UTC)
@@ -316,5 +425,35 @@ def _binding_from_row(row: sqlite3.Row) -> ConversationBinding:
         project_ref=project_ref,
         thread_ref=thread_ref,
         revision=int(row["revision"]),
+        updated_at=datetime.fromisoformat(str(row["updated_at"])),
+    )
+
+
+def _thread_storage_key(thread_ref: ThreadRef) -> tuple[str, str, str]:
+    return (
+        thread_ref.application_instance_id,
+        (thread_ref.project_ref.native_project_id if thread_ref.project_ref is not None else ""),
+        thread_ref.native_thread_id,
+    )
+
+
+def _projection_route_from_row(row: sqlite3.Row) -> ThreadProjectionRoute:
+    application_id = str(row["application_instance_id"])
+    project_id = str(row["project_id"])
+    project_ref = ProjectRef(application_id, project_id) if project_id else None
+    return ThreadProjectionRoute(
+        route_id=str(row["route_id"]),
+        thread_ref=ThreadRef(
+            application_instance_id=application_id,
+            native_thread_id=str(row["thread_id"]),
+            project_ref=project_ref,
+        ),
+        conversation_ref=ConversationRef(
+            channel_instance_id=str(row["channel_instance_id"]),
+            native_conversation_id=str(row["native_conversation_id"]),
+        ),
+        reply_to_message_id=(
+            str(row["reply_to_message_id"]) if row["reply_to_message_id"] is not None else None
+        ),
         updated_at=datetime.fromisoformat(str(row["updated_at"])),
     )

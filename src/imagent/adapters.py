@@ -17,6 +17,7 @@ from .contracts import (
     GatewayOperation,
     InboundMessage,
     OutboundMessage,
+    ThreadProjectionRoute,
     ThreadRef,
 )
 
@@ -85,6 +86,23 @@ class BindingRepository(Protocol):
         conversation: ConversationRef,
         expected_revision: int | None = None,
     ) -> None: ...
+
+
+class ProjectionRouteRepository(Protocol):
+    async def list_projection_routes(
+        self,
+        thread_ref: ThreadRef | None = None,
+    ) -> tuple[ThreadProjectionRoute, ...]: ...
+
+    async def put_projection_route(
+        self,
+        route: ThreadProjectionRoute,
+    ) -> ThreadProjectionRoute: ...
+
+    async def replace_thread_projection_routes(
+        self,
+        route: ThreadProjectionRoute,
+    ) -> ThreadProjectionRoute: ...
 
 
 class IdempotencyRepository(Protocol):

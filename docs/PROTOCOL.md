@@ -183,6 +183,7 @@ The initial Gateway operations are:
 | `conversation.bind_project` | `ConversationBound` | Validate/select a project and clear thread |
 | `conversation.bind_thread` | `ConversationBound` | Validate/select a thread for future input |
 | `conversation.clear_thread` | `ConversationBound` | Clear the selected thread |
+| `thread.observe` | `ThreadObserved` | Establish/refresh an output projection route |
 
 Each Python and wire operation variant exposes its fields directly rather than
 putting behavior-critical values in `Metadata`. The result is also a
@@ -234,6 +235,32 @@ otherwise mutates the Agent application's native active-thread state.
 capability. A product that needs both invokes both explicitly and handles each
 result independently.
 
+### Thread observation
+
+```text
+thread.observe {
+  operationId
+  conversationRef
+  actor
+  threadRef
+  replyToMessageId?
+  createdAt
+}
+
+ThreadObserved {
+  operationId
+  type = thread.observe
+  status = succeeded
+  route
+  completedAt
+}
+```
+
+`thread.observe` changes only Gateway delivery routing. It does not mutate the
+Conversation input binding and does not activate or resume a native
+application UI. Products may compose it with `conversation.bind_thread` when
+the user returns to a Thread.
+
 ### Thread deletion
 
 Deletion capability is explicit:
@@ -282,7 +309,9 @@ thread.history {
 
 `TurnCatchup` contains the latest Turn status and recent meaningful Agent
 progress messages. `ThreadHistory` contains recent Turn entries with the user
-goal, final/latest Agent result, terminal status, error, and compaction marker.
+goal, every ordered completed Agent message, terminal status, error, and
+compaction marker. `agentMessages[]` is plural because one Turn may produce
+commentary and final-answer messages before its explicit terminal event.
 
 Slash commands are one expression of these typed operations:
 
@@ -435,10 +464,15 @@ skip when another Thread receives an event.
 
 ## Delivery projection
 
+Completed messages are routed by the current `ThreadProjectionRoute` set at
+delivery time, never solely by retaining the inbound message object that
+started a Turn. The optional `replyToMessageId` is delivery correlation, not
+Agent transcript state.
+
 Channel delivery identity is derived from:
 
 ```text
-(destination, sourceEventId, segmentIndex)
+(destination, authoritativeMessageItemId, segmentIndex)
 ```
 
 It is not derived from Turn ID alone because one Turn may produce multiple
