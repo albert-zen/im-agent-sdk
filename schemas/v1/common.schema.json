@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.imagent.dev/v1/common.schema.json",
+  "title": "IM Agent common values",
+  "$defs": {
+    "NonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "Identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "Metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "Error": {
+      "type": "object",
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": { "$ref": "#/$defs/Identifier" },
+        "message": { "$ref": "#/$defs/NonEmptyString" },
+        "retryable": { "type": "boolean" },
+        "metadata": { "$ref": "#/$defs/Metadata" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

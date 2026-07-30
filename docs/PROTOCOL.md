@@ -28,12 +28,14 @@ sequence or cursor
 Unknown adapter-native fields may be carried as namespaced metadata, but core
 behavior cannot depend on undocumented metadata.
 
-## Message object
+## Message objects
 
 Message represents content, not control intent.
 
+The common content model is used by two envelopes:
+
 ```text
-Message {
+ChannelMessage {
   messageId
   conversationRef
   sender
@@ -43,7 +45,21 @@ Message {
   createdAt
   metadata
 }
+
+AgentMessage {
+  agentItemId
+  threadRef
+  role
+  content[]
+  clientMessageId?
+  createdAt
+  metadata
+}
 ```
+
+The Gateway translates `ChannelMessage` into `AgentInput`. The application
+emits authoritative `AgentMessage` objects. They share content semantics but do
+not pretend an IM Conversation and an Agent Thread are the same address.
 
 Initial content parts:
 

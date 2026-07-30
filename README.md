@@ -29,8 +29,10 @@ turns, approvals, and execution status.
 
 ## Status
 
-The repository is currently **design-first**. No implementation language or
-wire encoding has been selected yet.
+The design baseline has been accepted and Milestone 1 is in progress.
+Language-neutral JSON Schemas are paired with a dependency-free Python
+reference package and contract test kit. No production Channel or Agent
+application adapter is included yet.
 
 The initial review set is:
 
@@ -39,6 +41,19 @@ The initial review set is:
 - [Domain model](docs/DOMAIN_MODEL.md)
 - [Messages, operations, and events](docs/PROTOCOL.md)
 - [Adapter contracts](docs/ADAPTERS.md)
+- [Accepted decisions](docs/DECISIONS.md)
+- [Reuse and provenance policy](docs/REUSE.md)
 - [Roadmap and open decisions](docs/ROADMAP.md)
 
-Implementation starts only after these boundaries are reviewed.
+## Development
+
+Python 3.11 or newer is required.
+
+```sh
+python -m pip install -e '.[dev]'
+PYTHONPATH=src python -m unittest discover -s tests -v
+python -m compileall -q src tests
+python scripts/validate_schemas.py
+ruff check src tests scripts
+pyright src tests scripts
+```

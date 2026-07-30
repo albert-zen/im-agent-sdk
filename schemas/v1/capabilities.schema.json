@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.imagent.dev/v1/capabilities.schema.json",
+  "title": "IM Agent adapter capabilities",
+  "$defs": {
+    "SupportLevel": {
+      "enum": ["native", "fallback", "unsupported"]
+    },
+    "ChannelCapabilities": {
+      "type": "object",
+      "required": [
+        "plainText",
+        "markdown",
+        "messageEdits",
+        "attachments",
+        "interactiveActions"
+      ],
+      "properties": {
+        "plainText": { "$ref": "#/$defs/SupportLevel" },
+        "markdown": { "$ref": "#/$defs/SupportLevel" },
+        "messageEdits": { "$ref": "#/$defs/SupportLevel" },
+        "messageDeletion": { "$ref": "#/$defs/SupportLevel" },
+        "typingIndicators": { "$ref": "#/$defs/SupportLevel" },
+        "interactiveActions": { "$ref": "#/$defs/SupportLevel" },
+        "attachments": { "$ref": "#/$defs/SupportLevel" },
+        "replyReferences": { "$ref": "#/$defs/SupportLevel" },
+        "nativeThreadsOrTopics": { "$ref": "#/$defs/SupportLevel" },
+        "maxTextLength": { "type": ["integer", "null"], "minimum": 1 },
+        "maxAttachmentSize": { "type": ["integer", "null"], "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "ProjectCapabilities": {
+      "type": "object",
+      "required": ["mode", "discovery", "selection", "creation", "deletion"],
+      "properties": {
+        "mode": {
+          "enum": ["managed", "flat", "fixed"]
+        },
+        "discovery": { "$ref": "#/$defs/SupportLevel" },
+        "selection": { "$ref": "#/$defs/SupportLevel" },
+        "creation": { "$ref": "#/$defs/SupportLevel" },
+        "deletion": { "$ref": "#/$defs/SupportLevel" }
+      },
+      "additionalProperties": false
+    },
+    "ThreadDeletionCapability": {
+      "enum": ["unsupported", "archive", "permanent"]
+    },
+    "ThreadCapabilities": {
+      "type": "object",
+      "required": ["listing", "creation", "switching", "deletion"],
+      "properties": {
+        "listing": { "$ref": "#/$defs/SupportLevel" },
+        "creation": { "$ref": "#/$defs/SupportLevel" },
+        "switching": { "$ref": "#/$defs/SupportLevel" },
+        "deletion": { "$ref": "#/$defs/ThreadDeletionCapability" }
+      },
+      "additionalProperties": false
+    },
+    "RuntimeCapabilities": {
+      "type": "object",
+      "required": [
+        "history",
+        "streaming",
+        "replayFromCursor",
+        "interruption",
+        "interactiveRequests"
+      ],
+      "properties": {
+        "history": { "$ref": "#/$defs/SupportLevel" },
+        "streaming": { "$ref": "#/$defs/SupportLevel" },
+        "replayFromCursor": { "$ref": "#/$defs/SupportLevel" },
+        "interruption": { "$ref": "#/$defs/SupportLevel" },
+        "interactiveRequests": { "$ref": "#/$defs/SupportLevel" }
+      },
+      "additionalProperties": false
+    },
+    "ApplicationCapabilities": {
+      "type": "object",
+      "required": ["projects", "threads", "runtime"],
+      "properties": {
+        "projects": { "$ref": "#/$defs/ProjectCapabilities" },
+        "threads": { "$ref": "#/$defs/ThreadCapabilities" },
+        "runtime": { "$ref": "#/$defs/RuntimeCapabilities" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

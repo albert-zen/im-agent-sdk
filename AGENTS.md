@@ -23,8 +23,11 @@ Agent runtime itself.
    history come from the Agent application.
 9. Unsupported behavior must be reported through capabilities or explicit
    errors. Do not silently approximate destructive operations.
+10. Production adapters should migrate proven implementations with recorded
+    provenance before inventing replacements. Preserve license notices and
+    source commit IDs.
 
-10. During the design-first phase, do not add runtime code before the
+11. During the design-first phase, do not add runtime code before the
     architecture and contract changes are accepted in the authoritative docs.
 
 ## Authoritative documents
@@ -34,4 +37,14 @@ Agent runtime itself.
 - `docs/DOMAIN_MODEL.md`: application, project, thread, and binding resources.
 - `docs/PROTOCOL.md`: message, operation, result, and event contracts.
 - `docs/ADAPTERS.md`: Channel and Agent application adapter responsibilities.
+- `docs/DECISIONS.md`: accepted architectural decisions.
+- `docs/REUSE.md`: source reuse, provenance, and extraction policy.
 - `docs/ROADMAP.md`: milestones and unresolved decisions.
+
+## Verification
+
+```sh
+PYTHONPATH=src python -m unittest discover -s tests -v
+python -m compileall -q src tests
+python scripts/validate_schemas.py
+```

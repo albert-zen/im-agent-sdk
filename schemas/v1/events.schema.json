@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.imagent.dev/v1/events.schema.json",
+  "title": "IM Agent unified events",
+  "$defs": {
+    "EventType": {
+      "enum": [
+        "message.created",
+        "message.delta",
+        "message.completed",
+        "thread.created",
+        "thread.updated",
+        "thread.deleted",
+        "turn.started",
+        "turn.completed",
+        "turn.failed",
+        "turn.interrupted",
+        "status.changed",
+        "request.opened",
+        "request.resolved",
+        "binding.changed"
+      ]
+    },
+    "AgentEvent": {
+      "type": "object",
+      "required": [
+        "eventId",
+        "applicationInstanceId",
+        "sequence",
+        "type",
+        "data",
+        "createdAt"
+      ],
+      "properties": {
+        "eventId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "applicationInstanceId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "projectRef": {
+          "oneOf": [
+            { "$ref": "resources.schema.json#/$defs/ProjectRef" },
+            { "type": "null" }
+          ]
+        },
+        "threadRef": {
+          "oneOf": [
+            { "$ref": "resources.schema.json#/$defs/ThreadRef" },
+            { "type": "null" }
+          ]
+        },
+        "turnId": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "cursor": { "type": ["string", "null"] },
+        "type": { "$ref": "#/$defs/EventType" },
+        "data": { "$ref": "common.schema.json#/$defs/Metadata" },
+        "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "im-agent-sdk"
+version = "0.1.0a1"
+description = "Unified contracts between IM channels and Agent applications"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Albert Zen" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "jsonschema>=4.23",
+  "pyright>=1.1.400",
+  "ruff>=0.12",
+]
+
+[project.urls]
+Repository = "https://github.com/albert-zen/im-agent-sdk"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/imagent"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
