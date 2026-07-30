@@ -205,6 +205,11 @@ The canonical user-item event is required even when the originating client
 already displayed an optimistic local message. Clients deduplicate by stable
 ID.
 
+Native notification producers fan out into independent subscriber streams and
+return without waiting for Channel delivery. Slow IM projection therefore
+cannot stall an application socket read path. Projection exits only on an
+explicit terminal Turn event, never merely on `message.completed`.
+
 ## Recovery flow
 
 A live event stream alone is insufficient for seamless cross-client work.

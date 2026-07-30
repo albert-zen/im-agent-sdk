@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import inspect
 from collections.abc import AsyncIterator, Mapping
@@ -64,6 +63,7 @@ from ..contracts import (
     validate_application_operation,
     validate_application_operation_result,
 )
+from ..events import EventBroadcaster
 
 
 class AppServerClient(Protocol):
@@ -120,7 +120,7 @@ class _AppServerApplicationAdapter:
         self._cwd = cwd
         self._shared_filesystem_root = configure_shared_filesystem_root(shared_filesystem_root)
         self._sequence = 0
-        self._events: dict[str, asyncio.Queue[AgentEvent]] = {}
+        self._events = EventBroadcaster[str, AgentEvent]()
         self._client.add_notification_handler(self._handle_notification)
         capabilities = ApplicationCapabilities(
             projects=ProjectCapabilities(
@@ -490,19 +490,14 @@ class _AppServerApplicationAdapter:
             client_message_id=message.client_message_id,
         )
 
-    async def subscribe_thread(
+    def subscribe_thread(
         self,
         thread_ref: ThreadRef,
         after_cursor: str | None = None,
     ) -> AsyncIterator[AgentEvent]:
         del after_cursor
         self._require_own_thread(thread_ref)
-        queue = self._events.setdefault(
-            thread_ref.native_thread_id,
-            asyncio.Queue(),
-        )
-        while True:
-            yield await queue.get()
+        return self._events.subscribe(thread_ref.native_thread_id)
 
     async def _handle_notification(self, notification: dict) -> None:
         method = str(notification.get("method") or "")
@@ -518,7 +513,7 @@ class _AppServerApplicationAdapter:
         )
         thread_ref = self._thread_ref(thread_id)
         if method == "item/agentMessage/delta":
-            await self._emit(
+            self._emit(
                 thread_id,
                 AgentEventType.MESSAGE_DELTA,
                 {"delta": str(params.get("delta") or "")},
@@ -548,7 +543,7 @@ class _AppServerApplicationAdapter:
                     "native_method": method,
                 },
             )
-            await self._emit(
+            self._emit(
                 thread_id,
                 AgentEventType.MESSAGE_COMPLETED,
                 {"message": message},
@@ -564,7 +559,7 @@ class _AppServerApplicationAdapter:
                 "failed": AgentEventType.TURN_FAILED,
                 "interrupted": AgentEventType.TURN_INTERRUPTED,
             }.get(status, AgentEventType.TURN_COMPLETED)
-            await self._emit(
+            self._emit(
                 thread_id,
                 event_type,
                 {"status": status or "completed"},
@@ -572,7 +567,7 @@ class _AppServerApplicationAdapter:
                 turn_id=turn_id or None,
             )
 
-    async def _emit(
+    def _emit(
         self,
         thread_id: str,
         event_type: AgentEventType,
@@ -593,7 +588,7 @@ class _AppServerApplicationAdapter:
             turn_id=turn_id,
             cursor=str(self._sequence),
         )
-        await self._events.setdefault(thread_id, asyncio.Queue()).put(event)
+        self._events.publish(thread_id, event)
 
     def _thread_summary(self, thread: Mapping[str, object]) -> ThreadSummary:
         thread_id = str(thread.get("id") or thread.get("threadId") or "")

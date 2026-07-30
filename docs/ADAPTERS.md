@@ -189,6 +189,24 @@ subscribe
 If replay is unavailable, the capability says so and reconnect falls back to a
 fresh snapshot.
 
+Subscriptions to one Thread must fan out. Each active subscriber receives the
+same canonical events in publication order and owns its own consumption
+position. Cancelling or slowing one subscriber cannot consume, delay, or
+discard another subscriber's events.
+
+`subscribeThread` registers the live observer before returning its iterator.
+The Gateway establishes that subscription before `sendInput`, so an
+application that emits native notifications synchronously during input
+acceptance cannot race past observation.
+
+Native socket/read callbacks publish into subscriber queues without awaiting
+IM delivery. Queue consumption and Channel delivery run downstream. The SDK
+does not create a second transcript to implement this fan-out; authoritative
+recovery still comes from the application snapshot/history surface.
+
+`message.completed` is a complete Message only. Adapters preserve every such
+event and emit a separate explicit terminal Turn event.
+
 ### Application-specific mappings
 
 #### Zen

@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import asyncio
+import inspect
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from imagent.adapters import AgentApplicationAdapter, ChannelAdapter
 from imagent.contracts import (
     ActivateNativeThread,
+    AgentEvent,
+    AgentEventType,
     AgentInput,
     ApplicationOperationFailed,
     CreateThread,
@@ -226,6 +231,8 @@ async def verify_application_adapter(
         sample_conversation(),
         "contract-message-1",
     )
+    first_events = adapter.subscribe_thread(created.ref)
+    second_events = adapter.subscribe_thread(created.ref)
     accepted = await adapter.send_input(
         created.ref,
         AgentInput(
@@ -238,6 +245,27 @@ async def verify_application_adapter(
     if accepted.client_message_id != client_message_id:
         raise AssertionError("client message ID was not preserved")
     checks.append(ContractCheck("stable client message ID round-trip"))
+
+    first_observation, second_observation = await asyncio.wait_for(
+        asyncio.gather(
+            _collect_turn_events(first_events, accepted.turn_id),
+            _collect_turn_events(second_events, accepted.turn_id),
+        ),
+        timeout=2,
+    )
+    first_ids = tuple(event.event_id for event in first_observation)
+    second_ids = tuple(event.event_id for event in second_observation)
+    if first_ids != second_ids:
+        raise AssertionError("Thread subscribers did not receive the same canonical events")
+    if not any(event.type is AgentEventType.MESSAGE_COMPLETED for event in first_observation):
+        raise AssertionError("Turn stream did not contain a completed Agent message")
+    if first_observation[-1].type not in {
+        AgentEventType.TURN_COMPLETED,
+        AgentEventType.TURN_FAILED,
+        AgentEventType.TURN_INTERRUPTED,
+    }:
+        raise AssertionError("Turn stream did not end with an explicit terminal event")
+    checks.append(ContractCheck("fan-out Turn event lifecycle"))
 
     if capabilities.runtime.history is not SupportLevel.UNSUPPORTED:
         catchup_operation = GetTurnCatchup(
@@ -309,6 +337,31 @@ def _require_result(result, expected_type):
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+async def _collect_turn_events(
+    events: AsyncIterator[AgentEvent],
+    turn_id: str,
+) -> tuple[AgentEvent, ...]:
+    observed: list[AgentEvent] = []
+    try:
+        async for event in events:
+            if event.turn_id not in {None, turn_id}:
+                continue
+            observed.append(event)
+            if event.type in {
+                AgentEventType.TURN_COMPLETED,
+                AgentEventType.TURN_FAILED,
+                AgentEventType.TURN_INTERRUPTED,
+            }:
+                return tuple(observed)
+    finally:
+        close = getattr(events, "aclose", None)
+        if callable(close):
+            result = close()
+            if inspect.isawaitable(result):
+                await result
+    raise AssertionError("Thread event stream ended before a terminal Turn event")
 
 
 def sample_conversation():

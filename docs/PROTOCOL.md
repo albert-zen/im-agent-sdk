@@ -361,6 +361,11 @@ message.completed
 `message.delta` is transient. `message.completed` contains the complete
 canonical item. Deltas need not be journaled by the SDK.
 
+`message.completed` does not mean `turn.completed`. One Turn may emit multiple
+complete Agent messages, including application-specific phases carried in
+Metadata. A Turn subscription remains active until an explicit
+`turn.completed`, `turn.failed`, or `turn.interrupted` event for that Turn.
+
 ### Thread events
 
 ```text
@@ -403,6 +408,10 @@ binding.changed
 
 This event is scoped to the Gateway/Conversation rather than the Agent thread.
 It allows multiple IM views or devices to update their selected context.
+
+Thread subscriptions are fan-out observations. Every active subscriber gets
+its own stream of each published canonical event; subscribers never compete
+for one queue. This is live delivery, not an SDK-owned transcript.
 
 ## Ordering
 

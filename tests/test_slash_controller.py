@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import unittest
 from datetime import UTC, datetime
 
@@ -57,13 +58,16 @@ class OptionalControllerTests(unittest.IsolatedAsyncioTestCase):
         await gateway.start()
         try:
             await channel.on_message(_message("/help"))
+            async with asyncio.timeout(1):
+                while len(channel.sent) < 2:
+                    await asyncio.sleep(0)
         finally:
             await gateway.stop()
 
         self.assertEqual(len(application._inputs), 1)
         agent_input = application._inputs[0][1]
         self.assertEqual(agent_input.content, (TextContent("/help"),))
-        self.assertEqual(channel.sent, [])
+        self.assertEqual(len(channel.sent), 2)
 
     async def test_default_slash_controller_consumes_common_command(self) -> None:
         channel = FakeChannelAdapter()

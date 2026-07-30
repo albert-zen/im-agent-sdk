@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import inspect
+import logging
 import mimetypes
 import uuid
 from collections.abc import AsyncIterator, Mapping
@@ -71,8 +72,10 @@ from ..contracts import (
     validate_application_operation,
     validate_application_operation_result,
 )
+from ..events import EventBroadcaster
 
 _ID_NAMESPACE = uuid.UUID("15440f13-a923-4a4c-8791-637914777e5e")
+logger = logging.getLogger(__name__)
 
 
 class T3Client(Protocol):
@@ -107,6 +110,11 @@ class T3ApplicationAdapter:
         self._shared_filesystem_root = configure_shared_filesystem_root(shared_filesystem_root)
         self._sequence = 0
         self._turn_baselines: dict[tuple[str, str], frozenset[str]] = {}
+        self._events = EventBroadcaster[str, AgentEvent]()
+        self._poll_tasks: dict[str, asyncio.Task[None]] = {}
+        self._seen_messages: dict[str, set[str]] = {}
+        self._terminal_turns: dict[str, set[str]] = {}
+        self._initialized_threads: set[str] = set()
         self._summary = ApplicationSummary(
             ref=ApplicationRef(application_instance_id),
             kind="t3",
@@ -152,6 +160,12 @@ class T3ApplicationAdapter:
         return None
 
     async def stop(self) -> None:
+        tasks = tuple(self._poll_tasks.values())
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._poll_tasks.clear()
         close = getattr(self._client, "aclose", None)
         if callable(close):
             result = close()
@@ -550,46 +564,83 @@ class T3ApplicationAdapter:
         if not turn_id:
             raise RuntimeError("T3 did not return the accepted turn id")
         self._turn_baselines[(thread_ref.native_thread_id, turn_id)] = baseline
+        self._publish_thread_state(
+            thread_ref,
+            thread,
+            only_turn_id=turn_id,
+        )
         return AcceptedTurn(
             thread_ref=thread_ref,
             turn_id=turn_id,
             client_message_id=message.client_message_id,
         )
 
-    async def subscribe_thread(
+    def subscribe_thread(
         self,
         thread_ref: ThreadRef,
         after_cursor: str | None = None,
     ) -> AsyncIterator[AgentEvent]:
         del after_cursor
         self._require_own_thread(thread_ref)
-        seen: set[str] = set()
-        terminal_turns: set[str] = set()
-        while True:
+        thread_id = thread_ref.native_thread_id
+        subscription = self._events.subscribe(thread_id)
+        task = self._poll_tasks.get(thread_id)
+        if task is None or task.done():
+            task = asyncio.create_task(self._poll_thread(thread_ref))
+            self._poll_tasks[thread_id] = task
+            task.add_done_callback(
+                lambda completed, subscribed_thread_id=thread_id: self._finish_poll_task(
+                    subscribed_thread_id,
+                    completed,
+                )
+            )
+        return subscription
+
+    async def _poll_thread(self, thread_ref: ThreadRef) -> None:
+        thread_id = thread_ref.native_thread_id
+        while self._events.subscriber_count(thread_id):
             detail = await self._client.thread_detail(thread_ref.native_thread_id)
             thread = _object(detail.get("thread"), "thread")
-            latest_turn = _optional_object(thread.get("latestTurn"))
-            turn_id = (
-                str(latest_turn.get("turnId") or latest_turn.get("id") or "")
-                if latest_turn is not None
-                else ""
+            initialize = thread_id not in self._initialized_threads
+            self._publish_thread_state(
+                thread_ref,
+                thread,
+                initialize=initialize,
             )
-            baseline = self._turn_baselines.get(
-                (thread_ref.native_thread_id, turn_id),
-                frozenset(),
-            )
-            for message in _object_list(thread.get("messages")):
-                message_id = _message_id(message)
-                if (
-                    not message_id
-                    or message_id in baseline
-                    or message_id in seen
-                    or str(message.get("role") or "") != "assistant"
-                    or (turn_id and str(message.get("turnId") or "") != turn_id)
-                ):
-                    continue
+            self._initialized_threads.add(thread_id)
+            await asyncio.sleep(self._poll_interval)
+
+    def _publish_thread_state(
+        self,
+        thread_ref: ThreadRef,
+        thread: Mapping[str, object],
+        *,
+        only_turn_id: str | None = None,
+        initialize: bool = False,
+    ) -> None:
+        thread_id = thread_ref.native_thread_id
+        seen = self._seen_messages.setdefault(thread_id, set())
+        for message in _object_list(thread.get("messages")):
+            message_id = _message_id(message)
+            turn_id = str(message.get("turnId") or "")
+            if (
+                not message_id
+                or message_id in seen
+                or str(message.get("role") or "") != "assistant"
+                or (only_turn_id is not None and turn_id != only_turn_id)
+            ):
+                continue
+            baseline = self._turn_baselines.get((thread_id, turn_id))
+            if initialize and baseline is None:
                 seen.add(message_id)
-                yield self._event(
+                continue
+            if baseline is not None and message_id in baseline:
+                seen.add(message_id)
+                continue
+            seen.add(message_id)
+            self._events.publish(
+                thread_id,
+                self._event(
                     AgentEventType.MESSAGE_COMPLETED,
                     thread_ref,
                     turn_id or None,
@@ -608,31 +659,62 @@ class T3ApplicationAdapter:
                             metadata={"native_application": "t3"},
                         )
                     },
-                )
-            state = (
-                str(latest_turn.get("state") or latest_turn.get("status") or "")
-                .replace("-", "_")
-                .casefold()
-                if latest_turn is not None
-                else ""
+                ),
             )
-            event_type = {
-                "completed": AgentEventType.TURN_COMPLETED,
-                "failed": AgentEventType.TURN_FAILED,
-                "interrupted": AgentEventType.TURN_INTERRUPTED,
-                "cancelled": AgentEventType.TURN_INTERRUPTED,
-                "canceled": AgentEventType.TURN_INTERRUPTED,
-            }.get(state)
-            if event_type is not None and turn_id not in terminal_turns:
-                terminal_turns.add(turn_id)
-                yield self._event(
-                    event_type,
-                    thread_ref,
-                    turn_id or None,
-                    {"status": state},
-                )
-                return
-            await asyncio.sleep(self._poll_interval)
+
+        latest_turn = _optional_object(thread.get("latestTurn"))
+        turn_id = (
+            str(latest_turn.get("turnId") or latest_turn.get("id") or "")
+            if latest_turn is not None
+            else ""
+        )
+        if only_turn_id is not None and turn_id != only_turn_id:
+            return
+        state = (
+            str(latest_turn.get("state") or latest_turn.get("status") or "")
+            .replace("-", "_")
+            .casefold()
+            if latest_turn is not None
+            else ""
+        )
+        event_type = {
+            "completed": AgentEventType.TURN_COMPLETED,
+            "failed": AgentEventType.TURN_FAILED,
+            "interrupted": AgentEventType.TURN_INTERRUPTED,
+            "cancelled": AgentEventType.TURN_INTERRUPTED,
+            "canceled": AgentEventType.TURN_INTERRUPTED,
+        }.get(state)
+        terminal_turns = self._terminal_turns.setdefault(thread_id, set())
+        if event_type is None or not turn_id or turn_id in terminal_turns:
+            return
+        terminal_turns.add(turn_id)
+        if initialize:
+            return
+        self._events.publish(
+            thread_id,
+            self._event(
+                event_type,
+                thread_ref,
+                turn_id,
+                {"status": state},
+            ),
+        )
+
+    def _finish_poll_task(
+        self,
+        thread_id: str,
+        task: asyncio.Task[None],
+    ) -> None:
+        if self._poll_tasks.get(thread_id) is task:
+            self._poll_tasks.pop(thread_id, None)
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None:
+            logger.exception(
+                "T3 thread polling failed",
+                exc_info=(type(error), error, error.__traceback__),
+            )
 
     async def _find_project(
         self,

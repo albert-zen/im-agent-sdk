@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 from .adapters import (
@@ -13,6 +15,7 @@ from .adapters import (
 from .bindings import BindingConflict
 from .contracts import (
     AcceptedTurn,
+    AgentEvent,
     AgentEventType,
     AgentInput,
     AgentMessage,
@@ -345,23 +348,28 @@ class ImAgentGateway:
             thread_ref = binding.thread_ref
             if thread_ref is None:
                 raise RuntimeError("thread binding was not established")
-            accepted = await application.send_input(
-                thread_ref,
-                AgentInput(
-                    client_message_id=derive_client_message_id(
-                        message.conversation_ref,
-                        message.message_id,
+            events = application.subscribe_thread(thread_ref)
+            try:
+                accepted = await application.send_input(
+                    thread_ref,
+                    AgentInput(
+                        client_message_id=derive_client_message_id(
+                            message.conversation_ref,
+                            message.message_id,
+                        ),
+                        content=message.content,
+                        sender=message.sender,
+                        metadata={"channel_message_id": message.message_id},
                     ),
-                    content=message.content,
-                    sender=message.sender,
-                    metadata={"channel_message_id": message.message_id},
-                ),
-            )
+                )
+            except BaseException:
+                await _close_subscription(events)
+                raise
             task = asyncio.create_task(
                 self._project_turn(
                     message=message,
-                    application=application,
                     accepted=accepted,
+                    events=events,
                 )
             )
             self._tasks.add(task)
@@ -391,22 +399,25 @@ class ImAgentGateway:
         self,
         *,
         message: InboundMessage,
-        application: AgentApplicationAdapter,
         accepted: AcceptedTurn,
+        events: AsyncIterator[AgentEvent],
     ) -> None:
-        async for event in application.subscribe_thread(accepted.thread_ref):
-            if event.turn_id not in {None, accepted.turn_id}:
-                continue
-            if event.type is AgentEventType.MESSAGE_COMPLETED:
-                agent_message = event.data.get("message")
-                if isinstance(agent_message, AgentMessage):
-                    await self._deliver_agent_message(message, agent_message)
-            if event.type in {
-                AgentEventType.TURN_COMPLETED,
-                AgentEventType.TURN_FAILED,
-                AgentEventType.TURN_INTERRUPTED,
-            }:
-                return
+        try:
+            async for event in events:
+                if event.turn_id not in {None, accepted.turn_id}:
+                    continue
+                if event.type is AgentEventType.MESSAGE_COMPLETED:
+                    agent_message = event.data.get("message")
+                    if isinstance(agent_message, AgentMessage):
+                        await self._deliver_agent_message(message, agent_message)
+                if event.type in {
+                    AgentEventType.TURN_COMPLETED,
+                    AgentEventType.TURN_FAILED,
+                    AgentEventType.TURN_INTERRUPTED,
+                }:
+                    return
+        finally:
+            await _close_subscription(events)
 
     async def _deliver_agent_message(
         self,
@@ -543,3 +554,11 @@ def _contract_error(error: Exception) -> ContractError:
 
 def _operation_id(message: InboundMessage, operation_type: str) -> str:
     return f"imagent:operation:{message.message_id}:{operation_type}"
+
+
+async def _close_subscription(events: AsyncIterator[AgentEvent]) -> None:
+    close = getattr(events, "aclose", None)
+    if callable(close):
+        result = close()
+        if inspect.isawaitable(result):
+            await result

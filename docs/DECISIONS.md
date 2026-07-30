@@ -96,3 +96,13 @@ Application capabilities declare accepted source kinds. `LocalPath` is usable
 only when deployment configuration explicitly trusts a shared filesystem;
 messages cannot grant that trust. `RemoteUrl` requires adapter-owned fetch and
 SSRF/size/type policy rather than an unrestricted common downloader.
+
+## D-009: Thread event subscriptions are live fan-out streams
+
+Each active Thread subscriber owns an independent delivery queue. Native event
+producers publish without awaiting consumers; a slow or cancelled observer
+cannot steal from or block another observer. The queues are live projections,
+not an SDK transcript or execution authority.
+
+`message.completed` never terminates a Turn subscription. Only explicit
+`turn.completed`, `turn.failed`, or `turn.interrupted` events are terminal.
