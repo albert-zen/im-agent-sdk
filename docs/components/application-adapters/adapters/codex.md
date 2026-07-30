@@ -25,6 +25,39 @@ The current App Server seam does not claim native replay when unavailable. It
 omits cursor/sequence fields and uses authoritative Thread/Turn reads plus a
 fresh live subscription.
 
+Interactive requests use the locally installed Codex App Server generated
+schema and SDK-owned transport tests as the wire authority. The common mapping
+supports command/file approval choices, structured tool user input, and
+permission-profile approvals.
+Native `availableDecisions` become opaque stable choice IDs; Core does not
+reinterpret once/session/amendment scope. Permission choices map back to the
+native response payloads: grant returns the exact requested profile and
+decline returns an empty profile. The raw profile stays adapter-local; only a
+bounded readable summary crosses in the approval prompt.
+
+Command, path, reason, and permission data are untrusted. The adapter produces
+a bounded factual prompt, and the Markdown Presenter places it in an indented
+code block. A native `isSecret` question remains typed as `secret=True`; the
+Codex adapter does not reject it merely because the default Markdown presenter
+cannot collect it securely.
+
+The current Codex App Server protocol exposes no authoritative pending-request
+snapshot. A connection reset therefore invalidates outstanding transport
+response handles and emits a stale projection; the adapter does not reconstruct
+the request from Gateway correlation. Transport notifications carry their
+dispatch epoch; `serverRequest/resolved` uses the owning pending record for
+Thread/Turn routing and cannot resolve a reused request ID from another epoch.
+If resolution arrives while a response write is awaiting transport
+acknowledgement, the native terminal state wins and cannot be overwritten back
+to `responded`.
+Recent responded/resolved/stale diagnostics are retained in a 256-entry LRU;
+after eviction, an unknown response fails stale rather than growing
+process-lifetime state. If an already-responded entry is evicted before the
+native resolved notification arrives, the adapter first emits a stale
+projection while it still owns the Thread/Turn scope. A later request-ID-only
+notification is then honestly ignored outside the retained correlation
+window instead of leaving Gateway state indefinitely `responded`.
+
 ## Attachments
 
 Local paths require an explicitly configured shared root. Remote endpoints that

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Protocol
 
 from ..contracts import (
@@ -10,6 +11,7 @@ from ..contracts import (
     GatewayOperation,
     GatewayOperationResult,
     InboundMessage,
+    InteractiveRequest,
     OutboundMessage,
 )
 
@@ -38,4 +40,23 @@ class InboundController(Protocol):
         actions: ControllerActions,
     ) -> tuple[OutboundMessage, ...] | None:
         """Return None to pass through, otherwise deliveries for a consumed input."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class RequestPresentation:
+    message: OutboundMessage
+    response_supported: bool
+
+
+class RequestPresenter(Protocol):
+    def present_request(
+        self,
+        request: InteractiveRequest,
+        *,
+        conversation_ref: ConversationRef,
+        delivery_id: str,
+        reply_to_message_id: str | None,
+    ) -> RequestPresentation:
+        """Render one typed request for one already-selected destination."""
         ...

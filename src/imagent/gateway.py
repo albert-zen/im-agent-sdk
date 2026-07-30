@@ -11,6 +11,8 @@ from .adapters import (
     IdempotencyClaimStatus,
     IdempotencyRepository,
     ProjectionRouteRepository,
+    RequestCorrelationConflict,
+    RequestCorrelationRepository,
 )
 from .bindings import BindingConflict
 from .contracts import (
@@ -40,6 +42,14 @@ from .contracts import (
     ProjectionPolicy,
     ProjectMode,
     ProjectRead,
+    RequestDuplicateError,
+    RequestResolvedError,
+    RequestResponded,
+    RequestResponseRouted,
+    RequestRouteState,
+    RequestStaleError,
+    RespondRequest,
+    RespondToRequest,
     SelectApplication,
     TextContent,
     TextFormat,
@@ -53,10 +63,13 @@ from .contracts import (
     validate_application_operation_result,
     validate_gateway_operation,
     validate_gateway_operation_result,
+    validate_request_response,
 )
-from .controllers import ControllerActions, InboundController
+from .controllers import ControllerActions, InboundController, RequestPresenter
+from .keyed_locks import KeyedLockRegistry
 from .projection_runtime import ThreadProjectionRuntime
 from .projections import InMemoryProjectionRouteRepository, ProjectionWorkerHealth
+from .request_correlations import InMemoryRequestCorrelationRepository
 from .storage import InMemoryIdempotencyRepository
 
 logger = logging.getLogger(__name__)
@@ -73,8 +86,10 @@ class ImAgentGateway:
         bindings: BindingRepository,
         idempotency: IdempotencyRepository | None = None,
         projections: ProjectionRouteRepository | None = None,
+        request_correlations: RequestCorrelationRepository | None = None,
         projection_policy: ProjectionPolicy = ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
         controller: InboundController | None = None,
+        request_presenter: RequestPresenter | None = None,
         baseline_history_limit: int = 3,
         recovery_history_page_size: int = 10,
         recovery_max_pages: int = 5,
@@ -83,6 +98,7 @@ class ImAgentGateway:
         subscription_retry_initial_seconds: float = 0.05,
         subscription_retry_max_seconds: float = 2.0,
         turn_correlation_retention_seconds: float = 7 * 24 * 60 * 60,
+        request_correlation_retention_seconds: float = 7 * 24 * 60 * 60,
     ) -> None:
         self._channels = {channel.channel_instance_id: channel for channel in channels}
         self._applications = {
@@ -91,8 +107,10 @@ class ImAgentGateway:
         }
         self._bindings = bindings
         self._idempotency = idempotency or InMemoryIdempotencyRepository()
+        self._request_correlations = request_correlations or InMemoryRequestCorrelationRepository()
         self._controller = controller
         self._locks: dict[object, asyncio.Lock] = {}
+        self._request_locks = KeyedLockRegistry()
         self._starting = False
         self._startup_messages: list[InboundMessage] = []
         self._startup_operations: list[GatewayOperation] = []
@@ -100,6 +118,8 @@ class ImAgentGateway:
             applications=self._applications,
             bindings=bindings,
             projections=projections or InMemoryProjectionRouteRepository(),
+            request_correlations=self._request_correlations,
+            request_presenter=request_presenter,
             projection_policy=projection_policy,
             execute_application=self.execute_application,
             deliver_outbound=self._deliver_outbound,
@@ -111,6 +131,7 @@ class ImAgentGateway:
             subscription_retry_initial_seconds=subscription_retry_initial_seconds,
             subscription_retry_max_seconds=subscription_retry_max_seconds,
             turn_correlation_retention_seconds=turn_correlation_retention_seconds,
+            request_correlation_retention_seconds=request_correlation_retention_seconds,
         )
 
     async def start(self) -> None:
@@ -121,6 +142,8 @@ class ImAgentGateway:
         started_channels: list[ChannelAdapter] = []
         try:
             await self._projection_runtime.cleanup_stale_correlations()
+            restart_open_requests = await self._projection_runtime.open_request_refs()
+            await self._projection_runtime.restore()
             for application in self._applications.values():
                 await application.start()
                 started_applications.append(application)
@@ -130,7 +153,8 @@ class ImAgentGateway:
                     self._handle_operation_entry,
                 )
                 started_channels.append(channel)
-            await self._projection_runtime.restore()
+            self._projection_runtime.mark_delivery_ready()
+            await self._projection_runtime.reconcile_pending_requests(restart_open_requests)
             self._starting = False
             startup_messages = tuple(self._startup_messages)
             startup_operations = tuple(self._startup_operations)
@@ -339,6 +363,12 @@ class ImAgentGateway:
                 completed_at=completed_at,
                 route=route,
             )
+        if isinstance(operation, RespondToRequest):
+            async with self._request_locks.hold(operation.request_ref):
+                return await self._respond_to_request(
+                    operation,
+                    completed_at=completed_at,
+                )
         if isinstance(operation, ClearConversationThread):
             current = await self._bindings.get(operation.conversation_ref)
             if current is None:
@@ -359,6 +389,129 @@ class ImAgentGateway:
                 binding=binding,
             )
         raise NotImplementedError(operation.type.value)
+
+    async def _respond_to_request(
+        self,
+        operation: RespondToRequest,
+        *,
+        completed_at: datetime,
+    ) -> RequestResponseRouted:
+        correlations = await self._request_correlations.list_request_correlations(
+            request_ref=operation.request_ref
+        )
+        if not correlations:
+            raise RequestStaleError("request is unknown, expired, or no longer answerable")
+        destination = next(
+            (
+                correlation
+                for correlation in correlations
+                if correlation.conversation_ref == operation.conversation_ref
+            ),
+            None,
+        )
+        if destination is None:
+            raise _GatewayActionError(
+                ContractError(
+                    code=OperationErrorCode.UNAUTHORIZED_DESTINATION.value,
+                    message="this Conversation did not receive the request",
+                )
+            )
+        if destination.state is RequestRouteState.RESPONDED:
+            raise RequestDuplicateError("request already has a submitted response")
+        if destination.state is RequestRouteState.RESOLVED:
+            raise RequestResolvedError("request is already resolved")
+        if destination.state is RequestRouteState.STALE:
+            raise RequestStaleError("request response handle is stale")
+        now = datetime.now(UTC)
+        if destination.expires_at is not None and destination.expires_at <= now:
+            await self._transition_request_state(
+                operation,
+                state=RequestRouteState.STALE,
+                expected_states=(RequestRouteState.OPEN,),
+                updated_at=now,
+            )
+            raise RequestStaleError("request has expired")
+        validate_request_response(operation.response, destination.response_shape)
+        application = self._require_application(
+            operation.request_ref.application_ref.application_instance_id
+        )
+        native = await self.execute_application(
+            RespondRequest(
+                operation_id=f"{operation.operation_id}:request.respond",
+                application_ref=application.summary.ref,
+                request_ref=operation.request_ref,
+                response=operation.response,
+                thread_ref=destination.thread_ref,
+                created_at=operation.created_at,
+            )
+        )
+        if isinstance(native, ApplicationOperationFailed):
+            await self._converge_native_request_failure(operation, native)
+            raise _GatewayActionError(native.error)
+        if not isinstance(native, RequestResponded):
+            raise RuntimeError("request.respond returned an incompatible result")
+        try:
+            await self._transition_request_state(
+                operation,
+                state=RequestRouteState.RESPONDED,
+                expected_states=(RequestRouteState.OPEN,),
+                updated_at=completed_at,
+            )
+        except RequestCorrelationConflict:
+            current = await self._request_correlations.list_request_correlations(
+                request_ref=operation.request_ref
+            )
+            if not current or any(
+                correlation.state
+                not in {
+                    RequestRouteState.RESPONDED,
+                    RequestRouteState.RESOLVED,
+                }
+                for correlation in current
+            ):
+                raise
+        return RequestResponseRouted(
+            operation_id=operation.operation_id,
+            request_ref=operation.request_ref,
+            completed_at=completed_at,
+        )
+
+    async def _converge_native_request_failure(
+        self,
+        operation: RespondToRequest,
+        result: ApplicationOperationFailed,
+    ) -> None:
+        target = {
+            OperationErrorCode.REQUEST_DUPLICATE.value: RequestRouteState.RESPONDED,
+            OperationErrorCode.REQUEST_RESOLVED.value: RequestRouteState.RESOLVED,
+            OperationErrorCode.REQUEST_STALE.value: RequestRouteState.STALE,
+        }.get(result.error.code)
+        if target is None:
+            return
+        try:
+            await self._transition_request_state(
+                operation,
+                state=target,
+                expected_states=(RequestRouteState.OPEN,),
+                updated_at=result.completed_at,
+            )
+        except (KeyError, RequestCorrelationConflict):
+            pass
+
+    async def _transition_request_state(
+        self,
+        operation: RespondToRequest,
+        *,
+        state: RequestRouteState,
+        expected_states: tuple[RequestRouteState, ...],
+        updated_at: datetime,
+    ):
+        return await self._request_correlations.transition_request_correlations(
+            operation.request_ref,
+            expected_states=expected_states,
+            state=state,
+            updated_at=updated_at,
+        )
 
     async def _handle_message(self, message: InboundMessage) -> None:
         scope = f"inbound:{message.conversation_ref.channel_instance_id}"

@@ -17,6 +17,8 @@ The Gateway owns:
 - establishing Thread observation before input delivery;
 - composing the projection runtime with Application execution and Channel
   send callbacks;
+- validating that an interactive response comes from a Conversation that
+  actually received the request and routing the typed native response;
 - per-Conversation serialization and explicit delivery errors.
 
 It does not own:
@@ -95,6 +97,47 @@ Gateway's ordered checkpoint decision does not make Channel side effects and
 SQLite atomic. Stable delivery IDs make completed work convergent; a crash
 between native send and durable completion can still yield an ambiguous
 side-effect outcome. Receipt-aware retry/backpressure remains Issue #12.
+
+## Interactive request flow
+
+An Application `request.opened` event is projected only through active output
+routes. A configured Request Presenter renders the request; Gateway stores a
+minimal per-destination correlation only after that stable delivery is
+accepted or already completed.
+
+Slash text and Channel-native actions submit
+`conversation.respond_request`. Gateway then:
+
+1. finds all correlations for the application-scoped `RequestRef` under a
+   request-scoped lock;
+2. rejects an unknown/stale request, an already responded/resolved request, or
+   a Conversation that never received it with distinct stable codes;
+3. calls Application `request.respond` using the stored
+   Application/Thread scope;
+4. marks every destination correlation responded only after native success.
+
+The later authoritative `request.resolved` event marks all correlations
+resolved or stale. Changing the Conversation's current input binding does not
+retarget an earlier delivered request. Sender admission remains Channel or
+consumer policy; destination validation is not approval authorization.
+If one destination is still completing delivery when another wins the native
+response, its later correlation atomically inherits the request-wide state
+instead of reopening the request.
+Request-scoped serialization uses a waiter-counted keyed lock that removes its
+entry after the last current/waiting caller exits; completed request IDs do not
+accumulate in Gateway memory.
+
+At process start, Gateway snapshots only the pre-existing open bridge
+correlations, installs restored Thread subscriptions, and only then starts
+native Application producers. Restored workers hold live events behind their
+route bootstrap barriers until Applications are ready for authoritative
+recovery. Pending-snapshot reconciliation may stale only the pre-start
+snapshot; a new request emitted during `Application.start()` is therefore not
+mistaken for unverifiable restart state.
+
+When no Presenter is configured, an unexpected request is an explicit
+projection failure and creates no response correlation. A Full Access product
+that never receives native requests therefore incurs no prompt or SDK policy.
 
 ## Change obligations
 

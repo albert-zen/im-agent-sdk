@@ -29,6 +29,18 @@ It does not own:
 - native Application replay guarantees;
 - a synthetic restart-unsafe sequence or SDK event log.
 
+Typed interactive requests share route selection and per-route delivery
+serialization with message projection, but they do not advance transcript
+checkpoints. A Request Presenter produces one stable outbound delivery per
+destination. Only accepted/already-completed destinations receive a response
+correlation; one route's failure neither authorizes it nor blocks another.
+
+`request.resolved` transitions the minimal request correlation but never ends
+a Turn. AppServer connection reset may emit a typed stale resolution solely
+to invalidate an unusable response handle; it does not manufacture native
+request history. Pending requests are reconciled only from an authoritative
+native snapshot capability.
+
 ## Fan-out and lifecycle
 
 ### Current behavior
@@ -91,11 +103,12 @@ does not inherit a route's last inbound message.
 ## Bootstrap ordering
 
 Each route has a bootstrap barrier and serial delivery boundary. Gateway
-installs the barrier before publishing a durable route, subscribes to the
-Application, then reads a bounded authoritative baseline. Live events arriving
-meanwhile remain in the projection subscriber's independent queue until that
-route completes baseline delivery. Recovery delivery also waits for any
-in-flight `AcceptedTurn` result, so history cannot outrun creation of its
+installs the barrier and restored subscription before starting the native
+Application producer, then reads a bounded authoritative baseline once the
+Application is ready. Live events arriving during Application startup or
+baseline recovery remain in the projection subscriber's independent queue
+until that route completes baseline delivery. Recovery delivery also waits for
+any in-flight `AcceptedTurn` result, so history cannot outrun creation of its
 per-Turn reply correlation. The native producer never awaits these barriers.
 
 Both pages/Turns requested from the Application and flattened Agent items
@@ -151,6 +164,8 @@ is SDK infrastructure state, never Agent Turn/request truth.
 
 The accepted state and failure-domain design is
 [ADR 0007](../../decisions/0007-projection-lifecycle-and-delivery-boundaries.md).
+Interactive request routing is defined by
+[ADR 0008](../../decisions/0008-interactive-request-routing.md).
 
 Bounded Channel delivery execution/backpressure/retry is separate
 [Issue #12](https://github.com/albert-zen/im-agent-sdk/issues/12) work. Current

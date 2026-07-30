@@ -72,6 +72,7 @@
         "replayFromCursor",
         "interruption",
         "interactiveRequests",
+        "pendingRequestSnapshot",
         "nativeThreadActivation",
         "gapDetection",
         "eventSequenceScope"
@@ -82,6 +83,7 @@
         "replayFromCursor": { "$ref": "#/$defs/SupportLevel" },
         "interruption": { "$ref": "#/$defs/SupportLevel" },
         "interactiveRequests": { "$ref": "#/$defs/SupportLevel" },
+        "pendingRequestSnapshot": { "$ref": "#/$defs/SupportLevel" },
         "nativeThreadActivation": { "$ref": "#/$defs/SupportLevel" },
         "gapDetection": { "$ref": "#/$defs/SupportLevel" },
         "eventSequenceScope": { "$ref": "#/$defs/EventSequenceScope" }

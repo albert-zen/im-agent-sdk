@@ -11,6 +11,22 @@ class OperationErrorCode(StrEnum):
     NOT_FOUND = "not_found"
     CONFLICT = "conflict"
     ADAPTER_FAILURE = "adapter_failure"
+    UNAUTHORIZED_DESTINATION = "unauthorized_destination"
+    REQUEST_DUPLICATE = "request_duplicate"
+    REQUEST_RESOLVED = "request_resolved"
+    REQUEST_STALE = "request_stale"
+
+
+class RequestDuplicateError(RuntimeError):
+    pass
+
+
+class RequestResolvedError(RuntimeError):
+    pass
+
+
+class RequestStaleError(RuntimeError):
+    pass
 
 
 def operation_error(
@@ -26,6 +42,12 @@ def operation_error(
             code = OperationErrorCode.NOT_FOUND
         elif isinstance(error, ValueError):
             code = OperationErrorCode.INVALID_OPERATION
+        elif isinstance(error, RequestDuplicateError):
+            code = OperationErrorCode.REQUEST_DUPLICATE
+        elif isinstance(error, RequestResolvedError):
+            code = OperationErrorCode.REQUEST_RESOLVED
+        elif isinstance(error, RequestStaleError):
+            code = OperationErrorCode.REQUEST_STALE
         else:
             code = OperationErrorCode.ADAPTER_FAILURE
     return ContractError(

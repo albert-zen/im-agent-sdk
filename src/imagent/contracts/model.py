@@ -58,6 +58,23 @@ class ProjectionPolicy(StrEnum):
     ALL_OBSERVERS = "all_observers"
 
 
+class InteractiveRequestKind(StrEnum):
+    APPROVAL = "approval"
+    USER_INPUT = "user_input"
+
+
+class RequestResolutionStatus(StrEnum):
+    RESOLVED = "resolved"
+    STALE = "stale"
+
+
+class RequestRouteState(StrEnum):
+    OPEN = "open"
+    RESPONDED = "responded"
+    RESOLVED = "resolved"
+    STALE = "stale"
+
+
 class ProjectMode(StrEnum):
     MANAGED = "managed"
     FLAT = "flat"
@@ -100,6 +117,7 @@ class RuntimeCapabilities:
     replay_from_cursor: SupportLevel
     interruption: SupportLevel
     interactive_requests: SupportLevel
+    pending_request_snapshot: SupportLevel = SupportLevel.UNSUPPORTED
     native_thread_activation: SupportLevel = SupportLevel.UNSUPPORTED
     gap_detection: SupportLevel = SupportLevel.UNSUPPORTED
     event_sequence_scope: EventSequenceScope = EventSequenceScope.NONE
@@ -321,6 +339,118 @@ class AcceptedTurn:
 
 
 @dataclass(frozen=True, slots=True)
+class RequestRef:
+    """Application-scoped opaque identity for an interactive request."""
+
+    application_ref: ApplicationRef
+    native_request_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class RequestChoice:
+    choice_id: str
+    label: str
+    description: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ApprovalRequest:
+    request_ref: RequestRef
+    thread_ref: ThreadRef
+    turn_id: str
+    prompt: str
+    choices: tuple[RequestChoice, ...]
+    expires_at: datetime | None = None
+    metadata: Metadata = field(default_factory=dict)
+    kind: InteractiveRequestKind = field(
+        init=False,
+        default=InteractiveRequestKind.APPROVAL,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class UserInputQuestion:
+    question_id: str
+    prompt: str
+    header: str | None = None
+    choices: tuple[RequestChoice, ...] = ()
+    allows_other: bool = False
+    secret: bool = False
+    min_answers: int = 1
+    max_answers: int = 1
+
+
+@dataclass(frozen=True, slots=True)
+class UserInputRequest:
+    request_ref: RequestRef
+    thread_ref: ThreadRef
+    turn_id: str
+    questions: tuple[UserInputQuestion, ...]
+    prompt: str | None = None
+    expires_at: datetime | None = None
+    metadata: Metadata = field(default_factory=dict)
+    kind: InteractiveRequestKind = field(
+        init=False,
+        default=InteractiveRequestKind.USER_INPUT,
+    )
+
+
+InteractiveRequest: TypeAlias = ApprovalRequest | UserInputRequest
+
+
+@dataclass(frozen=True, slots=True)
+class ApprovalResponseShape:
+    choice_ids: tuple[str, ...]
+    kind: InteractiveRequestKind = field(
+        init=False,
+        default=InteractiveRequestKind.APPROVAL,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class UserInputQuestionShape:
+    question_id: str
+    choice_ids: tuple[str, ...]
+    allows_other: bool
+    min_answers: int
+    max_answers: int
+
+
+@dataclass(frozen=True, slots=True)
+class UserInputResponseShape:
+    questions: tuple[UserInputQuestionShape, ...]
+    kind: InteractiveRequestKind = field(
+        init=False,
+        default=InteractiveRequestKind.USER_INPUT,
+    )
+
+
+RequestResponseShape: TypeAlias = ApprovalResponseShape | UserInputResponseShape
+
+
+@dataclass(frozen=True, slots=True)
+class RequestResolution:
+    request_ref: RequestRef
+    status: RequestResolutionStatus
+    resolved_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class RequestRouteCorrelation:
+    correlation_id: str
+    request_ref: RequestRef
+    thread_ref: ThreadRef
+    turn_id: str
+    conversation_ref: ConversationRef
+    delivery_id: str
+    response_shape: RequestResponseShape
+    state: RequestRouteState
+    created_at: datetime
+    updated_at: datetime
+    expires_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ContractError:
     code: str
     message: str
@@ -358,6 +488,8 @@ class AgentEvent:
     sequence: int | None = None
     sequence_epoch: str | None = None
     cursor: str | None = None
+    request: InteractiveRequest | None = None
+    request_resolution: RequestResolution | None = None
 
 
 @dataclass(frozen=True, slots=True)

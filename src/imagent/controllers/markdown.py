@@ -230,4 +230,6 @@ _HELP = """## IM Agent commands
 - `/status` — show the selected thread status
 - `/catchup [messages]` — show recent progress in the latest Turn
 - `/history [turns] [--page N]` — restore context from recent Turns
+- `/respond <application> <request> <choice>` — answer a delivered approval
+- `/answer <application> <request> <question>=<answer> ...` — answer delivered input
 """

@@ -19,6 +19,10 @@ from .contracts import (
     validate_projection_route,
     validate_turn_reply_correlation,
 )
+from .request_correlations import (
+    SQLiteRequestCorrelationMixin,
+    initialize_request_correlation_schema,
+)
 
 
 class InMemoryIdempotencyRepository:
@@ -50,7 +54,7 @@ class InMemoryIdempotencyRepository:
                 self._records.pop(record, None)
 
 
-class SQLiteGatewayState:
+class SQLiteGatewayState(SQLiteRequestCorrelationMixin):
     """Durable bindings, projection routes, and idempotency without Agent truth."""
 
     def __init__(
@@ -152,6 +156,7 @@ class SQLiteGatewayState:
             self._connection.execute(
                 "UPDATE thread_projection_routes SET reply_to_message_id = NULL"
             )
+        initialize_request_correlation_schema(self._connection)
         self._connection.commit()
 
     async def close(self) -> None:

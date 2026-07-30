@@ -16,6 +16,7 @@ from .model import (
     Page,
     ProjectRef,
     ProjectSummary,
+    RequestRef,
     ThreadHistory,
     ThreadProjectionRoute,
     ThreadRef,
@@ -51,6 +52,7 @@ class GatewayOperationType(StrEnum):
     CONVERSATION_BIND_PROJECT = "conversation.bind_project"
     CONVERSATION_BIND_THREAD = "conversation.bind_thread"
     CONVERSATION_CLEAR_THREAD = "conversation.clear_thread"
+    CONVERSATION_RESPOND_REQUEST = "conversation.respond_request"
     THREAD_OBSERVE = "thread.observe"
 
 
@@ -59,20 +61,15 @@ class ThreadDeletionMode(StrEnum):
     PERMANENT = "permanent"
 
 
-class ApprovalDecision(StrEnum):
-    APPROVE = "approve"
-    DENY = "deny"
-
-
 @dataclass(frozen=True, slots=True)
 class ApprovalResponse:
-    decision: ApprovalDecision
+    choice_id: str
     kind: str = field(init=False, default="approval")
 
 
 @dataclass(frozen=True, slots=True)
 class UserInputResponse:
-    values: Mapping[str, str]
+    answers: Mapping[str, tuple[str, ...]]
     kind: str = field(init=False, default="user_input")
 
 
@@ -197,7 +194,7 @@ class InterruptTurn(_ApplicationOperation):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RespondRequest(_ApplicationOperation):
-    request_id: str
+    request_ref: RequestRef
     response: RequestResponse
     thread_ref: ThreadRef | None = None
     type: ApplicationOperationType = field(
@@ -287,6 +284,16 @@ class ObserveThread(_GatewayOperation):
     )
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RespondToRequest(_GatewayOperation):
+    request_ref: RequestRef
+    response: RequestResponse
+    type: GatewayOperationType = field(
+        init=False,
+        default=GatewayOperationType.CONVERSATION_RESPOND_REQUEST,
+    )
+
+
 GatewayOperation: TypeAlias = (
     ListApplications
     | SelectApplication
@@ -294,6 +301,7 @@ GatewayOperation: TypeAlias = (
     | BindConversationToThread
     | ClearConversationThread
     | ObserveThread
+    | RespondToRequest
 )
 
 
@@ -411,7 +419,7 @@ class TurnInterrupted(_ApplicationOperationSucceeded):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RequestResponded(_ApplicationOperationSucceeded):
-    request_id: str
+    request_ref: RequestRef
     type: ApplicationOperationType = field(
         init=False,
         default=ApplicationOperationType.REQUEST_RESPOND,
@@ -482,6 +490,15 @@ class ThreadObserved(_GatewayOperationSucceeded):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class RequestResponseRouted(_GatewayOperationSucceeded):
+    request_ref: RequestRef
+    type: GatewayOperationType = field(
+        init=False,
+        default=GatewayOperationType.CONVERSATION_RESPOND_REQUEST,
+    )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class GatewayOperationFailed:
     operation_id: str
     type: GatewayOperationType
@@ -494,5 +511,9 @@ class GatewayOperationFailed:
 
 
 GatewayOperationResult: TypeAlias = (
-    ApplicationsListed | ConversationBound | ThreadObserved | GatewayOperationFailed
+    ApplicationsListed
+    | ConversationBound
+    | ThreadObserved
+    | RequestResponseRouted
+    | GatewayOperationFailed
 )

@@ -18,6 +18,7 @@ from imagent.contracts import (
     ApplicationOperationResult,
     ApplicationRef,
     ApplicationSummary,
+    ApprovalRequest,
     ChannelCapabilities,
     CreateThread,
     DeleteThread,
@@ -41,7 +42,15 @@ from imagent.contracts import (
     ProjectRef,
     ProjectsListed,
     ProjectSummary,
+    RequestChoice,
+    RequestDuplicateError,
+    RequestRef,
+    RequestResolution,
+    RequestResolutionStatus,
+    RequestResolvedError,
     RequestResponded,
+    RequestResponse,
+    RequestStaleError,
     RespondRequest,
     RuntimeCapabilities,
     SupportLevel,
@@ -66,9 +75,13 @@ from imagent.contracts import (
     TurnHistoryEntry,
     TurnInterrupted,
     TurnStatus,
+    UserInputQuestion,
+    UserInputRequest,
+    derive_request_response_shape,
     operation_error,
     validate_application_operation,
     validate_application_operation_result,
+    validate_request_response,
 )
 from imagent.events import CursorExpired, EventBroadcaster
 
@@ -95,6 +108,7 @@ def make_capabilities(project_mode: ProjectMode) -> ApplicationCapabilities:
             replay_from_cursor=SupportLevel.NATIVE,
             interruption=SupportLevel.NATIVE,
             interactive_requests=SupportLevel.NATIVE,
+            pending_request_snapshot=SupportLevel.NATIVE,
             native_thread_activation=SupportLevel.NATIVE,
             gap_detection=SupportLevel.NATIVE,
             event_sequence_scope=EventSequenceScope.THREAD,
@@ -164,6 +178,10 @@ class FakeAgentApplicationAdapter:
         self._event_history: dict[ThreadRef, list[AgentEvent]] = {}
         self._next_thread = 1
         self.activated_threads: list[ThreadRef] = []
+        self._open_requests: dict[RequestRef, ApprovalRequest | UserInputRequest] = {}
+        self._resolved_requests: set[RequestRef] = set()
+        self.request_responses: dict[RequestRef, RequestResponse] = {}
+        self._next_request = 1
 
     @property
     def summary(self) -> ApplicationSummary:
@@ -178,6 +196,11 @@ class FakeAgentApplicationAdapter:
 
     async def stop(self) -> None:
         return None
+
+    async def list_pending_requests(
+        self,
+    ) -> tuple[ApprovalRequest | UserInputRequest, ...]:
+        return tuple(self._open_requests.values())
 
     async def list_projects(self, cursor=None) -> Page[ProjectSummary]:
         return Page(tuple(self._projects.values()))
@@ -295,11 +318,11 @@ class FakeAgentApplicationAdapter:
                 turn_id=operation.turn_id,
             )
         if isinstance(operation, RespondRequest):
-            await self.respond_request(operation.request_id, operation.response)
+            await self.respond_request(operation.request_ref, operation.response)
             return RequestResponded(
                 operation_id=operation.operation_id,
                 completed_at=now,
-                request_id=operation.request_id,
+                request_ref=operation.request_ref,
             )
         raise NotImplementedError(operation.type.value)
 
@@ -422,12 +445,21 @@ class FakeAgentApplicationAdapter:
         event_type: AgentEventType,
         turn_id: str,
         data,
+        *,
+        request: ApprovalRequest | UserInputRequest | None = None,
+        request_resolution: RequestResolution | None = None,
     ) -> None:
         sequence = self._sequences.get(thread_ref, 0) + 1
         self._sequences[thread_ref] = sequence
         message = data.get("message")
         if isinstance(message, AgentMessage):
             native_identity = f"message:{message.agent_item_id}"
+        elif request is not None:
+            native_identity = f"request:{request.request_ref.native_request_id}:{event_type.value}"
+        elif request_resolution is not None:
+            native_identity = (
+                f"request:{request_resolution.request_ref.native_request_id}:{event_type.value}"
+            )
         else:
             native_identity = f"turn:{turn_id}:{event_type.value}"
         event = AgentEvent(
@@ -443,6 +475,8 @@ class FakeAgentApplicationAdapter:
             thread_ref=thread_ref,
             turn_id=turn_id,
             cursor=(f"fake:{self._event_epoch}:{thread_ref.native_thread_id}:{sequence}"),
+            request=request,
+            request_resolution=request_resolution,
         )
         history = self._event_history.setdefault(thread_ref, [])
         history.append(event)
@@ -458,5 +492,106 @@ class FakeAgentApplicationAdapter:
             status=ThreadStatus.INTERRUPTED,
         )
 
-    async def respond_request(self, request_id: str, response: object) -> None:
-        return None
+    async def open_approval_request(
+        self,
+        thread_ref: ThreadRef,
+        *,
+        turn_id: str,
+        prompt: str = "Approve the requested action?",
+        choices: tuple[RequestChoice, ...] = (
+            RequestChoice("accept", "Approve once"),
+            RequestChoice("accept_for_session", "Approve for session"),
+            RequestChoice("decline", "Deny"),
+            RequestChoice("cancel", "Cancel"),
+        ),
+    ) -> ApprovalRequest:
+        request = ApprovalRequest(
+            request_ref=self._new_request_ref(),
+            thread_ref=thread_ref,
+            turn_id=turn_id,
+            prompt=prompt,
+            choices=choices,
+        )
+        self._open_requests[request.request_ref] = request
+        self._publish(
+            thread_ref,
+            AgentEventType.REQUEST_OPENED,
+            turn_id,
+            {},
+            request=request,
+        )
+        return request
+
+    async def open_user_input_request(
+        self,
+        thread_ref: ThreadRef,
+        *,
+        turn_id: str,
+        questions: tuple[UserInputQuestion, ...],
+        prompt: str | None = None,
+    ) -> UserInputRequest:
+        request = UserInputRequest(
+            request_ref=self._new_request_ref(),
+            thread_ref=thread_ref,
+            turn_id=turn_id,
+            questions=questions,
+            prompt=prompt,
+        )
+        self._open_requests[request.request_ref] = request
+        self._publish(
+            thread_ref,
+            AgentEventType.REQUEST_OPENED,
+            turn_id,
+            {},
+            request=request,
+        )
+        return request
+
+    async def resolve_request(
+        self,
+        request_ref: RequestRef,
+        *,
+        status: RequestResolutionStatus = RequestResolutionStatus.RESOLVED,
+    ) -> None:
+        request = self._open_requests.pop(request_ref, None)
+        if request is None:
+            raise RequestStaleError("fake request is not pending")
+        self._resolved_requests.add(request_ref)
+        resolution = RequestResolution(
+            request_ref=request_ref,
+            status=status,
+            resolved_at=datetime.now(UTC),
+        )
+        self._publish(
+            request.thread_ref,
+            AgentEventType.REQUEST_RESOLVED,
+            request.turn_id,
+            {},
+            request_resolution=resolution,
+        )
+
+    async def respond_request(
+        self,
+        request_ref: RequestRef,
+        response: RequestResponse,
+    ) -> None:
+        if request_ref in self.request_responses:
+            raise RequestDuplicateError("fake request already has a response")
+        request = self._open_requests.get(request_ref)
+        if request is None:
+            if request_ref in self._resolved_requests:
+                raise RequestResolvedError("fake request is resolved")
+            raise RequestStaleError("fake request is not pending")
+        validate_request_response(
+            response,
+            derive_request_response_shape(request),
+        )
+        self.request_responses[request_ref] = response
+
+    def _new_request_ref(self) -> RequestRef:
+        request_ref = RequestRef(
+            application_ref=self._summary.ref,
+            native_request_id=f"{self._event_epoch}:request-{self._next_request}",
+        )
+        self._next_request += 1
+        return request_ref

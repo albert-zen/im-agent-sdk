@@ -26,6 +26,7 @@
         "conversation.bind_project",
         "conversation.bind_thread",
         "conversation.clear_thread",
+        "conversation.respond_request",
         "thread.observe"
       ]
     },
@@ -247,21 +248,26 @@
     },
     "ApprovalResponse": {
       "type": "object",
-      "required": ["kind", "decision"],
+      "required": ["kind", "choiceId"],
       "properties": {
         "kind": { "const": "approval" },
-        "decision": { "enum": ["approve", "deny"] }
+        "choiceId": { "$ref": "common.schema.json#/$defs/Identifier" }
       },
       "additionalProperties": false
     },
     "UserInputResponse": {
       "type": "object",
-      "required": ["kind", "values"],
+      "required": ["kind", "answers"],
       "properties": {
         "kind": { "const": "user_input" },
-        "values": {
+        "answers": {
           "type": "object",
-          "additionalProperties": { "type": "string" }
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          }
         }
       },
       "additionalProperties": false
@@ -277,11 +283,11 @@
         { "$ref": "#/$defs/ApplicationOperationIdentity" },
         {
           "type": "object",
-          "required": ["type", "requestId", "response"],
+          "required": ["type", "requestRef", "response"],
           "properties": {
             "type": { "const": "request.respond" },
-            "requestId": {
-              "$ref": "common.schema.json#/$defs/Identifier"
+            "requestRef": {
+              "$ref": "resources.schema.json#/$defs/RequestRef"
             },
             "threadRef": {
               "oneOf": [
@@ -409,6 +415,23 @@
       ],
       "unevaluatedProperties": false
     },
+    "RespondToRequest": {
+      "allOf": [
+        { "$ref": "#/$defs/GatewayOperationIdentity" },
+        {
+          "type": "object",
+          "required": ["type", "requestRef", "response"],
+          "properties": {
+            "type": { "const": "conversation.respond_request" },
+            "requestRef": {
+              "$ref": "resources.schema.json#/$defs/RequestRef"
+            },
+            "response": { "$ref": "#/$defs/RequestResponse" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
     "GatewayOperation": {
       "oneOf": [
         { "$ref": "#/$defs/ListApplications" },
@@ -416,7 +439,8 @@
         { "$ref": "#/$defs/BindConversationToProject" },
         { "$ref": "#/$defs/BindConversationToThread" },
         { "$ref": "#/$defs/ClearConversationThread" },
-        { "$ref": "#/$defs/ObserveThread" }
+        { "$ref": "#/$defs/ObserveThread" },
+        { "$ref": "#/$defs/RespondToRequest" }
       ]
     },
     "ProjectPage": {
@@ -636,11 +660,11 @@
         { "$ref": "#/$defs/ApplicationSuccessIdentity" },
         {
           "type": "object",
-          "required": ["type", "requestId"],
+          "required": ["type", "requestRef"],
           "properties": {
             "type": { "const": "request.respond" },
-            "requestId": {
-              "$ref": "common.schema.json#/$defs/Identifier"
+            "requestRef": {
+              "$ref": "resources.schema.json#/$defs/RequestRef"
             }
           }
         }
@@ -744,6 +768,22 @@
       ],
       "unevaluatedProperties": false
     },
+    "RequestResponseRouted": {
+      "allOf": [
+        { "$ref": "#/$defs/GatewaySuccessIdentity" },
+        {
+          "type": "object",
+          "required": ["type", "requestRef"],
+          "properties": {
+            "type": { "const": "conversation.respond_request" },
+            "requestRef": {
+              "$ref": "resources.schema.json#/$defs/RequestRef"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
     "GatewayOperationFailed": {
       "type": "object",
       "required": ["operationId", "type", "status", "error", "completedAt"],
@@ -761,6 +801,7 @@
         { "$ref": "#/$defs/ApplicationsListed" },
         { "$ref": "#/$defs/ConversationBound" },
         { "$ref": "#/$defs/ThreadObserved" },
+        { "$ref": "#/$defs/RequestResponseRouted" },
         { "$ref": "#/$defs/GatewayOperationFailed" }
       ]
     }

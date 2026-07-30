@@ -10,6 +10,9 @@ from imagent.contracts import (
     ApplicationOperationFailed,
     ApplicationOperationType,
     ApplicationRef,
+    ApprovalRequest,
+    ApprovalResponse,
+    ApprovalResponseShape,
     BindConversationToThread,
     ContractError,
     ContractViolation,
@@ -26,6 +29,8 @@ from imagent.contracts import (
     ProjectCapabilities,
     ProjectMode,
     ProjectRef,
+    RequestChoice,
+    RequestRef,
     RuntimeCapabilities,
     SupportLevel,
     ThreadCapabilities,
@@ -34,6 +39,11 @@ from imagent.contracts import (
     ThreadRef,
     ThreadsListed,
     TurnReplyCorrelation,
+    UserInputQuestion,
+    UserInputQuestionShape,
+    UserInputRequest,
+    UserInputResponse,
+    UserInputResponseShape,
     derive_client_message_id,
     operation_error,
     validate_agent_event,
@@ -43,7 +53,9 @@ from imagent.contracts import (
     validate_binding,
     validate_gateway_operation,
     validate_gateway_operation_result,
+    validate_interactive_request,
     validate_projection_route,
+    validate_request_response,
     validate_turn_reply_correlation,
 )
 
@@ -244,6 +256,100 @@ class MessageIdentityTests(unittest.TestCase):
             ),
             replay_capabilities,
         )
+
+
+class InteractiveRequestContractTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.application = ApplicationRef("codex-local")
+        self.request_ref = RequestRef(self.application, "epoch-4:request-7")
+        self.thread = ThreadRef("codex-local", "thread-1")
+
+    def test_approval_preserves_native_choice_ids_without_binary_policy(self) -> None:
+        choices = tuple(
+            RequestChoice(choice_id, label)
+            for choice_id, label in (
+                ("accept", "Approve once"),
+                ("accept_for_session", "Approve for session"),
+                ("decline", "Deny"),
+                ("cancel", "Cancel"),
+            )
+        )
+        request = ApprovalRequest(
+            request_ref=self.request_ref,
+            thread_ref=self.thread,
+            turn_id="turn-1",
+            prompt="Run the command?",
+            choices=choices,
+        )
+        validate_interactive_request(request)
+        shape = ApprovalResponseShape(tuple(choice.choice_id for choice in choices))
+        validate_request_response(ApprovalResponse("accept_for_session"), shape)
+        with self.assertRaisesRegex(ContractViolation, "not offered"):
+            validate_request_response(ApprovalResponse("approve"), shape)
+
+    def test_user_input_cardinality_is_explicit_and_enforced(self) -> None:
+        single = UserInputQuestion(
+            question_id="environment",
+            prompt="Choose an environment",
+            choices=(
+                RequestChoice("staging", "Staging"),
+                RequestChoice("production", "Production"),
+            ),
+            min_answers=1,
+            max_answers=1,
+        )
+        validate_interactive_request(
+            UserInputRequest(
+                request_ref=self.request_ref,
+                thread_ref=self.thread,
+                turn_id="turn-1",
+                questions=(single,),
+            )
+        )
+        shape = UserInputResponseShape(
+            (
+                UserInputQuestionShape(
+                    question_id=single.question_id,
+                    choice_ids=tuple(choice.choice_id for choice in single.choices),
+                    allows_other=False,
+                    min_answers=1,
+                    max_answers=1,
+                ),
+            )
+        )
+        validate_request_response(
+            UserInputResponse({"environment": ("staging",)}),
+            shape,
+        )
+        with self.assertRaisesRegex(ContractViolation, "too many"):
+            validate_request_response(
+                UserInputResponse({"environment": ("staging", "production")}),
+                shape,
+            )
+
+    def test_request_ref_must_match_event_application(self) -> None:
+        request = ApprovalRequest(
+            request_ref=RequestRef(
+                ApplicationRef("other-application"),
+                self.request_ref.native_request_id,
+            ),
+            thread_ref=self.thread,
+            turn_id="turn-1",
+            prompt="Run the command?",
+            choices=(RequestChoice("accept", "Approve"),),
+        )
+        event = AgentEvent(
+            event_id="request-event-1",
+            application_instance_id="codex-local",
+            type=AgentEventType.REQUEST_OPENED,
+            data={},
+            created_at=datetime.now(UTC),
+            thread_ref=self.thread,
+            turn_id="turn-1",
+            request=request,
+        )
+        with self.assertRaisesRegex(ContractViolation, "different application"):
+            validate_agent_event(event, capabilities(ProjectMode.FLAT))
 
 
 class ProjectionContractTests(unittest.TestCase):

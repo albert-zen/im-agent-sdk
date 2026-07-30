@@ -8,7 +8,12 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from .adapters import AgentApplicationAdapter, BindingRepository, ProjectionRouteRepository
+from .adapters import (
+    AgentApplicationAdapter,
+    BindingRepository,
+    ProjectionRouteRepository,
+    RequestCorrelationRepository,
+)
 from .contracts import (
     AcceptedTurn,
     AgentEvent,
@@ -20,10 +25,12 @@ from .contracts import (
     ConversationBinding,
     ConversationRef,
     ProjectionPolicy,
+    RequestRef,
     ThreadProjectionRoute,
     ThreadRef,
     TurnReplyCorrelation,
 )
+from .controllers import RequestPresenter
 from .projection_routes import ProjectionRouteCoordinator
 from .projections import (
     DeliverOutbound,
@@ -35,6 +42,7 @@ from .projections import (
     get_projection_route,
 )
 from .recovery import ProjectionRecoveryUnavailable
+from .request_projection_runtime import InteractiveRequestProjection
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +61,8 @@ class ThreadProjectionRuntime:
         applications: Mapping[str, AgentApplicationAdapter],
         bindings: BindingRepository,
         projections: ProjectionRouteRepository,
+        request_correlations: RequestCorrelationRepository,
+        request_presenter: RequestPresenter | None,
         projection_policy: ProjectionPolicy,
         execute_application: ExecuteApplication,
         deliver_outbound: DeliverOutbound,
@@ -64,6 +74,7 @@ class ThreadProjectionRuntime:
         subscription_retry_initial_seconds: float = 0.05,
         subscription_retry_max_seconds: float = 2.0,
         turn_correlation_retention_seconds: float = 7 * 24 * 60 * 60,
+        request_correlation_retention_seconds: float = 7 * 24 * 60 * 60,
     ) -> None:
         if baseline_history_limit < 1:
             raise ValueError("baseline_history_limit must be positive")
@@ -81,22 +92,31 @@ class ThreadProjectionRuntime:
             raise ValueError("maximum subscription retry delay is below initial delay")
         if turn_correlation_retention_seconds <= 0:
             raise ValueError("turn_correlation_retention_seconds must be positive")
+        if request_correlation_retention_seconds <= 0:
+            raise ValueError("request_correlation_retention_seconds must be positive")
         self._applications = applications
         self._bindings = bindings
         self._projections = projections
+        self._request_correlations = request_correlations
         self._projection_policy = projection_policy
         self._subscription_retry_initial_seconds = subscription_retry_initial_seconds
         self._subscription_retry_max_seconds = subscription_retry_max_seconds
         self._turn_correlation_retention = timedelta(seconds=turn_correlation_retention_seconds)
+        self._request_correlation_retention = timedelta(
+            seconds=request_correlation_retention_seconds
+        )
         self._tasks: dict[ThreadRef, asyncio.Task[None]] = {}
         self._ready: dict[ThreadRef, asyncio.Event] = {}
         self._event_locks: dict[ThreadRef, asyncio.Lock] = {}
         self._pending_turn_acceptances: dict[ThreadRef, int] = {}
         self._acceptance_ready: dict[ThreadRef, asyncio.Event] = {}
         self._buffered_events: dict[ThreadRef, list[AgentEvent]] = {}
+        self._delivery_ready = asyncio.Event()
         self._health: dict[ThreadRef, ProjectionWorkerHealth] = {}
         self._routes = ProjectionRouteCoordinator(
             projections=projections,
+            request_correlations=request_correlations,
+            request_presenter=request_presenter,
             execute_application=execute_application,
             deliver_outbound=deliver_outbound,
             wait_for_acceptance=self._wait_for_acceptance,
@@ -108,15 +128,25 @@ class ThreadProjectionRuntime:
             catchup_limit=catchup_limit,
             projection_item_limit=projection_item_limit,
         )
+        self._request_projection = InteractiveRequestProjection(
+            applications=applications,
+            correlations=request_correlations,
+            active_routes=self._active_routes,
+            deliver_request=self._routes.deliver_request_to_routes,
+        )
         self._stopping = False
 
     async def cleanup_stale_correlations(self) -> None:
         await self._projections.delete_turn_reply_correlations(
             older_than=datetime.now(UTC) - self._turn_correlation_retention
         )
+        await self._request_projection.cleanup_older_than(
+            datetime.now(UTC) - self._request_correlation_retention
+        )
 
     async def restore(self) -> None:
         self._stopping = False
+        self._delivery_ready.clear()
         self._routes.reset()
         self._pending_turn_acceptances.clear()
         self._acceptance_ready.clear()
@@ -132,15 +162,21 @@ class ThreadProjectionRuntime:
         for route in restored_routes:
             await self._routes.begin_bootstrap(route.route_id)
         for thread_ref in {route.thread_ref for route in restored_routes}:
-            task = self._tasks.get(thread_ref)
-            if task is not None and not task.done():
-                # A Channel may synchronously deliver input from start().
-                # Restart that just-created worker so restoration owns one
-                # authoritative reconcile for every durable route instead of
-                # replacing its barrier and silently skipping recovery.
-                task.cancel()
-                await asyncio.gather(task, return_exceptions=True)
             await self._ensure_projection(thread_ref, recover_existing=True)
+
+    def mark_delivery_ready(self) -> None:
+        """Release restored workers after producers are observed and Channels can send."""
+
+        self._delivery_ready.set()
+
+    async def open_request_refs(self) -> frozenset[RequestRef]:
+        return await self._request_projection.open_request_refs()
+
+    async def reconcile_pending_requests(
+        self,
+        restart_open_refs: frozenset[RequestRef],
+    ) -> None:
+        await self._request_projection.reconcile_pending_requests(restart_open_refs)
 
     async def stop(self) -> None:
         self._stopping = True
@@ -350,6 +386,10 @@ class ThreadProjectionRuntime:
                         thread_ref=thread_ref,
                         conversation_ref=removed.conversation_ref,
                     )
+                    await self._request_correlations.delete_request_correlations(
+                        thread_ref=thread_ref,
+                        conversation_ref=removed.conversation_ref,
+                    )
             self._routes.forget_routes(
                 tuple(
                     removed
@@ -460,6 +500,7 @@ class ThreadProjectionRuntime:
                 events = application.subscribe_thread(thread_ref)
                 ready.set()
                 if needs_recovery:
+                    await self._delivery_ready.wait()
                     await self._routes.reconcile_routes(
                         application,
                         await self._active_routes(thread_ref),
@@ -550,6 +591,7 @@ class ThreadProjectionRuntime:
                 await self._apply_event(event)
 
     async def _apply_event(self, event: AgentEvent) -> None:
+        await self._request_projection.handle_event(event)
         thread_ref = event.thread_ref
         if thread_ref is None:
             return
@@ -581,6 +623,7 @@ class ThreadProjectionRuntime:
             routes = await self._projections.list_projection_routes(thread_ref)
             await self._projections.delete_projection_routes(thread_ref)
             await self._projections.delete_turn_reply_correlations(thread_ref=thread_ref)
+            await self._request_correlations.delete_request_correlations(thread_ref=thread_ref)
             self._routes.forget_routes(routes)
 
     async def _active_routes(

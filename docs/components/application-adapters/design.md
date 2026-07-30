@@ -61,6 +61,13 @@ Approval and user-input request truth remains native. The common adapter may
 translate request/response semantics; it never decides Full Access, sandbox,
 or consumer permission policy.
 
+An adapter advertises interactive requests only when it can translate both an
+open request and its response without guessing a native wire shape. It maps a
+native terminal or an invalidated response handle to typed resolution, while
+the native Application remains first-writer authority. Pending-request
+recovery is declared separately in adapter documentation and is performed only
+from an authoritative native pending set.
+
 ## Native pages
 
 - [Codex](adapters/codex.md)

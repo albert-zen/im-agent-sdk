@@ -272,6 +272,43 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             release_handler.set()
             await client.close()
 
+    async def test_request_resolution_notification_carries_dispatch_epoch(
+        self,
+    ) -> None:
+        process = _ScriptedProcess(
+            {
+                "initialize": [{"result": {"ok": True}}],
+                "thread/list": [
+                    {"result": {"threads": []}},
+                    {
+                        "method": "serverRequest/resolved",
+                        "params": {"requestId": 99},
+                    },
+                ],
+            }
+        )
+        client = _client(process)
+        received = asyncio.Event()
+        captured: list[dict] = []
+
+        def capture(notification: dict) -> None:
+            captured.append(notification)
+            received.set()
+
+        client.add_notification_handler(capture)
+        try:
+            await client.list_threads()
+            await asyncio.wait_for(received.wait(), timeout=1)
+            self.assertEqual(
+                captured[0]["params"],
+                {
+                    "requestId": 99,
+                    "_connection_epoch": 1,
+                },
+            )
+        finally:
+            await client.close()
+
     async def test_stdio_eof_respawns_and_advances_connection_epoch(self) -> None:
         first = _ScriptedProcess({"initialize": [{"result": {"ok": True}}]})
         second = _ScriptedProcess(

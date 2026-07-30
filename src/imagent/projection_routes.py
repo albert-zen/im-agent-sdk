@@ -2,14 +2,25 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 
-from .adapters import AgentApplicationAdapter, ProjectionRouteRepository
+from .adapters import (
+    AgentApplicationAdapter,
+    IdempotencyClaimStatus,
+    ProjectionRouteRepository,
+    RequestCorrelationRepository,
+)
 from .contracts import (
     ApplicationOperation,
     ApplicationOperationResult,
+    InteractiveRequest,
+    RequestRouteCorrelation,
+    RequestRouteState,
     ThreadProjectionRoute,
     ThreadRef,
+    derive_request_response_shape,
 )
+from .controllers import RequestPresenter
 from .projections import (
     DeliverOutbound,
     ProjectedAgentMessage,
@@ -17,6 +28,10 @@ from .projections import (
     get_projection_route,
 )
 from .recovery import read_bounded_authoritative_projection
+from .request_correlations import (
+    derive_request_correlation_id,
+    derive_request_delivery_id,
+)
 
 RecordGap = Callable[[ThreadRef, str, str], None]
 RecordDeliveryFailure = Callable[[ThreadProjectionRoute, Exception], None]
@@ -34,6 +49,8 @@ class ProjectionRouteCoordinator:
         self,
         *,
         projections: ProjectionRouteRepository,
+        request_correlations: RequestCorrelationRepository,
+        request_presenter: RequestPresenter | None,
         execute_application: ExecuteApplication,
         deliver_outbound: DeliverOutbound,
         wait_for_acceptance: WaitForAcceptance,
@@ -46,6 +63,8 @@ class ProjectionRouteCoordinator:
         projection_item_limit: int,
     ) -> None:
         self._projections = projections
+        self._request_correlations = request_correlations
+        self._request_presenter = request_presenter
         self._execute_application = execute_application
         self._deliver_outbound = deliver_outbound
         self._wait_for_acceptance = wait_for_acceptance
@@ -159,6 +178,88 @@ class ProjectionRouteCoordinator:
         projected: ProjectedAgentMessage,
     ) -> None:
         await asyncio.gather(*(self._deliver_to_route(route, projected) for route in routes))
+
+    async def deliver_request_to_routes(
+        self,
+        routes: tuple[ThreadProjectionRoute, ...],
+        request: InteractiveRequest,
+    ) -> None:
+        await asyncio.gather(*(self._deliver_request_to_route(route, request) for route in routes))
+
+    async def _deliver_request_to_route(
+        self,
+        route: ThreadProjectionRoute,
+        request: InteractiveRequest,
+    ) -> None:
+        barrier = self._bootstrap.get(route.route_id)
+        if barrier is None:
+            barrier = asyncio.Event()
+            barrier.set()
+            self._bootstrap[route.route_id] = barrier
+        if not barrier.is_set():
+            await barrier.wait()
+        lock = self._locks.setdefault(route.route_id, asyncio.Lock())
+        async with lock:
+            if route.route_id in self._blocked_routes:
+                return
+            current = await get_projection_route(
+                self._projections,
+                route.route_id,
+            )
+            if current is None:
+                return
+            try:
+                presenter = self._request_presenter
+                if presenter is None:
+                    raise RuntimeError("interactive request presenter is not configured")
+                reply_correlation = await self._projections.get_turn_reply_correlation(
+                    request.thread_ref,
+                    request.turn_id,
+                )
+                reply_to = (
+                    reply_correlation.reply_to_message_id
+                    if reply_correlation is not None
+                    and reply_correlation.conversation_ref == current.conversation_ref
+                    else None
+                )
+                delivery_id = derive_request_delivery_id(
+                    request.request_ref,
+                    current.conversation_ref,
+                )
+                presentation = presenter.present_request(
+                    request,
+                    conversation_ref=current.conversation_ref,
+                    delivery_id=delivery_id,
+                    reply_to_message_id=reply_to,
+                )
+                outcome = await self._deliver_outbound(presentation.message)
+                if outcome is IdempotencyClaimStatus.IN_FLIGHT:
+                    raise RuntimeError(
+                        f"interactive request delivery is already in flight: {delivery_id}"
+                    )
+                if not presentation.response_supported:
+                    return
+                now = datetime.now(UTC)
+                await self._request_correlations.put_request_correlation(
+                    RequestRouteCorrelation(
+                        correlation_id=derive_request_correlation_id(
+                            request.request_ref,
+                            current.conversation_ref,
+                        ),
+                        request_ref=request.request_ref,
+                        thread_ref=request.thread_ref,
+                        turn_id=request.turn_id,
+                        conversation_ref=current.conversation_ref,
+                        delivery_id=delivery_id,
+                        response_shape=derive_request_response_shape(request),
+                        state=RequestRouteState.OPEN,
+                        created_at=now,
+                        updated_at=now,
+                        expires_at=request.expires_at,
+                    )
+                )
+            except Exception as error:
+                self._block_route(current, error)
 
     async def _deliver_to_route(
         self,

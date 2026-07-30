@@ -14,6 +14,14 @@ Required scenarios:
 - a legacy SQLite database without checkpoint/correlation columns migrates
   without losing binding, route, or idempotency rows;
 - Turn reply correlation supports exact deletion plus explicit bounded cleanup;
+- request correlation persists per successful destination, transitions every
+  destination atomically by request, survives restart, and rejects
+  zero-selector cleanup;
+- a destination inserted after a request-wide response/resolution inherits
+  that state instead of reintroducing `open`;
+- a later put cannot revive a stale epoch-scoped request correlation;
+- opening the previous SQLite schema adds request correlation storage without
+  losing existing bridge state;
 - route policy replacement remains deterministic;
 - storage rows cannot introduce cross-Application references.
 

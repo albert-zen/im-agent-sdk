@@ -158,6 +158,7 @@ Gateway operations mutate only Gateway-owned selection or routing:
 | `conversation.bind_thread` | `ConversationBound` | select future input destination |
 | `conversation.clear_thread` | `ConversationBound` | clear selected Thread |
 | `thread.observe` | `ThreadObserved` | establish/refresh output route |
+| `conversation.respond_request` | `RequestResponseRouted` | validate one delivered destination and route a native response |
 
 Application and Gateway operation unions have discriminated variants with
 typed arguments. Success results repeat the operation ID and discriminant and
@@ -227,6 +228,53 @@ Recovery falls back to a live subscription plus authoritative
 history/catch-up reconciliation. The SDK never presents an in-memory counter
 as restart-safe recovery.
 
+## Interactive requests
+
+`request.opened` carries one typed request:
+
+```text
+ApprovalRequest {
+  requestRef{applicationRef, nativeRequestId}, threadRef, turnId, prompt,
+  choices[{choiceId, label, description?}], expiresAt?, metadata
+}
+
+UserInputRequest {
+  requestRef{applicationRef, nativeRequestId}, threadRef, turnId, prompt?,
+  questions[{ questionId, prompt, header?, choices[], allowsOther, secret,
+              minAnswers, maxAnswers }],
+  expiresAt?, metadata
+}
+```
+
+`request.resolved` carries a typed resolution with the same `RequestRef` and one
+of `resolved` or `stale`. `stale` means the adapter can prove that the response
+handle is no longer usable, including a transport reset without a native
+pending-request snapshot. It does not claim that the native Turn or request
+was otherwise deleted.
+
+Approval responses return one stable `choiceId` from the native choices
+projected with that request. Core does not interpret once/session/cancel scope
+or choose among them. Session grants, persistent command/network policies,
+sandbox profiles, and Full Access remain native Application or consumer
+policy. User-input responses map question IDs to string-answer tuples and are
+validated against explicit minimum/maximum cardinality, available choice IDs,
+and `allowsOther`.
+
+`secret` is a sensitivity requirement, not a claim that any presenter or
+Channel can collect the answer securely. A presenter without an evidenced
+secure-input capability must refuse response collection and must not create a
+plain-text answer route.
+
+`RequestRef` prevents two Application instances with the same native request
+ID from sharing authorization or state. Native IDs are opaque but must be
+stable within their Application instance; an adapter whose transport reuses
+IDs across reconnects namespaces the epoch into `nativeRequestId`.
+
+The Conversation operation includes only `RequestRef` and typed response.
+Gateway looks up Application/Thread scope from a correlation created after
+that Conversation actually received the prompt. It never trusts caller
+Metadata for native request routing.
+
 ## Capabilities and failures
 
 Capabilities distinguish native support, declared fallback, and unsupported
@@ -260,3 +308,12 @@ sequence.
 originating Conversation, reply ID, and creation time. It is minimal bridge
 state, not a copy of Turn status or request truth. It applies only when the
 projection destination matches its Conversation.
+
+`RequestRouteCorrelation` is also per destination. It contains only the
+application-scoped request, Thread, Turn, Conversation, delivery, expiry, and bridge
+projection-state identity plus only the response shape required to validate a
+choice/cardinality. This response shape is routing-validation state, not a
+copy or assertion of native pending-request truth. It never contains the
+prompt, requested permissions, or response. `open`, `responded`, `resolved`, and `stale` describe
+whether this bridge may route another response; the native Application remains
+request authority.

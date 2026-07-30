@@ -30,6 +30,16 @@ Protect these historical and known failure modes:
   subscription;
 - worker health conflating infrastructure state with Agent Turn/request truth;
 - an unbounded subscriber queue hiding slow-delivery memory pressure.
+- a request response being accepted from a destination where request delivery
+  failed or never occurred;
+- one failed request destination blocking another destination or creating an
+  authorization correlation;
+- a slow destination reopening correlation state after another destination
+  already won the native response;
+- a no-snapshot Application emitting an unobserved request during Gateway
+  startup;
+- `request.resolved` incorrectly terminating its Turn;
+- restart/reconnect manufacturing pending requests without a native snapshot.
 
 These cases are covered by `test_projection_hardening.py`,
 `test_projection_routing.py`, `test_event_fanout.py`, `test_recovery.py`, and

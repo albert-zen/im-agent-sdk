@@ -13,6 +13,17 @@
       },
       "additionalProperties": false
     },
+    "RequestRef": {
+      "type": "object",
+      "required": ["applicationRef", "nativeRequestId"],
+      "properties": {
+        "applicationRef": { "$ref": "#/$defs/ApplicationRef" },
+        "nativeRequestId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        }
+      },
+      "additionalProperties": false
+    },
     "ProjectRef": {
       "type": "object",
       "required": ["applicationInstanceId", "nativeProjectId"],

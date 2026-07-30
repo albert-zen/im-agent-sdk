@@ -21,6 +21,12 @@ The adapter advertises only native replay/order guarantees. Without native
 replay, recovery uses a fresh subscription plus authoritative Thread/Turn
 history. No SDK transcript or synthetic sequence is created.
 
+The current Zen adapter reuses the App Server client transport, but repository
+evidence does not prove that Zen emits Codex request methods or accepts Codex
+response payloads. It therefore advertises interactive requests as
+unsupported. Shared transport code is not treated as a second independent
+native protocol proof.
+
 ## Product boundary
 
 Zen-specific provider, model, runtime mode, workspace UI, tools, approval

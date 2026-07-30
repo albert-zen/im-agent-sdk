@@ -3,8 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 
+from ._validation import (
+    ContractViolation,
+    require_identifier,
+    validate_thread_ref,
+)
 from .model import (
     AgentEvent,
+    AgentEventType,
     ApplicationCapabilities,
     ConversationBinding,
     ConversationRef,
@@ -12,7 +18,6 @@ from .model import (
     ProjectMode,
     SupportLevel,
     ThreadProjectionRoute,
-    ThreadRef,
     TurnReplyCorrelation,
 )
 from .operations import (
@@ -21,6 +26,7 @@ from .operations import (
     ApplicationOperationFailed,
     ApplicationOperationResult,
     ApplicationsListed,
+    ApprovalResponse,
     BindConversationToProject,
     BindConversationToThread,
     ClearConversationThread,
@@ -44,7 +50,9 @@ from .operations import (
     ProjectRead,
     ProjectsListed,
     RequestResponded,
+    RequestResponseRouted,
     RespondRequest,
+    RespondToRequest,
     SelectApplication,
     ThreadCreated,
     ThreadDeleted,
@@ -55,32 +63,24 @@ from .operations import (
     ThreadStatusRead,
     TurnCatchupRead,
     TurnInterrupted,
+    UserInputResponse,
 )
-
-
-class ContractViolation(ValueError):
-    pass
-
-
-def require_identifier(value: str, name: str) -> None:
-    if not value or len(value) > 512:
-        raise ContractViolation(f"{name} must be a non-empty string of at most 512 characters")
-
-
-def validate_thread_ref(thread: ThreadRef) -> None:
-    require_identifier(thread.application_instance_id, "application_instance_id")
-    require_identifier(thread.native_thread_id, "native_thread_id")
-    if (
-        thread.project_ref is not None
-        and thread.project_ref.application_instance_id != thread.application_instance_id
-    ):
-        raise ContractViolation("thread and project belong to different application instances")
+from .request_validation import (
+    validate_interactive_request,
+    validate_request_ref,
+    validate_request_resolution,
+)
 
 
 def validate_application_capabilities(capabilities: ApplicationCapabilities) -> None:
     if len(set(capabilities.attachment_sources)) != len(capabilities.attachment_sources):
         raise ContractViolation("application attachment source capabilities must be unique")
     runtime = capabilities.runtime
+    if (
+        runtime.pending_request_snapshot is not SupportLevel.UNSUPPORTED
+        and runtime.interactive_requests is SupportLevel.UNSUPPORTED
+    ):
+        raise ContractViolation("pending request snapshot requires interactive request support")
     if (
         runtime.gap_detection is not SupportLevel.UNSUPPORTED
         and runtime.event_sequence_scope is EventSequenceScope.NONE
@@ -128,6 +128,32 @@ def validate_agent_event(
         and capabilities.runtime.replay_from_cursor is SupportLevel.UNSUPPORTED
     ):
         raise ContractViolation("event cursor requires replay-from-cursor support")
+    if event.type is AgentEventType.REQUEST_OPENED:
+        if event.request is None or event.request_resolution is not None:
+            raise ContractViolation("request.opened requires one typed request")
+        validate_interactive_request(event.request)
+        if capabilities.runtime.interactive_requests is SupportLevel.UNSUPPORTED:
+            raise ContractViolation("request event requires interactive request support")
+        if event.thread_ref != event.request.thread_ref:
+            raise ContractViolation("request event belongs to a different Thread")
+        if event.turn_id != event.request.turn_id:
+            raise ContractViolation("request event belongs to a different Turn")
+        if (
+            event.request.request_ref.application_ref.application_instance_id
+            != event.application_instance_id
+        ):
+            raise ContractViolation("request event belongs to a different application")
+    elif event.type is AgentEventType.REQUEST_RESOLVED:
+        if event.request is not None or event.request_resolution is None:
+            raise ContractViolation("request.resolved requires one typed resolution")
+        validate_request_resolution(event.request_resolution)
+        if (
+            event.request_resolution.request_ref.application_ref.application_instance_id
+            != event.application_instance_id
+        ):
+            raise ContractViolation("request resolution belongs to a different application")
+    elif event.request is not None or event.request_resolution is not None:
+        raise ContractViolation("typed request fields require a request event")
 
 
 def validate_binding(
@@ -232,7 +258,9 @@ def validate_application_operation(operation: ApplicationOperation) -> None:
     ):
         thread_ref = operation.thread_ref
     elif isinstance(operation, RespondRequest):
-        require_identifier(operation.request_id, "request_id")
+        validate_request_ref(operation.request_ref)
+        if operation.request_ref.application_ref != operation.application_ref:
+            raise ContractViolation("request belongs to a different application")
         thread_ref = operation.thread_ref
     if thread_ref is not None:
         validate_thread_ref(thread_ref)
@@ -248,6 +276,21 @@ def validate_application_operation(operation: ApplicationOperation) -> None:
         raise ContractViolation("catch-up limit must be between 1 and 20")
     if isinstance(operation, InterruptTurn) and operation.turn_id is not None:
         require_identifier(operation.turn_id, "turn_id")
+    if isinstance(operation, RespondRequest) and isinstance(
+        operation.response,
+        UserInputResponse,
+    ):
+        if not operation.response.answers:
+            raise ContractViolation("user input response requires answers")
+        for question_id, answers in operation.response.answers.items():
+            require_identifier(question_id, "question_id")
+            if not answers or any(not answer for answer in answers):
+                raise ContractViolation("each user input question requires non-empty answers")
+    if isinstance(operation, RespondRequest) and isinstance(
+        operation.response,
+        ApprovalResponse,
+    ):
+        require_identifier(operation.response.choice_id, "choice_id")
 
 
 def validate_gateway_operation(operation: GatewayOperation) -> None:
@@ -272,6 +315,17 @@ def validate_gateway_operation(operation: GatewayOperation) -> None:
         validate_thread_ref(operation.thread_ref)
         if operation.reply_to_message_id is not None:
             require_identifier(operation.reply_to_message_id, "reply_to_message_id")
+    if isinstance(operation, RespondToRequest):
+        validate_request_ref(operation.request_ref)
+        if isinstance(operation.response, ApprovalResponse):
+            require_identifier(operation.response.choice_id, "choice_id")
+        if isinstance(operation.response, UserInputResponse):
+            if not operation.response.answers:
+                raise ContractViolation("user input response requires answers")
+            for question_id, answers in operation.response.answers.items():
+                require_identifier(question_id, "question_id")
+                if not answers or any(not answer for answer in answers):
+                    raise ContractViolation("each user input question requires non-empty answers")
 
 
 def validate_application_operation_result(
@@ -380,7 +434,7 @@ def validate_application_operation_result(
     elif isinstance(result, RequestResponded):
         if not isinstance(operation, RespondRequest):
             raise ContractViolation("request.respond returned for a different operation")
-        if result.request_id != operation.request_id:
+        if result.request_ref != operation.request_ref:
             raise ContractViolation("request.respond returned a different request")
         refs = ()
     else:
@@ -415,6 +469,14 @@ def validate_gateway_operation_result(
             raise ContractViolation("thread.observe returned a different Conversation")
         if result.route.reply_to_message_id != operation.reply_to_message_id:
             raise ContractViolation("thread.observe returned different reply correlation")
+        return
+    if isinstance(operation, RespondToRequest):
+        if not isinstance(result, RequestResponseRouted):
+            raise ContractViolation(
+                "conversation.respond_request must return RequestResponseRouted"
+            )
+        if result.request_ref != operation.request_ref:
+            raise ContractViolation("Gateway response routed a different request")
         return
     if not isinstance(
         operation,

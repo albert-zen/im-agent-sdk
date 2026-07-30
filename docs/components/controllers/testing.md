@@ -10,7 +10,14 @@ Required scenarios:
 - create/select/observe composition is explicit;
 - catch-up/history preserve all completed messages in a Turn;
 - unsupported and invalid operations produce user-safe errors;
-- Markdown presentation does not take over Channel escaping or segmentation.
+- Markdown presentation does not take over Channel segmentation;
+- untrusted prompt fields cannot escape the approval code block or inject
+  Markdown through choice labels/descriptions;
+- secret input produces no plain-text command or response correlation;
+- approval and structured-input Markdown include stable request/question IDs
+  without exposing native transport IDs;
+- Slash and simulated Channel-native actions submit identical typed response
+  semantics.
 
 Run:
 

@@ -35,6 +35,7 @@ from ..contracts import (
     GetThreadHistory,
     GetThreadStatus,
     GetTurnCatchup,
+    InteractiveRequest,
     InterruptTurn,
     ListProjects,
     ListThreads,
@@ -175,6 +176,9 @@ class T3ApplicationAdapter:
             result = close()
             if inspect.isawaitable(result):
                 await result
+
+    async def list_pending_requests(self) -> tuple[InteractiveRequest, ...]:
+        raise NotImplementedError("T3 does not expose an interactive request response API")
 
     async def execute(
         self,

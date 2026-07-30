@@ -13,6 +13,7 @@ Persistence owns implementations for:
 - `ConversationBinding` with optimistic revision guards;
 - `ThreadProjectionRoute`;
 - minimal per-Turn IM reply correlations;
+- minimal per-destination interactive-request correlations;
 - inbound and outbound idempotency claim/completion state.
 
 The current implementations are in-memory repositories and
@@ -43,6 +44,7 @@ It must not store:
 | outbound delivery completion | Gateway | deployment choice |
 | projection completion boundary | Gateway projection state | per route; never transcript content |
 | Turn reply correlation | Gateway projection state | active IM-originated Turns only |
+| Request route correlation | Gateway projection state | delivered request/destination identity only |
 
 Binding updates are atomic from one Conversation's perspective. A stale
 expected revision fails explicitly. Project/Thread references are validated
@@ -62,6 +64,22 @@ target, and is removed on a terminal Turn event or bounded cleanup. Deletion
 requires an explicit Thread, Conversation, or retention cutoff selector;
 clearing every correlation is not an accidental zero-argument operation.
 Neither state may copy message bodies, Turn status, or native execution state.
+
+A request route correlation stores no prompt, requested permissions, or
+response. Its persisted response shape is only routing-validation state, not
+native request truth. `RequestRef` scopes the opaque native ID by Application,
+including an adapter-generated epoch namespace when transport IDs are reused.
+Repository selectors, uniqueness, and transitions use that complete identity.
+Its state only controls whether this bridge may route another response.
+Repository transitions are request-wide so multi-destination records converge
+together from `open` to `responded`, then to native
+`resolved` or adapter-proven `stale`. Retention cleanup bounds missing terminal
+events and requires an explicit selector. Creating a later destination is
+atomic with those transitions: when any existing destination has already
+advanced, the new correlation inherits the most advanced request-wide state
+and cannot reopen response authority. `stale` is monotonic for one
+epoch-scoped `RequestRef`; a later native transport reuse must have a new
+namespaced reference rather than reviving the old one.
 
 ## Dependencies
 
@@ -85,6 +103,9 @@ without losing bindings, routes, or idempotency records. Its legacy
 `reply_to_message_id` values are cleared because the old Gateway used that
 column for the latest inbound message and it cannot be distinguished safely
 from an explicit destination/topic default.
+
+Adding request correlation storage is an additive SQLite migration. Existing
+databases retain bindings, routes, Turn correlations, and idempotency records.
 
 ## Change obligations
 

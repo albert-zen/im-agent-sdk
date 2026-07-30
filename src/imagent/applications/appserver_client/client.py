@@ -1305,9 +1305,14 @@ class AppServerClient:
                     await result
             return
         if "method" in message:
+            params = message.get("params", {})
+            notification_params = (
+                dict(params) if isinstance(params, dict) else {"_raw_params": params}
+            )
+            notification_params["_connection_epoch"] = epoch
             notification = {
                 "method": message["method"],
-                "params": message.get("params", {}),
+                "params": notification_params,
                 "_imagent_dispatch_sequence": message.get("_imagent_dispatch_sequence"),
             }
             for handler in list(self._notification_handlers):

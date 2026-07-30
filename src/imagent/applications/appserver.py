@@ -32,6 +32,7 @@ from ..contracts import (
     GetThreadHistory,
     GetThreadStatus,
     GetTurnCatchup,
+    InteractiveRequest,
     InterruptTurn,
     ListProjects,
     ListThreads,
@@ -66,6 +67,11 @@ from ..contracts import (
     validate_application_operation_result,
 )
 from ..events import EventBroadcaster
+from .appserver_request_runtime import (
+    AppServerRequestRuntime,
+    ServerRequestMapper,
+)
+from .appserver_requests import map_appserver_request
 
 
 class AppServerClient(Protocol):
@@ -116,6 +122,7 @@ class _AppServerApplicationAdapter:
         client: AppServerClient,
         cwd: str,
         shared_filesystem_root: str | Path | None = None,
+        server_request_mapper: ServerRequestMapper | None = None,
     ) -> None:
         self._application_instance_id = application_instance_id
         self._client = client
@@ -123,6 +130,13 @@ class _AppServerApplicationAdapter:
         self._shared_filesystem_root = configure_shared_filesystem_root(shared_filesystem_root)
         self._events = EventBroadcaster[str, AgentEvent]()
         self._client.add_notification_handler(self._handle_notification)
+        self._request_runtime = AppServerRequestRuntime(
+            application_ref=ApplicationRef(application_instance_id),
+            client=self._client,
+            mapper=server_request_mapper,
+            publish_event=self._events.publish,
+        )
+        self._interactive_requests_enabled = self._request_runtime.enabled
         capabilities = ApplicationCapabilities(
             projects=ProjectCapabilities(
                 mode=ProjectMode.FIXED,
@@ -140,7 +154,11 @@ class _AppServerApplicationAdapter:
                 streaming=SupportLevel.NATIVE,
                 replay_from_cursor=SupportLevel.UNSUPPORTED,
                 interruption=SupportLevel.NATIVE,
-                interactive_requests=SupportLevel.UNSUPPORTED,
+                interactive_requests=(
+                    SupportLevel.NATIVE
+                    if self._interactive_requests_enabled
+                    else SupportLevel.UNSUPPORTED
+                ),
                 native_thread_activation=SupportLevel.NATIVE,
                 gap_detection=SupportLevel.UNSUPPORTED,
                 event_sequence_scope=EventSequenceScope.NONE,
@@ -176,6 +194,11 @@ class _AppServerApplicationAdapter:
             result = close()
             if inspect.isawaitable(result):
                 await result
+
+    async def list_pending_requests(self) -> tuple[InteractiveRequest, ...]:
+        raise NotImplementedError(
+            "App Server does not expose an authoritative pending-request snapshot"
+        )
 
     async def execute(
         self,
@@ -321,9 +344,14 @@ class _AppServerApplicationAdapter:
                 thread_ref=thread_ref,
                 turn_id=turn_id,
             )
+        if isinstance(operation, RespondRequest):
+            return await self._request_runtime.respond(
+                operation,
+                completed_at,
+            )
         if isinstance(
             operation,
-            (ListProjects, GetProject, DeleteThread, RespondRequest),
+            (ListProjects, GetProject, DeleteThread),
         ):
             raise NotImplementedError(f"{operation.type.value} is unsupported by this application")
         raise NotImplementedError(f"unsupported operation: {operation.type.value}")
@@ -505,6 +533,9 @@ class _AppServerApplicationAdapter:
         params = notification.get("params")
         if not isinstance(params, dict):
             return
+        if method == "serverRequest/resolved":
+            await self._request_runtime.handle_resolution_notification(params)
+            return
         thread_id = str(params.get("threadId") or "")
         if not thread_id:
             return
@@ -669,6 +700,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
             client=client,
             cwd=cwd,
             shared_filesystem_root=shared_filesystem_root,
+            server_request_mapper=map_appserver_request,
         )
 
 

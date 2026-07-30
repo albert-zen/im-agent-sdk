@@ -5,8 +5,10 @@ from dataclasses import dataclass
 
 from ..contracts import (
     ApplicationOperationFailed,
+    ApplicationRef,
     ApplicationsListed,
     ApplicationSummary,
+    ApprovalResponse,
     BindConversationToProject,
     BindConversationToThread,
     ClearConversationThread,
@@ -28,6 +30,9 @@ from ..contracts import (
     ProjectMode,
     ProjectsListed,
     ProjectSummary,
+    RequestRef,
+    RequestResponseRouted,
+    RespondToRequest,
     SelectApplication,
     TextContent,
     ThreadCreated,
@@ -40,6 +45,7 @@ from ..contracts import (
     ThreadStatusRead,
     ThreadSummary,
     TurnCatchupRead,
+    UserInputResponse,
 )
 from .base import ControllerActions
 from .markdown import MarkdownSlashPresenter
@@ -116,6 +122,8 @@ class SlashController:
             return self._presenter.applications(await self._applications(message, actions))
         if command.name == "app":
             return await self._select_application(message, command, actions)
+        if command.name in {"respond", "answer"}:
+            return await self._respond_to_request(message, command, actions)
 
         context = await self._ensure_application_binding(message, actions)
         if command.name == "projects":
@@ -151,6 +159,55 @@ class SlashController:
         if command.name == "history":
             return await self._thread_history(message, command, actions, context)
         raise _CommandError(f"Unknown command `/{command.name}`. Use `/help`.")
+
+    async def _respond_to_request(
+        self,
+        message: InboundMessage,
+        command: SlashCommand,
+        actions: ControllerActions,
+    ) -> str:
+        if len(command.arguments) < 3:
+            raise _CommandError(
+                "Use `/respond <application> <request> <choice>` or "
+                "`/answer <application> <request> <question>=<answer> ...`."
+            )
+        application_id, native_request_id, *response_arguments = command.arguments
+        request_ref = RequestRef(
+            application_ref=ApplicationRef(application_id),
+            native_request_id=native_request_id,
+        )
+        if command.name == "respond":
+            if len(response_arguments) != 1:
+                raise _CommandError("Use `/respond <application> <request> <choice>`.")
+            response = ApprovalResponse(response_arguments[0])
+        else:
+            answers: dict[str, list[str]] = {}
+            for argument in response_arguments:
+                question_id, separator, answer = argument.partition("=")
+                if not separator or not question_id or not answer:
+                    raise _CommandError("Each `/answer` value must be `<question>=<answer>`.")
+                answers.setdefault(question_id, []).append(answer)
+            response = UserInputResponse(
+                {question_id: tuple(values) for question_id, values in answers.items()}
+            )
+        result = await actions.execute_gateway(
+            RespondToRequest(
+                operation_id=_operation_id(
+                    message,
+                    "conversation.respond_request",
+                ),
+                conversation_ref=message.conversation_ref,
+                actor=message.sender,
+                request_ref=request_ref,
+                response=response,
+                created_at=message.created_at,
+            )
+        )
+        if isinstance(result, GatewayOperationFailed):
+            raise _CommandError(result.error.message)
+        if not isinstance(result, RequestResponseRouted):
+            raise _CommandError("Request response returned an incompatible result.")
+        return "Response submitted to the Agent application."
 
     async def _applications(
         self,

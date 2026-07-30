@@ -7,14 +7,18 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from imagent.adapters import IdempotencyClaimStatus
+from imagent.adapters import IdempotencyClaimStatus, RequestCorrelationConflict
 from imagent.contracts import (
     AgentInput,
     ApplicationRef,
+    ApprovalResponseShape,
     ConversationBinding,
     ConversationRef,
     ProjectMode,
     ProjectRef,
+    RequestRef,
+    RequestRouteCorrelation,
+    RequestRouteState,
     TextContent,
     ThreadProjectionRoute,
     ThreadRef,
@@ -22,11 +26,217 @@ from imagent.contracts import (
 )
 from imagent.gateway import ImAgentGateway
 from imagent.projections import derive_projection_route_id, derive_turn_reply_correlation_id
+from imagent.request_correlations import (
+    InMemoryRequestCorrelationRepository,
+    derive_request_correlation_id,
+)
 from imagent.storage import SQLiteGatewayState
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 
 class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
+    def _request_correlation(
+        self,
+        *,
+        application_id: str,
+        native_request_id: str,
+        conversation_id: str,
+        now: datetime,
+    ) -> RequestRouteCorrelation:
+        request_ref = RequestRef(
+            application_ref=ApplicationRef(application_id),
+            native_request_id=native_request_id,
+        )
+        conversation = ConversationRef("qq-main", conversation_id)
+        return RequestRouteCorrelation(
+            correlation_id=derive_request_correlation_id(
+                request_ref,
+                conversation,
+            ),
+            request_ref=request_ref,
+            thread_ref=ThreadRef(application_id, f"thread-{application_id}"),
+            turn_id=f"turn-{application_id}",
+            conversation_ref=conversation,
+            delivery_id=f"delivery-{application_id}-{conversation_id}",
+            response_shape=ApprovalResponseShape(
+                ("approve_once", "approve_session", "decline", "cancel")
+            ),
+            state=RequestRouteState.OPEN,
+            created_at=now,
+            updated_at=now,
+        )
+
+    async def test_request_correlations_are_scoped_by_application_and_epoch(
+        self,
+    ) -> None:
+        now = datetime.now(UTC)
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_state = SQLiteGatewayState(Path(directory) / "requests.sqlite3")
+            repositories = (
+                InMemoryRequestCorrelationRepository(),
+                sqlite_state,
+            )
+            try:
+                for repository in repositories:
+                    with self.subTest(repository=type(repository).__name__):
+                        first = self._request_correlation(
+                            application_id="app-a",
+                            native_request_id="epoch-1:request-7",
+                            conversation_id="conversation-a",
+                            now=now,
+                        )
+                        same_native_id_other_app = self._request_correlation(
+                            application_id="app-b",
+                            native_request_id="epoch-1:request-7",
+                            conversation_id="conversation-a",
+                            now=now,
+                        )
+                        reused_transport_id_next_epoch = self._request_correlation(
+                            application_id="app-a",
+                            native_request_id="epoch-2:request-7",
+                            conversation_id="conversation-a",
+                            now=now,
+                        )
+                        for correlation in (
+                            first,
+                            same_native_id_other_app,
+                            reused_transport_id_next_epoch,
+                        ):
+                            await repository.put_request_correlation(correlation)
+
+                        transitioned = await repository.transition_request_correlations(
+                            first.request_ref,
+                            expected_states=(RequestRouteState.OPEN,),
+                            state=RequestRouteState.RESPONDED,
+                            updated_at=now + timedelta(seconds=1),
+                        )
+                        self.assertEqual(len(transitioned), 1)
+                        self.assertEqual(
+                            (
+                                await repository.list_request_correlations(
+                                    request_ref=same_native_id_other_app.request_ref
+                                )
+                            )[0].state,
+                            RequestRouteState.OPEN,
+                        )
+                        self.assertEqual(
+                            (
+                                await repository.list_request_correlations(
+                                    request_ref=reused_transport_id_next_epoch.request_ref
+                                )
+                            )[0].state,
+                            RequestRouteState.OPEN,
+                        )
+                        with self.assertRaises(RequestCorrelationConflict):
+                            await repository.transition_request_correlations(
+                                first.request_ref,
+                                expected_states=(RequestRouteState.OPEN,),
+                                state=RequestRouteState.STALE,
+                                updated_at=now + timedelta(seconds=2),
+                            )
+            finally:
+                await sqlite_state.close()
+
+    async def test_request_correlation_shape_and_state_survive_restart(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "request-restart.sqlite3"
+            now = datetime.now(UTC)
+            correlation = self._request_correlation(
+                application_id="app-a",
+                native_request_id="epoch-1:request-7",
+                conversation_id="conversation-a",
+                now=now,
+            )
+            first = SQLiteGatewayState(path)
+            await first.put_request_correlation(correlation)
+            await first.close()
+
+            second = SQLiteGatewayState(path)
+            try:
+                self.assertEqual(
+                    await second.list_request_correlations(request_ref=correlation.request_ref),
+                    (correlation,),
+                )
+                with self.assertRaises(ValueError):
+                    await second.delete_request_correlations()
+            finally:
+                await second.close()
+
+    async def test_late_request_destination_inherits_request_wide_state(
+        self,
+    ) -> None:
+        now = datetime.now(UTC)
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_state = SQLiteGatewayState(Path(directory) / "late-route.sqlite3")
+            repositories = (
+                InMemoryRequestCorrelationRepository(),
+                sqlite_state,
+            )
+            try:
+                for repository in repositories:
+                    with self.subTest(repository=type(repository).__name__):
+                        first = self._request_correlation(
+                            application_id="app-a",
+                            native_request_id="epoch-1:request-late-route",
+                            conversation_id="conversation-a",
+                            now=now,
+                        )
+                        await repository.put_request_correlation(first)
+                        await repository.transition_request_correlations(
+                            first.request_ref,
+                            expected_states=(RequestRouteState.OPEN,),
+                            state=RequestRouteState.RESPONDED,
+                            updated_at=now + timedelta(seconds=1),
+                        )
+                        late = self._request_correlation(
+                            application_id="app-a",
+                            native_request_id="epoch-1:request-late-route",
+                            conversation_id="conversation-b",
+                            now=now + timedelta(seconds=2),
+                        )
+                        stored = await repository.put_request_correlation(late)
+                        self.assertIs(stored.state, RequestRouteState.RESPONDED)
+
+                        await repository.transition_request_correlations(
+                            first.request_ref,
+                            expected_states=(RequestRouteState.RESPONDED,),
+                            state=RequestRouteState.RESOLVED,
+                            updated_at=now + timedelta(seconds=3),
+                        )
+                        latest = self._request_correlation(
+                            application_id="app-a",
+                            native_request_id="epoch-1:request-late-route",
+                            conversation_id="conversation-c",
+                            now=now + timedelta(seconds=4),
+                        )
+                        stored = await repository.put_request_correlation(latest)
+                        self.assertIs(stored.state, RequestRouteState.RESOLVED)
+
+                        stale = self._request_correlation(
+                            application_id="app-a",
+                            native_request_id="epoch-1:request-stale",
+                            conversation_id="conversation-a",
+                            now=now,
+                        )
+                        await repository.put_request_correlation(stale)
+                        await repository.transition_request_correlations(
+                            stale.request_ref,
+                            expected_states=(RequestRouteState.OPEN,),
+                            state=RequestRouteState.STALE,
+                            updated_at=now + timedelta(seconds=1),
+                        )
+                        repeated = await repository.put_request_correlation(
+                            self._request_correlation(
+                                application_id="app-a",
+                                native_request_id="epoch-1:request-stale",
+                                conversation_id="conversation-a",
+                                now=now + timedelta(seconds=2),
+                            )
+                        )
+                        self.assertIs(repeated.state, RequestRouteState.STALE)
+            finally:
+                await sqlite_state.close()
+
     async def test_bindings_and_completed_idempotency_survive_restart(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "gateway.sqlite3"
@@ -238,6 +448,33 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                 await state.put_turn_reply_correlation(correlation)
                 self.assertEqual(
                     await state.delete_turn_reply_correlations(thread_ref=thread),
+                    1,
+                )
+
+                request_correlation = self._request_correlation(
+                    application_id="t3-main",
+                    native_request_id="epoch-1:request-legacy",
+                    conversation_id=conversation.native_conversation_id,
+                    now=now,
+                )
+                await state.put_request_correlation(request_correlation)
+                self.assertEqual(
+                    await state.list_request_correlations(
+                        request_ref=request_correlation.request_ref
+                    ),
+                    (request_correlation,),
+                )
+                transitioned = await state.transition_request_correlations(
+                    request_correlation.request_ref,
+                    expected_states=(RequestRouteState.OPEN,),
+                    state=RequestRouteState.RESOLVED,
+                    updated_at=now + timedelta(seconds=2),
+                )
+                self.assertEqual(transitioned[0].state, RequestRouteState.RESOLVED)
+                self.assertEqual(
+                    await state.delete_request_correlations(
+                        request_ref=request_correlation.request_ref
+                    ),
                     1,
                 )
             finally:

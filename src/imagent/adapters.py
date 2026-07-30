@@ -18,7 +18,11 @@ from .contracts import (
     DeliveryReceipt,
     GatewayOperation,
     InboundMessage,
+    InteractiveRequest,
     OutboundMessage,
+    RequestRef,
+    RequestRouteCorrelation,
+    RequestRouteState,
     ThreadProjectionRoute,
     ThreadRef,
     TurnReplyCorrelation,
@@ -40,6 +44,10 @@ class ProjectionCheckpointConflict(RuntimeError):
 
 class ProjectionRouteConflict(RuntimeError):
     """A stable route ID was reused for different immutable endpoints."""
+
+
+class RequestCorrelationConflict(RuntimeError):
+    """A request route correlation changed outside the expected state."""
 
 
 class ChannelAdapter(Protocol):
@@ -78,6 +86,8 @@ class AgentApplicationAdapter(Protocol):
         thread_ref: ThreadRef,
         message: AgentInput,
     ) -> AcceptedTurn: ...
+
+    async def list_pending_requests(self) -> tuple[InteractiveRequest, ...]: ...
 
     def subscribe_thread(
         self,
@@ -173,3 +183,36 @@ class IdempotencyRepository(Protocol):
     async def complete(self, scope: str, key: str) -> None: ...
 
     async def release(self, scope: str, key: str) -> None: ...
+
+
+class RequestCorrelationRepository(Protocol):
+    async def list_request_correlations(
+        self,
+        *,
+        request_ref: RequestRef | None = None,
+        thread_ref: ThreadRef | None = None,
+        conversation_ref: ConversationRef | None = None,
+    ) -> tuple[RequestRouteCorrelation, ...]: ...
+
+    async def put_request_correlation(
+        self,
+        correlation: RequestRouteCorrelation,
+    ) -> RequestRouteCorrelation: ...
+
+    async def transition_request_correlations(
+        self,
+        request_ref: RequestRef,
+        *,
+        expected_states: tuple[RequestRouteState, ...],
+        state: RequestRouteState,
+        updated_at: datetime,
+    ) -> tuple[RequestRouteCorrelation, ...]: ...
+
+    async def delete_request_correlations(
+        self,
+        *,
+        request_ref: RequestRef | None = None,
+        thread_ref: ThreadRef | None = None,
+        conversation_ref: ConversationRef | None = None,
+        older_than: datetime | None = None,
+    ) -> int: ...
