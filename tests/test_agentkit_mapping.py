@@ -138,6 +138,21 @@ class AgentKitMappingTests(unittest.TestCase):
                 "repository-maintainability",
             },
         )
+        self.assertEqual(
+            _components_for("docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md"),
+            {
+                "application-adapters-appserver",
+                "application-adapters-t3",
+                "channel-adapters",
+                "contracts",
+                "gateway",
+                "persistence",
+                "ports",
+                "projections-and-recovery",
+                "repository-maintainability",
+                "testing-and-conformance",
+            },
+        )
 
     def test_authoritative_paths_and_component_docs_exist(self) -> None:
         self.assertEqual(CONFIG["docs"]["design"], "docs/VISION.md")

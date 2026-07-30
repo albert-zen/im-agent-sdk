@@ -12,6 +12,7 @@ Persistence owns implementations for:
 
 - `ConversationBinding` with optimistic revision guards;
 - `ThreadProjectionRoute`;
+- minimal per-Turn IM reply correlations;
 - inbound and outbound idempotency claim/completion state.
 
 The current implementations are in-memory repositories and
@@ -33,15 +34,19 @@ It must not store:
 | Thread output route | Gateway | optional in-memory or SQLite |
 | inbound idempotency | Gateway | deployment choice |
 | outbound delivery completion | Gateway | deployment choice |
-| projection completion boundary | Gateway projection state | planned; never transcript content |
+| projection completion boundary | Gateway projection state | per route; never transcript content |
+| Turn reply correlation | Gateway projection state | active IM-originated Turns only |
 
 Binding updates are atomic from one Conversation's perspective. A stale
 expected revision fails explicitly. Project/Thread references are validated
 against Application ownership before they are persisted.
 
-Route storage retains routing and correlation fields only. A future recovery
-checkpoint may identify a completed projection boundary, but it cannot copy
-message bodies, Turn status, or native execution state.
+Route storage retains routing and per-route delivery fields only. Repository
+refresh merges an existing checkpoint, while an explicit advance operation
+moves it after successful delivery. A Turn reply correlation stores only
+native identity and its originating IM target, and is removed on a terminal
+Turn event. Neither state may copy message bodies, Turn status, or native
+execution state.
 
 ## Dependencies
 

@@ -12,6 +12,7 @@ Unaccepted directions belong in `docs/ROADMAP.md`.
 | [0004](0004-event-fanout-and-recovery.md) | Accepted | fan-out, Turn lifecycle, event ordering, authoritative recovery |
 | [0005](0005-input-activation-and-projection.md) | Accepted | binding, native activation, and output projection separation |
 | [0006](0006-core-admission-and-policy-ownership.md) | Accepted | evidence threshold and Core/capability/adapter/consumer classification |
+| [0007](0007-projection-lifecycle-and-delivery-boundaries.md) | Accepted | per-route checkpoints, Turn reply correlation, bootstrap order, and failure domains |
 
 Reopening an accepted decision requires updating this index, the ADR, affected
 global/component docs, contracts/tests, and AgentKit mapping when paths or

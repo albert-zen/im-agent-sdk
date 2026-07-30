@@ -35,6 +35,11 @@ Adding a method requires a real caller and at least one implementation. A
 native-specific method stays on a concrete adapter until at least two
 integrations prove a common port.
 
+`ProjectionRouteRepository` owns explicit merge/advance and Turn-correlation
+operations because these are common Gateway projection state across
+Application and Channel implementations. It does not expose transcript or
+native Turn mutation APIs.
+
 ## Change obligations
 
 Changes to a Port require checking all implementations, fakes, type checking,

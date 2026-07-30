@@ -49,6 +49,7 @@ components:
       - docs/decisions/0001-contract-and-resource-foundations.md
       - docs/decisions/0002-design-authority-and-control-boundaries.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
+      - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - src/imagent/adapters.py
       - src/imagent/__init__.py
       - src/imagent/py.typed
@@ -96,6 +97,7 @@ components:
       - docs/decisions/0004-event-fanout-and-recovery.md
       - docs/decisions/0005-input-activation-and-projection.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
+      - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - src/imagent/gateway.py
       - tests/test_gateway_operations.py
       - tests/test_gateway_vertical_slice.py
@@ -120,6 +122,7 @@ components:
       - docs/decisions/0004-event-fanout-and-recovery.md
       - docs/decisions/0005-input-activation-and-projection.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
+      - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - src/imagent/events.py
       - src/imagent/projections.py
       - src/imagent/recovery.py
@@ -148,6 +151,7 @@ components:
       - docs/decisions/0004-event-fanout-and-recovery.md
       - docs/decisions/0005-input-activation-and-projection.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
+      - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - src/imagent/bindings.py
       - src/imagent/storage.py
       - tests/test_bindings.py
@@ -195,6 +199,7 @@ components:
       - docs/decisions/README.md
       - docs/decisions/0003-attachment-sources-and-trust.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
+      - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - src/imagent/channels/**
       - tests/test_imcodex_channels.py
     docs:
@@ -223,6 +228,7 @@ components:
       - docs/decisions/0004-event-fanout-and-recovery.md
       - docs/decisions/0005-input-activation-and-projection.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
+      - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - src/imagent/applications/__init__.py
       - src/imagent/applications/appserver.py
       - src/imagent/applications/imcodex_appserver.py
@@ -253,6 +259,7 @@ components:
       - docs/decisions/0004-event-fanout-and-recovery.md
       - docs/decisions/0005-input-activation-and-projection.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
+      - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - src/imagent/applications/__init__.py
       - src/imagent/applications/t3.py
       - src/imagent/applications/t3_client.py
@@ -279,6 +286,7 @@ components:
       - docs/decisions/0002-design-authority-and-control-boundaries.md
       - docs/decisions/0004-event-fanout-and-recovery.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
+      - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - src/imagent/testing/**
       - tests/test_adapter_contracts.py
     docs:

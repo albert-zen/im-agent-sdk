@@ -51,8 +51,8 @@ currently tear them down.
 ## Projection routes
 
 Input selection, native activation, and output projection are independent.
-Routes contain only Thread/Conversation references, optional reply
-correlation, and update time.
+Routes contain only Thread/Conversation references, optional destination
+reply context, per-destination completion checkpoint, and update times.
 
 Supported policies:
 
@@ -62,6 +62,29 @@ Supported policies:
 
 Destinations are resolved at delivery time. One inbound message object is not
 retained as routing truth.
+
+The completion checkpoint is per route because one destination can succeed
+while another fails. It stores only the last successfully delivered stable
+Agent item ID and boundary time. Repository merge/advance operations preserve
+the boundary across route refresh and move it forward atomically.
+
+Per-Turn reply correlation is separate minimal projection state keyed by
+authoritative Thread/Turn/client-message identity. It stores the originating
+Conversation and IM reply ID, never message content or Turn status. Gateway
+creates it from `AcceptedTurn` and removes it on an explicit terminal Turn
+event. A recovered/external Turn without correlation does not inherit a
+route's last inbound message.
+
+## Bootstrap ordering
+
+Each route has a bootstrap barrier and serial delivery boundary. Gateway
+subscribes to the Application first, then reads a bounded authoritative
+baseline. Live events arriving meanwhile remain in the projection
+subscriber's independent queue until that route completes baseline delivery.
+The native producer never awaits this barrier.
+
+This is ordering isolation, not bounded backpressure. Queue bounds and the
+common Delivery Coordinator remain Issue #12 work.
 
 ## Recovery
 
@@ -123,6 +146,9 @@ archive messages.
   archive rescan.
 - A minimal worker-health snapshot exposes SDK infrastructure state without
   representing Agent Turn/request truth or pre-empting Issue #13 telemetry.
+
+The accepted state and failure-domain design is
+[ADR 0007](../../decisions/0007-projection-lifecycle-and-delivery-boundaries.md).
 
 The first target above describes untested current behavior; the remaining six
 guarantees are not fully implemented at the current 9fca3dd runtime baseline.
