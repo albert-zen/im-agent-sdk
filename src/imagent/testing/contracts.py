@@ -1,15 +1,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from imagent.adapters import AgentApplicationAdapter, ChannelAdapter
 from imagent.contracts import (
     AgentInput,
     ChannelMessage,
+    Operation,
+    OperationResultStatus,
+    OperationTarget,
+    OperationType,
+    Page,
     ProjectMode,
+    ProjectSummary,
     SupportLevel,
     TextContent,
     ThreadDeletionCapability,
+    ThreadStatus,
+    ThreadSummary,
     derive_client_message_id,
     validate_application_capabilities,
     validate_thread_ref,
@@ -84,43 +93,96 @@ async def verify_application_adapter(
 ) -> ContractReport:
     checks: list[ContractCheck] = []
     summary = adapter.summary
-    capabilities = adapter.capabilities
-    if summary.capabilities != capabilities:
-        raise AssertionError("application summary and adapter capabilities differ")
+    capabilities = summary.capabilities
     validate_application_capabilities(capabilities)
     checks.append(ContractCheck("valid application capabilities"))
+    await adapter.start()
+    checks.append(ContractCheck("application start lifecycle"))
 
     project_ref = None
     if capabilities.projects.mode is ProjectMode.MANAGED:
-        projects = await adapter.list_projects()
-        if not projects.items:
+        projects_result = await adapter.execute(operation(OperationType.PROJECT_LIST, adapter))
+        projects = succeeded_value(projects_result, Page)
+        if not projects.items or not isinstance(projects.items[0], ProjectSummary):
             raise AssertionError("managed project adapter must expose a contract-test project")
-        project = await adapter.get_project(projects.items[0].ref)
+        project_result = await adapter.execute(
+            operation(
+                OperationType.PROJECT_SELECT,
+                adapter,
+                project_ref=projects.items[0].ref,
+            )
+        )
+        project = succeeded_value(project_result, ProjectSummary)
         project_ref = project.ref
         checks.append(ContractCheck("managed project list and read"))
 
-    before = await adapter.list_threads(project_ref)
-    created = await adapter.create_thread(project_ref, title)
+    before = succeeded_value(
+        await adapter.execute(
+            operation(
+                OperationType.THREAD_LIST,
+                adapter,
+                project_ref=project_ref,
+            )
+        ),
+        Page,
+    )
+    created = succeeded_value(
+        await adapter.execute(
+            operation(
+                OperationType.THREAD_CREATE,
+                adapter,
+                project_ref=project_ref,
+                arguments={"title": title},
+            )
+        ),
+        ThreadSummary,
+    )
     validate_thread_ref(created.ref)
     if created.ref.project_ref != project_ref:
         raise AssertionError("created thread project scope differs from requested project")
-    read = await adapter.get_thread(created.ref)
+    read = succeeded_value(
+        await adapter.execute(
+            operation(
+                OperationType.THREAD_SWITCH,
+                adapter,
+                project_ref=project_ref,
+                thread_ref=created.ref,
+            )
+        ),
+        ThreadSummary,
+    )
     if read.ref != created.ref:
         raise AssertionError("created thread cannot be read by the same reference")
-    after = await adapter.list_threads(project_ref)
+    after = succeeded_value(
+        await adapter.execute(
+            operation(
+                OperationType.THREAD_LIST,
+                adapter,
+                project_ref=project_ref,
+            )
+        ),
+        Page,
+    )
     if created.ref not in {item.ref for item in after.items}:
         raise AssertionError("created thread is absent from thread listing")
     if len(after.items) < len(before.items) + 1:
         raise AssertionError("thread listing did not grow after creation")
     checks.append(ContractCheck("thread create, read, and list round-trip"))
 
-    snapshot = await adapter.read_thread(created.ref)
-    if snapshot.thread.ref != created.ref:
-        raise AssertionError("thread snapshot belongs to a different thread")
-    status = await adapter.get_thread_status(created.ref)
-    if status != snapshot.thread.status:
-        raise AssertionError("thread status and snapshot status disagree")
-    checks.append(ContractCheck("thread snapshot and status"))
+    status = succeeded_value(
+        await adapter.execute(
+            operation(
+                OperationType.THREAD_STATUS,
+                adapter,
+                project_ref=project_ref,
+                thread_ref=created.ref,
+            )
+        ),
+        ThreadStatus,
+    )
+    if status != created.status:
+        raise AssertionError("created thread and native status disagree")
+    checks.append(ContractCheck("thread status"))
 
     client_message_id = derive_client_message_id(
         sample_conversation(),
@@ -140,13 +202,65 @@ async def verify_application_adapter(
     checks.append(ContractCheck("stable client message ID round-trip"))
 
     if capabilities.threads.deletion is not ThreadDeletionCapability.UNSUPPORTED:
-        await adapter.delete_thread(created.ref)
-        deleted_listing = await adapter.list_threads(project_ref)
+        succeeded_value(
+            await adapter.execute(
+                operation(
+                    OperationType.THREAD_DELETE,
+                    adapter,
+                    project_ref=project_ref,
+                    thread_ref=created.ref,
+                )
+            ),
+            type(None),
+        )
+        deleted_listing = succeeded_value(
+            await adapter.execute(
+                operation(
+                    OperationType.THREAD_LIST,
+                    adapter,
+                    project_ref=project_ref,
+                )
+            ),
+            Page,
+        )
         if created.ref in {item.ref for item in deleted_listing.items}:
             raise AssertionError("deleted thread remains in thread listing")
         checks.append(ContractCheck("declared thread deletion"))
 
+    await adapter.stop()
+    checks.append(ContractCheck("application stop lifecycle"))
     return ContractReport(tuple(checks))
+
+
+def operation(
+    operation_type: OperationType,
+    adapter: AgentApplicationAdapter,
+    *,
+    project_ref=None,
+    thread_ref=None,
+    arguments=None,
+) -> Operation:
+    return Operation(
+        operation_id=f"contract:{operation_type.value}",
+        conversation_ref=sample_conversation(),
+        actor="contract-user",
+        type=operation_type,
+        target=OperationTarget(
+            application_ref=adapter.summary.ref,
+            project_ref=project_ref,
+            thread_ref=thread_ref,
+        ),
+        arguments=arguments or {},
+        created_at=datetime.now(UTC),
+    )
+
+
+def succeeded_value(result, expected_type):
+    if result.status is not OperationResultStatus.SUCCEEDED:
+        raise AssertionError(f"operation failed: {result.error}")
+    if not isinstance(result.value, expected_type):
+        raise AssertionError(f"expected {expected_type}, got {type(result.value)}")
+    return result.value
 
 
 def sample_conversation():

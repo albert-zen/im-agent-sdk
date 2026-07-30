@@ -15,27 +15,26 @@ Milestone 1 implementation provides:
 - [x] Channel adapter contract test kit;
 - [x] Agent application adapter contract test kit;
 - [x] in-memory Conversation binding repository;
-- [x] no production channel or application adapter yet.
+- [x] durable SQLite binding and idempotency repository;
+- [x] production QQ, Telegram, Feishu, and Weixin adapters;
+- [x] production Codex App Server, Zen, and T3 application adapters.
 
 ## Milestone 2: prove both sides
 
-Suggested vertical slice:
+Implemented vertical slices:
 
-- migrate one existing IM channel, initially QQ, from the pinned IMCodex
-  implementation rather than rewriting it;
-- Zen Agent application adapter;
-- T3 Code Agent application adapter;
-- migrate the mature Codex App Server protocol/client package when beginning
-  the Codex application adapter;
-- create/list/switch/delete/status;
-- message send and canonical user/Agent event synchronization;
-- snapshot plus live-event recovery;
-- Markdown projection and Full Access as product configuration.
+- all four pinned IMCodex channels behind one Channel seam;
+- distinct Zen, Codex, and T3 Code application adapters;
+- create/list/switch/delete/status slash-command flow;
+- message send, final Agent-event projection, and image attachments;
+- Markdown-first projection and T3 Full Access as adapter configuration;
+- durable bindings, inbound idempotency, and delivery idempotency.
 
-The milestone is successful only when one IM conversation can switch between
-real Zen and T3 threads without either adapter inventing a second transcript.
+Live edit-in-place delta projection and authoritative snapshot reconciliation
+remain the next recovery slice; final messages already use the application as
+the sole transcript authority.
 
-## Milestone 3: expand migrated channel work
+## Milestone 3: deepen migrated channel work
 
 Extract reusable behavior from IMCodex/IMZen/IMT3:
 

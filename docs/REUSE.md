@@ -27,7 +27,8 @@ Primary source:
 
 ```text
 repository: https://github.com/albert-zen/imcodex
-reviewed commit: 9f2f38da44aa88af0cdb82917cfee1d93ce02675
+runtime dependency commit: 858398226e8f76e49f8259ae686939f209e1bb36
+newer local implementation reviewed: 9f2f38da44aa88af0cdb82917cfee1d93ce02675
 ```
 
 Candidate paths:
@@ -56,13 +57,16 @@ Behaviors to preserve:
 - attachment staging and platform size limits;
 - reconnect tokens that belong to the Channel adapter.
 
-IMCodex is owner-controlled code but currently has no repository license file.
-Do not publish copied source outside owner-controlled repositories until its
-licensing is made explicit.
+The current implementation imports the pinned owner-controlled package instead
+of copying its source. This retains its channel lifecycle, access policy,
+attachment, Markdown, reply, and retry behavior at the tested boundary.
 
 ## Codex App Server source
 
-Primary source:
+The current Python implementation imports the pinned IMCodex App Server client
+and supervisor. It supports spawned stdio and remote WebSocket endpoints.
+
+Additional reviewed source:
 
 ```text
 repository: https://github.com/pingdotgg/t3code

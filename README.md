@@ -29,10 +29,17 @@ turns, approvals, and execution status.
 
 ## Status
 
-The design baseline has been accepted and Milestone 1 is in progress.
-Language-neutral JSON Schemas are paired with a dependency-free Python
-reference package and contract test kit. No production Channel or Agent
-application adapter is included yet.
+The accepted design now has runnable vertical slices:
+
+- production QQ, Telegram, Feishu, and Weixin adapters reuse the pinned
+  IMCodex implementations;
+- distinct Codex, Zen, and T3 Code application adapters;
+- slash-command project/thread navigation and normal Agent input;
+- Markdown-first outbound messages and image attachment mapping;
+- durable SQLite conversation bindings and delivery/inbound idempotency.
+
+Language-neutral JSON Schemas remain paired with the Python reference package
+and adapter contract test kit.
 
 The initial review set is:
 
@@ -47,10 +54,10 @@ The initial review set is:
 
 ## Development
 
-Python 3.11 or newer is required.
+Python 3.13 or newer is required.
 
 ```sh
-python -m pip install -e '.[dev]'
+python -m pip install -e '.[dev,imcodex]'
 PYTHONPATH=src python -m unittest discover -s tests -v
 python -m compileall -q src tests
 python scripts/validate_schemas.py

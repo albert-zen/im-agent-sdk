@@ -91,19 +91,15 @@ native message per token.
 ### Required resource surface
 
 ```text
-describeApplication
-capabilities
-
-listProjects
-getProject
-
-listThreads
-getThread
-createThread
-deleteThread
-readThread
-getThreadStatus
+summary
+start()
+stop()
+execute(Operation) -> OperationResult
 ```
+
+The deliberately small `execute` seam owns project/thread control operations;
+the adapter maps each typed Operation to its native application API. This is a
+deep module boundary rather than a method-per-resource mirror.
 
 Project creation or deletion may be optional. Project listing is part of the
 managed application model. An adapter declares `projectMode`:

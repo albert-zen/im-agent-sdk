@@ -1,0 +1,587 @@
+from __future__ import annotations
+
+import asyncio
+import base64
+import inspect
+import mimetypes
+import uuid
+from collections.abc import AsyncIterator, Mapping
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Protocol
+
+from ..contracts import (
+    AcceptedTurn,
+    AgentEvent,
+    AgentEventType,
+    AgentInput,
+    AgentMessage,
+    ApplicationCapabilities,
+    ApplicationRef,
+    ApplicationSummary,
+    AttachmentContent,
+    ContractError,
+    MessageRole,
+    Operation,
+    OperationResult,
+    OperationResultStatus,
+    OperationType,
+    Page,
+    ProjectCapabilities,
+    ProjectMode,
+    ProjectRef,
+    ProjectSummary,
+    RuntimeCapabilities,
+    SupportLevel,
+    TextContent,
+    TextFormat,
+    ThreadCapabilities,
+    ThreadDeletionCapability,
+    ThreadRef,
+    ThreadStatus,
+    ThreadSummary,
+)
+
+_ID_NAMESPACE = uuid.UUID("15440f13-a923-4a4c-8791-637914777e5e")
+
+
+class T3Client(Protocol):
+    async def shell_snapshot(self) -> Mapping[str, object]: ...
+
+    async def thread_detail(self, thread_id: str) -> Mapping[str, object]: ...
+
+    async def dispatch(
+        self,
+        command: Mapping[str, object],
+    ) -> Mapping[str, object]: ...
+
+
+class T3ApplicationAdapter:
+    """Native T3 project, thread and turn operations behind one application seam."""
+
+    def __init__(
+        self,
+        *,
+        application_instance_id: str,
+        client: T3Client,
+        runtime_mode: str = "full-access",
+        interaction_mode: str = "default",
+        poll_interval: float = 0.25,
+    ) -> None:
+        self._application_instance_id = application_instance_id
+        self._client = client
+        self._runtime_mode = runtime_mode
+        self._interaction_mode = interaction_mode
+        self._poll_interval = poll_interval
+        self._sequence = 0
+        self._turn_baselines: dict[tuple[str, str], frozenset[str]] = {}
+        self._summary = ApplicationSummary(
+            ref=ApplicationRef(application_instance_id),
+            kind="t3",
+            display_name="T3 Code",
+            capabilities=ApplicationCapabilities(
+                projects=ProjectCapabilities(
+                    mode=ProjectMode.MANAGED,
+                    discovery=SupportLevel.NATIVE,
+                    selection=SupportLevel.NATIVE,
+                ),
+                threads=ThreadCapabilities(
+                    listing=SupportLevel.NATIVE,
+                    creation=SupportLevel.NATIVE,
+                    switching=SupportLevel.NATIVE,
+                    deletion=ThreadDeletionCapability.ARCHIVE,
+                ),
+                runtime=RuntimeCapabilities(
+                    history=SupportLevel.NATIVE,
+                    streaming=SupportLevel.FALLBACK,
+                    replay_from_cursor=SupportLevel.FALLBACK,
+                    interruption=SupportLevel.NATIVE,
+                    interactive_requests=SupportLevel.NATIVE,
+                ),
+            ),
+            metadata={
+                "runtime_mode": runtime_mode,
+                "interaction_mode": interaction_mode,
+                "protocol": "t3-orchestration",
+            },
+        )
+
+    @property
+    def summary(self) -> ApplicationSummary:
+        return self._summary
+
+    async def start(self) -> None:
+        return None
+
+    async def stop(self) -> None:
+        close = getattr(self._client, "aclose", None)
+        if callable(close):
+            result = close()
+            if inspect.isawaitable(result):
+                await result
+
+    async def execute(self, operation: Operation) -> OperationResult:
+        try:
+            value = await self._execute(operation)
+        except Exception as error:
+            return OperationResult(
+                operation_id=operation.operation_id,
+                status=OperationResultStatus.FAILED,
+                completed_at=datetime.now(UTC),
+                error=ContractError(
+                    code=type(error).__name__,
+                    message=str(error),
+                ),
+            )
+        return OperationResult(
+            operation_id=operation.operation_id,
+            status=OperationResultStatus.SUCCEEDED,
+            completed_at=datetime.now(UTC),
+            value=value,
+        )
+
+    async def _execute(self, operation: Operation) -> object | None:
+        if operation.type is OperationType.PROJECT_LIST:
+            snapshot = await self._client.shell_snapshot()
+            query = str(operation.arguments.get("query") or "").casefold()
+            projects = tuple(
+                summary
+                for project in _object_list(snapshot.get("projects"))
+                if (summary := self._project_summary(project)) is not None
+                and (
+                    not query
+                    or query in summary.display_name.casefold()
+                    or query in summary.ref.native_project_id.casefold()
+                )
+            )
+            return Page(items=projects)
+        if operation.type is OperationType.PROJECT_SELECT:
+            project_ref = _required_project(operation)
+            project = await self._find_project(project_ref.native_project_id)
+            if project is None:
+                raise ValueError(f"T3 project not found: {project_ref.native_project_id}")
+            return project
+        if operation.type is OperationType.THREAD_LIST:
+            snapshot = await self._client.shell_snapshot()
+            project_ref = operation.target.project_ref
+            query = str(operation.arguments.get("query") or "").casefold()
+            threads = tuple(
+                summary
+                for thread in _object_list(snapshot.get("threads"))
+                if (summary := self._thread_summary(thread)) is not None
+                and (project_ref is None or summary.ref.project_ref == project_ref)
+                and (
+                    not query
+                    or query in (summary.title or "").casefold()
+                    or query in summary.ref.native_thread_id.casefold()
+                )
+            )
+            return Page(items=threads)
+        if operation.type is OperationType.THREAD_CREATE:
+            project_ref = _required_project(operation)
+            project = await self._find_project(project_ref.native_project_id)
+            if project is None:
+                raise ValueError(f"T3 project not found: {project_ref.native_project_id}")
+            model_selection = project.metadata.get("default_model_selection")
+            if not isinstance(model_selection, Mapping):
+                raise ValueError("T3 project has no default Agent/model selection")
+            thread_id = _stable_id(operation.operation_id, "thread")
+            title = _safe_title(str(operation.arguments.get("title") or "IM task"))
+            now = _utc_now()
+            await self._client.dispatch(
+                {
+                    "type": "thread.create",
+                    "commandId": _stable_id(operation.operation_id, "create"),
+                    "threadId": thread_id,
+                    "projectId": project_ref.native_project_id,
+                    "title": title,
+                    "modelSelection": dict(model_selection),
+                    "runtimeMode": self._runtime_mode,
+                    "interactionMode": self._interaction_mode,
+                    "branch": None,
+                    "worktreePath": None,
+                    "createdAt": now,
+                }
+            )
+            return ThreadSummary(
+                ref=ThreadRef(
+                    application_instance_id=self._application_instance_id,
+                    native_thread_id=thread_id,
+                    project_ref=project_ref,
+                ),
+                title=title,
+                status=ThreadStatus.IDLE,
+                updated_at=datetime.now(UTC),
+                metadata={
+                    "runtime_mode": self._runtime_mode,
+                    "model_selection": dict(model_selection),
+                },
+            )
+        if operation.type in {
+            OperationType.THREAD_SWITCH,
+            OperationType.THREAD_STATUS,
+        }:
+            thread_ref = _required_thread(operation)
+            self._require_own_thread(thread_ref)
+            detail = await self._client.thread_detail(thread_ref.native_thread_id)
+            summary = self._thread_summary(_object(detail.get("thread"), "thread"))
+            if summary is None:
+                raise ValueError("T3 thread is archived or deleted")
+            return summary.status if operation.type is OperationType.THREAD_STATUS else summary
+        if operation.type is OperationType.THREAD_DELETE:
+            thread_ref = _required_thread(operation)
+            self._require_own_thread(thread_ref)
+            await self._client.dispatch(
+                {
+                    "type": "thread.archive",
+                    "commandId": _stable_id(operation.operation_id, "archive"),
+                    "threadId": thread_ref.native_thread_id,
+                }
+            )
+            return None
+        if operation.type is OperationType.TURN_INTERRUPT:
+            thread_ref = _required_thread(operation)
+            self._require_own_thread(thread_ref)
+            command: dict[str, object] = {
+                "type": "thread.turn.interrupt",
+                "commandId": _stable_id(operation.operation_id, "interrupt"),
+                "threadId": thread_ref.native_thread_id,
+                "createdAt": _utc_now(),
+            }
+            turn_id = str(operation.arguments.get("turn_id") or "")
+            if turn_id:
+                command["turnId"] = turn_id
+            await self._client.dispatch(command)
+            return None
+        raise NotImplementedError(f"{operation.type.value} is unsupported by T3")
+
+    async def send_input(
+        self,
+        thread_ref: ThreadRef,
+        message: AgentInput,
+    ) -> AcceptedTurn:
+        self._require_own_thread(thread_ref)
+        text = "\n".join(
+            part.text for part in message.content if isinstance(part, TextContent)
+        ).strip()
+        attachments = tuple(part for part in message.content if isinstance(part, AttachmentContent))
+        if not text and not attachments:
+            raise ValueError("T3 input requires text or image")
+        before = await self._client.thread_detail(thread_ref.native_thread_id)
+        baseline = frozenset(
+            _message_id(item)
+            for item in _object_list(_object(before.get("thread"), "thread").get("messages"))
+            if _message_id(item)
+        )
+        await self._client.dispatch(
+            {
+                "type": "thread.turn.start",
+                "commandId": _stable_id(message.client_message_id, "turn"),
+                "threadId": thread_ref.native_thread_id,
+                "message": {
+                    "messageId": _stable_id(message.client_message_id, "message"),
+                    "role": "user",
+                    "text": text,
+                    "attachments": _encode_t3_attachments(attachments),
+                },
+                "runtimeMode": self._runtime_mode,
+                "interactionMode": self._interaction_mode,
+                "createdAt": _utc_now(),
+            }
+        )
+        detail = await self._client.thread_detail(thread_ref.native_thread_id)
+        thread = _object(detail.get("thread"), "thread")
+        latest_turn = _object(thread.get("latestTurn"), "latestTurn")
+        turn_id = str(latest_turn.get("turnId") or latest_turn.get("id") or "")
+        if not turn_id:
+            raise RuntimeError("T3 did not return the accepted turn id")
+        self._turn_baselines[(thread_ref.native_thread_id, turn_id)] = baseline
+        return AcceptedTurn(
+            thread_ref=thread_ref,
+            turn_id=turn_id,
+            client_message_id=message.client_message_id,
+        )
+
+    async def subscribe_thread(
+        self,
+        thread_ref: ThreadRef,
+        after_cursor: str | None = None,
+    ) -> AsyncIterator[AgentEvent]:
+        del after_cursor
+        self._require_own_thread(thread_ref)
+        seen: set[str] = set()
+        terminal_turns: set[str] = set()
+        while True:
+            detail = await self._client.thread_detail(thread_ref.native_thread_id)
+            thread = _object(detail.get("thread"), "thread")
+            latest_turn = _optional_object(thread.get("latestTurn"))
+            turn_id = (
+                str(latest_turn.get("turnId") or latest_turn.get("id") or "")
+                if latest_turn is not None
+                else ""
+            )
+            baseline = self._turn_baselines.get(
+                (thread_ref.native_thread_id, turn_id),
+                frozenset(),
+            )
+            for message in _object_list(thread.get("messages")):
+                message_id = _message_id(message)
+                if (
+                    not message_id
+                    or message_id in baseline
+                    or message_id in seen
+                    or str(message.get("role") or "") != "assistant"
+                    or (turn_id and str(message.get("turnId") or "") != turn_id)
+                ):
+                    continue
+                seen.add(message_id)
+                yield self._event(
+                    AgentEventType.MESSAGE_COMPLETED,
+                    thread_ref,
+                    turn_id or None,
+                    {
+                        "message": AgentMessage(
+                            agent_item_id=message_id,
+                            thread_ref=thread_ref,
+                            role=MessageRole.ASSISTANT,
+                            content=(
+                                TextContent(
+                                    str(message.get("text") or ""),
+                                    TextFormat.MARKDOWN,
+                                ),
+                            ),
+                            created_at=_parse_datetime(message.get("createdAt")),
+                            metadata={"native_application": "t3"},
+                        )
+                    },
+                )
+            state = (
+                str(latest_turn.get("state") or latest_turn.get("status") or "")
+                .replace("-", "_")
+                .casefold()
+                if latest_turn is not None
+                else ""
+            )
+            event_type = {
+                "completed": AgentEventType.TURN_COMPLETED,
+                "failed": AgentEventType.TURN_FAILED,
+                "interrupted": AgentEventType.TURN_INTERRUPTED,
+                "cancelled": AgentEventType.TURN_INTERRUPTED,
+                "canceled": AgentEventType.TURN_INTERRUPTED,
+            }.get(state)
+            if event_type is not None and turn_id not in terminal_turns:
+                terminal_turns.add(turn_id)
+                yield self._event(
+                    event_type,
+                    thread_ref,
+                    turn_id or None,
+                    {"status": state},
+                )
+                return
+            await asyncio.sleep(self._poll_interval)
+
+    async def _find_project(
+        self,
+        project_id: str,
+    ) -> ProjectSummary | None:
+        snapshot = await self._client.shell_snapshot()
+        for project in _object_list(snapshot.get("projects")):
+            if str(project.get("id") or "") == project_id:
+                return self._project_summary(project)
+        return None
+
+    def _project_summary(
+        self,
+        project: Mapping[str, object],
+    ) -> ProjectSummary | None:
+        if project.get("deletedAt") is not None:
+            return None
+        project_id = str(project.get("id") or "")
+        if not project_id:
+            return None
+        return ProjectSummary(
+            ref=ProjectRef(
+                application_instance_id=self._application_instance_id,
+                native_project_id=project_id,
+            ),
+            display_name=str(project.get("title") or project.get("name") or project_id),
+            root_path=_optional_string(project.get("workspaceRoot") or project.get("path")),
+            metadata={
+                "default_model_selection": project.get("defaultModelSelection"),
+            },
+        )
+
+    def _thread_summary(
+        self,
+        thread: Mapping[str, object],
+    ) -> ThreadSummary | None:
+        if thread.get("deletedAt") is not None or thread.get("archivedAt") is not None:
+            return None
+        thread_id = str(thread.get("id") or "")
+        project_id = str(thread.get("projectId") or "")
+        if not thread_id:
+            return None
+        latest_turn = _optional_object(thread.get("latestTurn"))
+        state = (
+            latest_turn.get("state") or latest_turn.get("status")
+            if latest_turn is not None
+            else "idle"
+        )
+        project_ref = ProjectRef(self._application_instance_id, project_id) if project_id else None
+        return ThreadSummary(
+            ref=ThreadRef(
+                application_instance_id=self._application_instance_id,
+                native_thread_id=thread_id,
+                project_ref=project_ref,
+            ),
+            status=_thread_status(state),
+            title=_optional_string(thread.get("title")),
+            updated_at=_parse_optional_datetime(thread.get("updatedAt") or thread.get("createdAt")),
+            metadata={
+                "runtime_mode": thread.get("runtimeMode"),
+                "model_selection": thread.get("modelSelection"),
+            },
+        )
+
+    def _event(
+        self,
+        event_type: AgentEventType,
+        thread_ref: ThreadRef,
+        turn_id: str | None,
+        data: dict[str, object],
+    ) -> AgentEvent:
+        self._sequence += 1
+        return AgentEvent(
+            event_id=f"{self._application_instance_id}:{self._sequence}",
+            application_instance_id=self._application_instance_id,
+            sequence=self._sequence,
+            type=event_type,
+            data=data,
+            created_at=datetime.now(UTC),
+            project_ref=thread_ref.project_ref,
+            thread_ref=thread_ref,
+            turn_id=turn_id,
+            cursor=str(self._sequence),
+        )
+
+    def _require_own_thread(self, thread_ref: ThreadRef) -> None:
+        if thread_ref.application_instance_id != self._application_instance_id:
+            raise ValueError("thread belongs to a different application instance")
+
+
+def _required_project(operation: Operation) -> ProjectRef:
+    project_ref = operation.target.project_ref
+    if project_ref is None:
+        raise ValueError(f"{operation.type.value} requires project_ref")
+    return project_ref
+
+
+def _required_thread(operation: Operation) -> ThreadRef:
+    thread_ref = operation.target.thread_ref
+    if thread_ref is None:
+        raise ValueError(f"{operation.type.value} requires thread_ref")
+    return thread_ref
+
+
+def _object(value: object, name: str) -> Mapping[str, object]:
+    if not isinstance(value, Mapping):
+        raise RuntimeError(f"T3 result did not contain {name}")
+    return value
+
+
+def _optional_object(value: object) -> Mapping[str, object] | None:
+    return value if isinstance(value, Mapping) else None
+
+
+def _object_list(value: object) -> tuple[Mapping[str, object], ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(item for item in value if isinstance(item, Mapping))
+
+
+def _message_id(message: Mapping[str, object]) -> str:
+    return str(message.get("id") or message.get("messageId") or "")
+
+
+def _stable_id(*parts: str) -> str:
+    return str(uuid.uuid5(_ID_NAMESPACE, "\x1f".join(parts)))
+
+
+def _safe_title(value: str) -> str:
+    return (" ".join(value.strip().split())[:80] or "IM task").strip()
+
+
+def _utc_now() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _optional_string(value: object) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _parse_datetime(value: object) -> datetime:
+    return _parse_optional_datetime(value) or datetime.now(UTC)
+
+
+def _parse_optional_datetime(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _thread_status(value: object) -> ThreadStatus:
+    normalized = str(value or "").replace("-", "_").casefold()
+    return {
+        "idle": ThreadStatus.IDLE,
+        "running": ThreadStatus.RUNNING,
+        "active": ThreadStatus.RUNNING,
+        "in_progress": ThreadStatus.RUNNING,
+        "completed": ThreadStatus.COMPLETED,
+        "failed": ThreadStatus.FAILED,
+        "interrupted": ThreadStatus.INTERRUPTED,
+        "cancelled": ThreadStatus.INTERRUPTED,
+        "canceled": ThreadStatus.INTERRUPTED,
+        "waiting_for_approval": ThreadStatus.WAITING_FOR_APPROVAL,
+        "waiting_for_input": ThreadStatus.WAITING_FOR_INPUT,
+    }.get(normalized, ThreadStatus.UNKNOWN)
+
+
+def _encode_t3_attachments(
+    attachments: tuple[AttachmentContent, ...],
+) -> list[dict[str, object]]:
+    if len(attachments) > 8:
+        raise ValueError("T3 accepts at most 8 image attachments")
+    result: list[dict[str, object]] = []
+    for attachment in attachments:
+        media_type = attachment.media_type.strip().casefold()
+        if not media_type.startswith("image/"):
+            raise ValueError("T3 supports image attachments only")
+        local_path = str(attachment.metadata.get("local_path") or "")
+        if not local_path:
+            raise ValueError("T3 image requires a local_path")
+        path = Path(local_path)
+        try:
+            data = path.read_bytes()
+        except OSError as error:
+            raise ValueError("Unable to read the staged T3 image") from error
+        if len(data) > 10 * 1024 * 1024:
+            raise ValueError("Each T3 image must be at most 10 MiB")
+        if attachment.size_bytes is not None and len(data) != attachment.size_bytes:
+            raise ValueError("The staged T3 image size changed")
+        filename = attachment.filename or path.name or "image"
+        if not Path(filename).suffix:
+            filename += mimetypes.guess_extension(media_type) or ".img"
+        result.append(
+            {
+                "type": "image",
+                "name": filename[:255],
+                "mimeType": media_type[:100],
+                "sizeBytes": len(data),
+                "dataUrl": (f"data:{media_type};base64,{base64.b64encode(data).decode('ascii')}"),
+            }
+        )
+    return result

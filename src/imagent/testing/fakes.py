@@ -15,6 +15,10 @@ from imagent.contracts import (
     ChannelCapabilities,
     ChannelMessage,
     DeliveryReceipt,
+    Operation,
+    OperationResult,
+    OperationResultStatus,
+    OperationType,
     Page,
     ProjectCapabilities,
     ProjectMode,
@@ -119,8 +123,59 @@ class FakeAgentApplicationAdapter:
     def capabilities(self) -> ApplicationCapabilities:
         return self._capabilities
 
+    async def start(self) -> None:
+        return None
+
+    async def stop(self) -> None:
+        return None
+
     async def list_projects(self, cursor=None) -> Page[ProjectSummary]:
         return Page(tuple(self._projects.values()))
+
+    async def execute(self, operation: Operation) -> OperationResult:
+        value: object | None
+        if operation.type is OperationType.PROJECT_LIST:
+            value = await self.list_projects(operation.arguments.get("cursor"))
+        elif operation.type is OperationType.PROJECT_SELECT:
+            if operation.target.project_ref is None:
+                raise ValueError("project.select requires project_ref")
+            value = await self.get_project(operation.target.project_ref)
+        elif operation.type is OperationType.THREAD_LIST:
+            value = await self.list_threads(
+                operation.target.project_ref,
+                operation.arguments.get("cursor"),
+            )
+        elif operation.type is OperationType.THREAD_CREATE:
+            value = await self.create_thread(
+                operation.target.project_ref,
+                str(operation.arguments.get("title") or ""),
+            )
+        elif operation.type is OperationType.THREAD_SWITCH:
+            if operation.target.thread_ref is None:
+                raise ValueError("thread.switch requires thread_ref")
+            value = await self.get_thread(operation.target.thread_ref)
+        elif operation.type is OperationType.THREAD_DELETE:
+            if operation.target.thread_ref is None:
+                raise ValueError("thread.delete requires thread_ref")
+            await self.delete_thread(operation.target.thread_ref)
+            value = None
+        elif operation.type is OperationType.THREAD_STATUS:
+            if operation.target.thread_ref is None:
+                raise ValueError("thread.status requires thread_ref")
+            value = await self.get_thread_status(operation.target.thread_ref)
+        elif operation.type is OperationType.TURN_INTERRUPT:
+            if operation.target.thread_ref is None:
+                raise ValueError("turn.interrupt requires thread_ref")
+            await self.interrupt_turn(operation.target.thread_ref)
+            value = None
+        else:
+            raise NotImplementedError(operation.type.value)
+        return OperationResult(
+            operation_id=operation.operation_id,
+            status=OperationResultStatus.SUCCEEDED,
+            completed_at=datetime.now(UTC),
+            value=value,
+        )
 
     async def get_project(self, project_ref: ProjectRef) -> ProjectSummary:
         return self._projects[project_ref]

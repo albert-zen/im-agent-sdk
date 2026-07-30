@@ -7,11 +7,14 @@ name = "im-agent-sdk"
 version = "0.1.0a1"
 description = "Unified contracts between IM channels and Agent applications"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 authors = [{ name = "Albert Zen" }]
-dependencies = []
+dependencies = ["httpx>=0.28"]
 
 [project.optional-dependencies]
+imcodex = [
+  "imcodex @ git+https://github.com/albert-zen/imcodex.git@858398226e8f76e49f8259ae686939f209e1bb36",
+]
 dev = [
   "jsonschema>=4.23",
   "pyright>=1.1.400",
@@ -23,6 +26,9 @@ Repository = "https://github.com/albert-zen/im-agent-sdk"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/imagent"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.ruff]
 line-length = 100
