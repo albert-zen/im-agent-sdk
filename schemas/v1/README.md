@@ -10,6 +10,7 @@ These JSON Schemas describe semantic contracts, not a required transport.
 - `operations.schema.json`: operations and results.
 - `events.schema.json`: unified Agent events.
 - `bindings.schema.json`: current IM Conversation selection.
+- `projections.schema.json`: Gateway-owned Thread output routes.
 
 Python reference objects add cross-reference invariants that JSON Schema cannot
 express conveniently, such as ensuring a selected Project and Thread belong to

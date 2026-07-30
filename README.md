@@ -42,26 +42,28 @@ The accepted design now has runnable vertical slices:
 Language-neutral JSON Schemas remain paired with the Python reference package
 and adapter contract test kit.
 
-The initial review set is:
+Start design/maintenance work from:
 
-- [Vision](docs/VISION.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Domain model](docs/DOMAIN_MODEL.md)
-- [Messages, operations, and events](docs/PROTOCOL.md)
-- [Adapter contracts](docs/ADAPTERS.md)
-- [Accepted decisions](docs/DECISIONS.md)
-- [Reuse and provenance policy](docs/REUSE.md)
-- [Roadmap and open decisions](docs/ROADMAP.md)
+- [documentation map](docs/README.md);
+- [Vision](docs/VISION.md);
+- [Architecture](docs/ARCHITECTURE.md);
+- [accepted decisions](docs/decisions/README.md);
+- the affected component under `docs/components/`.
 
 ## Development
 
-Python 3.13 or newer is required.
+Python 3.13 or newer and
+[uv](https://docs.astral.sh/uv/getting-started/installation/) are required.
+CI pins uv 0.12.0; use that version when regenerating `uv.lock`.
 
 ```sh
-python -m pip install -e '.[dev,imcodex]'
-PYTHONPATH=src python -m unittest discover -s tests -v
-python -m compileall -q src tests
-python scripts/validate_schemas.py
-ruff check src tests scripts
-pyright src tests scripts
+uv sync --extra dev --extra imcodex --locked
+PYTHONPATH=src uv run python -m unittest discover -s tests -v
+uv run python -m compileall -q src tests scripts
+uv run python scripts/validate_schemas.py
+uv run python scripts/check_doc_links.py
+uv run ruff check src tests scripts
+uv run ruff format --check src tests scripts
+uv run pyright src tests scripts
+python scripts/agentkit.py check
 ```

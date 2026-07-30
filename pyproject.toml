@@ -17,6 +17,7 @@ imcodex = [
 ]
 dev = [
   "jsonschema>=4.23",
+  "PyYAML>=6.0",
   "pyright>=1.1.400",
   "ruff>=0.12",
 ]

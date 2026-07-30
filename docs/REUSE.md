@@ -61,10 +61,20 @@ The current implementation imports the pinned owner-controlled package instead
 of copying its source. This retains its channel lifecycle, access policy,
 attachment, Markdown, reply, and retry behavior at the tested boundary.
 
+Issue #9 removes this reverse dependency. Before implementation it must publish
+a transfer map covering each source module, tests/fixtures, license notice,
+configuration owner, local modification, and deletion point. After transfer,
+the SDK owns reusable adapter/client/test code and IMCodex is a downstream
+consumer. Product commands, allowlists, bot policy, Full Access, and deployment
+configuration remain explicit consumer decisions.
+
 ## Codex App Server source
 
 The current Python implementation imports the pinned IMCodex App Server client
 and supervisor. It supports spawned stdio and remote WebSocket endpoints.
+Issue #9 transfers only reusable client/protocol/lifecycle behavior into the
+SDK; IMCodex-specific supervision or product configuration is not promoted to
+Core.
 
 Additional reviewed source:
 

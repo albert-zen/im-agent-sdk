@@ -3,162 +3,81 @@
 ## System shape
 
 ```text
-┌──────────────────────────────────────────────────────────────┐
-│ IM channels                                                  │
-│ QQ · Telegram · Feishu · Weixin · DingTalk · Slack · …      │
-└─────────────────────────────┬────────────────────────────────┘
-                              │ native messages/actions
-                    ┌─────────▼─────────┐
-                    │ Channel adapters │
-                    └─────────┬─────────┘
-                              │ Message / Operation
-              ┌───────────────▼────────────────┐
-              │ IM Agent Gateway               │
-              │                                │
-              │ routing · bindings · dedup     │
-              │ delivery projection · cursors │
-              └───────────────┬────────────────┘
-                              │ common application contract
-                ┌─────────────▼─────────────┐
-                │ Agent application adapters│
-                └──────┬──────┬──────┬─────┘
-                       │      │      │
-                    Zen/T3  Codex  Claude Code · …
+IM Channels
+  ↓ native events / actions
+Channel integrations
+  ↓ InboundMessage / OutboundMessage / typed interaction
+Gateway ─── optional Controllers
+  ↓ Python Ports carrying language-neutral Contracts
+Agent Application integrations
+  ↓ native resource, input, event, history, request APIs
+Zen · T3 · Codex · other Agent Applications
+
+Gateway also composes:
+  Persistence ← bindings, routes, idempotency
+  Projections and recovery ← live fan-out, reconciliation, checkpoints
+  Attachments/media ← explicit source and trust boundary
 ```
 
-IM pages are not a separate architectural tier from CLI, desktop, or Web
-clients. They are another access surface using the same Agent application
-capabilities.
+IM is another access surface over the native Agent Application. It is not a
+separate Agent state tier.
 
-## Components
+## Product components
 
-### Channel adapter
+| Component | Owns | Does not own | Detail |
+|---|---|---|---|
+| Contracts | language-neutral resources, messages, operations, capabilities, events, validation | Python runtime implementations | [design](components/contracts/design.md) |
+| Python Ports | runtime interfaces for integrations and repositories | semantic or native behavior | [design](components/ports/design.md) |
+| Gateway | deterministic input routing and composition | Agent or Channel truth | [design](components/gateway/design.md) |
+| Projections and recovery | live observation, routes, authoritative reconciliation mechanics | transcript/event journal | [design](components/projections-and-recovery/design.md) |
+| Persistence | minimal Gateway-owned state | Agent transcript/Turn/request state | [design](components/persistence/design.md) |
+| Attachments and media | explicit source/trust/materialization boundary | universal blob store or product media policy | [design](components/attachments-and-media/design.md) |
+| Controllers | optional common UX over typed Operations | Core semantics or binding authority | [design](components/controllers/design.md) |
+| Channel integrations | native admission, rendering, media, delivery, reconnect | Agent resources/execution | [design](components/channel-adapters/design.md) |
+| Application integrations | native resource/input/event/history/request translation | native resource/execution ownership | [design](components/application-adapters/design.md) |
+| Testing and conformance | reusable fakes and honesty suites | production runtime | [design](components/testing-and-conformance/design.md) |
 
-A Channel adapter translates between one configured IM bot/account instance
-and the common channel contract.
+Repository maintainability is an operational AgentKit component, not runtime
+architecture. See
+[its design](components/repository-maintainability/design.md).
 
-It owns:
+## Dependency direction
 
-- credentials and connection lifecycle;
-- native sender and conversation identity;
-- inbound event verification and access-control inputs;
-- native Markdown, cards, buttons, mentions, replies, and attachments;
-- text limits, chunking, escaping, and fallback rendering;
-- native message edit, typing, and delivery-receipt behavior;
-- channel reconnect cursors and tokens when required by the platform.
+Contracts are the semantic bottom. Python Ports depend on Contracts.
+Persistence, Controllers, media helpers, and eventing are lower services.
+Concrete integrations depend inward. Gateway is the high-level composition
+root. Test helpers depend on public Contracts/Ports, never the reverse.
 
-It does not own projects, Agent threads, turns, or Agent approvals.
+The precise current import graph and allowed edges are documented in
+[dependency rules](architecture/dependency-rules.md) and enforced by
+`python scripts/agentkit.py lint-architecture`.
 
-### Agent application adapter
-
-An Agent application adapter translates between one configured Agent
-application instance and the common application contract.
-
-It exposes:
-
-- application metadata and capabilities;
-- project discovery and optional management;
-- thread creation, listing, lookup, deletion, and history;
-- user input delivery with a stable client message ID;
-- thread status, interruption, and interactive requests;
-- authoritative snapshots and ordered event subscriptions.
-
-It owns native translation, not the resources themselves. The native
-application remains authoritative.
-
-### Gateway
-
-The Gateway composes Channel and Agent application adapters.
-
-It owns:
-
-- the current application/project/thread binding for an IM conversation;
-- typed Gateway operations that atomically mutate those bindings;
-- deterministic routing;
-- inbound idempotency;
-- outbound projection and delivery correlation;
-- per-conversation serialization and backpressure;
-- reconnect cursors and projection caches;
-- access policy at the IM boundary.
-
-It does not own:
-
-- the authoritative project or thread registry;
-- the Agent transcript;
-- an independent Turn state machine;
-- model, provider, workspace, or sandbox configuration;
-- Agent tool-approval truth.
-
-Attachment bytes cross the Channel/Application boundary only through an
-explicit source form. Shared-filesystem trust is deployment configuration, not
-message Metadata and not a claim supplied by an inbound attachment. Remote URL
-materialization belongs to the accepting Application adapter and its network
-security policy.
-
-The Gateway accepts an optional inbound Controller. A Controller may consume an
-inbound message and invoke the same typed application/Gateway operations that
-native buttons or other interactions invoke. If no Controller consumes the
-message, the Gateway routes its content as normal Agent input. The Gateway does
-not know Slash grammar, command aliases, selection-list caches, or fixed command
-presentation.
-
-The SDK-distributed `SlashController` provides the default common Slash UX. It
-is a replaceable composition choice, not a Gateway dependency. Its Markdown
-presenter owns the default English help, lists, errors, history, and catch-up
-views.
-
-Application operations and Gateway operations are separate typed families.
-The Gateway may route an application operation to the referenced adapter, but
-it does not reinterpret that operation as a binding mutation. Conversely,
-binding a Conversation to a Thread validates the authoritative Thread without
-implicitly changing an application's native active/open Thread.
-
-## Two planes and one event stream
-
-The input side has two planes:
-
-```text
-Data plane:    Message
-Control plane: Operation
-```
-
-The output side is a unified event stream:
-
-```text
-Event plane:   AgentEvent
-```
-
-This separation allows the same operation to originate from:
-
-- a slash command;
-- an IM button or card action;
-- a menu;
-- a natural-language command interpreter;
-- an API call.
-
-The core never depends on how the operation was expressed.
+Components describe responsibility; lint layers describe imports. They need
+not have identical names.
 
 ## Authority and persistence
 
-| State | Authority | May the Gateway persist it? |
+| State | Authority | SDK persistence |
 |---|---|---|
-| Agent application registry | Deployment/product | Configuration only |
-| Project registry | Agent application | Cache only |
-| Thread registry | Agent application | Cache only |
-| Thread transcript | Agent application | Projection/cache only |
-| Turn and request state | Agent application | Projection/cache only |
-| Conversation selection | Gateway | Yes |
-| Thread projection routes | Gateway | Yes, routing fields only |
-| Inbound idempotency | Gateway | Yes |
-| Outbound delivery correlation | Gateway | Yes |
-| Reconnect cursor | Gateway | Yes |
-| Channel credentials | Channel deployment | External configuration |
+| Application registry | deployment/consumer | configuration |
+| Project/Thread registry | Agent Application | cache only |
+| transcript and completed messages | Agent Application | rebuildable projection only |
+| Turn/request/execution/status | Agent Application | rebuildable projection only |
+| Conversation input binding | Gateway | yes |
+| Thread projection route | Gateway | routing fields only |
+| future projection completion checkpoint | Gateway target in #14 | permitted only when it carries no Agent content/truth |
+| inbound/outbound idempotency | Gateway | yes |
+| Channel reconnect token | Channel integration | yes as native transport state |
+| Agent replay cursor | Agent Application | opaque projection checkpoint only |
+| Channel credentials | Channel deployment | external configuration |
 
-Gateway-persisted state must not become a second source of Agent truth.
-Deleting the Gateway projection cache and replaying from the application must
-produce the same visible Agent history.
+Deleting rebuildable discovery/content caches must not lose Agent truth:
+authoritative history can reconstruct their content. Delivery idempotency,
+routes, and future completion checkpoints are owned bridge state, not
+disposable transcript caches; losing them may require explicit degraded
+recovery rather than pretending the prior delivery boundary is known.
 
-## Conversation binding
+## Input selection and output routing
 
 The default binding key is:
 
@@ -166,149 +85,132 @@ The default binding key is:
 (channelInstanceId, conversationId)
 ```
 
-Its value is:
+The `ConversationBinding` answers where the next input goes. The
+`ThreadProjectionRoute` answers where completed output may be delivered.
+`thread.activate_native` optionally changes native UI state. No one mutation
+implies another.
 
-```text
-applicationInstanceId
-projectRef?
-threadRef?
-revision
-```
+Projection policies:
 
-The binding describes the current destination for future messages. It does not
-change the identity or history of the selected thread.
+- `foreground_only`;
+- `remembered_last_recipient`;
+- `all_observers`.
 
-Some group-chat products may eventually require per-user selection:
+Per-user group selection is a future consumer policy, not current Core.
 
-```text
-(channelInstanceId, conversationId, principalId)
-```
+## Input flow
 
-That is a product policy and remains an open extension. The initial common
-contract uses conversation-level binding.
-
-## Thread projection routing
-
-Input selection and output observation are separate Gateway-owned resources.
-A `ConversationBinding` answers where the next inbound message goes. A
-`ThreadProjectionRoute` answers which Conversation may receive completed
-messages observed from one application Thread:
-
-```text
-routeId
-threadRef
-conversationRef
-replyToMessageId?
-updatedAt
-```
-
-Routes contain no transcript, Turn status, execution status, or message
-content. A deployment selects one projection policy:
-
-```text
-foreground_only
-remembered_last_recipient
-all_observers
-```
-
-`foreground_only` delivers only while the destination Conversation is
-currently bound to the route's Thread. `remembered_last_recipient` keeps one
-last destination per Thread even if that Conversation selects another input
-Thread. `all_observers` retains every explicitly observed destination.
-
-`conversation.bind_thread`, `thread.activate_native`, and `thread.observe` are
-three distinct mutations. Default UX may compose them, but none implies either
-of the others in the Core contract.
-
-## Message flow
-
-1. A Channel adapter verifies and normalizes a native inbound message.
-2. Access policy runs before attachment download or Agent mutation.
-3. An optional Controller may translate a slash command, button, or other
-   interaction into a typed operation; normal content continues unchanged.
-4. The Gateway derives a stable client message ID from the native identity.
-5. The Gateway resolves the conversation binding.
-6. The Gateway records or refreshes an explicit projection route and
-   establishes the Thread subscription before sending input.
-7. The selected Agent application adapter sends the input to the selected
-   thread.
-8. The Agent application broadcasts the canonical user item and subsequent
-   Agent events.
-9. The Gateway resolves current projection routes at delivery time and
-   projects events into the capabilities of each subscribed channel.
-
-The canonical user-item event is required even when the originating client
-already displayed an optimistic local message. Clients deduplicate by stable
-ID.
-
-Native notification producers fan out into independent subscriber streams and
-return without waiting for Channel delivery. Slow IM projection therefore
-cannot stall an application socket read path. Thread projection exits only on
-Gateway shutdown; a terminal event ends its Turn, not observation of the
-durable Thread.
+1. Channel verifies/authenticates and normalizes native input.
+2. Access policy and duplicate rejection run before media work.
+3. Optional Controller translates UX into typed actions.
+4. Gateway derives/preserves a stable client message ID.
+5. Gateway resolves the Conversation binding.
+6. It records/refreshes output observation and establishes live subscription
+   before sending input.
+7. Application accepts input and emits authoritative user/Agent events.
+8. Projection resolves current destinations at delivery time.
+9. Channel performs native rendering/delivery and returns a receipt.
 
 ## Recovery flow
 
-A live event stream alone is insufficient for seamless cross-client work.
+With native replay:
 
-An adapter that supports recovery should provide:
+```text
+subscribe after opaque cursor
+→ consume ordered native events
+→ surface explicit gap/expiration
+→ reconcile authoritative history when required
+```
 
-1. subscription establishment;
-2. an authoritative thread snapshot or history page;
-3. an opaque replay cursor when natively supported;
-4. a scoped, epoch-qualified sequence when natively supported;
-5. explicit cursor-expired or gap outcomes.
+Without replay, the current recovery primitive establishes a live subscription
+and reads authoritative history:
 
-On reconnect, a Gateway or UI reconciles its projection from authoritative
-history, then continues consuming ordered events. Streaming deltas may be
-dropped and reconstructed from the final completed message.
+```text
+subscribe first
+→ read authoritative catch-up/history
+→ reconcile stable IDs
+→ consume live events
+```
 
-When native replay is unavailable, the honest path is subscribe first, read
-authoritative history/catch-up, reconcile stable IDs, then drain live events.
-The SDK never manufactures a restart-unsafe counter and presents it as a
-recoverable sequence.
+The current Gateway can rebuild observation after restart from routes and
+authoritative history, but its first-observe/restart scan is not bounded and
+has no projection completion checkpoint. This is a known gap, not current
+contract truth.
 
-At bridge restart, durable routes select the Threads whose live subscriptions
-must be rebuilt. Authoritative history/catch-up plus outbound idempotency
-reconstruct visible delivery without persisting an SDK transcript. Explicitly
-observing a Thread again uses the same reconciliation path.
+The target invariant is a live baseline plus bounded recent/active catch-up.
+Full archive delivery is an explicit history operation/Controller UX. A
+Gateway-owned completion boundary may bound missed-output reconciliation but
+must contain no transcript or Turn truth. This work is tracked by
+[Issue #14](https://github.com/albert-zen/im-agent-sdk/issues/14).
 
-## Concurrency
+## Concurrency and worker lifecycle
 
-- Operations affecting one conversation binding are serialized.
-- Inputs targeting one Agent thread preserve application-defined ordering.
-- Different threads may progress concurrently.
-- Channel delivery for one destination is serialized to prevent reordered
-  chunks, edits, and retries.
-- A slow IM platform must not block the Agent application's event producer.
+### Current behavior
+
+- Conversation binding mutations serialize per Conversation.
+- Gateway does not manufacture a cross-Conversation input sequence; native
+  Application acceptance and execution ordering remains authoritative.
+- native event publication fans out without awaiting Channel delivery.
+- independent subscriber queues prevent observers from stealing events.
+- Gateway stores durable routes and uses delivery idempotency.
+- `_ensure_projection` records a newly created worker before its first
+  suspension point, so callers on the Gateway event loop cannot interleave
+  lookup and registration. The single-worker invariant lacks a direct
+  concurrency regression test. Gateway lifecycle entrypoints currently assume
+  execution on their owning event loop; a future cross-thread API would need
+  an explicit synchronization boundary.
+
+### Target invariants and known gaps
+
+- the current one-worker event-loop invariant should have direct concurrency
+  coverage and remain explicit if lifecycle code changes;
+- a worker failure should be observable and supervised, but current workers
+  exit and wait for another trigger;
+- observation should be reclaimed when no route/recovery policy needs it, but
+  current route removal does not tear down a worker;
+- per-Turn reply correlation must differ from long-lived route/topic context,
+  but current route state can be overwritten by the latest inbound message;
+- first-observe and restart reconciliation must be bounded, but current code
+  can scan the complete archive.
+
+These gaps are tracked by
+[Issue #14](https://github.com/albert-zen/im-agent-sdk/issues/14).
+
+Subscriber queues are currently unbounded and projection delivery awaits
+Channel send. This protects native notification callbacks from slow IM but
+does not provide bounded memory/backpressure. The target Delivery Coordinator
+is tracked by [Issue #12](https://github.com/albert-zen/im-agent-sdk/issues/12);
+it is not implemented by the current Gateway.
 
 ## Failure model
 
-Failures are explicit and scoped:
+Failures are explicit and scoped: unsupported capability, invalid/stale
+reference, access/authentication, missing binding, unavailable Application,
+rejected operation, attachment source/trust, delivery outcome, worker health,
+gap, and cursor expiration.
 
-- unsupported capability;
-- invalid or stale reference;
-- authentication or access denial;
-- binding missing;
-- project or thread not found;
-- application unavailable;
-- operation rejected;
-- delivery accepted/rejected/unknown;
-- event cursor expired or gap detected.
+Core does not choose consumer retry counts, permission prompts, Full Access,
+or hidden self-healing policy. Safe infrastructure may expose health and
+idempotent recovery; adapters and consumers retain native/product policy.
 
-The core does not invent a durable self-healing workflow. Products may retry
-safe idempotent reads and deliveries according to platform policy, but failure
-must remain visible to the user.
+## Security and policy boundaries
 
-## Security boundaries
+Keep these separate:
 
-Four policies remain distinct:
+1. IM sender/Conversation access — Channel or consumer policy.
+2. Agent Application authentication — Application integration/deployment.
+3. native approval/user-input truth — Agent Application.
+4. sandbox/Full Access — native Application or consumer policy.
+5. media filesystem/network trust — explicit deployment configuration.
 
-1. IM sender access control.
-2. Agent application authentication.
-3. Agent tool approval.
-4. Sandbox or execution restriction.
+An IM allowlist never grants execution permission. Full Access never bypasses
+IM admission. Attachments cannot grant shared-filesystem trust.
 
-An IM allowlist does not grant Full Access. Full Access does not bypass IM
-sender authorization. Sandbox configuration is not inferred from an approval
-decision.
+## Documentation authority
+
+- [Vision](VISION.md): purpose, non-goals, Core admission.
+- this document: system map, ownership, dependencies, flows.
+- [accepted ADRs](decisions/README.md): reviewed cross-component decisions.
+- `components/<name>/`: local design, protocol where needed, and tests.
+- [Reuse](REUSE.md): provenance and transfer constraints.
+- [Roadmap](ROADMAP.md): future/unresolved work only.

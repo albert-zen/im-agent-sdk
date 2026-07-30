@@ -19,10 +19,18 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - run: python -m pip install -e '.[dev,imcodex]'
-      - run: PYTHONPATH=src python -m unittest discover -s tests -v
-      - run: python -m compileall -q src tests scripts
-      - run: python scripts/validate_schemas.py
-      - run: ruff check src tests scripts
-      - run: ruff format --check src tests scripts
-      - run: pyright src tests scripts
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.0"
+
+      - run: uv sync --extra dev --extra imcodex --locked
+      - run: PYTHONPATH=src uv run python -m unittest discover -s tests -v
+      - run: uv run python -m compileall -q src tests scripts
+      - run: uv run python scripts/validate_schemas.py
+      - run: uv run python scripts/check_doc_links.py
+      - run: uv run ruff check src tests scripts
+      - run: uv run ruff format --check src tests scripts
+      - run: uv run pyright src tests scripts
+      - run: ./scripts/agentkit doctor
+      - run: ./scripts/agentkit lint-architecture
+      - run: ./scripts/agentkit check

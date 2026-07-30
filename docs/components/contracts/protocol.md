@@ -1,0 +1,252 @@
+# Common protocol
+
+This document defines semantic contracts, not one transport encoding. JSON,
+Python, TypeScript, JSON-RPC, HTTP, WebSocket, or in-process calls may carry
+the same objects. `schemas/v1/` is the precise language-neutral shape.
+
+## Identity and resource scope
+
+Every externally visible mutation and event has a stable identifier. Text and
+timestamps never define identity or deduplication.
+
+```text
+ApplicationRef = applicationInstanceId
+ProjectRef = (applicationInstanceId, nativeProjectId)
+ThreadRef = (applicationInstanceId, nativeThreadId, projectRef?)
+ConversationRef = (channelInstanceId, nativeConversationId)
+```
+
+Native IDs are opaque and scoped by one configured Application or Channel
+instance. A native Thread ID from one Application instance cannot be used with
+another.
+
+The full organization model is:
+
+```text
+AgentApplication
+  └── Project
+        └── Thread
+```
+
+An Application declares its real project shape:
+
+- `managed`: Projects are authoritative selectable resources.
+- `flat`: Threads live directly under the Application.
+- `fixed`: one externally configured workspace/cwd contains flat Threads.
+
+Flat and fixed Applications omit `ProjectRef`; adapters do not synthesize fake
+Projects.
+
+## Resources and bridge state
+
+Agent Applications own Project and Thread resources, transcript items, Turns,
+requests, execution, archival, and retention.
+
+A `ConversationBinding` selects the destination of future input:
+
+```text
+conversationRef
+applicationRef?
+projectRef?
+threadRef?
+revision
+updatedAt
+```
+
+A `ThreadProjectionRoute` selects a possible IM output destination:
+
+```text
+routeId
+threadRef
+conversationRef
+replyToMessageId?
+updatedAt
+```
+
+Bindings and routes are distinct. Neither contains transcript, Turn, request,
+or execution truth. Native Thread activation is a third, optional mutation.
+
+## Message envelopes
+
+Message objects carry content, not control intent.
+
+```text
+InboundMessage {
+  messageId
+  conversationRef
+  sender
+  content[]
+  replyTo?
+  createdAt
+  metadata
+}
+
+OutboundMessage {
+  deliveryId
+  conversationRef
+  content[]
+  replyTo?
+  createdAt
+  metadata
+}
+
+AgentMessage {
+  agentItemId
+  threadRef
+  role
+  content[]
+  clientMessageId?
+  createdAt
+  metadata
+}
+```
+
+Inbound native identity, an outbound delivery request, and an authoritative
+Agent item are deliberately different envelopes. A Channel returns native
+delivery identity in `DeliveryReceipt`.
+
+Initial content parts are `TextContent` and `AttachmentContent`.
+
+```text
+AttachmentSource =
+  LocalPath { path }
+  | RemoteUrl { url }
+  | AttachmentHandle { handleId }
+```
+
+Attachment location never travels through Metadata. `LocalPath` requires
+deployment-configured shared-filesystem trust. `RemoteUrl` requires
+adapter-owned network, redirect, size, and media policy. `AttachmentHandle` is
+reserved until a resolver is configured.
+
+The Gateway derives or preserves a stable client message ID from:
+
+```text
+(channelInstanceId, conversationId, channelMessageId)
+  -> clientMessageId
+```
+
+The authoritative user-item event repeats that ID so clients can deduplicate
+optimistic local echo.
+
+## Typed operations
+
+Application operations mutate or read one native Agent Application:
+
+| Operation | Success result | Meaning |
+|---|---|---|
+| `project.list` | `ProjectsListed` | list authoritative Projects |
+| `project.get` | `ProjectRead` | validate/read one Project |
+| `thread.create` | `ThreadCreated` | create a native Thread |
+| `thread.list` | `ThreadsListed` | list native Threads |
+| `thread.get` | `ThreadRead` | validate/read one Thread |
+| `thread.activate_native` | `NativeThreadActivated` | optionally change native UI selection |
+| `thread.delete` | `ThreadDeleted` | archive/delete with actual mode |
+| `thread.status` | `ThreadStatusRead` | read projected native status |
+| `thread.history` | `ThreadHistoryRead` | read authoritative Turn history |
+| `turn.catchup` | `TurnCatchupRead` | read latest Turn progress |
+| `turn.interrupt` | `TurnInterrupted` | interrupt a native Turn |
+| `request.respond` | `RequestResponded` | answer a native request |
+
+Gateway operations mutate only Gateway-owned selection or routing:
+
+| Operation | Success result | Meaning |
+|---|---|---|
+| `application.list` | `ApplicationsListed` | list configured Application instances |
+| `application.select` | `ConversationBound` | select Application and clear narrower selection |
+| `conversation.bind_project` | `ConversationBound` | validate/select Project and clear Thread |
+| `conversation.bind_thread` | `ConversationBound` | select future input destination |
+| `conversation.clear_thread` | `ConversationBound` | clear selected Thread |
+| `thread.observe` | `ThreadObserved` | establish/refresh output route |
+
+Application and Gateway operation unions have discriminated variants with
+typed arguments. Success results repeat the operation ID and discriminant and
+use named fields. Failures use `ApplicationOperationFailed` or
+`GatewayOperationFailed` with a stable `ContractError`.
+
+Listing is side-effect free and paginated. Thread creation does not bind a
+Conversation. Binding a Thread does not activate native UI state. Observing a
+Thread does not bind input or activate it. A product may compose these
+operations explicitly.
+
+Thread deletion declares `unsupported`, `archive`, or `permanent`. Destructive
+semantics are never silently approximated.
+
+## History and Turn lifecycle
+
+`turn.catchup` and `thread.history` are authoritative context restoration, not
+token streaming. A history entry contains the user goal, every ordered
+completed Agent message, terminal status, error, and compaction marker.
+
+`agentMessages` is plural because one Turn may emit several completed messages.
+Application-specific phases such as commentary or final answer may stay in
+namespaced Metadata.
+
+`message.completed` never means `turn.completed`. Only explicit
+`turn.completed`, `turn.failed`, or `turn.interrupted` events terminate a
+Turn.
+
+## Agent events and ordering
+
+Every `AgentEvent` has:
+
+```text
+eventId
+applicationInstanceId
+projectRef?
+threadRef?
+turnId?
+sequence?
+sequenceEpoch?
+cursor?
+type
+data
+createdAt
+```
+
+Initial event families:
+
+- message: `message.created`, `message.delta`, `message.completed`;
+- Thread: `thread.created`, `thread.updated`, `thread.deleted`;
+- Turn: `turn.started`, `turn.completed`, `turn.failed`,
+  `turn.interrupted`;
+- status/request: `status.changed`, `request.opened`,
+  `request.resolved`;
+- Gateway: `binding.changed`.
+
+Ordering guarantees are honest:
+
+- `eventId` is required and stable within the producer's declared window.
+- `sequence` is optional and requires `sequenceEpoch`.
+- `cursor` is optional, opaque, and appears only with real replay support.
+- cursor expiration and detected gaps are explicit.
+- timestamps are descriptive, never authoritative order.
+- adapters without native replay or restart-safe sequence omit those fields.
+
+Recovery falls back to a live subscription plus authoritative
+history/catch-up reconciliation. The SDK never presents an in-memory counter
+as restart-safe recovery.
+
+## Capabilities and failures
+
+Capabilities distinguish native support, declared fallback, and unsupported
+behavior. Project mode, Thread deletion, native activation, attachment source
+kinds, replay, gap detection, and sequence scope are separate facts.
+
+Unsupported, stale-reference, authentication, access, binding, unavailable,
+rejected-operation, delivery, gap, and cursor-expired outcomes remain explicit.
+Products may retry safe idempotent work, but Core does not invent a hidden
+self-healing workflow.
+
+## Delivery correlation
+
+Completed Agent messages are projected using current routes. One authoritative
+item may become several native segments. Stable delivery identity derives
+from:
+
+```text
+(destination, authoritativeMessageItemId, segmentIndex)
+```
+
+A receipt distinguishes platform acceptance, rejection, and unknown outcome.
+Platform acceptance does not claim device display or read.
