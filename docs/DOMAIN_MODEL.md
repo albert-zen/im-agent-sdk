@@ -2,7 +2,7 @@
 
 ## Overview
 
-The common resource hierarchy is:
+The full common resource hierarchy is:
 
 ```text
 AgentApplication
@@ -10,8 +10,14 @@ AgentApplication
         └── Thread
 ```
 
-The hierarchy is an application-facing organization model. It does not require
-every Agent runtime to persist identical entities internally.
+The hierarchy is an application-facing organization model. Runtime shape is
+declared by `projectMode`:
+
+```text
+managed: AgentApplication → Project → Thread
+flat:    AgentApplication → Thread
+fixed:   AgentApplication(fixed cwd/workspace) → Thread
+```
 
 ## Identity rule
 
@@ -93,6 +99,22 @@ Repository URL alone is not a safe project identity:
 
 An adapter should prefer a stable native application ID. `rootPath` and
 `repoUrl` are descriptive metadata, not universal identity.
+
+### Project modes
+
+`managed` applications expose Project discovery and selection. Thread list and
+creation may be scoped by `ProjectRef`.
+
+`flat` applications expose a single application-wide thread list. Thread
+references omit `projectRef`.
+
+`fixed` applications are configured with one cwd/workspace outside the shared
+contract. Their threads are also flat and omit `projectRef`. The configured
+working context may be exposed as application metadata, but it is not promoted
+to a fake Project resource.
+
+Thread creation, listing, switching, deletion, status, input, and events remain
+available in all three modes according to their own capabilities.
 
 ### Project and Zen Core
 

@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.imagent.dev/v1/operations.schema.json",
+  "title": "IM Agent operations",
+  "$defs": {
+    "OperationType": {
+      "enum": [
+        "application.list",
+        "project.list",
+        "project.select",
+        "thread.create",
+        "thread.list",
+        "thread.switch",
+        "thread.delete",
+        "thread.status",
+        "turn.interrupt",
+        "request.respond"
+      ]
+    },
+    "Operation": {
+      "type": "object",
+      "required": [
+        "operationId",
+        "conversationRef",
+        "actor",
+        "type",
+        "target",
+        "arguments",
+        "createdAt"
+      ],
+      "properties": {
+        "operationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "conversationRef": {
+          "$ref": "messages.schema.json#/$defs/ConversationRef"
+        },
+        "actor": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "type": { "$ref": "#/$defs/OperationType" },
+        "target": {
+          "type": "object",
+          "properties": {
+            "applicationRef": {
+              "$ref": "resources.schema.json#/$defs/ApplicationRef"
+            },
+            "projectRef": {
+              "$ref": "resources.schema.json#/$defs/ProjectRef"
+            },
+            "threadRef": {
+              "$ref": "resources.schema.json#/$defs/ThreadRef"
+            }
+          },
+          "additionalProperties": false
+        },
+        "arguments": { "$ref": "common.schema.json#/$defs/Metadata" },
+        "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      },
+      "additionalProperties": false
+    },
+    "OperationResult": {
+      "type": "object",
+      "required": ["operationId", "status", "completedAt"],
+      "properties": {
+        "operationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "status": { "enum": ["succeeded", "failed"] },
+        "value": true,
+        "error": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Error" },
+            { "type": "null" }
+          ]
+        },
+        "completedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "const": "failed" } },
+            "required": ["status"]
+          },
+          "then": { "required": ["error"] }
+        }
+      ],
+      "additionalProperties": false
+    }
+  }
+}

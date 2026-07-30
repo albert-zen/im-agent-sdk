@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.imagent.dev/v1/bindings.schema.json",
+  "title": "IM Agent conversation bindings",
+  "$defs": {
+    "ConversationBinding": {
+      "type": "object",
+      "required": ["conversationRef", "revision", "updatedAt"],
+      "properties": {
+        "conversationRef": {
+          "$ref": "messages.schema.json#/$defs/ConversationRef"
+        },
+        "applicationRef": {
+          "oneOf": [
+            { "$ref": "resources.schema.json#/$defs/ApplicationRef" },
+            { "type": "null" }
+          ]
+        },
+        "projectRef": {
+          "oneOf": [
+            { "$ref": "resources.schema.json#/$defs/ProjectRef" },
+            { "type": "null" }
+          ]
+        },
+        "threadRef": {
+          "oneOf": [
+            { "$ref": "resources.schema.json#/$defs/ThreadRef" },
+            { "type": "null" }
+          ]
+        },
+        "revision": { "type": "integer", "minimum": 0 },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -91,23 +91,28 @@ native message per token.
 ### Required resource surface
 
 ```text
-describeApplication
-capabilities
-
-listProjects
-getProject
-
-listThreads
-getThread
-createThread
-deleteThread
-readThread
-getThreadStatus
+summary
+start()
+stop()
+execute(Operation) -> OperationResult
 ```
 
+The deliberately small `execute` seam owns project/thread control operations;
+the adapter maps each typed Operation to its native application API. This is a
+deep module boundary rather than a method-per-resource mirror.
+
 Project creation or deletion may be optional. Project listing is part of the
-common application model, but an adapter may return an explicit unsupported
-capability for an application that truly has no discoverable project registry.
+managed application model. An adapter declares `projectMode`:
+
+```text
+managed
+flat
+fixed
+```
+
+Flat and fixed applications omit `ProjectRef`; they still provide the full
+thread surface. A fixed cwd/workspace is application configuration, not a
+synthetic Project.
 
 ### Required runtime surface
 
@@ -178,7 +183,9 @@ fresh snapshot.
 
 Capabilities are queried before an operation is exposed in UI or executed.
 
-Three outcomes are distinct:
+Feature support and project shape are separate declarations.
+
+Feature outcomes are:
 
 ```text
 supported natively

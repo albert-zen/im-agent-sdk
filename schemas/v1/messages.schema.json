@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.imagent.dev/v1/messages.schema.json",
+  "title": "IM Agent messages",
+  "$defs": {
+    "ConversationRef": {
+      "type": "object",
+      "required": ["channelInstanceId", "nativeConversationId"],
+      "properties": {
+        "channelInstanceId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "nativeConversationId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TextContent": {
+      "type": "object",
+      "required": ["type", "text", "format"],
+      "properties": {
+        "type": { "const": "text" },
+        "text": { "type": "string" },
+        "format": { "enum": ["plain", "markdown"] }
+      },
+      "additionalProperties": false
+    },
+    "AttachmentContent": {
+      "type": "object",
+      "required": ["type", "attachmentId", "mediaType"],
+      "properties": {
+        "type": { "const": "attachment" },
+        "attachmentId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "mediaType": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+        "filename": { "type": ["string", "null"] },
+        "sizeBytes": { "type": ["integer", "null"], "minimum": 0 },
+        "url": { "type": ["string", "null"], "format": "uri" },
+        "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
+      },
+      "additionalProperties": false
+    },
+    "Content": {
+      "oneOf": [
+        { "$ref": "#/$defs/TextContent" },
+        { "$ref": "#/$defs/AttachmentContent" }
+      ]
+    },
+    "ChannelMessage": {
+      "type": "object",
+      "required": [
+        "messageId",
+        "conversationRef",
+        "sender",
+        "content",
+        "createdAt"
+      ],
+      "properties": {
+        "messageId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "conversationRef": { "$ref": "#/$defs/ConversationRef" },
+        "sender": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "role": {
+          "enum": ["user", "assistant", "system", "tool", null]
+        },
+        "content": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Content" },
+          "minItems": 1
+        },
+        "replyTo": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "clientMessageId": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
+      },
+      "additionalProperties": false
+    },
+    "AgentInput": {
+      "type": "object",
+      "required": ["clientMessageId", "content"],
+      "properties": {
+        "clientMessageId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "sender": { "type": ["string", "null"] },
+        "content": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Content" },
+          "minItems": 1
+        },
+        "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
+      },
+      "additionalProperties": false
+    },
+    "AgentMessage": {
+      "type": "object",
+      "required": [
+        "agentItemId",
+        "threadRef",
+        "role",
+        "content",
+        "createdAt"
+      ],
+      "properties": {
+        "agentItemId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "threadRef": {
+          "$ref": "resources.schema.json#/$defs/ThreadRef"
+        },
+        "role": {
+          "enum": ["user", "assistant", "system", "tool"]
+        },
+        "content": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Content" },
+          "minItems": 1
+        },
+        "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "clientMessageId": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

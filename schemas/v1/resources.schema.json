@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.imagent.dev/v1/resources.schema.json",
+  "title": "IM Agent resources",
+  "$defs": {
+    "ApplicationRef": {
+      "type": "object",
+      "required": ["applicationInstanceId"],
+      "properties": {
+        "applicationInstanceId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ProjectRef": {
+      "type": "object",
+      "required": ["applicationInstanceId", "nativeProjectId"],
+      "properties": {
+        "applicationInstanceId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "nativeProjectId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ThreadRef": {
+      "type": "object",
+      "required": ["applicationInstanceId", "nativeThreadId"],
+      "properties": {
+        "applicationInstanceId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "nativeThreadId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "projectRef": {
+          "oneOf": [
+            { "$ref": "#/$defs/ProjectRef" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ApplicationSummary": {
+      "type": "object",
+      "required": ["ref", "kind", "displayName", "capabilities"],
+      "properties": {
+        "ref": { "$ref": "#/$defs/ApplicationRef" },
+        "kind": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "displayName": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+        "capabilities": {
+          "$ref": "capabilities.schema.json#/$defs/ApplicationCapabilities"
+        },
+        "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
+      },
+      "additionalProperties": false
+    },
+    "ProjectSummary": {
+      "type": "object",
+      "required": ["ref", "displayName"],
+      "properties": {
+        "ref": { "$ref": "#/$defs/ProjectRef" },
+        "displayName": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+        "rootPath": { "type": ["string", "null"] },
+        "repoUrl": { "type": ["string", "null"], "format": "uri" },
+        "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
+      },
+      "additionalProperties": false
+    },
+    "ThreadStatus": {
+      "enum": [
+        "idle",
+        "running",
+        "waiting_for_approval",
+        "waiting_for_input",
+        "completed",
+        "failed",
+        "interrupted",
+        "unknown"
+      ]
+    },
+    "ThreadSummary": {
+      "type": "object",
+      "required": ["ref", "status"],
+      "properties": {
+        "ref": { "$ref": "#/$defs/ThreadRef" },
+        "title": { "type": ["string", "null"] },
+        "status": { "$ref": "#/$defs/ThreadStatus" },
+        "updatedAt": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Timestamp" },
+            { "type": "null" }
+          ]
+        },
+        "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
+      },
+      "additionalProperties": false
+    }
+  }
+}
