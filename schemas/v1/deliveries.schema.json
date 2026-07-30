@@ -1,0 +1,344 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.imagent.dev/v1/deliveries.schema.json",
+  "title": "IM Agent proactive delivery",
+  "$defs": {
+    "DeliverySubmissionState": {
+      "enum": ["in_flight", "accepted", "rejected", "partial", "unknown"]
+    },
+    "ConversationDeliveryTarget": {
+      "type": "object",
+      "required": ["kind", "conversationRef"],
+      "properties": {
+        "kind": { "const": "conversation" },
+        "conversationRef": {
+          "$ref": "messages.schema.json#/$defs/ConversationRef"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ThreadRouteDeliveryTarget": {
+      "type": "object",
+      "required": ["kind", "threadRef"],
+      "properties": {
+        "kind": { "const": "thread_routes" },
+        "threadRef": { "$ref": "resources.schema.json#/$defs/ThreadRef" },
+        "routeId": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "DeliveryTarget": {
+      "oneOf": [
+        { "$ref": "#/$defs/ConversationDeliveryTarget" },
+        { "$ref": "#/$defs/ThreadRouteDeliveryTarget" }
+      ]
+    },
+    "DeliveryIntent": {
+      "type": "object",
+      "required": ["deliveryId", "target", "content", "createdAt"],
+      "properties": {
+        "deliveryId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "target": { "$ref": "#/$defs/DeliveryTarget" },
+        "content": {
+          "type": "array",
+          "items": { "$ref": "messages.schema.json#/$defs/Content" },
+          "minItems": 1
+        },
+        "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "replyTo": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
+      },
+      "additionalProperties": false
+    },
+    "DeliveryPrincipal": {
+      "type": "object",
+      "required": ["principalId", "allowedThreads", "allowedConversations"],
+      "properties": {
+        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "allowedThreads": {
+          "type": "array",
+          "items": { "$ref": "resources.schema.json#/$defs/ThreadRef" },
+          "uniqueItems": true
+        },
+        "allowedConversations": {
+          "type": "array",
+          "items": { "$ref": "messages.schema.json#/$defs/ConversationRef" },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "DeliveryItemReceipt": {
+      "type": "object",
+      "required": ["contentIndex", "status"],
+      "properties": {
+        "contentIndex": { "type": "integer", "minimum": 0 },
+        "status": { "enum": ["accepted", "rejected", "unknown", "skipped"] },
+        "attachmentId": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "nativeMessageId": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "detail": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "DeliveryReceipt": {
+      "type": "object",
+      "required": ["status", "items"],
+      "properties": {
+        "status": {
+          "enum": [
+            "accepted_by_platform",
+            "rejected_by_platform",
+            "unknown"
+          ]
+        },
+        "nativeMessageId": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "detail": { "type": ["string", "null"] },
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DeliveryItemReceipt" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "DeliveryRouteSnapshot": {
+      "type": "object",
+      "required": ["conversationRef"],
+      "properties": {
+        "conversationRef": {
+          "$ref": "messages.schema.json#/$defs/ConversationRef"
+        },
+        "threadRef": {
+          "oneOf": [
+            { "$ref": "resources.schema.json#/$defs/ThreadRef" },
+            { "type": "null" }
+          ]
+        },
+        "routeId": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "routeUpdatedAt": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Timestamp" },
+            { "type": "null" }
+          ]
+        },
+        "replyToMessageId": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "DestinationDeliveryResult": {
+      "type": "object",
+      "required": ["deliveryId", "state", "replayed"],
+      "properties": {
+        "deliveryId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "routeId": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "conversationRef": {
+          "oneOf": [
+            { "$ref": "messages.schema.json#/$defs/ConversationRef" },
+            { "type": "null" }
+          ]
+        },
+        "state": { "$ref": "#/$defs/DeliverySubmissionState" },
+        "receipt": {
+          "oneOf": [
+            { "$ref": "#/$defs/DeliveryReceipt" },
+            { "type": "null" }
+          ]
+        },
+        "error": { "type": ["string", "null"] },
+        "replayed": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "ProactiveDeliveryResult": {
+      "type": "object",
+      "required": ["deliveryId", "state", "destinations"],
+      "properties": {
+        "deliveryId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "state": { "$ref": "#/$defs/DeliverySubmissionState" },
+        "destinations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DestinationDeliveryResult" },
+          "minItems": 1
+        },
+        "error": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "InlineArtifact": {
+      "type": "object",
+      "required": [
+        "type",
+        "attachmentId",
+        "filename",
+        "mediaType",
+        "contentBase64"
+      ],
+      "properties": {
+        "type": { "const": "inlineArtifact" },
+        "attachmentId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "filename": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+        "mediaType": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+        "sizeBytes": { "type": ["integer", "null"], "minimum": 0 },
+        "contentBase64": {
+          "type": "string",
+          "contentEncoding": "base64"
+        }
+      },
+      "additionalProperties": false
+    },
+    "IngressText": {
+      "type": "object",
+      "required": ["type", "text"],
+      "properties": {
+        "type": { "const": "text" },
+        "text": { "type": "string", "minLength": 1 },
+        "format": { "enum": ["plain", "markdown"] }
+      },
+      "additionalProperties": false
+    },
+    "IngressThreadTarget": {
+      "type": "object",
+      "required": ["kind", "applicationInstanceId", "nativeThreadId"],
+      "properties": {
+        "kind": { "const": "threadRoutes" },
+        "applicationInstanceId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "nativeThreadId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "projectRef": { "$ref": "resources.schema.json#/$defs/ProjectRef" },
+        "routeId": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "IngressConversationTarget": {
+      "type": "object",
+      "required": ["kind", "channelInstanceId", "nativeConversationId"],
+      "properties": {
+        "kind": { "const": "conversation" },
+        "channelInstanceId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "nativeConversationId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ProactiveDeliveryIngressRequest": {
+      "type": "object",
+      "required": ["deliveryId", "target", "content"],
+      "properties": {
+        "deliveryId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "target": {
+          "oneOf": [
+            { "$ref": "#/$defs/IngressThreadTarget" },
+            { "$ref": "#/$defs/IngressConversationTarget" }
+          ]
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "$ref": "#/$defs/IngressText" },
+              { "$ref": "#/$defs/InlineArtifact" }
+            ]
+          },
+          "minItems": 1
+        },
+        "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "replyTo": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
+      },
+      "additionalProperties": false
+    },
+    "IngressDestinationResult": {
+      "type": "object",
+      "required": ["deliveryId", "state", "replayed"],
+      "properties": {
+        "deliveryId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "routeId": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "state": { "$ref": "#/$defs/DeliverySubmissionState" },
+        "replayed": { "type": "boolean" },
+        "error": { "type": ["string", "null"] },
+        "receipt": {
+          "oneOf": [
+            { "$ref": "#/$defs/DeliveryReceipt" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ProactiveDeliveryIngressResponse": {
+      "type": "object",
+      "required": ["deliveryId", "state", "destinations"],
+      "properties": {
+        "deliveryId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "state": { "$ref": "#/$defs/DeliverySubmissionState" },
+        "destinations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/IngressDestinationResult" },
+          "minItems": 1
+        },
+        "error": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    }
+  }
+}

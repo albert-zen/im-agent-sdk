@@ -52,6 +52,7 @@ class OutboundArtifact:
     filename: str
     size_bytes: int
     sha256: str = ""
+    attachment_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)

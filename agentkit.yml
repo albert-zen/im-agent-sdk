@@ -100,10 +100,16 @@ components:
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
+      - docs/decisions/0009-proactive-delivery-routing.md
       - src/imagent/gateway.py
       - src/imagent/keyed_locks.py
+      - src/imagent/delivery_ingress.py
+      - src/imagent/proactive_delivery.py
+      - src/imagent/cli/**
       - tests/test_gateway_operations.py
       - tests/test_gateway_vertical_slice.py
+      - tests/test_delivery_ingress.py
+      - tests/test_proactive_delivery.py
     docs:
       - docs/components/gateway/design.md
       - docs/components/gateway/testing.md
@@ -161,7 +167,9 @@ components:
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
+      - docs/decisions/0009-proactive-delivery-routing.md
       - src/imagent/bindings.py
+      - src/imagent/delivery_submissions.py
       - src/imagent/request_correlations.py
       - src/imagent/sqlite_rows.py
       - src/imagent/storage.py
@@ -394,6 +402,7 @@ layers:
   state:
     paths:
       - src/imagent/bindings.py
+      - src/imagent/delivery_submissions.py
       - src/imagent/projections.py
       - src/imagent/request_correlations.py
       - src/imagent/sqlite_rows.py
@@ -436,6 +445,9 @@ layers:
     paths:
       - src/imagent/gateway.py
       - src/imagent/keyed_locks.py
+      - src/imagent/delivery_ingress.py
+      - src/imagent/proactive_delivery.py
+      - src/imagent/cli/**
     may_import:
       - contracts
       - ports

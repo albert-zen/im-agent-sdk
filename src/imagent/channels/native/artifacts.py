@@ -116,8 +116,7 @@ def stable_artifact_identity(
         return None
     digest = hashlib.sha256(
         (
-            f"{delivery_id}\0{artifact.sha256 or artifact.local_path}"
-            f"\0{artifact.size_bytes}\0{artifact.filename}"
+            f"{delivery_id}\0{artifact.attachment_id or artifact.sha256 or artifact.local_path}"
         ).encode()
     ).hexdigest()
     return digest
@@ -135,6 +134,7 @@ def record_artifact_delivery(
         return
     receipts.append(
         {
+            "attachment_id": artifact.attachment_id,
             "filename": artifact.filename,
             "sha256": artifact.sha256,
             "local_path": artifact.local_path,
@@ -156,6 +156,7 @@ def record_artifact_failure(
         return
     receipts.append(
         {
+            "attachment_id": artifact.attachment_id,
             "filename": artifact.filename,
             "sha256": artifact.sha256,
             "local_path": artifact.local_path,

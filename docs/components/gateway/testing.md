@@ -19,6 +19,22 @@
 - binding selection changes never retarget a previously delivered request;
 - live observation is established before synchronous native notifications;
 - duplicate inbound messages and duplicate outbound items are idempotent;
+- proactive delivery rejects unscoped targets before staging or routing;
+- explicit Conversation and policy-resolved Thread targets both work;
+- route snapshots remain pinned across route movement and restart;
+- concurrent reuse of one delivery ID sends once, while mismatched reuse is a
+  conflict;
+- an external principal named like the Gateway-internal principal still has a
+  distinct SDK-controlled submission namespace;
+- Thread-targeted results redact resolved Conversation IDs and aggregate or
+  per-item native message IDs;
+- public proactive `LocalPath` input requires a stable SHA-256 digest;
+- unsupported attachment source/count/size rejects every destination before
+  side effects;
+- per-artifact failures and multi-destination failures remain typed partial
+  results, and ambiguous outcomes are never resent automatically;
+- the optional JSON ingress removes staged bytes and the reference CLI refuses
+  non-loopback endpoints;
 - slow Channel delivery does not await/block the native event producer, while
   current unbounded queue growth remains a known limitation;
 - concurrent Threads and Turns do not steal events or routes;
@@ -35,6 +51,7 @@ Run:
 uv run python -m unittest discover -s tests -p "test_gateway*.py" -v
 uv run python -m unittest discover -s tests -p "test_projection*.py" -v
 uv run python -m unittest discover -s tests -p "test_event_fanout.py" -v
+uv run python -m unittest tests.test_proactive_delivery tests.test_delivery_ingress -v
 ```
 
 Also run the full adapter contract suite after changing a Gateway-facing port.

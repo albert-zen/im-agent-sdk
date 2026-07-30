@@ -38,9 +38,29 @@ The accepted design now has runnable vertical slices:
   Agent input;
 - Markdown-first outbound messages and image attachment mapping;
 - durable SQLite conversation bindings and delivery/inbound idempotency.
+- scoped proactive text/artifact delivery through Gateway, with a loopback-only
+  reference `imagent-send` client and typed partial results.
 
 Language-neutral JSON Schemas remain paired with the Python reference package
 and adapter contract test kit.
+
+Consumers host the optional proactive JSON handler inside their existing local
+authenticated service; the SDK intentionally does not start another web
+server. A product launcher can wrap:
+
+```sh
+imagent-send \
+  --endpoint http://127.0.0.1:8080/deliver \
+  --credential-file /private/run/delivery-token \
+  --delivery-id task-123-result-1 \
+  --application codex-main \
+  --thread thread-123 \
+  --text "Build complete" \
+  --artifact dist/result.zip
+```
+
+The scoped caller supplies a Thread identity and never needs bot credentials,
+Gateway database access, or a Channel-native Conversation ID.
 
 Start design/maintenance work from:
 

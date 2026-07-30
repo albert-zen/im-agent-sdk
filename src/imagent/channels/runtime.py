@@ -12,9 +12,13 @@ from typing import Protocol
 from ..adapters import MessageHandler, OperationHandler
 from ..contracts import (
     AttachmentContent,
+    AttachmentSourceKind,
     ChannelCapabilities,
     ConversationRef,
+    DeliveryItemReceipt,
+    DeliveryItemStatus,
     DeliveryReceipt,
+    DeliveryReceiptStatus,
     InboundMessage,
     LocalPath,
     OutboundMessage,
@@ -51,12 +55,14 @@ _CHANNEL_CAPABILITIES = {
     "qq": ChannelCapabilities(
         markdown=SupportLevel.NATIVE,
         attachments=SupportLevel.NATIVE,
+        attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
         reply_references=SupportLevel.NATIVE,
         max_text_length=3_500,
     ),
     "telegram": ChannelCapabilities(
         markdown=SupportLevel.FALLBACK,
         attachments=SupportLevel.NATIVE,
+        attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
         reply_references=SupportLevel.NATIVE,
         native_threads_or_topics=SupportLevel.NATIVE,
         max_text_length=4_096,
@@ -64,6 +70,7 @@ _CHANNEL_CAPABILITIES = {
     "feishu": ChannelCapabilities(
         markdown=SupportLevel.FALLBACK,
         attachments=SupportLevel.NATIVE,
+        attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
         reply_references=SupportLevel.NATIVE,
         native_threads_or_topics=SupportLevel.NATIVE,
         max_text_length=3_500,
@@ -71,6 +78,7 @@ _CHANNEL_CAPABILITIES = {
     "weixin": ChannelCapabilities(
         markdown=SupportLevel.FALLBACK,
         attachments=SupportLevel.NATIVE,
+        attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
         reply_references=SupportLevel.NATIVE,
         max_text_length=4_000,
     ),
@@ -173,10 +181,20 @@ class NativeTransportChannelAdapter:
                 else f"platform accepted {len(native_message_ids)} native messages"
             )
         )
+        item_indexes = {
+            item.attachment_id: index
+            for index, item in enumerate(message.content)
+            if isinstance(item, AttachmentContent)
+        }
+        item_receipts = _artifact_item_receipts(
+            native_message.metadata,
+            item_indexes=item_indexes,
+        )
         return DeliveryReceipt(
-            status="accepted_by_platform",
+            status=DeliveryReceiptStatus.ACCEPTED_BY_PLATFORM,
             native_message_id=native_message_id,
             detail=detail,
+            items=item_receipts,
         )
 
 
@@ -377,7 +395,39 @@ def _to_native_artifact(attachment: AttachmentContent) -> NativeOutboundArtifact
         filename=filename,
         size_bytes=attachment.size_bytes,
         sha256=str(attachment.metadata.get("sha256") or ""),
+        attachment_id=attachment.attachment_id,
     )
+
+
+def _artifact_item_receipts(
+    metadata: dict[str, object],
+    *,
+    item_indexes: dict[str, int],
+) -> tuple[DeliveryItemReceipt, ...]:
+    raw_receipts = metadata.get("artifact_receipts")
+    if not isinstance(raw_receipts, list):
+        return ()
+    receipts: list[DeliveryItemReceipt] = []
+    for raw in raw_receipts:
+        if not isinstance(raw, dict):
+            continue
+        attachment_id = str(raw.get("attachment_id") or "")
+        content_index = item_indexes.get(attachment_id)
+        if content_index is None:
+            continue
+        delivered = raw.get("status") == "delivered"
+        receipts.append(
+            DeliveryItemReceipt(
+                content_index=content_index,
+                attachment_id=attachment_id,
+                status=(DeliveryItemStatus.ACCEPTED if delivered else DeliveryItemStatus.REJECTED),
+                native_message_id=(str(raw.get("platform_message_id") or "") or None),
+                detail=(
+                    None if delivered else str(raw.get("error") or "attachment delivery failed")
+                ),
+            )
+        )
+    return tuple(sorted(receipts, key=lambda receipt: receipt.content_index))
 
 
 def _parse_datetime(value: object) -> datetime:

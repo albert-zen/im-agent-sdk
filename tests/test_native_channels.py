@@ -6,13 +6,26 @@ from datetime import UTC, datetime
 
 from imagent.channels import NativeTransportChannelAdapter, channel_from_config
 from imagent.channels.native.access import ChannelAccessPolicy
-from imagent.channels.native.artifacts import delivered_artifact_message_ids
+from imagent.channels.native.artifacts import (
+    delivered_artifact_message_ids,
+    record_artifact_delivery,
+    record_artifact_failure,
+    stable_artifact_identity,
+)
 from imagent.channels.native.base import BaseChannelAdapter
-from imagent.channels.native.models import InboundMessage, NativeDeliveryResult
+from imagent.channels.native.models import (
+    InboundMessage,
+    NativeDeliveryResult,
+    OutboundArtifact,
+)
+from imagent.channels.native.models import (
+    OutboundMessage as NativeOutboundMessage,
+)
 from imagent.channels.native.text import split_text
 from imagent.contracts import (
     AttachmentContent,
     ConversationRef,
+    DeliveryItemStatus,
     LocalPath,
     OutboundMessage,
     RemoteUrl,
@@ -77,8 +90,114 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(sent[0].artifacts[0].kind, "image")
             self.assertEqual(sent[0].artifacts[0].local_path, "D:/spool/image.png")
             self.assertEqual(sent[0].artifacts[0].sha256, "abc")
+            self.assertEqual(sent[0].artifacts[0].attachment_id, "attachment-1")
         finally:
             await adapter.stop()
+
+    async def test_native_artifact_results_become_typed_item_receipts(self) -> None:
+        class PartiallySuccessfulNative:
+            channel_id = "qq"
+            middleware = object()
+
+            async def start(self) -> None:
+                return None
+
+            async def stop(self) -> None:
+                return None
+
+            async def send_message(self, message) -> NativeDeliveryResult:
+                record_artifact_delivery(
+                    message,
+                    message.artifacts[0],
+                    platform_message_id="native-image-1",
+                )
+                record_artifact_failure(
+                    message,
+                    message.artifacts[1],
+                    error="unsupported document",
+                )
+                return NativeDeliveryResult(("native-image-1",))
+
+        adapter = NativeTransportChannelAdapter(
+            channel_instance_id="qq-main",
+            channel_id="qq",
+            native_factory=lambda _middleware: PartiallySuccessfulNative(),
+        )
+
+        async def ignore(_item) -> None:
+            return None
+
+        await adapter.start(ignore, ignore)
+        try:
+            receipt = await adapter.send(
+                OutboundMessage(
+                    delivery_id="delivery-partial",
+                    conversation_ref=ConversationRef("qq-main", "user:user-1"),
+                    content=(
+                        TextContent("artifacts"),
+                        AttachmentContent(
+                            attachment_id="image-1",
+                            media_type="image/png",
+                            source=LocalPath("D:/spool/image.png"),
+                            filename="image.png",
+                            size_bytes=3,
+                        ),
+                        AttachmentContent(
+                            attachment_id="document-1",
+                            media_type="application/pdf",
+                            source=LocalPath("D:/spool/document.pdf"),
+                            filename="document.pdf",
+                            size_bytes=4,
+                        ),
+                    ),
+                    created_at=datetime.now(UTC),
+                )
+            )
+
+            self.assertEqual(
+                tuple(item.content_index for item in receipt.items),
+                (1, 2),
+            )
+            self.assertEqual(receipt.items[0].attachment_id, "image-1")
+            self.assertEqual(receipt.items[0].status, DeliveryItemStatus.ACCEPTED)
+            self.assertEqual(receipt.items[0].native_message_id, "native-image-1")
+            self.assertEqual(receipt.items[1].attachment_id, "document-1")
+            self.assertEqual(receipt.items[1].status, DeliveryItemStatus.REJECTED)
+            self.assertEqual(receipt.items[1].detail, "unsupported document")
+        finally:
+            await adapter.stop()
+
+    def test_artifact_identity_prefers_stable_attachment_id(self) -> None:
+        message = NativeOutboundMessage(
+            channel_id="qq",
+            conversation_id="user:user-1",
+            message_type="file",
+            text="",
+            metadata={"delivery_id": "delivery-1"},
+        )
+        original = OutboundArtifact(
+            kind="file",
+            local_path="D:/spool/original.bin",
+            content_type="application/octet-stream",
+            filename="original.bin",
+            size_bytes=4,
+            sha256="first",
+            attachment_id="attachment-1",
+        )
+        moved = OutboundArtifact(
+            kind="file",
+            local_path="E:/new-spool/moved.bin",
+            content_type="application/octet-stream",
+            filename="moved.bin",
+            size_bytes=8,
+            sha256="second",
+            attachment_id="attachment-1",
+        )
+
+        self.assertEqual(
+            stable_artifact_identity(message, original),
+            stable_artifact_identity(message, moved),
+        )
 
     async def test_disabled_native_channel_rejects_delivery_instead_of_no_op(self) -> None:
         class DisabledNative:

@@ -4,7 +4,7 @@ import time
 import unittest
 from typing import Any, cast
 
-from imagent.channels.native.models import OutboundMessage
+from imagent.channels.native.models import OutboundArtifact, OutboundMessage
 from imagent.channels.native.qq import QQ_TEXT_LIMIT, QQChannelAdapter
 
 
@@ -36,6 +36,40 @@ class QQChannelTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(inbound.conversation_id, "group:group-1")
         self.assertEqual(inbound.user_id, "user-1")
         self.assertEqual(inbound.text, "inspect repo")
+
+    def test_artifact_delivery_identity_uses_attachment_id_not_staging_path(
+        self,
+    ) -> None:
+        message = OutboundMessage(
+            channel_id="qq",
+            conversation_id="c2c:user",
+            message_type="file",
+            text="",
+            metadata={"delivery_id": "delivery-1"},
+        )
+        original = OutboundArtifact(
+            kind="file",
+            local_path="D:/first/result.bin",
+            content_type="application/octet-stream",
+            filename="result.bin",
+            size_bytes=3,
+            sha256="first",
+            attachment_id="artifact-1",
+        )
+        moved = OutboundArtifact(
+            kind="file",
+            local_path="E:/second/result.bin",
+            content_type="application/octet-stream",
+            filename="renamed.bin",
+            size_bytes=4,
+            sha256="second",
+            attachment_id="artifact-1",
+        )
+
+        self.assertEqual(
+            QQChannelAdapter._artifact_delivery_id(message, original),
+            QQChannelAdapter._artifact_delivery_id(message, moved),
+        )
 
     def test_startup_validation_normalizes_and_rejects_unsafe_configuration(self) -> None:
         normalized = self._adapter(

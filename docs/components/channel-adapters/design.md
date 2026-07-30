@@ -47,12 +47,19 @@ text/attachment delivery may produce several native IDs; the current singular
 public field remains unset and the receipt detail reports the accepted count
 rather than choosing a misleading ID.
 
+Native artifact helpers also map each attempted attachment back to its stable
+SDK `attachment_id`. Successful and permanently failed uploads become typed
+`DeliveryItemReceipt` values, so a caller can distinguish partial delivery
+without parsing adapter Metadata. Stable artifact idempotency derives from the
+root delivery ID plus attachment ID, not a temporary local path.
+
 The current native transports accept outbound attachments only after a
 consumer or delivery component has materialized them as an explicit
 `LocalPath` in a filesystem namespace trusted by that Channel instance.
 `RemoteUrl` and `AttachmentHandle` are rejected rather than fetched or silently
-dropped. General proactive Artifact materialization and delivery planning
-remain Issues #11/#12 work.
+dropped. The optional proactive ingress materializes inline bytes into this
+trusted `LocalPath` boundary. General segmentation, grouping, rate limiting,
+and coordinated retry remain Issue #12.
 
 Completed Agent messages are the default IM unit. Token-by-token native
 messages are not a common requirement.

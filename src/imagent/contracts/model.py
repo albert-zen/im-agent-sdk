@@ -75,6 +75,19 @@ class RequestRouteState(StrEnum):
     STALE = "stale"
 
 
+class DeliveryReceiptStatus(StrEnum):
+    ACCEPTED_BY_PLATFORM = "accepted_by_platform"
+    REJECTED_BY_PLATFORM = "rejected_by_platform"
+    UNKNOWN = "unknown"
+
+
+class DeliveryItemStatus(StrEnum):
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    UNKNOWN = "unknown"
+    SKIPPED = "skipped"
+
+
 class ProjectMode(StrEnum):
     MANAGED = "managed"
     FLAT = "flat"
@@ -142,8 +155,10 @@ class ChannelCapabilities:
     attachments: SupportLevel = SupportLevel.UNSUPPORTED
     reply_references: SupportLevel = SupportLevel.UNSUPPORTED
     native_threads_or_topics: SupportLevel = SupportLevel.UNSUPPORTED
+    attachment_sources: tuple[AttachmentSourceKind, ...] = ()
     max_text_length: int | None = None
     max_attachment_size: int | None = None
+    max_attachment_count: int | None = None
 
 
 class ThreadStatus(StrEnum):
@@ -525,7 +540,17 @@ class TurnReplyCorrelation:
 
 
 @dataclass(frozen=True, slots=True)
-class DeliveryReceipt:
-    status: str
+class DeliveryItemReceipt:
+    content_index: int
+    status: DeliveryItemStatus
+    attachment_id: str | None = None
     native_message_id: str | None = None
     detail: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryReceipt:
+    status: DeliveryReceiptStatus
+    native_message_id: str | None = None
+    detail: str | None = None
+    items: tuple[DeliveryItemReceipt, ...] = ()

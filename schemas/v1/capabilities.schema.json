@@ -29,10 +29,16 @@
         "typingIndicators": { "$ref": "#/$defs/SupportLevel" },
         "interactiveActions": { "$ref": "#/$defs/SupportLevel" },
         "attachments": { "$ref": "#/$defs/SupportLevel" },
+        "attachmentSources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/AttachmentSourceKind" },
+          "uniqueItems": true
+        },
         "replyReferences": { "$ref": "#/$defs/SupportLevel" },
         "nativeThreadsOrTopics": { "$ref": "#/$defs/SupportLevel" },
         "maxTextLength": { "type": ["integer", "null"], "minimum": 1 },
-        "maxAttachmentSize": { "type": ["integer", "null"], "minimum": 1 }
+        "maxAttachmentSize": { "type": ["integer", "null"], "minimum": 1 },
+        "maxAttachmentCount": { "type": ["integer", "null"], "minimum": 1 }
       },
       "additionalProperties": false
     },

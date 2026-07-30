@@ -31,15 +31,15 @@ Open design evidence:
 
 ## Issue #11: proactive content and Artifact send
 
-Route proactive text/Artifact delivery through Gateway routes and idempotency.
-Agent tools do not receive bot secrets or native Conversation IDs.
+The SDK owner-side implementation now provides scoped Gateway delivery,
+immutable route snapshots, SQLite/in-memory outcomes, per-artifact receipts,
+bounded inline staging, and a loopback-only reference CLI. Agent tools do not
+receive bot secrets, persistence access, or resolved native Conversation IDs.
 
-Open design evidence:
-
-- prove the route/correlation model across at least two Channels;
-- prove Artifact materialization across at least two Applications or keep
-  native behavior in adapters;
-- decide which parts are optional capabilities versus consumer policy.
+Remaining downstream evidence is to mount the handler in a real consumer and
+exercise the one-command path against its configured Channels. Artifact upload
+remains Channel-owned; no Application adapter needs an artificial Artifact
+send API.
 
 ## Issue #12: one delivery chain
 

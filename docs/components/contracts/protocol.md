@@ -299,6 +299,12 @@ from:
 A receipt distinguishes platform acceptance, rejection, and unknown outcome.
 Platform acceptance does not claim device display or read.
 
+`DeliveryReceipt.items` carries typed per-content outcomes when a native
+delivery can partially succeed. A completed Channel call may therefore have
+aggregate platform acceptance while one attachment is rejected; Gateway
+projects that destination as `partial` instead of hiding the artifact failure
+in Metadata.
+
 `ThreadProjectionRoute.checkpointAgentItemId` and `checkpointedAt` are a
 nullable pair. They identify one destination's last completed ordered
 delivery decision; the Agent item ID is opaque and not a sortable SDK
@@ -317,3 +323,44 @@ copy or assertion of native pending-request truth. It never contains the
 prompt, requested permissions, or response. `open`, `responded`, `resolved`, and `stale` describe
 whether this bridge may route another response; the native Application remains
 request authority.
+
+## Proactive delivery
+
+`DeliveryIntent` is the common semantic request for output that was not caused
+by a new inbound message. It contains a caller-stable delivery ID, content,
+and either:
+
+- an explicit `ConversationDeliveryTarget`; or
+- a `ThreadRouteDeliveryTarget`, optionally narrowed to one route.
+
+A Thread target reuses the configured projection policy. It may therefore
+resolve to several destinations under `all_observers`. Gateway authenticates
+an opaque credential into a `DeliveryPrincipal` and checks the requested
+Thread or explicit Conversation scope before route resolution.
+
+The first resolved route set is stored as immutable
+`DeliveryRouteSnapshot` values. Delivery identity is namespaced by an
+SDK-controlled external/internal origin and the trusted principal, so two
+principals cannot poison each other and an authorizer cannot impersonate the
+Gateway-internal domain. Within one principal, reusing a delivery ID with a
+different target or payload is a conflict. A retry returns the stored
+accepted, rejected, partial, in-flight, or unknown result; it never silently
+follows a route that moved after the first submission. Unknown remains
+ambiguous and is not treated as permission to resend.
+
+Internal persistence retains the resolved Conversation snapshot. A
+Thread-targeted public result exposes only its route ID, state, and sanitized
+receipt without native message IDs or free-form Channel diagnostics; only an
+explicit Conversation caller receives the Conversation it already supplied.
+
+External proactive `LocalPath` content requires lowercase `metadata.sha256` as its
+logical content identity. The accepting Channel verifies that digest while
+reading its configured trusted spool. Temporary paths therefore do not define
+retry identity, and changing bytes without changing the authoritative digest
+cannot become a new send.
+
+The optional JSON ingress is not the semantic protocol. It is a safe adapter
+for local tools: inline base64 artifacts are authorized before decoding,
+materialized beneath a configured private staging root, synchronously
+submitted as `LocalPath`, and then removed. Its response deliberately omits
+Channel-native Conversation IDs for Thread-scoped callers.

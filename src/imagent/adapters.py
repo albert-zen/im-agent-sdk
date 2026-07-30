@@ -15,7 +15,12 @@ from .contracts import (
     ChannelCapabilities,
     ConversationBinding,
     ConversationRef,
+    DeliveryPrincipal,
     DeliveryReceipt,
+    DeliveryReservation,
+    DeliverySubmissionRecord,
+    DeliverySubmissionState,
+    DestinationDeliveryRecord,
     GatewayOperation,
     InboundMessage,
     InteractiveRequest,
@@ -48,6 +53,10 @@ class ProjectionRouteConflict(RuntimeError):
 
 class RequestCorrelationConflict(RuntimeError):
     """A request route correlation changed outside the expected state."""
+
+
+class DeliverySubmissionConflict(RuntimeError):
+    """A stable delivery ID was reused for a different immutable submission."""
 
 
 class ChannelAdapter(Protocol):
@@ -183,6 +192,31 @@ class IdempotencyRepository(Protocol):
     async def complete(self, scope: str, key: str) -> None: ...
 
     async def release(self, scope: str, key: str) -> None: ...
+
+
+class DeliveryAuthorizer(Protocol):
+    async def authenticate(self, credential: str) -> DeliveryPrincipal: ...
+
+
+class DeliverySubmissionRepository(Protocol):
+    async def get_delivery_submission(
+        self,
+        submission_id: str,
+    ) -> DeliverySubmissionRecord | None: ...
+
+    async def reserve_delivery_submission(
+        self,
+        record: DeliverySubmissionRecord,
+    ) -> DeliveryReservation: ...
+
+    async def update_delivery_destination(
+        self,
+        submission_id: str,
+        destination_delivery_id: str,
+        *,
+        expected_state: DeliverySubmissionState,
+        destination: DestinationDeliveryRecord,
+    ) -> DeliverySubmissionRecord: ...
 
 
 class RequestCorrelationRepository(Protocol):

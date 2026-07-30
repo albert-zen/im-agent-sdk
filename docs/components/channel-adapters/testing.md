@@ -8,6 +8,8 @@ Every Channel adapter should prove:
 - Markdown/plain fallback and ordered segmentation;
 - attachment size/type/source handling;
 - native reply behavior and receipt meaning;
+- typed per-attachment accepted/rejected results and stable attachment
+  identity independent of staging path;
 - retry behavior when native idempotency is absent;
 - reconnect state remains Channel-owned.
 

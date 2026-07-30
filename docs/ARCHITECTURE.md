@@ -17,6 +17,7 @@ Gateway also composes:
   Persistence ← bindings, routes, idempotency
   Projections and recovery ← live fan-out, reconciliation, checkpoints
   Attachments/media ← explicit source and trust boundary
+  Optional delivery ingress ← scoped local tool/Artifact submission
 ```
 
 IM is another access surface over the native Agent Application. It is not a
@@ -68,6 +69,7 @@ not have identical names.
 | projection completion checkpoint | Gateway | per destination route; stable Agent item ID and time only |
 | Turn-to-IM reply correlation | Gateway | minimal active-Turn bridge identity with bounded retention |
 | inbound/outbound idempotency | Gateway | yes |
+| proactive route snapshot/outcome | Gateway | identity and receipt only; never content |
 | Channel reconnect token | Channel integration | yes as native transport state |
 | Agent replay cursor | Agent Application | opaque projection checkpoint only |
 | Channel credentials | Channel deployment | external configuration |
@@ -111,6 +113,25 @@ Per-user group selection is a future consumer policy, not current Core.
 7. Application accepts input and emits authoritative user/Agent events.
 8. Projection resolves current destinations at delivery time.
 9. Channel performs native rendering/delivery and returns a receipt.
+
+## Proactive output flow
+
+```text
+Agent task / operator tool
+  → scoped credential + stable delivery ID + Thread target
+  → optional loopback JSON ingress
+  → Gateway authorization and projection-policy route resolution
+  → immutable destination snapshot + capability preflight
+  → common Channel send seam
+  → typed destination and per-artifact receipts
+```
+
+The first submission pins its destination set. Repository identity is
+namespaced by an SDK-controlled external/internal origin and trusted principal,
+so callers cannot poison another principal or impersonate Gateway projection.
+Retries cannot follow a moved route or turn an ambiguous outcome into a silent
+resend. The reference ingress stages inline files only after authorization and
+does not disclose resolved native Conversation or message IDs.
 
 ## Recovery flow
 
@@ -198,6 +219,8 @@ Keep these separate:
 3. native approval/user-input truth — Agent Application.
 4. sandbox/Full Access — native Application or consumer policy.
 5. media filesystem/network trust — explicit deployment configuration.
+6. proactive-delivery authority — opaque capability scoped to explicit
+   Threads/Conversations, independent from IM admission and Agent sandbox.
 
 An IM allowlist never grants execution permission. Full Access never bypasses
 IM admission. Attachments cannot grant shared-filesystem trust.

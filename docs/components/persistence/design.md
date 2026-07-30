@@ -15,6 +15,8 @@ Persistence owns implementations for:
 - minimal per-Turn IM reply correlations;
 - minimal per-destination interactive-request correlations;
 - inbound and outbound idempotency claim/completion state.
+- proactive-delivery identity, immutable route snapshots, destination states,
+  and typed receipts.
 
 The current implementations are in-memory repositories and
 `SQLiteGatewayState`; `sqlite_rows.py` contains only SQLite row/merge mapping
@@ -45,6 +47,7 @@ It must not store:
 | projection completion boundary | Gateway projection state | per route; never transcript content |
 | Turn reply correlation | Gateway projection state | active IM-originated Turns only |
 | Request route correlation | Gateway projection state | delivered request/destination identity only |
+| Proactive delivery submission | Gateway | fingerprints, route snapshots, outcome/receipt only |
 
 Binding updates are atomic from one Conversation's perspective. A stale
 expected revision fails explicitly. Project/Thread references are validated
@@ -106,6 +109,14 @@ from an explicit destination/topic default.
 
 Adding request correlation storage is an additive SQLite migration. Existing
 databases retain bindings, routes, Turn correlations, and idempotency records.
+
+Adding proactive delivery storage is also additive. The root table contains an
+SDK-origin-and-principal-derived submission ID, caller delivery ID, the
+SDK-controlled origin, principal/target/payload fingerprints, and timestamps.
+Child rows contain the pinned destination route identity and typed outcome.
+Neither table stores text, inline artifact bytes, local paths from message
+content, bot credentials, or a replayable job body. An `in_flight` row left by
+a crash is truthful ambiguity, not evidence that a resend is safe.
 
 ## Change obligations
 

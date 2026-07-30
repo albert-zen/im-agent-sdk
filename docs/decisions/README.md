@@ -14,6 +14,7 @@ Unaccepted directions belong in `docs/ROADMAP.md`.
 | [0006](0006-core-admission-and-policy-ownership.md) | Accepted | evidence threshold and Core/capability/adapter/consumer classification |
 | [0007](0007-projection-lifecycle-and-delivery-boundaries.md) | Accepted | per-route checkpoints, Turn reply correlation, bootstrap order, and failure domains |
 | [0008](0008-interactive-request-routing.md) | Accepted | typed interactive requests, destination-safe response correlation, and reconnect honesty |
+| [0009](0009-proactive-delivery-routing.md) | Accepted | scoped proactive delivery, pinned route snapshots, and durable idempotent outcomes |
 
 Reopening an accepted decision requires updating this index, the ADR, affected
 global/component docs, contracts/tests, and AgentKit mapping when paths or

@@ -23,6 +23,7 @@ from .artifacts import (
     deliver_artifact_batch,
     delivered_artifact_message_ids,
     record_artifact_failure,
+    stable_artifact_identity,
 )
 from .base import BaseChannelAdapter
 from .diagnostics import emit_event, mark_channel_health
@@ -559,6 +560,9 @@ class QQChannelAdapter(BaseChannelAdapter):
         artifact: OutboundArtifact,
     ) -> str:
         parent = str(message.metadata.get("delivery_id") or "unstable")
+        stable_identity = stable_artifact_identity(message, artifact)
+        if stable_identity is not None:
+            return f"{parent}:artifact:{stable_identity}"
         identity = f"{parent}\0{artifact.sha256 or artifact.local_path}\0{artifact.size_bytes}"
         return f"{parent}:artifact:{hashlib.sha256(identity.encode('utf-8')).hexdigest()}"
 

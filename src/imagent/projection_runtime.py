@@ -203,6 +203,13 @@ class ThreadProjectionRuntime:
     def list_health(self) -> tuple[ProjectionWorkerHealth, ...]:
         return tuple(self._health.values())
 
+    async def active_routes(
+        self,
+        thread_ref: ThreadRef,
+    ) -> tuple[ThreadProjectionRoute, ...]:
+        """Resolve current destinations using the configured projection policy."""
+        return await self._active_routes(thread_ref)
+
     async def observe_thread(
         self,
         application: AgentApplicationAdapter,

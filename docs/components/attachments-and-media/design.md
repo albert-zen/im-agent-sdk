@@ -15,6 +15,7 @@ It owns:
 - the cross-adapter trust rule for typed `AttachmentSource`;
 - reusable boundaries for future media or Artifact materialization proven by
   #9/#11 consumers.
+- bounded inline-artifact staging for the optional proactive delivery ingress.
 
 It does not own:
 
@@ -33,9 +34,23 @@ Application integrations accept only source kinds declared by capability.
 establish a shared filesystem namespace and root. Resolution rejects missing
 trust, relative paths, and paths outside that root.
 
+Public proactive `LocalPath` input must also carry a lowercase-hex SHA-256
+digest in `AttachmentContent.metadata["sha256"]`. The canonical lowercase
+representation gives idempotency a content identity independent from a
+temporary path; the accepting Channel still verifies that the bytes at the
+trusted path match that digest before upload.
+
 `RemoteUrl` materialization belongs to an accepting integration with scheme,
 address, redirect, credential, size, and media validation. `AttachmentHandle`
 remains unsupported until a resolver contract is configured.
+
+The proactive JSON ingress accepts inline bytes rather than an arbitrary
+server-side path. It authenticates the target before decoding, bounds decoded
+bytes, creates a random exclusive directory beneath a consumer-configured
+private root, writes SDK-controlled names, includes a content digest, and removes the staging
+directory after synchronous submission. The same root must be trusted by the
+configured Channel adapter. The ingress is not a durable blob store and does
+not fetch remote URLs.
 
 ## Dependency direction
 

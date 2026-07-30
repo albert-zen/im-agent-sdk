@@ -23,6 +23,7 @@ from imagent.contracts import (
     CreateThread,
     DeleteThread,
     DeliveryReceipt,
+    DeliveryReceiptStatus,
     EventSequenceScope,
     GetProject,
     GetThread,
@@ -142,7 +143,7 @@ class FakeChannelAdapter:
     async def send(self, message: OutboundMessage) -> DeliveryReceipt:
         self.sent.append(message)
         return DeliveryReceipt(
-            status="accepted_by_platform",
+            status=DeliveryReceiptStatus.ACCEPTED_BY_PLATFORM,
             native_message_id=f"sent-{len(self.sent)}",
         )
 

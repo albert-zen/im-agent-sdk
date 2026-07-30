@@ -16,6 +16,8 @@ Ports owns:
   subscription signatures;
 - `BindingRepository`, `ProjectionRouteRepository`, and
   `IdempotencyRepository` interfaces;
+- `DeliveryAuthorizer` and `DeliverySubmissionRepository` interfaces for
+  scoped proactive delivery, immutable route snapshots, and typed outcomes;
 - callback aliases shared by Gateway and integrations.
 
 It does not own:
@@ -43,6 +45,12 @@ rejects a conflicting explicit value. Checkpoint advance is compare-and-swap
 against an expected opaque Agent item ID; implementations never infer ordering
 from that ID. Correlation bulk deletion requires at least one explicit
 selector.
+
+`DeliveryAuthorizer.authenticate` converts an opaque untrusted credential into
+a trusted `DeliveryPrincipal`; the caller cannot declare its own effective
+scope. `DeliverySubmissionRepository.reserve_delivery_submission` is atomic
+and stores identity/snapshots/outcomes only. It is intentionally not a queue,
+content store, or retry scheduler.
 
 ## Change obligations
 

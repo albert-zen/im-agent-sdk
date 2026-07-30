@@ -8,6 +8,9 @@ from .adapters import (
     AgentApplicationAdapter,
     BindingRepository,
     ChannelAdapter,
+    DeliveryAuthorizer,
+    DeliverySubmissionConflict,
+    DeliverySubmissionRepository,
     IdempotencyClaimStatus,
     IdempotencyRepository,
     ProjectionRouteRepository,
@@ -25,10 +28,14 @@ from .contracts import (
     BindConversationToThread,
     ClearConversationThread,
     ContractError,
+    ContractViolation,
     ConversationBinding,
     ConversationBound,
     ConversationRef,
     CreateThread,
+    DeliveryIntent,
+    DeliverySubmissionState,
+    DeliveryTarget,
     GatewayOperation,
     GatewayOperationFailed,
     GatewayOperationResult,
@@ -39,6 +46,7 @@ from .contracts import (
     ObserveThread,
     OperationErrorCode,
     OutboundMessage,
+    ProactiveDeliveryResult,
     ProjectionPolicy,
     ProjectMode,
     ProjectRead,
@@ -67,6 +75,10 @@ from .contracts import (
 )
 from .controllers import ControllerActions, InboundController, RequestPresenter
 from .keyed_locks import KeyedLockRegistry
+from .proactive_delivery import (
+    InMemoryDeliverySubmissionRepository,
+    ProactiveDeliveryService,
+)
 from .projection_runtime import ThreadProjectionRuntime
 from .projections import InMemoryProjectionRouteRepository, ProjectionWorkerHealth
 from .request_correlations import InMemoryRequestCorrelationRepository
@@ -85,6 +97,8 @@ class ImAgentGateway:
         applications: list[AgentApplicationAdapter],
         bindings: BindingRepository,
         idempotency: IdempotencyRepository | None = None,
+        delivery_submissions: DeliverySubmissionRepository | None = None,
+        delivery_authorizer: DeliveryAuthorizer | None = None,
         projections: ProjectionRouteRepository | None = None,
         request_correlations: RequestCorrelationRepository | None = None,
         projection_policy: ProjectionPolicy = ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
@@ -114,10 +128,11 @@ class ImAgentGateway:
         self._starting = False
         self._startup_messages: list[InboundMessage] = []
         self._startup_operations: list[GatewayOperation] = []
+        projection_repository = projections or InMemoryProjectionRouteRepository()
         self._projection_runtime = ThreadProjectionRuntime(
             applications=self._applications,
             bindings=bindings,
-            projections=projections or InMemoryProjectionRouteRepository(),
+            projections=projection_repository,
             request_correlations=self._request_correlations,
             request_presenter=request_presenter,
             projection_policy=projection_policy,
@@ -132,6 +147,12 @@ class ImAgentGateway:
             subscription_retry_max_seconds=subscription_retry_max_seconds,
             turn_correlation_retention_seconds=turn_correlation_retention_seconds,
             request_correlation_retention_seconds=request_correlation_retention_seconds,
+        )
+        self._delivery_service = ProactiveDeliveryService(
+            channels=self._channels,
+            submissions=delivery_submissions or InMemoryDeliverySubmissionRepository(),
+            resolve_thread_routes=self._projection_runtime.active_routes,
+            authorizer=delivery_authorizer,
         )
 
     async def start(self) -> None:
@@ -226,6 +247,24 @@ class ImAgentGateway:
         conversation_ref: ConversationRef,
     ) -> ConversationBinding | None:
         return await self._bindings.get(conversation_ref)
+
+    async def deliver_proactively(
+        self,
+        intent: DeliveryIntent,
+        *,
+        credential: str,
+    ) -> ProactiveDeliveryResult:
+        """Deliver caller-provided content through an authorized Gateway target."""
+        return await self._delivery_service.deliver(intent, credential=credential)
+
+    async def authorize_proactive_target(
+        self,
+        target: DeliveryTarget,
+        *,
+        credential: str,
+    ) -> None:
+        """Fail closed before an ingress materializes caller-provided artifacts."""
+        await self._delivery_service.authorize(target, credential=credential)
 
     async def _execute_gateway_locked(
         self,
@@ -689,25 +728,31 @@ class ImAgentGateway:
         self,
         message: OutboundMessage,
     ) -> IdempotencyClaimStatus:
-        channel = self._channels[message.conversation_ref.channel_instance_id]
         scope = f"outbound:{message.conversation_ref.channel_instance_id}"
         claim = await self._idempotency.claim(scope, message.delivery_id)
         if claim is not IdempotencyClaimStatus.ACQUIRED:
             return claim
         try:
-            receipt = await channel.send(message)
-        except BaseException:
+            result = await self._delivery_service.deliver_internal(message)
+        except (ContractViolation, DeliverySubmissionConflict):
             await self._idempotency.release(scope, message.delivery_id)
             raise
-        if receipt.status == "unknown":
-            raise RuntimeError(f"Channel delivery outcome is unknown: {message.delivery_id}")
-        if receipt.status == "rejected_by_platform":
-            await self._idempotency.release(scope, message.delivery_id)
+        destination = result.destinations[0]
+        if result.state is DeliverySubmissionState.IN_FLIGHT:
+            return IdempotencyClaimStatus.IN_FLIGHT
+        if result.state is not DeliverySubmissionState.ACCEPTED:
+            if result.state is DeliverySubmissionState.REJECTED:
+                await self._idempotency.release(scope, message.delivery_id)
             raise RuntimeError(
-                receipt.detail or f"Channel rejected delivery: {message.delivery_id}"
+                destination.error
+                or f"Channel delivery did not complete successfully: {message.delivery_id}"
             )
         await self._idempotency.complete(scope, message.delivery_id)
-        return IdempotencyClaimStatus.ACQUIRED
+        return (
+            IdempotencyClaimStatus.ALREADY_COMPLETED
+            if destination.replayed
+            else IdempotencyClaimStatus.ACQUIRED
+        )
 
     def _bound_application(
         self,

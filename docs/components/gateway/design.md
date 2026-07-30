@@ -14,6 +14,7 @@ The Gateway owns:
 - executing typed Gateway operations atomically per Conversation;
 - routing typed Application operations without reinterpreting them;
 - inbound idempotency and outbound delivery correlation;
+- scoped proactive text/artifact delivery and immutable route snapshots;
 - establishing Thread observation before input delivery;
 - composing the projection runtime with Application execution and Channel
   send callbacks;
@@ -47,6 +48,37 @@ may import Gateway.
 7. The Application emits authoritative user and Agent events.
 8. Projection resolves destinations at delivery time.
 9. Channel sends an `OutboundMessage`; Gateway records correlation outcome.
+
+## Proactive delivery flow
+
+1. A caller submits a typed `DeliveryIntent` and opaque credential.
+2. Gateway authenticates a `DeliveryPrincipal` and checks the exact Thread or
+   Conversation scope.
+3. A Thread target resolves through the same projection policy used by Agent
+   output; `all_observers` can produce multiple destinations.
+4. Gateway preflights every destination before any Channel side effect.
+5. It atomically reserves an SDK-origin-and-principal-namespaced submission
+   identity with the caller delivery ID, immutable route snapshots, and
+   payload/authority fingerprints. The authorizer cannot select the origin
+   namespace.
+6. Every destination uses the same outbound execution seam as projection and
+   interactive-request presentation.
+7. Typed receipts preserve accepted, rejected, partial, and unknown outcomes.
+
+The optional `ProactiveDeliveryJsonHandler` is an ingress adapter, not a web
+server. A consumer mounts it in its own authenticated loopback service. It
+checks authorization before decoding inline artifacts, uses only a private
+configured staging root, and removes staged bytes after the synchronous call.
+The reference `imagent-send` client accepts only loopback HTTP(S), reads a
+scoped credential from a file or stdin, and never reads Gateway persistence or
+Channel credentials.
+
+Thread-targeted public results expose route identity and sanitized outcome
+only. They omit the resolved native Conversation and both aggregate and
+per-item native message IDs, plus all free-form destination, receipt, and item
+details that could contain hidden routing or platform diagnostics. Explicit
+Conversation callers may receive only the Conversation identity they already
+supplied.
 
 Listing never changes a binding. Binding a Thread does not activate native UI
 state. Observing a Thread does not select it for future input.
@@ -97,6 +129,12 @@ Gateway's ordered checkpoint decision does not make Channel side effects and
 SQLite atomic. Stable delivery IDs make completed work convergent; a crash
 between native send and durable completion can still yield an ambiguous
 side-effect outcome. Receipt-aware retry/backpressure remains Issue #12.
+
+Proactive submission persistence likewise is not a durable job queue. An
+`in_flight` or `unknown` record blocks automatic duplicate delivery after a
+crash or ambiguous Channel outcome. Rejected preflight results are persisted
+too, so the same delivery ID cannot change destinations and later become a
+send merely because routes or capabilities changed.
 
 ## Interactive request flow
 

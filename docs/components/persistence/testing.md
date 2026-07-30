@@ -22,6 +22,14 @@ Required scenarios:
 - a later put cannot revive a stale epoch-scoped request correlation;
 - opening the previous SQLite schema adds request correlation storage without
   losing existing bridge state;
+- proactive route snapshots and per-item receipts survive restart without
+  storing message/artifact content;
+- concurrent proactive reservation has one winner and mismatched reuse of a
+  delivery ID fails;
+- SDK-controlled origin and principal namespaces prevent external identities
+  from colliding with Gateway-internal projection submissions;
+- rejected, in-flight, partial, and unknown proactive states remain sticky
+  across restart;
 - route policy replacement remains deterministic;
 - storage rows cannot introduce cross-Application references.
 
