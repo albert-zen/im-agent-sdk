@@ -218,13 +218,18 @@ An adapter that supports recovery should provide:
 
 1. subscription establishment;
 2. an authoritative thread snapshot or history page;
-3. a monotonic cursor or sequence;
-4. replay after a cursor;
-5. explicit gap detection.
+3. an opaque replay cursor when natively supported;
+4. a scoped, epoch-qualified sequence when natively supported;
+5. explicit cursor-expired or gap outcomes.
 
 On reconnect, a Gateway or UI reconciles its projection from authoritative
 history, then continues consuming ordered events. Streaming deltas may be
 dropped and reconstructed from the final completed message.
+
+When native replay is unavailable, the honest path is subscribe first, read
+authoritative history/catch-up, reconcile stable IDs, then drain live events.
+The SDK never manufactures a restart-unsafe counter and presents it as a
+recoverable sequence.
 
 ## Concurrency
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -21,6 +22,7 @@ from imagent.contracts import (
     CreateThread,
     DeleteThread,
     DeliveryReceipt,
+    EventSequenceScope,
     GetProject,
     GetThread,
     GetThreadHistory,
@@ -68,7 +70,7 @@ from imagent.contracts import (
     validate_application_operation,
     validate_application_operation_result,
 )
-from imagent.events import EventBroadcaster
+from imagent.events import CursorExpired, EventBroadcaster
 
 
 def make_capabilities(project_mode: ProjectMode) -> ApplicationCapabilities:
@@ -94,6 +96,8 @@ def make_capabilities(project_mode: ProjectMode) -> ApplicationCapabilities:
             interruption=SupportLevel.NATIVE,
             interactive_requests=SupportLevel.NATIVE,
             native_thread_activation=SupportLevel.NATIVE,
+            gap_detection=SupportLevel.NATIVE,
+            event_sequence_scope=EventSequenceScope.THREAD,
         ),
     )
 
@@ -134,7 +138,10 @@ class FakeAgentApplicationAdapter:
         self,
         application_instance_id: str = "fake-agent",
         project_mode: ProjectMode = ProjectMode.MANAGED,
+        event_history_limit: int = 100,
     ) -> None:
+        if event_history_limit < 1:
+            raise ValueError("event_history_limit must be positive")
         self._application_id = application_instance_id
         self._capabilities = make_capabilities(project_mode)
         self._summary = ApplicationSummary(
@@ -150,7 +157,10 @@ class FakeAgentApplicationAdapter:
         self._threads: dict[ThreadRef, ThreadSummary] = {}
         self._inputs: list[tuple[ThreadRef, AgentInput]] = []
         self._events = EventBroadcaster[ThreadRef, AgentEvent]()
-        self._sequence = 0
+        self._event_epoch = str(uuid.uuid4())
+        self._event_history_limit = event_history_limit
+        self._sequences: dict[ThreadRef, int] = {}
+        self._event_history: dict[ThreadRef, list[AgentEvent]] = {}
         self._next_thread = 1
         self.activated_threads: list[ThreadRef] = []
 
@@ -255,7 +265,7 @@ class FakeAgentApplicationAdapter:
                 catchup=TurnCatchup(
                     thread_ref=operation.thread_ref,
                     turn_id=(f"turn-{len(self._inputs)}" if self._inputs else None),
-                    status=(TurnStatus.RUNNING if self._inputs else TurnStatus.IDLE),
+                    status=(TurnStatus.COMPLETED if self._inputs else TurnStatus.IDLE),
                     messages=(),
                 ),
             )
@@ -269,7 +279,7 @@ class FakeAgentApplicationAdapter:
                         (
                             TurnHistoryEntry(
                                 turn_id=f"turn-{len(self._inputs)}",
-                                status=TurnStatus.RUNNING,
+                                status=TurnStatus.COMPLETED,
                             ),
                         )
                         if self._inputs
@@ -361,6 +371,11 @@ class FakeAgentApplicationAdapter:
             turn_id,
             {"status": "completed"},
         )
+        self._threads[thread_ref] = replace(
+            self._threads[thread_ref],
+            status=ThreadStatus.COMPLETED,
+            updated_at=datetime.now(UTC),
+        )
         return AcceptedTurn(
             thread_ref=thread_ref,
             turn_id=turn_id,
@@ -372,10 +387,18 @@ class FakeAgentApplicationAdapter:
         thread_ref: ThreadRef,
         after_cursor=None,
     ) -> AsyncIterator[AgentEvent]:
-        del after_cursor
         if thread_ref not in self._threads:
             raise KeyError(thread_ref)
-        return self._events.subscribe(thread_ref)
+        initial: tuple[AgentEvent, ...] = ()
+        if after_cursor is not None:
+            history = self._event_history.get(thread_ref, [])
+            for index, event in enumerate(history):
+                if event.cursor == after_cursor:
+                    initial = tuple(history[index + 1 :])
+                    break
+            else:
+                raise CursorExpired("fake replay cursor expired or belongs to another epoch")
+        return self._events.subscribe(thread_ref, initial=initial)
 
     def _publish(
         self,
@@ -384,21 +407,31 @@ class FakeAgentApplicationAdapter:
         turn_id: str,
         data,
     ) -> None:
-        self._sequence += 1
-        self._events.publish(
-            thread_ref,
-            AgentEvent(
-                event_id=f"{self._application_id}:{self._sequence}",
-                application_instance_id=self._application_id,
-                sequence=self._sequence,
-                type=event_type,
-                data=data,
-                created_at=datetime.now(UTC),
-                thread_ref=thread_ref,
-                turn_id=turn_id,
-                cursor=str(self._sequence),
+        sequence = self._sequences.get(thread_ref, 0) + 1
+        self._sequences[thread_ref] = sequence
+        message = data.get("message")
+        if isinstance(message, AgentMessage):
+            native_identity = f"message:{message.agent_item_id}"
+        else:
+            native_identity = f"turn:{turn_id}:{event_type.value}"
+        event = AgentEvent(
+            event_id=(
+                f"{self._application_id}:thread:{thread_ref.native_thread_id}:{native_identity}"
             ),
+            application_instance_id=self._application_id,
+            sequence=sequence,
+            sequence_epoch=self._event_epoch,
+            type=event_type,
+            data=data,
+            created_at=datetime.now(UTC),
+            thread_ref=thread_ref,
+            turn_id=turn_id,
+            cursor=(f"fake:{self._event_epoch}:{thread_ref.native_thread_id}:{sequence}"),
         )
+        history = self._event_history.setdefault(thread_ref, [])
+        history.append(event)
+        del history[: -self._event_history_limit]
+        self._events.publish(thread_ref, event)
 
     async def get_thread_status(self, thread_ref: ThreadRef) -> ThreadStatus:
         return self._threads[thread_ref].status

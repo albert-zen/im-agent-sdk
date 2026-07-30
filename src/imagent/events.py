@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Callable, Hashable
+from collections.abc import AsyncIterator, Callable, Hashable, Iterable
 from typing import Generic, TypeVar
 
 K = TypeVar("K", bound=Hashable)
 V = TypeVar("V")
+
+
+class CursorExpired(ValueError):
+    pass
 
 
 class FanoutSubscription(AsyncIterator[V], Generic[K, V]):
@@ -49,9 +53,16 @@ class EventBroadcaster(Generic[K, V]):
     def __init__(self) -> None:
         self._subscribers: dict[K, set[FanoutSubscription[K, V]]] = {}
 
-    def subscribe(self, key: K) -> FanoutSubscription[K, V]:
+    def subscribe(
+        self,
+        key: K,
+        *,
+        initial: Iterable[V] = (),
+    ) -> FanoutSubscription[K, V]:
         subscription = FanoutSubscription(key, asyncio.Queue(), self._remove)
         self._subscribers.setdefault(key, set()).add(subscription)
+        for event in initial:
+            subscription._publish(event)
         return subscription
 
     def publish(self, key: K, event: V) -> None:

@@ -46,6 +46,12 @@ class SupportLevel(StrEnum):
     UNSUPPORTED = "unsupported"
 
 
+class EventSequenceScope(StrEnum):
+    NONE = "none"
+    THREAD = "thread"
+    APPLICATION = "application"
+
+
 class ProjectMode(StrEnum):
     MANAGED = "managed"
     FLAT = "flat"
@@ -89,6 +95,8 @@ class RuntimeCapabilities:
     interruption: SupportLevel
     interactive_requests: SupportLevel
     native_thread_activation: SupportLevel = SupportLevel.UNSUPPORTED
+    gap_detection: SupportLevel = SupportLevel.UNSUPPORTED
+    event_sequence_scope: EventSequenceScope = EventSequenceScope.NONE
 
 
 @dataclass(frozen=True, slots=True)
@@ -335,13 +343,14 @@ class AgentEventType(StrEnum):
 class AgentEvent:
     event_id: str
     application_instance_id: str
-    sequence: int
     type: AgentEventType
     data: Metadata
     created_at: datetime
     project_ref: ProjectRef | None = None
     thread_ref: ThreadRef | None = None
     turn_id: str | None = None
+    sequence: int | None = None
+    sequence_epoch: str | None = None
     cursor: str | None = None
 
 

@@ -26,7 +26,6 @@
       "required": [
         "eventId",
         "applicationInstanceId",
-        "sequence",
         "type",
         "data",
         "createdAt"
@@ -54,12 +53,48 @@
             { "type": "null" }
           ]
         },
-        "sequence": { "type": "integer", "minimum": 0 },
+        "sequence": { "type": ["integer", "null"], "minimum": 0 },
+        "sequenceEpoch": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
         "cursor": { "type": ["string", "null"] },
         "type": { "$ref": "#/$defs/EventType" },
         "data": { "$ref": "common.schema.json#/$defs/Metadata" },
         "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
       },
+      "allOf": [
+        {
+          "if": {
+            "required": ["sequence"],
+            "properties": { "sequence": { "type": "integer" } }
+          },
+          "then": {
+            "required": ["sequenceEpoch"],
+            "properties": {
+              "sequenceEpoch": {
+                "$ref": "common.schema.json#/$defs/Identifier"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["sequenceEpoch"],
+            "properties": {
+              "sequenceEpoch": {
+                "$ref": "common.schema.json#/$defs/Identifier"
+              }
+            }
+          },
+          "then": {
+            "required": ["sequence"],
+            "properties": { "sequence": { "type": "integer" } }
+          }
+        }
+      ],
       "additionalProperties": false
     }
   }

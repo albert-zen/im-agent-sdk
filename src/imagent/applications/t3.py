@@ -29,6 +29,7 @@ from ..contracts import (
     AttachmentSourceKind,
     CreateThread,
     DeleteThread,
+    EventSequenceScope,
     GetProject,
     GetThread,
     GetThreadHistory,
@@ -108,7 +109,6 @@ class T3ApplicationAdapter:
         self._interaction_mode = interaction_mode
         self._poll_interval = poll_interval
         self._shared_filesystem_root = configure_shared_filesystem_root(shared_filesystem_root)
-        self._sequence = 0
         self._turn_baselines: dict[tuple[str, str], frozenset[str]] = {}
         self._events = EventBroadcaster[str, AgentEvent]()
         self._poll_tasks: dict[str, asyncio.Task[None]] = {}
@@ -134,10 +134,12 @@ class T3ApplicationAdapter:
                 runtime=RuntimeCapabilities(
                     history=SupportLevel.NATIVE,
                     streaming=SupportLevel.FALLBACK,
-                    replay_from_cursor=SupportLevel.FALLBACK,
+                    replay_from_cursor=SupportLevel.UNSUPPORTED,
                     interruption=SupportLevel.NATIVE,
                     interactive_requests=SupportLevel.UNSUPPORTED,
                     native_thread_activation=SupportLevel.UNSUPPORTED,
+                    gap_detection=SupportLevel.UNSUPPORTED,
+                    event_sequence_scope=EventSequenceScope.NONE,
                 ),
                 attachment_sources=(
                     (AttachmentSourceKind.LOCAL_PATH,)
@@ -580,7 +582,8 @@ class T3ApplicationAdapter:
         thread_ref: ThreadRef,
         after_cursor: str | None = None,
     ) -> AsyncIterator[AgentEvent]:
-        del after_cursor
+        if after_cursor is not None:
+            raise NotImplementedError("T3 does not support event replay")
         self._require_own_thread(thread_ref)
         thread_id = thread_ref.native_thread_id
         subscription = self._events.subscribe(thread_id)
@@ -786,18 +789,23 @@ class T3ApplicationAdapter:
         turn_id: str | None,
         data: dict[str, object],
     ) -> AgentEvent:
-        self._sequence += 1
+        message = data.get("message")
+        if isinstance(message, AgentMessage):
+            native_identity = f"message:{message.agent_item_id}"
+        else:
+            native_identity = f"turn:{turn_id or 'unknown'}:{event_type.value}"
         return AgentEvent(
-            event_id=f"{self._application_instance_id}:{self._sequence}",
+            event_id=(
+                f"{self._application_instance_id}:thread:{thread_ref.native_thread_id}:"
+                f"{native_identity}"
+            ),
             application_instance_id=self._application_instance_id,
-            sequence=self._sequence,
             type=event_type,
             data=data,
             created_at=datetime.now(UTC),
             project_ref=thread_ref.project_ref,
             thread_ref=thread_ref,
             turn_id=turn_id,
-            cursor=str(self._sequence),
         )
 
     def _require_own_thread(self, thread_ref: ThreadRef) -> None:

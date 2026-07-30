@@ -22,7 +22,7 @@ projectRef?
 threadRef?
 turnId?
 requestId?
-sequence or cursor
+optional sequence and replay cursor
 ```
 
 Unknown adapter-native fields may be carried as namespaced metadata, but core
@@ -340,7 +340,8 @@ AgentEvent {
   projectRef?
   threadRef?
   turnId?
-  sequence
+  sequence?
+  sequenceEpoch?
   cursor?
   type
   data
@@ -415,11 +416,22 @@ for one queue. This is live delivery, not an SDK-owned transcript.
 
 ## Ordering
 
-- `sequence` is monotonic within the adapter's declared event scope.
-- `cursor` is opaque and only interpreted by the producing adapter.
+- `eventId` is required and stable within the producer's declared
+  recovery/idempotency window.
+- `sequence` is optional. It exists only when the producer can state its scope
+  and restart epoch; `sequenceEpoch` is required whenever `sequence` is
+  present.
+- `cursor` is optional, opaque, and only emitted when the producer can replay
+  from it. A cursor may expire and must then produce an explicit
+  `CursorExpired` outcome.
 - timestamps are descriptive and never define authoritative order.
 - a repeated `eventId` is the same event and must be idempotently projected.
-- a detected gap triggers snapshot/history reconciliation.
+- a detected gap or expired cursor triggers authoritative
+  snapshot/history/catch-up reconciliation.
+
+Adapters without native ordering or replay omit `sequence`, `sequenceEpoch`,
+and `cursor`. They do not synthesize counters that reset on process restart or
+skip when another Thread receives an event.
 
 ## Delivery projection
 

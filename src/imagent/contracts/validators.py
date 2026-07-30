@@ -4,9 +4,11 @@ import hashlib
 import json
 
 from .model import (
+    AgentEvent,
     ApplicationCapabilities,
     ConversationBinding,
     ConversationRef,
+    EventSequenceScope,
     ProjectMode,
     SupportLevel,
     ThreadRef,
@@ -74,6 +76,12 @@ def validate_thread_ref(thread: ThreadRef) -> None:
 def validate_application_capabilities(capabilities: ApplicationCapabilities) -> None:
     if len(set(capabilities.attachment_sources)) != len(capabilities.attachment_sources):
         raise ContractViolation("application attachment source capabilities must be unique")
+    runtime = capabilities.runtime
+    if (
+        runtime.gap_detection is not SupportLevel.UNSUPPORTED
+        and runtime.event_sequence_scope is EventSequenceScope.NONE
+    ):
+        raise ContractViolation("gap detection requires a declared event sequence scope")
     projects = capabilities.projects
     project_operations = (
         projects.discovery,
@@ -90,6 +98,32 @@ def validate_application_capabilities(capabilities: ApplicationCapabilities) -> 
         raise ContractViolation(
             f"{projects.mode.value} project mode cannot advertise project operations"
         )
+
+
+def validate_agent_event(
+    event: AgentEvent,
+    capabilities: ApplicationCapabilities,
+) -> None:
+    require_identifier(event.event_id, "event_id")
+    require_identifier(event.application_instance_id, "application_instance_id")
+    if event.thread_ref is not None:
+        validate_thread_ref(event.thread_ref)
+        if event.thread_ref.application_instance_id != event.application_instance_id:
+            raise ContractViolation("event thread belongs to a different application")
+    if event.sequence is None:
+        if event.sequence_epoch is not None:
+            raise ContractViolation("sequence_epoch requires sequence")
+    else:
+        if event.sequence < 0:
+            raise ContractViolation("event sequence cannot be negative")
+        if capabilities.runtime.event_sequence_scope is EventSequenceScope.NONE:
+            raise ContractViolation("event sequence has no declared scope")
+        require_identifier(event.sequence_epoch or "", "sequence_epoch")
+    if (
+        event.cursor is not None
+        and capabilities.runtime.replay_from_cursor is SupportLevel.UNSUPPORTED
+    ):
+        raise ContractViolation("event cursor requires replay-from-cursor support")
 
 
 def validate_binding(

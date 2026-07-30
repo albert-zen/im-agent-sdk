@@ -76,8 +76,9 @@ silently choose which application, project, or thread receives a message.
 ### Cross-client consistency
 
 The same completed user and Agent messages must be observable from IM, desktop,
-CLI, and Web clients. Stable IDs and ordered cursors are contract requirements,
-not implementation details.
+CLI, and Web clients. Stable event IDs are contract requirements. Ordered
+cursors are used only when the authoritative producer actually supports
+replay; otherwise clients reconcile from authoritative history/catch-up.
 
 ### Honest capability differences
 

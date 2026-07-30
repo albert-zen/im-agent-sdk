@@ -4,6 +4,8 @@ import unittest
 from datetime import UTC, datetime
 
 from imagent.contracts import (
+    AgentEvent,
+    AgentEventType,
     ApplicationCapabilities,
     ApplicationOperationFailed,
     ApplicationOperationType,
@@ -14,6 +16,7 @@ from imagent.contracts import (
     ConversationBinding,
     ConversationBound,
     ConversationRef,
+    EventSequenceScope,
     GatewayOperationType,
     GetThreadHistory,
     GetTurnCatchup,
@@ -31,6 +34,7 @@ from imagent.contracts import (
     ThreadsListed,
     derive_client_message_id,
     operation_error,
+    validate_agent_event,
     validate_application_capabilities,
     validate_application_operation,
     validate_application_operation_result,
@@ -164,6 +168,78 @@ class MessageIdentityTests(unittest.TestCase):
         )
         self.assertEqual(first, second)
         self.assertNotEqual(first, other)
+
+    def test_event_ordering_fields_require_declared_guarantees(self) -> None:
+        created_at = datetime.now(UTC)
+        honest = AgentEvent(
+            event_id="event-1",
+            application_instance_id="app-1",
+            type=AgentEventType.TURN_COMPLETED,
+            data={},
+            created_at=created_at,
+        )
+        validate_agent_event(honest, capabilities(ProjectMode.FLAT))
+
+        with self.assertRaisesRegex(ContractViolation, "cursor"):
+            validate_agent_event(
+                AgentEvent(
+                    event_id="event-2",
+                    application_instance_id="app-1",
+                    type=AgentEventType.TURN_COMPLETED,
+                    data={},
+                    created_at=created_at,
+                    cursor="unsupported",
+                ),
+                capabilities(ProjectMode.FLAT),
+            )
+
+        replay_capabilities = ApplicationCapabilities(
+            projects=ProjectCapabilities(
+                mode=ProjectMode.FLAT,
+                discovery=SupportLevel.UNSUPPORTED,
+                reading=SupportLevel.UNSUPPORTED,
+            ),
+            threads=ThreadCapabilities(
+                listing=SupportLevel.NATIVE,
+                creation=SupportLevel.NATIVE,
+                reading=SupportLevel.NATIVE,
+            ),
+            runtime=RuntimeCapabilities(
+                history=SupportLevel.NATIVE,
+                streaming=SupportLevel.NATIVE,
+                replay_from_cursor=SupportLevel.NATIVE,
+                interruption=SupportLevel.NATIVE,
+                interactive_requests=SupportLevel.NATIVE,
+                gap_detection=SupportLevel.NATIVE,
+                event_sequence_scope=EventSequenceScope.THREAD,
+            ),
+        )
+        with self.assertRaisesRegex(ContractViolation, "sequence_epoch"):
+            validate_agent_event(
+                AgentEvent(
+                    event_id="event-3",
+                    application_instance_id="app-1",
+                    type=AgentEventType.TURN_COMPLETED,
+                    data={},
+                    created_at=created_at,
+                    sequence=1,
+                    cursor="cursor-1",
+                ),
+                replay_capabilities,
+            )
+        validate_agent_event(
+            AgentEvent(
+                event_id="event-4",
+                application_instance_id="app-1",
+                type=AgentEventType.TURN_COMPLETED,
+                data={},
+                created_at=created_at,
+                sequence=1,
+                sequence_epoch="epoch-1",
+                cursor="cursor-1",
+            ),
+            replay_capabilities,
+        )
 
 
 class OperationTests(unittest.TestCase):

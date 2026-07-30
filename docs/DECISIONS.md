@@ -106,3 +106,14 @@ not an SDK transcript or execution authority.
 
 `message.completed` never terminates a Turn subscription. Only explicit
 `turn.completed`, `turn.failed`, or `turn.interrupted` events are terminal.
+
+## D-010: Ordering fields state only native recoverable guarantees
+
+`eventId` is required. `sequence`, its epoch, and `cursor` are optional.
+Adapters omit sequence/cursor when the native application cannot preserve
+their meaning across the declared scope and recovery window.
+
+Capabilities separately declare replay, gap detection, and sequence scope.
+Cursor expiration is explicit. Unsupported replay falls back to a fresh live
+subscription plus authoritative history/catch-up reconciliation, not a
+synthetic SDK event log.

@@ -9,6 +9,9 @@
     "AttachmentSourceKind": {
       "enum": ["local_path", "remote_url", "attachment_handle"]
     },
+    "EventSequenceScope": {
+      "enum": ["none", "thread", "application"]
+    },
     "ChannelCapabilities": {
       "type": "object",
       "required": [
@@ -69,7 +72,9 @@
         "replayFromCursor",
         "interruption",
         "interactiveRequests",
-        "nativeThreadActivation"
+        "nativeThreadActivation",
+        "gapDetection",
+        "eventSequenceScope"
       ],
       "properties": {
         "history": { "$ref": "#/$defs/SupportLevel" },
@@ -77,8 +82,24 @@
         "replayFromCursor": { "$ref": "#/$defs/SupportLevel" },
         "interruption": { "$ref": "#/$defs/SupportLevel" },
         "interactiveRequests": { "$ref": "#/$defs/SupportLevel" },
-        "nativeThreadActivation": { "$ref": "#/$defs/SupportLevel" }
+        "nativeThreadActivation": { "$ref": "#/$defs/SupportLevel" },
+        "gapDetection": { "$ref": "#/$defs/SupportLevel" },
+        "eventSequenceScope": { "$ref": "#/$defs/EventSequenceScope" }
       },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "gapDetection": { "enum": ["native", "fallback"] }
+            }
+          },
+          "then": {
+            "properties": {
+              "eventSequenceScope": { "enum": ["thread", "application"] }
+            }
+          }
+        }
+      ],
       "additionalProperties": false
     },
     "ApplicationCapabilities": {

@@ -40,6 +40,7 @@ from imagent.contracts import (
     ThreadStatusRead,
     TurnCatchupRead,
     derive_client_message_id,
+    validate_agent_event,
     validate_application_capabilities,
     validate_application_operation_result,
     validate_thread_ref,
@@ -255,6 +256,8 @@ async def verify_application_adapter(
     )
     first_ids = tuple(event.event_id for event in first_observation)
     second_ids = tuple(event.event_id for event in second_observation)
+    for event in first_observation:
+        validate_agent_event(event, capabilities)
     if first_ids != second_ids:
         raise AssertionError("Thread subscribers did not receive the same canonical events")
     if not any(event.type is AgentEventType.MESSAGE_COMPLETED for event in first_observation):

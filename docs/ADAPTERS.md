@@ -182,12 +182,27 @@ An adapter should expose enough information to implement:
 subscribe
 → read authoritative snapshot/history
 → reconcile projection
-→ consume ordered events
-→ re-read on sequence gap
+→ consume live events
+→ re-read on an explicitly supported gap outcome
 ```
 
 If replay is unavailable, the capability says so and reconnect falls back to a
 fresh snapshot.
+
+`replayFromCursor`, `gapDetection`, and `eventSequenceScope` report distinct
+facts. A producer with no native replay declares replay unsupported and emits
+no cursor. A producer with no restart-safe scoped sequence declares scope
+`none` and emits no sequence. `fallback` means the adapter performs a real
+documented fallback; it is not a label for silently ignoring a cursor.
+
+On reconnect, replay-capable adapters resume after the opaque cursor. An
+expired cursor is explicit. Otherwise the consumer establishes a fresh live
+subscription first, reads authoritative history/catch-up, reconciles by stable
+IDs, and then drains the live stream. This cache/projection workflow never
+becomes transcript authority.
+
+Cursor validity is checked while establishing the subscription so an expired
+cursor can select the authoritative recovery path before live consumption.
 
 Subscriptions to one Thread must fan out. Each active subscriber receives the
 same canonical events in publication order and owns its own consumption

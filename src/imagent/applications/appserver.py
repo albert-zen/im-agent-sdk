@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import inspect
+import uuid
 from collections.abc import AsyncIterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,6 +26,7 @@ from ..contracts import (
     AttachmentSourceKind,
     CreateThread,
     DeleteThread,
+    EventSequenceScope,
     GetProject,
     GetThread,
     GetThreadHistory,
@@ -119,7 +121,6 @@ class _AppServerApplicationAdapter:
         self._client = client
         self._cwd = cwd
         self._shared_filesystem_root = configure_shared_filesystem_root(shared_filesystem_root)
-        self._sequence = 0
         self._events = EventBroadcaster[str, AgentEvent]()
         self._client.add_notification_handler(self._handle_notification)
         capabilities = ApplicationCapabilities(
@@ -137,10 +138,12 @@ class _AppServerApplicationAdapter:
             runtime=RuntimeCapabilities(
                 history=SupportLevel.NATIVE,
                 streaming=SupportLevel.NATIVE,
-                replay_from_cursor=SupportLevel.FALLBACK,
+                replay_from_cursor=SupportLevel.UNSUPPORTED,
                 interruption=SupportLevel.NATIVE,
                 interactive_requests=SupportLevel.UNSUPPORTED,
                 native_thread_activation=SupportLevel.NATIVE,
+                gap_detection=SupportLevel.UNSUPPORTED,
+                event_sequence_scope=EventSequenceScope.NONE,
             ),
             attachment_sources=(
                 (AttachmentSourceKind.LOCAL_PATH,)
@@ -495,7 +498,8 @@ class _AppServerApplicationAdapter:
         thread_ref: ThreadRef,
         after_cursor: str | None = None,
     ) -> AsyncIterator[AgentEvent]:
-        del after_cursor
+        if after_cursor is not None:
+            raise NotImplementedError("Codex App Server does not support event replay")
         self._require_own_thread(thread_ref)
         return self._events.subscribe(thread_ref.native_thread_id)
 
@@ -517,6 +521,10 @@ class _AppServerApplicationAdapter:
                 thread_id,
                 AgentEventType.MESSAGE_DELTA,
                 {"delta": str(params.get("delta") or "")},
+                event_id=(
+                    str(params.get("eventId") or params.get("event_id") or "")
+                    or f"{self._application_instance_id}:live:{uuid.uuid4()}"
+                ),
                 thread_ref=thread_ref,
                 turn_id=turn_id or None,
             )
@@ -532,8 +540,10 @@ class _AppServerApplicationAdapter:
             if not text:
                 return
             item_id = str(item.get("id") or params.get("itemId") or "")
+            if not item_id:
+                item_id = f"live-{uuid.uuid4()}"
             message = AgentMessage(
-                agent_item_id=item_id or f"{thread_id}:{turn_id}:assistant",
+                agent_item_id=item_id,
                 thread_ref=thread_ref,
                 role=MessageRole.ASSISTANT,
                 content=(TextContent(text, TextFormat.MARKDOWN),),
@@ -547,6 +557,10 @@ class _AppServerApplicationAdapter:
                 thread_id,
                 AgentEventType.MESSAGE_COMPLETED,
                 {"message": message},
+                event_id=(
+                    f"{self._application_instance_id}:thread:{thread_id}:"
+                    f"message:{item_id}:completed"
+                ),
                 thread_ref=thread_ref,
                 turn_id=turn_id or None,
             )
@@ -559,10 +573,15 @@ class _AppServerApplicationAdapter:
                 "failed": AgentEventType.TURN_FAILED,
                 "interrupted": AgentEventType.TURN_INTERRUPTED,
             }.get(status, AgentEventType.TURN_COMPLETED)
+            terminal_id = turn_id or f"live-{uuid.uuid4()}"
             self._emit(
                 thread_id,
                 event_type,
                 {"status": status or "completed"},
+                event_id=(
+                    f"{self._application_instance_id}:thread:{thread_id}:"
+                    f"turn:{terminal_id}:{event_type.value}"
+                ),
                 thread_ref=thread_ref,
                 turn_id=turn_id or None,
             )
@@ -573,20 +592,18 @@ class _AppServerApplicationAdapter:
         event_type: AgentEventType,
         data: dict[str, object],
         *,
+        event_id: str,
         thread_ref: ThreadRef,
         turn_id: str | None,
     ) -> None:
-        self._sequence += 1
         event = AgentEvent(
-            event_id=f"{self._application_instance_id}:{self._sequence}",
+            event_id=event_id,
             application_instance_id=self._application_instance_id,
-            sequence=self._sequence,
             type=event_type,
             data=data,
             created_at=datetime.now(UTC),
             thread_ref=thread_ref,
             turn_id=turn_id,
-            cursor=str(self._sequence),
         )
         self._events.publish(thread_id, event)
 

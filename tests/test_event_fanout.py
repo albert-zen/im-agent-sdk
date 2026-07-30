@@ -107,6 +107,9 @@ class EventBroadcasterTests(unittest.IsolatedAsyncioTestCase):
                 AgentEventType.TURN_COMPLETED,
             ],
         )
+        self.assertTrue(all(event.sequence is None for event in first_events))
+        self.assertTrue(all(event.sequence_epoch is None for event in first_events))
+        self.assertTrue(all(event.cursor is None for event in first_events))
         messages = [event.data["message"] for event in first_events[:2]]
         self.assertTrue(all(isinstance(message, AgentMessage) for message in messages))
         phases = [
