@@ -1,24 +1,20 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 import logging
-from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 from .adapters import (
     AgentApplicationAdapter,
     BindingRepository,
     ChannelAdapter,
+    IdempotencyClaimStatus,
     IdempotencyRepository,
     ProjectionRouteRepository,
 )
 from .bindings import BindingConflict
 from .contracts import (
-    AgentEvent,
-    AgentEventType,
     AgentInput,
-    AgentMessage,
     ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,
@@ -36,8 +32,6 @@ from .contracts import (
     GatewayOperationResult,
     GetProject,
     GetThread,
-    GetThreadHistory,
-    GetTurnCatchup,
     InboundMessage,
     ListApplications,
     ObserveThread,
@@ -50,12 +44,9 @@ from .contracts import (
     TextContent,
     TextFormat,
     ThreadCreated,
-    ThreadHistoryRead,
     ThreadObserved,
-    ThreadProjectionRoute,
     ThreadRead,
     ThreadRef,
-    TurnCatchupRead,
     derive_client_message_id,
     operation_error,
     validate_application_operation,
@@ -64,12 +55,8 @@ from .contracts import (
     validate_gateway_operation_result,
 )
 from .controllers import ControllerActions, InboundController
-from .projections import (
-    InMemoryProjectionRouteRepository,
-    derive_projection_delivery_id,
-    derive_projection_route_id,
-)
-from .recovery import ThreadRecovery, recover_thread
+from .projection_runtime import ThreadProjectionRuntime
+from .projections import InMemoryProjectionRouteRepository, ProjectionWorkerHealth
 from .storage import InMemoryIdempotencyRepository
 
 logger = logging.getLogger(__name__)
@@ -88,6 +75,14 @@ class ImAgentGateway:
         projections: ProjectionRouteRepository | None = None,
         projection_policy: ProjectionPolicy = ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
         controller: InboundController | None = None,
+        baseline_history_limit: int = 3,
+        recovery_history_page_size: int = 10,
+        recovery_max_pages: int = 5,
+        catchup_limit: int = 10,
+        projection_item_limit: int = 20,
+        subscription_retry_initial_seconds: float = 0.05,
+        subscription_retry_max_seconds: float = 2.0,
+        turn_correlation_retention_seconds: float = 7 * 24 * 60 * 60,
     ) -> None:
         self._channels = {channel.channel_instance_id: channel for channel in channels}
         self._applications = {
@@ -96,42 +91,83 @@ class ImAgentGateway:
         }
         self._bindings = bindings
         self._idempotency = idempotency or InMemoryIdempotencyRepository()
-        self._projections = projections or InMemoryProjectionRouteRepository()
-        self._projection_policy = projection_policy
         self._controller = controller
         self._locks: dict[object, asyncio.Lock] = {}
-        self._projection_tasks: dict[ThreadRef, asyncio.Task[None]] = {}
-        self._projection_ready: dict[ThreadRef, asyncio.Event] = {}
+        self._starting = False
+        self._startup_messages: list[InboundMessage] = []
+        self._startup_operations: list[GatewayOperation] = []
+        self._projection_runtime = ThreadProjectionRuntime(
+            applications=self._applications,
+            bindings=bindings,
+            projections=projections or InMemoryProjectionRouteRepository(),
+            projection_policy=projection_policy,
+            execute_application=self.execute_application,
+            deliver_outbound=self._deliver_outbound,
+            baseline_history_limit=baseline_history_limit,
+            recovery_history_page_size=recovery_history_page_size,
+            recovery_max_pages=recovery_max_pages,
+            catchup_limit=catchup_limit,
+            projection_item_limit=projection_item_limit,
+            subscription_retry_initial_seconds=subscription_retry_initial_seconds,
+            subscription_retry_max_seconds=subscription_retry_max_seconds,
+            turn_correlation_retention_seconds=turn_correlation_retention_seconds,
+        )
 
     async def start(self) -> None:
-        for application in self._applications.values():
-            await application.start()
-        for channel in self._channels.values():
-            await channel.start(self._handle_message, self._handle_operation)
-        restored_routes = await self._projections.list_projection_routes()
-        if self._projection_policy is ProjectionPolicy.FOREGROUND_ONLY:
-            active_routes: list[ThreadProjectionRoute] = []
-            for route in restored_routes:
-                binding = await self._bindings.get(route.conversation_ref)
-                if binding is not None and binding.thread_ref == route.thread_ref:
-                    active_routes.append(route)
-            restored_routes = tuple(active_routes)
-        restored_threads = {route.thread_ref for route in restored_routes}
-        for thread_ref in restored_threads:
-            await self._ensure_projection(thread_ref, recover_existing=True)
+        self._starting = True
+        self._startup_messages.clear()
+        self._startup_operations.clear()
+        started_applications: list[AgentApplicationAdapter] = []
+        started_channels: list[ChannelAdapter] = []
+        try:
+            await self._projection_runtime.cleanup_stale_correlations()
+            for application in self._applications.values():
+                await application.start()
+                started_applications.append(application)
+            for channel in self._channels.values():
+                await channel.start(
+                    self._handle_message_entry,
+                    self._handle_operation_entry,
+                )
+                started_channels.append(channel)
+            await self._projection_runtime.restore()
+            self._starting = False
+            startup_messages = tuple(self._startup_messages)
+            startup_operations = tuple(self._startup_operations)
+            self._startup_messages.clear()
+            self._startup_operations.clear()
+            for message in startup_messages:
+                await self._handle_message(message)
+            for operation in startup_operations:
+                await self._handle_operation(operation)
+        except BaseException:
+            self._starting = False
+            self._startup_messages.clear()
+            self._startup_operations.clear()
+            await self._projection_runtime.stop()
+            for channel in reversed(started_channels):
+                await channel.stop()
+            for application in reversed(started_applications):
+                await application.stop()
+            raise
 
     async def stop(self) -> None:
-        tasks = tuple(self._projection_tasks.values())
-        for task in tasks:
-            task.cancel()
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-        self._projection_tasks.clear()
-        self._projection_ready.clear()
+        await self._projection_runtime.stop()
         for channel in reversed(tuple(self._channels.values())):
             await channel.stop()
         for application in reversed(tuple(self._applications.values())):
             await application.stop()
+
+    def get_projection_health(
+        self,
+        thread_ref: ThreadRef,
+    ) -> ProjectionWorkerHealth | None:
+        """Return process-local infrastructure health for one projection worker."""
+        return self._projection_runtime.get_health(thread_ref)
+
+    def list_projection_health(self) -> tuple[ProjectionWorkerHealth, ...]:
+        """Return process-local projection health without Agent Turn state."""
+        return self._projection_runtime.list_health()
 
     async def execute_application(
         self,
@@ -202,6 +238,7 @@ class ImAgentGateway:
             )
         if isinstance(operation, SelectApplication):
             self._require_application(operation.application_ref.application_instance_id)
+            previous = await self._bindings.get(operation.conversation_ref)
             binding = await self._bindings.put(
                 ConversationBinding(
                     conversation_ref=operation.conversation_ref,
@@ -209,6 +246,7 @@ class ImAgentGateway:
                 ),
                 expected_revision=operation.expected_revision,
             )
+            await self._projection_runtime.handle_binding_change(previous, binding)
             return ConversationBound(
                 operation_id=operation.operation_id,
                 type=operation.type,
@@ -229,6 +267,7 @@ class ImAgentGateway:
                 raise _GatewayActionError(read.error)
             if not isinstance(read, ProjectRead):
                 raise RuntimeError("project.get returned an incompatible result")
+            previous = await self._bindings.get(operation.conversation_ref)
             binding = await self._bindings.put(
                 ConversationBinding(
                     conversation_ref=operation.conversation_ref,
@@ -237,6 +276,7 @@ class ImAgentGateway:
                 ),
                 expected_revision=operation.expected_revision,
             )
+            await self._projection_runtime.handle_binding_change(previous, binding)
             return ConversationBound(
                 operation_id=operation.operation_id,
                 type=operation.type,
@@ -257,6 +297,7 @@ class ImAgentGateway:
                 raise _GatewayActionError(read.error)
             if not isinstance(read, ThreadRead):
                 raise RuntimeError("thread.get returned an incompatible result")
+            previous = await self._bindings.get(operation.conversation_ref)
             binding = await self._bindings.put(
                 ConversationBinding(
                     conversation_ref=operation.conversation_ref,
@@ -266,6 +307,7 @@ class ImAgentGateway:
                 ),
                 expected_revision=operation.expected_revision,
             )
+            await self._projection_runtime.handle_binding_change(previous, binding)
             return ConversationBound(
                 operation_id=operation.operation_id,
                 type=operation.type,
@@ -286,13 +328,12 @@ class ImAgentGateway:
                 raise _GatewayActionError(read.error)
             if not isinstance(read, ThreadRead):
                 raise RuntimeError("thread.get returned an incompatible result")
-            route, _created = await self._remember_projection_route(
+            route = await self._projection_runtime.observe_thread(
+                application,
                 read.thread.ref,
                 operation.conversation_ref,
                 reply_to_message_id=operation.reply_to_message_id,
             )
-            await self._ensure_projection(route.thread_ref)
-            await self._reconcile_route(application, route)
             return ThreadObserved(
                 operation_id=operation.operation_id,
                 completed_at=completed_at,
@@ -310,6 +351,7 @@ class ImAgentGateway:
                 ),
                 expected_revision=operation.expected_revision,
             )
+            await self._projection_runtime.handle_binding_change(current, binding)
             return ConversationBound(
                 operation_id=operation.operation_id,
                 type=operation.type,
@@ -321,7 +363,8 @@ class ImAgentGateway:
     async def _handle_message(self, message: InboundMessage) -> None:
         scope = f"inbound:{message.conversation_ref.channel_instance_id}"
         key = f"{message.conversation_ref.native_conversation_id}:{message.message_id}"
-        if not await self._idempotency.claim(scope, key):
+        claim = await self._idempotency.claim(scope, key)
+        if claim is not IdempotencyClaimStatus.ACQUIRED:
             return
         try:
             await self._process_message(message)
@@ -329,6 +372,12 @@ class ImAgentGateway:
             await self._idempotency.release(scope, key)
             raise
         await self._idempotency.complete(scope, key)
+
+    async def _handle_message_entry(self, message: InboundMessage) -> None:
+        if self._starting:
+            self._startup_messages.append(message)
+            return
+        await self._handle_message(message)
 
     async def _process_message(self, message: InboundMessage) -> None:
         lock = self._locks.setdefault(message.conversation_ref, asyncio.Lock())
@@ -409,42 +458,26 @@ class ImAgentGateway:
             thread_ref = binding.thread_ref
             if thread_ref is None:
                 raise RuntimeError("thread binding was not established")
-            route, created = await self._remember_projection_route(
+            await self._projection_runtime.prepare_input_route(
+                application,
                 thread_ref,
                 message.conversation_ref,
-                reply_to_message_id=message.message_id,
+                thread_was_created=thread_was_created,
             )
-            await self._ensure_projection(thread_ref)
-            if created and not thread_was_created:
-                await self._reconcile_route(application, route)
-            await application.send_input(
+            client_message_id = derive_client_message_id(
+                message.conversation_ref,
+                message.message_id,
+            )
+            await self._projection_runtime.send_input(
+                application,
                 thread_ref,
                 AgentInput(
-                    client_message_id=derive_client_message_id(
-                        message.conversation_ref,
-                        message.message_id,
-                    ),
+                    client_message_id=client_message_id,
                     content=message.content,
                     sender=message.sender,
-                    metadata={"channel_message_id": message.message_id},
                 ),
-            )
-
-    def _finish_projection_task(
-        self,
-        thread_ref: ThreadRef,
-        task: asyncio.Task[None],
-    ) -> None:
-        if self._projection_tasks.get(thread_ref) is task:
-            self._projection_tasks.pop(thread_ref, None)
-            self._projection_ready.pop(thread_ref, None)
-        if task.cancelled():
-            return
-        error = task.exception()
-        if error is not None:
-            logger.exception(
-                "Agent event projection failed",
-                exc_info=(type(error), error, error.__traceback__),
+                conversation_ref=message.conversation_ref,
+                reply_to_message_id=message.message_id,
             )
 
     async def _handle_operation(self, operation: GatewayOperation) -> None:
@@ -456,239 +489,14 @@ class ImAgentGateway:
                 result.error.message,
             )
 
-    async def _remember_projection_route(
+    async def _handle_operation_entry(
         self,
-        thread_ref: ThreadRef,
-        conversation_ref: ConversationRef,
-        *,
-        reply_to_message_id: str | None,
-    ) -> tuple[ThreadProjectionRoute, bool]:
-        existing = await self._projections.list_projection_routes(thread_ref)
-        created = not any(route.conversation_ref == conversation_ref for route in existing)
-        route = ThreadProjectionRoute(
-            route_id=derive_projection_route_id(thread_ref, conversation_ref),
-            thread_ref=thread_ref,
-            conversation_ref=conversation_ref,
-            reply_to_message_id=reply_to_message_id,
-            updated_at=datetime.now(UTC),
-        )
-        if self._projection_policy is ProjectionPolicy.REMEMBERED_LAST_RECIPIENT:
-            stored = await self._projections.replace_thread_projection_routes(route)
-        else:
-            stored = await self._projections.put_projection_route(route)
-        return stored, created
-
-    async def _ensure_projection(
-        self,
-        thread_ref: ThreadRef,
-        *,
-        recover_existing: bool = False,
+        operation: GatewayOperation,
     ) -> None:
-        task = self._projection_tasks.get(thread_ref)
-        if task is None or task.done():
-            ready = asyncio.Event()
-            task = asyncio.create_task(
-                self._project_thread(
-                    thread_ref,
-                    ready,
-                    recover_existing=recover_existing,
-                )
-            )
-            self._projection_tasks[thread_ref] = task
-            self._projection_ready[thread_ref] = ready
-            task.add_done_callback(
-                lambda completed, ref=thread_ref: self._finish_projection_task(
-                    ref,
-                    completed,
-                )
-            )
-        ready = self._projection_ready[thread_ref]
-        await ready.wait()
-        if task.done():
-            await task
-
-    async def _project_thread(
-        self,
-        thread_ref: ThreadRef,
-        ready: asyncio.Event,
-        *,
-        recover_existing: bool,
-    ) -> None:
-        recovery: ThreadRecovery | None = None
-        events: AsyncIterator[AgentEvent] | None = None
-        application = self._require_application(thread_ref.application_instance_id)
-        try:
-            if recover_existing:
-                recovery = await recover_thread(
-                    application,
-                    thread_ref,
-                    recovery_id=derive_projection_route_id(
-                        thread_ref,
-                        ConversationRef("gateway", "projection-recovery"),
-                    ),
-                )
-                events = recovery.events
-            else:
-                events = application.subscribe_thread(thread_ref)
-            ready.set()
-            if recovery is not None:
-                await self._reconcile_recovery(application, recovery)
-            async for event in events:
-                if event.type is AgentEventType.MESSAGE_COMPLETED:
-                    agent_message = event.data.get("message")
-                    if isinstance(agent_message, AgentMessage):
-                        await self._deliver_to_active_routes(agent_message)
-        finally:
-            ready.set()
-            if events is not None:
-                await _close_subscription(events)
-
-    async def _reconcile_recovery(
-        self,
-        application: AgentApplicationAdapter,
-        recovery: ThreadRecovery,
-    ) -> None:
-        thread_ref = (
-            recovery.history.thread_ref
-            if recovery.history is not None
-            else recovery.catchup.thread_ref
-            if recovery.catchup is not None
-            else None
-        )
-        routes = await self._active_projection_routes(thread_ref)
-        if not routes:
+        if self._starting:
+            self._startup_operations.append(operation)
             return
-        if thread_ref is None:
-            return
-        messages = await self._read_authoritative_messages(
-            application,
-            thread_ref,
-        )
-        for route in routes:
-            await self._deliver_messages(route, messages)
-
-    async def _reconcile_route(
-        self,
-        application: AgentApplicationAdapter,
-        route: ThreadProjectionRoute,
-    ) -> None:
-        messages = await self._read_authoritative_messages(
-            application,
-            route.thread_ref,
-        )
-        await self._deliver_messages(route, messages)
-
-    async def _read_authoritative_messages(
-        self,
-        application: AgentApplicationAdapter,
-        thread_ref: ThreadRef,
-    ) -> tuple[AgentMessage, ...]:
-        history_pages: list[tuple[AgentMessage, ...]] = []
-        recovery_scope = derive_projection_route_id(
-            thread_ref,
-            ConversationRef("gateway", "authoritative-recovery"),
-        )
-        page = 1
-        while True:
-            history_result = await self.execute_application(
-                GetThreadHistory(
-                    operation_id=f"{recovery_scope}:thread.history:{page}",
-                    application_ref=application.summary.ref,
-                    thread_ref=thread_ref,
-                    limit=20,
-                    page=page,
-                    created_at=datetime.now(UTC),
-                )
-            )
-            if not isinstance(history_result, ThreadHistoryRead):
-                break
-            history_pages.append(
-                tuple(
-                    message
-                    for turn in history_result.history.turns
-                    for message in turn.agent_messages
-                )
-            )
-            if not history_result.history.has_older:
-                break
-            page += 1
-        catchup_result = await self.execute_application(
-            GetTurnCatchup(
-                operation_id=f"{recovery_scope}:turn.catchup",
-                application_ref=application.summary.ref,
-                thread_ref=thread_ref,
-                limit=20,
-                created_at=datetime.now(UTC),
-            )
-        )
-        messages: list[AgentMessage] = []
-        for history_page in reversed(history_pages):
-            messages.extend(history_page)
-        if isinstance(catchup_result, TurnCatchupRead):
-            messages.extend(catchup_result.catchup.messages)
-        return tuple(messages)
-
-    async def _deliver_to_active_routes(
-        self,
-        agent_message: AgentMessage,
-    ) -> None:
-        routes = await self._active_projection_routes(agent_message.thread_ref)
-        await asyncio.gather(
-            *(self._deliver_agent_message(route, agent_message) for route in routes)
-        )
-
-    async def _active_projection_routes(
-        self,
-        thread_ref: ThreadRef | None,
-    ) -> tuple[ThreadProjectionRoute, ...]:
-        if thread_ref is None:
-            return ()
-        routes = await self._projections.list_projection_routes(thread_ref)
-        if self._projection_policy is not ProjectionPolicy.FOREGROUND_ONLY:
-            return routes
-        active: list[ThreadProjectionRoute] = []
-        for route in routes:
-            binding = await self._bindings.get(route.conversation_ref)
-            if binding is not None and binding.thread_ref == thread_ref:
-                active.append(route)
-        return tuple(active)
-
-    async def _deliver_messages(
-        self,
-        route: ThreadProjectionRoute,
-        messages: tuple[AgentMessage, ...],
-    ) -> None:
-        seen: set[str] = set()
-        for message in messages:
-            if message.agent_item_id in seen:
-                continue
-            seen.add(message.agent_item_id)
-            await self._deliver_agent_message(route, message)
-
-    async def _deliver_agent_message(
-        self,
-        route: ThreadProjectionRoute,
-        agent_message: AgentMessage,
-    ) -> None:
-        delivery_id = derive_projection_delivery_id(
-            route.conversation_ref,
-            agent_message.thread_ref,
-            agent_message.agent_item_id,
-        )
-        await self._deliver_outbound(
-            OutboundMessage(
-                delivery_id=delivery_id,
-                conversation_ref=route.conversation_ref,
-                content=tuple(
-                    TextContent(item.text, TextFormat.MARKDOWN)
-                    if isinstance(item, TextContent)
-                    else item
-                    for item in agent_message.content
-                ),
-                created_at=agent_message.created_at,
-                reply_to=route.reply_to_message_id,
-            )
-        )
+        await self._handle_operation(operation)
 
     async def _deliver_error(
         self,
@@ -724,17 +532,29 @@ class ImAgentGateway:
             error.message if error is not None else "Operation returned an incompatible result.",
         )
 
-    async def _deliver_outbound(self, message: OutboundMessage) -> None:
+    async def _deliver_outbound(
+        self,
+        message: OutboundMessage,
+    ) -> IdempotencyClaimStatus:
         channel = self._channels[message.conversation_ref.channel_instance_id]
         scope = f"outbound:{message.conversation_ref.channel_instance_id}"
-        if not await self._idempotency.claim(scope, message.delivery_id):
-            return
+        claim = await self._idempotency.claim(scope, message.delivery_id)
+        if claim is not IdempotencyClaimStatus.ACQUIRED:
+            return claim
         try:
-            await channel.send(message)
+            receipt = await channel.send(message)
         except BaseException:
             await self._idempotency.release(scope, message.delivery_id)
             raise
+        if receipt.status == "unknown":
+            raise RuntimeError(f"Channel delivery outcome is unknown: {message.delivery_id}")
+        if receipt.status == "rejected_by_platform":
+            await self._idempotency.release(scope, message.delivery_id)
+            raise RuntimeError(
+                receipt.detail or f"Channel rejected delivery: {message.delivery_id}"
+            )
         await self._idempotency.complete(scope, message.delivery_id)
+        return IdempotencyClaimStatus.ACQUIRED
 
     def _bound_application(
         self,
@@ -801,11 +621,3 @@ def _contract_error(error: Exception) -> ContractError:
 
 def _operation_id(message: InboundMessage, operation_type: str) -> str:
     return f"imagent:operation:{message.message_id}:{operation_type}"
-
-
-async def _close_subscription(events: AsyncIterator[AgentEvent]) -> None:
-    close = getattr(events, "aclose", None)
-    if callable(close):
-        result = close()
-        if inspect.isawaitable(result):
-            await result

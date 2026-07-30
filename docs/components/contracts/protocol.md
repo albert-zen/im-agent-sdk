@@ -250,3 +250,13 @@ from:
 
 A receipt distinguishes platform acceptance, rejection, and unknown outcome.
 Platform acceptance does not claim device display or read.
+
+`ThreadProjectionRoute.checkpointAgentItemId` and `checkpointedAt` are a
+nullable pair. They identify one destination's last completed ordered
+delivery decision; the Agent item ID is opaque and not a sortable SDK
+sequence.
+
+`TurnReplyCorrelation` contains Thread/Turn/client-message identity plus the
+originating Conversation, reply ID, and creation time. It is minimal bridge
+state, not a copy of Turn status or request truth. It applies only when the
+projection destination matches its Conversation.

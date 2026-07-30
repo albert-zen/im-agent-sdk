@@ -13,6 +13,7 @@ from .model import (
     SupportLevel,
     ThreadProjectionRoute,
     ThreadRef,
+    TurnReplyCorrelation,
 )
 from .operations import (
     ActivateNativeThread,
@@ -178,6 +179,31 @@ def validate_projection_route(route: ThreadProjectionRoute) -> None:
     )
     if route.reply_to_message_id is not None:
         require_identifier(route.reply_to_message_id, "reply_to_message_id")
+    if route.checkpoint_agent_item_id is not None:
+        require_identifier(
+            route.checkpoint_agent_item_id,
+            "checkpoint_agent_item_id",
+        )
+    if (route.checkpoint_agent_item_id is None) != (route.checkpointed_at is None):
+        raise ContractViolation(
+            "checkpoint_agent_item_id and checkpointed_at must be present together"
+        )
+
+
+def validate_turn_reply_correlation(correlation: TurnReplyCorrelation) -> None:
+    require_identifier(correlation.correlation_id, "correlation_id")
+    validate_thread_ref(correlation.thread_ref)
+    require_identifier(correlation.turn_id, "turn_id")
+    require_identifier(correlation.client_message_id, "client_message_id")
+    require_identifier(
+        correlation.conversation_ref.channel_instance_id,
+        "channel_instance_id",
+    )
+    require_identifier(
+        correlation.conversation_ref.native_conversation_id,
+        "native_conversation_id",
+    )
+    require_identifier(correlation.reply_to_message_id, "reply_to_message_id")
 
 
 def validate_application_operation(operation: ApplicationOperation) -> None:

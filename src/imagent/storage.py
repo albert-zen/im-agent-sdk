@@ -2,36 +2,42 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+from . import sqlite_rows
+from .adapters import IdempotencyClaimStatus, ProjectionCheckpointConflict
 from .bindings import BindingConflict
 from .contracts import (
-    ApplicationRef,
     ConversationBinding,
     ConversationRef,
-    ProjectRef,
     ThreadProjectionRoute,
     ThreadRef,
+    TurnReplyCorrelation,
     validate_binding,
     validate_projection_route,
+    validate_turn_reply_correlation,
 )
 
 
 class InMemoryIdempotencyRepository:
-    """Process-local exact-once admission for tests and ephemeral deployments."""
+    """Process-local stable claim state for tests and ephemeral deployments."""
 
     def __init__(self) -> None:
         self._records: dict[tuple[str, str], str] = {}
         self._lock = asyncio.Lock()
 
-    async def claim(self, scope: str, key: str) -> bool:
+    async def claim(self, scope: str, key: str) -> IdempotencyClaimStatus:
         async with self._lock:
             record = (scope, key)
-            if record in self._records:
-                return False
+            status = self._records.get(record)
+            if status == "completed":
+                return IdempotencyClaimStatus.ALREADY_COMPLETED
+            if status == "in_flight":
+                return IdempotencyClaimStatus.IN_FLIGHT
             self._records[record] = "in_flight"
-            return True
+            return IdempotencyClaimStatus.ACQUIRED
 
     async def complete(self, scope: str, key: str) -> None:
         async with self._lock:
@@ -89,6 +95,8 @@ class SQLiteGatewayState:
                 channel_instance_id TEXT NOT NULL,
                 native_conversation_id TEXT NOT NULL,
                 reply_to_message_id TEXT,
+                checkpoint_agent_item_id TEXT,
+                checkpointed_at TEXT,
                 updated_at TEXT NOT NULL,
                 UNIQUE (
                     application_instance_id,
@@ -98,8 +106,53 @@ class SQLiteGatewayState:
                     native_conversation_id
                 )
             );
+            CREATE TABLE IF NOT EXISTS turn_reply_correlations (
+                correlation_id TEXT NOT NULL PRIMARY KEY,
+                application_instance_id TEXT NOT NULL,
+                project_id TEXT NOT NULL,
+                thread_id TEXT NOT NULL,
+                turn_id TEXT NOT NULL,
+                client_message_id TEXT NOT NULL,
+                channel_instance_id TEXT NOT NULL,
+                native_conversation_id TEXT NOT NULL,
+                reply_to_message_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE (
+                    application_instance_id,
+                    project_id,
+                    thread_id,
+                    turn_id
+                )
+            );
             """
         )
+        route_columns = {
+            str(row["name"])
+            for row in self._connection.execute(
+                "PRAGMA table_info(thread_projection_routes)"
+            ).fetchall()
+        }
+        legacy_route_schema = (
+            "checkpoint_agent_item_id" not in route_columns
+            or "checkpointed_at" not in route_columns
+        )
+        if "checkpoint_agent_item_id" not in route_columns:
+            self._connection.execute(
+                "ALTER TABLE thread_projection_routes ADD COLUMN checkpoint_agent_item_id TEXT"
+            )
+        if "checkpointed_at" not in route_columns:
+            self._connection.execute(
+                "ALTER TABLE thread_projection_routes ADD COLUMN checkpointed_at TEXT"
+            )
+        if legacy_route_schema:
+            # The pre-checkpoint Gateway stored the latest inbound message ID
+            # in this column.  That value cannot be distinguished from an
+            # explicit topic default, so preserving it would mis-correlate
+            # external/recovered Turns after upgrade.
+            self._connection.execute(
+                "UPDATE thread_projection_routes SET reply_to_message_id = NULL"
+            )
+        self._connection.commit()
 
     async def close(self) -> None:
         async with self._lock:
@@ -120,7 +173,7 @@ class SQLiteGatewayState:
                     conversation.native_conversation_id,
                 ),
             ).fetchone()
-        return _binding_from_row(row) if row is not None else None
+        return sqlite_rows.binding_from_row(row) if row is not None else None
 
     async def put(
         self,
@@ -260,9 +313,9 @@ class SQLiteGatewayState:
                       AND thread_id = ?
                     ORDER BY updated_at
                     """,
-                    _thread_storage_key(thread_ref),
+                    sqlite_rows.thread_storage_key(thread_ref),
                 ).fetchall()
-        return tuple(_projection_route_from_row(row) for row in rows)
+        return tuple(sqlite_rows.projection_route_from_row(row) for row in rows)
 
     async def put_projection_route(
         self,
@@ -272,12 +325,16 @@ class SQLiteGatewayState:
         async with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
-                self._write_projection_route(route)
+                existing = self._read_projection_route(
+                    route.route_id
+                ) or self._read_projection_route_for_endpoints(route)
+                stored = sqlite_rows.merge_projection_route(existing, route)
+                self._write_projection_route(stored)
                 self._connection.commit()
             except BaseException:
                 self._connection.rollback()
                 raise
-        return route
+        return stored
 
     async def replace_thread_projection_routes(
         self,
@@ -287,6 +344,11 @@ class SQLiteGatewayState:
         async with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
+                stored = sqlite_rows.merge_projection_route(
+                    self._read_projection_route(route.route_id)
+                    or self._read_projection_route_for_endpoints(route),
+                    route,
+                )
                 self._connection.execute(
                     """
                     DELETE FROM thread_projection_routes
@@ -294,14 +356,247 @@ class SQLiteGatewayState:
                       AND project_id = ?
                       AND thread_id = ?
                     """,
-                    _thread_storage_key(route.thread_ref),
+                    sqlite_rows.thread_storage_key(stored.thread_ref),
                 )
-                self._write_projection_route(route)
+                self._write_projection_route(stored)
                 self._connection.commit()
             except BaseException:
                 self._connection.rollback()
                 raise
-        return route
+        return stored
+
+    async def advance_projection_checkpoint(
+        self,
+        route_id: str,
+        *,
+        expected_agent_item_id: str | None,
+        agent_item_id: str,
+        checkpointed_at: datetime,
+    ) -> ThreadProjectionRoute:
+        async with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                existing = self._read_projection_route(route_id)
+                if existing is None:
+                    raise KeyError(f"projection route does not exist: {route_id}")
+                if existing.checkpoint_agent_item_id != expected_agent_item_id:
+                    raise ProjectionCheckpointConflict(
+                        f"projection checkpoint changed for route {route_id}"
+                    )
+                candidate = replace(
+                    existing,
+                    checkpoint_agent_item_id=agent_item_id,
+                    checkpointed_at=checkpointed_at,
+                )
+                validate_projection_route(candidate)
+                cursor = self._connection.execute(
+                    """
+                    UPDATE thread_projection_routes
+                    SET checkpoint_agent_item_id = ?, checkpointed_at = ?
+                    WHERE route_id = ?
+                      AND (
+                        checkpoint_agent_item_id = ?
+                        OR (
+                            checkpoint_agent_item_id IS NULL
+                            AND ? IS NULL
+                        )
+                      )
+                    """,
+                    (
+                        agent_item_id,
+                        checkpointed_at.isoformat(),
+                        route_id,
+                        expected_agent_item_id,
+                        expected_agent_item_id,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    raise ProjectionCheckpointConflict(
+                        f"projection checkpoint changed for route {route_id}"
+                    )
+                advanced = self._read_projection_route(route_id)
+                self._connection.commit()
+            except BaseException:
+                self._connection.rollback()
+                raise
+        if advanced is None:
+            raise KeyError(f"projection route does not exist: {route_id}")
+        return advanced
+
+    async def delete_projection_routes(
+        self,
+        thread_ref: ThreadRef,
+        conversation_ref: ConversationRef | None = None,
+    ) -> int:
+        where = """
+            application_instance_id = ? AND project_id = ? AND thread_id = ?
+            """
+        parameters: tuple[object, ...] = sqlite_rows.thread_storage_key(thread_ref)
+        if conversation_ref is not None:
+            where += " AND channel_instance_id = ? AND native_conversation_id = ?"
+            parameters += (
+                conversation_ref.channel_instance_id,
+                conversation_ref.native_conversation_id,
+            )
+        async with self._lock:
+            cursor = self._connection.execute(
+                f"DELETE FROM thread_projection_routes WHERE {where}",
+                parameters,
+            )
+            self._connection.commit()
+            return cursor.rowcount
+
+    async def get_turn_reply_correlation(
+        self,
+        thread_ref: ThreadRef,
+        turn_id: str,
+    ) -> TurnReplyCorrelation | None:
+        async with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT * FROM turn_reply_correlations
+                WHERE application_instance_id = ?
+                  AND project_id = ?
+                  AND thread_id = ?
+                  AND turn_id = ?
+                """,
+                (*sqlite_rows.thread_storage_key(thread_ref), turn_id),
+            ).fetchone()
+        return sqlite_rows.turn_reply_correlation_from_row(row) if row is not None else None
+
+    async def list_turn_reply_correlations(
+        self,
+        thread_ref: ThreadRef | None = None,
+    ) -> tuple[TurnReplyCorrelation, ...]:
+        async with self._lock:
+            if thread_ref is None:
+                rows = self._connection.execute(
+                    "SELECT * FROM turn_reply_correlations ORDER BY created_at"
+                ).fetchall()
+            else:
+                rows = self._connection.execute(
+                    """
+                    SELECT * FROM turn_reply_correlations
+                    WHERE application_instance_id = ?
+                      AND project_id = ?
+                      AND thread_id = ?
+                    ORDER BY created_at
+                    """,
+                    sqlite_rows.thread_storage_key(thread_ref),
+                ).fetchall()
+        return tuple(sqlite_rows.turn_reply_correlation_from_row(row) for row in rows)
+
+    async def put_turn_reply_correlation(
+        self,
+        correlation: TurnReplyCorrelation,
+    ) -> TurnReplyCorrelation:
+        validate_turn_reply_correlation(correlation)
+        async with self._lock:
+            self._connection.execute(
+                """
+                INSERT INTO turn_reply_correlations (
+                    correlation_id,
+                    application_instance_id,
+                    project_id,
+                    thread_id,
+                    turn_id,
+                    client_message_id,
+                    channel_instance_id,
+                    native_conversation_id,
+                    reply_to_message_id,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (
+                    application_instance_id,
+                    project_id,
+                    thread_id,
+                    turn_id
+                )
+                DO UPDATE SET
+                    correlation_id = excluded.correlation_id,
+                    client_message_id = excluded.client_message_id,
+                    channel_instance_id = excluded.channel_instance_id,
+                    native_conversation_id = excluded.native_conversation_id,
+                    reply_to_message_id = excluded.reply_to_message_id,
+                    created_at = excluded.created_at
+                """,
+                (
+                    correlation.correlation_id,
+                    *sqlite_rows.thread_storage_key(correlation.thread_ref),
+                    correlation.turn_id,
+                    correlation.client_message_id,
+                    correlation.conversation_ref.channel_instance_id,
+                    correlation.conversation_ref.native_conversation_id,
+                    correlation.reply_to_message_id,
+                    correlation.created_at.isoformat(),
+                ),
+            )
+            self._connection.commit()
+        return correlation
+
+    async def delete_turn_reply_correlation(
+        self,
+        thread_ref: ThreadRef,
+        turn_id: str,
+    ) -> bool:
+        async with self._lock:
+            cursor = self._connection.execute(
+                """
+                DELETE FROM turn_reply_correlations
+                WHERE application_instance_id = ?
+                  AND project_id = ?
+                  AND thread_id = ?
+                  AND turn_id = ?
+                """,
+                (*sqlite_rows.thread_storage_key(thread_ref), turn_id),
+            )
+            self._connection.commit()
+            return cursor.rowcount == 1
+
+    async def delete_turn_reply_correlations(
+        self,
+        *,
+        thread_ref: ThreadRef | None = None,
+        conversation_ref: ConversationRef | None = None,
+        older_than: datetime | None = None,
+    ) -> int:
+        if thread_ref is None and conversation_ref is None and older_than is None:
+            raise ValueError("correlation deletion requires at least one selector")
+        clauses: list[str] = []
+        parameters: list[object] = []
+        if thread_ref is not None:
+            clauses.extend(
+                (
+                    "application_instance_id = ?",
+                    "project_id = ?",
+                    "thread_id = ?",
+                )
+            )
+            parameters.extend(sqlite_rows.thread_storage_key(thread_ref))
+        if conversation_ref is not None:
+            clauses.extend(
+                (
+                    "channel_instance_id = ?",
+                    "native_conversation_id = ?",
+                )
+            )
+            parameters.extend(
+                (
+                    conversation_ref.channel_instance_id,
+                    conversation_ref.native_conversation_id,
+                )
+            )
+        if older_than is not None:
+            clauses.append("created_at < ?")
+            parameters.append(older_than.isoformat())
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        async with self._lock:
+            cursor = self._connection.execute(
+                f"DELETE FROM turn_reply_correlations{where}",
+                tuple(parameters),
+            )
+            self._connection.commit()
+            return cursor.rowcount
 
     def _write_projection_route(self, route: ThreadProjectionRoute) -> None:
         updated_at = route.updated_at or datetime.now(UTC)
@@ -315,24 +610,61 @@ class SQLiteGatewayState:
                 channel_instance_id,
                 native_conversation_id,
                 reply_to_message_id,
+                checkpoint_agent_item_id,
+                checkpointed_at,
                 updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(route_id)
             DO UPDATE SET
                 reply_to_message_id = excluded.reply_to_message_id,
+                checkpoint_agent_item_id = excluded.checkpoint_agent_item_id,
+                checkpointed_at = excluded.checkpointed_at,
                 updated_at = excluded.updated_at
             """,
             (
                 route.route_id,
-                *_thread_storage_key(route.thread_ref),
+                *sqlite_rows.thread_storage_key(route.thread_ref),
                 route.conversation_ref.channel_instance_id,
                 route.conversation_ref.native_conversation_id,
                 route.reply_to_message_id,
+                route.checkpoint_agent_item_id,
+                (route.checkpointed_at.isoformat() if route.checkpointed_at is not None else None),
                 updated_at.isoformat(),
             ),
         )
 
-    async def claim(self, scope: str, key: str) -> bool:
+    def _read_projection_route(
+        self,
+        route_id: str,
+    ) -> ThreadProjectionRoute | None:
+        row = self._connection.execute(
+            "SELECT * FROM thread_projection_routes WHERE route_id = ?",
+            (route_id,),
+        ).fetchone()
+        return sqlite_rows.projection_route_from_row(row) if row is not None else None
+
+    def _read_projection_route_for_endpoints(
+        self,
+        route: ThreadProjectionRoute,
+    ) -> ThreadProjectionRoute | None:
+        row = self._connection.execute(
+            """
+            SELECT * FROM thread_projection_routes
+            WHERE application_instance_id = ?
+              AND project_id = ?
+              AND thread_id = ?
+              AND channel_instance_id = ?
+              AND native_conversation_id = ?
+            """,
+            (
+                *sqlite_rows.thread_storage_key(route.thread_ref),
+                route.conversation_ref.channel_instance_id,
+                route.conversation_ref.native_conversation_id,
+            ),
+        ).fetchone()
+        return sqlite_rows.projection_route_from_row(row) if row is not None else None
+
+    async def claim(self, scope: str, key: str) -> IdempotencyClaimStatus:
         async with self._lock:
             now = datetime.now(UTC)
             self._connection.execute("BEGIN IMMEDIATE")
@@ -346,7 +678,7 @@ class SQLiteGatewayState:
                     (scope, key, now.isoformat()),
                 )
                 self._connection.commit()
-                return True
+                return IdempotencyClaimStatus.ACQUIRED
             except sqlite3.IntegrityError:
                 row = self._connection.execute(
                     """
@@ -357,12 +689,12 @@ class SQLiteGatewayState:
                 ).fetchone()
                 if row is None or str(row["status"]) == "completed":
                     self._connection.rollback()
-                    return False
+                    return IdempotencyClaimStatus.ALREADY_COMPLETED
                 updated_at = datetime.fromisoformat(str(row["updated_at"]))
                 age = (now - updated_at).total_seconds()
                 if age < self._stale_claim_after_seconds:
                     self._connection.rollback()
-                    return False
+                    return IdempotencyClaimStatus.IN_FLIGHT
                 self._connection.execute(
                     """
                     UPDATE idempotency_records SET updated_at = ?
@@ -371,7 +703,7 @@ class SQLiteGatewayState:
                     (now.isoformat(), scope, key),
                 )
                 self._connection.commit()
-                return True
+                return IdempotencyClaimStatus.ACQUIRED
 
     async def complete(self, scope: str, key: str) -> None:
         async with self._lock:
@@ -395,65 +727,3 @@ class SQLiteGatewayState:
                 (scope, key),
             )
             self._connection.commit()
-
-
-def _binding_from_row(row: sqlite3.Row) -> ConversationBinding:
-    application_id = row["application_instance_id"]
-    project_id = row["project_id"]
-    thread_id = row["thread_id"]
-    application_ref = ApplicationRef(str(application_id)) if application_id is not None else None
-    project_ref = (
-        ProjectRef(str(application_id), str(project_id))
-        if application_id is not None and project_id is not None
-        else None
-    )
-    thread_ref = (
-        ThreadRef(
-            application_instance_id=str(application_id),
-            native_thread_id=str(thread_id),
-            project_ref=project_ref,
-        )
-        if application_id is not None and thread_id is not None
-        else None
-    )
-    return ConversationBinding(
-        conversation_ref=ConversationRef(
-            str(row["channel_instance_id"]),
-            str(row["native_conversation_id"]),
-        ),
-        application_ref=application_ref,
-        project_ref=project_ref,
-        thread_ref=thread_ref,
-        revision=int(row["revision"]),
-        updated_at=datetime.fromisoformat(str(row["updated_at"])),
-    )
-
-
-def _thread_storage_key(thread_ref: ThreadRef) -> tuple[str, str, str]:
-    return (
-        thread_ref.application_instance_id,
-        (thread_ref.project_ref.native_project_id if thread_ref.project_ref is not None else ""),
-        thread_ref.native_thread_id,
-    )
-
-
-def _projection_route_from_row(row: sqlite3.Row) -> ThreadProjectionRoute:
-    application_id = str(row["application_instance_id"])
-    project_id = str(row["project_id"])
-    project_ref = ProjectRef(application_id, project_id) if project_id else None
-    return ThreadProjectionRoute(
-        route_id=str(row["route_id"]),
-        thread_ref=ThreadRef(
-            application_instance_id=application_id,
-            native_thread_id=str(row["thread_id"]),
-            project_ref=project_ref,
-        ),
-        conversation_ref=ConversationRef(
-            channel_instance_id=str(row["channel_instance_id"]),
-            native_conversation_id=str(row["native_conversation_id"]),
-        ),
-        reply_to_message_id=(
-            str(row["reply_to_message_id"]) if row["reply_to_message_id"] is not None else None
-        ),
-        updated_at=datetime.fromisoformat(str(row["updated_at"])),
-    )

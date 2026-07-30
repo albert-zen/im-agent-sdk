@@ -15,7 +15,8 @@ The Gateway owns:
 - routing typed Application operations without reinterpreting them;
 - inbound idempotency and outbound delivery correlation;
 - establishing Thread observation before input delivery;
-- coordinating projection workers, route lookup, and Channel send;
+- composing the projection runtime with Application execution and Channel
+  send callbacks;
 - per-Conversation serialization and explicit delivery errors.
 
 It does not own:
@@ -57,12 +58,22 @@ are released on retryable failure.
 Application and Channel failures remain typed or explicitly reported. Gateway
 does not convert unknown delivery into success.
 
-On restart, current Gateway rebuilds Thread projection workers from persisted
+On restart, Gateway rebuilds required Thread projection workers from persisted
 routes and reconciles from authoritative Application history/catch-up plus
-delivery IDs. It never loads an SDK transcript. The current reconciliation can
-scan the complete archive; bounded checkpoint behavior is a target in
-[Issue #14](https://github.com/albert-zen/im-agent-sdk/issues/14), not an
-implemented guarantee.
+per-route completion checkpoints. New routes receive only a configured
+recent/active baseline. Existing routes scan newest pages toward their
+checkpoint under strict configured bounds; a missing checkpoint is explicit
+degraded health. Gateway never loads an SDK transcript.
+
+During `start()`, Channel callbacks are admitted into a short process-local
+buffer until durable projection routes have been restored. This prevents a
+Channel that immediately produces input from racing restoration; queued input
+then drains through the normal Conversation locks.
+
+For IM-originated input, Gateway persists a minimal mapping from the returned
+`AcceptedTurn` to the originating Conversation/reply ID. Projection preserves
+the event/history Turn envelope and applies the reply only to that same
+destination. An external Turn does not inherit a prior IM message.
 
 Current projection delivery awaits the Channel send in a Thread worker.
 Application notification callbacks remain non-blocking because they publish
@@ -72,11 +83,18 @@ Delivery Coordinator work in
 [Issue #12](https://github.com/albert-zen/im-agent-sdk/issues/12); until then
 memory pressure from a persistently slow Channel is an explicit limitation.
 
-Current projection worker failure recovery and route reply correlation have
-known gaps/ambiguities. Worker creation's current single-event-loop invariant
-lacks direct concurrency coverage. Their target invariants and tests are
-tracked by
-[Issue #14](https://github.com/albert-zen/im-agent-sdk/issues/14).
+Projection workers resubscribe after Application subscription/recovery failure
+with bounded backoff and expose process-local infrastructure health.
+Foreground workers are reclaimed/restored from binding policy; remembered and
+all-observer workers follow their durable routes. A per-route Channel failure
+is recorded with its route ID and cannot kill or restart the Application
+subscription. The current one-worker creation rule remains a tested
+single-event-loop, pre-suspension registration invariant.
+
+Gateway's ordered checkpoint decision does not make Channel side effects and
+SQLite atomic. Stable delivery IDs make completed work convergent; a crash
+between native send and durable completion can still yield an ambiguous
+side-effect outcome. Receipt-aware retry/backpressure remains Issue #12.
 
 ## Change obligations
 

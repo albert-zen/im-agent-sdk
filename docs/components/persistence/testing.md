@@ -6,8 +6,14 @@ Required scenarios:
 - stale put/delete revisions fail;
 - managed/flat/fixed binding invariants remain valid;
 - completed idempotency survives SQLite restart;
-- incomplete/released claims remain retryable;
+- claims distinguish acquired, completed, and in-flight work;
 - projection routes survive restart without transcript content;
+- route refresh preserves checkpoints and rejects conflicting explicit values;
+- concurrent checkpoint advances use compare-and-swap and cannot overwrite a
+  newer boundary;
+- a legacy SQLite database without checkpoint/correlation columns migrates
+  without losing binding, route, or idempotency rows;
+- Turn reply correlation supports exact deletion plus explicit bounded cleanup;
 - route policy replacement remains deterministic;
 - storage rows cannot introduce cross-Application references.
 
@@ -17,6 +23,7 @@ Run:
 PYTHONPATH=src python -m unittest \
   tests.test_bindings \
   tests.test_storage \
+  tests.test_projection_hardening \
   tests.test_projection_routing -v
 ```
 

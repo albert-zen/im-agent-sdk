@@ -23,6 +23,7 @@ Coverage must preserve:
 - attachment source discrimination and capability gating;
 - `eventId` requirements and honest optional ordering fields;
 - binding and projection-route invariants;
+- checkpoint pair validation and Turn reply-correlation identity;
 - multiple completed messages inside one Turn.
 
 Any schema change requires a matching Python model/validator change and the

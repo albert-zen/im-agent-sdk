@@ -124,9 +124,12 @@ components:
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - src/imagent/events.py
+      - src/imagent/projection_routes.py
+      - src/imagent/projection_runtime.py
       - src/imagent/projections.py
       - src/imagent/recovery.py
       - tests/test_event_fanout.py
+      - tests/test_projection_hardening.py
       - tests/test_projection_routing.py
       - tests/test_recovery.py
     docs:
@@ -153,6 +156,7 @@ components:
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - src/imagent/bindings.py
+      - src/imagent/sqlite_rows.py
       - src/imagent/storage.py
       - tests/test_bindings.py
       - tests/test_storage.py
@@ -360,17 +364,21 @@ layers:
     paths:
       - src/imagent/bindings.py
       - src/imagent/projections.py
+      - src/imagent/sqlite_rows.py
       - src/imagent/storage.py
     may_import:
       - contracts
       - ports
   recovery:
     paths:
+      - src/imagent/projection_routes.py
+      - src/imagent/projection_runtime.py
       - src/imagent/recovery.py
     may_import:
       - contracts
       - ports
       - eventing
+      - state
   controllers:
     paths:
       - src/imagent/controllers/**
@@ -442,6 +450,9 @@ maintainability:
       guidance: Keep native translation cohesive; split protocol clients or pure mapping helpers when a native adapter grows beyond one reviewable unit.
     - name: focused-bridge-modules
       paths:
+        - src/imagent/projection_routes.py
+        - src/imagent/projection_runtime.py
+        - src/imagent/sqlite_rows.py
         - src/imagent/storage.py
         - src/imagent/controllers/slash.py
         - src/imagent/contracts/validators.py

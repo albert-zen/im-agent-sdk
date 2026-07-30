@@ -45,6 +45,7 @@ from .model import (
     ThreadSummary,
     TurnCatchup,
     TurnHistoryEntry,
+    TurnReplyCorrelation,
     TurnStatus,
 )
 from .operations import (
@@ -109,6 +110,7 @@ from .validators import (
     validate_gateway_operation_result,
     validate_projection_route,
     validate_thread_ref,
+    validate_turn_reply_correlation,
 )
 
 __all__ = [
@@ -204,6 +206,7 @@ __all__ = [
     "TurnCatchup",
     "TurnCatchupRead",
     "TurnHistoryEntry",
+    "TurnReplyCorrelation",
     "TurnInterrupted",
     "TurnStatus",
     "UserInputResponse",
@@ -219,4 +222,5 @@ __all__ = [
     "validate_gateway_operation_result",
     "validate_projection_route",
     "validate_thread_ref",
+    "validate_turn_reply_correlation",
 ]

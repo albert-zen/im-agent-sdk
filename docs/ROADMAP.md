@@ -3,28 +3,6 @@
 This document contains future or unresolved work. Current behavior is defined
 by Contracts, component docs, accepted ADRs, code, and tests.
 
-## Projection maturity gate
-
-Before reusable code is transferred in Issue #9, complete
-[Issue #14](https://github.com/albert-zen/im-agent-sdk/issues/14) to harden the
-existing projection runtime:
-
-- regression-test the current non-yield, single-event-loop one-worker
-  invariant and make lifecycle ownership explicit; add synchronization only
-  if the execution model changes;
-- establish a live baseline plus bounded recent/active catch-up on first
-  observation instead of delivering a complete archive;
-- use a Gateway-owned projection completion boundary for bounded restart
-  reconciliation;
-- separate long-lived destination reply context from per-Turn correlation;
-- supervise failed projection workers and expose health/recovery behavior;
-- record current unbounded subscriber queues until Issue #12 adds bounded
-  delivery execution.
-
-These are cross-Channel/Application projection concerns, not Codex-only
-behavior. Native replay remains an optional Application capability and native
-reply rendering remains Channel policy.
-
 ## Issue #9: transfer reusable ownership
 
 Create a module-by-module transfer map, then remove the SDK's package/runtime/

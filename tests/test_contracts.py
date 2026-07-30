@@ -30,8 +30,10 @@ from imagent.contracts import (
     SupportLevel,
     ThreadCapabilities,
     ThreadDeletionCapability,
+    ThreadProjectionRoute,
     ThreadRef,
     ThreadsListed,
+    TurnReplyCorrelation,
     derive_client_message_id,
     operation_error,
     validate_agent_event,
@@ -41,6 +43,8 @@ from imagent.contracts import (
     validate_binding,
     validate_gateway_operation,
     validate_gateway_operation_result,
+    validate_projection_route,
+    validate_turn_reply_correlation,
 )
 
 
@@ -239,6 +243,41 @@ class MessageIdentityTests(unittest.TestCase):
                 cursor="cursor-1",
             ),
             replay_capabilities,
+        )
+
+
+class ProjectionContractTests(unittest.TestCase):
+    def test_checkpoint_fields_are_a_nullable_pair(self) -> None:
+        route = ThreadProjectionRoute(
+            route_id="route-1",
+            thread_ref=ThreadRef("agent-1", "thread-1"),
+            conversation_ref=ConversationRef("channel-1", "conversation-1"),
+        )
+        validate_projection_route(route)
+        with self.assertRaisesRegex(ContractViolation, "present together"):
+            validate_projection_route(
+                ThreadProjectionRoute(
+                    route_id=route.route_id,
+                    thread_ref=route.thread_ref,
+                    conversation_ref=route.conversation_ref,
+                    checkpoint_agent_item_id="agent-item-1",
+                )
+            )
+
+    def test_turn_reply_correlation_requires_explicit_identity(self) -> None:
+        validate_turn_reply_correlation(
+            TurnReplyCorrelation(
+                correlation_id="correlation-1",
+                thread_ref=ThreadRef("agent-1", "thread-1"),
+                turn_id="turn-1",
+                client_message_id="client-message-1",
+                conversation_ref=ConversationRef(
+                    "channel-1",
+                    "conversation-1",
+                ),
+                reply_to_message_id="native-message-1",
+                created_at=datetime.now(UTC),
+            )
         )
 
 

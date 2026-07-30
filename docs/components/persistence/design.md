@@ -16,7 +16,14 @@ Persistence owns implementations for:
 - inbound and outbound idempotency claim/completion state.
 
 The current implementations are in-memory repositories and
-`SQLiteGatewayState`.
+`SQLiteGatewayState`; `sqlite_rows.py` contains only SQLite row/merge mapping
+helpers used by that implementation.
+
+`SQLiteGatewayState` intentionally keeps bindings, routes/correlations, and
+idempotency in one adapter because they share one connection, lock, migration,
+and transaction boundary. Row conversion is extracted, but splitting the
+transaction owner merely to meet a line-count warning would weaken that
+boundary without creating a second responsibility.
 
 It must not store:
 
@@ -41,12 +48,20 @@ Binding updates are atomic from one Conversation's perspective. A stale
 expected revision fails explicitly. Project/Thread references are validated
 against Application ownership before they are persisted.
 
-Route storage retains routing and per-route delivery fields only. Repository
-refresh merges an existing checkpoint, while an explicit advance operation
-moves it after successful delivery. A Turn reply correlation stores only
-native identity and its originating IM target, and is removed on a terminal
-Turn event. Neither state may copy message bodies, Turn status, or native
-execution state.
+Route storage retains routing and per-route delivery fields only. A normal
+refresh with no checkpoint preserves an existing boundary. A `put` that
+carries a different checkpoint is rejected: only
+`advance_projection_checkpoint` may move the boundary, and it uses an expected
+checkpoint compare-and-swap so stale calls cannot regress or replace newer
+progress. Stable route IDs and their Thread/Conversation endpoints are a
+one-to-one identity; either direction of conflicting reuse is rejected by
+both repositories. Opaque Agent item IDs are not sortable bridge sequence
+numbers. A
+Turn reply correlation stores only native identity and its originating IM
+target, and is removed on a terminal Turn event or bounded cleanup. Deletion
+requires an explicit Thread, Conversation, or retention cutoff selector;
+clearing every correlation is not an accidental zero-argument operation.
+Neither state may copy message bodies, Turn status, or native execution state.
 
 ## Dependencies
 
@@ -56,12 +71,20 @@ row mapping are implementation details behind the Ports.
 
 ## Failure and recovery
 
-Storage errors remain visible to Gateway. Idempotency has claim, complete, and
-release states so failed work is not silently marked delivered.
+Storage errors and checkpoint conflicts remain visible to Gateway.
+Idempotency claims distinguish acquired, already-completed, and currently
+in-flight work so completed delivery can converge a lagging checkpoint without
+mistaking active work for success.
 
 At process restart, bindings and routes can be reloaded. Authoritative
 Application history/catch-up reconciles message content; persistence never
 reconstructs it from a local transcript.
+
+Opening a pre-checkpoint SQLite schema adds checkpoint/correlation storage
+without losing bindings, routes, or idempotency records. Its legacy
+`reply_to_message_id` values are cleared because the old Gateway used that
+column for the latest inbound message and it cannot be distinguished safely
+from an explicit destination/topic default.
 
 ## Change obligations
 

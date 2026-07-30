@@ -29,6 +29,7 @@ from imagent.contracts import (
     LocalPath,
     ProjectRef,
     RemoteUrl,
+    TextContent,
     ThreadRef,
 )
 from imagent.controllers import SlashController
@@ -278,6 +279,14 @@ class NativeT3Client:
         elif command["type"] == "thread.archive":
             self.threads[command["threadId"]]["archivedAt"] = "2026-07-30T00:00:00Z"
         return {"sequence": self.sequence}
+
+
+class YieldingNativeT3Client(NativeT3Client):
+    async def dispatch(self, command):
+        result = await super().dispatch(command)
+        if command["type"] == "thread.turn.start":
+            await asyncio.sleep(0)
+        return result
 
 
 class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
@@ -677,6 +686,10 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             "## Done\n\n**Markdown** is enabled.",
         )
         self.assertEqual(native_channel.sent[0].message_type, "markdown")
+        self.assertEqual(
+            native_channel.sent[0].metadata["reply_to_message_id"],
+            "qq-message-1",
+        )
 
     async def test_slash_commands_manage_a_t3_project_and_thread(self) -> None:
         native_channel = NativeQQChannel()
@@ -729,7 +742,60 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             "## T3 done\n\nThe same pipeline works.",
             rendered,
         )
+        t3_output = next(
+            message
+            for message in native_channel.sent
+            if message.text == "## T3 done\n\nThe same pipeline works."
+        )
+        self.assertEqual(
+            t3_output.metadata["reply_to_message_id"],
+            "t3-4",
+        )
         self.assertTrue(all(message.message_type == "markdown" for message in native_channel.sent))
+
+    async def test_t3_concurrent_inputs_return_distinct_accepted_turns(
+        self,
+    ) -> None:
+        native_app = YieldingNativeT3Client()
+        native_app.threads["thread-1"] = {
+            "id": "thread-1",
+            "projectId": "project-1",
+            "title": "Concurrent",
+            "modelSelection": {},
+            "runtimeMode": "full-access",
+            "latestTurn": None,
+            "messages": [],
+            "activities": [],
+            "archivedAt": None,
+            "deletedAt": None,
+        }
+        application = T3ApplicationAdapter(
+            application_instance_id="t3-main",
+            client=native_app,
+            poll_interval=0,
+        )
+        thread_ref = ThreadRef(
+            "t3-main",
+            "thread-1",
+            ProjectRef("t3-main", "project-1"),
+        )
+        first, second = await asyncio.gather(
+            application.send_input(
+                thread_ref,
+                AgentInput(
+                    client_message_id="concurrent-first",
+                    content=(TextContent("first"),),
+                ),
+            ),
+            application.send_input(
+                thread_ref,
+                AgentInput(
+                    client_message_id="concurrent-second",
+                    content=(TextContent("second"),),
+                ),
+            ),
+        )
+        self.assertNotEqual(first.turn_id, second.turn_id)
 
     @staticmethod
     def _bind_channel(native_channel, middleware):

@@ -6,12 +6,18 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 
+from imagent.adapters import (
+    ProjectionCheckpointConflict,
+    ProjectionRouteConflict,
+    ProjectionRouteRepository,
+)
 from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     ActivateNativeThread,
     AgentInput,
     ApplicationRef,
     BindConversationToThread,
+    ContractViolation,
     ConversationBinding,
     ConversationBound,
     ConversationRef,
@@ -22,11 +28,185 @@ from imagent.contracts import (
     ProjectMode,
     TextContent,
     ThreadObserved,
+    ThreadProjectionRoute,
+    ThreadRef,
 )
 from imagent.gateway import ImAgentGateway
-from imagent.projections import InMemoryProjectionRouteRepository
+from imagent.projections import (
+    InMemoryProjectionRouteRepository,
+    ProjectionWorkerState,
+    derive_projection_route_id,
+)
 from imagent.storage import SQLiteGatewayState
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
+
+
+class ProjectionRouteRepositoryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_refresh_preserves_checkpoint_and_rejects_checkpoint_change(
+        self,
+    ) -> None:
+        for repository in await self._repositories():
+            with self.subTest(repository=type(repository).__name__):
+                thread = _thread_ref()
+                conversation = ConversationRef("fake-channel", "conversation")
+                route = _projection_route(thread, conversation)
+                await repository.put_projection_route(route)
+                checkpointed_at = datetime.now(UTC)
+                advanced = await repository.advance_projection_checkpoint(
+                    route.route_id,
+                    expected_agent_item_id=None,
+                    agent_item_id="agent-item-2",
+                    checkpointed_at=checkpointed_at,
+                )
+
+                refreshed = await repository.put_projection_route(
+                    ThreadProjectionRoute(
+                        route_id=route.route_id,
+                        thread_ref=thread,
+                        conversation_ref=conversation,
+                        reply_to_message_id="new-default-reply",
+                    )
+                )
+                self.assertEqual(
+                    refreshed.checkpoint_agent_item_id,
+                    advanced.checkpoint_agent_item_id,
+                )
+                self.assertEqual(refreshed.checkpointed_at, checkpointed_at)
+                self.assertEqual(
+                    refreshed.reply_to_message_id,
+                    "new-default-reply",
+                )
+
+                with self.assertRaises(ProjectionCheckpointConflict):
+                    await repository.put_projection_route(
+                        ThreadProjectionRoute(
+                            route_id=route.route_id,
+                            thread_ref=thread,
+                            conversation_ref=conversation,
+                            checkpoint_agent_item_id="agent-item-1",
+                            checkpointed_at=checkpointed_at,
+                        )
+                    )
+            await _close_if_needed(repository)
+
+    async def test_checkpoint_advance_is_compare_and_swap(
+        self,
+    ) -> None:
+        for repository in await self._repositories():
+            with self.subTest(repository=type(repository).__name__):
+                thread = _thread_ref()
+                conversation = ConversationRef("fake-channel", "conversation")
+                route = _projection_route(thread, conversation)
+                await repository.put_projection_route(route)
+                outcomes = await asyncio.gather(
+                    repository.advance_projection_checkpoint(
+                        route.route_id,
+                        expected_agent_item_id=None,
+                        agent_item_id="agent-item-a",
+                        checkpointed_at=datetime.now(UTC),
+                    ),
+                    repository.advance_projection_checkpoint(
+                        route.route_id,
+                        expected_agent_item_id=None,
+                        agent_item_id="agent-item-b",
+                        checkpointed_at=datetime.now(UTC),
+                    ),
+                    return_exceptions=True,
+                )
+                self.assertEqual(
+                    sum(isinstance(item, ThreadProjectionRoute) for item in outcomes),
+                    1,
+                )
+                self.assertEqual(
+                    sum(isinstance(item, ProjectionCheckpointConflict) for item in outcomes),
+                    1,
+                )
+                winner = next(item for item in outcomes if isinstance(item, ThreadProjectionRoute))
+                with self.assertRaises(ProjectionCheckpointConflict):
+                    await repository.advance_projection_checkpoint(
+                        route.route_id,
+                        expected_agent_item_id=None,
+                        agent_item_id="late-old-item",
+                        checkpointed_at=datetime.now(UTC),
+                    )
+                stored = (await repository.list_projection_routes(thread))[0]
+                self.assertEqual(
+                    stored.checkpoint_agent_item_id,
+                    winner.checkpoint_agent_item_id,
+                )
+            await _close_if_needed(repository)
+
+    async def test_correlation_deletion_requires_a_selector(self) -> None:
+        for repository in await self._repositories():
+            with self.subTest(repository=type(repository).__name__):
+                with self.assertRaises(ValueError):
+                    await repository.delete_turn_reply_correlations()
+            await _close_if_needed(repository)
+
+    async def test_route_id_cannot_be_reused_for_different_endpoints(
+        self,
+    ) -> None:
+        for repository in await self._repositories():
+            with self.subTest(repository=type(repository).__name__):
+                original = _projection_route(
+                    _thread_ref(),
+                    ConversationRef("fake-channel", "first"),
+                )
+                await repository.put_projection_route(original)
+                conflicting = ThreadProjectionRoute(
+                    route_id=original.route_id,
+                    thread_ref=ThreadRef("fake-agent", "other-thread"),
+                    conversation_ref=ConversationRef(
+                        "fake-channel",
+                        "second",
+                    ),
+                )
+                with self.assertRaises(ProjectionRouteConflict):
+                    await repository.put_projection_route(conflicting)
+                with self.assertRaises(ProjectionRouteConflict):
+                    await repository.put_projection_route(
+                        ThreadProjectionRoute(
+                            route_id="different-route-id",
+                            thread_ref=original.thread_ref,
+                            conversation_ref=original.conversation_ref,
+                        )
+                    )
+                stored_routes = await repository.list_projection_routes()
+                self.assertEqual(len(stored_routes), 1)
+                self.assertEqual(stored_routes[0].route_id, original.route_id)
+                self.assertEqual(stored_routes[0].thread_ref, original.thread_ref)
+                self.assertEqual(
+                    stored_routes[0].conversation_ref,
+                    original.conversation_ref,
+                )
+            await _close_if_needed(repository)
+
+    async def test_checkpoint_advance_validates_candidate_route(self) -> None:
+        for repository in await self._repositories():
+            with self.subTest(repository=type(repository).__name__):
+                route = _projection_route(
+                    _thread_ref(),
+                    ConversationRef("fake-channel", "conversation"),
+                )
+                await repository.put_projection_route(route)
+                with self.assertRaises(ContractViolation):
+                    await repository.advance_projection_checkpoint(
+                        route.route_id,
+                        expected_agent_item_id=None,
+                        agent_item_id="",
+                        checkpointed_at=datetime.now(UTC),
+                    )
+            await _close_if_needed(repository)
+
+    async def _repositories(self) -> tuple[ProjectionRouteRepository, ...]:
+        self._temporary_directory = tempfile.TemporaryDirectory()
+        sqlite = SQLiteGatewayState(Path(self._temporary_directory.name) / "gateway.sqlite3")
+        return InMemoryProjectionRouteRepository(), sqlite
+
+    async def asyncTearDown(self) -> None:
+        temporary_directory = getattr(self, "_temporary_directory", None)
+        if temporary_directory is not None:
+            temporary_directory.cleanup()
 
 
 class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
@@ -131,6 +311,9 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
             self.assertIsInstance(switched_b, ConversationBound)
+            health_a = gateway.get_projection_health(thread_a.ref)
+            assert health_a is not None
+            self.assertIs(health_a.state, ProjectionWorkerState.STOPPED)
             await channel.on_message(_inbound(conversation, "b-first"))
             await _wait_for_deliveries(channel, 4)
 
@@ -170,6 +353,12 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsInstance(observed, ThreadObserved)
             await _wait_for_deliveries(channel, 6)
             self.assertEqual(channel.sent[-1].reply_to, "return-a")
+            async with asyncio.timeout(1):
+                while True:
+                    health_a = gateway.get_projection_health(thread_a.ref)
+                    if health_a is not None and health_a.state is ProjectionWorkerState.RUNNING:
+                        break
+                    await asyncio.sleep(0)
 
             await application.send_input(
                 thread_a.ref,
@@ -326,9 +515,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
             await second_gateway.start()
             try:
                 await _wait_for_deliveries(second_channel, 2)
-                self.assertTrue(
-                    all(message.reply_to == "before-restart" for message in second_channel.sent)
-                )
+                self.assertTrue(all(message.reply_to is None for message in second_channel.sent))
             finally:
                 await second_gateway.stop()
                 await second_state.close()
@@ -351,3 +538,26 @@ async def _wait_for_deliveries(
     async with asyncio.timeout(1):
         while len(channel.sent) < count:
             await asyncio.sleep(0)
+
+
+def _thread_ref() -> ThreadRef:
+    return ThreadRef(
+        application_instance_id="fake-agent",
+        native_thread_id="thread-1",
+    )
+
+
+def _projection_route(
+    thread_ref: ThreadRef,
+    conversation_ref: ConversationRef,
+) -> ThreadProjectionRoute:
+    return ThreadProjectionRoute(
+        route_id=derive_projection_route_id(thread_ref, conversation_ref),
+        thread_ref=thread_ref,
+        conversation_ref=conversation_ref,
+    )
+
+
+async def _close_if_needed(repository: ProjectionRouteRepository) -> None:
+    if isinstance(repository, SQLiteGatewayState):
+        await repository.close()

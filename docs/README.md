@@ -22,8 +22,8 @@ JSON Schema under `schemas/v1/` is the language-neutral contract surface.
 | `adapters.py` | [ports design](components/ports/design.md), [testing](components/ports/testing.md) | adapter contract kit and static typing |
 | `attachments.py` | [attachments/media design](components/attachments-and-media/design.md), [testing](components/attachments-and-media/testing.md) | attachment trust and vertical-slice tests |
 | `gateway.py` | [gateway design](components/gateway/design.md), [testing](components/gateway/testing.md) | gateway operation and vertical-slice tests |
-| `events.py`, `projections.py`, `recovery.py` | [projection/recovery design](components/projections-and-recovery/design.md), [testing](components/projections-and-recovery/testing.md) | fan-out, projection routing, recovery tests |
-| `bindings.py`, `storage.py` | [persistence design](components/persistence/design.md), [testing](components/persistence/testing.md) | binding and storage tests |
+| `events.py`, `projection_routes.py`, `projection_runtime.py`, `projections.py`, `recovery.py` | [projection/recovery design](components/projections-and-recovery/design.md), [testing](components/projections-and-recovery/testing.md) | fan-out, projection routing, recovery tests |
+| `bindings.py`, `sqlite_rows.py`, `storage.py` | [persistence design](components/persistence/design.md), [testing](components/persistence/testing.md) | binding and storage tests |
 | `controllers/**` | [controllers design](components/controllers/design.md), [testing](components/controllers/testing.md) | Slash Controller tests |
 | `channels/**` | [Channel adapter design](components/channel-adapters/design.md), [testing](components/channel-adapters/testing.md), applicable native page | Channel contract and native seam tests |
 | `applications/**` | [Application adapter design](components/application-adapters/design.md), [testing](components/application-adapters/testing.md), applicable native page | adapter contract, native client, event, recovery tests |

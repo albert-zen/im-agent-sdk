@@ -1,8 +1,9 @@
 # Projections and recovery testing
 
 Current tests prove independent fan-out, explicit Turn terminal events, honest
-ordering/replay declarations, foreground/remembered routing, and restart
-reconciliation from authoritative history.
+ordering/replay declarations, foreground/remembered routing, bounded
+authoritative reconciliation, checkpoint persistence, per-Turn reply
+correlation, and failure isolation.
 
 Protect these historical and known failure modes:
 
@@ -30,20 +31,21 @@ Protect these historical and known failure modes:
 - worker health conflating infrastructure state with Agent Turn/request truth;
 - an unbounded subscriber queue hiding slow-delivery memory pressure.
 
-The explicit worker-concurrency, bounded-scan, bootstrap ordering, checkpoint,
-per-Turn reply, failure-isolation, and worker-supervision cases are required
-but not yet present at the 9fca3dd baseline. They are acceptance criteria for
-[Issue #14](https://github.com/albert-zen/im-agent-sdk/issues/14). Bounded
-delivery/backpressure tests belong to
+These cases are covered by `test_projection_hardening.py`,
+`test_projection_routing.py`, `test_event_fanout.py`, `test_recovery.py`, and
+`test_storage.py`. Gateway vertical slices additionally prove that Zen App
+Server and T3 `AcceptedTurn` identities reach a reply-capable QQ projection;
+the flat/no-reply fake Channel profile proves that reply context remains
+optional and destination-safe. Native rendering details stay adapter tests.
+Bounded delivery/backpressure and receipt-aware retry tests remain
 [Issue #12](https://github.com/albert-zen/im-agent-sdk/issues/12).
 
 Run:
 
 ```sh
-PYTHONPATH=src python -m unittest \
-  tests.test_event_fanout \
-  tests.test_recovery \
-  tests.test_projection_routing -v
+uv run python -m unittest discover -s tests -p "test_projection*.py" -v
+uv run python -m unittest discover -s tests -p "test_event_fanout.py" -v
+uv run python -m unittest discover -s tests -p "test_recovery.py" -v
 ```
 
 When a native adapter changes event mapping, run its adapter contract and

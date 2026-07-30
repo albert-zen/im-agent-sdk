@@ -10,7 +10,7 @@ contracts
 ├── state
 └── controllers
 
-eventing + contracts + ports
+eventing + contracts + ports + state
 └── recovery
 
 contracts + ports + media + eventing

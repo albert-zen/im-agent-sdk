@@ -376,7 +376,20 @@ class ThreadProjectionRoute:
     thread_ref: ThreadRef
     conversation_ref: ConversationRef
     reply_to_message_id: str | None = None
+    checkpoint_agent_item_id: str | None = None
+    checkpointed_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TurnReplyCorrelation:
+    correlation_id: str
+    thread_ref: ThreadRef
+    turn_id: str
+    client_message_id: str
+    conversation_ref: ConversationRef
+    reply_to_message_id: str
+    created_at: datetime
 
 
 @dataclass(frozen=True, slots=True)

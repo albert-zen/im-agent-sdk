@@ -38,7 +38,11 @@ integrations prove a common port.
 `ProjectionRouteRepository` owns explicit merge/advance and Turn-correlation
 operations because these are common Gateway projection state across
 Application and Channel implementations. It does not expose transcript or
-native Turn mutation APIs.
+native Turn mutation APIs. Route refresh preserves an omitted checkpoint and
+rejects a conflicting explicit value. Checkpoint advance is compare-and-swap
+against an expected opaque Agent item ID; implementations never infer ordering
+from that ID. Correlation bulk deletion requires at least one explicit
+selector.
 
 ## Change obligations
 

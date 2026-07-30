@@ -65,7 +65,8 @@ not have identical names.
 | Turn/request/execution/status | Agent Application | rebuildable projection only |
 | Conversation input binding | Gateway | yes |
 | Thread projection route | Gateway | routing fields only |
-| future projection completion checkpoint | Gateway target in #14 | permitted only when it carries no Agent content/truth |
+| projection completion checkpoint | Gateway | per destination route; stable Agent item ID and time only |
+| Turn-to-IM reply correlation | Gateway | minimal active-Turn bridge identity with bounded retention |
 | inbound/outbound idempotency | Gateway | yes |
 | Channel reconnect token | Channel integration | yes as native transport state |
 | Agent replay cursor | Agent Application | opaque projection checkpoint only |
@@ -73,7 +74,7 @@ not have identical names.
 
 Deleting rebuildable discovery/content caches must not lose Agent truth:
 authoritative history can reconstruct their content. Delivery idempotency,
-routes, and future completion checkpoints are owned bridge state, not
+routes, completion checkpoints, and reply correlations are owned bridge state, not
 disposable transcript caches; losing them may require explicit degraded
 recovery rather than pretending the prior delivery boundary is known.
 
@@ -132,16 +133,13 @@ subscribe first
 → consume live events
 ```
 
-The current Gateway can rebuild observation after restart from routes and
-authoritative history, but its first-observe/restart scan is not bounded and
-has no projection completion checkpoint. This is a known gap, not current
-contract truth.
-
-The target invariant is a live baseline plus bounded recent/active catch-up.
-Full archive delivery is an explicit history operation/Controller UX. A
-Gateway-owned completion boundary may bound missed-output reconciliation but
-must contain no transcript or Turn truth. This work is tracked by
-[Issue #14](https://github.com/albert-zen/im-agent-sdk/issues/14).
+Gateway rebuilds observation after restart from routes and authoritative
+history. A new route reads a configured recent/active baseline rather than a
+complete archive. An existing route scans newest pages toward its
+per-destination completion checkpoint under configured page and item bounds.
+Missing/expired checkpoints remain visible as degraded worker health. Full
+archive reading is an explicit history operation/Controller UX; the checkpoint
+contains no transcript or Turn truth.
 
 ## Concurrency and worker lifecycle
 
@@ -155,26 +153,23 @@ must contain no transcript or Turn truth. This work is tracked by
 - Gateway stores durable routes and uses delivery idempotency.
 - `_ensure_projection` records a newly created worker before its first
   suspension point, so callers on the Gateway event loop cannot interleave
-  lookup and registration. The single-worker invariant lacks a direct
-  concurrency regression test. Gateway lifecycle entrypoints currently assume
+  lookup and registration. Concurrent-observer coverage protects this
+  one-worker invariant. Gateway lifecycle entrypoints currently assume
   execution on their owning event loop; a future cross-thread API would need
   an explicit synchronization boundary.
-
-### Target invariants and known gaps
-
-- the current one-worker event-loop invariant should have direct concurrency
-  coverage and remain explicit if lifecycle code changes;
-- a worker failure should be observable and supervised, but current workers
-  exit and wait for another trigger;
-- observation should be reclaimed when no route/recovery policy needs it, but
-  current route removal does not tear down a worker;
-- per-Turn reply correlation must differ from long-lived route/topic context,
-  but current route state can be overwritten by the latest inbound message;
-- first-observe and restart reconciliation must be bounded, but current code
-  can scan the complete archive.
-
-These gaps are tracked by
-[Issue #14](https://github.com/albert-zen/im-agent-sdk/issues/14).
+- subscription/recovery failure enters bounded-backoff resubscription and is
+  visible in process-local worker health;
+- `foreground_only` reclaims workers with no active binding route and restores
+  the bound route after restart; remembered/all-observer policies retain
+  workers while their routes exist;
+- `AcceptedTurn` creates minimal per-Turn reply correlation. Only a matching
+  destination may use it; external/recovered Turns without a correlation use
+  no reply unless the route carries an explicit destination/topic default;
+- per-route bootstrap barriers serialize bounded baseline before queued live
+  delivery decisions without blocking native event publication;
+- one route's Channel failure blocks that route's later delivery decisions,
+  records its route ID in worker health, and does not restart the Application
+  subscription.
 
 Subscriber queues are currently unbounded and projection delivery awaits
 Channel send. This protects native notification callbacks from slow IM but
@@ -189,9 +184,10 @@ reference, access/authentication, missing binding, unavailable Application,
 rejected operation, attachment source/trust, delivery outcome, worker health,
 gap, and cursor expiration.
 
-Core does not choose consumer retry counts, permission prompts, Full Access,
-or hidden self-healing policy. Safe infrastructure may expose health and
-idempotent recovery; adapters and consumers retain native/product policy.
+Core does not choose product retry counts, permission prompts, or Full Access.
+Safe Application resubscription is bounded infrastructure recovery. Channel
+delivery retry/backpressure remains explicit future coordinator/consumer
+policy rather than a hidden loop in the projection worker.
 
 ## Security and policy boundaries
 

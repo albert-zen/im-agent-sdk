@@ -17,8 +17,10 @@ and loses background output.
 
 No one implies another. Default UX may compose them explicitly.
 
-Current routes persist only stable Thread/Conversation references, optional
-destination reply context, and update time. They never store transcript, Turn,
+Routes persist only stable Thread/Conversation references, optional
+destination reply context, a per-destination delivery checkpoint, and update
+times. Separate bounded-lifetime correlation links an accepted IM-originated
+Turn to its originating reply target. Neither stores transcript, Turn status,
 request, or execution truth.
 
 Gateway supports `foreground_only`, `remembered_last_recipient`, and
@@ -27,13 +29,9 @@ plus authoritative history/catch-up.
 
 ## Consequences
 
-Cross-client selection stays isolated. Output observation can survive input
-switches according to policy. Per-Turn reply correlation must not be inferred
-from the last inbound message stored on a long-lived route. The current
-non-yield, single-event-loop one-worker invariant needs direct regression
-coverage and explicit lifecycle ownership; synchronization is required only
-if that execution model changes. Per-Turn correlation, route reclamation,
-supervised recovery, and any future content-free projection checkpoint are
-target follow-up work in
-[Issue #14](https://github.com/albert-zen/im-agent-sdk/issues/14), not claims
-about the current baseline.
+Cross-client selection stays isolated. Output observation survives or is
+reclaimed according to policy. Per-Turn reply correlation comes from
+`AcceptedTurn`, never the last inbound message stored on a long-lived route.
+The tested non-yield, single-event-loop one-worker invariant remains explicit;
+synchronization is required only if that execution model changes. ADR 0007
+defines checkpoint, bootstrap, recovery, and failure-domain details.

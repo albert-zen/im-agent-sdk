@@ -112,6 +112,7 @@ class T3ApplicationAdapter:
         self._turn_baselines: dict[tuple[str, str], frozenset[str]] = {}
         self._events = EventBroadcaster[str, AgentEvent]()
         self._poll_tasks: dict[str, asyncio.Task[None]] = {}
+        self._send_locks: dict[str, asyncio.Lock] = {}
         self._seen_messages: dict[str, set[str]] = {}
         self._terminal_turns: dict[str, set[str]] = {}
         self._initialized_threads: set[str] = set()
@@ -168,6 +169,7 @@ class T3ApplicationAdapter:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._poll_tasks.clear()
+        self._send_locks.clear()
         close = getattr(self._client, "aclose", None)
         if callable(close):
             result = close()
@@ -527,6 +529,18 @@ class T3ApplicationAdapter:
         message: AgentInput,
     ) -> AcceptedTurn:
         self._require_own_thread(thread_ref)
+        lock = self._send_locks.setdefault(
+            thread_ref.native_thread_id,
+            asyncio.Lock(),
+        )
+        async with lock:
+            return await self._send_input_locked(thread_ref, message)
+
+    async def _send_input_locked(
+        self,
+        thread_ref: ThreadRef,
+        message: AgentInput,
+    ) -> AcceptedTurn:
         text = "\n".join(
             part.text for part in message.content if isinstance(part, TextContent)
         ).strip()

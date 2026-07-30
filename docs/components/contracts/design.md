@@ -15,8 +15,8 @@ This component owns:
 - content envelopes and explicit attachment sources;
 - typed Application and Gateway operations and results;
 - capabilities and explicit error shapes;
-- Agent events, ordering fields, history projections, bindings, and projection
-  route value objects;
+- Agent events, ordering fields, history projections, bindings, projection
+  route checkpoints, and minimal Turn reply-correlation value objects;
 - Python validators and the matching JSON Schemas.
 
 It does not own:

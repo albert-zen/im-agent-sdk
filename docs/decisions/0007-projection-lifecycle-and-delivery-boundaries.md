@@ -19,9 +19,22 @@ transcript, Turn, request, or execution truth.
 
 Each `ThreadProjectionRoute` may carry the stable Agent item ID of its last
 successfully delivered completed message and the time that boundary advanced.
-Repository route refresh merges these fields and cannot clear an existing
-boundary. Successful delivery advances one route atomically; progress for
-another Conversation never overwrites it.
+An ordinary repository route refresh with no checkpoint preserves these
+fields. A `put` carrying a checkpoint must match the stored value; it cannot
+silently advance, clear, or replace it. Successful delivery advances one route
+with an expected-checkpoint compare-and-swap. A stale caller fails explicitly,
+and progress for another Conversation never overwrites it. Agent item IDs are
+opaque and are never compared to guess ordering.
+
+The idempotency claim distinguishes newly acquired work, an already completed
+delivery, and work currently in flight. A fresh successful send advances its
+route checkpoint. During authoritative ordered recovery, an
+already-completed stable delivery ID may converge a lagging checkpoint; an
+in-flight claim cannot. Live duplicates never use opaque Agent item IDs to
+guess order. Native Channel send, durable idempotency completion, and
+checkpoint advance are not one transaction. The SDK guarantees one ordered
+delivery decision per stable ID, not strict exactly-once external side effects
+across a process crash.
 
 New routes read only a bounded recent baseline plus active Turn catch-up.
 Existing routes scan newest authoritative pages toward their checkpoint with a
@@ -50,8 +63,11 @@ For IM-originated input, Gateway records only:
 The mapping is created from `AcceptedTurn`, never Metadata or a route's latest
 inbound message. Live projection preserves `AgentEvent.turn_id`; recovery uses
 native history Turn envelopes. An explicit terminal Turn event removes the
-correlation. If recovery has no correlation, output uses no reply unless the
-route carries an explicit Channel topic/default context.
+correlation. Configurable time retention and route/Thread cleanup bound stale
+entries when a terminal event is missing. A correlation applies only when its
+Conversation matches the destination route. If recovery has no matching
+correlation, output uses no reply unless the route carries an explicit Channel
+topic/default context.
 
 ### Observation and delivery failures are separate
 
@@ -61,8 +77,8 @@ bounded backoff. A Channel send failure is isolated per destination, updates
 delivery health, and does not restart observation or trigger history replay.
 
 `foreground_only` requires observation only while a matching Conversation
-binding selects the Thread. `remembered_last_recipient` and `all_observers`
-retain observation while their durable routes exist.
+binding selects the Thread, including after restart. `remembered_last_recipient`
+and `all_observers` retain observation while their durable routes exist.
 
 ## Classification
 

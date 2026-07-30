@@ -8,6 +8,8 @@ Every adapter should prove:
 - Thread lookup independent from native activation;
 - actual archive/permanent deletion semantics;
 - stable client-message ID round-trip;
+- concurrent input returns the distinct native `AcceptedTurn` identity for
+  each call;
 - canonical user and Agent message events;
 - multiple completed messages before an explicit terminal Turn event;
 - fan-out-safe subscriptions;
@@ -18,12 +20,7 @@ Every adapter should prove:
 Run:
 
 ```sh
-PYTHONPATH=src python -m unittest \
-  tests.test_adapter_contracts \
-  tests.test_imcodex_appserver \
-  tests.test_t3_client \
-  tests.test_attachments \
-  tests.test_recovery \
-  tests.test_event_fanout \
-  tests.test_gateway_vertical_slice -v
+uv run python -m unittest discover -s tests -p "test_adapter_contracts.py" -v
+uv run python -m unittest discover -s tests -p "test_gateway_vertical_slice.py" -v
+uv run python -m unittest discover -s tests -p "test_recovery.py" -v
 ```

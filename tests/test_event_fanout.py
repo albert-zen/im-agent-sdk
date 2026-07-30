@@ -156,8 +156,9 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
             await gateway.stop()
 
         replies = [message.reply_to for message in channel.sent]
-        self.assertEqual(replies.count("first-message"), 4)
-        self.assertEqual(replies.count("second-message"), 4)
+        self.assertEqual(replies.count("first-message"), 2)
+        self.assertEqual(replies.count("second-message"), 2)
+        self.assertEqual(replies.count(None), 4)
         self.assertEqual(len({message.delivery_id for message in channel.sent}), 8)
 
 

@@ -17,6 +17,8 @@
         "threadRef",
         "conversationRef",
         "replyToMessageId",
+        "checkpointAgentItemId",
+        "checkpointedAt",
         "updatedAt"
       ],
       "properties": {
@@ -33,11 +35,95 @@
             { "type": "null" }
           ]
         },
+        "checkpointAgentItemId": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "checkpointedAt": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Timestamp" },
+            { "type": "null" }
+          ]
+        },
         "updatedAt": {
           "oneOf": [
             { "$ref": "common.schema.json#/$defs/Timestamp" },
             { "type": "null" }
           ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["checkpointAgentItemId"],
+            "properties": {
+              "checkpointAgentItemId": {
+                "$ref": "common.schema.json#/$defs/Identifier"
+              }
+            }
+          },
+          "then": {
+            "required": ["checkpointedAt"],
+            "properties": {
+              "checkpointedAt": {
+                "$ref": "common.schema.json#/$defs/Timestamp"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["checkpointedAt"],
+            "properties": {
+              "checkpointedAt": {
+                "$ref": "common.schema.json#/$defs/Timestamp"
+              }
+            }
+          },
+          "then": {
+            "required": ["checkpointAgentItemId"],
+            "properties": {
+              "checkpointAgentItemId": {
+                "$ref": "common.schema.json#/$defs/Identifier"
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "TurnReplyCorrelation": {
+      "type": "object",
+      "required": [
+        "correlationId",
+        "threadRef",
+        "turnId",
+        "clientMessageId",
+        "conversationRef",
+        "replyToMessageId",
+        "createdAt"
+      ],
+      "properties": {
+        "correlationId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "threadRef": {
+          "$ref": "resources.schema.json#/$defs/ThreadRef"
+        },
+        "turnId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "clientMessageId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "conversationRef": {
+          "$ref": "messages.schema.json#/$defs/ConversationRef"
+        },
+        "replyToMessageId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "createdAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
         }
       },
       "additionalProperties": false
