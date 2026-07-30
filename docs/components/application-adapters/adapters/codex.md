@@ -33,7 +33,14 @@ and Full Access semantics are not chosen by the SDK.
 
 ## Current client ownership
 
-The current Python composition imports the pinned IMCodex App Server
-client/supervisor. Issue #9 transfers the reusable client, fixtures, tests,
-license/provenance, and lifecycle into this SDK. IMCodex-specific supervision
-and product configuration remain consumer decisions.
+The SDK owns the reusable JSON-RPC client, stdio/WebSocket transports, target
+model, bounded retry, protocol classification, redacted diagnostics, and
+supervisor under `applications/appserver_client/`. Local paths are exposed
+only for stdio/Unix-socket transports or an explicitly verified shared
+filesystem.
+
+IMCodex-specific configuration loading, launcher behavior, branding, command
+surface, and product supervision remain consumer decisions. Its later
+composition migration and duplicate removal are still required to complete
+Issue #9; see the
+[owner transfer map](../../../migrations/issue-9-imcodex-owner-transfer.md).

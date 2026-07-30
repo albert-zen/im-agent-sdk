@@ -15,7 +15,8 @@ from imagent.applications import (
     ZenApplicationAdapter,
 )
 from imagent.bindings import InMemoryBindingRepository
-from imagent.channels import ImcodexChannelAdapter
+from imagent.channels import NativeTransportChannelAdapter
+from imagent.channels.native.models import NativeDeliveryResult
 from imagent.contracts import (
     ActivateNativeThread,
     AgentInput,
@@ -50,9 +51,10 @@ class NativeQQChannel:
     async def stop(self) -> None:
         return None
 
-    async def send_message(self, message) -> None:
+    async def send_message(self, message) -> NativeDeliveryResult:
         self.sent.append(message)
         self.delivered.set()
+        return NativeDeliveryResult()
 
     async def receive(self, text: str, *, message_id: str, attachments=()) -> None:
         inbound = SimpleNamespace(
@@ -329,7 +331,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_appserver_catchup_and_history_restore_user_context(self) -> None:
         native_channel = NativeQQChannel()
-        channel = ImcodexChannelAdapter(
+        channel = NativeTransportChannelAdapter(
             channel_instance_id="qq-main",
             channel_id="qq",
             native_factory=lambda middleware: self._bind_channel(
@@ -381,7 +383,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_t3_catchup_and_history_use_native_turn_grouping(self) -> None:
         native_channel = NativeQQChannel()
-        channel = ImcodexChannelAdapter(
+        channel = NativeTransportChannelAdapter(
             channel_instance_id="qq-main",
             channel_id="qq",
             native_factory=lambda middleware: self._bind_channel(
@@ -579,12 +581,12 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(codex.summary.capabilities.attachment_sources, ())
 
-    async def test_imcodex_channel_emits_explicit_local_path_source(self) -> None:
+    async def test_native_channel_emits_explicit_local_path_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             image_path = Path(directory) / "from-channel.png"
             image_path.write_bytes(b"png")
             native_channel = NativeQQChannel()
-            channel = ImcodexChannelAdapter(
+            channel = NativeTransportChannelAdapter(
                 channel_instance_id="qq-main",
                 channel_id="qq",
                 native_factory=lambda middleware: self._bind_channel(
@@ -646,7 +648,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_qq_message_runs_a_zen_turn_and_returns_markdown(self) -> None:
         native_channel = NativeQQChannel()
-        channel = ImcodexChannelAdapter(
+        channel = NativeTransportChannelAdapter(
             channel_instance_id="qq-main",
             channel_id="qq",
             native_factory=lambda middleware: self._bind_channel(
@@ -693,7 +695,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_slash_commands_manage_a_t3_project_and_thread(self) -> None:
         native_channel = NativeQQChannel()
-        channel = ImcodexChannelAdapter(
+        channel = NativeTransportChannelAdapter(
             channel_instance_id="qq-main",
             channel_id="qq",
             native_factory=lambda middleware: self._bind_channel(

@@ -3,16 +3,18 @@
 This document contains future or unresolved work. Current behavior is defined
 by Contracts, component docs, accepted ADRs, code, and tests.
 
-## Issue #9: transfer reusable ownership
+## Issue #9: finish downstream consumer migration
 
-Create a module-by-module transfer map, then remove the SDK's package/runtime/
-dynamic-import dependency on IMCodex.
+The SDK owner-side transfer is represented by code, component docs, tests, and
+the [transfer map](migrations/issue-9-imcodex-owner-transfer.md). The remaining
+future work is an isolated IMCodex migration:
 
-The SDK becomes owner of reusable Channel adapters, App Server client pieces,
-tests, fixtures, and provenance. IMCodex becomes a downstream composition.
-Do not keep permanent dual implementations or an exitless shim. IMCodex
-configuration, product commands, bot policy, and permission choices remain
-consumer decisions and are migrated later in a separate repository task.
+- depend on and compose the SDK-owned Channel/App Server APIs;
+- retain product configuration, commands, branding, launchers, and policy;
+- prove downstream parity, then delete the duplicated product implementations
+  without an exitless shim.
+
+Issue #9 remains open until that consumer-side removal is complete.
 
 ## Issue #10: request response loop
 

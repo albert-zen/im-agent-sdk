@@ -12,8 +12,29 @@ authors = [{ name = "Albert Zen" }]
 dependencies = ["httpx>=0.28"]
 
 [project.optional-dependencies]
-imcodex = [
-  "imcodex @ git+https://github.com/albert-zen/imcodex.git@858398226e8f76e49f8259ae686939f209e1bb36",
+appserver = [
+  "websockets>=15.0,<16.0",
+]
+qq = [
+  "Pillow>=12.3,<13.0",
+  "websockets>=15.0,<16.0",
+]
+telegram = [
+  "Pillow>=12.3,<13.0",
+]
+feishu = [
+  "lark-channel-sdk>=1.1,<2.0",
+  "Pillow>=12.3,<13.0",
+]
+weixin = [
+  "Pillow>=12.3,<13.0",
+  "pycryptodome>=3.23,<4.0",
+]
+channels = [
+  "lark-channel-sdk>=1.1,<2.0",
+  "Pillow>=12.3,<13.0",
+  "pycryptodome>=3.23,<4.0",
+  "websockets>=15.0,<16.0",
 ]
 dev = [
   "jsonschema>=4.23",

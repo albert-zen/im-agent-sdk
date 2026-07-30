@@ -15,11 +15,21 @@ Run the reusable Channel contract suite plus native adapter tests:
 
 ```sh
 PYTHONPATH=src python -m unittest \
-  tests.test_imcodex_channels \
+  tests.test_native_channels \
+  tests.test_channel_qq \
+  tests.test_channel_telegram \
+  tests.test_channel_feishu \
+  tests.test_channel_weixin \
   tests.test_adapter_contracts \
   tests.test_gateway_vertical_slice -v
 ```
 
-After Issue #9 adds local QQ/Telegram/Feishu/Weixin modules, each native module
-must receive a focused adapter page and tests before its path is added to the
-mapping. Current config does not pretend those not-yet-local files exist.
+`test_package_independence.py` additionally guards package metadata, lockfile,
+CI, and `src/imagent` against reintroducing a consumer-package dependency.
+Release validation builds the wheel and constructs every adapter in clean
+environments with only its declared extra:
+
+```sh
+uv build --wheel
+uv run python scripts/smoke_clean_install.py
+```

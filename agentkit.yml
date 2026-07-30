@@ -204,12 +204,21 @@ components:
       - docs/decisions/0003-attachment-sources-and-trust.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
+      - docs/migrations/issue-9-imcodex-owner-transfer.md
       - src/imagent/channels/**
-      - tests/test_imcodex_channels.py
+      - tests/test_native_channels.py
+      - tests/test_channel_qq.py
+      - tests/test_channel_telegram.py
+      - tests/test_channel_feishu.py
+      - tests/test_channel_weixin.py
     docs:
       - docs/components/channel-adapters/design.md
       - docs/components/channel-adapters/testing.md
-      - docs/components/channel-adapters/adapters/imcodex.md
+      - docs/components/channel-adapters/adapters/qq.md
+      - docs/components/channel-adapters/adapters/telegram.md
+      - docs/components/channel-adapters/adapters/feishu.md
+      - docs/components/channel-adapters/adapters/weixin.md
+      - docs/migrations/issue-9-imcodex-owner-transfer.md
     required_docs:
       - design
       - testing
@@ -233,15 +242,18 @@ components:
       - docs/decisions/0005-input-activation-and-projection.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
+      - docs/migrations/issue-9-imcodex-owner-transfer.md
       - src/imagent/applications/__init__.py
       - src/imagent/applications/appserver.py
-      - src/imagent/applications/imcodex_appserver.py
-      - tests/test_imcodex_appserver.py
+      - src/imagent/applications/appserver_client/**
+      - tests/test_appserver_client.py
+      - tests/test_appserver_transport.py
     docs:
       - docs/components/application-adapters/design.md
       - docs/components/application-adapters/testing.md
       - docs/components/application-adapters/adapters/codex.md
       - docs/components/application-adapters/adapters/zen.md
+      - docs/migrations/issue-9-imcodex-owner-transfer.md
     required_docs:
       - design
       - testing
@@ -313,6 +325,7 @@ components:
       - .gitignore
       - AGENTS.md
       - README.md
+      - THIRD_PARTY_NOTICES.md
       - agentkit.yml
       - pyproject.toml
       - uv.lock
@@ -321,10 +334,13 @@ components:
       - scripts/agentkit.cmd
       - scripts/agentkit.py
       - scripts/check_doc_links.py
+      - scripts/smoke_clean_install.py
       - tests/test_agentkit_mapping.py
+      - tests/test_package_independence.py
       - docs/README.md
       - docs/REUSE.md
       - docs/ROADMAP.md
+      - docs/migrations/**
       - docs/decisions/**
       - docs/architecture/**
       - docs/components/repository-maintainability/**
@@ -461,3 +477,24 @@ maintainability:
       max_classes: 6
       mode: warn
       guidance: Preserve one clear responsibility per module and avoid mixing product policy with common bridge behavior.
+    - name: native-channel-transports
+      paths:
+        - src/imagent/channels/native/qq.py
+        - src/imagent/channels/native/telegram.py
+        - src/imagent/channels/native/feishu.py
+        - src/imagent/channels/native/weixin.py
+        - src/imagent/channels/native/weixin_ilink.py
+        - src/imagent/channels/native/media.py
+      max_lines: 1400
+      max_functions: 65
+      max_classes: 18
+      mode: warn
+      guidance: Keep each proven native transport cohesive; split protocol-neutral media or transport mechanics before adding product composition or policy.
+    - name: appserver-client-transport
+      paths:
+        - src/imagent/applications/appserver_client/client.py
+      max_lines: 1700
+      max_functions: 105
+      max_classes: 8
+      mode: warn
+      guidance: Keep JSON-RPC transport and dispatch reusable; extract a reviewed submodule before adding Application mapping or consumer supervision.

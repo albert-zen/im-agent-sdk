@@ -31,8 +31,8 @@ turns, approvals, and execution status.
 
 The accepted design now has runnable vertical slices:
 
-- production QQ, Telegram, Feishu, and Weixin adapters reuse the pinned
-  IMCodex implementations;
+- SDK-owned QQ, Telegram, Feishu, and Weixin native adapters, transferred with
+  pinned provenance and optional protocol extras;
 - distinct Codex, Zen, and T3 Code application adapters;
 - slash-command project/thread navigation, `/catchup`, `/history`, and normal
   Agent input;
@@ -57,7 +57,7 @@ Python 3.13 or newer and
 CI pins uv 0.12.0; use that version when regenerating `uv.lock`.
 
 ```sh
-uv sync --extra dev --extra imcodex --locked
+uv sync --extra dev --extra channels --extra appserver --locked
 PYTHONPATH=src uv run python -m unittest discover -s tests -v
 uv run python -m compileall -q src tests scripts
 uv run python scripts/validate_schemas.py
@@ -65,5 +65,7 @@ uv run python scripts/check_doc_links.py
 uv run ruff check src tests scripts
 uv run ruff format --check src tests scripts
 uv run pyright src tests scripts
+uv build --wheel
+uv run python scripts/smoke_clean_install.py
 python scripts/agentkit.py check
 ```

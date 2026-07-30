@@ -23,3 +23,10 @@ entrypoints. None may depend on a sibling checkout or global `agentkit`.
 Runtime `.agentkit/` contents must remain ignored. Durable configuration is
 limited to `agentkit.yml`, `.agents/`, `plugins/agentkit/`, the launcher, and
 repository docs.
+
+Until AgentKit
+[#5](https://github.com/albert-zen/AgentKit/issues/5) is fixed, deleted paths
+reported as unmapped must be checked against the base manifest and replacement
+mapping during review. Do not retain stale manifest entries or compatibility
+files merely to suppress that warning. The durable inventory test remains the
+authority for the post-change tree.

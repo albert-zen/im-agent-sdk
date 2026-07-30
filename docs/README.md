@@ -13,6 +13,9 @@ Start with:
 `REUSE.md` owns source provenance and extraction rules. `ROADMAP.md` contains
 future or unresolved work and is not authority for current runtime behavior.
 JSON Schema under `schemas/v1/` is the language-neutral contract surface.
+Active ownership migrations use explicit maps under `docs/migrations/`; the
+current [Issue #9 SDK-side transfer map](migrations/issue-9-imcodex-owner-transfer.md)
+separates SDK ownership work from the later IMCodex consumer migration.
 
 ## Change navigation
 

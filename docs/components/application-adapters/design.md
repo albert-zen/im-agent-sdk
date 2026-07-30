@@ -71,3 +71,7 @@ or consumer permission policy.
 
 Every change requires focused native tests, the reusable adapter contract
 suite, event/recovery tests, and a capability honesty review.
+
+The Codex App Server client ownership transfer is scoped by the
+[Issue #9 SDK-side map](../../migrations/issue-9-imcodex-owner-transfer.md);
+product supervision/configuration outside that map remains downstream.

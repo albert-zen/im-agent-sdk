@@ -1,6 +1,6 @@
-from .imcodex import ImcodexChannelAdapter, imcodex_channel
+from .runtime import NativeTransportChannelAdapter, channel_from_config
 
 __all__ = [
-    "ImcodexChannelAdapter",
-    "imcodex_channel",
+    "NativeTransportChannelAdapter",
+    "channel_from_config",
 ]

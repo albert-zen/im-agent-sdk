@@ -47,15 +47,20 @@ Current AgentKit v1 has two honest limitations:
 
 - component path matching uses one `code` field for source and tests;
 - global design/workflow docs are first-class, but arbitrary global intent
-  docs lack a separate read-only/reverse-impact role.
+  docs lack a separate read-only/reverse-impact role;
+- deleted paths are matched only against the post-change manifest, so removal
+  of an obsolete API/doc/test is reported as unmapped unless a stale mapping
+  or empty shim is retained.
 
 The config comments and mapping tests document the current fallback. Upstream
 tracking:
 
 - [AgentKit #3: role-aware test paths](https://github.com/albert-zen/AgentKit/issues/3)
 - [AgentKit #4: global intent and reverse impact](https://github.com/albert-zen/AgentKit/issues/4)
+- [AgentKit #5: deletion and rename impact](https://github.com/albert-zen/AgentKit/issues/5)
 
-The repository does not use broad `src/**` catch-alls to hide either gap.
+The repository does not use broad `src/**` catch-alls, stale deleted-file
+mappings, or empty compatibility files to hide these gaps.
 
 AgentKit mapping may split one documentation component into stable native
 subcomponents when one code path should read only its applicable adapter page.

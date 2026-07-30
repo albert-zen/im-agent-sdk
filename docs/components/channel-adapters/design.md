@@ -41,7 +41,18 @@ Access and deduplication happen before attachment download and Agent mutation.
 The adapter accepts `OutboundMessage`, converts Markdown or falls back to plain
 text, segments within native limits, applies rate limits, and returns a
 `DeliveryReceipt`. The receipt reports native acceptance/rejection/unknown; it
-does not claim device display.
+does not claim device display. When one platform call returns one native
+message ID, the receipt preserves it. A segmented text or mixed
+text/attachment delivery may produce several native IDs; the current singular
+public field remains unset and the receipt detail reports the accepted count
+rather than choosing a misleading ID.
+
+The current native transports accept outbound attachments only after a
+consumer or delivery component has materialized them as an explicit
+`LocalPath` in a filesystem namespace trusted by that Channel instance.
+`RemoteUrl` and `AttachmentHandle` are rejected rather than fetched or silently
+dropped. General proactive Artifact materialization and delivery planning
+remain Issues #11/#12 work.
 
 Completed Agent messages are the default IM unit. Token-by-token native
 messages are not a common requirement.
@@ -61,7 +72,19 @@ Channel adapter; they are not Agent event replay cursors.
 
 ## Current implementation
 
-The current seam imports pinned IMCodex Channel implementations. See
-[adapters/imcodex.md](adapters/imcodex.md). Issue #9 will transfer ownership
-into this repository before IMCodex becomes a downstream composition; that
-work must preserve provenance and avoid a permanent dual implementation.
+The SDK owns the reusable QQ, Telegram, Feishu, and Weixin native transports,
+media helpers, admission policy, and one common `channel_from_config` seam.
+Protocol dependencies remain optional extras; importing Contracts, Ports, or
+Gateway does not import them.
+
+Native behavior and limitations are documented separately:
+
+- [QQ](adapters/qq.md)
+- [Telegram](adapters/telegram.md)
+- [Feishu/Lark](adapters/feishu.md)
+- [Weixin iLink](adapters/weixin.md)
+
+The [Issue #9 transfer map](../../migrations/issue-9-imcodex-owner-transfer.md)
+records source provenance and the owner-side/consumer-side acceptance split.
+The later IMCodex migration must switch product composition and delete its old
+copies before Issue #9 is complete.

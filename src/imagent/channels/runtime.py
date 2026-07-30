@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
-from importlib import import_module
+from pathlib import Path
 from typing import Protocol
 
 from ..adapters import MessageHandler, OperationHandler
@@ -21,6 +22,16 @@ from ..contracts import (
     TextContent,
     TextFormat,
 )
+from .native.base import ChannelRouteContext
+from .native.models import (
+    NativeDeliveryResult,
+)
+from .native.models import (
+    OutboundArtifact as NativeOutboundArtifact,
+)
+from .native.models import (
+    OutboundMessage as NativeOutboundMessage,
+)
 
 
 class NativeChannel(Protocol):
@@ -31,7 +42,7 @@ class NativeChannel(Protocol):
 
     async def stop(self) -> None: ...
 
-    async def send_message(self, message) -> None: ...
+    async def send_message(self, message) -> NativeDeliveryResult: ...
 
 
 NativeFactory = Callable[[object], NativeChannel]
@@ -55,18 +66,34 @@ _CHANNEL_CAPABILITIES = {
         attachments=SupportLevel.NATIVE,
         reply_references=SupportLevel.NATIVE,
         native_threads_or_topics=SupportLevel.NATIVE,
-        max_text_length=4_000,
+        max_text_length=3_500,
     ),
     "weixin": ChannelCapabilities(
         markdown=SupportLevel.FALLBACK,
         attachments=SupportLevel.NATIVE,
         reply_references=SupportLevel.NATIVE,
+        max_text_length=4_000,
     ),
 }
 
+_TRANSIENT_ROUTE_LIMIT = 4_096
+_TRANSIENT_ADMISSION_LIMIT = 16_384
+_NATIVE_OWNED_METADATA_KEYS = frozenset(
+    {
+        "artifact_failures",
+        "artifact_receipts",
+        "delivery_id",
+        "message_id",
+        "qq_reply_identity_pinned",
+        "qq_reply_to_message_id",
+        "reply_to_message_id",
+        "reply_to_seen_at",
+    }
+)
 
-class ImcodexChannelAdapter:
-    """Deep adapter over the proven IMCodex channel implementations."""
+
+class NativeTransportChannelAdapter:
+    """Adapt one SDK-owned native transport to the common Channel Port."""
 
     def __init__(
         self,
@@ -76,7 +103,7 @@ class ImcodexChannelAdapter:
         native_factory: NativeFactory,
     ) -> None:
         if channel_id not in _CHANNEL_CAPABILITIES:
-            raise ValueError(f"unsupported IMCodex channel: {channel_id}")
+            raise ValueError(f"unsupported native channel: {channel_id}")
         self._channel_instance_id = channel_instance_id
         self._channel_id = channel_id
         self._native_factory = native_factory
@@ -104,7 +131,13 @@ class ImcodexChannelAdapter:
         )
         native = self._native_factory(middleware)
         self._native = native
-        await native.start()
+        try:
+            await native.start()
+        except BaseException:
+            self._native = None
+            with contextlib.suppress(Exception):
+                await native.stop()
+            raise
 
     async def stop(self) -> None:
         native = self._native
@@ -118,44 +151,60 @@ class ImcodexChannelAdapter:
             raise RuntimeError("channel is not started")
         if message.conversation_ref.channel_instance_id != self._channel_instance_id:
             raise ValueError("message belongs to a different channel instance")
+        if getattr(native, "enabled", True) is False:
+            raise RuntimeError(f"{self._channel_id} Channel delivery is disabled for this instance")
         native_message = _to_native_outbound(
             channel_id=self._channel_id,
             message=message,
         )
-        await native.send_message(native_message)
-        return DeliveryReceipt(status="sent")
+        if not native_message.text.strip() and not native_message.artifacts:
+            raise ValueError("outbound messages require text or at least one attachment")
+        result = await native.send_message(native_message)
+        native_message_ids = (
+            result.native_message_ids if isinstance(result, NativeDeliveryResult) else ()
+        )
+        native_message_id = native_message_ids[0] if len(native_message_ids) == 1 else None
+        detail = (
+            "platform call succeeded; native message ID was not returned"
+            if not native_message_ids
+            else (
+                "platform accepted one native message"
+                if native_message_id is not None
+                else f"platform accepted {len(native_message_ids)} native messages"
+            )
+        )
+        return DeliveryReceipt(
+            status="accepted_by_platform",
+            native_message_id=native_message_id,
+            detail=detail,
+        )
 
 
-def imcodex_channel(
+def channel_from_config(
     channel_id: str,
     *,
     config: dict[str, object],
     channel_instance_id: str | None = None,
-) -> ImcodexChannelAdapter:
-    """Load any proven IMCodex channel without importing its bridge/runtime."""
+) -> NativeTransportChannelAdapter:
+    """Construct one SDK-owned native Channel transport from adapter values."""
 
-    try:
-        channels = import_module("imcodex.channels")
-    except ImportError as error:
-        raise RuntimeError(
-            "Install im-agent-sdk[imcodex] to use IMCodex channel adapters"
-        ) from error
-    adapter_types = {
-        "qq": channels.QQChannelAdapter,
-        "telegram": channels.TelegramChannelAdapter,
-        "feishu": channels.FeishuChannelAdapter,
-        "weixin": channels.WeixinChannelAdapter,
-    }
-    adapter_type = adapter_types.get(channel_id)
-    if adapter_type is None:
-        raise ValueError(f"unsupported IMCodex channel: {channel_id}")
+    if channel_id == "qq":
+        from .native.qq import QQChannelAdapter as NativeAdapter
+    elif channel_id == "telegram":
+        from .native.telegram import TelegramChannelAdapter as NativeAdapter
+    elif channel_id == "feishu":
+        from .native.feishu import FeishuChannelAdapter as NativeAdapter
+    elif channel_id == "weixin":
+        from .native.weixin import WeixinChannelAdapter as NativeAdapter
+    else:
+        raise ValueError(f"unsupported native channel: {channel_id}")
     resolved_config = dict(config)
     if channel_id == "qq":
         resolved_config.setdefault("markdown_enabled", True)
-    return ImcodexChannelAdapter(
+    return NativeTransportChannelAdapter(
         channel_instance_id=channel_instance_id or channel_id,
         channel_id=channel_id,
-        native_factory=lambda middleware: adapter_type.from_config(
+        native_factory=lambda middleware: NativeAdapter.from_config(
             config=resolved_config,
             middleware=middleware,
         ),
@@ -197,6 +246,8 @@ class _InboundMiddleware:
             if admission_key in self._admitted_inbound:
                 return
             self._admitted_inbound.add(admission_key)
+            while len(self._admitted_inbound) > _TRANSIENT_ADMISSION_LIMIT:
+                self._admitted_inbound.pop()
         try:
             if prepare_inbound is not None:
                 prepared = prepare_inbound(inbound)
@@ -216,18 +267,15 @@ class _InboundMiddleware:
         *,
         reply_to_message_id: str | None,
     ) -> None:
-        try:
-            ChannelRouteContext = import_module("imcodex.channels.base").ChannelRouteContext
-        except ImportError:
-            ChannelRouteContext = None
-        if ChannelRouteContext is not None:
-            self._routes[(str(inbound.channel_id), str(inbound.conversation_id))] = (
-                ChannelRouteContext(
-                    admitted_user_id=str(inbound.user_id),
-                    last_inbound_message_id=str(inbound.message_id),
-                    last_inbound_seen_at=time.time(),
-                )
-            )
+        route_key = (str(inbound.channel_id), str(inbound.conversation_id))
+        self._routes.pop(route_key, None)
+        self._routes[route_key] = ChannelRouteContext(
+            admitted_user_id=str(inbound.user_id),
+            last_inbound_message_id=str(inbound.message_id),
+            last_inbound_seen_at=time.time(),
+        )
+        while len(self._routes) > _TRANSIENT_ROUTE_LIMIT:
+            del self._routes[next(iter(self._routes))]
         content: list[TextContent | AttachmentContent] = []
         if str(inbound.text or ""):
             content.append(TextContent(str(inbound.text), TextFormat.PLAIN))
@@ -270,10 +318,6 @@ class _InboundMiddleware:
         await self._on_message(message)
 
     def get_route_context(self, channel_id: str, conversation_id: str):
-        try:
-            ChannelRouteContext = import_module("imcodex.channels.base").ChannelRouteContext
-        except ImportError:
-            return None
         return self._routes.get(
             (channel_id, conversation_id),
             ChannelRouteContext(),
@@ -282,44 +326,58 @@ class _InboundMiddleware:
 
 def _to_native_outbound(*, channel_id: str, message: OutboundMessage):
     text_parts = [item.text for item in message.content if isinstance(item, TextContent)]
+    artifacts = [
+        _to_native_artifact(item) for item in message.content if isinstance(item, AttachmentContent)
+    ]
     markdown = any(
         isinstance(item, TextContent) and item.format is TextFormat.MARKDOWN
         for item in message.content
     )
-    try:
-        OutboundMessage = import_module("imcodex.models").OutboundMessage
-    except ImportError:
-        OutboundMessage = _CompatibleOutboundMessage
-    return OutboundMessage(
+    metadata = {
+        key: value
+        for key, value in message.metadata.items()
+        if key not in _NATIVE_OWNED_METADATA_KEYS
+    }
+    metadata.update(
+        {
+            "delivery_id": message.delivery_id,
+            "reply_to_message_id": message.reply_to,
+        }
+    )
+    return NativeOutboundMessage(
         channel_id=channel_id,
         conversation_id=message.conversation_ref.native_conversation_id,
         message_type="markdown" if markdown else "text",
         text="\n".join(text_parts),
-        metadata={
-            **dict(message.metadata),
-            "delivery_id": message.delivery_id,
-            "reply_to_message_id": message.reply_to,
-        },
+        metadata=metadata,
+        artifacts=artifacts,
     )
 
 
-class _CompatibleOutboundMessage:
-    def __init__(
-        self,
-        *,
-        channel_id: str,
-        conversation_id: str,
-        message_type: str,
-        text: str,
-        metadata: dict[str, object],
-    ) -> None:
-        self.channel_id = channel_id
-        self.conversation_id = conversation_id
-        self.message_type = message_type
-        self.text = text
-        self.metadata = metadata
-        self.request_id = None
-        self.artifacts = []
+def _to_native_artifact(attachment: AttachmentContent) -> NativeOutboundArtifact:
+    source = attachment.source
+    if not isinstance(source, LocalPath):
+        raise ValueError("SDK-owned native Channels require outbound attachments to use LocalPath")
+    if attachment.size_bytes is None or attachment.size_bytes < 0:
+        raise ValueError("outbound LocalPath attachments require a non-negative size_bytes")
+    path = Path(source.path)
+    filename = str(attachment.filename or path.name).strip()
+    if not filename:
+        raise ValueError("outbound attachments require a filename")
+    declared_kind = str(attachment.metadata.get("kind") or "").casefold()
+    kind = (
+        "image"
+        if declared_kind == "image" or attachment.media_type.startswith("image/")
+        else "file"
+    )
+    return NativeOutboundArtifact(
+        kind=kind,
+        local_path=source.path,
+        content_type=attachment.media_type,
+        filename=filename,
+        size_bytes=attachment.size_bytes,
+        sha256=str(attachment.metadata.get("sha256") or ""),
+    )
 
 
 def _parse_datetime(value: object) -> datetime:
