@@ -9,36 +9,57 @@ from typing import Protocol
 
 from ..contracts import (
     AcceptedTurn,
+    ActivateNativeThread,
     AgentEvent,
     AgentEventType,
     AgentInput,
     AgentMessage,
     ApplicationCapabilities,
+    ApplicationOperation,
+    ApplicationOperationFailed,
+    ApplicationOperationResult,
     ApplicationRef,
     ApplicationSummary,
     AttachmentContent,
-    ContractError,
+    CreateThread,
+    DeleteThread,
+    GetProject,
+    GetThread,
+    GetThreadHistory,
+    GetThreadStatus,
+    GetTurnCatchup,
+    InterruptTurn,
+    ListProjects,
+    ListThreads,
     MessageRole,
-    Operation,
-    OperationResult,
-    OperationResultStatus,
-    OperationType,
+    NativeThreadActivated,
     Page,
     ProjectCapabilities,
     ProjectMode,
+    RespondRequest,
     RuntimeCapabilities,
     SupportLevel,
     TextContent,
     TextFormat,
     ThreadCapabilities,
+    ThreadCreated,
     ThreadDeletionCapability,
     ThreadHistory,
+    ThreadHistoryRead,
+    ThreadRead,
     ThreadRef,
+    ThreadsListed,
     ThreadStatus,
+    ThreadStatusRead,
     ThreadSummary,
     TurnCatchup,
+    TurnCatchupRead,
     TurnHistoryEntry,
+    TurnInterrupted,
     TurnStatus,
+    operation_error,
+    validate_application_operation,
+    validate_application_operation_result,
 )
 
 
@@ -100,12 +121,12 @@ class _AppServerApplicationAdapter:
             projects=ProjectCapabilities(
                 mode=ProjectMode.FIXED,
                 discovery=SupportLevel.UNSUPPORTED,
-                selection=SupportLevel.UNSUPPORTED,
+                reading=SupportLevel.UNSUPPORTED,
             ),
             threads=ThreadCapabilities(
                 listing=SupportLevel.NATIVE,
                 creation=SupportLevel.NATIVE,
-                switching=SupportLevel.NATIVE,
+                reading=SupportLevel.NATIVE,
                 deletion=ThreadDeletionCapability.UNSUPPORTED,
             ),
             runtime=RuntimeCapabilities(
@@ -113,7 +134,8 @@ class _AppServerApplicationAdapter:
                 streaming=SupportLevel.NATIVE,
                 replay_from_cursor=SupportLevel.FALLBACK,
                 interruption=SupportLevel.NATIVE,
-                interactive_requests=SupportLevel.NATIVE,
+                interactive_requests=SupportLevel.UNSUPPORTED,
+                native_thread_activation=SupportLevel.NATIVE,
             ),
         )
         self._summary = ApplicationSummary(
@@ -142,70 +164,98 @@ class _AppServerApplicationAdapter:
             if inspect.isawaitable(result):
                 await result
 
-    async def execute(self, operation: Operation) -> OperationResult:
+    async def execute(
+        self,
+        operation: ApplicationOperation,
+    ) -> ApplicationOperationResult:
         try:
-            value = await self._execute(operation)
+            validate_application_operation(operation)
+            result = await self._execute(operation)
+            validate_application_operation_result(operation, result)
+            return result
         except Exception as error:
-            return OperationResult(
+            return ApplicationOperationFailed(
                 operation_id=operation.operation_id,
-                status=OperationResultStatus.FAILED,
+                type=operation.type,
                 completed_at=datetime.now(UTC),
-                error=ContractError(
-                    code=type(error).__name__,
-                    message=str(error),
-                ),
+                error=operation_error(error),
             )
-        return OperationResult(
-            operation_id=operation.operation_id,
-            status=OperationResultStatus.SUCCEEDED,
-            completed_at=datetime.now(UTC),
-            value=value,
-        )
 
-    async def _execute(self, operation: Operation) -> object | None:
-        if operation.type is OperationType.THREAD_LIST:
+    async def _execute(
+        self,
+        operation: ApplicationOperation,
+    ) -> ApplicationOperationResult:
+        completed_at = datetime.now(UTC)
+        if isinstance(operation, ListThreads):
             result = await self._client.list_threads(
                 sortKey="updated_at",
-                cursor=operation.arguments.get("cursor"),
-                searchTerm=operation.arguments.get("query"),
+                cursor=operation.cursor,
+                searchTerm=operation.query,
             )
             threads = tuple(
                 self._thread_summary(item) for item in _native_list(result, "data", "threads")
             )
-            return Page(
-                items=threads,
-                next_cursor=_optional_string(result.get("nextCursor") or result.get("next_cursor")),
+            return ThreadsListed(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                threads=Page(
+                    items=threads,
+                    next_cursor=_optional_string(
+                        result.get("nextCursor") or result.get("next_cursor")
+                    ),
+                ),
             )
-        if operation.type is OperationType.THREAD_CREATE:
+        if isinstance(operation, CreateThread):
+            if operation.initial_context:
+                raise NotImplementedError("initial thread context is unsupported by App Server")
             result = await self._client.start_thread(cwd=self._cwd)
             thread = _native_object(result, "thread")
-            return self._thread_summary(thread)
-        if operation.type in {
-            OperationType.THREAD_SWITCH,
-            OperationType.THREAD_STATUS,
-        }:
-            thread_ref = _required_thread(operation)
-            result = await self._client.read_thread(thread_ref.native_thread_id)
+            return ThreadCreated(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                thread=self._thread_summary(thread),
+            )
+        if isinstance(operation, (GetThread, GetThreadStatus)):
+            result = await self._client.read_thread(operation.thread_ref.native_thread_id)
             summary = self._thread_summary(_native_object(result, "thread"))
-            if operation.type is OperationType.THREAD_STATUS:
-                return summary.status
-            await self._client.resume_thread(threadId=thread_ref.native_thread_id)
-            return summary
-        if operation.type is OperationType.TURN_CATCHUP:
-            thread_ref = _required_thread(operation)
+            if isinstance(operation, GetThreadStatus):
+                return ThreadStatusRead(
+                    operation_id=operation.operation_id,
+                    completed_at=completed_at,
+                    thread_ref=operation.thread_ref,
+                    thread_status=summary.status,
+                )
+            return ThreadRead(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                thread=summary,
+            )
+        if isinstance(operation, ActivateNativeThread):
+            self._require_own_thread(operation.thread_ref)
+            await self._client.resume_thread(threadId=operation.thread_ref.native_thread_id)
+            return NativeThreadActivated(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                thread_ref=operation.thread_ref,
+            )
+        if isinstance(operation, GetTurnCatchup):
+            thread_ref = operation.thread_ref
             self._require_own_thread(thread_ref)
-            limit = _operation_limit(operation, default=5)
             turns, _has_older = await self._read_turn_page(
                 thread_ref,
                 limit=1,
                 page=1,
             )
             if not turns:
-                return TurnCatchup(
-                    thread_ref=thread_ref,
-                    turn_id=None,
-                    status=TurnStatus.IDLE,
-                    messages=(),
+                return TurnCatchupRead(
+                    operation_id=operation.operation_id,
+                    completed_at=completed_at,
+                    catchup=TurnCatchup(
+                        thread_ref=thread_ref,
+                        turn_id=None,
+                        status=TurnStatus.IDLE,
+                        messages=(),
+                    ),
                 )
             turn = turns[-1]
             commentary = tuple(
@@ -215,43 +265,53 @@ class _AppServerApplicationAdapter:
                 and str(item.get("phase") or "").casefold() == "commentary"
                 and (message := self._item_message(thread_ref, item)) is not None
             )
-            return TurnCatchup(
-                thread_ref=thread_ref,
-                turn_id=_turn_id(turn),
-                status=_turn_status(turn.get("status")),
-                messages=commentary[-limit:],
-                updated_at=_turn_updated_at(turn),
-                metadata={"native_application": self._summary.kind},
+            return TurnCatchupRead(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                catchup=TurnCatchup(
+                    thread_ref=thread_ref,
+                    turn_id=_turn_id(turn),
+                    status=_turn_status(turn.get("status")),
+                    messages=commentary[-operation.limit :],
+                    updated_at=_turn_updated_at(turn),
+                    metadata={"native_application": self._summary.kind},
+                ),
             )
-        if operation.type is OperationType.THREAD_HISTORY:
-            thread_ref = _required_thread(operation)
+        if isinstance(operation, GetThreadHistory):
+            thread_ref = operation.thread_ref
             self._require_own_thread(thread_ref)
-            limit = _operation_limit(operation, default=3)
-            page = _operation_page(operation)
             turns, has_older = await self._read_turn_page(
                 thread_ref,
-                limit=limit,
-                page=page,
+                limit=operation.limit,
+                page=operation.page,
             )
-            return ThreadHistory(
-                thread_ref=thread_ref,
-                turns=tuple(self._history_entry(thread_ref, turn) for turn in turns),
-                page=page,
-                has_older=has_older,
-                metadata={"native_application": self._summary.kind},
+            return ThreadHistoryRead(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                history=ThreadHistory(
+                    thread_ref=thread_ref,
+                    turns=tuple(self._history_entry(thread_ref, turn) for turn in turns),
+                    page=operation.page,
+                    has_older=has_older,
+                    metadata={"native_application": self._summary.kind},
+                ),
             )
-        if operation.type is OperationType.TURN_INTERRUPT:
-            thread_ref = _required_thread(operation)
-            turn_id = str(operation.arguments.get("turn_id") or "")
+        if isinstance(operation, InterruptTurn):
+            thread_ref = operation.thread_ref
+            turn_id = operation.turn_id or ""
             if not turn_id:
                 raise ValueError("turn.interrupt requires turn_id")
             await self._client.interrupt_turn(thread_ref.native_thread_id, turn_id)
-            return None
-        if operation.type in {
-            OperationType.PROJECT_LIST,
-            OperationType.PROJECT_SELECT,
-            OperationType.THREAD_DELETE,
-        }:
+            return TurnInterrupted(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                thread_ref=thread_ref,
+                turn_id=turn_id,
+            )
+        if isinstance(
+            operation,
+            (ListProjects, GetProject, DeleteThread, RespondRequest),
+        ):
             raise NotImplementedError(f"{operation.type.value} is unsupported by this application")
         raise NotImplementedError(f"unsupported operation: {operation.type.value}")
 
@@ -605,13 +665,6 @@ def _native_list(
     raise RuntimeError("application result did not contain a thread list")
 
 
-def _required_thread(operation: Operation) -> ThreadRef:
-    thread_ref = operation.target.thread_ref
-    if thread_ref is None:
-        raise ValueError(f"{operation.type.value} requires thread_ref")
-    return thread_ref
-
-
 def _optional_string(value: object) -> str | None:
     text = str(value or "").strip()
     return text or None
@@ -735,21 +788,6 @@ def _parse_optional_datetime(value: object) -> datetime | None:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
-
-
-def _operation_limit(operation: Operation, *, default: int) -> int:
-    raw = operation.arguments.get("limit")
-    limit = int(str(raw)) if raw is not None else default
-    if limit < 1 or limit > 20:
-        raise ValueError("limit must be between 1 and 20")
-    return limit
-
-
-def _operation_page(operation: Operation) -> int:
-    page = int(str(operation.arguments.get("page") or 1))
-    if page < 1:
-        raise ValueError("page must be positive")
-    return page
 
 
 def _is_unsupported_method_error(error: Exception) -> bool:

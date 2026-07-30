@@ -11,28 +11,60 @@ from .adapters import (
     ChannelAdapter,
     IdempotencyRepository,
 )
+from .bindings import BindingConflict
 from .commands import SlashCommand, parse_slash_command
 from .contracts import (
     AgentEventType,
     AgentInput,
     AgentMessage,
+    ApplicationOperation,
+    ApplicationOperationFailed,
+    ApplicationOperationResult,
+    ApplicationsListed,
+    BindConversationToProject,
+    BindConversationToThread,
     ChannelMessage,
+    ClearConversationThread,
+    ContractError,
     ConversationBinding,
+    ConversationBound,
+    CreateThread,
+    DeleteThread,
+    GatewayOperation,
+    GatewayOperationFailed,
+    GatewayOperationResult,
+    GetProject,
+    GetThread,
+    GetThreadHistory,
+    GetThreadStatus,
+    GetTurnCatchup,
+    ListApplications,
+    ListProjects,
+    ListThreads,
     MessageRole,
-    Operation,
-    OperationResult,
-    OperationResultStatus,
-    OperationTarget,
-    OperationType,
-    Page,
+    OperationErrorCode,
+    ProjectRead,
+    ProjectsListed,
     ProjectSummary,
+    SelectApplication,
     TextContent,
     TextFormat,
-    ThreadHistory,
-    ThreadStatus,
+    ThreadCreated,
+    ThreadDeleted,
+    ThreadDeletionCapability,
+    ThreadDeletionMode,
+    ThreadHistoryRead,
+    ThreadRead,
+    ThreadsListed,
+    ThreadStatusRead,
     ThreadSummary,
-    TurnCatchup,
+    TurnCatchupRead,
     derive_client_message_id,
+    operation_error,
+    validate_application_operation,
+    validate_application_operation_result,
+    validate_gateway_operation,
+    validate_gateway_operation_result,
 )
 from .history_rendering import render_thread_history, render_turn_catchup
 from .storage import InMemoryIdempotencyRepository
@@ -80,6 +112,167 @@ class ImAgentGateway:
         for application in reversed(tuple(self._applications.values())):
             await application.stop()
 
+    async def execute_application(
+        self,
+        operation: ApplicationOperation,
+    ) -> ApplicationOperationResult:
+        """Route one typed application operation without mutating a binding."""
+        try:
+            validate_application_operation(operation)
+            application = self._applications[operation.application_ref.application_instance_id]
+        except Exception as error:
+            return ApplicationOperationFailed(
+                operation_id=operation.operation_id,
+                type=operation.type,
+                completed_at=datetime.now(UTC),
+                error=_contract_error(error),
+            )
+        result = await application.execute(operation)
+        try:
+            validate_application_operation_result(operation, result)
+        except Exception as error:
+            return ApplicationOperationFailed(
+                operation_id=operation.operation_id,
+                type=operation.type,
+                completed_at=datetime.now(UTC),
+                error=_contract_error(error),
+            )
+        return result
+
+    async def execute_gateway(
+        self,
+        operation: GatewayOperation,
+    ) -> GatewayOperationResult:
+        """Execute one typed Gateway operation under Conversation serialization."""
+        lock = self._locks.setdefault(operation.conversation_ref, asyncio.Lock())
+        async with lock:
+            return await self._execute_gateway_locked(operation)
+
+    async def _execute_gateway_locked(
+        self,
+        operation: GatewayOperation,
+    ) -> GatewayOperationResult:
+        try:
+            validate_gateway_operation(operation)
+            result = await self._apply_gateway_operation(operation)
+            validate_gateway_operation_result(operation, result)
+            return result
+        except _GatewayActionError as error:
+            contract_error = error.error
+        except Exception as error:
+            contract_error = _contract_error(error)
+        return GatewayOperationFailed(
+            operation_id=operation.operation_id,
+            type=operation.type,
+            completed_at=datetime.now(UTC),
+            error=contract_error,
+        )
+
+    async def _apply_gateway_operation(
+        self,
+        operation: GatewayOperation,
+    ) -> GatewayOperationResult:
+        completed_at = datetime.now(UTC)
+        if isinstance(operation, ListApplications):
+            return ApplicationsListed(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                applications=tuple(
+                    application.summary for application in self._applications.values()
+                ),
+            )
+        if isinstance(operation, SelectApplication):
+            self._require_application(operation.application_ref.application_instance_id)
+            binding = await self._bindings.put(
+                ConversationBinding(
+                    conversation_ref=operation.conversation_ref,
+                    application_ref=operation.application_ref,
+                ),
+                expected_revision=operation.expected_revision,
+            )
+            return ConversationBound(
+                operation_id=operation.operation_id,
+                type=operation.type,
+                completed_at=completed_at,
+                binding=binding,
+            )
+        if isinstance(operation, BindConversationToProject):
+            application = self._require_application(operation.project_ref.application_instance_id)
+            read = await self.execute_application(
+                GetProject(
+                    operation_id=f"{operation.operation_id}:validate-project",
+                    application_ref=application.summary.ref,
+                    project_ref=operation.project_ref,
+                    created_at=operation.created_at,
+                )
+            )
+            if isinstance(read, ApplicationOperationFailed):
+                raise _GatewayActionError(read.error)
+            if not isinstance(read, ProjectRead):
+                raise RuntimeError("project.get returned an incompatible result")
+            binding = await self._bindings.put(
+                ConversationBinding(
+                    conversation_ref=operation.conversation_ref,
+                    application_ref=application.summary.ref,
+                    project_ref=read.project.ref,
+                ),
+                expected_revision=operation.expected_revision,
+            )
+            return ConversationBound(
+                operation_id=operation.operation_id,
+                type=operation.type,
+                completed_at=completed_at,
+                binding=binding,
+            )
+        if isinstance(operation, BindConversationToThread):
+            application = self._require_application(operation.thread_ref.application_instance_id)
+            read = await self.execute_application(
+                GetThread(
+                    operation_id=f"{operation.operation_id}:validate-thread",
+                    application_ref=application.summary.ref,
+                    thread_ref=operation.thread_ref,
+                    created_at=operation.created_at,
+                )
+            )
+            if isinstance(read, ApplicationOperationFailed):
+                raise _GatewayActionError(read.error)
+            if not isinstance(read, ThreadRead):
+                raise RuntimeError("thread.get returned an incompatible result")
+            binding = await self._bindings.put(
+                ConversationBinding(
+                    conversation_ref=operation.conversation_ref,
+                    application_ref=application.summary.ref,
+                    project_ref=read.thread.ref.project_ref,
+                    thread_ref=read.thread.ref,
+                ),
+                expected_revision=operation.expected_revision,
+            )
+            return ConversationBound(
+                operation_id=operation.operation_id,
+                type=operation.type,
+                completed_at=completed_at,
+                binding=binding,
+            )
+        if isinstance(operation, ClearConversationThread):
+            current = await self._bindings.get(operation.conversation_ref)
+            if current is None:
+                raise ValueError("Conversation has no binding")
+            binding = await self._bindings.put(
+                ConversationBinding(
+                    conversation_ref=current.conversation_ref,
+                    application_ref=current.application_ref,
+                    project_ref=current.project_ref,
+                ),
+                expected_revision=operation.expected_revision,
+            )
+            return ConversationBound(
+                operation_id=operation.operation_id,
+                type=operation.type,
+                completed_at=completed_at,
+                binding=binding,
+            )
+        raise NotImplementedError(operation.type.value)
+
     async def _handle_message(self, message: ChannelMessage) -> None:
         scope = f"inbound:{message.conversation_ref.channel_instance_id}"
         key = f"{message.conversation_ref.native_conversation_id}:{message.message_id}"
@@ -114,12 +307,20 @@ class ImAgentGateway:
                         "`/app <number-or-name>`.",
                     )
                     return
-                binding = await self._bindings.put(
-                    ConversationBinding(
+                selection = await self._execute_gateway_locked(
+                    SelectApplication(
+                        operation_id=_operation_id(message, "application.select"),
                         conversation_ref=message.conversation_ref,
+                        actor=message.sender,
                         application_ref=application.summary.ref,
+                        expected_revision=binding.revision if binding is not None else None,
+                        created_at=message.created_at,
                     )
                 )
+                if not isinstance(selection, ConversationBound):
+                    await self._deliver_operation_error(message, selection)
+                    return
+                binding = selection.binding
             if application is None:
                 raise RuntimeError("bound Agent application is unavailable")
             if binding.thread_ref is None:
@@ -132,35 +333,33 @@ class ImAgentGateway:
                         "Choose a project first with `/projects` and `/use <number>`.",
                     )
                     return
-                create = self._operation(
-                    message,
-                    OperationType.THREAD_CREATE,
-                    OperationTarget(
-                        application_ref=application.summary.ref,
-                        project_ref=binding.project_ref,
-                    ),
-                    {},
+                create = CreateThread(
+                    operation_id=_operation_id(message, "thread.create"),
+                    application_ref=application.summary.ref,
+                    project_ref=binding.project_ref,
+                    created_at=message.created_at,
                 )
-                result = await application.execute(create)
-                if result.status is not OperationResultStatus.SUCCEEDED:
+                result = await self.execute_application(create)
+                if not isinstance(result, ThreadCreated):
                     await self._deliver_operation_error(message, result)
                     return
-                thread = result.value
-                if not isinstance(thread, ThreadSummary):
-                    await self._deliver_error(
-                        message,
-                        "Agent application did not return the created thread.",
+                bind = await self._execute_gateway_locked(
+                    BindConversationToThread(
+                        operation_id=_operation_id(
+                            message,
+                            "conversation.bind_thread",
+                        ),
+                        conversation_ref=message.conversation_ref,
+                        actor=message.sender,
+                        thread_ref=result.thread.ref,
+                        expected_revision=binding.revision,
+                        created_at=message.created_at,
                     )
-                    return
-                binding = await self._bindings.put(
-                    ConversationBinding(
-                        conversation_ref=binding.conversation_ref,
-                        application_ref=binding.application_ref,
-                        project_ref=binding.project_ref,
-                        thread_ref=thread.ref,
-                    ),
-                    expected_revision=binding.revision,
                 )
+                if not isinstance(bind, ConversationBound):
+                    await self._deliver_operation_error(message, bind)
+                    return
+                binding = bind.binding
             thread_ref = binding.thread_ref
             if thread_ref is None:
                 raise RuntimeError("thread binding was not established")
@@ -214,18 +413,18 @@ class ImAgentGateway:
         if binding is None or application is None:
             return
         if command.name == "projects":
-            result = await application.execute(
-                self._operation(
-                    message,
-                    OperationType.PROJECT_LIST,
-                    OperationTarget(application_ref=application.summary.ref),
-                    {"query": " ".join(command.arguments)},
+            result = await self.execute_application(
+                ListProjects(
+                    operation_id=_operation_id(message, "project.list"),
+                    application_ref=application.summary.ref,
+                    query=" ".join(command.arguments) or None,
+                    created_at=message.created_at,
                 )
             )
-            projects = self._page_items(result, ProjectSummary)
-            if projects is None:
+            if not isinstance(result, ProjectsListed):
                 await self._deliver_operation_error(message, result)
                 return
+            projects = result.projects.items
             self._project_views[message.conversation_ref] = projects
             await self._deliver_text(message, _render_projects(projects))
             return
@@ -233,21 +432,19 @@ class ImAgentGateway:
             await self._select_project(message, command, binding, application)
             return
         if command.name == "threads":
-            result = await application.execute(
-                self._operation(
-                    message,
-                    OperationType.THREAD_LIST,
-                    OperationTarget(
-                        application_ref=application.summary.ref,
-                        project_ref=binding.project_ref,
-                    ),
-                    {"query": " ".join(command.arguments)},
+            result = await self.execute_application(
+                ListThreads(
+                    operation_id=_operation_id(message, "thread.list"),
+                    application_ref=application.summary.ref,
+                    project_ref=binding.project_ref,
+                    query=" ".join(command.arguments) or None,
+                    created_at=message.created_at,
                 )
             )
-            threads = self._page_items(result, ThreadSummary)
-            if threads is None:
+            if not isinstance(result, ThreadsListed):
                 await self._deliver_operation_error(message, result)
                 return
+            threads = result.threads.items
             self._thread_views[message.conversation_ref] = threads
             await self._deliver_text(message, _render_threads(threads))
             return
@@ -293,13 +490,19 @@ class ImAgentGateway:
             await self._deliver_error(message, "Agent application not found.")
             return
         current = await self._bindings.get(message.conversation_ref)
-        await self._bindings.put(
-            ConversationBinding(
+        result = await self._execute_gateway_locked(
+            SelectApplication(
+                operation_id=_operation_id(message, "application.select"),
                 conversation_ref=message.conversation_ref,
+                actor=message.sender,
                 application_ref=selected.summary.ref,
-            ),
-            expected_revision=current.revision if current is not None else None,
+                expected_revision=current.revision if current is not None else None,
+                created_at=message.created_at,
+            )
         )
+        if not isinstance(result, ConversationBound):
+            await self._deliver_operation_error(message, result)
+            return
         self._clear_views(message)
         await self._deliver_text(
             message,
@@ -322,18 +525,17 @@ class ImAgentGateway:
             return
         projects = self._project_views.get(message.conversation_ref)
         if projects is None:
-            result = await application.execute(
-                self._operation(
-                    message,
-                    OperationType.PROJECT_LIST,
-                    OperationTarget(application_ref=application.summary.ref),
-                    {},
+            list_result = await self.execute_application(
+                ListProjects(
+                    operation_id=_operation_id(message, "project.list"),
+                    application_ref=application.summary.ref,
+                    created_at=message.created_at,
                 )
             )
-            projects = self._page_items(result, ProjectSummary)
-            if projects is None:
-                await self._deliver_operation_error(message, result)
+            if not isinstance(list_result, ProjectsListed):
+                await self._deliver_operation_error(message, list_result)
                 return
+            projects = list_result.projects.items
             self._project_views[message.conversation_ref] = projects
         project = _select(
             projects,
@@ -344,28 +546,22 @@ class ImAgentGateway:
         if project is None:
             await self._deliver_error(message, "Project not found.")
             return
-        result = await application.execute(
-            self._operation(
-                message,
-                OperationType.PROJECT_SELECT,
-                OperationTarget(
-                    application_ref=application.summary.ref,
-                    project_ref=project.ref,
+        result = await self._execute_gateway_locked(
+            BindConversationToProject(
+                operation_id=_operation_id(
+                    message,
+                    "conversation.bind_project",
                 ),
-                {},
+                conversation_ref=message.conversation_ref,
+                actor=message.sender,
+                project_ref=project.ref,
+                expected_revision=binding.revision,
+                created_at=message.created_at,
             )
         )
-        if result.status is not OperationResultStatus.SUCCEEDED:
+        if not isinstance(result, ConversationBound):
             await self._deliver_operation_error(message, result)
             return
-        await self._bindings.put(
-            ConversationBinding(
-                conversation_ref=binding.conversation_ref,
-                application_ref=binding.application_ref,
-                project_ref=project.ref,
-            ),
-            expected_revision=binding.revision,
-        )
         self._thread_views.pop(message.conversation_ref, None)
         await self._deliver_text(
             message,
@@ -388,32 +584,32 @@ class ImAgentGateway:
                 "Choose a project first with `/projects` and `/use <number>`.",
             )
             return
-        result = await application.execute(
-            self._operation(
-                message,
-                OperationType.THREAD_CREATE,
-                OperationTarget(
-                    application_ref=application.summary.ref,
-                    project_ref=binding.project_ref,
-                ),
-                {"title": " ".join(command.arguments) or "IM task"},
+        result = await self.execute_application(
+            CreateThread(
+                operation_id=_operation_id(message, "thread.create"),
+                application_ref=application.summary.ref,
+                project_ref=binding.project_ref,
+                title=" ".join(command.arguments) or "IM task",
+                created_at=message.created_at,
             )
         )
-        if result.status is not OperationResultStatus.SUCCEEDED or not isinstance(
-            result.value, ThreadSummary
-        ):
+        if not isinstance(result, ThreadCreated):
             await self._deliver_operation_error(message, result)
             return
-        thread = result.value
-        await self._bindings.put(
-            ConversationBinding(
-                conversation_ref=binding.conversation_ref,
-                application_ref=binding.application_ref,
-                project_ref=binding.project_ref,
+        thread = result.thread
+        bind = await self._execute_gateway_locked(
+            BindConversationToThread(
+                operation_id=_operation_id(message, "conversation.bind_thread"),
+                conversation_ref=message.conversation_ref,
+                actor=message.sender,
                 thread_ref=thread.ref,
-            ),
-            expected_revision=binding.revision,
+                expected_revision=binding.revision,
+                created_at=message.created_at,
+            )
         )
+        if not isinstance(bind, ConversationBound):
+            await self._deliver_operation_error(message, bind)
+            return
         self._thread_views.pop(message.conversation_ref, None)
         await self._deliver_text(
             message,
@@ -436,21 +632,18 @@ class ImAgentGateway:
             return
         threads = self._thread_views.get(message.conversation_ref)
         if threads is None:
-            result = await application.execute(
-                self._operation(
-                    message,
-                    OperationType.THREAD_LIST,
-                    OperationTarget(
-                        application_ref=application.summary.ref,
-                        project_ref=binding.project_ref,
-                    ),
-                    {},
+            list_result = await self.execute_application(
+                ListThreads(
+                    operation_id=_operation_id(message, "thread.list"),
+                    application_ref=application.summary.ref,
+                    project_ref=binding.project_ref,
+                    created_at=message.created_at,
                 )
             )
-            threads = self._page_items(result, ThreadSummary)
-            if threads is None:
-                await self._deliver_operation_error(message, result)
+            if not isinstance(list_result, ThreadsListed):
+                await self._deliver_operation_error(message, list_result)
                 return
+            threads = list_result.threads.items
             self._thread_views[message.conversation_ref] = threads
         thread = _select(
             threads,
@@ -461,30 +654,19 @@ class ImAgentGateway:
         if thread is None:
             await self._deliver_error(message, "Thread not found.")
             return
-        result = await application.execute(
-            self._operation(
-                message,
-                OperationType.THREAD_SWITCH,
-                OperationTarget(
-                    application_ref=application.summary.ref,
-                    project_ref=binding.project_ref,
-                    thread_ref=thread.ref,
-                ),
-                {},
+        result = await self._execute_gateway_locked(
+            BindConversationToThread(
+                operation_id=_operation_id(message, "conversation.bind_thread"),
+                conversation_ref=message.conversation_ref,
+                actor=message.sender,
+                thread_ref=thread.ref,
+                expected_revision=binding.revision,
+                created_at=message.created_at,
             )
         )
-        if result.status is not OperationResultStatus.SUCCEEDED:
+        if not isinstance(result, ConversationBound):
             await self._deliver_operation_error(message, result)
             return
-        await self._bindings.put(
-            ConversationBinding(
-                conversation_ref=binding.conversation_ref,
-                application_ref=binding.application_ref,
-                project_ref=binding.project_ref,
-                thread_ref=thread.ref,
-            ),
-            expected_revision=binding.revision,
-        )
         await self._deliver_text(
             message,
             f"Selected thread **{thread.title or thread.ref.native_thread_id}** "
@@ -500,32 +682,44 @@ class ImAgentGateway:
         if binding.thread_ref is None:
             await self._deliver_error(message, "No thread is selected.")
             return
-        result = await application.execute(
-            self._operation(
-                message,
-                OperationType.THREAD_DELETE,
-                OperationTarget(
-                    application_ref=application.summary.ref,
-                    project_ref=binding.project_ref,
-                    thread_ref=binding.thread_ref,
-                ),
-                {},
+        capability = application.summary.capabilities.threads.deletion
+        if capability is ThreadDeletionCapability.UNSUPPORTED:
+            await self._deliver_error(message, "Thread deletion is unsupported.")
+            return
+        result = await self.execute_application(
+            DeleteThread(
+                operation_id=_operation_id(message, "thread.delete"),
+                application_ref=application.summary.ref,
+                thread_ref=binding.thread_ref,
+                mode=ThreadDeletionMode(capability.value),
+                created_at=message.created_at,
             )
         )
-        if result.status is not OperationResultStatus.SUCCEEDED:
+        if not isinstance(result, ThreadDeleted):
             await self._deliver_operation_error(message, result)
             return
         deleted_id = binding.thread_ref.native_thread_id
-        await self._bindings.put(
-            ConversationBinding(
-                conversation_ref=binding.conversation_ref,
-                application_ref=binding.application_ref,
-                project_ref=binding.project_ref,
-            ),
-            expected_revision=binding.revision,
+        clear = await self._execute_gateway_locked(
+            ClearConversationThread(
+                operation_id=_operation_id(message, "conversation.clear_thread"),
+                conversation_ref=message.conversation_ref,
+                actor=message.sender,
+                expected_revision=binding.revision,
+                created_at=message.created_at,
+            )
         )
+        if not isinstance(clear, ConversationBound):
+            await self._deliver_operation_error(message, clear)
+            return
         self._thread_views.pop(message.conversation_ref, None)
-        await self._deliver_text(message, f"Archived thread `{deleted_id}`.")
+        await self._deliver_text(
+            message,
+            (
+                f"Archived thread `{deleted_id}`."
+                if result.mode is ThreadDeletionMode.ARCHIVE
+                else f"Deleted thread `{deleted_id}`."
+            ),
+        )
 
     async def _thread_status(
         self,
@@ -536,25 +730,20 @@ class ImAgentGateway:
         if binding.thread_ref is None:
             await self._deliver_error(message, "No thread is selected.")
             return
-        result = await application.execute(
-            self._operation(
-                message,
-                OperationType.THREAD_STATUS,
-                OperationTarget(
-                    application_ref=application.summary.ref,
-                    project_ref=binding.project_ref,
-                    thread_ref=binding.thread_ref,
-                ),
-                {},
+        result = await self.execute_application(
+            GetThreadStatus(
+                operation_id=_operation_id(message, "thread.status"),
+                application_ref=application.summary.ref,
+                thread_ref=binding.thread_ref,
+                created_at=message.created_at,
             )
         )
-        if result.status is not OperationResultStatus.SUCCEEDED:
+        if not isinstance(result, ThreadStatusRead):
             await self._deliver_operation_error(message, result)
             return
-        status = result.value.value if isinstance(result.value, ThreadStatus) else str(result.value)
         await self._deliver_text(
             message,
-            f"Thread `{binding.thread_ref.native_thread_id}` is **{status}**.",
+            f"Thread `{binding.thread_ref.native_thread_id}` is **{result.thread_status.value}**.",
         )
 
     async def _turn_catchup(
@@ -572,24 +761,19 @@ class ImAgentGateway:
         except ValueError as error:
             await self._deliver_error(message, str(error))
             return
-        result = await application.execute(
-            self._operation(
-                message,
-                OperationType.TURN_CATCHUP,
-                OperationTarget(
-                    application_ref=application.summary.ref,
-                    project_ref=binding.project_ref,
-                    thread_ref=binding.thread_ref,
-                ),
-                {"limit": limit},
+        result = await self.execute_application(
+            GetTurnCatchup(
+                operation_id=_operation_id(message, "turn.catchup"),
+                application_ref=application.summary.ref,
+                thread_ref=binding.thread_ref,
+                limit=limit,
+                created_at=message.created_at,
             )
         )
-        if result.status is not OperationResultStatus.SUCCEEDED or not isinstance(
-            result.value, TurnCatchup
-        ):
+        if not isinstance(result, TurnCatchupRead):
             await self._deliver_operation_error(message, result)
             return
-        await self._deliver_text(message, render_turn_catchup(result.value))
+        await self._deliver_text(message, render_turn_catchup(result.catchup))
 
     async def _thread_history(
         self,
@@ -606,24 +790,20 @@ class ImAgentGateway:
         except ValueError as error:
             await self._deliver_error(message, str(error))
             return
-        result = await application.execute(
-            self._operation(
-                message,
-                OperationType.THREAD_HISTORY,
-                OperationTarget(
-                    application_ref=application.summary.ref,
-                    project_ref=binding.project_ref,
-                    thread_ref=binding.thread_ref,
-                ),
-                {"limit": limit, "page": page},
+        result = await self.execute_application(
+            GetThreadHistory(
+                operation_id=_operation_id(message, "thread.history"),
+                application_ref=application.summary.ref,
+                thread_ref=binding.thread_ref,
+                limit=limit,
+                page=page,
+                created_at=message.created_at,
             )
         )
-        if result.status is not OperationResultStatus.SUCCEEDED or not isinstance(
-            result.value, ThreadHistory
-        ):
+        if not isinstance(result, ThreadHistoryRead):
             await self._deliver_operation_error(message, result)
             return
-        await self._deliver_text(message, render_thread_history(result.value))
+        await self._deliver_text(message, render_thread_history(result.history))
 
     async def _ensure_application_binding(
         self,
@@ -643,18 +823,29 @@ class ImAgentGateway:
                 "Choose an Agent application with `/apps` and `/app <number>`.",
             )
             return None, None
-        binding = await self._bindings.put(
-            ConversationBinding(
+        result = await self._execute_gateway_locked(
+            SelectApplication(
+                operation_id=_operation_id(message, "application.select"),
                 conversation_ref=message.conversation_ref,
+                actor=message.sender,
                 application_ref=application.summary.ref,
-            ),
-            expected_revision=binding.revision if binding is not None else None,
+                expected_revision=binding.revision if binding is not None else None,
+                created_at=message.created_at,
+            )
         )
-        return binding, application
+        if not isinstance(result, ConversationBound):
+            await self._deliver_operation_error(message, result)
+            return None, None
+        return result.binding, application
 
-    async def _handle_operation(self, operation: Operation) -> None:
-        del operation
-        raise NotImplementedError("native channel operations are not implemented yet")
+    async def _handle_operation(self, operation: GatewayOperation) -> None:
+        result = await self.execute_gateway(operation)
+        if isinstance(result, GatewayOperationFailed):
+            logger.warning(
+                "Gateway operation %s failed: %s",
+                operation.operation_id,
+                result.error.message,
+            )
 
     async def _project_turn(
         self,
@@ -734,13 +925,16 @@ class ImAgentGateway:
     async def _deliver_operation_error(
         self,
         inbound: ChannelMessage,
-        result: OperationResult,
+        result: ApplicationOperationResult | GatewayOperationResult,
     ) -> None:
+        error = (
+            result.error
+            if isinstance(result, (ApplicationOperationFailed, GatewayOperationFailed))
+            else None
+        )
         await self._deliver_error(
             inbound,
-            result.error.message
-            if result.error is not None
-            else "Agent application operation failed.",
+            error.message if error is not None else "Operation returned an incompatible result.",
         )
 
     async def _deliver_text(
@@ -777,6 +971,17 @@ class ImAgentGateway:
             return None
         return next(iter(self._applications.values()))
 
+    def _require_application(
+        self,
+        application_instance_id: str,
+    ) -> AgentApplicationAdapter:
+        try:
+            return self._applications[application_instance_id]
+        except KeyError as error:
+            raise KeyError(
+                f"Agent application is not registered: {application_instance_id}"
+            ) from error
+
     def _render_applications(self) -> str:
         lines = ["## Agent applications", ""]
         for index, application in enumerate(self._applications.values(), start=1):
@@ -791,32 +996,21 @@ class ImAgentGateway:
         self._project_views.pop(message.conversation_ref, None)
         self._thread_views.pop(message.conversation_ref, None)
 
-    @staticmethod
-    def _page_items(result: OperationResult, item_type):
-        if (
-            result.status is not OperationResultStatus.SUCCEEDED
-            or not isinstance(result.value, Page)
-            or not all(isinstance(item, item_type) for item in result.value.items)
-        ):
-            return None
-        return result.value.items
 
-    @staticmethod
-    def _operation(
-        message: ChannelMessage,
-        operation_type: OperationType,
-        target: OperationTarget,
-        arguments: dict[str, object],
-    ) -> Operation:
-        return Operation(
-            operation_id=f"imagent:operation:{message.message_id}:{operation_type.value}",
-            conversation_ref=message.conversation_ref,
-            actor=message.sender,
-            type=operation_type,
-            target=target,
-            arguments=arguments,
-            created_at=message.created_at,
-        )
+class _GatewayActionError(RuntimeError):
+    def __init__(self, error: ContractError) -> None:
+        super().__init__(error.message)
+        self.error = error
+
+
+def _contract_error(error: Exception) -> ContractError:
+    if isinstance(error, BindingConflict):
+        return operation_error(error, code=OperationErrorCode.CONFLICT)
+    return operation_error(error)
+
+
+def _operation_id(message: ChannelMessage, operation_type: str) -> str:
+    return f"imagent:operation:{message.message_id}:{operation_type}"
 
 
 def _select(items, query: str, *, id_of, label_of):

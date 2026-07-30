@@ -32,13 +32,13 @@
     },
     "ProjectCapabilities": {
       "type": "object",
-      "required": ["mode", "discovery", "selection", "creation", "deletion"],
+      "required": ["mode", "discovery", "reading", "creation", "deletion"],
       "properties": {
         "mode": {
           "enum": ["managed", "flat", "fixed"]
         },
         "discovery": { "$ref": "#/$defs/SupportLevel" },
-        "selection": { "$ref": "#/$defs/SupportLevel" },
+        "reading": { "$ref": "#/$defs/SupportLevel" },
         "creation": { "$ref": "#/$defs/SupportLevel" },
         "deletion": { "$ref": "#/$defs/SupportLevel" }
       },
@@ -49,11 +49,11 @@
     },
     "ThreadCapabilities": {
       "type": "object",
-      "required": ["listing", "creation", "switching", "deletion"],
+      "required": ["listing", "creation", "reading", "deletion"],
       "properties": {
         "listing": { "$ref": "#/$defs/SupportLevel" },
         "creation": { "$ref": "#/$defs/SupportLevel" },
-        "switching": { "$ref": "#/$defs/SupportLevel" },
+        "reading": { "$ref": "#/$defs/SupportLevel" },
         "deletion": { "$ref": "#/$defs/ThreadDeletionCapability" }
       },
       "additionalProperties": false
@@ -65,14 +65,16 @@
         "streaming",
         "replayFromCursor",
         "interruption",
-        "interactiveRequests"
+        "interactiveRequests",
+        "nativeThreadActivation"
       ],
       "properties": {
         "history": { "$ref": "#/$defs/SupportLevel" },
         "streaming": { "$ref": "#/$defs/SupportLevel" },
         "replayFromCursor": { "$ref": "#/$defs/SupportLevel" },
         "interruption": { "$ref": "#/$defs/SupportLevel" },
-        "interactiveRequests": { "$ref": "#/$defs/SupportLevel" }
+        "interactiveRequests": { "$ref": "#/$defs/SupportLevel" },
+        "nativeThreadActivation": { "$ref": "#/$defs/SupportLevel" }
       },
       "additionalProperties": false
     },

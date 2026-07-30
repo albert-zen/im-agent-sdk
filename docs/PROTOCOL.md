@@ -97,73 +97,114 @@ it again on the canonical user-message event. This enables optimistic local
 echo without duplicates and makes externally originated user messages visible
 to desktop and Web clients.
 
-## Operation object
+## Typed operations
 
-Operation represents explicit control intent.
+Operation represents explicit control intent. The common contract has two
+discriminated operation families because application-native mutations and
+Gateway-owned bindings have different authorities.
+
+Application operations are sent to exactly one Agent application adapter:
 
 ```text
-Operation {
+ApplicationOperation {
   operationId
-  conversationRef
-  actor
   type
-  target
-  arguments
+  applicationRef
+  typed fields for type
   createdAt
 }
 ```
 
-The initial operations are:
+Gateway operations carry the IM actor and Conversation because they mutate
+Gateway-owned selection state:
 
-| Operation | Effect |
-|---|---|
-| `application.list` | List configured Agent application instances |
-| `project.list` | List projects exposed by one application |
-| `project.select` | Select a project and clear an incompatible thread |
-| `thread.create` | Create a thread and select it |
-| `thread.list` | List threads, optionally scoped to a project |
-| `thread.switch` | Validate, subscribe to, and select a thread |
-| `thread.delete` | Delete or archive according to explicit capability |
-| `thread.status` | Read normalized status |
-| `thread.history` | Read recent Turns to restore an old Thread's context |
-| `turn.catchup` | Read recent Agent progress from the latest Turn |
-| `turn.interrupt` | Interrupt a running turn when supported |
-| `request.respond` | Respond to approval or user-input request |
+```text
+GatewayOperation {
+  operationId
+  type
+  conversationRef
+  actor
+  typed fields for type
+  createdAt
+}
+```
+
+The initial application operations are:
+
+| Operation | Typed success result | Effect |
+|---|---|---|
+| `project.list` | `ProjectsListed` | List projects without changing a binding |
+| `project.get` | `ProjectRead` | Validate and read one project |
+| `thread.create` | `ThreadCreated` | Create a real application Thread |
+| `thread.list` | `ThreadsListed` | List threads without changing a binding |
+| `thread.get` | `ThreadRead` | Validate and read one thread |
+| `thread.activate_native` | `NativeThreadActivated` | Optionally change native application UI selection |
+| `thread.delete` | `ThreadDeleted` | Delete/archive with the actual mode reported |
+| `thread.status` | `ThreadStatusRead` | Read normalized status |
+| `thread.history` | `ThreadHistoryRead` | Read recent authoritative Turns |
+| `turn.catchup` | `TurnCatchupRead` | Read latest Turn progress |
+| `turn.interrupt` | `TurnInterrupted` | Interrupt a running Turn |
+| `request.respond` | `RequestResponded` | Respond to an approval or user-input request |
+
+The initial Gateway operations are:
+
+| Operation | Typed success result | Effect |
+|---|---|---|
+| `application.list` | `ApplicationsListed` | List configured application instances |
+| `application.select` | `ConversationBound` | Select an application and clear project/thread |
+| `conversation.bind_project` | `ConversationBound` | Validate/select a project and clear thread |
+| `conversation.bind_thread` | `ConversationBound` | Validate/select a thread for future input |
+| `conversation.clear_thread` | `ConversationBound` | Clear the selected thread |
+
+Each Python and wire operation variant exposes its fields directly rather than
+putting behavior-critical values in `Metadata`. The result is also a
+discriminated variant with named fields; callers never infer the runtime type
+of an untyped `value`.
 
 ### Thread creation
 
 ```text
 thread.create {
+  operationId
   applicationRef
   projectRef?
   title?
-  initialContext?
+  initialContext[]
+  createdAt
 }
 ```
 
-Successful creation selects the new thread for the originating Conversation.
-Whether a product offers lazy creation after `/new` is a product interaction
-choice; the core operation itself creates a real thread.
+Creation and input selection are separate operations. A Controller may create
+a Thread and then atomically bind its Conversation to the returned
+`threadRef`; the application operation itself never writes a Conversation
+binding.
 
-### Thread switching
+### Thread selection and native activation
 
 ```text
-thread.switch {
+conversation.bind_thread {
+  operationId
+  conversationRef
+  actor
   threadRef
+  expectedRevision?
+  createdAt
+}
+
+thread.activate_native {
+  operationId
+  applicationRef
+  threadRef
+  createdAt
 }
 ```
 
-Execution order:
-
-1. resolve the application instance;
-2. validate and read the target thread;
-3. establish recoverable observation of the target;
-4. atomically update the Conversation binding;
-5. emit `binding.changed`;
-6. route subsequent messages to the selected thread.
-
-If the application requires a native "activate/open thread" call, its adapter
-performs it. The shared semantic result is still the Conversation binding.
+`conversation.bind_thread` reads the authoritative Thread to validate it, then
+atomically updates the input binding. It never activates, opens, resumes, or
+otherwise mutates the Agent application's native active-thread state.
+`thread.activate_native` is a separate optional application operation and
+capability. A product that needs both invokes both explicitly and handles each
+result independently.
 
 ### Thread deletion
 
@@ -222,20 +263,35 @@ Slash commands are one expression of these typed operations:
 /history [turns] [--page N]
 ```
 
-## Operation result
+## Operation results
+
+Every success result repeats the originating operation's discriminant and has
+named result fields such as `projects`, `thread`, `status`, `history`,
+`catchup`, or `binding`.
 
 ```text
-OperationResult {
+ThreadCreated {
   operationId
-  status: succeeded | failed
-  value?
-  error?
+  type: thread.create
+  status: succeeded
+  thread
+  completedAt
+}
+
+ApplicationOperationFailed {
+  operationId
+  type
+  status: failed
+  error
   completedAt
 }
 ```
 
+Gateway failures use the corresponding `GatewayOperationFailed` variant.
 Errors include a stable code, user-safe message, retryability, and optional
-adapter-native diagnostic metadata.
+adapter-native diagnostic metadata. An adapter-specific extension may add its
+own typed interface outside the common union; it cannot inject an unknown
+payload into the common discriminated union.
 
 ## Unified Agent event
 

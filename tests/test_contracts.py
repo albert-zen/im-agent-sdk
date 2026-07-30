@@ -5,16 +5,21 @@ from datetime import UTC, datetime
 
 from imagent.contracts import (
     ApplicationCapabilities,
+    ApplicationOperationFailed,
+    ApplicationOperationType,
     ApplicationRef,
+    BindConversationToThread,
     ContractError,
     ContractViolation,
     ConversationBinding,
+    ConversationBound,
     ConversationRef,
-    Operation,
-    OperationResult,
-    OperationResultStatus,
-    OperationTarget,
-    OperationType,
+    GatewayOperationType,
+    GetThreadHistory,
+    GetTurnCatchup,
+    ListThreads,
+    OperationErrorCode,
+    Page,
     ProjectCapabilities,
     ProjectMode,
     ProjectRef,
@@ -23,11 +28,15 @@ from imagent.contracts import (
     ThreadCapabilities,
     ThreadDeletionCapability,
     ThreadRef,
+    ThreadsListed,
     derive_client_message_id,
+    operation_error,
     validate_application_capabilities,
+    validate_application_operation,
+    validate_application_operation_result,
     validate_binding,
-    validate_operation,
-    validate_operation_result,
+    validate_gateway_operation,
+    validate_gateway_operation_result,
 )
 
 
@@ -39,12 +48,12 @@ def capabilities(mode: ProjectMode) -> ApplicationCapabilities:
         projects=ProjectCapabilities(
             mode=mode,
             discovery=project_support,
-            selection=project_support,
+            reading=project_support,
         ),
         threads=ThreadCapabilities(
             listing=SupportLevel.NATIVE,
             creation=SupportLevel.NATIVE,
-            switching=SupportLevel.NATIVE,
+            reading=SupportLevel.NATIVE,
             deletion=ThreadDeletionCapability.ARCHIVE,
         ),
         runtime=RuntimeCapabilities(
@@ -63,13 +72,26 @@ class CapabilityTests(unittest.TestCase):
             with self.subTest(mode=mode):
                 validate_application_capabilities(capabilities(mode))
 
+    def test_operation_errors_use_stable_codes(self) -> None:
+        cases = (
+            (ValueError("bad input"), OperationErrorCode.INVALID_OPERATION),
+            (NotImplementedError("missing"), OperationErrorCode.UNSUPPORTED),
+            (KeyError("gone"), OperationErrorCode.NOT_FOUND),
+            (RuntimeError("boom"), OperationErrorCode.ADAPTER_FAILURE),
+        )
+        for error, expected in cases:
+            with self.subTest(error=error):
+                projected = operation_error(error)
+                self.assertEqual(projected.code, expected.value)
+                self.assertEqual(projected.metadata["native_exception"], type(error).__name__)
+
     def test_rejects_project_operations_in_flat_mode(self) -> None:
         invalid = capabilities(ProjectMode.FLAT)
         invalid = ApplicationCapabilities(
             projects=ProjectCapabilities(
                 mode=ProjectMode.FLAT,
                 discovery=SupportLevel.NATIVE,
-                selection=SupportLevel.UNSUPPORTED,
+                reading=SupportLevel.UNSUPPORTED,
             ),
             threads=invalid.threads,
             runtime=invalid.runtime,
@@ -145,72 +167,113 @@ class MessageIdentityTests(unittest.TestCase):
 
 
 class OperationTests(unittest.TestCase):
-    def test_history_operations_require_thread_reference(self) -> None:
-        for operation_type in (
-            OperationType.TURN_CATCHUP,
-            OperationType.THREAD_HISTORY,
-        ):
-            with self.subTest(operation_type=operation_type):
-                operation = Operation(
-                    operation_id=f"op-{operation_type.value}",
-                    conversation_ref=ConversationRef(
-                        "qq-primary",
-                        "c2c:user-1",
-                    ),
-                    actor="user-1",
-                    type=operation_type,
-                    target=OperationTarget(),
-                    arguments={},
-                    created_at=datetime.now(UTC),
-                )
-                with self.assertRaisesRegex(
-                    ContractViolation,
-                    "requires thread_ref",
-                ):
-                    validate_operation(operation)
-
-    def test_thread_switch_requires_thread_reference(self) -> None:
-        operation = Operation(
-            operation_id="op-1",
-            conversation_ref=ConversationRef("qq-primary", "c2c:user-1"),
-            actor="user-1",
-            type=OperationType.THREAD_SWITCH,
-            target=OperationTarget(),
-            arguments={},
-            created_at=datetime.now(UTC),
-        )
-        with self.assertRaisesRegex(ContractViolation, "requires thread_ref"):
-            validate_operation(operation)
-
-    def test_thread_switch_accepts_scoped_thread(self) -> None:
-        validate_operation(
-            Operation(
-                operation_id="op-1",
-                conversation_ref=ConversationRef("qq-primary", "c2c:user-1"),
-                actor="user-1",
-                type=OperationType.THREAD_SWITCH,
-                target=OperationTarget(thread_ref=ThreadRef("zen-local", "thread-1")),
-                arguments={},
+    def test_typed_history_operations_validate_limits_and_scope(self) -> None:
+        application = ApplicationRef("zen-local")
+        thread = ThreadRef("zen-local", "thread-1")
+        validate_application_operation(
+            GetTurnCatchup(
+                operation_id="op-catchup",
+                application_ref=application,
+                thread_ref=thread,
+                limit=5,
                 created_at=datetime.now(UTC),
             )
         )
-
-    def test_operation_result_error_invariants(self) -> None:
-        validate_operation_result(
-            OperationResult(
-                operation_id="op-1",
-                status=OperationResultStatus.FAILED,
-                completed_at=datetime.now(UTC),
-                error=ContractError(code="thread_not_found", message="missing"),
-            )
-        )
-        with self.assertRaisesRegex(ContractViolation, "must contain an error"):
-            validate_operation_result(
-                OperationResult(
-                    operation_id="op-2",
-                    status=OperationResultStatus.FAILED,
-                    completed_at=datetime.now(UTC),
+        with self.assertRaisesRegex(ContractViolation, "between 1 and 20"):
+            validate_application_operation(
+                GetThreadHistory(
+                    operation_id="op-history",
+                    application_ref=application,
+                    thread_ref=thread,
+                    limit=21,
+                    created_at=datetime.now(UTC),
                 )
+            )
+        with self.assertRaisesRegex(ContractViolation, "different application"):
+            validate_application_operation(
+                GetTurnCatchup(
+                    operation_id="op-cross-app",
+                    application_ref=application,
+                    thread_ref=ThreadRef("t3-remote", "thread-1"),
+                    created_at=datetime.now(UTC),
+                )
+            )
+
+    def test_gateway_thread_binding_is_a_distinct_typed_operation(self) -> None:
+        operation = BindConversationToThread(
+            operation_id="op-1",
+            conversation_ref=ConversationRef("qq-primary", "c2c:user-1"),
+            actor="user-1",
+            thread_ref=ThreadRef("zen-local", "thread-1"),
+            created_at=datetime.now(UTC),
+        )
+        validate_gateway_operation(operation)
+        self.assertEqual(
+            operation.type,
+            GatewayOperationType.CONVERSATION_BIND_THREAD,
+        )
+
+    def test_result_variant_must_match_operation(self) -> None:
+        operation = ListThreads(
+            operation_id="op-list",
+            application_ref=ApplicationRef("zen-local"),
+            created_at=datetime.now(UTC),
+        )
+        result = ThreadsListed(
+            operation_id=operation.operation_id,
+            completed_at=datetime.now(UTC),
+            threads=Page(()),
+        )
+        validate_application_operation_result(operation, result)
+        with self.assertRaisesRegex(ContractViolation, "type does not match"):
+            validate_application_operation_result(
+                operation,
+                ApplicationOperationFailed(
+                    operation_id=operation.operation_id,
+                    type=ApplicationOperationType.THREAD_STATUS,
+                    completed_at=datetime.now(UTC),
+                    error=ContractError(code="thread_not_found", message="missing"),
+                ),
+            )
+
+    def test_gateway_result_must_preserve_conversation(self) -> None:
+        operation = BindConversationToThread(
+            operation_id="op-bind",
+            conversation_ref=ConversationRef("qq-primary", "c2c:user-1"),
+            actor="user-1",
+            thread_ref=ThreadRef("zen-local", "thread-1"),
+            created_at=datetime.now(UTC),
+        )
+        with self.assertRaisesRegex(ContractViolation, "different Conversation"):
+            validate_gateway_operation_result(
+                operation,
+                ConversationBound(
+                    operation_id=operation.operation_id,
+                    type=operation.type,
+                    completed_at=datetime.now(UTC),
+                    binding=ConversationBinding(
+                        conversation_ref=ConversationRef("qq-primary", "c2c:user-2"),
+                        application_ref=ApplicationRef("zen-local"),
+                        thread_ref=ThreadRef("zen-local", "thread-1"),
+                    ),
+                ),
+            )
+
+    def test_failed_result_requires_valid_error(self) -> None:
+        operation = ListThreads(
+            operation_id="op-1",
+            application_ref=ApplicationRef("zen-local"),
+            created_at=datetime.now(UTC),
+        )
+        with self.assertRaisesRegex(ContractViolation, "message cannot be empty"):
+            validate_application_operation_result(
+                operation,
+                ApplicationOperationFailed(
+                    operation_id="op-1",
+                    type=operation.type,
+                    completed_at=datetime.now(UTC),
+                    error=ContractError(code="thread_not_found", message=""),
+                ),
             )
 
 

@@ -73,6 +73,7 @@ The Gateway composes Channel and Agent application adapters.
 It owns:
 
 - the current application/project/thread binding for an IM conversation;
+- typed Gateway operations that atomically mutate those bindings;
 - deterministic routing;
 - inbound idempotency;
 - outbound projection and delivery correlation;
@@ -87,6 +88,12 @@ It does not own:
 - an independent Turn state machine;
 - model, provider, workspace, or sandbox configuration;
 - Agent tool-approval truth.
+
+Application operations and Gateway operations are separate typed families.
+The Gateway may route an application operation to the referenced adapter, but
+it does not reinterpret that operation as a binding mutation. Conversely,
+binding a Conversation to a Thread validates the authoritative Thread without
+implicitly changing an application's native active/open Thread.
 
 ## Two planes and one event stream
 
@@ -165,13 +172,15 @@ contract uses conversation-level binding.
 
 1. A Channel adapter verifies and normalizes a native inbound message.
 2. Access policy runs before attachment download or Agent mutation.
-3. The Gateway derives a stable client message ID from the native identity.
-4. The Gateway resolves the conversation binding.
-5. The selected Agent application adapter sends the input to the selected
+3. An optional Controller may translate a slash command, button, or other
+   interaction into a typed operation; normal content continues unchanged.
+4. The Gateway derives a stable client message ID from the native identity.
+5. The Gateway resolves the conversation binding.
+6. The selected Agent application adapter sends the input to the selected
    thread.
-6. The Agent application broadcasts the canonical user item and subsequent
+7. The Agent application broadcasts the canonical user item and subsequent
    Agent events.
-7. The Gateway projects those events into the capabilities of each subscribed
+8. The Gateway projects those events into the capabilities of each subscribed
    channel.
 
 The canonical user-item event is required even when the originating client

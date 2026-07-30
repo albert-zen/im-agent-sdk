@@ -7,19 +7,20 @@ from .contracts import (
     AcceptedTurn,
     AgentEvent,
     AgentInput,
+    ApplicationOperation,
+    ApplicationOperationResult,
     ApplicationSummary,
     ChannelCapabilities,
     ChannelMessage,
     ConversationBinding,
     ConversationRef,
     DeliveryReceipt,
-    Operation,
-    OperationResult,
+    GatewayOperation,
     ThreadRef,
 )
 
 MessageHandler = Callable[[ChannelMessage], Awaitable[None]]
-OperationHandler = Callable[[Operation], Awaitable[None]]
+OperationHandler = Callable[[GatewayOperation], Awaitable[None]]
 
 
 class ChannelAdapter(Protocol):
@@ -48,7 +49,10 @@ class AgentApplicationAdapter(Protocol):
 
     async def stop(self) -> None: ...
 
-    async def execute(self, operation: Operation) -> OperationResult: ...
+    async def execute(
+        self,
+        operation: ApplicationOperation,
+    ) -> ApplicationOperationResult: ...
 
     async def send_input(
         self,

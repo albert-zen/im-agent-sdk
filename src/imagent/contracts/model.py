@@ -62,7 +62,7 @@ class ThreadDeletionCapability(StrEnum):
 class ProjectCapabilities:
     mode: ProjectMode
     discovery: SupportLevel
-    selection: SupportLevel
+    reading: SupportLevel
     creation: SupportLevel = SupportLevel.UNSUPPORTED
     deletion: SupportLevel = SupportLevel.UNSUPPORTED
 
@@ -71,7 +71,7 @@ class ProjectCapabilities:
 class ThreadCapabilities:
     listing: SupportLevel
     creation: SupportLevel
-    switching: SupportLevel
+    reading: SupportLevel
     deletion: ThreadDeletionCapability = ThreadDeletionCapability.UNSUPPORTED
 
 
@@ -82,6 +82,7 @@ class RuntimeCapabilities:
     replay_from_cursor: SupportLevel
     interruption: SupportLevel
     interactive_requests: SupportLevel
+    native_thread_activation: SupportLevel = SupportLevel.UNSUPPORTED
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,59 +261,12 @@ class AcceptedTurn:
     client_message_id: str
 
 
-class OperationType(StrEnum):
-    APPLICATION_LIST = "application.list"
-    PROJECT_LIST = "project.list"
-    PROJECT_SELECT = "project.select"
-    THREAD_CREATE = "thread.create"
-    THREAD_LIST = "thread.list"
-    THREAD_SWITCH = "thread.switch"
-    THREAD_DELETE = "thread.delete"
-    THREAD_STATUS = "thread.status"
-    THREAD_HISTORY = "thread.history"
-    TURN_CATCHUP = "turn.catchup"
-    TURN_INTERRUPT = "turn.interrupt"
-    REQUEST_RESPOND = "request.respond"
-
-
-@dataclass(frozen=True, slots=True)
-class OperationTarget:
-    application_ref: ApplicationRef | None = None
-    project_ref: ProjectRef | None = None
-    thread_ref: ThreadRef | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class Operation:
-    operation_id: str
-    conversation_ref: ConversationRef
-    actor: str
-    type: OperationType
-    target: OperationTarget
-    arguments: Metadata
-    created_at: datetime
-
-
 @dataclass(frozen=True, slots=True)
 class ContractError:
     code: str
     message: str
     retryable: bool = False
     metadata: Metadata = field(default_factory=dict)
-
-
-class OperationResultStatus(StrEnum):
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-
-
-@dataclass(frozen=True, slots=True)
-class OperationResult:
-    operation_id: str
-    status: OperationResultStatus
-    completed_at: datetime
-    value: object | None = None
-    error: ContractError | None = None
 
 
 class AgentEventType(StrEnum):

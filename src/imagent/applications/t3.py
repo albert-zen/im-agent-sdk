@@ -12,38 +12,62 @@ from typing import Protocol
 
 from ..contracts import (
     AcceptedTurn,
+    ActivateNativeThread,
     AgentEvent,
     AgentEventType,
     AgentInput,
     AgentMessage,
     ApplicationCapabilities,
+    ApplicationOperation,
+    ApplicationOperationFailed,
+    ApplicationOperationResult,
     ApplicationRef,
     ApplicationSummary,
     AttachmentContent,
-    ContractError,
+    CreateThread,
+    DeleteThread,
+    GetProject,
+    GetThread,
+    GetThreadHistory,
+    GetThreadStatus,
+    GetTurnCatchup,
+    InterruptTurn,
+    ListProjects,
+    ListThreads,
     MessageRole,
-    Operation,
-    OperationResult,
-    OperationResultStatus,
-    OperationType,
     Page,
     ProjectCapabilities,
     ProjectMode,
+    ProjectRead,
     ProjectRef,
+    ProjectsListed,
     ProjectSummary,
+    RespondRequest,
     RuntimeCapabilities,
     SupportLevel,
     TextContent,
     TextFormat,
     ThreadCapabilities,
+    ThreadCreated,
+    ThreadDeleted,
     ThreadDeletionCapability,
+    ThreadDeletionMode,
     ThreadHistory,
+    ThreadHistoryRead,
+    ThreadRead,
     ThreadRef,
+    ThreadsListed,
     ThreadStatus,
+    ThreadStatusRead,
     ThreadSummary,
     TurnCatchup,
+    TurnCatchupRead,
     TurnHistoryEntry,
+    TurnInterrupted,
     TurnStatus,
+    operation_error,
+    validate_application_operation,
+    validate_application_operation_result,
 )
 
 _ID_NAMESPACE = uuid.UUID("15440f13-a923-4a4c-8791-637914777e5e")
@@ -87,12 +111,12 @@ class T3ApplicationAdapter:
                 projects=ProjectCapabilities(
                     mode=ProjectMode.MANAGED,
                     discovery=SupportLevel.NATIVE,
-                    selection=SupportLevel.NATIVE,
+                    reading=SupportLevel.NATIVE,
                 ),
                 threads=ThreadCapabilities(
                     listing=SupportLevel.NATIVE,
                     creation=SupportLevel.NATIVE,
-                    switching=SupportLevel.NATIVE,
+                    reading=SupportLevel.NATIVE,
                     deletion=ThreadDeletionCapability.ARCHIVE,
                 ),
                 runtime=RuntimeCapabilities(
@@ -100,7 +124,8 @@ class T3ApplicationAdapter:
                     streaming=SupportLevel.FALLBACK,
                     replay_from_cursor=SupportLevel.FALLBACK,
                     interruption=SupportLevel.NATIVE,
-                    interactive_requests=SupportLevel.NATIVE,
+                    interactive_requests=SupportLevel.UNSUPPORTED,
+                    native_thread_activation=SupportLevel.UNSUPPORTED,
                 ),
             ),
             metadata={
@@ -124,30 +149,31 @@ class T3ApplicationAdapter:
             if inspect.isawaitable(result):
                 await result
 
-    async def execute(self, operation: Operation) -> OperationResult:
+    async def execute(
+        self,
+        operation: ApplicationOperation,
+    ) -> ApplicationOperationResult:
         try:
-            value = await self._execute(operation)
+            validate_application_operation(operation)
+            result = await self._execute(operation)
+            validate_application_operation_result(operation, result)
+            return result
         except Exception as error:
-            return OperationResult(
+            return ApplicationOperationFailed(
                 operation_id=operation.operation_id,
-                status=OperationResultStatus.FAILED,
+                type=operation.type,
                 completed_at=datetime.now(UTC),
-                error=ContractError(
-                    code=type(error).__name__,
-                    message=str(error),
-                ),
+                error=operation_error(error),
             )
-        return OperationResult(
-            operation_id=operation.operation_id,
-            status=OperationResultStatus.SUCCEEDED,
-            completed_at=datetime.now(UTC),
-            value=value,
-        )
 
-    async def _execute(self, operation: Operation) -> object | None:
-        if operation.type is OperationType.PROJECT_LIST:
+    async def _execute(
+        self,
+        operation: ApplicationOperation,
+    ) -> ApplicationOperationResult:
+        completed_at = datetime.now(UTC)
+        if isinstance(operation, ListProjects):
             snapshot = await self._client.shell_snapshot()
-            query = str(operation.arguments.get("query") or "").casefold()
+            query = (operation.query or "").casefold()
             projects = tuple(
                 summary
                 for project in _object_list(snapshot.get("projects"))
@@ -158,17 +184,24 @@ class T3ApplicationAdapter:
                     or query in summary.ref.native_project_id.casefold()
                 )
             )
-            return Page(items=projects)
-        if operation.type is OperationType.PROJECT_SELECT:
-            project_ref = _required_project(operation)
-            project = await self._find_project(project_ref.native_project_id)
+            return ProjectsListed(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                projects=Page(items=projects),
+            )
+        if isinstance(operation, GetProject):
+            project = await self._find_project(operation.project_ref.native_project_id)
             if project is None:
-                raise ValueError(f"T3 project not found: {project_ref.native_project_id}")
-            return project
-        if operation.type is OperationType.THREAD_LIST:
+                raise ValueError(f"T3 project not found: {operation.project_ref.native_project_id}")
+            return ProjectRead(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                project=project,
+            )
+        if isinstance(operation, ListThreads):
             snapshot = await self._client.shell_snapshot()
-            project_ref = operation.target.project_ref
-            query = str(operation.arguments.get("query") or "").casefold()
+            project_ref = operation.project_ref
+            query = (operation.query or "").casefold()
             threads = tuple(
                 summary
                 for thread in _object_list(snapshot.get("threads"))
@@ -180,9 +213,17 @@ class T3ApplicationAdapter:
                     or query in summary.ref.native_thread_id.casefold()
                 )
             )
-            return Page(items=threads)
-        if operation.type is OperationType.THREAD_CREATE:
-            project_ref = _required_project(operation)
+            return ThreadsListed(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                threads=Page(items=threads),
+            )
+        if isinstance(operation, CreateThread):
+            project_ref = operation.project_ref
+            if project_ref is None:
+                raise ValueError("thread.create requires project_ref")
+            if operation.initial_context:
+                raise NotImplementedError("initial thread context is unsupported by T3")
             project = await self._find_project(project_ref.native_project_id)
             if project is None:
                 raise ValueError(f"T3 project not found: {project_ref.native_project_id}")
@@ -190,7 +231,7 @@ class T3ApplicationAdapter:
             if not isinstance(model_selection, Mapping):
                 raise ValueError("T3 project has no default Agent/model selection")
             thread_id = _stable_id(operation.operation_id, "thread")
-            title = _safe_title(str(operation.arguments.get("title") or "IM task"))
+            title = _safe_title(operation.title or "IM task")
             now = _utc_now()
             await self._client.dispatch(
                 {
@@ -207,44 +248,59 @@ class T3ApplicationAdapter:
                     "createdAt": now,
                 }
             )
-            return ThreadSummary(
-                ref=ThreadRef(
-                    application_instance_id=self._application_instance_id,
-                    native_thread_id=thread_id,
-                    project_ref=project_ref,
+            return ThreadCreated(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                thread=ThreadSummary(
+                    ref=ThreadRef(
+                        application_instance_id=self._application_instance_id,
+                        native_thread_id=thread_id,
+                        project_ref=project_ref,
+                    ),
+                    title=title,
+                    status=ThreadStatus.IDLE,
+                    updated_at=datetime.now(UTC),
+                    metadata={
+                        "runtime_mode": self._runtime_mode,
+                        "model_selection": dict(model_selection),
+                    },
                 ),
-                title=title,
-                status=ThreadStatus.IDLE,
-                updated_at=datetime.now(UTC),
-                metadata={
-                    "runtime_mode": self._runtime_mode,
-                    "model_selection": dict(model_selection),
-                },
             )
-        if operation.type in {
-            OperationType.THREAD_SWITCH,
-            OperationType.THREAD_STATUS,
-        }:
-            thread_ref = _required_thread(operation)
+        if isinstance(operation, (GetThread, GetThreadStatus)):
+            thread_ref = operation.thread_ref
             self._require_own_thread(thread_ref)
             detail = await self._client.thread_detail(thread_ref.native_thread_id)
             summary = self._thread_summary(_object(detail.get("thread"), "thread"))
             if summary is None:
                 raise ValueError("T3 thread is archived or deleted")
-            return summary.status if operation.type is OperationType.THREAD_STATUS else summary
-        if operation.type is OperationType.TURN_CATCHUP:
-            thread_ref = _required_thread(operation)
+            if isinstance(operation, GetThreadStatus):
+                return ThreadStatusRead(
+                    operation_id=operation.operation_id,
+                    completed_at=completed_at,
+                    thread_ref=thread_ref,
+                    thread_status=summary.status,
+                )
+            return ThreadRead(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                thread=summary,
+            )
+        if isinstance(operation, GetTurnCatchup):
+            thread_ref = operation.thread_ref
             self._require_own_thread(thread_ref)
-            limit = _operation_limit(operation, default=5)
             detail = await self._client.thread_detail(thread_ref.native_thread_id)
             thread = _object(detail.get("thread"), "thread")
             latest_turn = _optional_object(thread.get("latestTurn"))
             if latest_turn is None:
-                return TurnCatchup(
-                    thread_ref=thread_ref,
-                    turn_id=None,
-                    status=TurnStatus.IDLE,
-                    messages=(),
+                return TurnCatchupRead(
+                    operation_id=operation.operation_id,
+                    completed_at=completed_at,
+                    catchup=TurnCatchup(
+                        thread_ref=thread_ref,
+                        turn_id=None,
+                        status=TurnStatus.IDLE,
+                        messages=(),
+                    ),
                 )
             turn_id = str(latest_turn.get("turnId") or latest_turn.get("id") or "")
             if not turn_id:
@@ -254,39 +310,47 @@ class T3ApplicationAdapter:
                 thread,
                 turn_id,
             )
-            return TurnCatchup(
-                thread_ref=thread_ref,
-                turn_id=turn_id,
-                status=_turn_status(latest_turn.get("state") or latest_turn.get("status")),
-                messages=messages[-limit:],
-                updated_at=_parse_optional_datetime(
-                    latest_turn.get("completedAt")
-                    or latest_turn.get("startedAt")
-                    or latest_turn.get("requestedAt")
-                    or thread.get("updatedAt")
+            return TurnCatchupRead(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                catchup=TurnCatchup(
+                    thread_ref=thread_ref,
+                    turn_id=turn_id,
+                    status=_turn_status(latest_turn.get("state") or latest_turn.get("status")),
+                    messages=messages[-operation.limit :],
+                    updated_at=_parse_optional_datetime(
+                        latest_turn.get("completedAt")
+                        or latest_turn.get("startedAt")
+                        or latest_turn.get("requestedAt")
+                        or thread.get("updatedAt")
+                    ),
+                    metadata={"native_application": "t3"},
                 ),
-                metadata={"native_application": "t3"},
             )
-        if operation.type is OperationType.THREAD_HISTORY:
-            thread_ref = _required_thread(operation)
+        if isinstance(operation, GetThreadHistory):
+            thread_ref = operation.thread_ref
             self._require_own_thread(thread_ref)
-            limit = _operation_limit(operation, default=3)
-            page = _operation_page(operation)
             detail = await self._client.thread_detail(thread_ref.native_thread_id)
             thread = _object(detail.get("thread"), "thread")
             turns = self._t3_history_entries(thread_ref, thread)
-            end = max(0, len(turns) - ((page - 1) * limit))
-            start = max(0, end - limit)
-            return ThreadHistory(
-                thread_ref=thread_ref,
-                turns=turns[start:end],
-                page=page,
-                has_older=start > 0,
-                metadata={"native_application": "t3"},
+            end = max(0, len(turns) - ((operation.page - 1) * operation.limit))
+            start = max(0, end - operation.limit)
+            return ThreadHistoryRead(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                history=ThreadHistory(
+                    thread_ref=thread_ref,
+                    turns=turns[start:end],
+                    page=operation.page,
+                    has_older=start > 0,
+                    metadata={"native_application": "t3"},
+                ),
             )
-        if operation.type is OperationType.THREAD_DELETE:
-            thread_ref = _required_thread(operation)
+        if isinstance(operation, DeleteThread):
+            thread_ref = operation.thread_ref
             self._require_own_thread(thread_ref)
+            if operation.mode is not ThreadDeletionMode.ARCHIVE:
+                raise NotImplementedError("T3 supports archive, not permanent deletion")
             await self._client.dispatch(
                 {
                     "type": "thread.archive",
@@ -294,9 +358,14 @@ class T3ApplicationAdapter:
                     "threadId": thread_ref.native_thread_id,
                 }
             )
-            return None
-        if operation.type is OperationType.TURN_INTERRUPT:
-            thread_ref = _required_thread(operation)
+            return ThreadDeleted(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                thread_ref=thread_ref,
+                mode=ThreadDeletionMode.ARCHIVE,
+            )
+        if isinstance(operation, InterruptTurn):
+            thread_ref = operation.thread_ref
             self._require_own_thread(thread_ref)
             command: dict[str, object] = {
                 "type": "thread.turn.interrupt",
@@ -304,11 +373,18 @@ class T3ApplicationAdapter:
                 "threadId": thread_ref.native_thread_id,
                 "createdAt": _utc_now(),
             }
-            turn_id = str(operation.arguments.get("turn_id") or "")
+            turn_id = operation.turn_id
             if turn_id:
                 command["turnId"] = turn_id
             await self._client.dispatch(command)
-            return None
+            return TurnInterrupted(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                thread_ref=thread_ref,
+                turn_id=turn_id,
+            )
+        if isinstance(operation, (ActivateNativeThread, RespondRequest)):
+            raise NotImplementedError(f"{operation.type.value} is unsupported by T3")
         raise NotImplementedError(f"{operation.type.value} is unsupported by T3")
 
     def _t3_catchup_messages(
@@ -635,20 +711,6 @@ class T3ApplicationAdapter:
             raise ValueError("thread belongs to a different application instance")
 
 
-def _required_project(operation: Operation) -> ProjectRef:
-    project_ref = operation.target.project_ref
-    if project_ref is None:
-        raise ValueError(f"{operation.type.value} requires project_ref")
-    return project_ref
-
-
-def _required_thread(operation: Operation) -> ThreadRef:
-    thread_ref = operation.target.thread_ref
-    if thread_ref is None:
-        raise ValueError(f"{operation.type.value} requires thread_ref")
-    return thread_ref
-
-
 def _object(value: object, name: str) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
         raise RuntimeError(f"T3 result did not contain {name}")
@@ -820,21 +882,6 @@ def _t3_turn_error(
             payload.get("message") or payload.get("detail") or activity.get("summary")
         )
     return None
-
-
-def _operation_limit(operation: Operation, *, default: int) -> int:
-    raw = operation.arguments.get("limit")
-    limit = int(str(raw)) if raw is not None else default
-    if limit < 1 or limit > 20:
-        raise ValueError("limit must be between 1 and 20")
-    return limit
-
-
-def _operation_page(operation: Operation) -> int:
-    page = int(str(operation.arguments.get("page") or 1))
-    if page < 1:
-        raise ValueError("page must be positive")
-    return page
 
 
 def _encode_t3_attachments(

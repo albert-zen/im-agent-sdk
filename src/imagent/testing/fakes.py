@@ -7,35 +7,62 @@ from datetime import UTC, datetime
 
 from imagent.contracts import (
     AcceptedTurn,
+    ActivateNativeThread,
     AgentEvent,
     AgentInput,
     ApplicationCapabilities,
+    ApplicationOperation,
+    ApplicationOperationFailed,
+    ApplicationOperationResult,
     ApplicationRef,
     ApplicationSummary,
     ChannelCapabilities,
     ChannelMessage,
+    CreateThread,
+    DeleteThread,
     DeliveryReceipt,
-    Operation,
-    OperationResult,
-    OperationResultStatus,
-    OperationType,
+    GetProject,
+    GetThread,
+    GetThreadHistory,
+    GetThreadStatus,
+    GetTurnCatchup,
+    InterruptTurn,
+    ListProjects,
+    ListThreads,
+    NativeThreadActivated,
     Page,
     ProjectCapabilities,
     ProjectMode,
+    ProjectRead,
     ProjectRef,
+    ProjectsListed,
     ProjectSummary,
+    RequestResponded,
+    RespondRequest,
     RuntimeCapabilities,
     SupportLevel,
     ThreadCapabilities,
+    ThreadCreated,
+    ThreadDeleted,
     ThreadDeletionCapability,
+    ThreadDeletionMode,
     ThreadHistory,
+    ThreadHistoryRead,
+    ThreadRead,
     ThreadRef,
+    ThreadsListed,
     ThreadSnapshot,
     ThreadStatus,
+    ThreadStatusRead,
     ThreadSummary,
     TurnCatchup,
+    TurnCatchupRead,
     TurnHistoryEntry,
+    TurnInterrupted,
     TurnStatus,
+    operation_error,
+    validate_application_operation,
+    validate_application_operation_result,
 )
 
 
@@ -47,12 +74,12 @@ def make_capabilities(project_mode: ProjectMode) -> ApplicationCapabilities:
         projects=ProjectCapabilities(
             mode=project_mode,
             discovery=project_support,
-            selection=project_support,
+            reading=project_support,
         ),
         threads=ThreadCapabilities(
             listing=SupportLevel.NATIVE,
             creation=SupportLevel.NATIVE,
-            switching=SupportLevel.NATIVE,
+            reading=SupportLevel.NATIVE,
             deletion=ThreadDeletionCapability.PERMANENT,
         ),
         runtime=RuntimeCapabilities(
@@ -61,6 +88,7 @@ def make_capabilities(project_mode: ProjectMode) -> ApplicationCapabilities:
             replay_from_cursor=SupportLevel.NATIVE,
             interruption=SupportLevel.NATIVE,
             interactive_requests=SupportLevel.NATIVE,
+            native_thread_activation=SupportLevel.NATIVE,
         ),
     )
 
@@ -118,6 +146,7 @@ class FakeAgentApplicationAdapter:
         self._inputs: list[tuple[ThreadRef, AgentInput]] = []
         self._events: dict[ThreadRef, asyncio.Queue[AgentEvent]] = {}
         self._next_thread = 1
+        self.activated_threads: list[ThreadRef] = []
 
     @property
     def summary(self) -> ApplicationSummary:
@@ -136,75 +165,129 @@ class FakeAgentApplicationAdapter:
     async def list_projects(self, cursor=None) -> Page[ProjectSummary]:
         return Page(tuple(self._projects.values()))
 
-    async def execute(self, operation: Operation) -> OperationResult:
-        value: object | None
-        if operation.type is OperationType.PROJECT_LIST:
-            value = await self.list_projects(operation.arguments.get("cursor"))
-        elif operation.type is OperationType.PROJECT_SELECT:
-            if operation.target.project_ref is None:
-                raise ValueError("project.select requires project_ref")
-            value = await self.get_project(operation.target.project_ref)
-        elif operation.type is OperationType.THREAD_LIST:
-            value = await self.list_threads(
-                operation.target.project_ref,
-                operation.arguments.get("cursor"),
+    async def execute(
+        self,
+        operation: ApplicationOperation,
+    ) -> ApplicationOperationResult:
+        try:
+            validate_application_operation(operation)
+            result = await self._execute(operation)
+            validate_application_operation_result(operation, result)
+            return result
+        except Exception as error:
+            return ApplicationOperationFailed(
+                operation_id=operation.operation_id,
+                type=operation.type,
+                completed_at=datetime.now(UTC),
+                error=operation_error(error),
             )
-        elif operation.type is OperationType.THREAD_CREATE:
-            value = await self.create_thread(
-                operation.target.project_ref,
-                str(operation.arguments.get("title") or ""),
+
+    async def _execute(
+        self,
+        operation: ApplicationOperation,
+    ) -> ApplicationOperationResult:
+        now = datetime.now(UTC)
+        if isinstance(operation, ListProjects):
+            return ProjectsListed(
+                operation_id=operation.operation_id,
+                completed_at=now,
+                projects=await self.list_projects(operation.cursor),
             )
-        elif operation.type is OperationType.THREAD_SWITCH:
-            if operation.target.thread_ref is None:
-                raise ValueError("thread.switch requires thread_ref")
-            value = await self.get_thread(operation.target.thread_ref)
-        elif operation.type is OperationType.THREAD_DELETE:
-            if operation.target.thread_ref is None:
-                raise ValueError("thread.delete requires thread_ref")
-            await self.delete_thread(operation.target.thread_ref)
-            value = None
-        elif operation.type is OperationType.THREAD_STATUS:
-            if operation.target.thread_ref is None:
-                raise ValueError("thread.status requires thread_ref")
-            value = await self.get_thread_status(operation.target.thread_ref)
-        elif operation.type is OperationType.TURN_CATCHUP:
-            if operation.target.thread_ref is None:
-                raise ValueError("turn.catchup requires thread_ref")
-            value = TurnCatchup(
-                thread_ref=operation.target.thread_ref,
-                turn_id=(f"turn-{len(self._inputs)}" if self._inputs else None),
-                status=(TurnStatus.RUNNING if self._inputs else TurnStatus.IDLE),
-                messages=(),
+        if isinstance(operation, GetProject):
+            return ProjectRead(
+                operation_id=operation.operation_id,
+                completed_at=now,
+                project=await self.get_project(operation.project_ref),
             )
-        elif operation.type is OperationType.THREAD_HISTORY:
-            if operation.target.thread_ref is None:
-                raise ValueError("thread.history requires thread_ref")
-            value = ThreadHistory(
-                thread_ref=operation.target.thread_ref,
-                turns=(
-                    (
-                        TurnHistoryEntry(
-                            turn_id=f"turn-{len(self._inputs)}",
-                            status=TurnStatus.RUNNING,
-                        ),
-                    )
-                    if self._inputs
-                    else ()
+        if isinstance(operation, ListThreads):
+            return ThreadsListed(
+                operation_id=operation.operation_id,
+                completed_at=now,
+                threads=await self.list_threads(operation.project_ref, operation.cursor),
+            )
+        if isinstance(operation, CreateThread):
+            return ThreadCreated(
+                operation_id=operation.operation_id,
+                completed_at=now,
+                thread=await self.create_thread(operation.project_ref, operation.title),
+            )
+        if isinstance(operation, GetThread):
+            return ThreadRead(
+                operation_id=operation.operation_id,
+                completed_at=now,
+                thread=await self.get_thread(operation.thread_ref),
+            )
+        if isinstance(operation, ActivateNativeThread):
+            await self.get_thread(operation.thread_ref)
+            self.activated_threads.append(operation.thread_ref)
+            return NativeThreadActivated(
+                operation_id=operation.operation_id,
+                completed_at=now,
+                thread_ref=operation.thread_ref,
+            )
+        if isinstance(operation, DeleteThread):
+            if operation.mode is not ThreadDeletionMode.PERMANENT:
+                raise NotImplementedError("fake adapter supports permanent deletion")
+            await self.delete_thread(operation.thread_ref)
+            return ThreadDeleted(
+                operation_id=operation.operation_id,
+                completed_at=now,
+                thread_ref=operation.thread_ref,
+                mode=ThreadDeletionMode.PERMANENT,
+            )
+        if isinstance(operation, GetThreadStatus):
+            return ThreadStatusRead(
+                operation_id=operation.operation_id,
+                completed_at=now,
+                thread_ref=operation.thread_ref,
+                thread_status=await self.get_thread_status(operation.thread_ref),
+            )
+        if isinstance(operation, GetTurnCatchup):
+            return TurnCatchupRead(
+                operation_id=operation.operation_id,
+                completed_at=now,
+                catchup=TurnCatchup(
+                    thread_ref=operation.thread_ref,
+                    turn_id=(f"turn-{len(self._inputs)}" if self._inputs else None),
+                    status=(TurnStatus.RUNNING if self._inputs else TurnStatus.IDLE),
+                    messages=(),
                 ),
             )
-        elif operation.type is OperationType.TURN_INTERRUPT:
-            if operation.target.thread_ref is None:
-                raise ValueError("turn.interrupt requires thread_ref")
-            await self.interrupt_turn(operation.target.thread_ref)
-            value = None
-        else:
-            raise NotImplementedError(operation.type.value)
-        return OperationResult(
-            operation_id=operation.operation_id,
-            status=OperationResultStatus.SUCCEEDED,
-            completed_at=datetime.now(UTC),
-            value=value,
-        )
+        if isinstance(operation, GetThreadHistory):
+            return ThreadHistoryRead(
+                operation_id=operation.operation_id,
+                completed_at=now,
+                history=ThreadHistory(
+                    thread_ref=operation.thread_ref,
+                    turns=(
+                        (
+                            TurnHistoryEntry(
+                                turn_id=f"turn-{len(self._inputs)}",
+                                status=TurnStatus.RUNNING,
+                            ),
+                        )
+                        if self._inputs
+                        else ()
+                    ),
+                    page=operation.page,
+                ),
+            )
+        if isinstance(operation, InterruptTurn):
+            await self.interrupt_turn(operation.thread_ref, operation.turn_id)
+            return TurnInterrupted(
+                operation_id=operation.operation_id,
+                completed_at=now,
+                thread_ref=operation.thread_ref,
+                turn_id=operation.turn_id,
+            )
+        if isinstance(operation, RespondRequest):
+            await self.respond_request(operation.request_id, operation.response)
+            return RequestResponded(
+                operation_id=operation.operation_id,
+                completed_at=now,
+                request_id=operation.request_id,
+            )
+        raise NotImplementedError(operation.type.value)
 
     async def get_project(self, project_ref: ProjectRef) -> ProjectSummary:
         return self._projects[project_ref]

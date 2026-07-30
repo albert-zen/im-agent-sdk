@@ -7,13 +7,48 @@ from .model import (
     ApplicationCapabilities,
     ConversationBinding,
     ConversationRef,
-    Operation,
-    OperationResult,
-    OperationResultStatus,
-    OperationType,
     ProjectMode,
     SupportLevel,
     ThreadRef,
+)
+from .operations import (
+    ActivateNativeThread,
+    ApplicationOperation,
+    ApplicationOperationFailed,
+    ApplicationOperationResult,
+    ApplicationsListed,
+    BindConversationToProject,
+    BindConversationToThread,
+    ClearConversationThread,
+    ConversationBound,
+    CreateThread,
+    DeleteThread,
+    GatewayOperation,
+    GatewayOperationFailed,
+    GatewayOperationResult,
+    GetProject,
+    GetThread,
+    GetThreadHistory,
+    GetThreadStatus,
+    GetTurnCatchup,
+    InterruptTurn,
+    ListApplications,
+    ListProjects,
+    ListThreads,
+    NativeThreadActivated,
+    ProjectRead,
+    ProjectsListed,
+    RequestResponded,
+    RespondRequest,
+    SelectApplication,
+    ThreadCreated,
+    ThreadDeleted,
+    ThreadHistoryRead,
+    ThreadRead,
+    ThreadsListed,
+    ThreadStatusRead,
+    TurnCatchupRead,
+    TurnInterrupted,
 )
 
 
@@ -40,15 +75,15 @@ def validate_application_capabilities(capabilities: ApplicationCapabilities) -> 
     projects = capabilities.projects
     project_operations = (
         projects.discovery,
-        projects.selection,
+        projects.reading,
         projects.creation,
         projects.deletion,
     )
     if projects.mode is ProjectMode.MANAGED:
         if projects.discovery is SupportLevel.UNSUPPORTED:
             raise ContractViolation("managed project mode requires project discovery")
-        if projects.selection is SupportLevel.UNSUPPORTED:
-            raise ContractViolation("managed project mode requires project selection")
+        if projects.reading is SupportLevel.UNSUPPORTED:
+            raise ContractViolation("managed project mode requires project reads")
     elif any(level is not SupportLevel.UNSUPPORTED for level in project_operations):
         raise ContractViolation(
             f"{projects.mode.value} project mode cannot advertise project operations"
@@ -91,42 +126,239 @@ def validate_binding(
         )
 
 
-def validate_operation(operation: Operation) -> None:
+def validate_application_operation(operation: ApplicationOperation) -> None:
+    require_identifier(operation.operation_id, "operation_id")
+    application_id = operation.application_ref.application_instance_id
+    require_identifier(application_id, "application_instance_id")
+
+    project_ref = None
+    if isinstance(operation, (GetProject, CreateThread, ListThreads)):
+        project_ref = operation.project_ref
+    if project_ref is not None and project_ref.application_instance_id != application_id:
+        raise ContractViolation("operation project belongs to a different application")
+
+    thread_ref = None
+    if isinstance(
+        operation,
+        (
+            GetThread,
+            ActivateNativeThread,
+            DeleteThread,
+            GetThreadStatus,
+            GetThreadHistory,
+            GetTurnCatchup,
+            InterruptTurn,
+        ),
+    ):
+        thread_ref = operation.thread_ref
+    elif isinstance(operation, RespondRequest):
+        require_identifier(operation.request_id, "request_id")
+        thread_ref = operation.thread_ref
+    if thread_ref is not None:
+        validate_thread_ref(thread_ref)
+        if thread_ref.application_instance_id != application_id:
+            raise ContractViolation("operation thread belongs to a different application")
+
+    if isinstance(operation, GetThreadHistory):
+        if not 1 <= operation.limit <= 20:
+            raise ContractViolation("history limit must be between 1 and 20")
+        if operation.page < 1:
+            raise ContractViolation("history page must be positive")
+    if isinstance(operation, GetTurnCatchup) and not 1 <= operation.limit <= 20:
+        raise ContractViolation("catch-up limit must be between 1 and 20")
+    if isinstance(operation, InterruptTurn) and operation.turn_id is not None:
+        require_identifier(operation.turn_id, "turn_id")
+
+
+def validate_gateway_operation(operation: GatewayOperation) -> None:
     require_identifier(operation.operation_id, "operation_id")
     require_identifier(operation.actor, "actor")
-    target = operation.target
-    requirements = {
-        OperationType.APPLICATION_LIST: (),
-        OperationType.PROJECT_LIST: ("application",),
-        OperationType.PROJECT_SELECT: ("project",),
-        OperationType.THREAD_CREATE: ("application",),
-        OperationType.THREAD_LIST: ("application",),
-        OperationType.THREAD_SWITCH: ("thread",),
-        OperationType.THREAD_DELETE: ("thread",),
-        OperationType.THREAD_STATUS: ("thread",),
-        OperationType.THREAD_HISTORY: ("thread",),
-        OperationType.TURN_CATCHUP: ("thread",),
-        OperationType.TURN_INTERRUPT: ("thread",),
-        OperationType.REQUEST_RESPOND: ("application",),
-    }
-    present = {
-        "application": target.application_ref is not None,
-        "project": target.project_ref is not None,
-        "thread": target.thread_ref is not None,
-    }
-    for requirement in requirements[operation.type]:
-        if not present[requirement]:
-            raise ContractViolation(f"{operation.type.value} requires {requirement}_ref")
-    if target.thread_ref is not None:
-        validate_thread_ref(target.thread_ref)
+    require_identifier(operation.conversation_ref.channel_instance_id, "channel_instance_id")
+    require_identifier(operation.conversation_ref.native_conversation_id, "native_conversation_id")
+    expected_revision = getattr(operation, "expected_revision", None)
+    if expected_revision is not None and expected_revision < 0:
+        raise ContractViolation("expected_revision cannot be negative")
+    if isinstance(operation, SelectApplication):
+        require_identifier(
+            operation.application_ref.application_instance_id,
+            "application_instance_id",
+        )
+    if isinstance(operation, BindConversationToProject):
+        require_identifier(operation.project_ref.application_instance_id, "application_instance_id")
+        require_identifier(operation.project_ref.native_project_id, "native_project_id")
+    if isinstance(operation, BindConversationToThread):
+        validate_thread_ref(operation.thread_ref)
 
 
-def validate_operation_result(result: OperationResult) -> None:
+def validate_application_operation_result(
+    operation: ApplicationOperation,
+    result: ApplicationOperationResult,
+) -> None:
     require_identifier(result.operation_id, "operation_id")
-    if result.status is OperationResultStatus.SUCCEEDED and result.error is not None:
-        raise ContractViolation("successful operation cannot contain an error")
-    if result.status is OperationResultStatus.FAILED and result.error is None:
-        raise ContractViolation("failed operation must contain an error")
+    if result.operation_id != operation.operation_id:
+        raise ContractViolation("operation result ID does not match the request")
+    if result.type is not operation.type:
+        raise ContractViolation("operation result type does not match the request")
+    if isinstance(result, ApplicationOperationFailed):
+        _validate_error(result.error)
+        return
+
+    expected_result: type[object]
+    expected_result = {
+        ListProjects: ProjectsListed,
+        GetProject: ProjectRead,
+        CreateThread: ThreadCreated,
+        ListThreads: ThreadsListed,
+        GetThread: ThreadRead,
+        ActivateNativeThread: NativeThreadActivated,
+        DeleteThread: ThreadDeleted,
+        GetThreadStatus: ThreadStatusRead,
+        GetThreadHistory: ThreadHistoryRead,
+        GetTurnCatchup: TurnCatchupRead,
+        InterruptTurn: TurnInterrupted,
+        RespondRequest: RequestResponded,
+    }[type(operation)]
+    if not isinstance(result, expected_result):
+        raise ContractViolation(
+            f"{operation.type.value} returned {type(result).__name__}, "
+            f"expected {expected_result.__name__}"
+        )
+
+    application_id = operation.application_ref.application_instance_id
+    if isinstance(result, ProjectsListed):
+        refs = tuple(item.ref for item in result.projects.items)
+    elif isinstance(result, ProjectRead):
+        refs = (result.project.ref,)
+        if not isinstance(operation, GetProject):
+            raise ContractViolation("project.get returned for a different operation")
+        if result.project.ref != operation.project_ref:
+            raise ContractViolation("project.get returned a different project")
+    elif isinstance(result, ThreadCreated):
+        if not isinstance(operation, CreateThread):
+            raise ContractViolation("thread.create returned for a different operation")
+        refs = (result.thread.ref,)
+        if result.thread.ref.project_ref != operation.project_ref:
+            raise ContractViolation("thread.create returned a different project scope")
+    elif isinstance(result, ThreadsListed):
+        if not isinstance(operation, ListThreads):
+            raise ContractViolation("thread.list returned for a different operation")
+        refs = tuple(item.ref for item in result.threads.items)
+        if operation.project_ref is not None and any(
+            item.ref.project_ref != operation.project_ref for item in result.threads.items
+        ):
+            raise ContractViolation("thread.list returned a different project scope")
+    elif isinstance(result, ThreadRead):
+        if not isinstance(operation, GetThread):
+            raise ContractViolation("thread.get returned for a different operation")
+        refs = (result.thread.ref,)
+        if result.thread.ref != operation.thread_ref:
+            raise ContractViolation("thread.get returned a different thread")
+    elif isinstance(result, NativeThreadActivated):
+        if not isinstance(operation, ActivateNativeThread):
+            raise ContractViolation("thread.activate_native returned for a different operation")
+        refs = (result.thread_ref,)
+        if result.thread_ref != operation.thread_ref:
+            raise ContractViolation("thread.activate_native returned a different thread")
+    elif isinstance(result, ThreadDeleted):
+        if not isinstance(operation, DeleteThread):
+            raise ContractViolation("thread.delete returned for a different operation")
+        refs = (result.thread_ref,)
+        if result.thread_ref != operation.thread_ref:
+            raise ContractViolation("thread.delete returned a different thread")
+        if result.mode is not operation.mode:
+            raise ContractViolation("thread.delete returned a different deletion mode")
+    elif isinstance(result, ThreadStatusRead):
+        if not isinstance(operation, GetThreadStatus):
+            raise ContractViolation("thread.status returned for a different operation")
+        refs = (result.thread_ref,)
+        if result.thread_ref != operation.thread_ref:
+            raise ContractViolation("thread.status returned a different thread")
+    elif isinstance(result, ThreadHistoryRead):
+        if not isinstance(operation, GetThreadHistory):
+            raise ContractViolation("thread.history returned for a different operation")
+        refs = (result.history.thread_ref,)
+        if result.history.thread_ref != operation.thread_ref:
+            raise ContractViolation("thread.history returned a different thread")
+    elif isinstance(result, TurnCatchupRead):
+        if not isinstance(operation, GetTurnCatchup):
+            raise ContractViolation("turn.catchup returned for a different operation")
+        refs = (result.catchup.thread_ref,)
+        if result.catchup.thread_ref != operation.thread_ref:
+            raise ContractViolation("turn.catchup returned a different thread")
+    elif isinstance(result, TurnInterrupted):
+        if not isinstance(operation, InterruptTurn):
+            raise ContractViolation("turn.interrupt returned for a different operation")
+        refs = (result.thread_ref,)
+        if result.thread_ref != operation.thread_ref:
+            raise ContractViolation("turn.interrupt returned a different thread")
+        if result.turn_id != operation.turn_id:
+            raise ContractViolation("turn.interrupt returned a different Turn")
+    elif isinstance(result, RequestResponded):
+        if not isinstance(operation, RespondRequest):
+            raise ContractViolation("request.respond returned for a different operation")
+        if result.request_id != operation.request_id:
+            raise ContractViolation("request.respond returned a different request")
+        refs = ()
+    else:
+        refs = ()
+    if any(ref.application_instance_id != application_id for ref in refs):
+        raise ContractViolation("operation result belongs to a different application")
+
+
+def validate_gateway_operation_result(
+    operation: GatewayOperation,
+    result: GatewayOperationResult,
+) -> None:
+    require_identifier(result.operation_id, "operation_id")
+    if result.operation_id != operation.operation_id:
+        raise ContractViolation("Gateway result ID does not match the request")
+    if result.type is not operation.type:
+        raise ContractViolation("Gateway result type does not match the request")
+    if isinstance(result, GatewayOperationFailed):
+        _validate_error(result.error)
+        return
+    if isinstance(operation, ListApplications):
+        if not isinstance(result, ApplicationsListed):
+            raise ContractViolation("application.list must return ApplicationsListed")
+        return
+    if not isinstance(
+        operation,
+        (
+            SelectApplication,
+            BindConversationToProject,
+            BindConversationToThread,
+            ClearConversationThread,
+        ),
+    ) or not isinstance(result, ConversationBound):
+        raise ContractViolation(f"{operation.type.value} must return ConversationBound")
+    if result.binding.conversation_ref != operation.conversation_ref:
+        raise ContractViolation("Gateway result belongs to a different Conversation")
+    validate_binding(result.binding)
+    if isinstance(operation, SelectApplication):
+        if (
+            result.binding.application_ref != operation.application_ref
+            or result.binding.project_ref is not None
+            or result.binding.thread_ref is not None
+        ):
+            raise ContractViolation("application.select returned an incompatible binding")
+    elif isinstance(operation, BindConversationToProject):
+        if (
+            result.binding.project_ref != operation.project_ref
+            or result.binding.thread_ref is not None
+        ):
+            raise ContractViolation("conversation.bind_project returned an incompatible binding")
+    elif isinstance(operation, BindConversationToThread):
+        if result.binding.thread_ref != operation.thread_ref:
+            raise ContractViolation("conversation.bind_thread returned a different thread")
+    elif isinstance(operation, ClearConversationThread):
+        if result.binding.thread_ref is not None:
+            raise ContractViolation("conversation.clear_thread did not clear the thread")
+
+
+def _validate_error(error) -> None:
+    require_identifier(error.code, "error.code")
+    if not error.message:
+        raise ContractViolation("operation error message cannot be empty")
 
 
 def derive_client_message_id(

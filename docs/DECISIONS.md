@@ -62,3 +62,16 @@ request cannot be silently implemented as archive.
 The Vision, Architecture, Domain Model, Protocol, Adapter, and Decision
 documents define the shared boundary. Runtime code cannot introduce new common
 semantics without first documenting them.
+
+## D-006: Application actions and Gateway bindings are separate typed unions
+
+Common application operations have discriminated, behavior-specific fields and
+matching typed results. They never mutate a Gateway Conversation binding.
+
+Gateway operations own application/project/thread selection for one
+Conversation. Binding a Thread validates the application-owned resource but
+does not implicitly activate, open, or resume that Thread in the native
+application. Native activation is a separate optional application operation.
+
+Free-form Metadata remains an extension surface, not a place for common
+operation arguments or success values.

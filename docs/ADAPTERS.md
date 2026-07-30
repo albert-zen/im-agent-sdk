@@ -95,12 +95,15 @@ message per token.
 summary
 start()
 stop()
-execute(Operation) -> OperationResult
+execute(ApplicationOperation) -> ApplicationOperationResult
 ```
 
 The deliberately small `execute` seam owns project/thread control operations;
-the adapter maps each typed Operation to its native application API. This is a
-deep module boundary rather than a method-per-resource mirror.
+the adapter maps each discriminated operation to its native application API
+and returns the matching discriminated result. Behavior-critical arguments
+and success values are named fields, not free-form Metadata or an untyped
+`value`. This is a deep module boundary rather than a method-per-resource
+mirror.
 
 History-capable adapters implement both `turn.catchup` and `thread.history`.
 Codex/Zen map these to native App Server Turn items; T3 groups its native
@@ -120,6 +123,11 @@ Flat and fixed applications omit `ProjectRef`; they still provide the full
 thread surface. A fixed cwd/workspace is application configuration, not a
 synthetic Project.
 
+Project and Thread capabilities use `reading` for authoritative resource
+lookup. Conversation selection is a Gateway capability, so application
+capabilities do not advertise `selection` or `switching`. Mutable native UI
+selection is advertised separately as `nativeThreadActivation`.
+
 ### Required runtime surface
 
 ```text
@@ -137,7 +145,9 @@ activateNativeThread
 ```
 
 `activateNativeThread` exists only for applications with mutable native
-selection. It does not replace the Gateway's Conversation binding.
+selection. It is expressed as the explicit `thread.activate_native`
+application operation. The Gateway's `conversation.bind_thread` operation
+never invokes it implicitly and it does not replace the Conversation binding.
 
 ### Snapshot and subscription
 
@@ -218,7 +228,7 @@ Every Agent application adapter should pass common tests for:
 - reference scoping;
 - pagination without binding side effects;
 - create then read/list;
-- switch validation;
+- thread-read validation independently from native activation;
 - deletion semantics;
 - stable client message ID round-trip;
 - canonical user and Agent message events;

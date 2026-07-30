@@ -4,6 +4,7 @@ import asyncio
 import inspect
 import tempfile
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -16,10 +17,13 @@ from imagent.applications import (
 from imagent.bindings import InMemoryBindingRepository
 from imagent.channels import ImcodexChannelAdapter
 from imagent.contracts import (
+    ActivateNativeThread,
     AgentInput,
     ApplicationRef,
     AttachmentContent,
+    BindConversationToThread,
     ConversationBinding,
+    ConversationBound,
     ConversationRef,
     ProjectRef,
     ThreadRef,
@@ -71,12 +75,14 @@ class NativeZenClient:
         self.handlers = []
         self.started_threads = []
         self.started_turns = []
+        self.resumed_threads = []
+        self.threads = {}
 
     def add_notification_handler(self, handler) -> None:
         self.handlers.append(handler)
 
     async def list_threads(self, **_params):
-        return {"data": []}
+        return {"data": list(self.threads.values())}
 
     async def list_thread_turns(self, thread_id: str, **_params):
         return {
@@ -127,14 +133,14 @@ class NativeZenClient:
 
     async def start_thread(self, **params):
         self.started_threads.append(params)
-        return {
-            "thread": {
-                "id": "zen-thread-1",
-                "cwd": params["cwd"],
-                "preview": "",
-                "status": {"type": "idle"},
-            }
+        thread = {
+            "id": f"zen-thread-{len(self.started_threads)}",
+            "cwd": params["cwd"],
+            "preview": "",
+            "status": {"type": "idle"},
         }
+        self.threads[thread["id"]] = thread
+        return {"thread": thread}
 
     async def read_thread(self, thread_id: str, *, include_turns: bool = False):
         return {
@@ -148,6 +154,7 @@ class NativeZenClient:
         }
 
     async def resume_thread(self, **params):
+        self.resumed_threads.append(str(params["threadId"]))
         return await self.read_thread(str(params["threadId"]))
 
     async def start_turn(
@@ -270,6 +277,43 @@ class NativeT3Client:
 
 
 class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_codex_binding_does_not_implicitly_resume_native_thread(self) -> None:
+        native_app = NativeZenClient()
+        application = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=native_app,
+            cwd="/repo",
+        )
+        gateway = ImAgentGateway(
+            channels=[],
+            applications=[application],
+            bindings=InMemoryBindingRepository(),
+        )
+        thread_ref = ThreadRef("codex-main", "codex-thread")
+        bound = await gateway.execute_gateway(
+            BindConversationToThread(
+                operation_id="bind-codex-thread",
+                conversation_ref=ConversationRef("qq-main", "c2c:user-1"),
+                actor="user-1",
+                thread_ref=thread_ref,
+                created_at=datetime.now(UTC),
+            )
+        )
+
+        self.assertIsInstance(bound, ConversationBound)
+        self.assertEqual(native_app.resumed_threads, [])
+
+        await gateway.execute_application(
+            ActivateNativeThread(
+                operation_id="activate-codex-thread",
+                application_ref=ApplicationRef("codex-main"),
+                thread_ref=thread_ref,
+                created_at=datetime.now(UTC),
+            )
+        )
+
+        self.assertEqual(native_app.resumed_threads, ["codex-thread"])
+
     async def test_appserver_catchup_and_history_restore_user_context(self) -> None:
         native_channel = NativeQQChannel()
         channel = ImcodexChannelAdapter(

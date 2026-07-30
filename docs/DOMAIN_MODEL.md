@@ -102,8 +102,9 @@ An adapter should prefer a stable native application ID. `rootPath` and
 
 ### Project modes
 
-`managed` applications expose Project discovery and selection. Thread list and
-creation may be scoped by `ProjectRef`.
+`managed` applications expose Project discovery and authoritative reads.
+Gateway-owned Conversation selection may then bind to a returned `ProjectRef`.
+Thread list and creation may be scoped by `ProjectRef`.
 
 `flat` applications expose a single application-wide thread list. Thread
 references omit `projectRef`.
@@ -113,8 +114,10 @@ contract. Their threads are also flat and omit `projectRef`. The configured
 working context may be exposed as application metadata, but it is not promoted
 to a fake Project resource.
 
-Thread creation, listing, switching, deletion, status, input, and events remain
-available in all three modes according to their own capabilities.
+Thread creation, listing, reading, deletion, status, input, and events remain
+available in all three modes according to their own capabilities. Gateway
+binding and optional native activation are separate from those resource
+operations.
 
 ### Project and Zen Core
 
@@ -198,7 +201,11 @@ Invariants:
 - changing the project clears an incompatible selected thread;
 - deleting the selected thread clears the thread selection;
 - listing resources never changes the binding;
-- switching is atomic from the conversation's perspective.
+- binding changes are atomic from the Conversation's perspective.
+- selecting a Thread for Conversation input does not imply native application
+  activation;
+- native activation, when supported, is an explicit application operation and
+  does not mutate a Conversation binding.
 
 ## Thread status
 
