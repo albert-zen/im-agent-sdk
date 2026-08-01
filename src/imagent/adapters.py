@@ -43,14 +43,6 @@ class IdempotencyClaimStatus(StrEnum):
     IN_FLIGHT = "in_flight"
 
 
-class ApplicationInputOutcomeUnknown(RuntimeError):
-    """Native input dispatch may have succeeded, so automatic retry is unsafe."""
-
-    def __init__(self, message: str, cause: BaseException) -> None:
-        super().__init__(message)
-        self.cause = cause
-
-
 class ProjectionCheckpointConflict(RuntimeError):
     """The stored route checkpoint no longer matches the caller's expectation."""
 

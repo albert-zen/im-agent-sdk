@@ -7,7 +7,7 @@ import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any, Protocol, cast
 
-from ...adapters import ApplicationInputOutcomeUnknown
+from ...contracts import ApplicationInputOutcomeUnknown
 from .diagnostics import summarize_text, summarize_transport_message
 from .retry import RetryBackoff
 from .runtime_diagnostics import emit_event, mark_appserver_health

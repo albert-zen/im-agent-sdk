@@ -9,13 +9,14 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from imagent.adapters import ApplicationInputOutcomeUnknown, IdempotencyClaimStatus
+from imagent.adapters import IdempotencyClaimStatus
 from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AcceptedTurn,
     AgentEvent,
     AgentEventType,
     AgentInput,
+    ApplicationInputOutcomeUnknown,
     ApplicationOperation,
     BindConversationToThread,
     ConversationBinding,

@@ -8,7 +8,6 @@ from uuid import uuid4
 
 from .adapters import (
     AgentApplicationAdapter,
-    ApplicationInputOutcomeUnknown,
     BindingRepository,
     ChannelAdapter,
     DeliveryAuthorizer,
@@ -23,6 +22,7 @@ from .adapters import (
 from .bindings import BindingConflict
 from .contracts import (
     AgentInput,
+    ApplicationInputOutcomeUnknown,
     ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,

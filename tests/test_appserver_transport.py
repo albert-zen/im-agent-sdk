@@ -5,12 +5,12 @@ import json
 import unittest
 from unittest.mock import patch
 
-from imagent.adapters import ApplicationInputOutcomeUnknown
 from imagent.applications.appserver_client.client import AppServerClient
 from imagent.applications.appserver_client.supervisor import (
     AppServerSupervisor,
     MissingAppServerDependencyError,
 )
+from imagent.contracts import ApplicationInputOutcomeUnknown
 
 
 class _ScriptedStdout:
