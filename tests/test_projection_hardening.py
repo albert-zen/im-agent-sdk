@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import tempfile
 import unittest
 from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
-from imagent.adapters import IdempotencyClaimStatus
+from imagent.adapters import ApplicationInputOutcomeUnknown, IdempotencyClaimStatus
 from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AcceptedTurn,
@@ -42,7 +44,7 @@ from imagent.projections import (
     derive_projection_route_id,
     derive_turn_reply_correlation_id,
 )
-from imagent.storage import InMemoryIdempotencyRepository
+from imagent.storage import InMemoryIdempotencyRepository, SQLiteGatewayState
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 
@@ -334,6 +336,248 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             await _wait_until(lambda: len(channel.sent) == 2)
         finally:
             await gateway.stop()
+
+    async def test_post_acceptance_correlation_failure_keeps_inbound_terminal(
+        self,
+    ) -> None:
+        application = PassiveAcceptanceApplication()
+        thread = await application.create_thread()
+        conversation = ConversationRef("fake-channel", "conversation")
+        bindings = InMemoryBindingRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+                thread_ref=thread.ref,
+            )
+        )
+        channel = FakeChannelAdapter()
+        projections = FailingTurnCorrelationRepository()
+        idempotency = InMemoryIdempotencyRepository()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=bindings,
+            projections=projections,
+            idempotency=idempotency,
+        )
+        await gateway.start()
+        inbound = _inbound(conversation, "post-accept-correlation")
+        try:
+            with self.assertRaisesRegex(RuntimeError, "simulated correlation failure"):
+                await channel.on_message(inbound)
+            await channel.on_message(inbound)
+
+            self.assertEqual(application.send_input_calls, 1)
+            self.assertEqual(
+                await idempotency.claim(
+                    "inbound:fake-channel",
+                    "conversation:post-accept-correlation",
+                ),
+                IdempotencyClaimStatus.ALREADY_COMPLETED,
+            )
+        finally:
+            await gateway.stop()
+
+    async def test_post_acceptance_drain_failure_keeps_inbound_terminal(self) -> None:
+        application = PassiveAcceptanceApplication()
+        thread = await application.create_thread()
+        conversation = ConversationRef("fake-channel", "conversation")
+        bindings = InMemoryBindingRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+                thread_ref=thread.ref,
+            )
+        )
+        channel = FakeChannelAdapter()
+        idempotency = InMemoryIdempotencyRepository()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=bindings,
+            idempotency=idempotency,
+        )
+
+        async def fail_drain(thread_ref: ThreadRef) -> None:
+            del thread_ref
+            raise RuntimeError("simulated buffered-event drain failure")
+
+        gateway._projection_runtime._drain_buffered_events = fail_drain
+        await gateway.start()
+        inbound = _inbound(conversation, "post-accept-drain")
+        try:
+            with self.assertRaisesRegex(RuntimeError, "simulated buffered-event drain failure"):
+                await channel.on_message(inbound)
+            await channel.on_message(inbound)
+
+            self.assertEqual(application.send_input_calls, 1)
+            self.assertEqual(
+                await idempotency.claim(
+                    "inbound:fake-channel",
+                    "conversation:post-accept-drain",
+                ),
+                IdempotencyClaimStatus.ALREADY_COMPLETED,
+            )
+        finally:
+            await gateway.stop()
+
+    async def test_pre_acceptance_failure_releases_inbound_for_retry(self) -> None:
+        application = FailOnceBeforeAcceptanceApplication()
+        thread = await application.create_thread()
+        conversation = ConversationRef("fake-channel", "conversation")
+        bindings = InMemoryBindingRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+                thread_ref=thread.ref,
+            )
+        )
+        channel = FakeChannelAdapter()
+        idempotency = InMemoryIdempotencyRepository()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=bindings,
+            idempotency=idempotency,
+        )
+        await gateway.start()
+        inbound = _inbound(conversation, "pre-accept-failure")
+        try:
+            with self.assertRaisesRegex(RuntimeError, "simulated pre-acceptance failure"):
+                await channel.on_message(inbound)
+            await channel.on_message(inbound)
+
+            self.assertEqual(application.send_input_calls, 2)
+            self.assertEqual(application.accepted_input_calls, 1)
+            self.assertEqual(
+                await idempotency.claim(
+                    "inbound:fake-channel",
+                    "conversation:pre-accept-failure",
+                ),
+                IdempotencyClaimStatus.ALREADY_COMPLETED,
+            )
+        finally:
+            await gateway.stop()
+
+    async def test_dispatched_unknown_input_keeps_inbound_in_flight(self) -> None:
+        application = UnknownOutcomeApplication()
+        thread = await application.create_thread()
+        conversation = ConversationRef("fake-channel", "conversation")
+        bindings = InMemoryBindingRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+                thread_ref=thread.ref,
+            )
+        )
+        channel = FakeChannelAdapter()
+        idempotency = InMemoryIdempotencyRepository()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=bindings,
+            idempotency=idempotency,
+        )
+        await gateway.start()
+        inbound = _inbound(conversation, "unknown-native-outcome")
+        try:
+            with self.assertRaises(asyncio.CancelledError):
+                await channel.on_message(inbound)
+            await channel.on_message(inbound)
+
+            self.assertEqual(application.send_input_calls, 1)
+            self.assertEqual(
+                await idempotency.claim(
+                    "inbound:fake-channel",
+                    "conversation:unknown-native-outcome",
+                ),
+                IdempotencyClaimStatus.IN_FLIGHT,
+            )
+        finally:
+            await gateway.stop()
+
+    async def test_primary_post_acceptance_error_survives_drain_failure(self) -> None:
+        application = PassiveAcceptanceApplication()
+        thread = await application.create_thread()
+        conversation = ConversationRef("fake-channel", "conversation")
+        bindings = InMemoryBindingRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+                thread_ref=thread.ref,
+            )
+        )
+        channel = FakeChannelAdapter()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=bindings,
+            projections=FailingTurnCorrelationRepository(),
+        )
+
+        async def fail_drain(thread_ref: ThreadRef) -> None:
+            del thread_ref
+            raise RuntimeError("secondary drain failure")
+
+        gateway._projection_runtime._drain_buffered_events = fail_drain
+        await gateway.start()
+        try:
+            with self.assertRaisesRegex(RuntimeError, "simulated correlation failure") as raised:
+                await channel.on_message(_inbound(conversation, "combined-failure"))
+            self.assertTrue(
+                any("secondary drain failure" in note for note in raised.exception.__notes__)
+            )
+            self.assertIsNone(raised.exception.__cause__)
+        finally:
+            await gateway.stop()
+
+    async def test_failed_terminal_write_remains_sticky_after_restart(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "gateway.sqlite3"
+            state = FailingAcceptedInputSQLiteState(path)
+            application = PassiveAcceptanceApplication()
+            thread = await application.create_thread()
+            conversation = ConversationRef("fake-channel", "conversation")
+            await state.put(
+                ConversationBinding(
+                    conversation_ref=conversation,
+                    application_ref=application.summary.ref,
+                    thread_ref=thread.ref,
+                )
+            )
+            channel = FakeChannelAdapter()
+            gateway = ImAgentGateway(
+                channels=[channel],
+                applications=[application],
+                bindings=state,
+                projections=state,
+                idempotency=state,
+            )
+            await gateway.start()
+            try:
+                with self.assertRaisesRegex(RuntimeError, "simulated terminal write failure"):
+                    await channel.on_message(_inbound(conversation, "terminal-write-failure"))
+            finally:
+                await gateway.stop()
+                await state.close()
+
+            reopened = SQLiteGatewayState(path)
+            try:
+                self.assertEqual(
+                    await reopened.claim(
+                        "inbound:fake-channel",
+                        "conversation:terminal-write-failure",
+                    ),
+                    IdempotencyClaimStatus.IN_FLIGHT,
+                )
+                self.assertEqual(application.send_input_calls, 1)
+            finally:
+                await reopened.close()
 
     async def test_turn_reply_correlation_is_destination_safe(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
@@ -779,6 +1023,90 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(channel.sent, [])
         finally:
             await gateway.stop()
+
+    async def test_stale_outbound_claim_before_reservation_is_reclaimed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "gateway.sqlite3"
+            conversation = ConversationRef("fake-channel", "conversation")
+            message = OutboundMessage(
+                delivery_id="pre-reservation-crash",
+                conversation_ref=conversation,
+                content=(TextContent("recover"),),
+                created_at=datetime.now(UTC),
+            )
+            first = SQLiteGatewayState(path)
+            self.assertEqual(
+                await first.claim("outbound:fake-channel", message.delivery_id),
+                IdempotencyClaimStatus.ACQUIRED,
+            )
+            await first.close()
+
+            recovered = SQLiteGatewayState(path, stale_claim_after_seconds=0)
+            channel = FakeChannelAdapter()
+            gateway = ImAgentGateway(
+                channels=[channel],
+                applications=[],
+                bindings=recovered,
+                projections=recovered,
+                idempotency=recovered,
+                delivery_submissions=recovered,
+            )
+            try:
+                self.assertEqual(
+                    await gateway._deliver_outbound(message),
+                    IdempotencyClaimStatus.ACQUIRED,
+                )
+                self.assertEqual(len(channel.sent), 1)
+                self.assertEqual(channel.sent[0].content, message.content)
+            finally:
+                await recovered.close()
+
+    async def test_accepted_submission_converges_after_outer_complete_crash(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "gateway.sqlite3"
+            conversation = ConversationRef("fake-channel", "conversation")
+            message = OutboundMessage(
+                delivery_id="accepted-before-outer-complete",
+                conversation_ref=conversation,
+                content=(TextContent("recover"),),
+                created_at=datetime.now(UTC),
+            )
+            first = FailingOutboundCompleteOnceSQLiteState(path)
+            channel = FakeChannelAdapter()
+            first_gateway = ImAgentGateway(
+                channels=[channel],
+                applications=[],
+                bindings=first,
+                projections=first,
+                idempotency=first,
+                delivery_submissions=first,
+            )
+            try:
+                with self.assertRaisesRegex(RuntimeError, "simulated outer complete crash"):
+                    await first_gateway._deliver_outbound(message)
+                self.assertEqual(len(channel.sent), 1)
+                self.assertEqual(channel.sent[0].content, message.content)
+            finally:
+                await first.close()
+
+            recovered = SQLiteGatewayState(path, stale_claim_after_seconds=0)
+            recovered_gateway = ImAgentGateway(
+                channels=[channel],
+                applications=[],
+                bindings=recovered,
+                projections=recovered,
+                idempotency=recovered,
+                delivery_submissions=recovered,
+            )
+            try:
+                self.assertEqual(
+                    await recovered_gateway._deliver_outbound(message),
+                    IdempotencyClaimStatus.ALREADY_COMPLETED,
+                )
+                self.assertEqual(len(channel.sent), 1)
+                self.assertEqual(channel.sent[0].content, message.content)
+            finally:
+                await recovered.close()
 
     async def test_in_flight_delivery_does_not_advance_checkpoint(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
@@ -1454,6 +1782,98 @@ class AcceptanceRecoveryRaceApplication(CountingSubscriptionApplication):
         self.turn_persisted.set()
         await self.release_acceptance.wait()
         return accepted
+
+
+class PassiveAcceptanceApplication(FakeAgentApplicationAdapter):
+    def __init__(self) -> None:
+        super().__init__(project_mode=ProjectMode.FLAT)
+        self.send_input_calls = 0
+        self.accepted_input_calls = 0
+
+    async def send_input(
+        self,
+        thread_ref: ThreadRef,
+        message: AgentInput,
+    ) -> AcceptedTurn:
+        self.send_input_calls += 1
+        self.accepted_input_calls += 1
+        return AcceptedTurn(
+            thread_ref=thread_ref,
+            turn_id=f"turn-{self.accepted_input_calls}",
+            client_message_id=message.client_message_id,
+        )
+
+
+class FailOnceBeforeAcceptanceApplication(PassiveAcceptanceApplication):
+    async def send_input(
+        self,
+        thread_ref: ThreadRef,
+        message: AgentInput,
+    ) -> AcceptedTurn:
+        if self.send_input_calls == 0:
+            self.send_input_calls += 1
+            raise RuntimeError("simulated pre-acceptance failure")
+        return await super().send_input(thread_ref, message)
+
+
+class UnknownOutcomeApplication(PassiveAcceptanceApplication):
+    async def send_input(
+        self,
+        thread_ref: ThreadRef,
+        message: AgentInput,
+    ) -> AcceptedTurn:
+        del thread_ref, message
+        self.send_input_calls += 1
+        cancellation = asyncio.CancelledError()
+        raise ApplicationInputOutcomeUnknown(
+            "native input was dispatched but its outcome is unknown",
+            cancellation,
+        ) from cancellation
+
+
+class FailingTurnCorrelationRepository(InMemoryProjectionRouteRepository):
+    async def put_turn_reply_correlation(
+        self,
+        correlation: TurnReplyCorrelation,
+    ) -> TurnReplyCorrelation:
+        raise RuntimeError("simulated correlation failure")
+
+
+class FailingAcceptedInputSQLiteState(SQLiteGatewayState):
+    async def put_turn_reply_correlation(
+        self,
+        correlation: TurnReplyCorrelation,
+    ) -> TurnReplyCorrelation:
+        del correlation
+        raise RuntimeError("simulated correlation failure")
+
+    async def complete(
+        self,
+        scope: str,
+        key: str,
+        *,
+        owner_token: str | None = None,
+    ) -> None:
+        del scope, key, owner_token
+        raise RuntimeError("simulated terminal write failure")
+
+
+class FailingOutboundCompleteOnceSQLiteState(SQLiteGatewayState):
+    def __init__(self, path: str | Path) -> None:
+        super().__init__(path)
+        self._failed_outbound_complete = False
+
+    async def complete(
+        self,
+        scope: str,
+        key: str,
+        *,
+        owner_token: str | None = None,
+    ) -> None:
+        if scope.startswith("outbound:") and not self._failed_outbound_complete:
+            self._failed_outbound_complete = True
+            raise RuntimeError("simulated outer complete crash")
+        await super().complete(scope, key, owner_token=owner_token)
 
 
 class FailingRefreshRepository(InMemoryProjectionRouteRepository):

@@ -14,6 +14,9 @@ history, and retention.
   history/catch-up, interruption, and notifications.
 - every completed Agent item is preserved before the explicit terminal Turn
   event.
+- because the shared transport has no native input-idempotency key, a lost
+  `turn/start` acceptance response is reported as an unknown input outcome and
+  must not be retried automatically.
 
 ## Recovery guarantees
 

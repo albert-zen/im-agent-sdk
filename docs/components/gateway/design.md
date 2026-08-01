@@ -90,7 +90,17 @@ state. Observing a Thread does not select it for future input.
 
 Conversation mutations use revision guards and serialize per Conversation.
 Idempotency claims are completed only after the scoped operation succeeds and
-are released on retryable failure.
+are released on failure known to precede a native side effect. Once an
+Application returns `AcceptedTurn`, the inbound claim becomes terminal even if
+reply-correlation persistence or buffered projection draining then fails. The
+post-acceptance failure remains observable, but Channel redelivery cannot
+silently create a second native Turn.
+If transport dispatch begins but the Application acceptance response is lost,
+the claim remains in the non-expiring `side_effect_started` state; unknown is
+not converted to either success or permission to retry. A failed terminal
+idempotency write likewise leaves the protected claim sticky across restart.
+Ordinary `in_flight` leases remain reclaimable, including outbound projection
+claims whose durable submission record can safely converge a retried worker.
 
 Application and Channel failures remain typed or explicitly reported. Gateway
 does not convert unknown delivery into success.

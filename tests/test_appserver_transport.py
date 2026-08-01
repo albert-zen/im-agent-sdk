@@ -5,6 +5,7 @@ import json
 import unittest
 from unittest.mock import patch
 
+from imagent.adapters import ApplicationInputOutcomeUnknown
 from imagent.applications.appserver_client.client import AppServerClient
 from imagent.applications.appserver_client.supervisor import (
     AppServerSupervisor,
@@ -131,6 +132,34 @@ def _client(process: _ScriptedProcess, *, request_timeout_s: float = 15.0) -> Ap
 
 
 class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_turn_start_cancelled_after_dispatch_has_unknown_outcome(self) -> None:
+        process = _ScriptedProcess({"initialize": [{"result": {"ok": True}}]})
+        client = _client(process)
+        task = asyncio.create_task(client.start_turn("thread-1", "run"))
+        try:
+            async with asyncio.timeout(1):
+                while not any(item.get("method") == "turn/start" for item in process.sent):
+                    await asyncio.sleep(0)
+            task.cancel()
+            with self.assertRaises(ApplicationInputOutcomeUnknown) as raised:
+                await task
+            self.assertIsInstance(raised.exception.cause, asyncio.CancelledError)
+        finally:
+            if not task.done():
+                task.cancel()
+            await client.close()
+
+    async def test_turn_start_response_loss_has_unknown_outcome(self) -> None:
+        process = _ScriptedProcess({"initialize": [{"result": {"ok": True}}]})
+        client = _client(process, request_timeout_s=0.01)
+        try:
+            with self.assertRaises(ApplicationInputOutcomeUnknown) as raised:
+                await client.start_turn("thread-1", "run")
+            self.assertIn("timed out", str(raised.exception.cause))
+            self.assertTrue(any(item.get("method") == "turn/start" for item in process.sent))
+        finally:
+            await client.close()
+
     async def test_missing_websocket_extra_fails_without_retry(self) -> None:
         sleeps: list[float] = []
         supervisor = AppServerSupervisor(

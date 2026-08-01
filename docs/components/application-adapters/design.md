@@ -14,6 +14,7 @@ Application adapters own:
 - native project mode and resource mapping;
 - typed Application operation translation;
 - input encoding and stable client-message ID round-trip;
+- truthful pre-dispatch versus dispatched/unknown input outcomes;
 - native event-to-`AgentEvent` mapping and fan-out publication;
 - authoritative history/catch-up reads;
 - explicit request, interruption, activation, attachment, replay, and ordering
@@ -32,6 +33,12 @@ They do not own:
 
 Each adapter exposes a summary, `start`, `stop`, typed `execute`, `send_input`,
 and fan-out-safe `subscribe_thread`.
+
+An adapter may report an ordinary failure only while it knows native input was
+not dispatched. After dispatch, an absent acceptance response is an
+`ApplicationInputOutcomeUnknown` unless the native API proves retries
+idempotent. This is transport outcome classification, not bridge-owned Turn
+truth.
 
 Managed Applications expose real Projects. Flat/fixed Applications omit them.
 Thread lookup is independent of Conversation selection. Native activation is

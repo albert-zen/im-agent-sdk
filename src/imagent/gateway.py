@@ -4,9 +4,11 @@ import asyncio
 import logging
 from datetime import UTC, datetime
 from functools import partial
+from uuid import uuid4
 
 from .adapters import (
     AgentApplicationAdapter,
+    ApplicationInputOutcomeUnknown,
     BindingRepository,
     ChannelAdapter,
     DeliveryAuthorizer,
@@ -82,7 +84,7 @@ from .proactive_delivery import (
     InMemoryDeliverySubmissionRepository,
     ProactiveDeliveryService,
 )
-from .projection_runtime import ThreadProjectionRuntime
+from .projection_runtime import InputPostAcceptanceError, ThreadProjectionRuntime
 from .projections import (
     InMemoryProjectionRouteRepository,
     ProjectionWorkerHealth,
@@ -578,15 +580,28 @@ class ImAgentGateway:
     async def _handle_message(self, message: InboundMessage) -> None:
         scope = f"inbound:{message.conversation_ref.channel_instance_id}"
         key = f"{message.conversation_ref.native_conversation_id}:{message.message_id}"
-        claim = await self._idempotency.claim(scope, key)
+        owner_token = uuid4().hex
+        claim = await self._idempotency.claim(scope, key, owner_token=owner_token)
         if claim is not IdempotencyClaimStatus.ACQUIRED:
             return
         try:
-            await self._process_message(message)
+            await self._process_message(message, idempotency_owner_token=owner_token)
+        except InputPostAcceptanceError as exc:
+            # The native Application already accepted the Turn. Redelivery is
+            # unsafe when the Application has no native input-idempotency key.
+            try:
+                await self._idempotency.complete(scope, key, owner_token=owner_token)
+            except BaseException as terminal_error:
+                raise terminal_error from exc.cause
+            raise exc.cause.with_traceback(exc.cause.__traceback__) from None
+        except ApplicationInputOutcomeUnknown as exc:
+            # Dispatch crossed the native side-effect boundary without a
+            # definitive outcome. Keep the protected claim sticky.
+            raise exc.cause.with_traceback(exc.cause.__traceback__) from None
         except BaseException:
-            await self._idempotency.release(scope, key)
+            await self._idempotency.release(scope, key, owner_token=owner_token)
             raise
-        await self._idempotency.complete(scope, key)
+        await self._idempotency.complete(scope, key, owner_token=owner_token)
 
     async def _handle_message_entry(self, message: InboundMessage) -> None:
         if self._starting:
@@ -594,7 +609,12 @@ class ImAgentGateway:
             return
         await self._handle_message(message)
 
-    async def _process_message(self, message: InboundMessage) -> None:
+    async def _process_message(
+        self,
+        message: InboundMessage,
+        *,
+        idempotency_owner_token: str,
+    ) -> None:
         lock = self._locks.setdefault(message.conversation_ref, asyncio.Lock())
         async with lock:
             thread_was_created = False
@@ -693,6 +713,12 @@ class ImAgentGateway:
                 ),
                 conversation_ref=message.conversation_ref,
                 reply_to_message_id=message.message_id,
+                before_application_send=partial(
+                    self._idempotency.mark_side_effect_started,
+                    f"inbound:{message.conversation_ref.channel_instance_id}",
+                    (f"{message.conversation_ref.native_conversation_id}:{message.message_id}"),
+                    owner_token=idempotency_owner_token,
+                ),
             )
 
     async def _handle_operation(self, operation: GatewayOperation) -> None:
@@ -780,7 +806,12 @@ class ImAgentGateway:
         *,
         scope: str,
     ) -> IdempotencyClaimStatus:
-        claim = await self._idempotency.claim(scope, message.delivery_id)
+        owner_token = uuid4().hex
+        claim = await self._idempotency.claim(
+            scope,
+            message.delivery_id,
+            owner_token=owner_token,
+        )
         if claim is not IdempotencyClaimStatus.ACQUIRED:
             return claim
         try:
@@ -790,14 +821,22 @@ class ImAgentGateway:
             DeliveryPlanningError,
             DeliverySubmissionConflict,
         ):
-            await self._idempotency.release(scope, message.delivery_id)
+            await self._idempotency.release(
+                scope,
+                message.delivery_id,
+                owner_token=owner_token,
+            )
             raise
         destination = result.destinations[0]
         if result.state is DeliverySubmissionState.IN_FLIGHT:
             return IdempotencyClaimStatus.IN_FLIGHT
         if result.state is not DeliverySubmissionState.ACCEPTED:
             if result.state is DeliverySubmissionState.RETRYABLE:
-                await self._idempotency.release(scope, message.delivery_id)
+                await self._idempotency.release(
+                    scope,
+                    message.delivery_id,
+                    owner_token=owner_token,
+                )
                 raise RetryableDeliveryError(
                     destination.error
                     or f"Channel delivery was deferred safely: {message.delivery_id}",
@@ -808,12 +847,20 @@ class ImAgentGateway:
                     ),
                 )
             if result.state is DeliverySubmissionState.REJECTED:
-                await self._idempotency.release(scope, message.delivery_id)
+                await self._idempotency.release(
+                    scope,
+                    message.delivery_id,
+                    owner_token=owner_token,
+                )
             raise RuntimeError(
                 destination.error
                 or f"Channel delivery did not complete successfully: {message.delivery_id}"
             )
-        await self._idempotency.complete(scope, message.delivery_id)
+        await self._idempotency.complete(
+            scope,
+            message.delivery_id,
+            owner_token=owner_token,
+        )
         return (
             IdempotencyClaimStatus.ALREADY_COMPLETED
             if destination.replayed

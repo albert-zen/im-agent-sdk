@@ -53,6 +53,18 @@ ExecuteApplication = Callable[
 ]
 
 
+class InputPostAcceptanceError(RuntimeError):
+    """Bridge post-processing failed after the Application accepted input."""
+
+    def __init__(self, accepted_turn: AcceptedTurn, cause: BaseException) -> None:
+        super().__init__(
+            "Agent input was accepted before bridge post-processing failed: "
+            f"{accepted_turn.turn_id}"
+        )
+        self.accepted_turn = accepted_turn
+        self.cause = cause
+
+
 class ThreadProjectionRuntime:
     """Own Thread observation and rebuildable IM projection lifecycle."""
 
@@ -291,13 +303,18 @@ class ThreadProjectionRuntime:
         *,
         conversation_ref: ConversationRef,
         reply_to_message_id: str,
+        before_application_send: Callable[[], Awaitable[None]] | None = None,
     ) -> AcceptedTurn:
         if self._pending_turn_acceptances.get(thread_ref, 0) == 0:
             self._acceptance_ready[thread_ref] = asyncio.Event()
         self._pending_turn_acceptances[thread_ref] = (
             self._pending_turn_acceptances.get(thread_ref, 0) + 1
         )
+        accepted: AcceptedTurn | None = None
+        primary_error: BaseException | None = None
         try:
+            if before_application_send is not None:
+                await before_application_send()
             accepted = await application.send_input(thread_ref, agent_input)
             if accepted.thread_ref != thread_ref:
                 raise ValueError("AcceptedTurn belongs to a different Thread")
@@ -317,7 +334,8 @@ class ThreadProjectionRuntime:
                     created_at=datetime.now(UTC),
                 )
             )
-            return accepted
+        except BaseException as exc:
+            primary_error = exc
         finally:
             remaining = self._pending_turn_acceptances.get(thread_ref, 1) - 1
             if remaining > 0:
@@ -327,7 +345,28 @@ class ThreadProjectionRuntime:
                 ready = self._acceptance_ready.pop(thread_ref, None)
                 if ready is not None:
                     ready.set()
-                await self._drain_buffered_events(thread_ref)
+                try:
+                    await self._drain_buffered_events(thread_ref)
+                except BaseException as drain_error:
+                    if primary_error is None:
+                        primary_error = drain_error
+                    else:
+                        primary_error.add_note(
+                            "Buffered-event draining also failed after input handling: "
+                            f"{drain_error!r}"
+                        )
+                        logger.exception(
+                            "Buffered-event draining failed while preserving the primary "
+                            "input error",
+                            exc_info=drain_error,
+                        )
+        if primary_error is not None:
+            if accepted is not None:
+                raise InputPostAcceptanceError(accepted, primary_error) from primary_error
+            raise primary_error
+        if accepted is None:
+            raise RuntimeError("Application input completed without an AcceptedTurn")
+        return accepted
 
     async def handle_binding_change(
         self,

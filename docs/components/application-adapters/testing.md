@@ -10,6 +10,8 @@ Every adapter should prove:
 - stable client-message ID round-trip;
 - concurrent input returns the distinct native `AcceptedTurn` identity for
   each call;
+- cancellation, timeout, and response loss after native input dispatch report
+  unknown rather than a retryable pre-dispatch failure;
 - canonical user and Agent message events;
 - multiple completed messages before an explicit terminal Turn event;
 - fan-out-safe subscriptions;

@@ -97,6 +97,20 @@ Idempotency claims distinguish acquired, already-completed, and currently
 in-flight work so completed delivery can converge a lagging checkpoint without
 mistaking active work for success.
 
+An `in_flight` claim is a reclaimable lease so a crash before work begins does
+not permanently block inbound or outbound progress. Immediately before a
+non-idempotent remote input is dispatched, Gateway durably transitions that
+claim to `side_effect_started`. A crash, unknown outcome, or failed terminal
+write after that boundary is ambiguous, so elapsed wall-clock time never turns
+the protected record back into permission to repeat the operation. Only an
+explicit release on a failure proven to precede dispatch makes it claimable
+again.
+
+Every acquired lease carries an opaque owner token. Reclaim replaces the
+token, and `mark_side_effect_started`, `complete`, and `release` compare it
+atomically. A stale worker therefore cannot protect, complete, or delete the
+new owner's record.
+
 At process restart, bindings and routes can be reloaded. Authoritative
 Application history/catch-up reconciles message content; persistence never
 reconstructs it from a local transcript.

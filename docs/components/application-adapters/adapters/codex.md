@@ -16,6 +16,12 @@ that control surface.
   commentary/final-answer phases remain Metadata.
 - native notification IDs are stable event IDs.
 
+`turn/start` has no SDK-controlled native idempotency key. The client therefore
+distinguishes failure before transport dispatch from cancellation, timeout,
+disconnect, or response loss after dispatch begins. A dispatched request
+without a response reports `ApplicationInputOutcomeUnknown`; Gateway keeps the
+inbound key sticky rather than risking a second native Turn.
+
 `message.completed` does not terminate a Codex Turn. The adapter emits the
 native terminal Turn event separately.
 

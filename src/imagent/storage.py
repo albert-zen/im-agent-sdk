@@ -33,28 +33,68 @@ class InMemoryIdempotencyRepository:
     """Process-local stable claim state for tests and ephemeral deployments."""
 
     def __init__(self) -> None:
-        self._records: dict[tuple[str, str], str] = {}
+        self._records: dict[tuple[str, str], tuple[str, str | None]] = {}
         self._lock = asyncio.Lock()
 
-    async def claim(self, scope: str, key: str) -> IdempotencyClaimStatus:
+    async def claim(
+        self,
+        scope: str,
+        key: str,
+        *,
+        owner_token: str | None = None,
+    ) -> IdempotencyClaimStatus:
         async with self._lock:
             record = (scope, key)
-            status = self._records.get(record)
+            current = self._records.get(record)
+            status = current[0] if current is not None else None
             if status == "completed":
                 return IdempotencyClaimStatus.ALREADY_COMPLETED
-            if status == "in_flight":
+            if status in {"in_flight", "side_effect_started"}:
                 return IdempotencyClaimStatus.IN_FLIGHT
-            self._records[record] = "in_flight"
+            self._records[record] = ("in_flight", owner_token)
             return IdempotencyClaimStatus.ACQUIRED
 
-    async def complete(self, scope: str, key: str) -> None:
-        async with self._lock:
-            self._records[(scope, key)] = "completed"
-
-    async def release(self, scope: str, key: str) -> None:
+    async def complete(
+        self,
+        scope: str,
+        key: str,
+        *,
+        owner_token: str | None = None,
+    ) -> None:
         async with self._lock:
             record = (scope, key)
-            if self._records.get(record) == "in_flight":
+            current = self._records.get(record)
+            if current is None or current[1] != owner_token:
+                raise RuntimeError("idempotency claim is not owned by caller")
+            self._records[record] = ("completed", owner_token)
+
+    async def mark_side_effect_started(
+        self,
+        scope: str,
+        key: str,
+        *,
+        owner_token: str | None = None,
+    ) -> None:
+        async with self._lock:
+            record = (scope, key)
+            if self._records.get(record) != ("in_flight", owner_token):
+                raise RuntimeError("idempotency claim is not owned by caller")
+            self._records[record] = ("side_effect_started", owner_token)
+
+    async def release(
+        self,
+        scope: str,
+        key: str,
+        *,
+        owner_token: str | None = None,
+    ) -> None:
+        async with self._lock:
+            record = (scope, key)
+            current = self._records.get(record)
+            if current in {
+                ("in_flight", owner_token),
+                ("side_effect_started", owner_token),
+            }:
                 self._records.pop(record, None)
 
 
@@ -95,6 +135,7 @@ class SQLiteGatewayState(
                 scope TEXT NOT NULL,
                 record_key TEXT NOT NULL,
                 status TEXT NOT NULL,
+                owner_token TEXT,
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (scope, record_key)
             );
@@ -137,6 +178,12 @@ class SQLiteGatewayState(
             );
             """
         )
+        idempotency_columns = {
+            str(row["name"])
+            for row in self._connection.execute("PRAGMA table_info(idempotency_records)").fetchall()
+        }
+        if "owner_token" not in idempotency_columns:
+            self._connection.execute("ALTER TABLE idempotency_records ADD COLUMN owner_token TEXT")
         route_columns = {
             str(row["name"])
             for row in self._connection.execute(
@@ -677,7 +724,13 @@ class SQLiteGatewayState(
         ).fetchone()
         return sqlite_rows.projection_route_from_row(row) if row is not None else None
 
-    async def claim(self, scope: str, key: str) -> IdempotencyClaimStatus:
+    async def claim(
+        self,
+        scope: str,
+        key: str,
+        *,
+        owner_token: str | None = None,
+    ) -> IdempotencyClaimStatus:
         async with self._lock:
             now = datetime.now(UTC)
             self._connection.execute("BEGIN IMMEDIATE")
@@ -685,17 +738,17 @@ class SQLiteGatewayState(
                 self._connection.execute(
                     """
                     INSERT INTO idempotency_records (
-                        scope, record_key, status, updated_at
-                    ) VALUES (?, ?, 'in_flight', ?)
+                        scope, record_key, status, owner_token, updated_at
+                    ) VALUES (?, ?, 'in_flight', ?, ?)
                     """,
-                    (scope, key, now.isoformat()),
+                    (scope, key, owner_token, now.isoformat()),
                 )
                 self._connection.commit()
                 return IdempotencyClaimStatus.ACQUIRED
             except sqlite3.IntegrityError:
                 row = self._connection.execute(
                     """
-                    SELECT status, updated_at FROM idempotency_records
+                    SELECT status, owner_token, updated_at FROM idempotency_records
                     WHERE scope = ? AND record_key = ?
                     """,
                     (scope, key),
@@ -703,6 +756,9 @@ class SQLiteGatewayState(
                 if row is None or str(row["status"]) == "completed":
                     self._connection.rollback()
                     return IdempotencyClaimStatus.ALREADY_COMPLETED
+                if str(row["status"]) == "side_effect_started":
+                    self._connection.rollback()
+                    return IdempotencyClaimStatus.IN_FLIGHT
                 updated_at = datetime.fromisoformat(str(row["updated_at"]))
                 age = (now - updated_at).total_seconds()
                 if age < self._stale_claim_after_seconds:
@@ -710,33 +766,73 @@ class SQLiteGatewayState(
                     return IdempotencyClaimStatus.IN_FLIGHT
                 self._connection.execute(
                     """
-                    UPDATE idempotency_records SET updated_at = ?
+                    UPDATE idempotency_records
+                    SET owner_token = ?, updated_at = ?
                     WHERE scope = ? AND record_key = ?
                     """,
-                    (now.isoformat(), scope, key),
+                    (owner_token, now.isoformat(), scope, key),
                 )
                 self._connection.commit()
                 return IdempotencyClaimStatus.ACQUIRED
 
-    async def complete(self, scope: str, key: str) -> None:
+    async def mark_side_effect_started(
+        self,
+        scope: str,
+        key: str,
+        *,
+        owner_token: str | None = None,
+    ) -> None:
         async with self._lock:
-            self._connection.execute(
+            cursor = self._connection.execute(
+                """
+                UPDATE idempotency_records
+                SET status = 'side_effect_started', updated_at = ?
+                WHERE scope = ? AND record_key = ? AND status = 'in_flight'
+                  AND owner_token IS ?
+                """,
+                (datetime.now(UTC).isoformat(), scope, key, owner_token),
+            )
+            if cursor.rowcount != 1:
+                self._connection.rollback()
+                raise RuntimeError("idempotency claim is not owned by caller")
+            self._connection.commit()
+
+    async def complete(
+        self,
+        scope: str,
+        key: str,
+        *,
+        owner_token: str | None = None,
+    ) -> None:
+        async with self._lock:
+            cursor = self._connection.execute(
                 """
                 UPDATE idempotency_records
                 SET status = 'completed', updated_at = ?
-                WHERE scope = ? AND record_key = ?
+                WHERE scope = ? AND record_key = ? AND owner_token IS ?
                 """,
-                (datetime.now(UTC).isoformat(), scope, key),
+                (datetime.now(UTC).isoformat(), scope, key, owner_token),
             )
+            if cursor.rowcount != 1:
+                self._connection.rollback()
+                raise RuntimeError("idempotency claim is not owned by caller")
             self._connection.commit()
 
-    async def release(self, scope: str, key: str) -> None:
+    async def release(
+        self,
+        scope: str,
+        key: str,
+        *,
+        owner_token: str | None = None,
+    ) -> None:
         async with self._lock:
             self._connection.execute(
                 """
                 DELETE FROM idempotency_records
-                WHERE scope = ? AND record_key = ? AND status = 'in_flight'
+                WHERE scope = ? AND record_key = ?
+                  AND status IN ('in_flight', 'side_effect_started')
+                  AND owner_token IS ?
                 """,
-                (scope, key),
+                (scope, key, owner_token),
             )
             self._connection.commit()

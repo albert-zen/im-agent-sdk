@@ -7,6 +7,7 @@ import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any, Protocol, cast
 
+from ...adapters import ApplicationInputOutcomeUnknown
 from .diagnostics import summarize_text, summarize_transport_message
 from .retry import RetryBackoff
 from .runtime_diagnostics import emit_event, mark_appserver_health
@@ -632,6 +633,7 @@ class AppServerClient:
             "turn/start",
             payload,
             expected_local_image_epoch=expected_local_image_epoch,
+            outcome_unknown_on_dispatch=True,
         )
 
     async def steer_turn(
@@ -920,12 +922,14 @@ class AppServerClient:
         params: JsonDict | None,
         *,
         expected_local_image_epoch: int | None = None,
+        outcome_unknown_on_dispatch: bool = False,
     ) -> JsonDict:
         await self._ensure_ready()
         return await self._request_without_initialize(
             method,
             params,
             expected_local_image_epoch=expected_local_image_epoch,
+            outcome_unknown_on_dispatch=outcome_unknown_on_dispatch,
         )
 
     async def _request_without_initialize(
@@ -934,6 +938,7 @@ class AppServerClient:
         params: JsonDict | None,
         *,
         expected_local_image_epoch: int | None = None,
+        outcome_unknown_on_dispatch: bool = False,
     ) -> JsonDict:
         await self._ensure_connected()
         request_epoch = self.connection_epoch
@@ -951,6 +956,7 @@ class AppServerClient:
                 method,
                 params,
                 expected_local_image_epoch=expected_local_image_epoch,
+                outcome_unknown_on_dispatch=outcome_unknown_on_dispatch,
             )
             if "error" not in response:
                 return self._normalize_result(method, response["result"])
@@ -983,6 +989,7 @@ class AppServerClient:
         params: JsonDict | None,
         *,
         expected_local_image_epoch: int | None = None,
+        outcome_unknown_on_dispatch: bool = False,
     ) -> JsonDict:
         request_id = self._next_request_id
         self._next_request_id += 1
@@ -1004,20 +1011,35 @@ class AppServerClient:
         payload: JsonDict = {"id": request_id, "method": method}
         if params is not None:
             payload["params"] = params
+        dispatch_started = False
         try:
+            if self._transport is not transport:
+                raise AppServerError("app-server connection changed before request could be sent")
+            dispatch_started = True
             await self._send_json(payload, transport=transport)
             response = await asyncio.wait_for(future, timeout=self._request_timeout_s)
-        except TimeoutError as exc:
-            if self.connection_epoch == request_epoch and self._transport is transport:
-                await self._reset_connection()
-            raise AppServerError(
-                f"{method} timed out after {self._request_timeout_s:.1f}s"
-            ) from exc
-        except Exception:
+        except BaseException as exc:
+            error: BaseException = exc
+            if isinstance(exc, TimeoutError):
+                error = AppServerError(f"{method} timed out after {self._request_timeout_s:.1f}s")
             if not future.done():
                 future.cancel()
-            if self.connection_epoch == request_epoch and self._transport is transport:
-                await self._reset_connection()
+            if (
+                not isinstance(exc, asyncio.CancelledError)
+                and self.connection_epoch == request_epoch
+                and self._transport is transport
+            ):
+                try:
+                    await self._reset_connection()
+                except BaseException as reset_error:
+                    error.add_note(f"Connection reset also failed: {reset_error!r}")
+            if outcome_unknown_on_dispatch and dispatch_started:
+                raise ApplicationInputOutcomeUnknown(
+                    f"{method} was dispatched but its native outcome is unknown",
+                    error,
+                ) from error
+            if error is not exc:
+                raise error from exc
             raise
         finally:
             self._pending_futures.pop(request_id, None)

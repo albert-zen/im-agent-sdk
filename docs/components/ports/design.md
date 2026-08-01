@@ -14,6 +14,9 @@ Ports owns:
 - `ChannelAdapter` lifecycle, inbound callback, and send signatures;
 - `AgentApplicationAdapter` lifecycle, typed operation, input, and Thread
   subscription signatures;
+- `ApplicationInputOutcomeUnknown`, which marks a dispatched native input
+  whose acceptance result cannot be proven and therefore cannot be retried
+  automatically;
 - `BindingRepository`, `ProjectionRouteRepository`, and
   `IdempotencyRepository` interfaces;
 - `DeliveryAuthorizer` and `DeliverySubmissionRepository` interfaces for
@@ -51,6 +54,18 @@ a trusted `DeliveryPrincipal`; the caller cannot declare its own effective
 scope. `DeliverySubmissionRepository.reserve_delivery_submission` is atomic
 and stores identity/snapshots/outcomes only. It is intentionally not a queue,
 content store, or retry scheduler.
+
+Application input failures must preserve their side-effect boundary. A
+definitive pre-dispatch rejection may be retried by the caller; once dispatch
+has begun, cancellation, timeout, disconnect, or response loss is reported as
+`ApplicationInputOutcomeUnknown` unless the native protocol supplies a
+stronger idempotency guarantee.
+
+`IdempotencyRepository.mark_side_effect_started` durably separates a
+reclaimable lease from work that may already have changed a remote system.
+Implementations must never age the protected state back into permission to
+retry. A caller that supplies an owner token on acquisition must reuse it as a
+fencing token for every later state mutation.
 
 ## Change obligations
 

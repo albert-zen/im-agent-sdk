@@ -19,6 +19,13 @@
 - binding selection changes never retarget a previously delivered request;
 - live observation is established before synchronous native notifications;
 - duplicate inbound messages and duplicate outbound items are idempotent;
+- correlation or projection-drain failure after `AcceptedTurn` keeps inbound
+  idempotency terminal, while a failure before native acceptance remains
+  retryable;
+- cancellation or response loss after native input dispatch and failure of a
+  post-acceptance terminal write remain sticky across redelivery/restart;
+- stale outbound leases are reclaimed, while an already-accepted durable
+  submission converges without sending a second Channel message;
 - proactive delivery rejects unscoped targets before staging or routing;
 - explicit Conversation and policy-resolved Thread targets both work;
 - route snapshots remain pinned across route movement and restart;

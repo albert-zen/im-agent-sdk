@@ -100,6 +100,20 @@ active process. The reply applies only when the correlation Conversation
 matches the destination route. A recovered/external Turn without correlation
 does not inherit a route's last inbound message.
 
+Application acceptance is also the inbound idempotency side-effect boundary.
+If reply-correlation persistence or buffered-event draining fails after an
+`AcceptedTurn` is returned, the runtime reports a distinct post-acceptance
+failure so Gateway can keep the inbound key terminal while still exposing the
+projection degradation. Only a failure known to occur before acceptance may
+authorize automatic input redelivery.
+Dispatch with an unknown acceptance outcome is reported separately by the
+Application Port and keeps the side-effect-started claim non-expiring. The
+claim is protected immediately before the Application call; a definitive
+pre-dispatch failure explicitly releases it. When both primary post-acceptance
+processing and buffered-event draining fail, the primary error remains
+authoritative and the drain failure is attached as secondary diagnostic
+context.
+
 ## Bootstrap ordering
 
 Each route has a bootstrap barrier and serial delivery boundary. Gateway

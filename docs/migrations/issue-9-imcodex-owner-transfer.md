@@ -47,6 +47,11 @@ the ownership transfer would change failure behavior. AgentKit budgets are set
 just above these baselines so future growth forces a fresh extraction review;
 this is not permission to add consumer policy to either module.
 
+The SDK-owned client also preserves the native input side-effect boundary:
+after `turn/start` dispatch begins, cancellation, timeout, disconnect, or
+response loss is an unknown outcome rather than permission to send the same
+input again. Gateway persists that distinction independently of IMCodex.
+
 ## Channel transport modules
 
 Transferred code lives below `src/imagent/channels/native/`. These are

@@ -7,6 +7,13 @@ Required scenarios:
 - managed/flat/fixed binding invariants remain valid;
 - completed idempotency survives SQLite restart;
 - claims distinguish acquired, completed, and in-flight work;
+- stale in-flight leases are reclaimable after restart;
+- side-effect-started claims remain sticky across elapsed time and restart
+  until an explicit safe release;
+- stale outbound leases recover both before submission reservation and after
+  an accepted submission whose outer completion write was interrupted;
+- overlapping stale and replacement owners are fenced so the stale worker
+  cannot mark, complete, or release the replacement's claim;
 - projection routes survive restart without transcript content;
 - route refresh preserves checkpoints and rejects conflicting explicit values;
 - concurrent checkpoint advances use compare-and-swap and cannot overwrite a

@@ -304,6 +304,71 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 await recovered.close()
 
+    async def test_side_effect_started_claim_is_not_reclaimed_after_restart(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "gateway.sqlite3"
+            first = SQLiteGatewayState(path)
+            self.assertEqual(
+                await first.claim("inbound:qq-main", "message-unknown"),
+                IdempotencyClaimStatus.ACQUIRED,
+            )
+            await first.mark_side_effect_started(
+                "inbound:qq-main",
+                "message-unknown",
+            )
+            await first.close()
+
+            recovered = SQLiteGatewayState(
+                path,
+                stale_claim_after_seconds=0,
+            )
+            try:
+                self.assertEqual(
+                    await recovered.claim("inbound:qq-main", "message-unknown"),
+                    IdempotencyClaimStatus.IN_FLIGHT,
+                )
+            finally:
+                await recovered.close()
+
+    async def test_reclaimed_lease_fences_stale_owner_mutations(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state = SQLiteGatewayState(
+                Path(directory) / "gateway.sqlite3",
+                stale_claim_after_seconds=0,
+            )
+            scope = "inbound:qq-main"
+            key = "overlapping-message"
+            try:
+                self.assertEqual(
+                    await state.claim(scope, key, owner_token="owner-a"),
+                    IdempotencyClaimStatus.ACQUIRED,
+                )
+                self.assertEqual(
+                    await state.claim(scope, key, owner_token="owner-b"),
+                    IdempotencyClaimStatus.ACQUIRED,
+                )
+                with self.assertRaisesRegex(RuntimeError, "not owned"):
+                    await state.mark_side_effect_started(
+                        scope,
+                        key,
+                        owner_token="owner-a",
+                    )
+                await state.release(scope, key, owner_token="owner-a")
+                await state.mark_side_effect_started(
+                    scope,
+                    key,
+                    owner_token="owner-b",
+                )
+                await state.release(scope, key, owner_token="owner-a")
+                self.assertEqual(
+                    await state.claim(scope, key, owner_token="owner-c"),
+                    IdempotencyClaimStatus.IN_FLIGHT,
+                )
+            finally:
+                await state.close()
+
     async def test_existing_database_migrates_without_losing_bridge_state(
         self,
     ) -> None:

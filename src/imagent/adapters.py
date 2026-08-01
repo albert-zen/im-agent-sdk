@@ -43,6 +43,14 @@ class IdempotencyClaimStatus(StrEnum):
     IN_FLIGHT = "in_flight"
 
 
+class ApplicationInputOutcomeUnknown(RuntimeError):
+    """Native input dispatch may have succeeded, so automatic retry is unsafe."""
+
+    def __init__(self, message: str, cause: BaseException) -> None:
+        super().__init__(message)
+        self.cause = cause
+
+
 class ProjectionCheckpointConflict(RuntimeError):
     """The stored route checkpoint no longer matches the caller's expectation."""
 
@@ -187,11 +195,37 @@ class ProjectionRouteRepository(Protocol):
 
 
 class IdempotencyRepository(Protocol):
-    async def claim(self, scope: str, key: str) -> IdempotencyClaimStatus: ...
+    async def claim(
+        self,
+        scope: str,
+        key: str,
+        *,
+        owner_token: str | None = None,
+    ) -> IdempotencyClaimStatus: ...
 
-    async def complete(self, scope: str, key: str) -> None: ...
+    async def mark_side_effect_started(
+        self,
+        scope: str,
+        key: str,
+        *,
+        owner_token: str | None = None,
+    ) -> None: ...
 
-    async def release(self, scope: str, key: str) -> None: ...
+    async def complete(
+        self,
+        scope: str,
+        key: str,
+        *,
+        owner_token: str | None = None,
+    ) -> None: ...
+
+    async def release(
+        self,
+        scope: str,
+        key: str,
+        *,
+        owner_token: str | None = None,
+    ) -> None: ...
 
 
 class DeliveryAuthorizer(Protocol):
