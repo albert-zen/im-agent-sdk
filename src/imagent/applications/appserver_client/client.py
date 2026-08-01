@@ -8,6 +8,11 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any, Protocol, cast
 
 from ...contracts import ApplicationInputOutcomeUnknown
+from ...diagnostics import (
+    ConnectionDiagnosticFacts,
+    QueueDiagnosticName,
+)
+from .diagnostic_facts import AppServerDiagnosticState
 from .diagnostics import summarize_text, summarize_transport_message
 from .handoff import (
     APP_SERVER_DISPATCH_POSITION_KEY,
@@ -182,6 +187,10 @@ class AppServerClient:
         self._server_request_dispatcher_task: asyncio.Task[None] | None = None
         self._server_request_queue: asyncio.Queue[JsonDict] | None = None
         self._last_admitted_dispatch_sequence = 0
+        self._diagnostics = AppServerDiagnosticState(
+            notification_capacity=self._notification_queue_size,
+            server_request_capacity=self._server_request_queue_size,
+        )
         self._stderr_task: asyncio.Task[None] | None = None
         self._resetting = False
         self._reset_owner_task: asyncio.Task | None = None
@@ -314,6 +323,38 @@ class AppServerClient:
         if ready and isinstance(self._ready_health.get("rehydration"), dict):
             facts["rehydration"] = dict(self._ready_health["rehydration"])
         return facts
+
+    def connection_diagnostics(self) -> ConnectionDiagnosticFacts:
+        """Return stable redacted facts without endpoint, path, or protocol payloads."""
+
+        transport = self._transport
+        transport_open = transport is not None and not transport.is_closed()
+        reconnect_task = self._reconnect_task
+        reconnecting = reconnect_task is not None and not reconnect_task.done()
+        notification_queue = self._dispatch_queue
+        server_request_queue = self._server_request_queue
+        worker_tasks = (
+            self._listener_task,
+            self._dispatcher_task,
+            self._server_request_dispatcher_task,
+        )
+        worker_running = transport_open and all(
+            task is not None and not task.done() for task in worker_tasks
+        )
+        return self._diagnostics.snapshot(
+            transport_open=transport_open,
+            initialized=self.initialized,
+            reconnecting=reconnecting,
+            connection_epoch=self.connection_epoch,
+            closing=self._closing,
+            worker_running=worker_running,
+            notification_depth=(
+                notification_queue.qsize() if notification_queue is not None else 0
+            ),
+            server_request_depth=(
+                server_request_queue.qsize() if server_request_queue is not None else 0
+            ),
+        )
 
     async def _refresh_verified_shared_filesystem(
         self,
@@ -830,6 +871,7 @@ class AppServerClient:
         try:
             websocket = await self._supervisor.connect_external()
         except Exception as exc:
+            self._diagnostics.record_connect_failure()
             emit_event(
                 component="appserver.client",
                 event="appserver.connect.failed",
@@ -866,6 +908,7 @@ class AppServerClient:
                 target = self._connection_target()
                 diagnostic = getattr(self._supervisor, "last_connect_diagnostic", None) or {}
                 display_target = str(diagnostic.get("url") or target)
+                self._diagnostics.record_connect_failure()
                 self._mark_appserver_health(
                     connected=False,
                     mode="disconnected",
@@ -1180,6 +1223,7 @@ class AppServerClient:
     ) -> None:
         error: Exception | None = None
         cancelled = False
+        overflow_counts = self._diagnostics.overflow_counts
         try:
             while self._transport is transport and self.connection_epoch == epoch:
                 message = await transport.receive_json()
@@ -1209,6 +1253,8 @@ class AppServerClient:
             raise
         except Exception as exc:
             error = exc
+            if overflow_counts == self._diagnostics.overflow_counts:
+                self._diagnostics.record_transport_failure()
         finally:
             if error is not None:
                 self._fail_pending_futures(epoch, error)
@@ -1345,6 +1391,12 @@ class AppServerClient:
         try:
             queue.put_nowait(message)
         except asyncio.QueueFull as exc:
+            queue_name = (
+                QueueDiagnosticName.SERVER_REQUEST
+                if queue_kind == "server_request"
+                else QueueDiagnosticName.NOTIFICATION
+            )
+            self._diagnostics.record_overflow(queue_name)
             emit_event(
                 component="appserver.client",
                 event="appserver.dispatch.overflow",

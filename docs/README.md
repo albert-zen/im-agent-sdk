@@ -31,6 +31,7 @@ separates SDK ownership work from the later IMCodex consumer migration.
 | `controllers/**` | [controllers design](components/controllers/design.md), [testing](components/controllers/testing.md) | Slash Controller tests |
 | `channels/**` | [Channel adapter design](components/channel-adapters/design.md), [testing](components/channel-adapters/testing.md), applicable native page | Channel contract and native seam tests |
 | `applications/**` | [Application adapter design](components/application-adapters/design.md), [testing](components/application-adapters/testing.md), applicable native page | adapter contract, native client, event, recovery tests |
+| `diagnostics.py` and diagnostic providers | [diagnostics design](components/diagnostics/design.md), [testing](components/diagnostics/testing.md) | redaction, bounded-cardinality, reconnect/overflow, and aggregate health tests |
 | `testing/**` | [conformance design](components/testing-and-conformance/design.md), [testing](components/testing-and-conformance/testing.md) | adapter contract kit tests |
 | AgentKit, CI, root guidance, docs navigation | [repository maintainability design](components/repository-maintainability/design.md), [testing](components/repository-maintainability/testing.md) | AgentKit doctor/check and mapping tests |
 

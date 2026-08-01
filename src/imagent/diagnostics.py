@@ -1,0 +1,289 @@
+from __future__ import annotations
+
+from collections.abc import Iterable
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Protocol
+
+
+class ConnectionDiagnosticState(StrEnum):
+    """Stable, transport-neutral connection lifecycle states."""
+
+    DISCONNECTED = "disconnected"
+    CONNECTING = "connecting"
+    READY = "ready"
+    RECONNECTING = "reconnecting"
+
+
+class DiagnosticFailureCode(StrEnum):
+    """Bounded failure classifications safe for metrics labels and health views."""
+
+    CONNECT_FAILED = "connect_failed"
+    TRANSPORT_FAILED = "transport_failed"
+    NOTIFICATION_OVERFLOW = "notification_overflow"
+    SERVER_REQUEST_OVERFLOW = "server_request_overflow"
+    OTHER = "other"
+
+
+class QueueDiagnosticName(StrEnum):
+    """Fixed queue names keep consumer metric labels bounded."""
+
+    GATEWAY_STARTUP = "gateway_startup"
+    NOTIFICATION = "notification"
+    SERVER_REQUEST = "server_request"
+
+
+@dataclass(frozen=True, slots=True)
+class QueueDiagnosticFacts:
+    """Read-only facts for one process-local bounded queue."""
+
+    name: QueueDiagnosticName
+    capacity: int
+    depth: int
+    overflow_count: int = 0
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, QueueDiagnosticName):
+            raise ValueError("diagnostic queue name must use the fixed vocabulary")
+        if self.capacity < 1:
+            raise ValueError("diagnostic queue capacity must be positive")
+        if not 0 <= self.depth <= self.capacity:
+            raise ValueError("diagnostic queue depth must be within capacity")
+        if self.overflow_count < 0:
+            raise ValueError("diagnostic queue overflow count must not be negative")
+
+
+@dataclass(frozen=True, slots=True)
+class ConnectionDiagnosticFacts:
+    """Redacted connection and worker facts owned by one adapter."""
+
+    state: ConnectionDiagnosticState
+    connection_epoch: int
+    reconnect_count: int
+    worker_running: bool
+    worker_degraded: bool
+    last_failure_code: DiagnosticFailureCode | None = None
+    queues: tuple[QueueDiagnosticFacts, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.state, ConnectionDiagnosticState):
+            raise ValueError("diagnostic connection state must use the fixed vocabulary")
+        if self.last_failure_code is not None and not isinstance(
+            self.last_failure_code, DiagnosticFailureCode
+        ):
+            raise ValueError("diagnostic failure code must use the fixed vocabulary")
+        names = tuple(queue.name for queue in self.queues)
+        if len(names) != len(set(names)):
+            raise ValueError("diagnostic connection queue names must be unique")
+        allowed = {QueueDiagnosticName.NOTIFICATION, QueueDiagnosticName.SERVER_REQUEST}
+        if not set(names).issubset(allowed):
+            raise ValueError("diagnostic connection queue name is not connection-scoped")
+
+
+@dataclass(frozen=True, slots=True)
+class ApplicationDiagnosticFacts:
+    """Optional Application-adapter facts without native resource identities."""
+
+    application_instance_id: str
+    kind: str
+    connection: ConnectionDiagnosticFacts | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectionDiagnosticFacts:
+    """Identity-free aggregate of process-local projection worker health."""
+
+    worker_count: int = 0
+    running_count: int = 0
+    retrying_count: int = 0
+    stopped_count: int = 0
+    degraded_count: int = 0
+    restart_count: int = 0
+    delivery_failure_count: int = 0
+    event_overflow_count: int = 0
+    request_recovery_degraded_count: int = 0
+    recovery_gap_count: int = 0
+    recovery_gap_codes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class GatewayDiagnosticFacts:
+    """Bounded process-local Gateway admission facts."""
+
+    accepting_inbound: bool
+    starting: bool
+    startup_queue: QueueDiagnosticFacts
+
+
+@dataclass(frozen=True, slots=True)
+class DiagnosticsSnapshot:
+    """Stable, read-only, non-authoritative SDK diagnostics snapshot."""
+
+    applications: tuple[ApplicationDiagnosticFacts, ...]
+    projections: ProjectionDiagnosticFacts
+    gateway: GatewayDiagnosticFacts
+    generated_at: datetime
+    schema_version: int = 1
+    authoritative: bool = False
+
+
+class DiagnosticsProvider(Protocol):
+    """Optional structural seam; it is not a required Core adapter capability."""
+
+    def diagnostic_facts(self) -> ApplicationDiagnosticFacts: ...
+
+
+class _ProjectionHealth(Protocol):
+    @property
+    def state(self) -> object: ...
+
+    @property
+    def restart_count(self) -> int: ...
+
+    @property
+    def delivery_failure_count(self) -> int: ...
+
+    @property
+    def event_overflow_count(self) -> int: ...
+
+    @property
+    def last_subscription_error(self) -> str | None: ...
+
+    @property
+    def last_recovery_error(self) -> str | None: ...
+
+    @property
+    def last_delivery_error(self) -> str | None: ...
+
+    @property
+    def last_gap(self) -> str | None: ...
+
+    @property
+    def last_event_gap(self) -> str | None: ...
+
+    @property
+    def interactive_request_recovery_degraded(self) -> bool: ...
+
+
+class _ApplicationRef(Protocol):
+    @property
+    def application_instance_id(self) -> str: ...
+
+
+class _ApplicationSummary(Protocol):
+    @property
+    def ref(self) -> _ApplicationRef: ...
+
+    @property
+    def kind(self) -> str: ...
+
+
+class _DiagnosticApplication(Protocol):
+    @property
+    def summary(self) -> _ApplicationSummary: ...
+
+
+_KNOWN_RECOVERY_GAPS = frozenset(
+    {
+        "application_event_connection_reset",
+        "application_event_fanout_overflow",
+        "checkpoint_missing",
+        "checkpoint_out_of_window",
+        "projection_window_truncated",
+    }
+)
+
+
+def summarize_projection_health(
+    records: Iterable[_ProjectionHealth],
+) -> ProjectionDiagnosticFacts:
+    """Aggregate worker facts without copying Thread, route, or error identities."""
+
+    materialized = tuple(records)
+    state_counts = {"running": 0, "retrying": 0, "stopped": 0}
+    degraded_count = 0
+    gap_codes: set[str] = set()
+    for record in materialized:
+        state = str(record.state)
+        if state in state_counts:
+            state_counts[state] += 1
+        raw_gaps = tuple(gap for gap in (record.last_gap, record.last_event_gap) if gap is not None)
+        degraded = (
+            state == "retrying"
+            or record.last_subscription_error is not None
+            or record.last_recovery_error is not None
+            or record.last_delivery_error is not None
+            or record.interactive_request_recovery_degraded
+            or bool(raw_gaps)
+        )
+        degraded_count += int(degraded)
+        gap_codes.update(_bounded_gap_code(gap) for gap in raw_gaps)
+    return ProjectionDiagnosticFacts(
+        worker_count=len(materialized),
+        running_count=state_counts["running"],
+        retrying_count=state_counts["retrying"],
+        stopped_count=state_counts["stopped"],
+        degraded_count=degraded_count,
+        restart_count=sum(record.restart_count for record in materialized),
+        delivery_failure_count=sum(record.delivery_failure_count for record in materialized),
+        event_overflow_count=sum(record.event_overflow_count for record in materialized),
+        request_recovery_degraded_count=sum(
+            int(record.interactive_request_recovery_degraded) for record in materialized
+        ),
+        recovery_gap_count=sum(
+            record.last_gap is not None or record.last_event_gap is not None
+            for record in materialized
+        ),
+        recovery_gap_codes=tuple(sorted(gap_codes)),
+    )
+
+
+def collect_application_diagnostics(
+    applications: Iterable[_DiagnosticApplication],
+) -> tuple[ApplicationDiagnosticFacts, ...]:
+    """Read optional providers while preserving configured registry identity."""
+
+    collected: list[ApplicationDiagnosticFacts] = []
+    for application in applications:
+        provider = getattr(application, "diagnostic_facts", None)
+        try:
+            facts = provider() if callable(provider) else None
+        except Exception:
+            facts = None
+        summary = application.summary
+        if (
+            isinstance(facts, ApplicationDiagnosticFacts)
+            and facts.application_instance_id == summary.ref.application_instance_id
+            and facts.kind == summary.kind
+        ):
+            collected.append(facts)
+        else:
+            collected.append(
+                ApplicationDiagnosticFacts(
+                    application_instance_id=summary.ref.application_instance_id,
+                    kind=summary.kind,
+                )
+            )
+    return tuple(sorted(collected, key=lambda facts: facts.application_instance_id))
+
+
+def new_diagnostics_snapshot(
+    *,
+    applications: tuple[ApplicationDiagnosticFacts, ...],
+    projections: ProjectionDiagnosticFacts,
+    gateway: GatewayDiagnosticFacts,
+) -> DiagnosticsSnapshot:
+    return DiagnosticsSnapshot(
+        applications=applications,
+        projections=projections,
+        gateway=gateway,
+        generated_at=datetime.now(UTC),
+    )
+
+
+def _bounded_gap_code(value: str) -> str:
+    for code in _KNOWN_RECOVERY_GAPS:
+        if value == code or value.endswith(f":{code}"):
+            return code
+    return "other"

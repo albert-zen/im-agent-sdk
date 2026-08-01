@@ -71,6 +71,7 @@ from ..contracts import (
     validate_application_operation,
     validate_application_operation_result,
 )
+from ..diagnostics import ApplicationDiagnosticFacts, ConnectionDiagnosticFacts
 from ..events import EventBroadcaster, EventStreamReset
 from .appserver_request_runtime import (
     AppServerRequestRuntime,
@@ -191,6 +192,15 @@ class _AppServerApplicationAdapter:
     @property
     def summary(self) -> ApplicationSummary:
         return self._summary
+
+    def diagnostic_facts(self) -> ApplicationDiagnosticFacts:
+        connection_reader = getattr(self._client, "connection_diagnostics", None)
+        connection = connection_reader() if callable(connection_reader) else None
+        return ApplicationDiagnosticFacts(
+            application_instance_id=self._application_instance_id,
+            kind=self._summary.kind,
+            connection=(connection if isinstance(connection, ConnectionDiagnosticFacts) else None),
+        )
 
     async def start(self) -> None:
         connect = getattr(self._client, "connect", None)

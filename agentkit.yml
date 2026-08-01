@@ -199,6 +199,27 @@ components:
       - cursor
       - fanout
 
+  diagnostics:
+    description: Stable redacted read-only process-local diagnostics and consumer observability boundary.
+    code:
+      - docs/VISION.md
+      - docs/ARCHITECTURE.md
+      - docs/decisions/README.md
+      - docs/decisions/0014-read-only-diagnostics-surface.md
+      - src/imagent/diagnostics.py
+      - tests/test_diagnostics.py
+    docs:
+      - docs/components/diagnostics/design.md
+      - docs/components/diagnostics/testing.md
+    required_docs:
+      - design
+      - testing
+    keywords:
+      - diagnostics
+      - health
+      - observability
+      - redaction
+
   persistence:
     description: Minimal repositories for Conversation bindings, projection routes, and delivery or inbound idempotency.
     code:
@@ -444,6 +465,10 @@ components:
       - provenance
 
 layers:
+  diagnostics:
+    paths:
+      - src/imagent/diagnostics.py
+    may_import: []
   contracts:
     paths:
       - src/imagent/contracts/**
@@ -512,6 +537,7 @@ layers:
       - contracts
       - media
       - eventing
+      - diagnostics
   gateway:
     paths:
       - src/imagent/inbound_admission.py
@@ -526,6 +552,7 @@ layers:
       - recovery
       - controllers
       - coordination
+      - diagnostics
   testing:
     paths:
       - src/imagent/testing/**

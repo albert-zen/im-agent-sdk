@@ -104,6 +104,11 @@ supervisor under `applications/appserver_client/`. Local paths are exposed
 only for stdio/Unix-socket transports or an explicitly verified shared
 filesystem.
 
+The stable SDK diagnostic provider exposes only connection state/epoch,
+reconnect count, dispatch worker state, fixed notification/server-request
+queue facts, and bounded failure classification. Endpoint, local path,
+protocol payload, native resource IDs, and exception text remain excluded.
+
 IMCodex-specific configuration loading, launcher behavior, branding, command
 surface, and product supervision remain consumer decisions. Its later
 composition migration and duplicate removal are still required to complete

@@ -504,6 +504,10 @@ class GatewayStartupAdmissionTests(unittest.IsolatedAsyncioTestCase):
             await gateway.start()
         self.assertEqual(raised.exception.max_pending, 2)
         self.assertFalse(channel.started)
+        startup = gateway.diagnostics_snapshot().gateway.startup_queue
+        self.assertEqual(startup.capacity, 2)
+        self.assertEqual(startup.depth, 0)
+        self.assertEqual(startup.overflow_count, 1)
 
     async def test_startup_failure_rejects_callbacks_during_teardown(self) -> None:
         active_channel = _BlockingStopStartupChannel()

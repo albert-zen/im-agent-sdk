@@ -16,6 +16,11 @@ from imagent.applications.appserver_client.supervisor import (
     MissingAppServerDependencyError,
 )
 from imagent.contracts import ApplicationInputOutcomeUnknown
+from imagent.diagnostics import (
+    ConnectionDiagnosticState,
+    DiagnosticFailureCode,
+    QueueDiagnosticName,
+)
 
 
 class _ScriptedStdout:
@@ -465,6 +470,15 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(AppServerError, "notification dispatch queue overflowed"):
                 await client.list_threads()
             self.assertEqual(reset_epochs, [1])
+            facts = client.connection_diagnostics()
+            self.assertEqual(facts.state, ConnectionDiagnosticState.DISCONNECTED)
+            self.assertTrue(facts.worker_degraded)
+            self.assertEqual(facts.last_failure_code, DiagnosticFailureCode.NOTIFICATION_OVERFLOW)
+            queues = {queue.name: queue for queue in facts.queues}
+            queue = queues[QueueDiagnosticName.NOTIFICATION]
+            self.assertEqual(queue.capacity, 1)
+            self.assertEqual(queue.depth, 0)
+            self.assertEqual(queue.overflow_count, 1)
         finally:
             release_handler.set()
             await client.close()
@@ -507,6 +521,16 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             ):
                 await client.list_threads()
             self.assertEqual(reset_epochs, [1])
+            facts = client.connection_diagnostics()
+            self.assertEqual(
+                facts.last_failure_code,
+                DiagnosticFailureCode.SERVER_REQUEST_OVERFLOW,
+            )
+            queues = {queue.name: queue for queue in facts.queues}
+            queue = queues[QueueDiagnosticName.SERVER_REQUEST]
+            self.assertEqual(queue.capacity, 1)
+            self.assertEqual(queue.depth, 0)
+            self.assertEqual(queue.overflow_count, 1)
         finally:
             release_handler.set()
             await client.close()
@@ -573,6 +597,12 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await client.list_threads(), {"threads": []})
             self.assertEqual(client.connection_epoch, 2)
             self.assertEqual(second.sent[0]["method"], "initialize")
+            facts = client.connection_diagnostics()
+            self.assertEqual(facts.state, ConnectionDiagnosticState.READY)
+            self.assertEqual(facts.connection_epoch, 2)
+            self.assertEqual(facts.reconnect_count, 1)
+            self.assertTrue(facts.worker_running)
+            self.assertFalse(facts.worker_degraded)
         finally:
             await client.close()
 

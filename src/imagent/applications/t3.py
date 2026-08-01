@@ -78,6 +78,7 @@ from ..contracts import (
     validate_application_operation,
     validate_application_operation_result,
 )
+from ..diagnostics import ApplicationDiagnosticFacts
 from ..events import EventBroadcaster
 
 _ID_NAMESPACE = uuid.UUID("15440f13-a923-4a4c-8791-637914777e5e")
@@ -164,6 +165,14 @@ class T3ApplicationAdapter:
     @property
     def summary(self) -> ApplicationSummary:
         return self._summary
+
+    def diagnostic_facts(self) -> ApplicationDiagnosticFacts:
+        """T3 HTTP request/response has no meaningful long-lived connection epoch."""
+
+        return ApplicationDiagnosticFacts(
+            application_instance_id=self._application_instance_id,
+            kind=self._summary.kind,
+        )
 
     async def start(self) -> None:
         return None

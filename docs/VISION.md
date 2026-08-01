@@ -98,6 +98,11 @@ Overflow is explicit and converges through native replay, authoritative
 history, or truthful degraded health when a transient native request cannot be
 reconstructed.
 
+Process-local diagnostics are read-only, redacted observations of that bridge
+infrastructure. They do not become a second Agent authority or durable event
+history. Export, alerting, health endpoints, and operator presentation remain
+consumer policy.
+
 ### Deterministic, separated routing
 
 Conversation input selection, optional native Thread activation, and outbound

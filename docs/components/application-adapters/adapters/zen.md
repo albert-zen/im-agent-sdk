@@ -39,6 +39,11 @@ response payloads. It therefore advertises interactive requests as
 unsupported. Shared transport code is not treated as a second independent
 native protocol proof.
 
+Zen receives the shared stable App Server diagnostic provider: connection
+state/epoch, reconnect count, worker state, bounded dispatch queues, and fixed
+failure classifications. Native IDs, content, endpoints, paths, and exception
+text are excluded just as they are for Codex.
+
 ## Product boundary
 
 Zen-specific provider, model, runtime mode, workspace UI, tools, approval
