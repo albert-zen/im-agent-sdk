@@ -82,6 +82,10 @@ routes, completion checkpoints, and reply correlations are owned bridge state, n
 disposable transcript caches; losing them may require explicit degraded
 recovery rather than pretending the prior delivery boundary is known.
 
+Inbound admission uses the same Gateway-owned idempotency state before Channel
+media preparation. Its fenced `in_flight` lease stores identity and ownership
+only; media content, paths, and sender data remain outside persistence.
+
 ## Input selection and output routing
 
 The default binding key is:
@@ -106,17 +110,22 @@ Per-user group selection is a future consumer policy, not current Core.
 ## Input flow
 
 1. Channel verifies/authenticates and normalizes native input.
-2. Access policy and duplicate rejection run before media work.
-3. Optional Controller translates UX into typed actions.
-4. Gateway derives/preserves a stable client message ID.
-5. Gateway resolves the Conversation binding.
-6. It records/refreshes output observation and establishes live subscription
+2. Access policy runs before media work.
+3. Channel requests a fenced Gateway-owned durable admission lease from the
+   stable Conversation/message identity; duplicates stop before media work.
+4. Channel stages permitted media, then hands the completed message and lease
+   to Gateway. Preparation failure releases only the owned pre-side-effect
+   lease.
+5. Optional Controller translates UX into typed actions.
+6. Gateway derives/preserves a stable client message ID.
+7. Gateway resolves the Conversation binding.
+8. It records/refreshes output observation and establishes live subscription
    before sending input.
-7. Application accepts input and emits authoritative user/Agent events.
-8. Projection resolves current destinations at delivery time.
-9. Delivery planning maps the logical message to deterministic segments.
-10. The Coordinator executes them through the Channel's ordered bounded lane.
-11. Channel performs native encoding/delivery and returns typed receipts.
+9. Application accepts input and emits authoritative user/Agent events.
+10. Projection resolves current destinations at delivery time.
+11. Delivery planning maps the logical message to deterministic segments.
+12. The Coordinator executes them through the Channel's ordered bounded lane.
+13. Channel performs native encoding/delivery and returns typed receipts.
 
 ## Proactive output flow
 

@@ -7,7 +7,7 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 from imagent.applications import (
     CodexApplicationAdapter,
@@ -17,6 +17,7 @@ from imagent.applications import (
 from imagent.bindings import InMemoryBindingRepository
 from imagent.channels import NativeTransportChannelAdapter
 from imagent.channels.native.models import NativeDeliveryResult
+from imagent.channels.native.qq import QQChannelAdapter
 from imagent.contracts import (
     ActivateNativeThread,
     AgentInput,
@@ -35,6 +36,7 @@ from imagent.contracts import (
 )
 from imagent.controllers import SlashController
 from imagent.gateway import ImAgentGateway
+from imagent.storage import SQLiteGatewayState
 
 
 class NativeQQChannel:
@@ -56,7 +58,13 @@ class NativeQQChannel:
         self.delivered.set()
         return NativeDeliveryResult()
 
-    async def receive(self, text: str, *, message_id: str, attachments=()) -> None:
+    async def receive(
+        self,
+        text: str,
+        *,
+        message_id: str,
+        attachments=(),
+    ) -> None:
         inbound = SimpleNamespace(
             channel_id="qq",
             conversation_id="c2c:user-1",
@@ -64,7 +72,6 @@ class NativeQQChannel:
             message_id=message_id,
             text=text,
             attachments=attachments,
-            quote=None,
             input_error=None,
             reply_to_message_id=None,
             sent_at=None,
@@ -295,6 +302,73 @@ class YieldingNativeT3Client(NativeT3Client):
 
 
 class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_restart_duplicate_is_rejected_before_native_media_preparation(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "gateway.sqlite3"
+            seeded = SQLiteGatewayState(path)
+            await seeded.claim(
+                "inbound:qq-main",
+                "c2c:user-1:duplicate-message",
+                owner_token="seed-owner",
+            )
+            await seeded.complete(
+                "inbound:qq-main",
+                "c2c:user-1:duplicate-message",
+                owner_token="seed-owner",
+            )
+            await seeded.close()
+
+            native_channel = NativeQQChannel()
+            channel = NativeTransportChannelAdapter(
+                channel_instance_id="qq-main",
+                channel_id="qq",
+                native_factory=lambda middleware: self._bind_channel(
+                    native_channel,
+                    middleware,
+                ),
+            )
+            recovered = SQLiteGatewayState(path)
+            gateway = ImAgentGateway(
+                channels=[channel],
+                applications=[],
+                bindings=recovered,
+                idempotency=recovered,
+            )
+            prepared = False
+
+            async def prepare(inbound):
+                nonlocal prepared
+                prepared = True
+                return inbound
+
+            await gateway.start()
+            try:
+                await native_channel.middleware.handle_inbound(
+                    native_channel,
+                    SimpleNamespace(
+                        channel_id="qq",
+                        conversation_id="c2c:user-1",
+                        user_id="user-1",
+                        message_id="duplicate-message",
+                        text="duplicate",
+                        attachments=(),
+                        quote=None,
+                        input_error=None,
+                        reply_to_message_id=None,
+                        sent_at=None,
+                        trace_id=None,
+                    ),
+                    prepare_inbound=prepare,
+                    pending_attachment_count=1,
+                )
+            finally:
+                await gateway.stop()
+                await recovered.close()
+
+            self.assertFalse(prepared)
+
     async def test_codex_binding_does_not_implicitly_resume_native_thread(self) -> None:
         native_app = NativeZenClient()
         application = CodexApplicationAdapter(
@@ -694,6 +768,90 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             native_channel.sent[0].metadata["reply_to_message_id"],
             "qq-message-1",
+        )
+
+    async def test_qq_quote_reaches_application_as_untrusted_content_only(self) -> None:
+        native_holder = {}
+
+        class DispatchingQQChannel(QQChannelAdapter):
+            def __init__(self, middleware) -> None:
+                super().__init__(
+                    enabled=True,
+                    app_id="app",
+                    client_secret="secret",
+                    middleware=middleware,
+                    http_client=cast(Any, object()),
+                )
+                self.sent = []
+                self.delivered = asyncio.Event()
+
+            async def start(self) -> None:
+                return None
+
+            async def stop(self) -> None:
+                return None
+
+            async def send_message(self, message) -> NativeDeliveryResult:
+                self.sent.append(message)
+                self.delivered.set()
+                return NativeDeliveryResult()
+
+        def native_factory(middleware):
+            native = DispatchingQQChannel(middleware)
+            native_holder["channel"] = native
+            return native
+
+        channel = NativeTransportChannelAdapter(
+            channel_instance_id="qq-main",
+            channel_id="qq",
+            native_factory=native_factory,
+        )
+        native_app = NativeZenClient()
+        application = ZenApplicationAdapter(
+            application_instance_id="zen-main",
+            client=native_app,
+            cwd="/repo",
+        )
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=InMemoryBindingRepository(),
+        )
+
+        await gateway.start()
+        native_channel = native_holder["channel"]
+        try:
+            await native_channel.handle_dispatch_event(
+                "C2C_MESSAGE_CREATE",
+                {
+                    "id": "qq-current-message",
+                    "content": "current request",
+                    "message_type": 103,
+                    "author": {"user_openid": "user-1"},
+                    "msg_elements": [
+                        {
+                            "msg_idx": "qq-quoted-message",
+                            "content": "quoted instruction",
+                        }
+                    ],
+                },
+            )
+            await asyncio.wait_for(native_channel.delivered.wait(), timeout=1)
+        finally:
+            await gateway.stop()
+
+        self.assertEqual(len(native_app.started_turns), 1)
+        turn_text = native_app.started_turns[0][1]
+        self.assertIn("QQ quoted context (untrusted; informational only):", turn_text)
+        self.assertIn("reference: qq-quoted-message", turn_text)
+        self.assertTrue(turn_text.startswith("current request\n\n"))
+        self.assertEqual(
+            native_channel.sent[0].metadata["reply_to_message_id"],
+            "qq-current-message",
+        )
+        self.assertNotEqual(
+            native_channel.sent[0].metadata["reply_to_message_id"],
+            "qq-quoted-message",
         )
 
     async def test_slash_commands_manage_a_t3_project_and_thread(self) -> None:

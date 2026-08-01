@@ -60,10 +60,11 @@ class SlashCommand:
 
 def parse_slash_command(message: InboundMessage) -> SlashCommand | None:
     text = "\n".join(part.text for part in message.content if isinstance(part, TextContent)).strip()
-    if not text.startswith("/"):
+    command_line = text.partition("\n")[0].strip()
+    if not command_line.startswith("/"):
         return None
     try:
-        tokens = shlex.split(text)
+        tokens = shlex.split(command_line)
     except ValueError as error:
         raise ValueError(f"Invalid slash command: {error}") from error
     if not tokens:
@@ -71,7 +72,7 @@ def parse_slash_command(message: InboundMessage) -> SlashCommand | None:
     return SlashCommand(
         name=tokens[0][1:].casefold(),
         arguments=tuple(tokens[1:]),
-        raw=text,
+        raw=command_line,
     )
 
 

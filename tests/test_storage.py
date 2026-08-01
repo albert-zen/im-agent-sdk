@@ -350,6 +350,9 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                     IdempotencyClaimStatus.ACQUIRED,
                 )
                 with self.assertRaisesRegex(RuntimeError, "not owned"):
+                    await state.refresh(scope, key, owner_token="owner-a")
+                await state.refresh(scope, key, owner_token="owner-b")
+                with self.assertRaisesRegex(RuntimeError, "not owned"):
                     await state.mark_side_effect_started(
                         scope,
                         key,
@@ -361,6 +364,8 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                     key,
                     owner_token="owner-b",
                 )
+                with self.assertRaisesRegex(RuntimeError, "not owned"):
+                    await state.refresh(scope, key, owner_token="owner-b")
                 await state.release(scope, key, owner_token="owner-a")
                 self.assertEqual(
                     await state.claim(scope, key, owner_token="owner-c"),

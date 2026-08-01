@@ -51,6 +51,7 @@ components:
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
+      - docs/decisions/0011-durable-inbound-admission-before-media.md
       - src/imagent/adapters.py
       - src/imagent/__init__.py
       - src/imagent/py.typed
@@ -75,6 +76,7 @@ components:
       - docs/decisions/0003-attachment-sources-and-trust.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/migrations/imcodex-followup-blockers.md
+      - docs/decisions/0011-durable-inbound-admission-before-media.md
       - src/imagent/attachments.py
       - tests/test_attachments.py
     docs:
@@ -130,12 +132,15 @@ components:
       - docs/decisions/0009-proactive-delivery-routing.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/migrations/imcodex-followup-blockers.md
+      - docs/decisions/0011-durable-inbound-admission-before-media.md
+      - src/imagent/inbound_admission.py
       - src/imagent/gateway.py
       - src/imagent/delivery_ingress.py
       - src/imagent/proactive_delivery.py
       - src/imagent/cli/**
       - tests/test_gateway_operations.py
       - tests/test_gateway_vertical_slice.py
+      - tests/test_inbound_admission.py
       - tests/test_delivery_ingress.py
       - tests/test_proactive_delivery.py
     docs:
@@ -201,6 +206,7 @@ components:
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0009-proactive-delivery-routing.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
+      - docs/decisions/0011-durable-inbound-admission-before-media.md
       - src/imagent/bindings.py
       - src/imagent/delivery_submissions.py
       - src/imagent/request_correlations.py
@@ -255,6 +261,7 @@ components:
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
+      - docs/decisions/0011-durable-inbound-admission-before-media.md
       - docs/migrations/issue-9-imcodex-owner-transfer.md
       - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/channels/**
@@ -368,6 +375,7 @@ components:
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
+      - docs/decisions/0011-durable-inbound-admission-before-media.md
       - src/imagent/testing/**
       - tests/test_adapter_contracts.py
     docs:
@@ -494,6 +502,7 @@ layers:
       - eventing
   gateway:
     paths:
+      - src/imagent/inbound_admission.py
       - src/imagent/gateway.py
       - src/imagent/delivery_ingress.py
       - src/imagent/proactive_delivery.py
@@ -562,6 +571,7 @@ maintainability:
     - name: native-channel-transports
       paths:
         - src/imagent/channels/native/qq.py
+        - src/imagent/channels/native/qq_quote.py
         - src/imagent/channels/native/telegram.py
         - src/imagent/channels/native/feishu.py
         - src/imagent/channels/native/weixin.py

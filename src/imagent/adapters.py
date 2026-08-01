@@ -37,6 +37,20 @@ MessageHandler = Callable[[InboundMessage], Awaitable[None]]
 OperationHandler = Callable[[GatewayOperation], Awaitable[None]]
 
 
+class InboundAdmission(Protocol):
+    """One-shot fenced admission acquired before Channel media preparation."""
+
+    async def deliver(self, message: InboundMessage) -> None: ...
+
+    async def release(self) -> None: ...
+
+
+InboundAdmissionHandler = Callable[
+    [ConversationRef, str],
+    Awaitable[InboundAdmission | None],
+]
+
+
 class IdempotencyClaimStatus(StrEnum):
     ACQUIRED = "acquired"
     ALREADY_COMPLETED = "already_completed"
@@ -70,6 +84,7 @@ class ChannelAdapter(Protocol):
         self,
         on_message: MessageHandler,
         on_operation: OperationHandler,
+        on_admission: InboundAdmissionHandler | None = None,
     ) -> None: ...
 
     async def stop(self) -> None: ...
@@ -196,6 +211,14 @@ class IdempotencyRepository(Protocol):
     ) -> IdempotencyClaimStatus: ...
 
     async def mark_side_effect_started(
+        self,
+        scope: str,
+        key: str,
+        *,
+        owner_token: str | None = None,
+    ) -> None: ...
+
+    async def refresh(
         self,
         scope: str,
         key: str,

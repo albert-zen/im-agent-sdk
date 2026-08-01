@@ -19,6 +19,15 @@
 - binding selection changes never retarget a previously delivered request;
 - live observation is established before synchronous native notifications;
 - duplicate inbound messages and duplicate outbound items are idempotent;
+- durable inbound duplicates are rejected before Channel attachment
+  preparation, including after SQLite restart;
+- preparation failure and startup failure release only the matching fenced
+  pre-side-effect claim, cancellation during pre-handoff fencing also
+  releases, and stale owners cannot enter Gateway processing;
+- startup rollback closes admission before its first await, so an event racing
+  buffered-claim release cannot reach Controller or Application work;
+- startup buffering stays active through queued-message drain, so an event
+  racing a drain failure joins rollback instead of live processing;
 - correlation or projection-drain failure after `AcceptedTurn` keeps inbound
   idempotency terminal, while a failure before native acceptance remains
   retryable;

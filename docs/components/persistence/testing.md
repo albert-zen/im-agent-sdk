@@ -13,7 +13,9 @@ Required scenarios:
 - stale outbound leases recover both before submission reservation and after
   an accepted submission whose outer completion write was interrupted;
 - overlapping stale and replacement owners are fenced so the stale worker
-  cannot mark, complete, or release the replacement's claim;
+  cannot refresh, mark, complete, or release the replacement's claim;
+- an owner-checked refresh extends only an `in_flight` lease and is required
+  before a prepared inbound message enters Gateway processing;
 - projection routes survive restart without transcript content;
 - route refresh preserves checkpoints and rejects conflicting explicit values;
 - concurrent checkpoint advances use compare-and-swap and cannot overwrite a

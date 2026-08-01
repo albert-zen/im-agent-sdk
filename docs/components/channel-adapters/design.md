@@ -31,11 +31,18 @@ They do not own:
 1. Verify the native event or authenticated connection.
 2. Normalize stable identities.
 3. Apply sender/Conversation access policy.
-4. Reject duplicates before expensive work.
+4. Request a Gateway-owned durable admission lease from the stable
+   Conversation/message identity; reject completed or in-flight duplicates.
 5. Stage permitted media and emit an explicit `AttachmentSource`.
-6. Emit `InboundMessage` or a typed interaction.
+6. Hand one completed `InboundMessage` through the lease, or release the lease
+   when preparation fails before handoff.
 
 Access and deduplication happen before attachment download and Agent mutation.
+The native process-local duplicate set is only a fast path. The durable
+admission lease, defined by ADR 0011, is opaque to the Channel: after handoff,
+Gateway alone completes, protects, or releases it according to the Application
+side-effect outcome. A durable rejection removes the transient key so a later
+provider redelivery can retry after an abandoned claim becomes reclaimable.
 
 ## Outbound flow
 

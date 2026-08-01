@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections import deque
 from datetime import UTC, datetime
 from functools import partial
 from uuid import uuid4
@@ -15,6 +16,7 @@ from .adapters import (
     DeliverySubmissionRepository,
     IdempotencyClaimStatus,
     IdempotencyRepository,
+    InboundAdmission,
     ProjectionRouteRepository,
     RequestCorrelationConflict,
     RequestCorrelationRepository,
@@ -79,6 +81,12 @@ from .contracts import (
 from .controllers import ControllerActions, InboundController, RequestPresenter
 from .delivery_coordination import DeliveryCoordinator
 from .delivery_planning import DeliveryPlanningError
+from .inbound_admission import (
+    ClaimedInbound,
+    InboundAdmissionService,
+    inbound_idempotency_identity,
+    start_channel_with_admission,
+)
 from .keyed_locks import KeyedLockRegistry
 from .proactive_delivery import (
     InMemoryDeliverySubmissionRepository,
@@ -142,7 +150,8 @@ class ImAgentGateway:
             asyncio.Task[IdempotencyClaimStatus],
         ] = {}
         self._starting = False
-        self._startup_messages: list[InboundMessage] = []
+        self._accepting_inbound = False
+        self._startup_messages: list[ClaimedInbound] = []
         self._startup_operations: list[GatewayOperation] = []
         projection_repository = projections or InMemoryProjectionRouteRepository()
         self._projection_runtime = ThreadProjectionRuntime(
@@ -176,12 +185,18 @@ class ImAgentGateway:
             authorizer=delivery_authorizer,
             coordinator=self._delivery_coordinator,
         )
+        self._inbound_admission = InboundAdmissionService(
+            self._idempotency,
+            self._handle_claimed_message_entry,
+        )
 
     async def start(self) -> None:
         self._delivery_coordinator.start()
         self._starting = True
+        self._accepting_inbound = True
         self._startup_messages.clear()
         self._startup_operations.clear()
+        pending_startup_messages: deque[ClaimedInbound] = deque()
         started_applications: list[AgentApplicationAdapter] = []
         started_channels: list[ChannelAdapter] = []
         try:
@@ -192,26 +207,49 @@ class ImAgentGateway:
                 await application.start()
                 started_applications.append(application)
             for channel in self._channels.values():
-                await channel.start(
+                await start_channel_with_admission(
+                    channel,
                     self._handle_message_entry,
                     self._handle_operation_entry,
+                    partial(self._begin_inbound, channel.channel_instance_id),
                 )
                 started_channels.append(channel)
             self._projection_runtime.mark_delivery_ready()
             await self._projection_runtime.reconcile_pending_requests(restart_open_requests)
+            while True:
+                pending_startup_messages.extend(self._startup_messages)
+                startup_operations = tuple(self._startup_operations)
+                self._startup_messages.clear()
+                self._startup_operations.clear()
+                while pending_startup_messages:
+                    claimed = pending_startup_messages.popleft()
+                    await self._handle_claimed_message(claimed)
+                for operation in startup_operations:
+                    await self._handle_operation(operation)
+                if not self._startup_messages and not self._startup_operations:
+                    self._starting = False
+                    break
+        except BaseException as error:
+            self._accepting_inbound = False
             self._starting = False
-            startup_messages = tuple(self._startup_messages)
-            startup_operations = tuple(self._startup_operations)
+            startup_messages = (
+                *self._startup_messages,
+                *pending_startup_messages,
+            )
             self._startup_messages.clear()
             self._startup_operations.clear()
-            for message in startup_messages:
-                await self._handle_message(message)
-            for operation in startup_operations:
-                await self._handle_operation(operation)
-        except BaseException:
-            self._starting = False
-            self._startup_messages.clear()
-            self._startup_operations.clear()
+            for claimed in startup_messages:
+                try:
+                    await self._idempotency.release(
+                        claimed.scope,
+                        claimed.key,
+                        owner_token=claimed.owner_token,
+                    )
+                except BaseException as release_error:
+                    error.add_note(
+                        "Failed to release a pre-side-effect inbound claim during "
+                        f"Gateway startup rollback: {release_error!r}"
+                    )
             await self._projection_runtime.stop()
             await self._delivery_coordinator.close()
             for channel in reversed(started_channels):
@@ -221,6 +259,7 @@ class ImAgentGateway:
             raise
 
     async def stop(self) -> None:
+        self._accepting_inbound = False
         await self._projection_runtime.stop()
         await self._delivery_coordinator.close()
         for channel in reversed(tuple(self._channels.values())):
@@ -577,20 +616,21 @@ class ImAgentGateway:
             updated_at=updated_at,
         )
 
-    async def _handle_message(self, message: InboundMessage) -> None:
-        scope = f"inbound:{message.conversation_ref.channel_instance_id}"
-        key = f"{message.conversation_ref.native_conversation_id}:{message.message_id}"
-        owner_token = uuid4().hex
-        claim = await self._idempotency.claim(scope, key, owner_token=owner_token)
-        if claim is not IdempotencyClaimStatus.ACQUIRED:
-            return
+    async def _handle_claimed_message(self, claimed: ClaimedInbound) -> None:
         try:
-            await self._process_message(message, idempotency_owner_token=owner_token)
+            await self._process_message(
+                claimed.message,
+                idempotency_owner_token=claimed.owner_token,
+            )
         except InputPostAcceptanceError as exc:
             # The native Application already accepted the Turn. Redelivery is
             # unsafe when the Application has no native input-idempotency key.
             try:
-                await self._idempotency.complete(scope, key, owner_token=owner_token)
+                await self._idempotency.complete(
+                    claimed.scope,
+                    claimed.key,
+                    owner_token=claimed.owner_token,
+                )
             except BaseException as terminal_error:
                 raise terminal_error from exc.cause
             raise exc.cause.with_traceback(exc.cause.__traceback__) from None
@@ -599,15 +639,58 @@ class ImAgentGateway:
             # definitive outcome. Keep the protected claim sticky.
             raise exc.cause.with_traceback(exc.cause.__traceback__) from None
         except BaseException:
-            await self._idempotency.release(scope, key, owner_token=owner_token)
+            await self._idempotency.release(
+                claimed.scope,
+                claimed.key,
+                owner_token=claimed.owner_token,
+            )
             raise
-        await self._idempotency.complete(scope, key, owner_token=owner_token)
+        await self._idempotency.complete(
+            claimed.scope,
+            claimed.key,
+            owner_token=claimed.owner_token,
+        )
 
     async def _handle_message_entry(self, message: InboundMessage) -> None:
-        if self._starting:
-            self._startup_messages.append(message)
+        admission = await self._begin_inbound(
+            message.conversation_ref.channel_instance_id,
+            message.conversation_ref,
+            message.message_id,
+        )
+        if admission is None:
             return
-        await self._handle_message(message)
+        await admission.deliver(message)
+
+    async def _begin_inbound(
+        self,
+        channel_instance_id: str,
+        conversation_ref: ConversationRef,
+        message_id: str,
+    ) -> InboundAdmission | None:
+        if not self._accepting_inbound:
+            return None
+        admission = await self._inbound_admission.begin(
+            channel_instance_id,
+            conversation_ref,
+            message_id,
+        )
+        if admission is not None and not self._accepting_inbound:
+            await admission.release()
+            return None
+        return admission
+
+    async def _handle_claimed_message_entry(self, claimed: ClaimedInbound) -> None:
+        if not self._accepting_inbound:
+            await self._idempotency.release(
+                claimed.scope,
+                claimed.key,
+                owner_token=claimed.owner_token,
+            )
+            return
+        if self._starting:
+            self._startup_messages.append(claimed)
+            return
+        await self._handle_claimed_message(claimed)
 
     async def _process_message(
         self,
@@ -617,6 +700,15 @@ class ImAgentGateway:
     ) -> None:
         lock = self._locks.setdefault(message.conversation_ref, asyncio.Lock())
         async with lock:
+            scope, key = inbound_idempotency_identity(
+                message.conversation_ref,
+                message.message_id,
+            )
+            await self._idempotency.refresh(
+                scope,
+                key,
+                owner_token=idempotency_owner_token,
+            )
             thread_was_created = False
             if self._controller is not None:
                 outputs = await self._controller.handle(
@@ -715,8 +807,8 @@ class ImAgentGateway:
                 reply_to_message_id=message.message_id,
                 before_application_send=partial(
                     self._idempotency.mark_side_effect_started,
-                    f"inbound:{message.conversation_ref.channel_instance_id}",
-                    (f"{message.conversation_ref.native_conversation_id}:{message.message_id}"),
+                    scope,
+                    key,
                     owner_token=idempotency_owner_token,
                 ),
             )
