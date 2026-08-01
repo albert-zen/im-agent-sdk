@@ -45,11 +45,12 @@ native snapshot capability.
 
 ### Current behavior
 
-Each active Thread subscriber receives an independent stream in publication
-order. Native notification callbacks publish without awaiting consumers.
-Slow, cancelled, or failed observers cannot steal from another observer or
-block the native callback. Current queues are unbounded, so this is producer
-isolation rather than complete backpressure or memory isolation.
+Each active Thread subscriber receives an independent bounded stream in
+publication order. Native notification callbacks publish without awaiting
+consumers. Slow, cancelled, failed, or overflowed observers cannot steal from
+another observer or block the native callback. Overflow removes only that
+subscriber and raises a typed gap on its next read; queued projection items are
+discarded rather than retained as a hidden event journal.
 
 Within one Gateway event loop, `_ensure_projection` performs worker lookup,
 creation, and registration without a suspension point. Concurrent callers
@@ -131,9 +132,12 @@ checkpoint is explicitly degraded, while a new route establishes a bounded
 recent baseline. Temporary authoritative read failure enters the same bounded
 supervisor retry loop as subscription failure.
 
-This bootstrap queue is ordering isolation, not the Delivery Coordinator's
-admission queue. Channel planning/execution is bounded after projection;
-Application event subscriber and bootstrap queues remain unbounded.
+This bootstrap barrier is ordering isolation, not a second content queue: live
+events remain in the bounded Application subscription. Events consumed while
+one or more inputs await `AcceptedTurn` are held in a separately bounded
+per-Thread buffer so reply correlation is recorded first. Its overflow keeps
+accepted input terminal, records an explicit gap, and enters authoritative
+recovery.
 
 ## Recovery
 
@@ -195,8 +199,17 @@ Interactive request routing is defined by
 [ADR 0008](../../decisions/0008-interactive-request-routing.md).
 
 Bounded Channel delivery execution and conservative receipt-aware retry use
-the common Delivery Coordinator. Application subscriber queues remain
-unbounded and are recovered from authoritative history when gaps occur.
+the common Delivery Coordinator. Application subscriber overflow recovers
+completed messages from bounded authoritative history. If the Application has
+an authoritative pending-request snapshot, it is reconciled after the same
+gap for only the affected Thread; otherwise process-local worker health stays
+explicitly degraded for interactive-request recovery. Gap recovery never
+pulls an unrelated Thread's pending request around that Thread's own
+acceptance-order boundary.
+
+Health stores only bounded counters, stable gap codes, and route identities.
+It never stores event bodies, prompts, local paths, credentials, or Agent Turn
+truth.
 
 ## Dependencies and change obligations
 

@@ -42,8 +42,13 @@
   results, and ambiguous outcomes are never resent automatically;
 - the optional JSON ingress removes staged bytes and the reference CLI refuses
   non-loopback endpoints;
-- slow Channel delivery does not await/block the native event producer, while
-  current unbounded queue growth remains a known limitation;
+- slow Channel delivery does not await/block the native event producer;
+- startup message/operation admission is FIFO and bounded, overflow fails
+  startup, and teardown leaves no owned work running;
+- callbacks racing failed startup or shutdown are explicitly rejected rather
+  than reaching a stopping Application;
+- Application event overflow is visible in bounded health and recovers only
+  the affected Thread without restarting unrelated Applications;
 - concurrent Threads and Turns do not steal events or routes;
 - restart rebuilds projection from routes plus bounded authoritative history;
 - `AcceptedTurn` reply correlation is per Turn and destination-safe;

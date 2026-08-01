@@ -79,6 +79,10 @@ from .contracts import (
 from .controllers import ControllerActions, InboundController, RequestPresenter
 from .delivery_coordination import DeliveryCoordinator
 from .delivery_planning import DeliveryPlanningError
+from .gateway_startup import (
+    GatewayNotRunning,
+    GatewayStartupAdmission,
+)
 from .keyed_locks import KeyedLockRegistry
 from .proactive_delivery import (
     InMemoryDeliverySubmissionRepository,
@@ -120,6 +124,8 @@ class ImAgentGateway:
         catchup_limit: int = 10,
         projection_item_limit: int = 20,
         request_delivery_max_pending: int = 256,
+        startup_buffer_max_pending: int = 256,
+        turn_acceptance_event_max_pending: int = 256,
         subscription_retry_initial_seconds: float = 0.05,
         subscription_retry_max_seconds: float = 2.0,
         turn_correlation_retention_seconds: float = 7 * 24 * 60 * 60,
@@ -142,8 +148,10 @@ class ImAgentGateway:
             asyncio.Task[IdempotencyClaimStatus],
         ] = {}
         self._starting = False
-        self._startup_messages: list[InboundMessage] = []
-        self._startup_operations: list[GatewayOperation] = []
+        self._running = False
+        self._startup_admission = GatewayStartupAdmission[InboundMessage | GatewayOperation](
+            max_pending=startup_buffer_max_pending
+        )
         projection_repository = projections or InMemoryProjectionRouteRepository()
         self._projection_runtime = ThreadProjectionRuntime(
             applications=self._applications,
@@ -164,6 +172,7 @@ class ImAgentGateway:
             catchup_limit=catchup_limit,
             projection_item_limit=projection_item_limit,
             request_delivery_max_pending=request_delivery_max_pending,
+            turn_acceptance_event_max_pending=turn_acceptance_event_max_pending,
             subscription_retry_initial_seconds=subscription_retry_initial_seconds,
             subscription_retry_max_seconds=subscription_retry_max_seconds,
             turn_correlation_retention_seconds=turn_correlation_retention_seconds,
@@ -180,8 +189,8 @@ class ImAgentGateway:
     async def start(self) -> None:
         self._delivery_coordinator.start()
         self._starting = True
-        self._startup_messages.clear()
-        self._startup_operations.clear()
+        self._running = False
+        self._startup_admission.reset()
         started_applications: list[AgentApplicationAdapter] = []
         started_channels: list[ChannelAdapter] = []
         try:
@@ -191,27 +200,43 @@ class ImAgentGateway:
             for application in self._applications.values():
                 await application.start()
                 started_applications.append(application)
+                self._startup_admission.raise_if_overflowed()
             for channel in self._channels.values():
-                await channel.start(
-                    self._handle_message_entry,
-                    self._handle_operation_entry,
-                )
+                try:
+                    await channel.start(
+                        self._handle_message_entry,
+                        self._handle_operation_entry,
+                    )
+                except BaseException as start_error:
+                    try:
+                        await channel.stop()
+                    except BaseException as stop_error:
+                        start_error.add_note(
+                            f"Channel cleanup after startup failure also failed: {stop_error!r}"
+                        )
+                        logger.exception(
+                            "Channel cleanup after startup failure failed",
+                            exc_info=stop_error,
+                        )
+                    raise
                 started_channels.append(channel)
+                self._startup_admission.raise_if_overflowed()
             self._projection_runtime.mark_delivery_ready()
             await self._projection_runtime.reconcile_pending_requests(restart_open_requests)
+            self._startup_admission.raise_if_overflowed()
+            while self._startup_admission:
+                entry = self._startup_admission.popleft()
+                if isinstance(entry, InboundMessage):
+                    await self._handle_message(entry)
+                else:
+                    await self._handle_operation(entry)
+                self._startup_admission.raise_if_overflowed()
+            self._running = True
             self._starting = False
-            startup_messages = tuple(self._startup_messages)
-            startup_operations = tuple(self._startup_operations)
-            self._startup_messages.clear()
-            self._startup_operations.clear()
-            for message in startup_messages:
-                await self._handle_message(message)
-            for operation in startup_operations:
-                await self._handle_operation(operation)
         except BaseException:
             self._starting = False
-            self._startup_messages.clear()
-            self._startup_operations.clear()
+            self._running = False
+            self._startup_admission.clear()
             await self._projection_runtime.stop()
             await self._delivery_coordinator.close()
             for channel in reversed(started_channels):
@@ -221,6 +246,7 @@ class ImAgentGateway:
             raise
 
     async def stop(self) -> None:
+        self._running = False
         await self._projection_runtime.stop()
         await self._delivery_coordinator.close()
         for channel in reversed(tuple(self._channels.values())):
@@ -605,8 +631,10 @@ class ImAgentGateway:
 
     async def _handle_message_entry(self, message: InboundMessage) -> None:
         if self._starting:
-            self._startup_messages.append(message)
+            self._startup_admission.admit(message)
             return
+        if not self._running:
+            raise GatewayNotRunning("gateway is not accepting Channel callbacks")
         await self._handle_message(message)
 
     async def _process_message(
@@ -735,8 +763,10 @@ class ImAgentGateway:
         operation: GatewayOperation,
     ) -> None:
         if self._starting:
-            self._startup_operations.append(operation)
+            self._startup_admission.admit(operation)
             return
+        if not self._running:
+            raise GatewayNotRunning("gateway is not accepting Channel callbacks")
         await self._handle_operation(operation)
 
     async def _deliver_error(

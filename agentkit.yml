@@ -128,6 +128,7 @@ components:
       - docs/decisions/0009-proactive-delivery-routing.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - src/imagent/gateway.py
+      - src/imagent/gateway_startup.py
       - src/imagent/delivery_ingress.py
       - src/imagent/proactive_delivery.py
       - src/imagent/cli/**

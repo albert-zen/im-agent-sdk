@@ -22,7 +22,9 @@ history, and retention.
 
 The adapter advertises only native replay/order guarantees. Without native
 replay, recovery uses a fresh subscription plus authoritative Thread/Turn
-history. No SDK transcript or synthetic sequence is created.
+history. `event_buffer_max_pending` bounds each live subscriber and overflow
+enters that authoritative recovery path. No SDK transcript or synthetic
+sequence is created.
 
 The current Zen adapter reuses the App Server client transport, but repository
 evidence does not prove that Zen emits Codex request methods or accepts Codex

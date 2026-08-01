@@ -96,6 +96,42 @@ class InteractiveRequestProjection:
         for request_ref in restart_open_refs - pending_refs:
             await self._mark_stale(request_ref)
 
+    async def reconcile_application_after_event_gap(
+        self,
+        application: AgentApplicationAdapter,
+        thread_ref: ThreadRef,
+    ) -> bool:
+        """Reconcile native pending truth, or report that request recovery is degraded."""
+
+        runtime = application.summary.capabilities.runtime
+        if runtime.interactive_requests is SupportLevel.UNSUPPORTED:
+            return False
+        if runtime.pending_request_snapshot is not SupportLevel.NATIVE:
+            return True
+        application_ref = application.summary.ref
+        open_refs = {
+            correlation.request_ref
+            for correlation in await self._correlations.list_request_correlations()
+            if correlation.request_ref.application_ref == application_ref
+            and correlation.thread_ref == thread_ref
+            and correlation.state is RequestRouteState.OPEN
+        }
+        pending_refs: set[RequestRef] = set()
+        for request in await application.list_pending_requests():
+            validate_interactive_request(request)
+            if request.request_ref.application_ref != application_ref:
+                raise ValueError("pending request snapshot belongs to a different application")
+            if request.thread_ref != thread_ref:
+                continue
+            pending_refs.add(request.request_ref)
+            await self._deliver_request(
+                await self._active_routes(request.thread_ref),
+                request,
+            )
+        for request_ref in open_refs - pending_refs:
+            await self._mark_stale(request_ref)
+        return False
+
     async def handle_event(self, event: AgentEvent) -> None:
         resolution = event.request_resolution
         if event.type is AgentEventType.REQUEST_RESOLVED and resolution is not None:

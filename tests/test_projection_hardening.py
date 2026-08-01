@@ -38,6 +38,7 @@ from imagent.contracts import (
 )
 from imagent.delivery_coordination import DeliveryCoordinator, DeliveryCoordinatorConfig
 from imagent.gateway import ImAgentGateway
+from imagent.projection_runtime import TurnAcceptanceBufferOverflow
 from imagent.projections import (
     InMemoryProjectionRouteRepository,
     ProjectionWorkerState,
@@ -422,6 +423,69 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                 IdempotencyClaimStatus.ALREADY_COMPLETED,
             )
         finally:
+            await gateway.stop()
+
+    async def test_acceptance_buffer_overflow_keeps_input_terminal_and_recovers(
+        self,
+    ) -> None:
+        application = OverflowingAcceptanceApplication()
+        thread = await application.create_thread()
+        conversation = ConversationRef("fake-channel", "conversation")
+        bindings = InMemoryBindingRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+                thread_ref=thread.ref,
+            )
+        )
+        channel = FakeChannelAdapter()
+        idempotency = InMemoryIdempotencyRepository()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=bindings,
+            idempotency=idempotency,
+            turn_acceptance_event_max_pending=1,
+            subscription_retry_initial_seconds=0,
+            subscription_retry_max_seconds=0,
+        )
+        await gateway.start()
+        inbound = _inbound(conversation, "acceptance-overflow")
+        handling = asyncio.create_task(channel.on_message(inbound))
+        try:
+            await application.turn_persisted.wait()
+            await _wait_until(
+                lambda: (
+                    (health := gateway.get_projection_health(thread.ref)) is not None
+                    and health.event_overflow_count == 1
+                )
+            )
+            application.release_acceptance.set()
+            with self.assertRaises(TurnAcceptanceBufferOverflow):
+                await handling
+
+            await channel.on_message(inbound)
+            await _wait_until(lambda: len(channel.sent) == 2)
+            self.assertEqual(len(application._inputs), 1)
+            self.assertEqual(
+                await idempotency.claim(
+                    "inbound:fake-channel",
+                    "conversation:acceptance-overflow",
+                ),
+                IdempotencyClaimStatus.ALREADY_COMPLETED,
+            )
+            health = gateway.get_projection_health(thread.ref)
+            assert health is not None
+            self.assertEqual(
+                health.last_event_overflow,
+                "turn_acceptance_buffer_overflow",
+            )
+        finally:
+            application.release_acceptance.set()
+            if not handling.done():
+                handling.cancel()
+                await asyncio.gather(handling, return_exceptions=True)
             await gateway.stop()
 
     async def test_pre_acceptance_failure_releases_inbound_for_retry(self) -> None:
@@ -1773,6 +1837,23 @@ class AcceptanceRecoveryRaceApplication(CountingSubscriptionApplication):
             self.history_started.set()
             await self.release_history.wait()
         return await super().execute(operation)
+
+    async def send_input(
+        self,
+        thread_ref: ThreadRef,
+        message: AgentInput,
+    ) -> AcceptedTurn:
+        accepted = await super().send_input(thread_ref, message)
+        self.turn_persisted.set()
+        await self.release_acceptance.wait()
+        return accepted
+
+
+class OverflowingAcceptanceApplication(CountingSubscriptionApplication):
+    def __init__(self) -> None:
+        super().__init__()
+        self.turn_persisted = asyncio.Event()
+        self.release_acceptance = asyncio.Event()
 
     async def send_input(
         self,

@@ -157,6 +157,7 @@ class FakeAgentApplicationAdapter:
         application_instance_id: str = "fake-agent",
         project_mode: ProjectMode = ProjectMode.MANAGED,
         event_history_limit: int = 100,
+        event_buffer_max_pending: int = 1024,
     ) -> None:
         if event_history_limit < 1:
             raise ValueError("event_history_limit must be positive")
@@ -175,7 +176,7 @@ class FakeAgentApplicationAdapter:
         self._threads: dict[ThreadRef, ThreadSummary] = {}
         self._inputs: list[tuple[ThreadRef, AgentInput]] = []
         self._turn_history: dict[ThreadRef, list[TurnHistoryEntry]] = {}
-        self._events = EventBroadcaster[ThreadRef, AgentEvent]()
+        self._events = EventBroadcaster[ThreadRef, AgentEvent](max_pending=event_buffer_max_pending)
         self._event_epoch = str(uuid.uuid4())
         self._event_history_limit = event_history_limit
         self._sequences: dict[ThreadRef, int] = {}

@@ -26,11 +26,13 @@ from .contracts import (
     ConversationRef,
     ProjectionPolicy,
     RequestRef,
+    SupportLevel,
     ThreadProjectionRoute,
     ThreadRef,
     TurnReplyCorrelation,
 )
 from .controllers import RequestPresenter
+from .events import EventBufferOverflow
 from .projection_routes import ProjectionRouteCoordinator
 from .projections import (
     DeliverOutbound,
@@ -65,6 +67,11 @@ class InputPostAcceptanceError(RuntimeError):
         self.cause = cause
 
 
+class TurnAcceptanceBufferOverflow(EventBufferOverflow):
+    def __init__(self, *, max_pending: int) -> None:
+        super().__init__("turn_acceptance_buffer_overflow", max_pending=max_pending)
+
+
 class ThreadProjectionRuntime:
     """Own Thread observation and rebuildable IM projection lifecycle."""
 
@@ -86,6 +93,7 @@ class ThreadProjectionRuntime:
         catchup_limit: int = 10,
         projection_item_limit: int = 20,
         request_delivery_max_pending: int = 256,
+        turn_acceptance_event_max_pending: int = 256,
         subscription_retry_initial_seconds: float = 0.05,
         subscription_retry_max_seconds: float = 2.0,
         turn_correlation_retention_seconds: float = 7 * 24 * 60 * 60,
@@ -101,6 +109,8 @@ class ThreadProjectionRuntime:
             raise ValueError("catchup_limit must be positive")
         if projection_item_limit < 1:
             raise ValueError("projection_item_limit must be positive")
+        if turn_acceptance_event_max_pending < 1:
+            raise ValueError("turn_acceptance_event_max_pending must be positive")
         if subscription_retry_initial_seconds < 0:
             raise ValueError("initial subscription retry delay must be non-negative")
         if subscription_retry_max_seconds < subscription_retry_initial_seconds:
@@ -120,12 +130,14 @@ class ThreadProjectionRuntime:
         self._request_correlation_retention = timedelta(
             seconds=request_correlation_retention_seconds
         )
+        self._turn_acceptance_event_max_pending = turn_acceptance_event_max_pending
         self._tasks: dict[ThreadRef, asyncio.Task[None]] = {}
         self._ready: dict[ThreadRef, asyncio.Event] = {}
         self._event_locks: dict[ThreadRef, asyncio.Lock] = {}
         self._pending_turn_acceptances: dict[ThreadRef, int] = {}
         self._acceptance_ready: dict[ThreadRef, asyncio.Event] = {}
         self._buffered_events: dict[ThreadRef, list[AgentEvent]] = {}
+        self._buffered_event_overflows: set[ThreadRef] = set()
         self._delivery_ready = asyncio.Event()
         self._health: dict[ThreadRef, ProjectionWorkerHealth] = {}
         self._routes = ProjectionRouteCoordinator(
@@ -170,6 +182,7 @@ class ThreadProjectionRuntime:
         self._pending_turn_acceptances.clear()
         self._acceptance_ready.clear()
         self._buffered_events.clear()
+        self._buffered_event_overflows.clear()
         restored_routes = await self._projections.list_projection_routes()
         if self._projection_policy is ProjectionPolicy.FOREGROUND_ONLY:
             active_routes: list[ThreadProjectionRoute] = []
@@ -534,6 +547,7 @@ class ThreadProjectionRuntime:
     ) -> None:
         restart_count = 0
         needs_recovery = recover_existing
+        recover_requests_after_gap = False
         while not self._stopping:
             events: AsyncIterator[AgentEvent] | None = None
             try:
@@ -561,6 +575,18 @@ class ThreadProjectionRuntime:
                         await self._active_routes(thread_ref),
                         require_checkpoint=True,
                     )
+                    if recover_requests_after_gap:
+                        request_recovery_degraded = (
+                            await self._request_projection.reconcile_application_after_event_gap(
+                                application,
+                                thread_ref,
+                            )
+                        )
+                        self._update_health(
+                            thread_ref,
+                            interactive_request_recovery_degraded=(request_recovery_degraded),
+                        )
+                        recover_requests_after_gap = False
                 self._update_health(
                     thread_ref,
                     state=ProjectionWorkerState.RUNNING,
@@ -578,12 +604,28 @@ class ThreadProjectionRuntime:
             except Exception as error:
                 restart_count += 1
                 ready.set()
-                error_changes: dict[str, str | None]
+                error_changes: dict[str, Any]
                 if isinstance(error, ProjectionRecoveryUnavailable):
                     error_changes = {
                         "last_recovery_error": str(error),
                         "last_subscription_error": None,
                     }
+                elif isinstance(error, EventBufferOverflow):
+                    current = self._health.get(thread_ref)
+                    error_changes = {
+                        "last_gap": error.gap_code,
+                        "last_event_overflow": error.gap_code,
+                        "last_subscription_error": None,
+                        "event_overflow_count": (
+                            current.event_overflow_count + 1 if current is not None else 1
+                        ),
+                        "interactive_request_recovery_degraded": (
+                            self._request_recovery_is_degraded(
+                                self._application(thread_ref.application_instance_id)
+                            )
+                        ),
+                    }
+                    recover_requests_after_gap = True
                 else:
                     error_changes = {
                         "last_subscription_error": str(error),
@@ -634,7 +676,14 @@ class ThreadProjectionRuntime:
         lock = self._event_locks.setdefault(thread_ref, asyncio.Lock())
         async with lock:
             if self._pending_turn_acceptances.get(thread_ref, 0) > 0:
-                self._buffered_events.setdefault(thread_ref, []).append(event)
+                buffered = self._buffered_events.setdefault(thread_ref, [])
+                if len(buffered) >= self._turn_acceptance_event_max_pending:
+                    buffered.clear()
+                    self._buffered_event_overflows.add(thread_ref)
+                    raise TurnAcceptanceBufferOverflow(
+                        max_pending=self._turn_acceptance_event_max_pending
+                    )
+                buffered.append(event)
                 return
             await self._apply_event(event)
 
@@ -643,6 +692,12 @@ class ThreadProjectionRuntime:
         async with lock:
             if self._pending_turn_acceptances.get(thread_ref, 0) > 0:
                 return
+            if thread_ref in self._buffered_event_overflows:
+                self._buffered_event_overflows.remove(thread_ref)
+                self._buffered_events.pop(thread_ref, None)
+                raise TurnAcceptanceBufferOverflow(
+                    max_pending=self._turn_acceptance_event_max_pending
+                )
             events = self._buffered_events.pop(thread_ref, [])
             for event in events:
                 await self._apply_event(event)
@@ -739,6 +794,16 @@ class ThreadProjectionRuntime:
         self._update_health(
             thread_ref,
             last_gap=f"{route_id}:{gap}",
+        )
+
+    @staticmethod
+    def _request_recovery_is_degraded(
+        application: AgentApplicationAdapter,
+    ) -> bool:
+        runtime = application.summary.capabilities.runtime
+        return (
+            runtime.interactive_requests is not SupportLevel.UNSUPPORTED
+            and runtime.pending_request_snapshot is not SupportLevel.NATIVE
         )
 
     def _update_health(

@@ -49,9 +49,17 @@ message phases remain namespaced Metadata until common reuse is proven.
 
 ## Events and recovery
 
-Native notification producers publish into independent subscriber queues
-without awaiting Channel delivery. The adapter emits a separate explicit
-terminal Turn event after any number of completed messages.
+Native notification producers publish into independent, bounded subscriber
+queues without awaiting Channel delivery. Filling one subscriber terminates
+only that live subscription with an explicit overflow; Gateway resubscribes
+and reconciles native-authoritative state. The adapter emits a separate
+explicit terminal Turn event after any number of completed messages.
+
+App Server notification and server-request dispatch use separate bounded
+queues whose overflow resets that connection. T3 polling uses the shared
+bounded per-subscriber fan-out and does not keep polling solely for an
+overflowed subscriber. Queue capacity is injectable adapter infrastructure;
+product retry and degraded UX remain consumer policy.
 
 Replay, gap detection, and sequence scope are separate capabilities. When the
 native endpoint lacks replay or restart-safe sequence, fields are omitted and

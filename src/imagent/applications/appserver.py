@@ -123,12 +123,13 @@ class _AppServerApplicationAdapter:
         cwd: str,
         shared_filesystem_root: str | Path | None = None,
         server_request_mapper: ServerRequestMapper | None = None,
+        event_buffer_max_pending: int = 1024,
     ) -> None:
         self._application_instance_id = application_instance_id
         self._client = client
         self._cwd = cwd
         self._shared_filesystem_root = configure_shared_filesystem_root(shared_filesystem_root)
-        self._events = EventBroadcaster[str, AgentEvent]()
+        self._events = EventBroadcaster[str, AgentEvent](max_pending=event_buffer_max_pending)
         self._client.add_notification_handler(self._handle_notification)
         self._request_runtime = AppServerRequestRuntime(
             application_ref=ApplicationRef(application_instance_id),
@@ -673,6 +674,7 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
         client: AppServerClient,
         cwd: str,
         shared_filesystem_root: str | Path | None = None,
+        event_buffer_max_pending: int = 1024,
     ) -> None:
         super().__init__(
             application_instance_id=application_instance_id,
@@ -681,6 +683,7 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
             client=client,
             cwd=cwd,
             shared_filesystem_root=shared_filesystem_root,
+            event_buffer_max_pending=event_buffer_max_pending,
         )
 
 
@@ -692,6 +695,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
         client: AppServerClient,
         cwd: str,
         shared_filesystem_root: str | Path | None = None,
+        event_buffer_max_pending: int = 1024,
     ) -> None:
         super().__init__(
             application_instance_id=application_instance_id,
@@ -701,6 +705,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
             cwd=cwd,
             shared_filesystem_root=shared_filesystem_root,
             server_request_mapper=map_appserver_request,
+            event_buffer_max_pending=event_buffer_max_pending,
         )
 
 
