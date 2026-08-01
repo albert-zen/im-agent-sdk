@@ -16,6 +16,7 @@ PRODUCT_COMPONENTS = {
     "attachments-and-media",
     "gateway",
     "delivery-planning-and-coordination",
+    "diagnostics",
     "projections-and-recovery",
     "persistence",
     "controllers",

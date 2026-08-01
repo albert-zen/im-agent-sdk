@@ -13,6 +13,6 @@ def emit_event(**event: Any) -> None:
 
 
 def mark_appserver_health(**state: Any) -> None:
-    """Log client health changes until Issue #13 defines telemetry export."""
+    """Keep logs separate from the stable read-only diagnostic fact surface."""
 
     logger.debug("app-server health: %s", state)

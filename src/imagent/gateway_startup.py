@@ -27,6 +27,7 @@ class GatewayStartupAdmission(Generic[T]):
         self._max_pending = max_pending
         self._entries: deque[T] = deque()
         self._overflow: GatewayStartupOverflow | None = None
+        self._overflow_count = 0
 
     def __bool__(self) -> bool:
         return bool(self._entries)
@@ -41,6 +42,7 @@ class GatewayStartupAdmission(Generic[T]):
     def admit(self, entry: T) -> None:
         self.raise_if_overflowed()
         if len(self._entries) >= self._max_pending:
+            self._overflow_count += 1
             self._overflow = GatewayStartupOverflow(max_pending=self._max_pending)
             raise self._overflow
         self._entries.append(entry)
@@ -51,3 +53,15 @@ class GatewayStartupAdmission(Generic[T]):
     def raise_if_overflowed(self) -> None:
         if self._overflow is not None:
             raise self._overflow
+
+    @property
+    def capacity(self) -> int:
+        return self._max_pending
+
+    @property
+    def depth(self) -> int:
+        return len(self._entries)
+
+    @property
+    def overflow_count(self) -> int:
+        return self._overflow_count

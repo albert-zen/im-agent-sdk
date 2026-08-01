@@ -19,6 +19,7 @@ Unaccepted directions belong in `docs/ROADMAP.md`.
 | [0011](0011-durable-inbound-admission-before-media.md) | Accepted | fenced durable inbound admission before Channel media preparation |
 | [0012](0012-input-continuation-and-reply-correlation.md) | Accepted | default continuation preference, explicit input results, and immutable Turn reply correlation |
 | [0013](0013-bounded-application-event-admission.md) | Accepted | bounded Application event admission, explicit gaps, and authoritative recovery |
+| [0014](0014-read-only-diagnostics-surface.md) | Accepted | stable redacted process-local diagnostics and consumer observability boundary |
 
 Reopening an accepted decision requires updating this index, the ADR, affected
 global/component docs, contracts/tests, and AgentKit mapping when paths or

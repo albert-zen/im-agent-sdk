@@ -18,6 +18,7 @@ Gateway also composes:
   Projections and recovery ← live fan-out, reconciliation, checkpoints
   Attachments/media ← explicit source and trust boundary
   Delivery planning/coordination ← capability plans, ordered bounded sends
+  Diagnostics ← redacted process-local facts, optional adapter providers
   Optional delivery ingress ← scoped local tool/Artifact submission
 ```
 
@@ -38,6 +39,7 @@ separate Agent state tier.
 | Controllers | optional common UX over typed Operations | Core semantics or binding authority | [design](components/controllers/design.md) |
 | Channel integrations | native admission, rendering, media, delivery, reconnect | Agent resources/execution | [design](components/channel-adapters/design.md) |
 | Application integrations | native resource/input/event/history/request translation | native resource/execution ownership | [design](components/application-adapters/design.md) |
+| Diagnostics | stable redacted process-local infrastructure facts | Agent health authority, exporter, endpoint, or operator UX | [design](components/diagnostics/design.md) |
 | Testing and conformance | reusable fakes and honesty suites | production runtime | [design](components/testing-and-conformance/design.md) |
 
 Repository maintainability is an operational AgentKit component, not runtime
@@ -226,6 +228,11 @@ contains no transcript or Turn truth.
 - native pending-request snapshots reconcile request events after a gap when
   supported; otherwise worker health truthfully retains an interactive-request
   recovery degradation instead of manufacturing request state.
+- Gateway exposes a synchronous non-authoritative diagnostics snapshot. It
+  aggregates projection facts without Thread/route/error identities and reads
+  optional adapter providers without native I/O. App Server reports its
+  connection epoch and bounded dispatch lanes; T3 truthfully reports no
+  long-lived connection model.
 
 ## Failure model
 
@@ -233,6 +240,10 @@ Failures are explicit and scoped: unsupported capability, invalid/stale
 reference, access/authentication, missing binding, unavailable Application,
 rejected operation, attachment source/trust, delivery outcome, worker health,
 bounded-admission overflow, gap, and cursor expiration.
+
+Diagnostics preserve only fixed classifications and aggregate counters.
+OpenTelemetry export, `health.json`, polling, labels, alerting, and product
+degraded-state UX are consumer policy.
 
 Core does not choose product retry counts, permission prompts, or Full Access.
 Safe Application resubscription is bounded infrastructure recovery. Delivery

@@ -43,6 +43,10 @@ Every adapter should prove:
   connection-scoped; its reset becomes an Application observation gap and
   Gateway authoritative recovery, while T3 subscription overflow does not leak
   polling work;
+- App Server diagnostics cover ready/reconnect epochs and both dispatch-lane
+  overflows without exposing endpoints, paths, native IDs, or error text;
+- T3 diagnostics expose no synthetic long-lived connection, proving the
+  optional provider is not a Codex-specific Core requirement;
 - App Server callback positions preserve wire admission order across its
   independent notification/request lanes, fence a later response, and restart
   at the next connection epoch without claiming replay semantics; frames read

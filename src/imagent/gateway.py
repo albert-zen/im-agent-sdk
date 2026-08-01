@@ -80,6 +80,15 @@ from .contracts import (
 from .controllers import ControllerActions, InboundController, RequestPresenter
 from .delivery_coordination import DeliveryCoordinator
 from .delivery_planning import DeliveryPlanningError
+from .diagnostics import (
+    DiagnosticsSnapshot,
+    GatewayDiagnosticFacts,
+    QueueDiagnosticFacts,
+    QueueDiagnosticName,
+    collect_application_diagnostics,
+    new_diagnostics_snapshot,
+    summarize_projection_health,
+)
 from .gateway_startup import (
     GatewayNotRunning,
     GatewayStartupAdmission,
@@ -292,6 +301,25 @@ class ImAgentGateway:
     def list_projection_health(self) -> tuple[ProjectionWorkerHealth, ...]:
         """Return process-local projection health without Agent Turn state."""
         return self._projection_runtime.list_health()
+
+    def diagnostics_snapshot(self) -> DiagnosticsSnapshot:
+        """Return redacted process-local facts; Native Applications remain authoritative."""
+
+        startup = self._startup_admission
+        return new_diagnostics_snapshot(
+            applications=collect_application_diagnostics(self._applications.values()),
+            projections=summarize_projection_health(self._projection_runtime.list_health()),
+            gateway=GatewayDiagnosticFacts(
+                accepting_inbound=self._accepting_inbound,
+                starting=self._starting,
+                startup_queue=QueueDiagnosticFacts(
+                    name=QueueDiagnosticName.GATEWAY_STARTUP,
+                    capacity=startup.capacity,
+                    depth=startup.depth,
+                    overflow_count=startup.overflow_count,
+                ),
+            ),
+        )
 
     async def execute_application(
         self,

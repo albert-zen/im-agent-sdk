@@ -83,6 +83,12 @@ exists. T3 polling uses the shared bounded per-subscriber fan-out and does not
 keep polling solely for an overflowed subscriber. Queue capacity is injectable
 adapter infrastructure; product retry and degraded UX remain consumer policy.
 
+An Application may optionally expose stable redacted `diagnostic_facts()`.
+This structural seam is not part of the required Application port: App Server
+has a meaningful connection epoch and bounded dispatch queues, while T3's HTTP
+request/response transport has no equivalent long-lived connection. Exporters,
+health endpoints, polling, and operator presentation remain consumer policy.
+
 The App Server client also exposes an adapter-only ordered admission fence
 across those two lanes. Earlier non-response frames are admitted before a
 later JSON-RPC response completes; callback payloads carry a public
