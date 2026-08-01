@@ -125,7 +125,13 @@ class _TemporarilyUnkillableProcess(_StubbornProcess):
         super().kill()
 
 
-def _client(process: _ScriptedProcess, *, request_timeout_s: float = 15.0) -> AppServerClient:
+def _client(
+    process: _ScriptedProcess,
+    *,
+    request_timeout_s: float = 15.0,
+    notification_queue_size: int = 1024,
+    server_request_queue_size: int = 64,
+) -> AppServerClient:
     return AppServerClient(
         supervisor=AppServerSupervisor(
             app_server_url="stdio://",
@@ -133,6 +139,8 @@ def _client(process: _ScriptedProcess, *, request_timeout_s: float = 15.0) -> Ap
         ),
         client_info={"name": "sdk-test", "title": "SDK Test", "version": "0"},
         request_timeout_s=request_timeout_s,
+        notification_queue_size=notification_queue_size,
+        server_request_queue_size=server_request_queue_size,
     )
 
 
@@ -424,6 +432,83 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
                 AppServerDispatchPosition(connection_epoch=2, sequence=0),
             )
         finally:
+            await client.close()
+
+    async def test_notification_dispatch_overflow_resets_connection_explicitly(self) -> None:
+        notifications = [
+            {"method": "thread/status/changed", "params": {"threadId": f"thread-{index}"}}
+            for index in range(3)
+        ]
+        process = _ScriptedProcess(
+            {
+                "initialize": [{"result": {"ok": True}}],
+                "thread/list": [*notifications, {"result": {"threads": []}}],
+            }
+        )
+        client = _client(
+            process,
+            request_timeout_s=0.2,
+            notification_queue_size=1,
+        )
+        handler_started = asyncio.Event()
+        release_handler = asyncio.Event()
+        reset_epochs: list[int] = []
+
+        async def block_notification(_notification: dict) -> None:
+            handler_started.set()
+            await release_handler.wait()
+
+        client.add_notification_handler(block_notification)
+        client.add_connection_reset_handler(reset_epochs.append)
+        try:
+            await client.initialize()
+            with self.assertRaisesRegex(AppServerError, "notification dispatch queue overflowed"):
+                await client.list_threads()
+            self.assertEqual(reset_epochs, [1])
+        finally:
+            release_handler.set()
+            await client.close()
+
+    async def test_server_request_dispatch_overflow_resets_connection_explicitly(self) -> None:
+        requests = [
+            {
+                "id": 90 + index,
+                "method": "item/commandExecution/requestApproval",
+                "params": {"threadId": "thread-1", "turnId": "turn-1"},
+            }
+            for index in range(3)
+        ]
+        process = _ScriptedProcess(
+            {
+                "initialize": [{"result": {"ok": True}}],
+                "thread/list": [*requests, {"result": {"threads": []}}],
+            }
+        )
+        client = _client(
+            process,
+            request_timeout_s=0.2,
+            server_request_queue_size=1,
+        )
+        handler_started = asyncio.Event()
+        release_handler = asyncio.Event()
+        reset_epochs: list[int] = []
+
+        async def block_request(_request: dict) -> None:
+            handler_started.set()
+            await release_handler.wait()
+
+        client.add_server_request_handler(block_request)
+        client.add_connection_reset_handler(reset_epochs.append)
+        try:
+            await client.initialize()
+            with self.assertRaisesRegex(
+                AppServerError,
+                "server_request dispatch queue overflowed",
+            ):
+                await client.list_threads()
+            self.assertEqual(reset_epochs, [1])
+        finally:
+            release_handler.set()
             await client.close()
 
     async def test_request_resolution_notification_carries_dispatch_epoch(
