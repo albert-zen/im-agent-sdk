@@ -39,15 +39,18 @@ may import Gateway.
 
 ## Normal input flow
 
-1. A Channel emits a verified `InboundMessage`.
-2. Gateway claims the stable inbound idempotency key.
-3. An optional Controller may consume the input through typed actions.
-4. Unconsumed content resolves the current `ConversationBinding`.
-5. Gateway establishes or refreshes a `ThreadProjectionRoute`.
-6. It starts Thread observation before calling `send_input`.
-7. The Application emits authoritative user and Agent events.
-8. Projection resolves destinations at delivery time.
-9. Channel sends an `OutboundMessage`; Gateway records correlation outcome.
+1. A Channel verifies native identity and access policy.
+2. Before media preparation it requests a fenced durable admission lease from
+   Gateway using the stable Conversation/message identity.
+3. A duplicate receives no lease and stops. An admitted Channel prepares media
+   and hands one verified `InboundMessage` through the lease.
+4. An optional Controller may consume the input through typed actions.
+5. Unconsumed content resolves the current `ConversationBinding`.
+6. Gateway establishes or refreshes a `ThreadProjectionRoute`.
+7. It starts Thread observation before calling `send_input`.
+8. The Application emits authoritative user and Agent events.
+9. Projection resolves destinations at delivery time.
+10. Channel sends an `OutboundMessage`; Gateway records correlation outcome.
 
 ## Proactive delivery flow
 
@@ -90,7 +93,9 @@ state. Observing a Thread does not select it for future input.
 
 Conversation mutations use revision guards and serialize per Conversation.
 Idempotency claims are completed only after the scoped operation succeeds and
-are released on failure known to precede a native side effect. Once an
+are released on failure known to precede a native side effect. The adapter's
+typed pre-dispatch hook protects the inbound claim immediately before native
+mutation and authorizes its correlation policy. Once an
 Application returns `AcceptedTurn`, the inbound claim becomes terminal even if
 reply-correlation persistence or buffered projection draining then fails. The
 post-acceptance failure remains observable, but Channel redelivery cannot
@@ -101,6 +106,15 @@ not converted to either success or permission to retry. A failed terminal
 idempotency write likewise leaves the protected claim sticky across restart.
 Ordinary `in_flight` leases remain reclaimable, including outbound projection
 claims whose durable submission record can safely converge a retried worker.
+Inbound admission refreshes and verifies fenced lease ownership immediately
+before handoff and again after startup buffering and Conversation-lock waiting,
+before Controller or binding work. A stale media-preparation worker cannot use
+or release a replacement claim. During startup, Gateway buffers the prepared
+message together with its owned claim and releases safely unprocessed claims if
+startup fails. The inbound lifecycle gate closes before rollback awaits; a
+racing callback cannot start Application work after `start()` has failed.
+Startup buffering also remains active while queued input drains, so a drain
+failure cannot expose a temporary live-processing window before rollback.
 
 Application and Channel failures remain typed or explicitly reported. Gateway
 does not convert unknown delivery into success.
@@ -123,7 +137,9 @@ If startup fails, or once shutdown begins, the live admission gate rejects
 later Channel callbacks until another start completes successfully.
 
 For IM-originated input, Gateway persists a minimal mapping from the returned
-`AcceptedTurn` to the originating Conversation/reply ID. Projection preserves
+`started/create_new` result to the originating Conversation/reply ID. A
+`steered/preserve_existing` result is authorized only when that exact native
+Turn already has a mapping, and it never replaces the destination. Projection preserves
 the event/history Turn envelope and applies the reply only to that same
 destination. An external Turn does not inherit a prior IM message.
 

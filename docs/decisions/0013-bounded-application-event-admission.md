@@ -1,4 +1,4 @@
-# ADR 0012: Bounded Application event admission and recovery
+# ADR 0013: Bounded Application event admission and recovery
 
 Status: Accepted
 
@@ -32,6 +32,26 @@ App Server notification and server-request dispatch retain their existing
 separate bounded queues. Interactive request presentation retains its existing
 bounded managed-task admission; it does not share completed-message recovery
 assumptions.
+
+### App Server exposes an ordered admission fence, not a Core event sequence
+
+The App Server reader keeps JSON-RPC responses on its socket fast path. Before
+completing a response, every earlier notification or server request has either
+been admitted to its bounded callback lane or has failed the connection with
+explicit overflow. Each admitted callback carries a public
+`AppServerDispatchPosition(connection_epoch, sequence)`, and the client exposes
+the last admitted position as the response-side fence. Positions are monotonic
+only within one connection epoch and reset to zero on reconnect.
+
+Notification and server-request handlers may complete out of order because
+their lanes are intentionally isolated. A consumer that must hold live native
+output behind its own immediate response can gate callback admission by the
+public position and release through the response-side fence. Positions are
+transient adapter handoff metadata: they are not `AgentEvent.sequence`, a
+replay cursor, durable state, or permission to reconstruct native history.
+The SDK Gateway does not persist or interpret the fence; its Turn-acceptance
+buffer and authoritative recovery already own the corresponding common
+projection race.
 
 ### Overflow terminates only the affected live observation
 
@@ -73,7 +93,8 @@ prompts are not manufactured from bridge state.
 - **Optional capability:** native replay and authoritative pending-request
   snapshot recovery.
 - **Adapter-specific policy:** native transport queue/reset behavior and the
-  configured Application subscriber capacity.
+  configured Application subscriber capacity; App Server epoch-scoped ordered
+  callback admission.
 - **Consumer policy:** concrete capacity values and product retry/degraded UX.
 
 ## Cross-product evidence

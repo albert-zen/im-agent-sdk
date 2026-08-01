@@ -38,6 +38,11 @@ Current common commands cover help, Application/Project/Thread navigation,
 creation/deletion/status, catch-up, and history. Natural-language intent or
 native buttons can replace the parser without changing Core.
 
+The common Slash grammar is line-oriented: only the first non-empty input line
+is the command and its arguments. Trailing Channel-supplied or user-supplied
+context is not interpreted as control syntax. Channels therefore remain
+unaware of the optional Slash product behavior.
+
 The official Markdown Request Presenter renders typed approval/user-input
 requests without inventing policy. The optional Slash Controller maps an
 explicit Application instance plus native request ID and choice/answers to the

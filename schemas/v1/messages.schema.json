@@ -155,6 +155,120 @@
       },
       "additionalProperties": false
     },
+    "InputContinuationPreference": {
+      "enum": ["prefer_active_turn", "start_new_turn"]
+    },
+    "InputDisposition": {
+      "enum": ["started", "steered"]
+    },
+    "TurnReplyCorrelationPolicy": {
+      "enum": ["create_new", "preserve_existing"]
+    },
+    "ApplicationInputDispatch": {
+      "type": "object",
+      "required": [
+        "threadRef",
+        "clientMessageId",
+        "disposition",
+        "correlationPolicy"
+      ],
+      "properties": {
+        "threadRef": {
+          "$ref": "resources.schema.json#/$defs/ThreadRef"
+        },
+        "clientMessageId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "disposition": { "$ref": "#/$defs/InputDisposition" },
+        "correlationPolicy": {
+          "$ref": "#/$defs/TurnReplyCorrelationPolicy"
+        },
+        "expectedTurnId": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "disposition": { "const": "started" } },
+            "required": ["disposition"]
+          },
+          "then": {
+            "properties": {
+              "correlationPolicy": { "const": "create_new" },
+              "expectedTurnId": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "disposition": { "const": "steered" } },
+            "required": ["disposition"]
+          },
+          "then": {
+            "required": ["expectedTurnId"],
+            "properties": {
+              "correlationPolicy": { "const": "preserve_existing" },
+              "expectedTurnId": {
+                "$ref": "common.schema.json#/$defs/Identifier"
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "AcceptedTurn": {
+      "type": "object",
+      "required": [
+        "threadRef",
+        "turnId",
+        "clientMessageId",
+        "disposition",
+        "correlationPolicy"
+      ],
+      "properties": {
+        "threadRef": {
+          "$ref": "resources.schema.json#/$defs/ThreadRef"
+        },
+        "turnId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "clientMessageId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "disposition": { "$ref": "#/$defs/InputDisposition" },
+        "correlationPolicy": {
+          "$ref": "#/$defs/TurnReplyCorrelationPolicy"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "disposition": { "const": "started" } },
+            "required": ["disposition"]
+          },
+          "then": {
+            "properties": {
+              "correlationPolicy": { "const": "create_new" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "disposition": { "const": "steered" } },
+            "required": ["disposition"]
+          },
+          "then": {
+            "properties": {
+              "correlationPolicy": { "const": "preserve_existing" }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
     "AgentMessage": {
       "type": "object",
       "required": [

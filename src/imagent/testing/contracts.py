@@ -12,6 +12,7 @@ from imagent.contracts import (
     AgentEvent,
     AgentEventType,
     AgentInput,
+    ApplicationInputDispatch,
     ApplicationOperationFailed,
     CreateThread,
     DeleteThread,
@@ -21,6 +22,8 @@ from imagent.contracts import (
     GetThreadStatus,
     GetTurnCatchup,
     InboundMessage,
+    InputContinuationPreference,
+    InputDisposition,
     ListProjects,
     ListThreads,
     NativeThreadActivated,
@@ -39,6 +42,7 @@ from imagent.contracts import (
     ThreadsListed,
     ThreadStatusRead,
     TurnCatchupRead,
+    TurnReplyCorrelationPolicy,
     derive_client_message_id,
     validate_agent_event,
     validate_application_capabilities,
@@ -94,9 +98,13 @@ async def verify_channel_adapter(
     async def on_operation(operation):
         received_operations.append(operation)
 
-    await adapter.start(on_message, on_operation)
+    async def on_admission(_conversation_ref, _message_id):
+        return None
+
+    await adapter.start(on_message, on_operation, on_admission)
     await adapter.stop()
     checks.append(ContractCheck("start and stop lifecycle"))
+    checks.append(ContractCheck("admission callback accepted at startup"))
 
     if sample_message is not None:
         outbound = OutboundMessage(
@@ -238,18 +246,49 @@ async def verify_application_adapter(
     )
     first_events = adapter.subscribe_thread(created.ref)
     second_events = adapter.subscribe_thread(created.ref)
+    dispatches: list[ApplicationInputDispatch] = []
+
+    async def record_dispatch(dispatch: ApplicationInputDispatch) -> None:
+        dispatches.append(dispatch)
+
     accepted = await adapter.send_input(
         created.ref,
         AgentInput(
             client_message_id=client_message_id,
             content=(TextContent("contract message"),),
         ),
+        continuation=InputContinuationPreference.PREFER_ACTIVE_TURN,
+        before_dispatch=record_dispatch,
     )
     if accepted.thread_ref != created.ref:
         raise AssertionError("accepted turn belongs to a different thread")
     if accepted.client_message_id != client_message_id:
         raise AssertionError("client message ID was not preserved")
+    if len(dispatches) != 1:
+        raise AssertionError("input dispatch hook was not called exactly once")
+    dispatch = dispatches[0]
+    if dispatch.thread_ref != created.ref or dispatch.client_message_id != client_message_id:
+        raise AssertionError("input dispatch identity did not match the input")
+    if dispatch.disposition is not accepted.disposition:
+        raise AssertionError("accepted input disposition changed after dispatch")
+    if dispatch.correlation_policy is not accepted.correlation_policy:
+        raise AssertionError("accepted correlation policy changed after dispatch")
+    if accepted.disposition not in {InputDisposition.STARTED, InputDisposition.STEERED}:
+        raise AssertionError("adapter returned an unknown input disposition")
+    if accepted.disposition is InputDisposition.STARTED:
+        if accepted.correlation_policy is not TurnReplyCorrelationPolicy.CREATE_NEW:
+            raise AssertionError("started input did not create a new correlation")
+        if dispatch.expected_turn_id is not None:
+            raise AssertionError("started input declared an expected active Turn")
+    else:
+        if accepted.correlation_policy is not TurnReplyCorrelationPolicy.PRESERVE_EXISTING:
+            raise AssertionError("steered input did not preserve its existing correlation")
+        if dispatch.expected_turn_id is None:
+            raise AssertionError("steered input omitted its expected active Turn")
+        if accepted.turn_id != dispatch.expected_turn_id:
+            raise AssertionError("steered input accepted a different Turn than it declared")
     checks.append(ContractCheck("stable client message ID round-trip"))
+    checks.append(ContractCheck("truthful input dispatch result"))
 
     first_observation, second_observation = await asyncio.wait_for(
         asyncio.gather(

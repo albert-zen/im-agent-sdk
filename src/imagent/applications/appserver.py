@@ -3,10 +3,10 @@ from __future__ import annotations
 import hashlib
 import inspect
 import uuid
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
 from ..attachments import configure_shared_filesystem_root, resolve_local_attachment
 from ..contracts import (
@@ -17,6 +17,8 @@ from ..contracts import (
     AgentInput,
     AgentMessage,
     ApplicationCapabilities,
+    ApplicationInputDispatch,
+    ApplicationInputOutcomeUnknown,
     ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,
@@ -32,6 +34,8 @@ from ..contracts import (
     GetThreadHistory,
     GetThreadStatus,
     GetTurnCatchup,
+    InputContinuationPreference,
+    InputDisposition,
     InteractiveRequest,
     InterruptTurn,
     ListProjects,
@@ -61,6 +65,7 @@ from ..contracts import (
     TurnCatchupRead,
     TurnHistoryEntry,
     TurnInterrupted,
+    TurnReplyCorrelationPolicy,
     TurnStatus,
     operation_error,
     validate_application_operation,
@@ -124,12 +129,14 @@ class _AppServerApplicationAdapter:
         shared_filesystem_root: str | Path | None = None,
         server_request_mapper: ServerRequestMapper | None = None,
         event_buffer_max_pending: int = 1024,
+        steer_active_turn: bool = False,
     ) -> None:
         self._application_instance_id = application_instance_id
         self._client = client
         self._cwd = cwd
         self._shared_filesystem_root = configure_shared_filesystem_root(shared_filesystem_root)
         self._events = EventBroadcaster[str, AgentEvent](max_pending=event_buffer_max_pending)
+        self._steer_active_turn = steer_active_turn
         self._client.add_notification_handler(self._handle_notification)
         self._request_runtime = AppServerRequestRuntime(
             application_ref=ApplicationRef(application_instance_id),
@@ -475,14 +482,20 @@ class _AppServerApplicationAdapter:
         self,
         thread_ref: ThreadRef,
         message: AgentInput,
+        *,
+        continuation: InputContinuationPreference = (
+            InputContinuationPreference.PREFER_ACTIVE_TURN
+        ),
+        before_dispatch: Callable[[ApplicationInputDispatch], Awaitable[None]] | None = None,
     ) -> AcceptedTurn:
         self._require_own_thread(thread_ref)
         text = "\n".join(
             part.text for part in message.content if isinstance(part, TextContent)
         ).strip()
         attachments = tuple(part for part in message.content if isinstance(part, AttachmentContent))
+        input_items: list[dict[str, object]] | None = None
         if attachments:
-            input_items: list[dict[str, object]] = []
+            input_items = []
             if text:
                 input_items.append({"type": "text", "text": text})
             for attachment in attachments:
@@ -494,30 +507,130 @@ class _AppServerApplicationAdapter:
                     consumer="Codex App Server",
                 )
                 input_items.append({"type": "localImage", "path": str(local_path)})
-            result = await self._client.start_turn(
-                thread_ref.native_thread_id,
-                input_items=input_items,
-            )
-        else:
-            if not text:
-                raise ValueError("Codex App Server input requires text or image")
-            result = await self._client.start_turn(
-                thread_ref.native_thread_id,
-                text,
-            )
-        turn = result.get("turn")
-        turn_id = (
-            str(turn.get("id") or "")
-            if isinstance(turn, Mapping)
-            else str(result.get("turnId") or "")
+        elif not text:
+            raise ValueError("Codex App Server input requires text or image")
+
+        if not isinstance(continuation, InputContinuationPreference):
+            raise ValueError("unknown input continuation preference")
+        active_turn_id = None
+        if (
+            self._steer_active_turn
+            and continuation is InputContinuationPreference.PREFER_ACTIVE_TURN
+        ):
+            active_turn_id = await self._read_active_turn_id(thread_ref.native_thread_id)
+        expected_local_image_epoch = (
+            await self._verified_local_image_epoch() if input_items is not None else None
         )
+        if active_turn_id is not None:
+            steer_turn = getattr(self._client, "steer_turn", None)
+            if not callable(steer_turn):
+                raise RuntimeError("configured App Server client does not support turn/steer")
+            disposition = InputDisposition.STEERED
+            correlation_policy = TurnReplyCorrelationPolicy.PRESERVE_EXISTING
+        else:
+            disposition = InputDisposition.STARTED
+            correlation_policy = TurnReplyCorrelationPolicy.CREATE_NEW
+        if before_dispatch is not None:
+            await before_dispatch(
+                ApplicationInputDispatch(
+                    thread_ref=thread_ref,
+                    client_message_id=message.client_message_id,
+                    disposition=disposition,
+                    correlation_policy=correlation_policy,
+                    expected_turn_id=active_turn_id,
+                )
+            )
+        result = await self._dispatch_input(
+            thread_id=thread_ref.native_thread_id,
+            active_turn_id=active_turn_id,
+            text=text,
+            input_items=input_items,
+            expected_local_image_epoch=expected_local_image_epoch,
+        )
+
+        turn_id = _native_turn_id(result)
         if not turn_id:
-            raise RuntimeError("turn/start did not return a turn id")
+            operation = "turn/steer" if active_turn_id is not None else "turn/start"
+            cause = RuntimeError(f"{operation} did not return a turn id")
+            raise ApplicationInputOutcomeUnknown(
+                f"{operation} was accepted but its native Turn identity is unknown",
+                cause,
+            ) from cause
         return AcceptedTurn(
             thread_ref=thread_ref,
             turn_id=turn_id,
             client_message_id=message.client_message_id,
+            disposition=disposition,
+            correlation_policy=correlation_policy,
         )
+
+    async def _read_active_turn_id(self, thread_id: str) -> str | None:
+        result = await self._client.read_thread(thread_id, include_turns=True)
+        thread = _native_object(result, "thread")
+        turns = thread.get("turns")
+        if not isinstance(turns, list):
+            raise RuntimeError("active-Turn steering requires an authoritative native turn list")
+        for turn in reversed(turns):
+            if (
+                not isinstance(turn, Mapping)
+                or _turn_status(turn.get("status")) is not TurnStatus.RUNNING
+            ):
+                continue
+            turn_id = _optional_string(turn.get("id") or turn.get("turnId"))
+            if turn_id is None:
+                raise RuntimeError("active native Turn did not contain an id")
+            return turn_id
+        status_value = thread.get("status")
+        if isinstance(status_value, Mapping):
+            status_value = status_value.get("type") or status_value.get("status")
+        if _thread_status(status_value) is ThreadStatus.RUNNING:
+            raise RuntimeError("native thread is active but did not expose an active Turn identity")
+        return None
+
+    async def _verified_local_image_epoch(self) -> int:
+        epoch_reader = getattr(self._client, "local_image_paths_epoch", None)
+        if not callable(epoch_reader):
+            raise RuntimeError(
+                "Codex App Server local images require a verified shared filesystem epoch"
+            )
+        epoch = epoch_reader()
+        if epoch is None:
+            initialize = getattr(self._client, "initialize", None)
+            if callable(initialize):
+                initialized = initialize()
+                if inspect.isawaitable(initialized):
+                    await initialized
+                epoch = epoch_reader()
+        if epoch is None:
+            raise RuntimeError(
+                "Codex App Server local images require a verified shared filesystem epoch"
+            )
+        return int(cast(int, epoch))
+
+    async def _dispatch_input(
+        self,
+        *,
+        thread_id: str,
+        active_turn_id: str | None,
+        text: str,
+        input_items: list[dict[str, object]] | None,
+        expected_local_image_epoch: int | None,
+    ) -> Mapping[str, object]:
+        kwargs: dict[str, object] = {}
+        native_text: str | None = text
+        if input_items is not None:
+            native_text = None
+            kwargs["input_items"] = input_items
+            kwargs["expected_local_image_epoch"] = expected_local_image_epoch
+        if active_turn_id is None:
+            return await self._client.start_turn(thread_id, native_text, **kwargs)
+        steer_turn = getattr(self._client, "steer_turn", None)
+        if not callable(steer_turn):
+            raise RuntimeError("configured App Server client does not support turn/steer")
+        result = steer_turn(thread_id, active_turn_id, native_text, **kwargs)
+        if not inspect.isawaitable(result):
+            raise RuntimeError("configured App Server turn/steer did not return an awaitable")
+        return await cast(Awaitable[Mapping[str, object]], result)
 
     def subscribe_thread(
         self,
@@ -696,6 +809,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
         cwd: str,
         shared_filesystem_root: str | Path | None = None,
         event_buffer_max_pending: int = 1024,
+        steer_active_turn: bool = True,
     ) -> None:
         super().__init__(
             application_instance_id=application_instance_id,
@@ -706,6 +820,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
             shared_filesystem_root=shared_filesystem_root,
             server_request_mapper=map_appserver_request,
             event_buffer_max_pending=event_buffer_max_pending,
+            steer_active_turn=steer_active_turn,
         )
 
 
@@ -714,6 +829,13 @@ def _native_object(result: Mapping[str, object], key: str) -> Mapping[str, objec
     if not isinstance(value, Mapping):
         raise RuntimeError(f"application result did not contain {key}")
     return value
+
+
+def _native_turn_id(result: Mapping[str, object]) -> str | None:
+    turn = result.get("turn")
+    if isinstance(turn, Mapping):
+        return _optional_string(turn.get("id") or turn.get("turnId"))
+    return _optional_string(result.get("turnId"))
 
 
 def _native_list(
@@ -733,6 +855,8 @@ def _optional_string(value: object) -> str | None:
 
 
 def _thread_status(value: object) -> ThreadStatus:
+    if isinstance(value, Mapping):
+        value = value.get("type") or value.get("status")
     normalized = str(value or "").replace("-", "_").casefold()
     return {
         "idle": ThreadStatus.IDLE,

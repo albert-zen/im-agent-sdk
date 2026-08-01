@@ -38,6 +38,7 @@ class ChannelAdapterContractKitTests(unittest.IsolatedAsyncioTestCase):
             ),
         )
         self.assertIn("stable channel identity", report.check_names)
+        self.assertIn("admission callback accepted at startup", report.check_names)
         self.assertIn("delivery receipt semantics", report.check_names)
 
 

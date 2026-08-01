@@ -4,6 +4,7 @@ Required scenarios:
 
 - Gateway without a Controller treats Slash-looking text as normal input;
 - the default Controller consumes supported commands;
+- trailing input context is not parsed as Slash arguments;
 - non-Slash interactions invoke the same typed actions;
 - listing never changes selection;
 - Thread selection does not imply native activation;

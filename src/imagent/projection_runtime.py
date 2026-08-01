@@ -20,16 +20,20 @@ from .contracts import (
     AgentEventType,
     AgentInput,
     AgentMessage,
+    ApplicationInputDispatch,
     ApplicationOperation,
     ApplicationOperationResult,
     ConversationBinding,
     ConversationRef,
+    InputContinuationPreference,
+    InputDisposition,
     ProjectionPolicy,
     RequestRef,
     SupportLevel,
     ThreadProjectionRoute,
     ThreadRef,
     TurnReplyCorrelation,
+    TurnReplyCorrelationPolicy,
 )
 from .controllers import RequestPresenter
 from .events import EventBufferOverflow
@@ -70,6 +74,10 @@ class InputPostAcceptanceError(RuntimeError):
 class TurnAcceptanceBufferOverflow(EventBufferOverflow):
     def __init__(self, *, max_pending: int) -> None:
         super().__init__("turn_acceptance_buffer_overflow", max_pending=max_pending)
+
+
+class InputDispatchRejected(RuntimeError):
+    """Application input was rejected by a bridge invariant before dispatch."""
 
 
 class ThreadProjectionRuntime:
@@ -324,29 +332,94 @@ class ThreadProjectionRuntime:
             self._pending_turn_acceptances.get(thread_ref, 0) + 1
         )
         accepted: AcceptedTurn | None = None
+        authorized_dispatch: ApplicationInputDispatch | None = None
         primary_error: BaseException | None = None
-        try:
+
+        async def authorize_dispatch(dispatch: ApplicationInputDispatch) -> None:
+            nonlocal authorized_dispatch
+            if authorized_dispatch is not None:
+                raise InputDispatchRejected("Application input dispatch was declared twice")
+            if dispatch.thread_ref != thread_ref:
+                raise InputDispatchRejected("Application input dispatch belongs to another Thread")
+            if dispatch.client_message_id != agent_input.client_message_id:
+                raise InputDispatchRejected(
+                    "Application input dispatch client_message_id does not match input"
+                )
+            if dispatch.disposition is InputDisposition.STARTED:
+                if (
+                    dispatch.correlation_policy is not TurnReplyCorrelationPolicy.CREATE_NEW
+                    or dispatch.expected_turn_id is not None
+                ):
+                    raise InputDispatchRejected("started input must create a new Turn correlation")
+            elif dispatch.disposition is InputDisposition.STEERED:
+                if (
+                    dispatch.correlation_policy is not TurnReplyCorrelationPolicy.PRESERVE_EXISTING
+                    or not dispatch.expected_turn_id
+                ):
+                    raise InputDispatchRejected(
+                        "steered input must preserve an expected Turn correlation"
+                    )
+                existing = await self._projections.get_turn_reply_correlation(
+                    thread_ref,
+                    dispatch.expected_turn_id,
+                )
+                if existing is None:
+                    raise InputDispatchRejected(
+                        "cannot steer a Turn without an existing reply correlation"
+                    )
+            else:
+                raise InputDispatchRejected("unknown Application input disposition")
             if before_application_send is not None:
                 await before_application_send()
-            accepted = await application.send_input(thread_ref, agent_input)
+            authorized_dispatch = dispatch
+
+        try:
+            accepted = await application.send_input(
+                thread_ref,
+                agent_input,
+                continuation=InputContinuationPreference.PREFER_ACTIVE_TURN,
+                before_dispatch=authorize_dispatch,
+            )
             if accepted.thread_ref != thread_ref:
                 raise ValueError("AcceptedTurn belongs to a different Thread")
             if accepted.client_message_id != agent_input.client_message_id:
                 raise ValueError("AcceptedTurn client_message_id does not match input")
-            await self._projections.put_turn_reply_correlation(
-                TurnReplyCorrelation(
-                    correlation_id=derive_turn_reply_correlation_id(
-                        thread_ref,
-                        accepted.turn_id,
-                    ),
-                    thread_ref=thread_ref,
-                    turn_id=accepted.turn_id,
-                    client_message_id=accepted.client_message_id,
-                    conversation_ref=conversation_ref,
-                    reply_to_message_id=reply_to_message_id,
-                    created_at=datetime.now(UTC),
+            if authorized_dispatch is None:
+                raise RuntimeError("Application accepted input without declaring dispatch")
+            if (
+                accepted.disposition is not authorized_dispatch.disposition
+                or accepted.correlation_policy is not authorized_dispatch.correlation_policy
+            ):
+                raise RuntimeError(
+                    "AcceptedTurn disposition does not match the authorized dispatch"
                 )
-            )
+            if accepted.disposition is InputDisposition.STARTED:
+                await self._projections.put_turn_reply_correlation(
+                    TurnReplyCorrelation(
+                        correlation_id=derive_turn_reply_correlation_id(
+                            thread_ref,
+                            accepted.turn_id,
+                        ),
+                        thread_ref=thread_ref,
+                        turn_id=accepted.turn_id,
+                        client_message_id=accepted.client_message_id,
+                        conversation_ref=conversation_ref,
+                        reply_to_message_id=reply_to_message_id,
+                        created_at=datetime.now(UTC),
+                    )
+                )
+            else:
+                expected_turn_id = authorized_dispatch.expected_turn_id
+                if accepted.turn_id != expected_turn_id:
+                    raise RuntimeError("native steer accepted a different Turn than was authorized")
+                preserved = await self._projections.get_turn_reply_correlation(
+                    thread_ref,
+                    accepted.turn_id,
+                )
+                if preserved is None:
+                    raise RuntimeError(
+                        "authorized steer reply correlation disappeared after dispatch"
+                    )
         except BaseException as exc:
             primary_error = exc
         finally:

@@ -13,14 +13,18 @@ Required scenarios:
 - stale outbound leases recover both before submission reservation and after
   an accepted submission whose outer completion write was interrupted;
 - overlapping stale and replacement owners are fenced so the stale worker
-  cannot mark, complete, or release the replacement's claim;
+  cannot refresh, mark, complete, or release the replacement's claim;
+- an owner-checked refresh extends only an `in_flight` lease and is required
+  before a prepared inbound message enters Gateway processing;
 - projection routes survive restart without transcript content;
 - route refresh preserves checkpoints and rejects conflicting explicit values;
 - concurrent checkpoint advances use compare-and-swap and cannot overwrite a
   newer boundary;
 - a legacy SQLite database without checkpoint/correlation columns migrates
   without losing binding, route, or idempotency rows;
-- Turn reply correlation supports exact deletion plus explicit bounded cleanup;
+- Turn reply correlation is create-only/idempotent-same, rejects a different
+  destination for the same Thread/Turn in memory and SQLite, survives restart
+  unchanged, and supports exact deletion plus explicit bounded cleanup;
 - request correlation persists per successful destination, transitions every
   destination atomically by request, survives restart, and rejects
   zero-selector cleanup;

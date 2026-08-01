@@ -16,7 +16,9 @@ Unaccepted directions belong in `docs/ROADMAP.md`.
 | [0008](0008-interactive-request-routing.md) | Accepted | typed interactive requests, destination-safe response correlation, and reconnect honesty |
 | [0009](0009-proactive-delivery-routing.md) | Accepted | scoped proactive delivery, pinned route snapshots, and durable idempotent outcomes |
 | [0010](0010-capability-driven-delivery-coordination.md) | Accepted | pure capability-driven planning and bounded destination-ordered delivery |
-| [0012](0012-bounded-application-event-admission.md) | Accepted | bounded Application event admission, explicit gaps, and authoritative recovery |
+| [0011](0011-durable-inbound-admission-before-media.md) | Accepted | fenced durable inbound admission before Channel media preparation |
+| [0012](0012-input-continuation-and-reply-correlation.md) | Accepted | default continuation preference, explicit input results, and immutable Turn reply correlation |
+| [0013](0013-bounded-application-event-admission.md) | Accepted | bounded Application event admission, explicit gaps, and authoritative recovery |
 
 Reopening an accepted decision requires updating this index, the ADR, affected
 global/component docs, contracts/tests, and AgentKit mapping when paths or

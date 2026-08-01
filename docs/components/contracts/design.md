@@ -17,6 +17,8 @@ This component owns:
 - capabilities and explicit error shapes;
 - Agent events, ordering fields, history projections, bindings, projection
   route checkpoints, and minimal Turn reply-correlation value objects;
+- Application input continuation preference, pre-dispatch disposition/policy,
+  and truthful accepted-Turn result values;
 - Python validators and the matching JSON Schemas.
 
 It does not own:

@@ -15,6 +15,8 @@ This component owns:
 - representative capabilities and fixture resources;
 - cross-adapter assertions that stable IDs, lifecycle, and unsupported
   behavior remain consistent.
+- common input assertions that every Application adapter invokes the typed
+  pre-dispatch hook and truthfully returns started/steered correlation policy.
 
 It does not own:
 

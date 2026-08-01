@@ -14,9 +14,18 @@ When a repository port changes, also run binding/storage tests. When an
 Application or Channel port changes, run every concrete adapter's focused and
 vertical-slice tests.
 
+The reusable contract suite proves that a modern Channel accepts the admission
+callback through its lifecycle. Focused native/Gateway tests must additionally
+prove that durable admission happens before media preparation, a missing lease
+stops work without preventing a later reclaim attempt, preparation failure
+releases the lease, handoff transfers terminal ownership to Gateway, and the
+legacy two-callback startup shape remains usable during migration.
+
 Application input coverage must distinguish safe pre-dispatch failure from a
 sent request with an unknown native outcome. The latter remains sticky across
-redelivery and restart.
+redelivery and restart. Every implementation must accept the default
+continuation preference, invoke the hook once immediately before native
+mutation, and return a result matching the authorized disposition/policy.
 
 Delivery Port coverage must include atomic concurrent reservation, identity
 conflict, immutable snapshots, per-destination compare-and-set updates, and

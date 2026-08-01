@@ -32,7 +32,7 @@ synthetic event journal.
 ## Consequences
 
 Multiple IM/client observers see the same canonical events. Recovery remains
-native-authoritative. [ADR 0012](0012-bounded-application-event-admission.md)
+native-authoritative. [ADR 0013](0013-bounded-application-event-admission.md)
 bounds each independent live queue, terminates only an overflowed subscriber,
 and enters explicit authoritative gap recovery. Delivery execution policy
 remains separately bounded by ADR 0010.

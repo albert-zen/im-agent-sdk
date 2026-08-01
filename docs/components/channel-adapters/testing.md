@@ -5,6 +5,12 @@ Every Channel adapter should prove:
 - stable configured Channel and native Conversation identity;
 - duplicate inbound delivery does not repeat Agent mutation;
 - access checks occur before media work;
+- durable completed/in-flight admission rejects restart redelivery before
+  attachment preparation;
+- a durable in-flight rejection does not let the process-local fast path block
+  a later reclaim attempt;
+- preparation failure releases only its fenced pre-side-effect lease, while a
+  stale preparation owner cannot hand off or release a replacement claim;
 - an honest `DeliveryProfile` for Markdown/plain fallback, text length units,
   attachments/grouping, and reply scope;
 - native encoding accepts every common-planner segment and defensive direct
@@ -15,6 +21,13 @@ Every Channel adapter should prove:
   identity independent of staging path;
 - native retryable/unknown receipt mapping when idempotency is absent;
 - reconnect state remains Channel-owned.
+
+QQ-only quote fixtures additionally cover direct and group events, missing and
+malformed provider fields, every text/field/count bound, ignored nested history
+and media URLs, anti-forgery boundaries, and one
+native-to-common-to-Application vertical slice. The tests also prove that this
+single-Channel feature does not change common capabilities, schemas, Metadata,
+or routing/approval identity.
 
 Run the reusable Channel contract suite plus native adapter tests:
 

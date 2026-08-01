@@ -49,7 +49,7 @@ baseline reading. A per-route bootstrap barrier holds that route's projection
 consumer until the bounded baseline finishes. Native producers still publish
 to independent subscriber queues without awaiting Gateway or Channel work.
 
-ADR 0012 bounds Application subscriber and Turn-acceptance event admission;
+ADR 0013 bounds Application subscriber and Turn-acceptance event admission;
 the bootstrap barrier does not copy events into a second content queue. ADR
 0010 separately adds bounded Channel-delivery admission, ordered execution,
 receipt-aware retry, and explicit backpressure after projection.

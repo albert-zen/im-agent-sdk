@@ -66,6 +66,9 @@ Turn reply correlation stores only native identity and its originating IM
 target, and is removed on a terminal Turn event or bounded cleanup. Deletion
 requires an explicit Thread, Conversation, or retention cutoff selector;
 clearing every correlation is not an accidental zero-argument operation.
+Insertion is create-only for the Thread/Turn key: an identical repeat is
+idempotent and any different immutable value is a
+`TurnReplyCorrelationConflict`. SQLite uses no destination-replacing upsert.
 Neither state may copy message bodies, Turn status, or native execution state.
 
 A request route correlation stores no prompt, requested permissions, or
@@ -107,9 +110,11 @@ explicit release on a failure proven to precede dispatch makes it claimable
 again.
 
 Every acquired lease carries an opaque owner token. Reclaim replaces the
-token, and `mark_side_effect_started`, `complete`, and `release` compare it
-atomically. A stale worker therefore cannot protect, complete, or delete the
-new owner's record.
+token, and `refresh`, `mark_side_effect_started`, `complete`, and `release`
+compare it atomically. Refresh updates only the timestamp of the caller's
+`in_flight` lease; it cannot revive or alter a protected side-effect state. A
+stale worker therefore cannot hand off prepared media, protect, complete, or
+delete the new owner's record.
 
 At process restart, bindings and routes can be reloaded. Authoritative
 Application history/catch-up reconciles message content; persistence never

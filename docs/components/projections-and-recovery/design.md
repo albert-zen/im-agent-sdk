@@ -93,13 +93,21 @@ progress.
 Per-Turn reply correlation is separate minimal projection state keyed by
 authoritative Thread/Turn/client-message identity. It stores the originating
 Conversation and IM reply ID, never message content or Turn status. Gateway
-creates it from `AcceptedTurn` and removes it on an explicit terminal Turn
+creates it for a `started/create_new` result and removes it on an explicit terminal Turn
 event, Thread/route cleanup, or configured retention cutoff. Retention is
 enforced at Gateway startup and before accepting later IM input, so missing
 terminal events cannot grow correlation state without bound in a long-lived
 active process. The reply applies only when the correlation Conversation
 matches the destination route. A recovered/external Turn without correlation
 does not inherit a route's last inbound message.
+
+A `steered/preserve_existing` dispatch must name an already-correlated Turn
+before native mutation. Projection authorizes that policy without replacing
+the correlation, even when a second Conversation supplied the steer input.
+Repositories accept only the first immutable value for a Thread/Turn key.
+Missing correlation fails before dispatch; a native steer response with a
+different Turn ID is a post-acceptance degradation and cannot retarget either
+Turn.
 
 Application acceptance is also the inbound idempotency side-effect boundary.
 If reply-correlation persistence or buffered-event draining fails after an
@@ -109,8 +117,9 @@ projection degradation. Only a failure known to occur before acceptance may
 authorize automatic input redelivery.
 Dispatch with an unknown acceptance outcome is reported separately by the
 Application Port and keeps the side-effect-started claim non-expiring. The
-claim is protected immediately before the Application call; a definitive
-pre-dispatch failure explicitly releases it. When both primary post-acceptance
+claim is protected through the adapter's typed hook immediately before the
+native mutation; a definitive pre-dispatch failure explicitly releases it.
+When both primary post-acceptance
 processing and buffered-event draining fail, the primary error remains
 authoritative and the drain failure is attached as secondary diagnostic
 context.

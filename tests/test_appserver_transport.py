@@ -5,7 +5,12 @@ import json
 import unittest
 from unittest.mock import patch
 
-from imagent.applications.appserver_client.client import AppServerClient
+from imagent.applications.appserver_client import (
+    APP_SERVER_DISPATCH_POSITION_KEY,
+    AppServerClient,
+    AppServerDispatchPosition,
+    AppServerError,
+)
 from imagent.applications.appserver_client.supervisor import (
     AppServerSupervisor,
     MissingAppServerDependencyError,
@@ -160,6 +165,23 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await client.close()
 
+    async def test_turn_steer_cancelled_after_dispatch_has_unknown_outcome(self) -> None:
+        process = _ScriptedProcess({"initialize": [{"result": {"ok": True}}]})
+        client = _client(process)
+        task = asyncio.create_task(client.steer_turn("thread-1", "turn-1", "continue"))
+        try:
+            async with asyncio.timeout(1):
+                while not any(item.get("method") == "turn/steer" for item in process.sent):
+                    await asyncio.sleep(0)
+            task.cancel()
+            with self.assertRaises(ApplicationInputOutcomeUnknown) as raised:
+                await task
+            self.assertIsInstance(raised.exception.cause, asyncio.CancelledError)
+        finally:
+            if not task.done():
+                task.cancel()
+            await client.close()
+
     async def test_missing_websocket_extra_fails_without_retry(self) -> None:
         sleeps: list[float] = []
         supervisor = AppServerSupervisor(
@@ -301,6 +323,99 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             release_handler.set()
             await client.close()
 
+    async def test_public_dispatch_fence_orders_bounded_callback_lanes(self) -> None:
+        process = _ScriptedProcess(
+            {
+                "initialize": [
+                    {
+                        "method": "thread/status/changed",
+                        "params": {"threadId": "thread-1", "status": "idle"},
+                    },
+                    {
+                        "id": 91,
+                        "method": "item/commandExecution/requestApproval",
+                        "params": {"threadId": "thread-1", "turnId": "turn-1"},
+                    },
+                    {"result": {"ok": True}},
+                ]
+            }
+        )
+        client = _client(process, request_timeout_s=0.2)
+        notification_started = asyncio.Event()
+        release_notification = asyncio.Event()
+        request_received = asyncio.Event()
+        positions: list[AppServerDispatchPosition] = []
+
+        async def slow_notification(notification: dict) -> None:
+            positions.append(notification[APP_SERVER_DISPATCH_POSITION_KEY])
+            notification_started.set()
+            await release_notification.wait()
+
+        def capture_request(request: dict) -> None:
+            positions.append(request[APP_SERVER_DISPATCH_POSITION_KEY])
+            request_received.set()
+
+        client.add_notification_handler(slow_notification)
+        client.add_server_request_handler(capture_request)
+        try:
+            self.assertEqual(await client.initialize(), {"ok": True})
+            await asyncio.wait_for(notification_started.wait(), timeout=1)
+            await asyncio.wait_for(request_received.wait(), timeout=1)
+            self.assertEqual(
+                client.last_admitted_dispatch_position,
+                AppServerDispatchPosition(connection_epoch=1, sequence=2),
+            )
+            self.assertEqual(
+                sorted(positions, key=lambda position: position.sequence),
+                [
+                    AppServerDispatchPosition(connection_epoch=1, sequence=1),
+                    AppServerDispatchPosition(connection_epoch=1, sequence=2),
+                ],
+            )
+        finally:
+            release_notification.set()
+            await client.close()
+
+    async def test_dispatch_fence_resets_at_reconnect_epoch(self) -> None:
+        first = _ScriptedProcess(
+            {
+                "initialize": [
+                    {"method": "thread/status/changed", "params": {}},
+                    {"result": {"ok": True}},
+                ]
+            }
+        )
+        second = _ScriptedProcess(
+            {
+                "initialize": [{"result": {"ok": True}}],
+                "thread/list": [{"result": {"threads": []}}],
+            }
+        )
+        processes = iter((first, second))
+        client = AppServerClient(
+            supervisor=AppServerSupervisor(
+                app_server_url="stdio://",
+                spawn_process=lambda *_args: next(processes),
+            ),
+            client_info={"name": "sdk-test", "title": "SDK Test", "version": "0"},
+        )
+        client.add_notification_handler(lambda _notification: None)
+        try:
+            await client.initialize()
+            self.assertEqual(
+                client.last_admitted_dispatch_position,
+                AppServerDispatchPosition(connection_epoch=1, sequence=1),
+            )
+            first.stdout.lines.put_nowait(b"")
+            await asyncio.sleep(0)
+            self.assertEqual(await client.list_threads(), {"threads": []})
+            self.assertEqual(
+                client.last_admitted_dispatch_position,
+                AppServerDispatchPosition(connection_epoch=2, sequence=0),
+            )
+        finally:
+            await client.close()
+
     async def test_request_resolution_notification_carries_dispatch_epoch(
         self,
     ) -> None:
@@ -363,6 +478,59 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await client.list_threads(), {"threads": []})
             self.assertEqual(client.connection_epoch, 2)
             self.assertEqual(second.sent[0]["method"], "initialize")
+        finally:
+            await client.close()
+
+    async def test_stale_local_image_epoch_fails_before_input_dispatch_after_reconnect(
+        self,
+    ) -> None:
+        first = _ScriptedProcess({"initialize": [{"result": {"ok": True}}]})
+        second = _ScriptedProcess(
+            {
+                "initialize": [{"result": {"ok": True}}],
+                "thread/list": [{"result": {"threads": []}}],
+            }
+        )
+        processes = iter((first, second))
+        client = AppServerClient(
+            supervisor=AppServerSupervisor(
+                app_server_url="stdio://",
+                spawn_process=lambda *_args: next(processes),
+            ),
+            client_info={"name": "sdk-test", "title": "SDK Test", "version": "0"},
+        )
+        try:
+            await client.initialize()
+            expected_epoch = client.local_image_paths_epoch()
+            self.assertEqual(expected_epoch, 1)
+
+            first.stdout.lines.put_nowait(b"")
+            await asyncio.sleep(0)
+            self.assertEqual(await client.list_threads(), {"threads": []})
+            self.assertEqual(client.connection_epoch, 2)
+
+            for operation in (
+                lambda: client.start_turn(
+                    "thread-1",
+                    input_items=[{"type": "localImage", "path": "C:/shared/image.png"}],
+                    expected_local_image_epoch=expected_epoch,
+                ),
+                lambda: client.steer_turn(
+                    "thread-1",
+                    "turn-1",
+                    input_items=[{"type": "localImage", "path": "C:/shared/image.png"}],
+                    expected_local_image_epoch=expected_epoch,
+                ),
+            ):
+                with self.subTest(operation=operation):
+                    with self.assertRaisesRegex(AppServerError, "cannot read bridge-local image"):
+                        await operation()
+
+            self.assertFalse(
+                any(
+                    request.get("method") in {"turn/start", "turn/steer"} for request in second.sent
+                )
+            )
         finally:
             await client.close()
 

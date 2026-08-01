@@ -82,6 +82,10 @@ routes, completion checkpoints, and reply correlations are owned bridge state, n
 disposable transcript caches; losing them may require explicit degraded
 recovery rather than pretending the prior delivery boundary is known.
 
+Inbound admission uses the same Gateway-owned idempotency state before Channel
+media preparation. Its fenced `in_flight` lease stores identity and ownership
+only; media content, paths, and sender data remain outside persistence.
+
 ## Input selection and output routing
 
 The default binding key is:
@@ -106,17 +110,25 @@ Per-user group selection is a future consumer policy, not current Core.
 ## Input flow
 
 1. Channel verifies/authenticates and normalizes native input.
-2. Access policy and duplicate rejection run before media work.
-3. Optional Controller translates UX into typed actions.
-4. Gateway derives/preserves a stable client message ID.
-5. Gateway resolves the Conversation binding.
-6. It records/refreshes output observation and establishes live subscription
+2. Access policy runs before media work.
+3. Channel requests a fenced Gateway-owned durable admission lease from the
+   stable Conversation/message identity; duplicates stop before media work.
+4. Channel stages permitted media, then hands the completed message and lease
+   to Gateway. Preparation failure releases only the owned pre-side-effect
+   lease.
+5. Optional Controller translates UX into typed actions.
+6. Gateway derives/preserves a stable client message ID.
+7. Gateway resolves the Conversation binding.
+8. It records/refreshes output observation and establishes live subscription
    before sending input.
-7. Application accepts input and emits authoritative user/Agent events.
-8. Projection resolves current destinations at delivery time.
-9. Delivery planning maps the logical message to deterministic segments.
-10. The Coordinator executes them through the Channel's ordered bounded lane.
-11. Channel performs native encoding/delivery and returns typed receipts.
+9. Gateway supplies the default `prefer_active_turn` input preference. The
+   adapter declares `started/create_new` or `steered/preserve_existing`
+   immediately before native dispatch; Gateway authorizes the correlation
+   policy, then the Application accepts input and emits authoritative events.
+10. Projection resolves current destinations at delivery time.
+11. Delivery planning maps the logical message to deterministic segments.
+12. The Coordinator executes them through the Channel's ordered bounded lane.
+13. Channel performs native encoding/delivery and returns typed receipts.
 
 ## Proactive output flow
 
@@ -174,6 +186,11 @@ contains no transcript or Turn truth.
 - Conversation binding mutations serialize per Conversation.
 - Gateway does not manufacture a cross-Conversation input sequence; native
   Application acceptance and execution ordering remains authoritative.
+- The default input preference is to continue an active Turn. Every
+  Application adapter reports whether the native result was actually
+  `started` or `steered`; Codex may use native steer, while T3 and Zen
+  currently start because their evidenced protocols do not provide that
+  mutation.
 - native event publication fans out without awaiting Channel delivery.
 - independent subscriber queues prevent observers from stealing events.
 - Gateway stores durable routes and uses delivery idempotency.
@@ -192,9 +209,12 @@ contains no transcript or Turn truth.
 - `foreground_only` reclaims workers with no active binding route and restores
   the bound route after restart; remembered/all-observer policies retain
   workers while their routes exist;
-- `AcceptedTurn` creates minimal per-Turn reply correlation. Only a matching
-  destination may use it; external/recovered Turns without a correlation use
-  no reply unless the route carries an explicit destination/topic default;
+- a `started` acceptance creates minimal per-Turn reply correlation, while a
+  `steered` acceptance preserves the correlation authorized before dispatch.
+  Reusing the Thread/Turn key can never replace its original Conversation or
+  reply ID. Only a matching destination may use it; external/recovered Turns
+  without a correlation use no reply unless the route carries an explicit
+  destination/topic default;
 - per-route bootstrap barriers serialize bounded baseline before queued live
   delivery decisions without blocking native event publication;
 - one route's Channel failure blocks that route's later delivery decisions,

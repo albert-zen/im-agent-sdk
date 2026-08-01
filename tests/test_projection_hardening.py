@@ -9,13 +9,14 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from imagent.adapters import IdempotencyClaimStatus
+from imagent.adapters import ApplicationInputDispatchHandler, IdempotencyClaimStatus
 from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AcceptedTurn,
     AgentEvent,
     AgentEventType,
     AgentInput,
+    ApplicationInputDispatch,
     ApplicationInputOutcomeUnknown,
     ApplicationOperation,
     BindConversationToThread,
@@ -26,6 +27,8 @@ from imagent.contracts import (
     GatewayOperationFailed,
     GetThreadHistory,
     InboundMessage,
+    InputContinuationPreference,
+    InputDisposition,
     ObserveThread,
     OutboundMessage,
     ProjectionPolicy,
@@ -35,7 +38,9 @@ from imagent.contracts import (
     ThreadProjectionRoute,
     ThreadRef,
     TurnReplyCorrelation,
+    TurnReplyCorrelationPolicy,
 )
+from imagent.controllers import ControllerActions
 from imagent.delivery_coordination import DeliveryCoordinator, DeliveryCoordinatorConfig
 from imagent.gateway import ImAgentGateway
 from imagent.projection_runtime import TurnAcceptanceBufferOverflow
@@ -700,6 +705,242 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             [item.reply_to for item in second_deliveries].count(None),
             2,
         )
+
+    async def test_two_conversations_steer_one_turn_without_retargeting(self) -> None:
+        application = ContinuationApplication()
+        thread = await application.create_thread()
+        first = ConversationRef("fake-channel", "first")
+        second = ConversationRef("fake-channel", "second")
+        bindings = InMemoryBindingRepository()
+        for conversation in (first, second):
+            await bindings.put(
+                ConversationBinding(
+                    conversation_ref=conversation,
+                    application_ref=application.summary.ref,
+                    thread_ref=thread.ref,
+                )
+            )
+        projections = InMemoryProjectionRouteRepository()
+        channel = FakeChannelAdapter()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=bindings,
+            projections=projections,
+            projection_policy=ProjectionPolicy.ALL_OBSERVERS,
+        )
+        await gateway.start()
+        try:
+            await channel.on_message(_inbound(first, "message-first"))
+            await channel.on_message(_inbound(second, "message-second"))
+            correlation = await projections.get_turn_reply_correlation(
+                thread.ref,
+                "turn-active",
+            )
+            assert correlation is not None
+            self.assertEqual(correlation.conversation_ref, first)
+            self.assertEqual(correlation.reply_to_message_id, "message-first")
+            self.assertEqual(
+                application.native_dispatches,
+                [InputDisposition.STARTED, InputDisposition.STEERED],
+            )
+            self.assertEqual(
+                application.received_continuations,
+                [
+                    InputContinuationPreference.PREFER_ACTIVE_TURN,
+                    InputContinuationPreference.PREFER_ACTIVE_TURN,
+                ],
+            )
+        finally:
+            await gateway.stop()
+
+    async def test_steer_preserves_original_destination_after_sqlite_restart(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "steer-restart.sqlite3"
+            application = ContinuationApplication()
+            thread = await application.create_thread()
+            first = ConversationRef("fake-channel", "first")
+            second = ConversationRef("fake-channel", "second")
+            initial = SQLiteGatewayState(path)
+            for conversation in (first, second):
+                await initial.put(
+                    ConversationBinding(
+                        conversation_ref=conversation,
+                        application_ref=application.summary.ref,
+                        thread_ref=thread.ref,
+                    )
+                )
+            first_channel = FakeChannelAdapter()
+            first_gateway = ImAgentGateway(
+                channels=[first_channel],
+                applications=[application],
+                bindings=initial,
+                projections=initial,
+                idempotency=initial,
+                projection_policy=ProjectionPolicy.ALL_OBSERVERS,
+            )
+            await first_gateway.start()
+            try:
+                await first_channel.on_message(_inbound(first, "message-first"))
+            finally:
+                await first_gateway.stop()
+                await initial.close()
+
+            recovered = SQLiteGatewayState(path)
+            second_channel = FakeChannelAdapter()
+            second_gateway = ImAgentGateway(
+                channels=[second_channel],
+                applications=[application],
+                bindings=recovered,
+                projections=recovered,
+                idempotency=recovered,
+                projection_policy=ProjectionPolicy.ALL_OBSERVERS,
+            )
+            await second_gateway.start()
+            try:
+                await second_channel.on_message(_inbound(second, "message-second"))
+                correlation = await recovered.get_turn_reply_correlation(
+                    thread.ref,
+                    "turn-active",
+                )
+                assert correlation is not None
+                self.assertEqual(correlation.conversation_ref, first)
+                self.assertEqual(correlation.reply_to_message_id, "message-first")
+            finally:
+                await second_gateway.stop()
+                await recovered.close()
+
+    async def test_uncorrelated_steer_fails_before_native_dispatch(self) -> None:
+        application = ContinuationApplication(active_turn_id="turn-external")
+        thread = await application.create_thread()
+        conversation = ConversationRef("fake-channel", "conversation")
+        bindings = InMemoryBindingRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+                thread_ref=thread.ref,
+            )
+        )
+        channel = FakeChannelAdapter()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=bindings,
+            projections=InMemoryProjectionRouteRepository(),
+        )
+        await gateway.start()
+        try:
+            with self.assertRaisesRegex(RuntimeError, "without an existing reply correlation"):
+                await channel.on_message(_inbound(conversation, "message-steer"))
+            self.assertEqual(application.native_dispatches, [])
+        finally:
+            await gateway.stop()
+
+    async def test_steer_racing_started_correlation_fails_before_dispatch_then_retries(
+        self,
+    ) -> None:
+        application = ContinuationApplication(block_first_acceptance=True)
+        thread = await application.create_thread()
+        first = ConversationRef("fake-channel", "first")
+        second = ConversationRef("fake-channel", "second")
+        bindings = InMemoryBindingRepository()
+        for conversation in (first, second):
+            await bindings.put(
+                ConversationBinding(
+                    conversation_ref=conversation,
+                    application_ref=application.summary.ref,
+                    thread_ref=thread.ref,
+                )
+            )
+        projections = InMemoryProjectionRouteRepository()
+        channel = FakeChannelAdapter()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=bindings,
+            projections=projections,
+            projection_policy=ProjectionPolicy.ALL_OBSERVERS,
+        )
+        await gateway.start()
+        await gateway.execute_gateway(_observe("observe-first", first, thread.ref))
+        await gateway.execute_gateway(_observe("observe-second", second, thread.ref))
+        first_input = asyncio.create_task(channel.on_message(_inbound(first, "message-first")))
+        try:
+            await application.first_native_dispatch.wait()
+            self.assertIsNone(
+                await projections.get_turn_reply_correlation(
+                    thread.ref,
+                    "turn-active",
+                )
+            )
+            with self.assertRaisesRegex(RuntimeError, "without an existing reply correlation"):
+                await channel.on_message(_inbound(second, "message-second"))
+            self.assertEqual(application.native_dispatches, [InputDisposition.STARTED])
+
+            application.release_first_acceptance.set()
+            await first_input
+            await channel.on_message(_inbound(second, "message-second"))
+            correlation = await projections.get_turn_reply_correlation(
+                thread.ref,
+                "turn-active",
+            )
+            assert correlation is not None
+            self.assertEqual(correlation.conversation_ref, first)
+            self.assertEqual(
+                application.native_dispatches,
+                [InputDisposition.STARTED, InputDisposition.STEERED],
+            )
+        finally:
+            application.release_first_acceptance.set()
+            if not first_input.done():
+                await first_input
+            await gateway.stop()
+
+    async def test_replaced_steer_turn_is_post_acceptance_and_never_retargets(
+        self,
+    ) -> None:
+        application = ContinuationApplication(replacement_turn_id="turn-replacement")
+        thread = await application.create_thread()
+        first = ConversationRef("fake-channel", "first")
+        second = ConversationRef("fake-channel", "second")
+        bindings = InMemoryBindingRepository()
+        for conversation in (first, second):
+            await bindings.put(
+                ConversationBinding(
+                    conversation_ref=conversation,
+                    application_ref=application.summary.ref,
+                    thread_ref=thread.ref,
+                )
+            )
+        projections = InMemoryProjectionRouteRepository()
+        channel = FakeChannelAdapter()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=bindings,
+            projections=projections,
+            projection_policy=ProjectionPolicy.ALL_OBSERVERS,
+        )
+        await gateway.start()
+        try:
+            await channel.on_message(_inbound(first, "message-first"))
+            with self.assertRaisesRegex(RuntimeError, "different Turn"):
+                await channel.on_message(_inbound(second, "message-second"))
+            original = await projections.get_turn_reply_correlation(
+                thread.ref,
+                "turn-active",
+            )
+            assert original is not None
+            self.assertEqual(original.conversation_ref, first)
+            self.assertIsNone(
+                await projections.get_turn_reply_correlation(
+                    thread.ref,
+                    "turn-replacement",
+                )
+            )
+        finally:
+            await gateway.stop()
 
     async def test_foreground_restart_restores_only_bound_thread_and_reclaims_switch(
         self,
@@ -1633,6 +1874,194 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await gateway.stop()
 
+    async def test_startup_failure_releases_buffered_inbound_admission(self) -> None:
+        conversation = ConversationRef("eager-channel", "conversation")
+        message = _inbound(conversation, "startup-message")
+        channel = EagerInboundChannel(message)
+        idempotency = InMemoryIdempotencyRepository()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[],
+            bindings=InMemoryBindingRepository(),
+            idempotency=idempotency,
+        )
+
+        async def fail_reconciliation(restart_open_refs) -> None:
+            del restart_open_refs
+            raise RuntimeError("reconciliation failed")
+
+        gateway._projection_runtime.reconcile_pending_requests = fail_reconciliation
+        with self.assertRaisesRegex(RuntimeError, "reconciliation failed"):
+            await gateway.start()
+        if channel.delivery_task is not None:
+            await channel.delivery_task
+
+        self.assertEqual(
+            await idempotency.claim(
+                "inbound:eager-channel",
+                "conversation:startup-message",
+                owner_token="retry-owner",
+            ),
+            IdempotencyClaimStatus.ACQUIRED,
+        )
+
+    async def test_startup_rollback_rejects_new_inbound_during_claim_release(self) -> None:
+        class BlockingReleaseRepository(InMemoryIdempotencyRepository):
+            def __init__(self) -> None:
+                super().__init__()
+                self.release_started = asyncio.Event()
+                self.finish_release = asyncio.Event()
+
+            async def release(self, scope, key, *, owner_token=None) -> None:
+                if key == "conversation:startup-message":
+                    self.release_started.set()
+                    await self.finish_release.wait()
+                await super().release(scope, key, owner_token=owner_token)
+
+        class RecordingController:
+            def __init__(self) -> None:
+                self.messages: list[InboundMessage] = []
+
+            async def handle(
+                self,
+                message: InboundMessage,
+                actions: ControllerActions,
+            ) -> tuple[OutboundMessage, ...] | None:
+                del actions
+                self.messages.append(message)
+                return ()
+
+        conversation = ConversationRef("eager-channel", "conversation")
+        channel = EagerInboundChannel(_inbound(conversation, "startup-message"))
+        idempotency = BlockingReleaseRepository()
+        controller = RecordingController()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[],
+            bindings=InMemoryBindingRepository(),
+            idempotency=idempotency,
+            controller=controller,
+        )
+
+        async def fail_reconciliation(restart_open_refs) -> None:
+            del restart_open_refs
+            raise RuntimeError("reconciliation failed")
+
+        gateway._projection_runtime.reconcile_pending_requests = fail_reconciliation
+        start_task = asyncio.create_task(gateway.start())
+        await idempotency.release_started.wait()
+        await channel.emit_message(_inbound(conversation, "rollback-message"))
+        idempotency.finish_release.set()
+
+        with self.assertRaisesRegex(RuntimeError, "reconciliation failed"):
+            await start_task
+        self.assertEqual(controller.messages, [])
+
+    async def test_startup_drain_failure_keeps_racing_inbound_buffered(self) -> None:
+        class BlockingReleaseRepository(InMemoryIdempotencyRepository):
+            def __init__(self) -> None:
+                super().__init__()
+                self.release_started = asyncio.Event()
+                self.finish_release = asyncio.Event()
+
+            async def release(self, scope, key, *, owner_token=None) -> None:
+                if key == "conversation:startup-message":
+                    self.release_started.set()
+                    await self.finish_release.wait()
+                await super().release(scope, key, owner_token=owner_token)
+
+        class FailingController:
+            def __init__(self) -> None:
+                self.messages: list[InboundMessage] = []
+
+            async def handle(
+                self,
+                message: InboundMessage,
+                actions: ControllerActions,
+            ) -> tuple[OutboundMessage, ...] | None:
+                del actions
+                self.messages.append(message)
+                if message.message_id == "startup-message":
+                    raise RuntimeError("startup message failed")
+                return ()
+
+        conversation = ConversationRef("eager-channel", "conversation")
+        channel = EagerInboundChannel(_inbound(conversation, "startup-message"))
+        idempotency = BlockingReleaseRepository()
+        controller = FailingController()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[],
+            bindings=InMemoryBindingRepository(),
+            idempotency=idempotency,
+            controller=controller,
+        )
+
+        start_task = asyncio.create_task(gateway.start())
+        await idempotency.release_started.wait()
+        await channel.emit_message(_inbound(conversation, "racing-message"))
+        idempotency.finish_release.set()
+
+        with self.assertRaisesRegex(RuntimeError, "startup message failed"):
+            await start_task
+        self.assertEqual(
+            [message.message_id for message in controller.messages],
+            ["startup-message"],
+        )
+        self.assertEqual(
+            await idempotency.claim(
+                "inbound:eager-channel",
+                "conversation:racing-message",
+                owner_token="retry-owner",
+            ),
+            IdempotencyClaimStatus.ACQUIRED,
+        )
+
+    async def test_buffered_inbound_is_refenced_after_startup_wait(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            conversation = ConversationRef("eager-channel", "conversation")
+            channel = EagerInboundChannel(_inbound(conversation, "startup-message"))
+            idempotency = SQLiteGatewayState(
+                Path(directory) / "gateway.sqlite3",
+                stale_claim_after_seconds=0,
+            )
+            gateway = ImAgentGateway(
+                channels=[channel],
+                applications=[],
+                bindings=InMemoryBindingRepository(),
+                idempotency=idempotency,
+            )
+            reconciliation_started = asyncio.Event()
+            finish_reconciliation = asyncio.Event()
+
+            async def pause_reconciliation(restart_open_refs) -> None:
+                del restart_open_refs
+                reconciliation_started.set()
+                await finish_reconciliation.wait()
+
+            gateway._projection_runtime.reconcile_pending_requests = pause_reconciliation
+            start_task = asyncio.create_task(gateway.start())
+            await reconciliation_started.wait()
+            if channel.delivery_task is not None:
+                await channel.delivery_task
+            self.assertEqual(
+                await idempotency.claim(
+                    "inbound:eager-channel",
+                    "conversation:startup-message",
+                    owner_token="replacement-owner",
+                ),
+                IdempotencyClaimStatus.ACQUIRED,
+            )
+            finish_reconciliation.set()
+            try:
+                with self.assertRaisesRegex(RuntimeError, "not owned"):
+                    await start_task
+                self.assertEqual(channel.sent, [])
+            finally:
+                if not start_task.done():
+                    start_task.cancel()
+                await idempotency.close()
+
     async def test_one_route_delivery_failure_is_isolated_and_visible(self) -> None:
         application = CountingSubscriptionApplication()
         thread = await application.create_thread()
@@ -1842,8 +2271,18 @@ class AcceptanceRecoveryRaceApplication(CountingSubscriptionApplication):
         self,
         thread_ref: ThreadRef,
         message: AgentInput,
+        *,
+        continuation: InputContinuationPreference = (
+            InputContinuationPreference.PREFER_ACTIVE_TURN
+        ),
+        before_dispatch: ApplicationInputDispatchHandler | None = None,
     ) -> AcceptedTurn:
-        accepted = await super().send_input(thread_ref, message)
+        accepted = await super().send_input(
+            thread_ref,
+            message,
+            continuation=continuation,
+            before_dispatch=before_dispatch,
+        )
         self.turn_persisted.set()
         await self.release_acceptance.wait()
         return accepted
@@ -1859,11 +2298,87 @@ class OverflowingAcceptanceApplication(CountingSubscriptionApplication):
         self,
         thread_ref: ThreadRef,
         message: AgentInput,
+        *,
+        continuation: InputContinuationPreference = (
+            InputContinuationPreference.PREFER_ACTIVE_TURN
+        ),
+        before_dispatch: ApplicationInputDispatchHandler | None = None,
     ) -> AcceptedTurn:
-        accepted = await super().send_input(thread_ref, message)
+        accepted = await super().send_input(
+            thread_ref,
+            message,
+            continuation=continuation,
+            before_dispatch=before_dispatch,
+        )
         self.turn_persisted.set()
         await self.release_acceptance.wait()
         return accepted
+
+
+class ContinuationApplication(FakeAgentApplicationAdapter):
+    def __init__(
+        self,
+        *,
+        active_turn_id: str | None = None,
+        replacement_turn_id: str | None = None,
+        block_first_acceptance: bool = False,
+    ) -> None:
+        super().__init__(project_mode=ProjectMode.FLAT)
+        self.active_turn_id = active_turn_id
+        self.replacement_turn_id = replacement_turn_id
+        self.block_first_acceptance = block_first_acceptance
+        self.native_dispatches: list[InputDisposition] = []
+        self.received_continuations: list[InputContinuationPreference] = []
+        self.first_native_dispatch = asyncio.Event()
+        self.release_first_acceptance = asyncio.Event()
+
+    async def send_input(
+        self,
+        thread_ref: ThreadRef,
+        message: AgentInput,
+        *,
+        continuation: InputContinuationPreference = InputContinuationPreference.START_NEW_TURN,
+        before_dispatch: ApplicationInputDispatchHandler | None = None,
+    ) -> AcceptedTurn:
+        self.received_continuations.append(continuation)
+        if (
+            continuation is InputContinuationPreference.PREFER_ACTIVE_TURN
+            and self.active_turn_id is not None
+        ):
+            disposition = InputDisposition.STEERED
+            policy = TurnReplyCorrelationPolicy.PRESERVE_EXISTING
+            expected_turn_id = self.active_turn_id
+        else:
+            disposition = InputDisposition.STARTED
+            policy = TurnReplyCorrelationPolicy.CREATE_NEW
+            expected_turn_id = None
+        if before_dispatch is not None:
+            await before_dispatch(
+                ApplicationInputDispatch(
+                    thread_ref=thread_ref,
+                    client_message_id=message.client_message_id,
+                    disposition=disposition,
+                    correlation_policy=policy,
+                    expected_turn_id=expected_turn_id,
+                )
+            )
+        self.native_dispatches.append(disposition)
+        if disposition is InputDisposition.STARTED:
+            accepted_turn_id = "turn-active"
+            self.active_turn_id = accepted_turn_id
+            self.first_native_dispatch.set()
+            if self.block_first_acceptance:
+                await self.release_first_acceptance.wait()
+        else:
+            accepted_turn_id = self.replacement_turn_id or expected_turn_id
+            assert accepted_turn_id is not None
+        return AcceptedTurn(
+            thread_ref=thread_ref,
+            turn_id=accepted_turn_id,
+            client_message_id=message.client_message_id,
+            disposition=disposition,
+            correlation_policy=policy,
+        )
 
 
 class PassiveAcceptanceApplication(FakeAgentApplicationAdapter):
@@ -1876,8 +2391,23 @@ class PassiveAcceptanceApplication(FakeAgentApplicationAdapter):
         self,
         thread_ref: ThreadRef,
         message: AgentInput,
+        *,
+        continuation: InputContinuationPreference = (
+            InputContinuationPreference.PREFER_ACTIVE_TURN
+        ),
+        before_dispatch: ApplicationInputDispatchHandler | None = None,
     ) -> AcceptedTurn:
+        del continuation
         self.send_input_calls += 1
+        if before_dispatch is not None:
+            await before_dispatch(
+                ApplicationInputDispatch(
+                    thread_ref=thread_ref,
+                    client_message_id=message.client_message_id,
+                    disposition=InputDisposition.STARTED,
+                    correlation_policy=TurnReplyCorrelationPolicy.CREATE_NEW,
+                )
+            )
         self.accepted_input_calls += 1
         return AcceptedTurn(
             thread_ref=thread_ref,
@@ -1891,11 +2421,21 @@ class FailOnceBeforeAcceptanceApplication(PassiveAcceptanceApplication):
         self,
         thread_ref: ThreadRef,
         message: AgentInput,
+        *,
+        continuation: InputContinuationPreference = (
+            InputContinuationPreference.PREFER_ACTIVE_TURN
+        ),
+        before_dispatch: ApplicationInputDispatchHandler | None = None,
     ) -> AcceptedTurn:
         if self.send_input_calls == 0:
             self.send_input_calls += 1
             raise RuntimeError("simulated pre-acceptance failure")
-        return await super().send_input(thread_ref, message)
+        return await super().send_input(
+            thread_ref,
+            message,
+            continuation=continuation,
+            before_dispatch=before_dispatch,
+        )
 
 
 class UnknownOutcomeApplication(PassiveAcceptanceApplication):
@@ -1903,9 +2443,23 @@ class UnknownOutcomeApplication(PassiveAcceptanceApplication):
         self,
         thread_ref: ThreadRef,
         message: AgentInput,
+        *,
+        continuation: InputContinuationPreference = (
+            InputContinuationPreference.PREFER_ACTIVE_TURN
+        ),
+        before_dispatch: ApplicationInputDispatchHandler | None = None,
     ) -> AcceptedTurn:
-        del thread_ref, message
+        del continuation
         self.send_input_calls += 1
+        if before_dispatch is not None:
+            await before_dispatch(
+                ApplicationInputDispatch(
+                    thread_ref=thread_ref,
+                    client_message_id=message.client_message_id,
+                    disposition=InputDisposition.STARTED,
+                    correlation_policy=TurnReplyCorrelationPolicy.CREATE_NEW,
+                )
+            )
         cancellation = asyncio.CancelledError()
         raise ApplicationInputOutcomeUnknown(
             "native input was dispatched but its outcome is unknown",
@@ -2014,9 +2568,9 @@ class EagerInboundChannel(FakeChannelAdapter):
         self._inbound = inbound
         self.delivery_task: asyncio.Task[None] | None = None
 
-    async def start(self, on_message, on_operation) -> None:
-        await super().start(on_message, on_operation)
-        self.delivery_task = asyncio.create_task(on_message(self._inbound))
+    async def start(self, on_message, on_operation, on_admission=None) -> None:
+        await super().start(on_message, on_operation, on_admission)
+        self.delivery_task = asyncio.create_task(self.emit_message(self._inbound))
         await asyncio.sleep(0)
 
 

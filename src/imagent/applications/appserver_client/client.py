@@ -9,6 +9,7 @@ from typing import Any, Protocol, cast
 
 from ...contracts import ApplicationInputOutcomeUnknown
 from .diagnostics import summarize_text, summarize_transport_message
+from .handoff import APP_SERVER_DISPATCH_POSITION_KEY, AppServerDispatchPosition
 from .retry import RetryBackoff
 from .runtime_diagnostics import emit_event, mark_appserver_health
 from .target import EXTERNAL_CONNECTION_MODE, SPAWNED_STDIO_CONNECTION_MODE
@@ -176,7 +177,7 @@ class AppServerClient:
         self._dispatch_queue: asyncio.Queue[JsonDict] | None = None
         self._server_request_dispatcher_task: asyncio.Task[None] | None = None
         self._server_request_queue: asyncio.Queue[JsonDict] | None = None
-        self._last_received_dispatch_sequence = 0
+        self._last_admitted_dispatch_sequence = 0
         self._stderr_task: asyncio.Task[None] | None = None
         self._resetting = False
         self._reset_owner_task: asyncio.Task | None = None
@@ -236,8 +237,21 @@ class AppServerClient:
         return self._supervisor.target.preserves_server_state
 
     @property
+    def last_admitted_dispatch_position(self) -> AppServerDispatchPosition:
+        """Return the non-response callback fence admitted before the latest response."""
+
+        if self.connection_epoch < 1:
+            raise AppServerError("app-server has no live dispatch epoch")
+        return AppServerDispatchPosition(
+            connection_epoch=self.connection_epoch,
+            sequence=self._last_admitted_dispatch_sequence,
+        )
+
+    @property
     def last_received_dispatch_sequence(self) -> int:
-        return self._last_received_dispatch_sequence
+        """Compatibility alias; use ``last_admitted_dispatch_position``."""
+
+        return self._last_admitted_dispatch_sequence
 
     def supports_local_image_paths(self) -> bool:
         """Whether bridge-local paths are readable by the configured App Server."""
@@ -653,6 +667,7 @@ class AppServerClient:
                 "input": self._resolve_turn_input(text=text, input_items=input_items),
             },
             expected_local_image_epoch=expected_local_image_epoch,
+            outcome_unknown_on_dispatch=True,
         )
 
     @staticmethod
@@ -850,6 +865,7 @@ class AppServerClient:
                 raise AppServerError("app-server client is closed")
         self.connection_epoch += 1
         epoch = self.connection_epoch
+        self._last_admitted_dispatch_sequence = 0
         self._active_server_requests.clear()
         self._answered_server_requests.clear()
         queue: asyncio.Queue[JsonDict] = asyncio.Queue(maxsize=self._notification_queue_size)
@@ -1126,10 +1142,14 @@ class AppServerClient:
                 self._trace_protocol_message(stage="received", payload=message)
                 if self._dispatch_response(message, epoch):
                     continue
-                self._last_received_dispatch_sequence += 1
+                dispatch_sequence = self._last_admitted_dispatch_sequence + 1
+                dispatch_position = AppServerDispatchPosition(
+                    connection_epoch=epoch,
+                    sequence=dispatch_sequence,
+                )
                 message = {
                     **message,
-                    "_imagent_dispatch_sequence": self._last_received_dispatch_sequence,
+                    APP_SERVER_DISPATCH_POSITION_KEY: dispatch_position,
                 }
                 if self._uses_server_request_lane(message):
                     self._enqueue_dispatch_message(
@@ -1139,6 +1159,7 @@ class AppServerClient:
                     )
                 else:
                     self._enqueue_dispatch_message(queue, message, queue_kind="notification")
+                self._last_admitted_dispatch_sequence = dispatch_sequence
         except asyncio.CancelledError:
             cancelled = True
             raise
@@ -1313,7 +1334,7 @@ class AppServerClient:
             enriched = {
                 "id": message["id"],
                 "method": message["method"],
-                "_imagent_dispatch_sequence": message.get("_imagent_dispatch_sequence"),
+                APP_SERVER_DISPATCH_POSITION_KEY: message.get(APP_SERVER_DISPATCH_POSITION_KEY),
                 "params": {
                     **request_params,
                     "_request_id": request_id,
@@ -1335,7 +1356,7 @@ class AppServerClient:
             notification = {
                 "method": message["method"],
                 "params": notification_params,
-                "_imagent_dispatch_sequence": message.get("_imagent_dispatch_sequence"),
+                APP_SERVER_DISPATCH_POSITION_KEY: message.get(APP_SERVER_DISPATCH_POSITION_KEY),
             }
             for handler in list(self._notification_handlers):
                 result = handler(notification)

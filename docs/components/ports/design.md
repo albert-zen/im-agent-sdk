@@ -12,8 +12,12 @@ Ports owns:
 
 - the Python package's top-level typed public surface;
 - `ChannelAdapter` lifecycle, inbound callback, and send signatures;
+- the opaque `InboundAdmission` lease and handler used before Channel media
+  preparation;
 - `AgentApplicationAdapter` lifecycle, typed operation, input, and Thread
   subscription signatures;
+- the common input continuation preference, typed pre-dispatch intent, and
+  truthful started/steered acceptance result;
 - `ApplicationInputOutcomeUnknown`, which marks a dispatched native input
   whose acceptance result cannot be proven and therefore cannot be retried
   automatically;
@@ -61,11 +65,31 @@ has begun, cancellation, timeout, disconnect, or response loss is reported as
 `ApplicationInputOutcomeUnknown` unless the native protocol supplies a
 stronger idempotency guarantee.
 
+`AgentApplicationAdapter.send_input` defaults to `prefer_active_turn`. Every
+implementation accepts that preference even if its evidenced native mapping
+can only return `started`. Immediately before mutation it calls the supplied
+dispatch hook with `started/create_new` or
+`steered/preserve_existing(expected_turn_id)`. This is a common Port because
+Codex continuation and the T3/Zen start paths all need the same Gateway
+correlation boundary; the Port does not expose a native `steer_turn` method.
+
 `IdempotencyRepository.mark_side_effect_started` durably separates a
 reclaimable lease from work that may already have changed a remote system.
 Implementations must never age the protected state back into permission to
 retry. A caller that supplies an owner token on acquisition must reuse it as a
 fencing token for every later state mutation.
+
+`InboundAdmissionHandler` carries only stable Conversation/message identity.
+It returns a one-shot opaque lease or no lease for duplicate/in-flight work.
+Channel adapters release only preparation failures before handoff; after
+`InboundAdmission.deliver`, Gateway owns the terminal transition.
+`IdempotencyRepository.refresh` fences the handoff by updating only the owned
+`in_flight` timestamp.
+
+Gateway preserves the legacy two-callback `ChannelAdapter.start` shape during
+migration by inspecting its signature before invocation. Such adapters retain
+late Gateway idempotency but cannot claim the pre-media guarantee. A Channel
+that accepts the new optional callback must use a returned lease for media work.
 
 ## Change obligations
 

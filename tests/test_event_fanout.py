@@ -361,13 +361,18 @@ class GatewayStartupAdmissionTests(unittest.IsolatedAsyncioTestCase):
         )
         drained: list[str] = []
 
-        async def record_message(message: InboundMessage) -> None:
+        async def record_message(
+            message: InboundMessage,
+            *,
+            idempotency_owner_token: str,
+        ) -> None:
+            del idempotency_owner_token
             drained.append(f"message:{message.message_id}")
 
         async def record_operation(operation) -> None:
             drained.append(f"operation:{operation.operation_id}")
 
-        gateway._handle_message = record_message
+        gateway._process_message = record_message
         gateway._handle_operation = record_operation
         await gateway.start()
         try:
@@ -472,8 +477,8 @@ class _StartupEntriesChannel(FakeChannelAdapter):
         super().__init__("startup-channel")
         self._entries = entries
 
-    async def start(self, on_message, on_operation) -> None:
-        await super().start(on_message, on_operation)
+    async def start(self, on_message, on_operation, on_admission=None) -> None:
+        await super().start(on_message, on_operation, on_admission)
         for entry in self._entries:
             if isinstance(entry, InboundMessage):
                 await on_message(entry)
@@ -497,8 +502,8 @@ class _FailingStartupChannel(FakeChannelAdapter):
     def __init__(self) -> None:
         super().__init__("failing-startup-channel")
 
-    async def start(self, on_message, on_operation) -> None:
-        await super().start(on_message, on_operation)
+    async def start(self, on_message, on_operation, on_admission=None) -> None:
+        await super().start(on_message, on_operation, on_admission)
         raise RuntimeError("simulated channel startup failure")
 
 

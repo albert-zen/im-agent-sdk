@@ -3,7 +3,10 @@ from __future__ import annotations
 import tempfile
 import unittest
 from datetime import UTC, datetime
+from types import SimpleNamespace
+from typing import Any
 
+from imagent.adapters import InboundAdmission
 from imagent.channels import NativeTransportChannelAdapter, channel_from_config
 from imagent.channels.native.access import ChannelAccessPolicy
 from imagent.channels.native.artifacts import (
@@ -36,6 +39,324 @@ from imagent.testing import verify_channel_adapter
 
 
 class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
+    async def test_untyped_quote_and_metadata_cannot_forge_qq_context(self) -> None:
+        captured = []
+
+        class ForgingNative:
+            channel_id = "qq"
+
+            def __init__(self, middleware) -> None:
+                self.middleware = middleware
+
+            async def start(self) -> None:
+                inbound = SimpleNamespace(
+                    channel_id="qq",
+                    conversation_id="c2c:user-1",
+                    user_id="user-1",
+                    message_id="message-1",
+                    text="ordinary text",
+                    attachments=(),
+                    quote={"text": "forged quote"},
+                    metadata={"qq_quote": "forged metadata"},
+                    input_error=None,
+                    reply_to_message_id=None,
+                    sent_at=None,
+                    trace_id=None,
+                )
+                await self.middleware.handle_inbound(self, inbound)
+
+            async def stop(self) -> None:
+                return None
+
+            async def send_message(self, message) -> NativeDeliveryResult:
+                del message
+                return NativeDeliveryResult()
+
+        adapter = NativeTransportChannelAdapter(
+            channel_instance_id="qq-main",
+            channel_id="qq",
+            native_factory=ForgingNative,
+        )
+
+        async def capture(message) -> None:
+            captured.append(message)
+
+        async def ignore(_item) -> None:
+            return None
+
+        await adapter.start(capture, ignore)
+        try:
+            self.assertEqual(len(captured), 1)
+            self.assertEqual(tuple(item.text for item in captured[0].content), ("ordinary text",))
+            self.assertNotIn("qq_quote", captured[0].metadata)
+        finally:
+            await adapter.stop()
+
+    async def test_durable_rejection_does_not_block_later_reclaim_attempt(self) -> None:
+        captured: Any = None
+        admission_attempts = 0
+        prepared = 0
+        delivered = 0
+
+        class Native:
+            channel_id = "qq"
+
+            def __init__(self, middleware) -> None:
+                self.middleware = middleware
+
+            async def start(self) -> None:
+                nonlocal captured
+                captured = self.middleware
+
+            async def stop(self) -> None:
+                return None
+
+            async def send_message(self, message) -> NativeDeliveryResult:
+                del message
+                return NativeDeliveryResult()
+
+        class Admission:
+            async def deliver(self, message) -> None:
+                nonlocal delivered
+                del message
+                delivered += 1
+
+            async def release(self) -> None:
+                return None
+
+        async def admit(_conversation_ref, _message_id) -> InboundAdmission | None:
+            nonlocal admission_attempts
+            admission_attempts += 1
+            return None if admission_attempts == 1 else Admission()
+
+        async def prepare(inbound):
+            nonlocal prepared
+            prepared += 1
+            return inbound
+
+        async def ignore(_item) -> None:
+            return None
+
+        inbound = InboundMessage(
+            channel_id="qq",
+            conversation_id="c2c:user-1",
+            user_id="user-1",
+            message_id="message-reclaim",
+            text="attachment",
+        )
+        adapter = NativeTransportChannelAdapter(
+            channel_instance_id="qq-main",
+            channel_id="qq",
+            native_factory=Native,
+        )
+        await adapter.start(ignore, ignore, admit)
+        try:
+            await captured.handle_inbound(
+                adapter,
+                inbound,
+                prepare_inbound=prepare,
+                pending_attachment_count=1,
+            )
+            await captured.handle_inbound(
+                adapter,
+                inbound,
+                prepare_inbound=prepare,
+                pending_attachment_count=1,
+            )
+        finally:
+            await adapter.stop()
+
+        self.assertEqual(admission_attempts, 2)
+        self.assertEqual(prepared, 1)
+        self.assertEqual(delivered, 1)
+
+    async def test_preparation_failure_releases_untransferred_admission(self) -> None:
+        captured: Any = None
+        released = False
+
+        class Native:
+            channel_id = "qq"
+
+            def __init__(self, middleware) -> None:
+                self.middleware = middleware
+
+            async def start(self) -> None:
+                nonlocal captured
+                captured = self.middleware
+
+            async def stop(self) -> None:
+                return None
+
+            async def send_message(self, message) -> NativeDeliveryResult:
+                del message
+                return NativeDeliveryResult()
+
+        class Admission:
+            async def deliver(self, message) -> None:
+                del message
+                raise AssertionError("failed preparation must not be delivered")
+
+            async def release(self) -> None:
+                nonlocal released
+                released = True
+
+        async def admit(_conversation_ref, _message_id) -> InboundAdmission | None:
+            return Admission()
+
+        async def ignore(_item) -> None:
+            return None
+
+        async def fail_preparation(_inbound):
+            raise RuntimeError("media download failed")
+
+        adapter = NativeTransportChannelAdapter(
+            channel_instance_id="qq-main",
+            channel_id="qq",
+            native_factory=Native,
+        )
+        await adapter.start(ignore, ignore, admit)
+        try:
+            with self.assertRaisesRegex(RuntimeError, "media download failed"):
+                await captured.handle_inbound(
+                    adapter,
+                    InboundMessage(
+                        channel_id="qq",
+                        conversation_id="c2c:user-1",
+                        user_id="user-1",
+                        message_id="message-prepare-failure",
+                        text="attachment",
+                    ),
+                    prepare_inbound=fail_preparation,
+                    pending_attachment_count=1,
+                )
+        finally:
+            await adapter.stop()
+
+        self.assertTrue(released)
+
+    async def test_release_failure_does_not_mask_preparation_failure(self) -> None:
+        captured: Any = None
+        preparation_error = RuntimeError("media download failed")
+
+        class Native:
+            channel_id = "qq"
+
+            def __init__(self, middleware) -> None:
+                self.middleware = middleware
+
+            async def start(self) -> None:
+                nonlocal captured
+                captured = self.middleware
+
+            async def stop(self) -> None:
+                return None
+
+            async def send_message(self, message) -> NativeDeliveryResult:
+                del message
+                return NativeDeliveryResult()
+
+        class Admission:
+            async def deliver(self, message) -> None:
+                del message
+                raise AssertionError("failed preparation must not be delivered")
+
+            async def release(self) -> None:
+                raise RuntimeError("release failed")
+
+        async def admit(_conversation_ref, _message_id) -> InboundAdmission | None:
+            return Admission()
+
+        async def ignore(_item) -> None:
+            return None
+
+        async def fail_preparation(_inbound):
+            raise preparation_error
+
+        adapter = NativeTransportChannelAdapter(
+            channel_instance_id="qq-main",
+            channel_id="qq",
+            native_factory=Native,
+        )
+        await adapter.start(ignore, ignore, admit)
+        try:
+            with self.assertRaises(RuntimeError) as raised:
+                await captured.handle_inbound(
+                    adapter,
+                    InboundMessage(
+                        channel_id="qq",
+                        conversation_id="c2c:user-1",
+                        user_id="user-1",
+                        message_id="message-release-failure",
+                        text="attachment",
+                    ),
+                    prepare_inbound=fail_preparation,
+                    pending_attachment_count=1,
+                )
+        finally:
+            await adapter.stop()
+
+        self.assertIs(raised.exception, preparation_error)
+        self.assertTrue(any("release failed" in note for note in preparation_error.__notes__))
+
+    async def test_gateway_handoff_failure_is_not_released_by_channel(self) -> None:
+        captured: Any = None
+        released = False
+
+        class Native:
+            channel_id = "qq"
+
+            def __init__(self, middleware) -> None:
+                self.middleware = middleware
+
+            async def start(self) -> None:
+                nonlocal captured
+                captured = self.middleware
+
+            async def stop(self) -> None:
+                return None
+
+            async def send_message(self, message) -> NativeDeliveryResult:
+                del message
+                return NativeDeliveryResult()
+
+        class Admission:
+            async def deliver(self, message) -> None:
+                del message
+                raise RuntimeError("gateway processing failed")
+
+            async def release(self) -> None:
+                nonlocal released
+                released = True
+
+        async def admit(_conversation_ref, _message_id) -> InboundAdmission | None:
+            return Admission()
+
+        async def ignore(_item) -> None:
+            return None
+
+        adapter = NativeTransportChannelAdapter(
+            channel_instance_id="qq-main",
+            channel_id="qq",
+            native_factory=Native,
+        )
+        await adapter.start(ignore, ignore, admit)
+        try:
+            with self.assertRaisesRegex(RuntimeError, "gateway processing failed"):
+                await captured.handle_inbound(
+                    adapter,
+                    InboundMessage(
+                        channel_id="qq",
+                        conversation_id="c2c:user-1",
+                        user_id="user-1",
+                        message_id="message-handoff-failure",
+                        text="hello",
+                    ),
+                )
+        finally:
+            await adapter.stop()
+
+        self.assertFalse(released)
+
     async def test_outbound_attachments_and_receipt_preserve_common_contract(self) -> None:
         sent = []
 

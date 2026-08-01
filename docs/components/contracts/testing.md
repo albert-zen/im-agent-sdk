@@ -17,6 +17,8 @@ Coverage must preserve:
 
 - managed, flat, and fixed project modes;
 - reference scoping and cross-Application rejection;
+- valid started/create-new and steered/preserve-existing input dispatch and
+  accepted-Turn schema combinations, with mixed policies rejected;
 - stable client message IDs;
 - typed operation/result discriminant matching;
 - explicit error codes and unsupported behavior;

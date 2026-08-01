@@ -23,6 +23,10 @@ Protect these historical and known failure modes:
 - route refresh clearing a projection checkpoint, and missing/expired
   checkpoints silently causing an unbounded scan;
 - concurrent Turns inheriting the latest inbound message's reply correlation;
+- two Conversations steering the same native Turn replacing its original
+  reply destination, including after SQLite restart;
+- a steer dispatching before its expected correlation exists, or a repository
+  upsert silently replacing immutable correlation state;
 - post-acceptance correlation or buffered-event failure releasing an inbound
   claim and creating a duplicate native Turn on Channel redelivery;
 - native dispatch cancellation/response loss being mistaken for pre-dispatch

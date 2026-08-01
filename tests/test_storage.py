@@ -7,7 +7,11 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from imagent.adapters import IdempotencyClaimStatus, RequestCorrelationConflict
+from imagent.adapters import (
+    IdempotencyClaimStatus,
+    RequestCorrelationConflict,
+    TurnReplyCorrelationConflict,
+)
 from imagent.contracts import (
     AgentInput,
     ApplicationRef,
@@ -25,7 +29,11 @@ from imagent.contracts import (
     TurnReplyCorrelation,
 )
 from imagent.gateway import ImAgentGateway
-from imagent.projections import derive_projection_route_id, derive_turn_reply_correlation_id
+from imagent.projections import (
+    InMemoryProjectionRouteRepository,
+    derive_projection_route_id,
+    derive_turn_reply_correlation_id,
+)
 from imagent.request_correlations import (
     InMemoryRequestCorrelationRepository,
     derive_request_correlation_id,
@@ -65,6 +73,69 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
             created_at=now,
             updated_at=now,
         )
+
+    async def test_turn_reply_correlation_is_create_only_and_survives_restart(
+        self,
+    ) -> None:
+        now = datetime.now(UTC)
+        thread = ThreadRef("codex-main", "thread-1")
+        original = TurnReplyCorrelation(
+            correlation_id=derive_turn_reply_correlation_id(thread, "turn-active"),
+            thread_ref=thread,
+            turn_id="turn-active",
+            client_message_id="client-a",
+            conversation_ref=ConversationRef("qq-main", "conversation-a"),
+            reply_to_message_id="message-a",
+            created_at=now,
+        )
+        conflicting = TurnReplyCorrelation(
+            correlation_id=original.correlation_id,
+            thread_ref=thread,
+            turn_id=original.turn_id,
+            client_message_id="client-b",
+            conversation_ref=ConversationRef("qq-main", "conversation-b"),
+            reply_to_message_id="message-b",
+            created_at=now + timedelta(seconds=1),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "turn-correlations.sqlite3"
+            sqlite_state = SQLiteGatewayState(path)
+            repositories = (InMemoryProjectionRouteRepository(), sqlite_state)
+            try:
+                for repository in repositories:
+                    stored = await repository.put_turn_reply_correlation(original)
+                    repeated = await repository.put_turn_reply_correlation(
+                        TurnReplyCorrelation(
+                            correlation_id=original.correlation_id,
+                            thread_ref=thread,
+                            turn_id=original.turn_id,
+                            client_message_id=original.client_message_id,
+                            conversation_ref=original.conversation_ref,
+                            reply_to_message_id=original.reply_to_message_id,
+                            created_at=now + timedelta(seconds=2),
+                        )
+                    )
+                    self.assertEqual(stored, original)
+                    self.assertEqual(repeated, original)
+                    with self.assertRaises(TurnReplyCorrelationConflict):
+                        await repository.put_turn_reply_correlation(conflicting)
+                    self.assertEqual(
+                        await repository.get_turn_reply_correlation(thread, "turn-active"),
+                        original,
+                    )
+            finally:
+                await sqlite_state.close()
+
+            recovered = SQLiteGatewayState(path)
+            try:
+                self.assertEqual(
+                    await recovered.get_turn_reply_correlation(thread, "turn-active"),
+                    original,
+                )
+                with self.assertRaises(TurnReplyCorrelationConflict):
+                    await recovered.put_turn_reply_correlation(conflicting)
+            finally:
+                await recovered.close()
 
     async def test_request_correlations_are_scoped_by_application_and_epoch(
         self,
@@ -350,6 +421,9 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                     IdempotencyClaimStatus.ACQUIRED,
                 )
                 with self.assertRaisesRegex(RuntimeError, "not owned"):
+                    await state.refresh(scope, key, owner_token="owner-a")
+                await state.refresh(scope, key, owner_token="owner-b")
+                with self.assertRaisesRegex(RuntimeError, "not owned"):
                     await state.mark_side_effect_started(
                         scope,
                         key,
@@ -361,6 +435,8 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                     key,
                     owner_token="owner-b",
                 )
+                with self.assertRaisesRegex(RuntimeError, "not owned"):
+                    await state.refresh(scope, key, owner_token="owner-b")
                 await state.release(scope, key, owner_token="owner-a")
                 self.assertEqual(
                     await state.claim(scope, key, owner_token="owner-c"),
