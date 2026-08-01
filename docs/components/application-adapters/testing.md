@@ -8,16 +8,21 @@ Every adapter should prove:
 - Thread lookup independent from native activation;
 - actual archive/permanent deletion semantics;
 - stable client-message ID round-trip;
-- concurrent input returns the distinct native `AcceptedTurn` identity for
-  each call;
+- every adapter accepts the default continuation preference, invokes the typed
+  pre-dispatch hook exactly once, and returns the truthful `started` or
+  `steered` result/correlation policy;
+- concurrent starts return distinct native `AcceptedTurn` identities;
 - cancellation, timeout, and response loss after native input dispatch report
   unknown rather than a retryable pre-dispatch failure;
 - a successful App Server input response without a native Turn identity also
   reports unknown rather than authorizing redelivery;
 - App Server steer has the same dispatch-unknown boundary as start;
-- Codex continuation is disabled by default, and when opted in, native Turn
+- Codex continuation is enabled by default, explicit start-new bypasses active
+  discovery, deployment disablement remains available, and native Turn
   completion/replacement between read and steer never causes an unconditional
   start or a second state read that can mask the primary native error;
+- Zen and T3 return `started/create_new` for the common default preference
+  until their own native protocols prove an equivalent continuation mutation;
 - local-image start and steer pass the verified connection epoch, including a
   positive shared-base Zen case, while generic files remain explicit
   unsupported without a downstream exposure/encoding policy;

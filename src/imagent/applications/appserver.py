@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol, cast
@@ -17,6 +17,7 @@ from ..contracts import (
     AgentInput,
     AgentMessage,
     ApplicationCapabilities,
+    ApplicationInputDispatch,
     ApplicationInputOutcomeUnknown,
     ApplicationOperation,
     ApplicationOperationFailed,
@@ -33,6 +34,8 @@ from ..contracts import (
     GetThreadHistory,
     GetThreadStatus,
     GetTurnCatchup,
+    InputContinuationPreference,
+    InputDisposition,
     InteractiveRequest,
     InterruptTurn,
     ListProjects,
@@ -62,6 +65,7 @@ from ..contracts import (
     TurnCatchupRead,
     TurnHistoryEntry,
     TurnInterrupted,
+    TurnReplyCorrelationPolicy,
     TurnStatus,
     operation_error,
     validate_application_operation,
@@ -477,6 +481,11 @@ class _AppServerApplicationAdapter:
         self,
         thread_ref: ThreadRef,
         message: AgentInput,
+        *,
+        continuation: InputContinuationPreference = (
+            InputContinuationPreference.PREFER_ACTIVE_TURN
+        ),
+        before_dispatch: Callable[[ApplicationInputDispatch], Awaitable[None]] | None = None,
     ) -> AcceptedTurn:
         self._require_own_thread(thread_ref)
         text = "\n".join(
@@ -500,12 +509,36 @@ class _AppServerApplicationAdapter:
         elif not text:
             raise ValueError("Codex App Server input requires text or image")
 
+        if not isinstance(continuation, InputContinuationPreference):
+            raise ValueError("unknown input continuation preference")
         active_turn_id = None
-        if self._steer_active_turn:
+        if (
+            self._steer_active_turn
+            and continuation is InputContinuationPreference.PREFER_ACTIVE_TURN
+        ):
             active_turn_id = await self._read_active_turn_id(thread_ref.native_thread_id)
         expected_local_image_epoch = (
             await self._verified_local_image_epoch() if input_items is not None else None
         )
+        if active_turn_id is not None:
+            steer_turn = getattr(self._client, "steer_turn", None)
+            if not callable(steer_turn):
+                raise RuntimeError("configured App Server client does not support turn/steer")
+            disposition = InputDisposition.STEERED
+            correlation_policy = TurnReplyCorrelationPolicy.PRESERVE_EXISTING
+        else:
+            disposition = InputDisposition.STARTED
+            correlation_policy = TurnReplyCorrelationPolicy.CREATE_NEW
+        if before_dispatch is not None:
+            await before_dispatch(
+                ApplicationInputDispatch(
+                    thread_ref=thread_ref,
+                    client_message_id=message.client_message_id,
+                    disposition=disposition,
+                    correlation_policy=correlation_policy,
+                    expected_turn_id=active_turn_id,
+                )
+            )
         result = await self._dispatch_input(
             thread_id=thread_ref.native_thread_id,
             active_turn_id=active_turn_id,
@@ -526,6 +559,8 @@ class _AppServerApplicationAdapter:
             thread_ref=thread_ref,
             turn_id=turn_id,
             client_message_id=message.client_message_id,
+            disposition=disposition,
+            correlation_policy=correlation_policy,
         )
 
     async def _read_active_turn_id(self, thread_id: str) -> str | None:
@@ -770,7 +805,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
         client: AppServerClient,
         cwd: str,
         shared_filesystem_root: str | Path | None = None,
-        steer_active_turn: bool = False,
+        steer_active_turn: bool = True,
     ) -> None:
         super().__init__(
             application_instance_id=application_instance_id,

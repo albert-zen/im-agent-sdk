@@ -24,15 +24,19 @@ dispatched request without a response reports
 than risking a second native mutation. A successful response without a native
 Turn identity is equally ambiguous and receives the same classification.
 
-New input starts a Turn by default. A consumer may opt this Codex adapter into
-active-Turn continuation. The adapter then reads the authoritative native Turn
-list immediately before dispatch and steers the observed active Turn. That
+The SDK default input preference is active-Turn continuation, and the Codex
+adapter enables its native implementation by default. A deployment may disable
+native steering or a caller may explicitly request a new Turn. For the default
+path the adapter reads the authoritative native Turn list immediately before
+dispatch and steers the observed active Turn. That
 read is only a candidate selection, not cached truth: the native steer response
 supplies the accepted Turn identity. A definitive native rejection is itself
 the authoritative reconciliation result and is re-raised unchanged without a
-second read or `turn/start` fallback. An ambiguous steer remains unknown.
-Zen does not inherit this Codex-only opt-in merely because it shares the
-transport implementation.
+second read or `turn/start` fallback. Before dispatch it declares
+`steered/preserve_existing`; Gateway rejects an uncorrelated Turn without
+calling the native mutation. An ambiguous steer remains unknown. Zen accepts
+the common preference but does not inherit this Codex wire implementation
+merely because it shares the transport.
 
 `message.completed` does not terminate a Codex Turn. The adapter emits the
 native terminal Turn event separately.

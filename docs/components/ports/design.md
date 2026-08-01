@@ -16,6 +16,8 @@ Ports owns:
   preparation;
 - `AgentApplicationAdapter` lifecycle, typed operation, input, and Thread
   subscription signatures;
+- the common input continuation preference, typed pre-dispatch intent, and
+  truthful started/steered acceptance result;
 - `ApplicationInputOutcomeUnknown`, which marks a dispatched native input
   whose acceptance result cannot be proven and therefore cannot be retried
   automatically;
@@ -62,6 +64,14 @@ definitive pre-dispatch rejection may be retried by the caller; once dispatch
 has begun, cancellation, timeout, disconnect, or response loss is reported as
 `ApplicationInputOutcomeUnknown` unless the native protocol supplies a
 stronger idempotency guarantee.
+
+`AgentApplicationAdapter.send_input` defaults to `prefer_active_turn`. Every
+implementation accepts that preference even if its evidenced native mapping
+can only return `started`. Immediately before mutation it calls the supplied
+dispatch hook with `started/create_new` or
+`steered/preserve_existing(expected_turn_id)`. This is a common Port because
+Codex continuation and the T3/Zen start paths all need the same Gateway
+correlation boundary; the Port does not expose a native `steer_turn` method.
 
 `IdempotencyRepository.mark_side_effect_started` durably separates a
 reclaimable lease from work that may already have changed a remote system.

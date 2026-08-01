@@ -9,6 +9,7 @@ from .contracts import (
     AcceptedTurn,
     AgentEvent,
     AgentInput,
+    ApplicationInputDispatch,
     ApplicationOperation,
     ApplicationOperationResult,
     ApplicationSummary,
@@ -23,6 +24,7 @@ from .contracts import (
     DestinationDeliveryRecord,
     GatewayOperation,
     InboundMessage,
+    InputContinuationPreference,
     InteractiveRequest,
     OutboundMessage,
     RequestRef,
@@ -35,6 +37,7 @@ from .contracts import (
 
 MessageHandler = Callable[[InboundMessage], Awaitable[None]]
 OperationHandler = Callable[[GatewayOperation], Awaitable[None]]
+ApplicationInputDispatchHandler = Callable[[ApplicationInputDispatch], Awaitable[None]]
 
 
 class InboundAdmission(Protocol):
@@ -67,6 +70,10 @@ class ProjectionRouteConflict(RuntimeError):
 
 class RequestCorrelationConflict(RuntimeError):
     """A request route correlation changed outside the expected state."""
+
+
+class TurnReplyCorrelationConflict(RuntimeError):
+    """A Thread/Turn correlation was reused for a different IM destination."""
 
 
 class DeliverySubmissionConflict(RuntimeError):
@@ -109,6 +116,11 @@ class AgentApplicationAdapter(Protocol):
         self,
         thread_ref: ThreadRef,
         message: AgentInput,
+        *,
+        continuation: InputContinuationPreference = (
+            InputContinuationPreference.PREFER_ACTIVE_TURN
+        ),
+        before_dispatch: ApplicationInputDispatchHandler | None = None,
     ) -> AcceptedTurn: ...
 
     async def list_pending_requests(self) -> tuple[InteractiveRequest, ...]: ...

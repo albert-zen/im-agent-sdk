@@ -55,7 +55,8 @@
   current unbounded queue growth remains a known limitation;
 - concurrent Threads and Turns do not steal events or routes;
 - restart rebuilds projection from routes plus bounded authoritative history;
-- `AcceptedTurn` reply correlation is per Turn and destination-safe;
+- started/steered reply correlation is per Turn and destination-safe across
+  two Conversations, persistence, and restart;
 - foreground restart/switch reclaims and restores the correct worker;
 - Application subscription failure self-recovers while one destination
   failure remains isolated and visible;

@@ -11,9 +11,12 @@ from imagent.contracts import (
     AgentInput,
     ApplicationInputOutcomeUnknown,
     AttachmentContent,
+    InputContinuationPreference,
+    InputDisposition,
     LocalPath,
     TextContent,
     ThreadRef,
+    TurnReplyCorrelationPolicy,
 )
 
 
@@ -315,7 +318,6 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
             application_instance_id="codex-main",
             client=client,
             cwd="/repo",
-            steer_active_turn=True,
         )
 
         accepted = await adapter.send_input(
@@ -340,13 +342,19 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.started, [])
         self.assertEqual(accepted.turn_id, "turn-active")
         self.assertEqual(accepted.client_message_id, "message-followup")
+        self.assertIs(accepted.disposition, InputDisposition.STEERED)
+        self.assertIs(
+            accepted.correlation_policy,
+            TurnReplyCorrelationPolicy.PRESERVE_EXISTING,
+        )
 
-    async def test_active_turn_steering_is_disabled_by_default(self) -> None:
+    async def test_active_turn_steering_can_be_disabled_by_deployment(self) -> None:
         client = _InputClient(active_turn_id="turn-active")
         adapter = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
             cwd="/repo",
+            steer_active_turn=False,
         )
 
         await adapter.send_input(
@@ -360,6 +368,32 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.read_calls, [])
         self.assertEqual(client.steered, [])
         self.assertEqual(len(client.started), 1)
+
+    async def test_explicit_start_new_turn_bypasses_active_turn_discovery(self) -> None:
+        client = _InputClient(active_turn_id="turn-active")
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            cwd="/repo",
+        )
+
+        accepted = await adapter.send_input(
+            ThreadRef("codex-main", "thread-1"),
+            AgentInput(
+                client_message_id="message-explicit-start",
+                content=(TextContent("new work"),),
+            ),
+            continuation=InputContinuationPreference.START_NEW_TURN,
+        )
+
+        self.assertEqual(client.read_calls, [])
+        self.assertEqual(client.steered, [])
+        self.assertEqual(len(client.started), 1)
+        self.assertIs(accepted.disposition, InputDisposition.STARTED)
+        self.assertIs(
+            accepted.correlation_policy,
+            TurnReplyCorrelationPolicy.CREATE_NEW,
+        )
 
     async def test_completed_active_turn_between_read_and_steer_does_not_fallback_start(
         self,

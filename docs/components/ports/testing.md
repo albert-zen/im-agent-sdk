@@ -23,7 +23,9 @@ legacy two-callback startup shape remains usable during migration.
 
 Application input coverage must distinguish safe pre-dispatch failure from a
 sent request with an unknown native outcome. The latter remains sticky across
-redelivery and restart.
+redelivery and restart. Every implementation must accept the default
+continuation preference, invoke the hook once immediately before native
+mutation, and return a result matching the authorized disposition/policy.
 
 Delivery Port coverage must include atomic concurrent reservation, identity
 conflict, immutable snapshots, per-destination compare-and-set updates, and

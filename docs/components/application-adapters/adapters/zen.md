@@ -20,9 +20,10 @@ history, and retention.
 - local images use the shared client-proven connection epoch and fail closed
   when the configured filesystem is not verified for that connection.
 
-Codex active-Turn steering is not inferred for Zen from a shared transport.
-Zen remains start-only until its own native behavior proves an equivalent
-optional policy.
+Zen accepts the SDK's default continuation preference but truthfully returns
+`started/create_new`. Codex active-Turn steering is not inferred for Zen from a
+shared transport; Zen remains start-only until its own native behavior proves
+an equivalent native policy.
 
 ## Recovery guarantees
 

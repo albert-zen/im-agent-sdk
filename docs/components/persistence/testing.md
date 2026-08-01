@@ -22,7 +22,9 @@ Required scenarios:
   newer boundary;
 - a legacy SQLite database without checkpoint/correlation columns migrates
   without losing binding, route, or idempotency rows;
-- Turn reply correlation supports exact deletion plus explicit bounded cleanup;
+- Turn reply correlation is create-only/idempotent-same, rejects a different
+  destination for the same Thread/Turn in memory and SQLite, survives restart
+  unchanged, and supports exact deletion plus explicit bounded cleanup;
 - request correlation persists per successful destination, transitions every
   destination atomically by request, survives restart, and rejects
   zero-selector cleanup;

@@ -13,6 +13,7 @@ from .adapters import (
     ProjectionCheckpointConflict,
     ProjectionRouteConflict,
     ProjectionRouteRepository,
+    TurnReplyCorrelationConflict,
 )
 from .contracts import (
     AgentMessage,
@@ -75,6 +76,20 @@ class AuthoritativeProjectionSlice:
     pages_read: int
     checkpoint_found: bool
     gap: str | None = None
+
+
+def _same_turn_reply_correlation(
+    left: TurnReplyCorrelation,
+    right: TurnReplyCorrelation,
+) -> bool:
+    return (
+        left.correlation_id == right.correlation_id
+        and left.thread_ref == right.thread_ref
+        and left.turn_id == right.turn_id
+        and left.client_message_id == right.client_message_id
+        and left.conversation_ref == right.conversation_ref
+        and left.reply_to_message_id == right.reply_to_message_id
+    )
 
 
 class InMemoryProjectionRouteRepository:
@@ -194,8 +209,16 @@ class InMemoryProjectionRouteRepository:
     ) -> TurnReplyCorrelation:
         validate_turn_reply_correlation(correlation)
         async with self._lock:
-            self._turn_correlations[(correlation.thread_ref, correlation.turn_id)] = correlation
-        return correlation
+            key = (correlation.thread_ref, correlation.turn_id)
+            current = self._turn_correlations.get(key)
+            if current is None:
+                self._turn_correlations[key] = correlation
+                return correlation
+            if not _same_turn_reply_correlation(current, correlation):
+                raise TurnReplyCorrelationConflict(
+                    "Turn reply correlation already belongs to another IM input"
+                )
+            return current
 
     async def delete_turn_reply_correlation(
         self,

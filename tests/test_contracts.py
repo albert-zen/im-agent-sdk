@@ -516,6 +516,58 @@ class OperationTests(unittest.TestCase):
 
 
 class VersionOneSchemaCompatibilityTests(unittest.TestCase):
+    def test_input_dispatch_and_acceptance_require_matching_correlation_policy(
+        self,
+    ) -> None:
+        thread_ref = {
+            "applicationInstanceId": "codex-main",
+            "nativeThreadId": "thread-1",
+        }
+        self._validate_definition(
+            "messages.schema.json",
+            "ApplicationInputDispatch",
+            {
+                "threadRef": thread_ref,
+                "clientMessageId": "client-1",
+                "disposition": "steered",
+                "correlationPolicy": "preserve_existing",
+                "expectedTurnId": "turn-active",
+            },
+        )
+        self._validate_definition(
+            "messages.schema.json",
+            "AcceptedTurn",
+            {
+                "threadRef": thread_ref,
+                "turnId": "turn-active",
+                "clientMessageId": "client-1",
+                "disposition": "started",
+                "correlationPolicy": "create_new",
+            },
+        )
+        self._assert_invalid_definition(
+            "messages.schema.json",
+            "ApplicationInputDispatch",
+            {
+                "threadRef": thread_ref,
+                "clientMessageId": "client-1",
+                "disposition": "steered",
+                "correlationPolicy": "create_new",
+                "expectedTurnId": "turn-active",
+            },
+        )
+        self._assert_invalid_definition(
+            "messages.schema.json",
+            "AcceptedTurn",
+            {
+                "threadRef": thread_ref,
+                "turnId": "turn-active",
+                "clientMessageId": "client-1",
+                "disposition": "started",
+                "correlationPolicy": "preserve_existing",
+            },
+        )
+
     def test_retryable_receipts_cannot_carry_native_acceptance_identity(self) -> None:
         receipts = (
             DeliveryReceipt(

@@ -52,6 +52,7 @@ components:
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
+      - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - src/imagent/adapters.py
       - src/imagent/__init__.py
       - src/imagent/py.typed
@@ -133,6 +134,7 @@ components:
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/migrations/imcodex-followup-blockers.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
+      - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - src/imagent/inbound_admission.py
       - src/imagent/gateway.py
       - src/imagent/delivery_ingress.py
@@ -167,6 +169,7 @@ components:
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
+      - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/events.py
@@ -204,6 +207,7 @@ components:
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
+      - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/decisions/0009-proactive-delivery-routing.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
@@ -303,6 +307,7 @@ components:
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
+      - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/migrations/issue-9-imcodex-owner-transfer.md
       - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/applications/__init__.py
@@ -344,6 +349,7 @@ components:
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
+      - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/applications/__init__.py
       - src/imagent/applications/t3.py

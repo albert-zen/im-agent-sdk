@@ -17,7 +17,7 @@ baseline was `251` unit tests passing.
 | Gap | Classification | Second integration check | Required owner-side result |
 |---|---|---|---|
 | Ambiguous native input dispatch | Core invariant with adapter-specific transport evidence | T3 has native command/message IDs; App Server has no input idempotency key | Every App Server input mutation, including active-Turn steer, reports `ApplicationInputOutcomeUnknown` after dispatch instead of authorizing retry. |
-| Active-Turn continuation | Optional Codex adapter policy | Zen shares the App Server transport but has no independent steer evidence; T3 uses a different native orchestration API with no `turn/steer` | Core never steers automatically. An opted-in Codex policy must treat the native response as authority, cover the read/steer race, and never turn an ambiguous or stale steer into an unconditional `turn/start`; IMCodex must not subclass or bypass Gateway to decide it. |
+| Active-Turn continuation | Common SDK preference with optional native adapter capability | Zen shares the App Server transport but has no independent steer evidence; T3 uses a different native orchestration API with no `turn/steer` | SDK defaults to `prefer_active_turn`; every adapter returns `started` or `steered`. Codex enables native steer by default, while Zen/T3 truthfully start. Gateway authorizes `preserve_existing` before dispatch and never retargets the original Turn reply correlation. |
 | Local-image connection epoch | App Server adapter-specific capability wiring | Remote/upload-based Applications do not share a local filesystem epoch | The adapter passes only the client-proven epoch to `turn/start` or `turn/steer`; connection changes fail closed before dispatch. |
 | Generic local files | App Server capability plus consumer encoding/exposure policy | T3 has its own media/data encoding; a remote upload Application must not expose a host path | Default to explicit unsupported while App Server has no native file input. The adapter may validate a configured root and bounds, but whether an absolute path may be exposed and the prompt/encoding template require an explicit downstream callback or policy. |
 | Quoted native message context | QQ adapter-owned optional capability | Only QQ currently has positive native quote parsing evidence; Telegram, Feishu, and a text webhook are counterexamples without this contract | Preserve a bounded QQ-owned native-untrusted snapshot through the public adapter without widening Core or trusting caller-forged metadata. |
@@ -46,8 +46,9 @@ The gaps are not one mega-PR. Each slice starts from the latest merged
 review, and merges before the next slice is based:
 
 1. **App Server input correctness:** steer dispatch-unknown classification,
-   opt-in continuation with TOCTOU-safe reconciliation, local-image epoch
-   wiring, and explicit unsupported behavior for generic files until a
+   default prefer-active continuation with TOCTOU-safe correlation
+   authorization, truthful started/steered results, local-image epoch wiring,
+   and explicit unsupported behavior for generic files until a
    concrete downstream encoding/exposure policy justifies a separate seam.
 2. **Channel ingress correctness:** QQ-owned quote preservation and an SDK
    Gateway-owned durable admission boundary before expensive media work.

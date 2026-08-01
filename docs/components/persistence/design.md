@@ -66,6 +66,9 @@ Turn reply correlation stores only native identity and its originating IM
 target, and is removed on a terminal Turn event or bounded cleanup. Deletion
 requires an explicit Thread, Conversation, or retention cutoff selector;
 clearing every correlation is not an accidental zero-argument operation.
+Insertion is create-only for the Thread/Turn key: an identical repeat is
+idempotent and any different immutable value is a
+`TurnReplyCorrelationConflict`. SQLite uses no destination-replacing upsert.
 Neither state may copy message bodies, Turn status, or native execution state.
 
 A request route correlation stores no prompt, requested permissions, or

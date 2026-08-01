@@ -6,7 +6,7 @@ import inspect
 import logging
 import mimetypes
 import uuid
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
@@ -20,6 +20,7 @@ from ..contracts import (
     AgentInput,
     AgentMessage,
     ApplicationCapabilities,
+    ApplicationInputDispatch,
     ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,
@@ -35,6 +36,8 @@ from ..contracts import (
     GetThreadHistory,
     GetThreadStatus,
     GetTurnCatchup,
+    InputContinuationPreference,
+    InputDisposition,
     InteractiveRequest,
     InterruptTurn,
     ListProjects,
@@ -69,6 +72,7 @@ from ..contracts import (
     TurnCatchupRead,
     TurnHistoryEntry,
     TurnInterrupted,
+    TurnReplyCorrelationPolicy,
     TurnStatus,
     operation_error,
     validate_application_operation,
@@ -531,19 +535,32 @@ class T3ApplicationAdapter:
         self,
         thread_ref: ThreadRef,
         message: AgentInput,
+        *,
+        continuation: InputContinuationPreference = (
+            InputContinuationPreference.PREFER_ACTIVE_TURN
+        ),
+        before_dispatch: Callable[[ApplicationInputDispatch], Awaitable[None]] | None = None,
     ) -> AcceptedTurn:
+        if not isinstance(continuation, InputContinuationPreference):
+            raise ValueError("unknown input continuation preference")
         self._require_own_thread(thread_ref)
         lock = self._send_locks.setdefault(
             thread_ref.native_thread_id,
             asyncio.Lock(),
         )
         async with lock:
-            return await self._send_input_locked(thread_ref, message)
+            return await self._send_input_locked(
+                thread_ref,
+                message,
+                before_dispatch=before_dispatch,
+            )
 
     async def _send_input_locked(
         self,
         thread_ref: ThreadRef,
         message: AgentInput,
+        *,
+        before_dispatch: Callable[[ApplicationInputDispatch], Awaitable[None]] | None,
     ) -> AcceptedTurn:
         text = "\n".join(
             part.text for part in message.content if isinstance(part, TextContent)
@@ -557,25 +574,33 @@ class T3ApplicationAdapter:
             for item in _object_list(_object(before.get("thread"), "thread").get("messages"))
             if _message_id(item)
         )
-        await self._client.dispatch(
-            {
-                "type": "thread.turn.start",
-                "commandId": _stable_id(message.client_message_id, "turn"),
-                "threadId": thread_ref.native_thread_id,
-                "message": {
-                    "messageId": _stable_id(message.client_message_id, "message"),
-                    "role": "user",
-                    "text": text,
-                    "attachments": _encode_t3_attachments(
-                        attachments,
-                        shared_filesystem_root=self._shared_filesystem_root,
-                    ),
-                },
-                "runtimeMode": self._runtime_mode,
-                "interactionMode": self._interaction_mode,
-                "createdAt": _utc_now(),
-            }
-        )
+        command = {
+            "type": "thread.turn.start",
+            "commandId": _stable_id(message.client_message_id, "turn"),
+            "threadId": thread_ref.native_thread_id,
+            "message": {
+                "messageId": _stable_id(message.client_message_id, "message"),
+                "role": "user",
+                "text": text,
+                "attachments": _encode_t3_attachments(
+                    attachments,
+                    shared_filesystem_root=self._shared_filesystem_root,
+                ),
+            },
+            "runtimeMode": self._runtime_mode,
+            "interactionMode": self._interaction_mode,
+            "createdAt": _utc_now(),
+        }
+        if before_dispatch is not None:
+            await before_dispatch(
+                ApplicationInputDispatch(
+                    thread_ref=thread_ref,
+                    client_message_id=message.client_message_id,
+                    disposition=InputDisposition.STARTED,
+                    correlation_policy=TurnReplyCorrelationPolicy.CREATE_NEW,
+                )
+            )
+        await self._client.dispatch(command)
         detail = await self._client.thread_detail(thread_ref.native_thread_id)
         thread = _object(detail.get("thread"), "thread")
         latest_turn = _object(thread.get("latestTurn"), "latestTurn")
@@ -592,6 +617,8 @@ class T3ApplicationAdapter:
             thread_ref=thread_ref,
             turn_id=turn_id,
             client_message_id=message.client_message_id,
+            disposition=InputDisposition.STARTED,
+            correlation_policy=TurnReplyCorrelationPolicy.CREATE_NEW,
         )
 
     def subscribe_thread(

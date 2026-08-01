@@ -7,7 +7,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from . import sqlite_rows
-from .adapters import IdempotencyClaimStatus, ProjectionCheckpointConflict
+from .adapters import (
+    IdempotencyClaimStatus,
+    ProjectionCheckpointConflict,
+    TurnReplyCorrelationConflict,
+)
 from .bindings import BindingConflict
 from .contracts import (
     ConversationBinding,
@@ -27,6 +31,20 @@ from .request_correlations import (
     SQLiteRequestCorrelationMixin,
     initialize_request_correlation_schema,
 )
+
+
+def _same_turn_reply_correlation(
+    left: TurnReplyCorrelation,
+    right: TurnReplyCorrelation,
+) -> bool:
+    return (
+        left.correlation_id == right.correlation_id
+        and left.thread_ref == right.thread_ref
+        and left.turn_id == right.turn_id
+        and left.client_message_id == right.client_message_id
+        and left.conversation_ref == right.conversation_ref
+        and left.reply_to_message_id == right.reply_to_message_id
+    )
 
 
 class InMemoryIdempotencyRepository:
@@ -583,13 +601,7 @@ class SQLiteGatewayState(
                     thread_id,
                     turn_id
                 )
-                DO UPDATE SET
-                    correlation_id = excluded.correlation_id,
-                    client_message_id = excluded.client_message_id,
-                    channel_instance_id = excluded.channel_instance_id,
-                    native_conversation_id = excluded.native_conversation_id,
-                    reply_to_message_id = excluded.reply_to_message_id,
-                    created_at = excluded.created_at
+                DO NOTHING
                 """,
                 (
                     correlation.correlation_id,
@@ -603,7 +615,24 @@ class SQLiteGatewayState(
                 ),
             )
             self._connection.commit()
-        return correlation
+            row = self._connection.execute(
+                """
+                SELECT * FROM turn_reply_correlations
+                WHERE application_instance_id = ?
+                  AND project_id = ?
+                  AND thread_id = ?
+                  AND turn_id = ?
+                """,
+                (*sqlite_rows.thread_storage_key(correlation.thread_ref), correlation.turn_id),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("Turn reply correlation insert did not persist a row")
+            current = sqlite_rows.turn_reply_correlation_from_row(row)
+            if not _same_turn_reply_correlation(current, correlation):
+                raise TurnReplyCorrelationConflict(
+                    "Turn reply correlation already belongs to another IM input"
+                )
+            return current
 
     async def delete_turn_reply_correlation(
         self,
