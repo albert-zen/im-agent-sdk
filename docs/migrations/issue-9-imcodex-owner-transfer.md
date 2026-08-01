@@ -2,6 +2,10 @@
 
 Status: SDK owner-side implementation; downstream consumer migration pending
 
+The first downstream cutover review found additional adapter/runtime blockers.
+Their classifications and merge-before-cutover rule are recorded in
+[IMCodex consumer follow-up blockers](imcodex-followup-blockers.md).
+
 This map separates the work that can be completed in `im-agent-sdk` from the
 later IMCodex consumer migration. It is not a claim that Issue #9 is complete.
 

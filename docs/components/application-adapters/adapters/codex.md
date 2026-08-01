@@ -16,11 +16,23 @@ that control surface.
   commentary/final-answer phases remain Metadata.
 - native notification IDs are stable event IDs.
 
-`turn/start` has no SDK-controlled native idempotency key. The client therefore
-distinguishes failure before transport dispatch from cancellation, timeout,
-disconnect, or response loss after dispatch begins. A dispatched request
-without a response reports `ApplicationInputOutcomeUnknown`; Gateway keeps the
-inbound key sticky rather than risking a second native Turn.
+`turn/start` and `turn/steer` have no SDK-controlled native idempotency key.
+The client therefore distinguishes failure before transport dispatch from
+cancellation, timeout, disconnect, or response loss after dispatch begins. A
+dispatched request without a response reports
+`ApplicationInputOutcomeUnknown`; Gateway keeps the inbound key sticky rather
+than risking a second native mutation. A successful response without a native
+Turn identity is equally ambiguous and receives the same classification.
+
+New input starts a Turn by default. A consumer may opt this Codex adapter into
+active-Turn continuation. The adapter then reads the authoritative native Turn
+list immediately before dispatch and steers the observed active Turn. That
+read is only a candidate selection, not cached truth: the native steer response
+supplies the accepted Turn identity. A definitive native rejection is itself
+the authoritative reconciliation result and is re-raised unchanged without a
+second read or `turn/start` fallback. An ambiguous steer remains unknown.
+Zen does not inherit this Codex-only opt-in merely because it shares the
+transport implementation.
 
 `message.completed` does not terminate a Codex Turn. The adapter emits the
 native terminal Turn event separately.
@@ -69,6 +81,13 @@ window instead of leaving Gateway state indefinitely `responded`.
 Local paths require an explicitly configured shared root. Remote endpoints that
 cannot access or upload a source reject it. Codex workspace, sandbox, approval,
 and Full Access semantics are not chosen by the SDK.
+
+Local images also carry the connection epoch that proved shared-filesystem
+access. A reconnect between verification and dispatch therefore fails closed.
+App Server exposes no formal generic-file input item, so generic files are
+explicitly unsupported by default. A future downstream encoding/exposure
+policy must be explicit; the adapter does not invent a prompt template or
+silently disclose an absolute host path.
 
 ## Current client ownership
 

@@ -5,7 +5,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from imagent.applications.appserver_client.client import AppServerClient
+from imagent.applications.appserver_client.client import AppServerClient, AppServerError
 from imagent.applications.appserver_client.supervisor import (
     AppServerSupervisor,
     MissingAppServerDependencyError,
@@ -158,6 +158,23 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("timed out", str(raised.exception.cause))
             self.assertTrue(any(item.get("method") == "turn/start" for item in process.sent))
         finally:
+            await client.close()
+
+    async def test_turn_steer_cancelled_after_dispatch_has_unknown_outcome(self) -> None:
+        process = _ScriptedProcess({"initialize": [{"result": {"ok": True}}]})
+        client = _client(process)
+        task = asyncio.create_task(client.steer_turn("thread-1", "turn-1", "continue"))
+        try:
+            async with asyncio.timeout(1):
+                while not any(item.get("method") == "turn/steer" for item in process.sent):
+                    await asyncio.sleep(0)
+            task.cancel()
+            with self.assertRaises(ApplicationInputOutcomeUnknown) as raised:
+                await task
+            self.assertIsInstance(raised.exception.cause, asyncio.CancelledError)
+        finally:
+            if not task.done():
+                task.cancel()
             await client.close()
 
     async def test_missing_websocket_extra_fails_without_retry(self) -> None:
@@ -363,6 +380,59 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await client.list_threads(), {"threads": []})
             self.assertEqual(client.connection_epoch, 2)
             self.assertEqual(second.sent[0]["method"], "initialize")
+        finally:
+            await client.close()
+
+    async def test_stale_local_image_epoch_fails_before_input_dispatch_after_reconnect(
+        self,
+    ) -> None:
+        first = _ScriptedProcess({"initialize": [{"result": {"ok": True}}]})
+        second = _ScriptedProcess(
+            {
+                "initialize": [{"result": {"ok": True}}],
+                "thread/list": [{"result": {"threads": []}}],
+            }
+        )
+        processes = iter((first, second))
+        client = AppServerClient(
+            supervisor=AppServerSupervisor(
+                app_server_url="stdio://",
+                spawn_process=lambda *_args: next(processes),
+            ),
+            client_info={"name": "sdk-test", "title": "SDK Test", "version": "0"},
+        )
+        try:
+            await client.initialize()
+            expected_epoch = client.local_image_paths_epoch()
+            self.assertEqual(expected_epoch, 1)
+
+            first.stdout.lines.put_nowait(b"")
+            await asyncio.sleep(0)
+            self.assertEqual(await client.list_threads(), {"threads": []})
+            self.assertEqual(client.connection_epoch, 2)
+
+            for operation in (
+                lambda: client.start_turn(
+                    "thread-1",
+                    input_items=[{"type": "localImage", "path": "C:/shared/image.png"}],
+                    expected_local_image_epoch=expected_epoch,
+                ),
+                lambda: client.steer_turn(
+                    "thread-1",
+                    "turn-1",
+                    input_items=[{"type": "localImage", "path": "C:/shared/image.png"}],
+                    expected_local_image_epoch=expected_epoch,
+                ),
+            ):
+                with self.subTest(operation=operation):
+                    with self.assertRaisesRegex(AppServerError, "cannot read bridge-local image"):
+                        await operation()
+
+            self.assertFalse(
+                any(
+                    request.get("method") in {"turn/start", "turn/steer"} for request in second.sent
+                )
+            )
         finally:
             await client.close()
 

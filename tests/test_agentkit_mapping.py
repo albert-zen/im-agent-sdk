@@ -124,6 +124,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/test_channel_feishu.py": {"channel-adapters"},
             "tests/test_channel_weixin.py": {"channel-adapters"},
             "tests/test_appserver_client.py": {"application-adapters-appserver"},
+            "tests/test_appserver_input.py": {"application-adapters-appserver"},
             "tests/test_appserver_requests.py": {"application-adapters-appserver"},
             "tests/test_appserver_transport.py": {"application-adapters-appserver"},
             "tests/test_t3_client.py": {"application-adapters-t3"},
@@ -136,6 +137,18 @@ class AgentKitMappingTests(unittest.TestCase):
 
     def test_global_intent_changes_have_cross_component_impact(self) -> None:
         self.assertEqual(_components_for("docs/VISION.md"), PRODUCT_COMPONENTS)
+        self.assertEqual(
+            _components_for("docs/migrations/imcodex-followup-blockers.md"),
+            {
+                "application-adapters-appserver",
+                "application-adapters-t3",
+                "attachments-and-media",
+                "channel-adapters",
+                "gateway",
+                "projections-and-recovery",
+                "repository-maintainability",
+            },
+        )
         self.assertEqual(
             _components_for("docs/decisions/0002-design-authority-and-control-boundaries.md"),
             {

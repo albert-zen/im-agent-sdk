@@ -17,6 +17,12 @@ history, and retention.
 - because the shared transport has no native input-idempotency key, a lost
   `turn/start` acceptance response is reported as an unknown input outcome and
   must not be retried automatically.
+- local images use the shared client-proven connection epoch and fail closed
+  when the configured filesystem is not verified for that connection.
+
+Codex active-Turn steering is not inferred for Zen from a shared transport.
+Zen remains start-only until its own native behavior proves an equivalent
+optional policy.
 
 ## Recovery guarantees
 

@@ -12,6 +12,15 @@ Every adapter should prove:
   each call;
 - cancellation, timeout, and response loss after native input dispatch report
   unknown rather than a retryable pre-dispatch failure;
+- a successful App Server input response without a native Turn identity also
+  reports unknown rather than authorizing redelivery;
+- App Server steer has the same dispatch-unknown boundary as start;
+- Codex continuation is disabled by default, and when opted in, native Turn
+  completion/replacement between read and steer never causes an unconditional
+  start or a second state read that can mask the primary native error;
+- local-image start and steer pass the verified connection epoch, including a
+  positive shared-base Zen case, while generic files remain explicit
+  unsupported without a downstream exposure/encoding policy;
 - canonical user and Agent message events;
 - multiple completed messages before an explicit terminal Turn event;
 - fan-out-safe subscriptions;

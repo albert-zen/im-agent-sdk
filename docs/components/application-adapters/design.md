@@ -40,6 +40,12 @@ not dispatched. After dispatch, an absent acceptance response is an
 idempotent. This is transport outcome classification, not bridge-owned Turn
 truth.
 
+Application-native continuation such as Codex `turn/steer` is opt-in adapter
+policy, not a Core input rule. A discovery read is not authority over a later
+mutation: the adapter must accept the native mutation response as the result,
+preserve an ambiguous outcome, and never mask a native rejection or
+automatically start a second Turn after a read/mutation race.
+
 Managed Applications expose real Projects. Flat/fixed Applications omit them.
 Thread lookup is independent of Conversation selection. Native activation is
 an explicit optional operation.
