@@ -304,7 +304,10 @@ class _InboundMiddleware:
                 try:
                     await admission.release()
                 except BaseException as release_error:
-                    raise release_error from error
+                    error.add_note(
+                        "Failed to release inbound admission after pre-handoff "
+                        f"processing failed: {release_error!r}"
+                    )
             async with self._admission_lock:
                 self._admitted_inbound.discard(admission_key)
             raise

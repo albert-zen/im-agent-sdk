@@ -180,6 +180,70 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(released)
 
+    async def test_release_failure_does_not_mask_preparation_failure(self) -> None:
+        captured: Any = None
+        preparation_error = RuntimeError("media download failed")
+
+        class Native:
+            channel_id = "qq"
+
+            def __init__(self, middleware) -> None:
+                self.middleware = middleware
+
+            async def start(self) -> None:
+                nonlocal captured
+                captured = self.middleware
+
+            async def stop(self) -> None:
+                return None
+
+            async def send_message(self, message) -> NativeDeliveryResult:
+                del message
+                return NativeDeliveryResult()
+
+        class Admission:
+            async def deliver(self, message) -> None:
+                del message
+                raise AssertionError("failed preparation must not be delivered")
+
+            async def release(self) -> None:
+                raise RuntimeError("release failed")
+
+        async def admit(_conversation_ref, _message_id) -> InboundAdmission | None:
+            return Admission()
+
+        async def ignore(_item) -> None:
+            return None
+
+        async def fail_preparation(_inbound):
+            raise preparation_error
+
+        adapter = NativeTransportChannelAdapter(
+            channel_instance_id="qq-main",
+            channel_id="qq",
+            native_factory=Native,
+        )
+        await adapter.start(ignore, ignore, admit)
+        try:
+            with self.assertRaises(RuntimeError) as raised:
+                await captured.handle_inbound(
+                    adapter,
+                    InboundMessage(
+                        channel_id="qq",
+                        conversation_id="c2c:user-1",
+                        user_id="user-1",
+                        message_id="message-release-failure",
+                        text="attachment",
+                    ),
+                    prepare_inbound=fail_preparation,
+                    pending_attachment_count=1,
+                )
+        finally:
+            await adapter.stop()
+
+        self.assertIs(raised.exception, preparation_error)
+        self.assertTrue(any("release failed" in note for note in preparation_error.__notes__))
+
     async def test_gateway_handoff_failure_is_not_released_by_channel(self) -> None:
         captured: Any = None
         released = False
