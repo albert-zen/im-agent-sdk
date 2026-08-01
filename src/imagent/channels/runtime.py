@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
-from ..adapters import MessageHandler, OperationHandler
+from ..adapters import InboundAdmissionHandler, MessageHandler, OperationHandler
 from ..contracts import (
     AttachmentContent,
     AttachmentSourceKind,
@@ -131,6 +131,7 @@ class NativeTransportChannelAdapter:
         self,
         on_message: MessageHandler,
         on_operation: OperationHandler,
+        on_admission: InboundAdmissionHandler | None = None,
     ) -> None:
         if self._native is not None:
             raise RuntimeError("channel is already started")
@@ -138,6 +139,7 @@ class NativeTransportChannelAdapter:
             channel_instance_id=self._channel_instance_id,
             on_message=on_message,
             on_operation=on_operation,
+            on_admission=on_admission,
         )
         native = self._native_factory(middleware)
         self._native = native
@@ -238,10 +240,12 @@ class _InboundMiddleware:
         channel_instance_id: str,
         on_message: MessageHandler,
         on_operation: OperationHandler,
+        on_admission: InboundAdmissionHandler | None,
     ) -> None:
         self._channel_instance_id = channel_instance_id
         self._on_message = on_message
         self._on_operation = on_operation
+        self._on_admission = on_admission
         self._routes: dict[tuple[str, str], object] = {}
         self._admitted_inbound: set[tuple[str, str, str]] = set()
         self._admission_lock = asyncio.Lock()
@@ -268,25 +272,49 @@ class _InboundMiddleware:
             self._admitted_inbound.add(admission_key)
             while len(self._admitted_inbound) > _TRANSIENT_ADMISSION_LIMIT:
                 self._admitted_inbound.pop()
+        admission = None
+        transferred = False
         try:
+            if self._on_admission is not None:
+                admission = await self._on_admission(
+                    ConversationRef(
+                        channel_instance_id=self._channel_instance_id,
+                        native_conversation_id=str(inbound.conversation_id),
+                    ),
+                    str(inbound.message_id),
+                )
+                if admission is None:
+                    async with self._admission_lock:
+                        self._admitted_inbound.discard(admission_key)
+                    return
             if prepare_inbound is not None:
                 prepared = prepare_inbound(inbound)
                 inbound = await prepared if inspect.isawaitable(prepared) else prepared
-            await self._deliver_inbound(
+            message = self._normalize_inbound(
                 inbound,
                 reply_to_message_id=reply_to_message_id,
             )
-        except BaseException:
+            if admission is None:
+                await self._on_message(message)
+            else:
+                transferred = True
+                await admission.deliver(message)
+        except BaseException as error:
+            if admission is not None and not transferred:
+                try:
+                    await admission.release()
+                except BaseException as release_error:
+                    raise release_error from error
             async with self._admission_lock:
                 self._admitted_inbound.discard(admission_key)
             raise
 
-    async def _deliver_inbound(
+    def _normalize_inbound(
         self,
         inbound,
         *,
         reply_to_message_id: str | None,
-    ) -> None:
+    ) -> InboundMessage:
         route_key = (str(inbound.channel_id), str(inbound.conversation_id))
         self._routes.pop(route_key, None)
         self._routes[route_key] = ChannelRouteContext(
@@ -315,7 +343,7 @@ class _InboundMiddleware:
                     },
                 )
             )
-        message = InboundMessage(
+        return InboundMessage(
             message_id=str(inbound.message_id),
             conversation_ref=ConversationRef(
                 channel_instance_id=self._channel_instance_id,
@@ -335,7 +363,6 @@ class _InboundMiddleware:
                 "trace_id": getattr(inbound, "trace_id", None),
             },
         )
-        await self._on_message(message)
 
     def get_route_context(self, channel_id: str, conversation_id: str):
         return self._routes.get(

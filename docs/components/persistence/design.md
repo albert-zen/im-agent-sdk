@@ -107,9 +107,11 @@ explicit release on a failure proven to precede dispatch makes it claimable
 again.
 
 Every acquired lease carries an opaque owner token. Reclaim replaces the
-token, and `mark_side_effect_started`, `complete`, and `release` compare it
-atomically. A stale worker therefore cannot protect, complete, or delete the
-new owner's record.
+token, and `refresh`, `mark_side_effect_started`, `complete`, and `release`
+compare it atomically. Refresh updates only the timestamp of the caller's
+`in_flight` lease; it cannot revive or alter a protected side-effect state. A
+stale worker therefore cannot hand off prepared media, protect, complete, or
+delete the new owner's record.
 
 At process restart, bindings and routes can be reloaded. Authoritative
 Application history/catch-up reconciles message content; persistence never
