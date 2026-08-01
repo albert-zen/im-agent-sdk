@@ -1,0 +1,386 @@
+# Common protocol
+
+This document defines semantic contracts, not one transport encoding. JSON,
+Python, TypeScript, JSON-RPC, HTTP, WebSocket, or in-process calls may carry
+the same objects. `schemas/v1/` is the precise language-neutral shape.
+
+## Identity and resource scope
+
+Every externally visible mutation and event has a stable identifier. Text and
+timestamps never define identity or deduplication.
+
+```text
+ApplicationRef = applicationInstanceId
+ProjectRef = (applicationInstanceId, nativeProjectId)
+ThreadRef = (applicationInstanceId, nativeThreadId, projectRef?)
+ConversationRef = (channelInstanceId, nativeConversationId)
+```
+
+Native IDs are opaque and scoped by one configured Application or Channel
+instance. A native Thread ID from one Application instance cannot be used with
+another.
+
+The full organization model is:
+
+```text
+AgentApplication
+  └── Project
+        └── Thread
+```
+
+An Application declares its real project shape:
+
+- `managed`: Projects are authoritative selectable resources.
+- `flat`: Threads live directly under the Application.
+- `fixed`: one externally configured workspace/cwd contains flat Threads.
+
+Flat and fixed Applications omit `ProjectRef`; adapters do not synthesize fake
+Projects.
+
+## Resources and bridge state
+
+Agent Applications own Project and Thread resources, transcript items, Turns,
+requests, execution, archival, and retention.
+
+A `ConversationBinding` selects the destination of future input:
+
+```text
+conversationRef
+applicationRef?
+projectRef?
+threadRef?
+revision
+updatedAt
+```
+
+A `ThreadProjectionRoute` selects a possible IM output destination:
+
+```text
+routeId
+threadRef
+conversationRef
+replyToMessageId?
+updatedAt
+```
+
+Bindings and routes are distinct. Neither contains transcript, Turn, request,
+or execution truth. Native Thread activation is a third, optional mutation.
+
+## Message envelopes
+
+Message objects carry content, not control intent.
+
+```text
+InboundMessage {
+  messageId
+  conversationRef
+  sender
+  content[]
+  replyTo?
+  createdAt
+  metadata
+}
+
+OutboundMessage {
+  deliveryId
+  conversationRef
+  content[]
+  replyTo?
+  createdAt
+  metadata
+}
+
+AgentMessage {
+  agentItemId
+  threadRef
+  role
+  content[]
+  clientMessageId?
+  createdAt
+  metadata
+}
+```
+
+Inbound native identity, an outbound delivery request, and an authoritative
+Agent item are deliberately different envelopes. A Channel returns native
+delivery identity in `DeliveryReceipt`.
+
+A logical outbound message may require several Channel-compatible sends.
+`DeliveryReceipt.segments` records every planned segment's stable delivery ID,
+source content indexes, and accepted, rejected, retryable, unknown, or skipped
+outcome. `DeliveryReceipt.items` aggregates those outcomes back to the logical
+content. If one source item spans an accepted prefix and a failed or skipped
+suffix, its item status is `unknown`; the segment receipts retain the exact
+boundary. This is delivery evidence, not transcript or Agent execution truth.
+
+Initial content parts are `TextContent` and `AttachmentContent`.
+
+```text
+AttachmentSource =
+  LocalPath { path }
+  | RemoteUrl { url }
+  | AttachmentHandle { handleId }
+```
+
+Attachment location never travels through Metadata. `LocalPath` requires
+deployment-configured shared-filesystem trust. `RemoteUrl` requires
+adapter-owned network, redirect, size, and media policy. `AttachmentHandle` is
+reserved until a resolver is configured.
+
+The Gateway derives or preserves a stable client message ID from:
+
+```text
+(channelInstanceId, conversationId, channelMessageId)
+  -> clientMessageId
+```
+
+The authoritative user-item event repeats that ID so clients can deduplicate
+optimistic local echo.
+
+## Typed operations
+
+Application operations mutate or read one native Agent Application:
+
+| Operation | Success result | Meaning |
+|---|---|---|
+| `project.list` | `ProjectsListed` | list authoritative Projects |
+| `project.get` | `ProjectRead` | validate/read one Project |
+| `thread.create` | `ThreadCreated` | create a native Thread |
+| `thread.list` | `ThreadsListed` | list native Threads |
+| `thread.get` | `ThreadRead` | validate/read one Thread |
+| `thread.activate_native` | `NativeThreadActivated` | optionally change native UI selection |
+| `thread.delete` | `ThreadDeleted` | archive/delete with actual mode |
+| `thread.status` | `ThreadStatusRead` | read projected native status |
+| `thread.history` | `ThreadHistoryRead` | read authoritative Turn history |
+| `turn.catchup` | `TurnCatchupRead` | read latest Turn progress |
+| `turn.interrupt` | `TurnInterrupted` | interrupt a native Turn |
+| `request.respond` | `RequestResponded` | answer a native request |
+
+Gateway operations mutate only Gateway-owned selection or routing:
+
+| Operation | Success result | Meaning |
+|---|---|---|
+| `application.list` | `ApplicationsListed` | list configured Application instances |
+| `application.select` | `ConversationBound` | select Application and clear narrower selection |
+| `conversation.bind_project` | `ConversationBound` | validate/select Project and clear Thread |
+| `conversation.bind_thread` | `ConversationBound` | select future input destination |
+| `conversation.clear_thread` | `ConversationBound` | clear selected Thread |
+| `thread.observe` | `ThreadObserved` | establish/refresh output route |
+| `conversation.respond_request` | `RequestResponseRouted` | validate one delivered destination and route a native response |
+
+Application and Gateway operation unions have discriminated variants with
+typed arguments. Success results repeat the operation ID and discriminant and
+use named fields. Failures use `ApplicationOperationFailed` or
+`GatewayOperationFailed` with a stable `ContractError`.
+
+Listing is side-effect free and paginated. Thread creation does not bind a
+Conversation. Binding a Thread does not activate native UI state. Observing a
+Thread does not bind input or activate it. A product may compose these
+operations explicitly.
+
+Thread deletion declares `unsupported`, `archive`, or `permanent`. Destructive
+semantics are never silently approximated.
+
+## History and Turn lifecycle
+
+`turn.catchup` and `thread.history` are authoritative context restoration, not
+token streaming. A history entry contains the user goal, every ordered
+completed Agent message, terminal status, error, and compaction marker.
+
+`agentMessages` is plural because one Turn may emit several completed messages.
+Application-specific phases such as commentary or final answer may stay in
+namespaced Metadata.
+
+`message.completed` never means `turn.completed`. Only explicit
+`turn.completed`, `turn.failed`, or `turn.interrupted` events terminate a
+Turn.
+
+## Agent events and ordering
+
+Every `AgentEvent` has:
+
+```text
+eventId
+applicationInstanceId
+projectRef?
+threadRef?
+turnId?
+sequence?
+sequenceEpoch?
+cursor?
+type
+data
+createdAt
+```
+
+Initial event families:
+
+- message: `message.created`, `message.delta`, `message.completed`;
+- Thread: `thread.created`, `thread.updated`, `thread.deleted`;
+- Turn: `turn.started`, `turn.completed`, `turn.failed`,
+  `turn.interrupted`;
+- status/request: `status.changed`, `request.opened`,
+  `request.resolved`;
+- Gateway: `binding.changed`.
+
+Ordering guarantees are honest:
+
+- `eventId` is required and stable within the producer's declared window.
+- `sequence` is optional and requires `sequenceEpoch`.
+- `cursor` is optional, opaque, and appears only with real replay support.
+- cursor expiration and detected gaps are explicit.
+- timestamps are descriptive, never authoritative order.
+- adapters without native replay or restart-safe sequence omit those fields.
+
+Recovery falls back to a live subscription plus authoritative
+history/catch-up reconciliation. The SDK never presents an in-memory counter
+as restart-safe recovery.
+
+## Interactive requests
+
+`request.opened` carries one typed request:
+
+```text
+ApprovalRequest {
+  requestRef{applicationRef, nativeRequestId}, threadRef, turnId, prompt,
+  choices[{choiceId, label, description?}], expiresAt?, metadata
+}
+
+UserInputRequest {
+  requestRef{applicationRef, nativeRequestId}, threadRef, turnId, prompt?,
+  questions[{ questionId, prompt, header?, choices[], allowsOther, secret,
+              minAnswers, maxAnswers }],
+  expiresAt?, metadata
+}
+```
+
+`request.resolved` carries a typed resolution with the same `RequestRef` and one
+of `resolved` or `stale`. `stale` means the adapter can prove that the response
+handle is no longer usable, including a transport reset without a native
+pending-request snapshot. It does not claim that the native Turn or request
+was otherwise deleted.
+
+Approval responses return one stable `choiceId` from the native choices
+projected with that request. Core does not interpret once/session/cancel scope
+or choose among them. Session grants, persistent command/network policies,
+sandbox profiles, and Full Access remain native Application or consumer
+policy. User-input responses map question IDs to string-answer tuples and are
+validated against explicit minimum/maximum cardinality, available choice IDs,
+and `allowsOther`.
+
+`secret` is a sensitivity requirement, not a claim that any presenter or
+Channel can collect the answer securely. A presenter without an evidenced
+secure-input capability must refuse response collection and must not create a
+plain-text answer route.
+
+`RequestRef` prevents two Application instances with the same native request
+ID from sharing authorization or state. Native IDs are opaque but must be
+stable within their Application instance; an adapter whose transport reuses
+IDs across reconnects namespaces the epoch into `nativeRequestId`.
+
+The Conversation operation includes only `RequestRef` and typed response.
+Gateway looks up Application/Thread scope from a correlation created after
+that Conversation actually received the prompt. It never trusts caller
+Metadata for native request routing.
+
+## Capabilities and failures
+
+Capabilities distinguish native support, declared fallback, and unsupported
+behavior. Project mode, Thread deletion, native activation, attachment source
+kinds, replay, gap detection, and sequence scope are separate facts.
+The v1 `ChannelCapabilities` wire/Python constructor remains flat.
+`ChannelCapabilities.delivery` is a derived typed `DeliveryProfile` covering
+the same text format/length units, attachment source/media/grouping limits,
+and reply scope; it describes what the common planner may produce, not
+credentials or a native API contract. New v1 planning properties and
+`DeliveryReceipt.segments` are optional extensions, so documents valid before
+ADR 0010 remain valid. Existing positional constructor fields also retain
+their original order; new planning fields are appended after the legacy v1
+surface.
+
+Unsupported, stale-reference, authentication, access, binding, unavailable,
+rejected-operation, delivery, gap, and cursor-expired outcomes remain explicit.
+Products may retry safe idempotent work, but Core does not invent a hidden
+self-healing workflow.
+
+## Delivery correlation
+
+Completed Agent messages are projected using current routes. One authoritative
+item may become several native segments. Stable delivery identity derives
+from:
+
+```text
+(destination, authoritativeMessageItemId, segmentIndex)
+```
+
+A receipt distinguishes platform acceptance, rejection, explicit retryable
+failure, and unknown outcome.
+Platform acceptance does not claim device display or read.
+Retryable top-level, item, and segment evidence cannot carry a native message
+identity: observed native acceptance makes automatic replay unsafe.
+
+`DeliveryReceipt.items` carries typed per-content outcomes when a native
+delivery can partially succeed. A completed Channel call may therefore have
+aggregate platform acceptance while one attachment is rejected; Gateway
+projects that destination as `partial` instead of hiding the artifact failure
+in Metadata.
+
+`ThreadProjectionRoute.checkpointAgentItemId` and `checkpointedAt` are a
+nullable pair. They identify one destination's last completed ordered
+delivery decision; the Agent item ID is opaque and not a sortable SDK
+sequence.
+
+`TurnReplyCorrelation` contains Thread/Turn/client-message identity plus the
+originating Conversation, reply ID, and creation time. It is minimal bridge
+state, not a copy of Turn status or request truth. It applies only when the
+projection destination matches its Conversation.
+
+`RequestRouteCorrelation` is also per destination. It contains only the
+application-scoped request, Thread, Turn, Conversation, delivery, expiry, and bridge
+projection-state identity plus only the response shape required to validate a
+choice/cardinality. This response shape is routing-validation state, not a
+copy or assertion of native pending-request truth. It never contains the
+prompt, requested permissions, or response. `open`, `responded`, `resolved`, and `stale` describe
+whether this bridge may route another response; the native Application remains
+request authority.
+
+## Proactive delivery
+
+`DeliveryIntent` is the common semantic request for output that was not caused
+by a new inbound message. It contains a caller-stable delivery ID, content,
+and either:
+
+- an explicit `ConversationDeliveryTarget`; or
+- a `ThreadRouteDeliveryTarget`, optionally narrowed to one route.
+
+A Thread target reuses the configured projection policy. It may therefore
+resolve to several destinations under `all_observers`. Gateway authenticates
+an opaque credential into a `DeliveryPrincipal` and checks the requested
+Thread or explicit Conversation scope before route resolution.
+
+The first resolved route set is stored as immutable
+`DeliveryRouteSnapshot` values. Delivery identity is namespaced by an
+SDK-controlled external/internal origin and the trusted principal, so two
+principals cannot poison each other and an authorizer cannot impersonate the
+Gateway-internal domain. Within one principal, reusing a delivery ID with a
+different target or payload is a conflict. A retry returns the stored
+accepted, retryable, rejected, partial, in-flight, or unknown result; it never
+silently follows a route that moved after the first submission. Unknown
+remains ambiguous and is not treated as permission to resend.
+
+Internal persistence retains the resolved Conversation snapshot. A
+Thread-targeted public result exposes only its route ID, state, and sanitized
+receipt without native message IDs or free-form Channel diagnostics; only an
+explicit Conversation caller receives the Conversation it already supplied.
+
+External proactive `LocalPath` content requires lowercase `metadata.sha256` as its
+logical content identity. The accepting Channel verifies that digest while
+reading its configured trusted spool. Temporary paths therefore do not define
+retry identity, and changing bytes without changing the authoritative digest
+cannot become a new send.
+
+The optional JSON ingress is not the semantic protocol. It is a safe adapter
+for local tools: inline base64 artifacts are authorized before decoding,
+materialized beneath a configured private staging root, synchronously
+submitted as `LocalPath`, and then removed. Its response deliberately omits
+Channel-native Conversation IDs for Thread-scoped callers.

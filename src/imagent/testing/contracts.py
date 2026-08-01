@@ -1,26 +1,48 @@
 from __future__ import annotations
 
+import asyncio
+import inspect
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from imagent.adapters import AgentApplicationAdapter, ChannelAdapter
 from imagent.contracts import (
+    ActivateNativeThread,
+    AgentEvent,
+    AgentEventType,
     AgentInput,
-    ChannelMessage,
-    Operation,
-    OperationResultStatus,
-    OperationTarget,
-    OperationType,
-    Page,
+    ApplicationOperationFailed,
+    CreateThread,
+    DeleteThread,
+    GetProject,
+    GetThread,
+    GetThreadHistory,
+    GetThreadStatus,
+    GetTurnCatchup,
+    InboundMessage,
+    ListProjects,
+    ListThreads,
+    NativeThreadActivated,
+    OutboundMessage,
     ProjectMode,
-    ProjectSummary,
+    ProjectRead,
+    ProjectsListed,
     SupportLevel,
     TextContent,
+    ThreadCreated,
+    ThreadDeleted,
     ThreadDeletionCapability,
-    ThreadStatus,
-    ThreadSummary,
+    ThreadDeletionMode,
+    ThreadHistoryRead,
+    ThreadRead,
+    ThreadsListed,
+    ThreadStatusRead,
+    TurnCatchupRead,
     derive_client_message_id,
+    validate_agent_event,
     validate_application_capabilities,
+    validate_application_operation_result,
     validate_thread_ref,
 )
 
@@ -42,7 +64,7 @@ class ContractReport:
 
 async def verify_channel_adapter(
     adapter: ChannelAdapter,
-    sample_message: ChannelMessage | None = None,
+    sample_message: InboundMessage | None = None,
 ) -> ContractReport:
     checks: list[ContractCheck] = []
     first_identity = adapter.channel_instance_id
@@ -52,11 +74,14 @@ async def verify_channel_adapter(
     checks.append(ContractCheck("stable channel identity"))
 
     capabilities = adapter.capabilities
-    if capabilities.plain_text is SupportLevel.UNSUPPORTED:
+    profile = capabilities.delivery
+    if profile.plain_text is SupportLevel.UNSUPPORTED:
         raise AssertionError("Channel adapter must support plain text natively or by fallback")
-    if capabilities.max_text_length is not None and capabilities.max_text_length < 1:
+    if profile.max_text_length is not None and profile.max_text_length < 1:
         raise AssertionError("max_text_length must be positive")
-    if capabilities.max_attachment_size is not None and capabilities.max_attachment_size < 1:
+    if profile.max_attachment_count is not None and profile.max_attachment_count < 1:
+        raise AssertionError("max_attachment_count must be positive")
+    if profile.max_attachment_size is not None and profile.max_attachment_size < 1:
         raise AssertionError("max_attachment_size must be positive")
     checks.append(ContractCheck("valid channel capabilities"))
 
@@ -74,10 +99,18 @@ async def verify_channel_adapter(
     checks.append(ContractCheck("start and stop lifecycle"))
 
     if sample_message is not None:
-        receipt = await adapter.send(sample_message)
+        outbound = OutboundMessage(
+            delivery_id=f"contract:{sample_message.message_id}",
+            conversation_ref=sample_message.conversation_ref,
+            content=sample_message.content,
+            created_at=sample_message.created_at,
+            reply_to=sample_message.message_id,
+        )
+        receipt = await adapter.send(outbound)
         if receipt.status not in {
             "accepted_by_platform",
             "rejected_by_platform",
+            "retryable_failure",
             "unknown",
         }:
             raise AssertionError("delivery receipt has an unknown status")
@@ -101,93 +134,110 @@ async def verify_application_adapter(
 
     project_ref = None
     if capabilities.projects.mode is ProjectMode.MANAGED:
-        projects_result = await adapter.execute(operation(OperationType.PROJECT_LIST, adapter))
-        projects = succeeded_value(projects_result, Page)
-        if not projects.items or not isinstance(projects.items[0], ProjectSummary):
-            raise AssertionError("managed project adapter must expose a contract-test project")
-        project_result = await adapter.execute(
-            operation(
-                OperationType.PROJECT_SELECT,
-                adapter,
-                project_ref=projects.items[0].ref,
-            )
+        list_projects = ListProjects(
+            operation_id="contract:project.list",
+            application_ref=summary.ref,
+            created_at=_now(),
         )
-        project = succeeded_value(project_result, ProjectSummary)
-        project_ref = project.ref
+        projects_result = await adapter.execute(list_projects)
+        validate_application_operation_result(list_projects, projects_result)
+        projects = _require_result(projects_result, ProjectsListed).projects
+        if not projects.items:
+            raise AssertionError("managed project adapter must expose a contract-test project")
+
+        get_project = GetProject(
+            operation_id="contract:project.get",
+            application_ref=summary.ref,
+            project_ref=projects.items[0].ref,
+            created_at=_now(),
+        )
+        project_result = await adapter.execute(get_project)
+        validate_application_operation_result(get_project, project_result)
+        project_ref = _require_result(project_result, ProjectRead).project.ref
         checks.append(ContractCheck("managed project list and read"))
 
-    before = succeeded_value(
-        await adapter.execute(
-            operation(
-                OperationType.THREAD_LIST,
-                adapter,
-                project_ref=project_ref,
-            )
-        ),
-        Page,
+    list_before = ListThreads(
+        operation_id="contract:thread.list:before",
+        application_ref=summary.ref,
+        project_ref=project_ref,
+        created_at=_now(),
     )
-    created = succeeded_value(
-        await adapter.execute(
-            operation(
-                OperationType.THREAD_CREATE,
-                adapter,
-                project_ref=project_ref,
-                arguments={"title": title},
-            )
-        ),
-        ThreadSummary,
+    before_result = await adapter.execute(list_before)
+    validate_application_operation_result(list_before, before_result)
+    before = _require_result(before_result, ThreadsListed).threads
+
+    create = CreateThread(
+        operation_id="contract:thread.create",
+        application_ref=summary.ref,
+        project_ref=project_ref,
+        title=title,
+        created_at=_now(),
     )
+    create_result = await adapter.execute(create)
+    validate_application_operation_result(create, create_result)
+    created = _require_result(create_result, ThreadCreated).thread
     validate_thread_ref(created.ref)
     if created.ref.project_ref != project_ref:
         raise AssertionError("created thread project scope differs from requested project")
-    read = succeeded_value(
-        await adapter.execute(
-            operation(
-                OperationType.THREAD_SWITCH,
-                adapter,
-                project_ref=project_ref,
-                thread_ref=created.ref,
-            )
-        ),
-        ThreadSummary,
+
+    get_thread = GetThread(
+        operation_id="contract:thread.get",
+        application_ref=summary.ref,
+        thread_ref=created.ref,
+        created_at=_now(),
     )
+    read_result = await adapter.execute(get_thread)
+    validate_application_operation_result(get_thread, read_result)
+    read = _require_result(read_result, ThreadRead).thread
     if read.ref != created.ref:
         raise AssertionError("created thread cannot be read by the same reference")
-    after = succeeded_value(
-        await adapter.execute(
-            operation(
-                OperationType.THREAD_LIST,
-                adapter,
-                project_ref=project_ref,
-            )
-        ),
-        Page,
+
+    list_after = ListThreads(
+        operation_id="contract:thread.list:after",
+        application_ref=summary.ref,
+        project_ref=project_ref,
+        created_at=_now(),
     )
+    after_result = await adapter.execute(list_after)
+    validate_application_operation_result(list_after, after_result)
+    after = _require_result(after_result, ThreadsListed).threads
     if created.ref not in {item.ref for item in after.items}:
         raise AssertionError("created thread is absent from thread listing")
     if len(after.items) < len(before.items) + 1:
         raise AssertionError("thread listing did not grow after creation")
     checks.append(ContractCheck("thread create, read, and list round-trip"))
 
-    status = succeeded_value(
-        await adapter.execute(
-            operation(
-                OperationType.THREAD_STATUS,
-                adapter,
-                project_ref=project_ref,
-                thread_ref=created.ref,
-            )
-        ),
-        ThreadStatus,
+    status_operation = GetThreadStatus(
+        operation_id="contract:thread.status",
+        application_ref=summary.ref,
+        thread_ref=created.ref,
+        created_at=_now(),
     )
+    status_result = await adapter.execute(status_operation)
+    validate_application_operation_result(status_operation, status_result)
+    status = _require_result(status_result, ThreadStatusRead).thread_status
     if status != created.status:
         raise AssertionError("created thread and native status disagree")
     checks.append(ContractCheck("thread status"))
+
+    if capabilities.runtime.native_thread_activation is not SupportLevel.UNSUPPORTED:
+        activate = ActivateNativeThread(
+            operation_id="contract:thread.activate_native",
+            application_ref=summary.ref,
+            thread_ref=created.ref,
+            created_at=_now(),
+        )
+        activate_result = await adapter.execute(activate)
+        validate_application_operation_result(activate, activate_result)
+        _require_result(activate_result, NativeThreadActivated)
+        checks.append(ContractCheck("explicit native thread activation"))
 
     client_message_id = derive_client_message_id(
         sample_conversation(),
         "contract-message-1",
     )
+    first_events = adapter.subscribe_thread(created.ref)
+    second_events = adapter.subscribe_thread(created.ref)
     accepted = await adapter.send_input(
         created.ref,
         AgentInput(
@@ -201,28 +251,80 @@ async def verify_application_adapter(
         raise AssertionError("client message ID was not preserved")
     checks.append(ContractCheck("stable client message ID round-trip"))
 
-    if capabilities.threads.deletion is not ThreadDeletionCapability.UNSUPPORTED:
-        succeeded_value(
-            await adapter.execute(
-                operation(
-                    OperationType.THREAD_DELETE,
-                    adapter,
-                    project_ref=project_ref,
-                    thread_ref=created.ref,
-                )
-            ),
-            type(None),
+    first_observation, second_observation = await asyncio.wait_for(
+        asyncio.gather(
+            _collect_turn_events(first_events, accepted.turn_id),
+            _collect_turn_events(second_events, accepted.turn_id),
+        ),
+        timeout=2,
+    )
+    first_ids = tuple(event.event_id for event in first_observation)
+    second_ids = tuple(event.event_id for event in second_observation)
+    for event in first_observation:
+        validate_agent_event(event, capabilities)
+    if first_ids != second_ids:
+        raise AssertionError("Thread subscribers did not receive the same canonical events")
+    if not any(event.type is AgentEventType.MESSAGE_COMPLETED for event in first_observation):
+        raise AssertionError("Turn stream did not contain a completed Agent message")
+    if first_observation[-1].type not in {
+        AgentEventType.TURN_COMPLETED,
+        AgentEventType.TURN_FAILED,
+        AgentEventType.TURN_INTERRUPTED,
+    }:
+        raise AssertionError("Turn stream did not end with an explicit terminal event")
+    checks.append(ContractCheck("fan-out Turn event lifecycle"))
+
+    if capabilities.runtime.history is not SupportLevel.UNSUPPORTED:
+        catchup_operation = GetTurnCatchup(
+            operation_id="contract:turn.catchup",
+            application_ref=summary.ref,
+            thread_ref=created.ref,
+            limit=5,
+            created_at=_now(),
         )
-        deleted_listing = succeeded_value(
-            await adapter.execute(
-                operation(
-                    OperationType.THREAD_LIST,
-                    adapter,
-                    project_ref=project_ref,
-                )
-            ),
-            Page,
+        catchup_result = await adapter.execute(catchup_operation)
+        validate_application_operation_result(catchup_operation, catchup_result)
+        catchup = _require_result(catchup_result, TurnCatchupRead).catchup
+
+        history_operation = GetThreadHistory(
+            operation_id="contract:thread.history",
+            application_ref=summary.ref,
+            thread_ref=created.ref,
+            limit=3,
+            page=1,
+            created_at=_now(),
         )
+        history_result = await adapter.execute(history_operation)
+        validate_application_operation_result(history_operation, history_result)
+        history = _require_result(history_result, ThreadHistoryRead).history
+        if catchup.thread_ref != created.ref or history.thread_ref != created.ref:
+            raise AssertionError("history result belongs to a different thread")
+        checks.append(ContractCheck("catch-up and history result scoping"))
+
+    deletion = capabilities.threads.deletion
+    if deletion is not ThreadDeletionCapability.UNSUPPORTED:
+        delete = DeleteThread(
+            operation_id="contract:thread.delete",
+            application_ref=summary.ref,
+            thread_ref=created.ref,
+            mode=ThreadDeletionMode(deletion.value),
+            created_at=_now(),
+        )
+        delete_result = await adapter.execute(delete)
+        validate_application_operation_result(delete, delete_result)
+        deleted = _require_result(delete_result, ThreadDeleted)
+        if deleted.mode.value != deletion.value:
+            raise AssertionError("adapter did not report its actual deletion mode")
+
+        list_deleted = ListThreads(
+            operation_id="contract:thread.list:deleted",
+            application_ref=summary.ref,
+            project_ref=project_ref,
+            created_at=_now(),
+        )
+        deleted_result = await adapter.execute(list_deleted)
+        validate_application_operation_result(list_deleted, deleted_result)
+        deleted_listing = _require_result(deleted_result, ThreadsListed).threads
         if created.ref in {item.ref for item in deleted_listing.items}:
             raise AssertionError("deleted thread remains in thread listing")
         checks.append(ContractCheck("declared thread deletion"))
@@ -232,35 +334,41 @@ async def verify_application_adapter(
     return ContractReport(tuple(checks))
 
 
-def operation(
-    operation_type: OperationType,
-    adapter: AgentApplicationAdapter,
-    *,
-    project_ref=None,
-    thread_ref=None,
-    arguments=None,
-) -> Operation:
-    return Operation(
-        operation_id=f"contract:{operation_type.value}",
-        conversation_ref=sample_conversation(),
-        actor="contract-user",
-        type=operation_type,
-        target=OperationTarget(
-            application_ref=adapter.summary.ref,
-            project_ref=project_ref,
-            thread_ref=thread_ref,
-        ),
-        arguments=arguments or {},
-        created_at=datetime.now(UTC),
-    )
-
-
-def succeeded_value(result, expected_type):
-    if result.status is not OperationResultStatus.SUCCEEDED:
+def _require_result(result, expected_type):
+    if isinstance(result, ApplicationOperationFailed):
         raise AssertionError(f"operation failed: {result.error}")
-    if not isinstance(result.value, expected_type):
-        raise AssertionError(f"expected {expected_type}, got {type(result.value)}")
-    return result.value
+    if not isinstance(result, expected_type):
+        raise AssertionError(f"expected {expected_type}, got {type(result)}")
+    return result
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+async def _collect_turn_events(
+    events: AsyncIterator[AgentEvent],
+    turn_id: str,
+) -> tuple[AgentEvent, ...]:
+    observed: list[AgentEvent] = []
+    try:
+        async for event in events:
+            if event.turn_id not in {None, turn_id}:
+                continue
+            observed.append(event)
+            if event.type in {
+                AgentEventType.TURN_COMPLETED,
+                AgentEventType.TURN_FAILED,
+                AgentEventType.TURN_INTERRUPTED,
+            }:
+                return tuple(observed)
+    finally:
+        close = getattr(events, "aclose", None)
+        if callable(close):
+            result = close()
+            if inspect.isawaitable(result):
+                await result
+    raise AssertionError("Thread event stream ended before a terminal Turn event")
 
 
 def sample_conversation():

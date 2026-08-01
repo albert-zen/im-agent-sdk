@@ -3,6 +3,174 @@
   "$id": "https://schemas.imagent.dev/v1/events.schema.json",
   "title": "IM Agent unified events",
   "$defs": {
+    "RequestChoice": {
+      "type": "object",
+      "required": ["choiceId", "label"],
+      "properties": {
+        "choiceId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "label": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+        "description": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "ApprovalRequest": {
+      "type": "object",
+      "required": [
+        "kind",
+        "requestRef",
+        "threadRef",
+        "turnId",
+        "prompt",
+        "choices"
+      ],
+      "properties": {
+        "kind": { "const": "approval" },
+        "requestRef": { "$ref": "resources.schema.json#/$defs/RequestRef" },
+        "threadRef": { "$ref": "resources.schema.json#/$defs/ThreadRef" },
+        "turnId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "prompt": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+        "choices": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/RequestChoice" }
+        },
+        "expiresAt": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Timestamp" },
+            { "type": "null" }
+          ]
+        },
+        "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
+      },
+      "additionalProperties": false
+    },
+    "UserInputQuestion": {
+      "type": "object",
+      "required": [
+        "questionId",
+        "prompt",
+        "choices",
+        "allowsOther",
+        "secret",
+        "minAnswers",
+        "maxAnswers"
+      ],
+      "properties": {
+        "questionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "prompt": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
+        "header": { "type": ["string", "null"] },
+        "choices": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/RequestChoice" }
+        },
+        "allowsOther": { "type": "boolean" },
+        "secret": { "type": "boolean" },
+        "minAnswers": { "type": "integer", "minimum": 0 },
+        "maxAnswers": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "UserInputRequest": {
+      "type": "object",
+      "required": [
+        "kind",
+        "requestRef",
+        "threadRef",
+        "turnId",
+        "questions"
+      ],
+      "properties": {
+        "kind": { "const": "user_input" },
+        "requestRef": { "$ref": "resources.schema.json#/$defs/RequestRef" },
+        "threadRef": { "$ref": "resources.schema.json#/$defs/ThreadRef" },
+        "turnId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "prompt": { "type": ["string", "null"] },
+        "questions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/UserInputQuestion" }
+        },
+        "expiresAt": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Timestamp" },
+            { "type": "null" }
+          ]
+        },
+        "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
+      },
+      "additionalProperties": false
+    },
+    "InteractiveRequest": {
+      "oneOf": [
+        { "$ref": "#/$defs/ApprovalRequest" },
+        { "$ref": "#/$defs/UserInputRequest" }
+      ]
+    },
+    "ApprovalResponseShape": {
+      "type": "object",
+      "required": ["kind", "choiceIds"],
+      "properties": {
+        "kind": { "const": "approval" },
+        "choiceIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/Identifier" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "UserInputQuestionShape": {
+      "type": "object",
+      "required": [
+        "questionId",
+        "choiceIds",
+        "allowsOther",
+        "minAnswers",
+        "maxAnswers"
+      ],
+      "properties": {
+        "questionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "choiceIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/Identifier" }
+        },
+        "allowsOther": { "type": "boolean" },
+        "minAnswers": { "type": "integer", "minimum": 0 },
+        "maxAnswers": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "UserInputResponseShape": {
+      "type": "object",
+      "required": ["kind", "questions"],
+      "properties": {
+        "kind": { "const": "user_input" },
+        "questions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/UserInputQuestionShape" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "RequestResponseShape": {
+      "oneOf": [
+        { "$ref": "#/$defs/ApprovalResponseShape" },
+        { "$ref": "#/$defs/UserInputResponseShape" }
+      ]
+    },
+    "RequestResolution": {
+      "type": "object",
+      "required": ["requestRef", "status", "resolvedAt"],
+      "properties": {
+        "requestRef": { "$ref": "resources.schema.json#/$defs/RequestRef" },
+        "status": { "enum": ["resolved", "stale"] },
+        "resolvedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      },
+      "additionalProperties": false
+    },
     "EventType": {
       "enum": [
         "message.created",
@@ -26,7 +194,6 @@
       "required": [
         "eventId",
         "applicationInstanceId",
-        "sequence",
         "type",
         "data",
         "createdAt"
@@ -54,12 +221,86 @@
             { "type": "null" }
           ]
         },
-        "sequence": { "type": "integer", "minimum": 0 },
+        "sequence": { "type": ["integer", "null"], "minimum": 0 },
+        "sequenceEpoch": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
         "cursor": { "type": ["string", "null"] },
         "type": { "$ref": "#/$defs/EventType" },
         "data": { "$ref": "common.schema.json#/$defs/Metadata" },
-        "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+        "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "request": {
+          "oneOf": [
+            { "$ref": "#/$defs/InteractiveRequest" },
+            { "type": "null" }
+          ]
+        },
+        "requestResolution": {
+          "oneOf": [
+            { "$ref": "#/$defs/RequestResolution" },
+            { "type": "null" }
+          ]
+        }
       },
+      "allOf": [
+        {
+          "if": {
+            "required": ["sequence"],
+            "properties": { "sequence": { "type": "integer" } }
+          },
+          "then": {
+            "required": ["sequenceEpoch"],
+            "properties": {
+              "sequenceEpoch": {
+                "$ref": "common.schema.json#/$defs/Identifier"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["sequenceEpoch"],
+            "properties": {
+              "sequenceEpoch": {
+                "$ref": "common.schema.json#/$defs/Identifier"
+              }
+            }
+          },
+          "then": {
+            "required": ["sequence"],
+            "properties": { "sequence": { "type": "integer" } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "request.opened" } },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["request"],
+            "properties": {
+              "request": { "$ref": "#/$defs/InteractiveRequest" },
+              "requestResolution": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "request.resolved" } },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["requestResolution"],
+            "properties": {
+              "request": { "type": "null" },
+              "requestResolution": { "$ref": "#/$defs/RequestResolution" }
+            }
+          }
+        }
+      ],
       "additionalProperties": false
     }
   }

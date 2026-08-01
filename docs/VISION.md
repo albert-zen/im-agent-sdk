@@ -2,108 +2,140 @@
 
 ## Purpose
 
-IM Agent SDK makes different Agent applications controllable from different
-instant-messaging channels through one resource, operation, and event model.
+IM Agent SDK is a thin semantic bridge between multiple instant-messaging
+Channels and multiple Agent Applications.
 
-Its long-term value is not a particular QQ, Telegram, or Feishu bot. Its value
-is the stable seam between:
+It gives incompatible IM platforms and Agent Applications one small resource,
+message, operation, event, and adapter vocabulary without becoming a second
+Agent framework.
 
-- IM platforms with incompatible message and interaction capabilities; and
-- Agent applications with incompatible project, thread, execution, and event
-  models.
+Intended Agent Applications include Zen, T3 Code, Codex, Claude Code, and
+future products. Intended Channels include QQ, Telegram, Feishu, Weixin,
+DingTalk, Slack, and others.
 
-The intended applications include Zen, ZenX, T3 Code, Codex CLI, Codex App,
-Claude Code, and future coding-agent products. The intended channels include
-QQ, Telegram, Feishu, Weixin, DingTalk, Slack, and other IM systems.
+## Authority boundary
 
-## Product thesis
+Agent Applications always own:
 
-Coding-agent applications are converging on a common shape:
+- Project and Thread resources;
+- transcript/item identity and authoritative history;
+- Turn, request, approval, execution, and interruption truth;
+- model, provider, workspace, sandbox, and native runtime behavior.
 
-```text
-Agent application
-  └── Project or workspace
-        └── Thread or session
-              └── Messages, turns, requests, and execution events
-```
+The SDK owns only IM bridge state:
 
-Their native APIs and semantics still differ. IM Agent SDK gives an IM client a
-consistent way to:
+- Channel transport and native delivery behavior;
+- Conversation input bindings;
+- outbound Thread projection routes;
+- delivery correlation and idempotency;
+- necessary reconnect/recovery projections that can be rebuilt from the
+  authoritative Application.
 
-- discover Agent application instances;
-- list and select projects;
-- create, list, switch, delete, and inspect threads;
-- send messages to the selected thread;
-- observe user messages, Agent output, streaming deltas, status changes,
-  failures, interruptions, approvals, and user-input requests.
+The SDK never creates a second transcript, Agent state machine, execution
+runtime, request authority, policy engine, or general orchestrator.
 
 ## Experience goal
 
-A user can start work from an IM conversation, continue it in ZenX or T3 Code,
-then return to IM without losing the thread or seeing divergent histories.
+A user can start work from IM, continue the same native Thread in another
+client, then return without divergent histories. The surfaces are multiple
+views over one Agent Thread, not bots copying content between independent
+transcripts.
 
-The experience should feel like multiple views over one Agent thread, not like
-multiple bots copying messages between independent transcripts.
+## Common semantic model
 
-## Core concepts
+The SDK standardizes:
 
-The SDK standardizes four different kinds of objects:
+1. **Resources** — Application, Project, Thread, Conversation, binding, and
+   projection route references.
+2. **Messages** — inbound, outbound, and authoritative Agent content.
+3. **Operations** — explicit control intent.
+4. **Events** — canonical message and lifecycle observations.
+5. **Capabilities** — honest support and explicit unsupported outcomes.
 
-1. **Resources** — Agent application, project, and thread.
-2. **Messages** — content sent by users and produced by Agents.
-3. **Operations** — explicit control intent such as switching or deleting a
-   thread.
-4. **Events** — the unified stream through which clients observe canonical
-   messages and lifecycle changes.
+`Message` carries content. `Operation` carries control intent. Slash commands,
+buttons, and natural-language interpreters may create typed Operations, but
+their product grammar is not Core.
 
-Messages and operations are deliberately separate. A slash command, button, or
-natural-language intent may create an operation, but the core operation is not
-stored as magic chat text.
+## Core admission rule
+
+A concept enters SDK Core only when it is shared semantics rather than one
+consumer's convenience.
+
+- Agent-side semantics normally require evidence from at least two different
+  Agent Applications.
+- Channel-side behavior normally requires evidence from at least two different
+  IM Channels.
+- The design review must include a second implementation or a counterexample,
+  not only Codex/IMCodex.
+
+If only one product currently needs the behavior, prefer its concrete adapter,
+consumer composition, optional Controller/contrib package, or a neutral
+extension seam. Do not turn a Codex or IMCodex policy into a universal
+contract.
+
+Every design classifies a proposal:
+
+| Class | Meaning | Typical owner |
+|---|---|---|
+| Core invariant | required for interoperable semantics and safety across implementations | Contracts/Core/Gateway infrastructure |
+| Optional capability | common shape with honest per-integration support | Contracts plus concrete adapters |
+| Adapter-specific policy | native translation, limits, recovery, rendering, or API behavior | Channel/Application adapter |
+| Consumer policy | product UX, permissions, configuration, retry appetite, or orchestration | IMCodex or another downstream composition |
+
+See the accepted
+[Core admission and policy ownership ADR](decisions/0006-core-admission-and-policy-ownership.md).
 
 ## Principles
 
 ### One authoritative Agent history
 
-The connected Agent application remains authoritative for its projects,
-threads, transcript, turns, requests, and execution state. The SDK must not
-create a competing transcript or another Agent runtime.
+Completed messages and recovery come from native authoritative
+history/snapshot/catch-up. SDK projections can be cached or checkpointed only
+when deletion and reconciliation reproduce the same Agent truth.
 
-### Deterministic routing
+### Deterministic, separated routing
 
-Routing is selected by explicit bindings and operations. A model does not
-silently choose which application, project, or thread receives a message.
+Conversation input selection, optional native Thread activation, and outbound
+Thread projection are separate mutations. A model does not silently choose
+their targets.
 
-### Cross-client consistency
+### Stable identity and honest ordering
 
-The same completed user and Agent messages must be observable from IM, desktop,
-CLI, and Web clients. Stable IDs and ordered cursors are contract requirements,
-not implementation details.
+Externally visible mutations and events have stable IDs. Text and timestamps
+never define deduplication. Cursor/sequence guarantees are declared only when
+the native producer preserves them; otherwise recovery reconciles from
+authoritative history.
 
-### Honest capability differences
+### Explicit capability differences
 
-Channel and Agent application features vary. The SDK exposes capabilities and
-explicit unsupported errors instead of pretending all integrations can edit,
-delete, stream, approve, or manage projects identically.
+Integrations expose native support, declared fallback, or unsupported behavior.
+Destructive, security-sensitive, attachment, replay, and request behavior is
+never silently approximated.
 
 ### Small shared core
 
-The common model contains only semantics proven across integrations.
-Platform-specific rendering and Agent-specific runtime behavior stay in their
-adapters.
+Common delivery planning and bounded destination ordering use declared Channel
+capabilities. Native Markdown escaping, platform APIs, media upload,
+credentials, final validation, and native receipt mapping stay in Channel
+adapters. Application workspace, provider/model, sandbox, request, and runtime
+behavior stays in Application adapters. Product commands, permissions,
+capacity, and retry appetite stay in Controllers or consumers.
+
+### Maintainability is a boundary property
+
+The goal is clear ownership, one-way dependencies, explicit failure,
+diagnosability, and reviewable modules. More abstractions are not a goal.
+Repeated review guidance should become tests, schemas, architecture rules, or
+component documentation.
 
 ## Non-goals
 
 The SDK is not:
 
 - an Agent runtime or model provider;
-- a replacement for Zen App Server, T3 Server, Codex App Server, or Claude
-  Code;
-- a project scheduler or multi-Agent orchestration engine;
-- a universal credential store;
-- a second durable transcript;
-- a sandbox or tool-approval policy engine;
-- a UI framework;
-- an OpenClaw- or QwenPaw-style all-in-one Agent product.
-
-Products built with the SDK may provide those capabilities, but they are not
-part of the SDK core.
+- a replacement for native App Servers;
+- a durable transcript or execution store;
+- a universal permission, credential, sandbox, or approval policy engine;
+- a project scheduler or multi-Agent orchestrator;
+- a UI framework or all-in-one Agent product;
+- a durable delivery job system without proof from multiple real consumers.

@@ -1,20 +1,242 @@
 from __future__ import annotations
 
+import asyncio
+import sqlite3
 import tempfile
 import unittest
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from imagent.adapters import IdempotencyClaimStatus, RequestCorrelationConflict
 from imagent.contracts import (
+    AgentInput,
     ApplicationRef,
+    ApprovalResponseShape,
     ConversationBinding,
     ConversationRef,
+    ProjectMode,
     ProjectRef,
+    RequestRef,
+    RequestRouteCorrelation,
+    RequestRouteState,
+    TextContent,
+    ThreadProjectionRoute,
     ThreadRef,
+    TurnReplyCorrelation,
+)
+from imagent.gateway import ImAgentGateway
+from imagent.projections import derive_projection_route_id, derive_turn_reply_correlation_id
+from imagent.request_correlations import (
+    InMemoryRequestCorrelationRepository,
+    derive_request_correlation_id,
 )
 from imagent.storage import SQLiteGatewayState
+from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 
 class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
+    def _request_correlation(
+        self,
+        *,
+        application_id: str,
+        native_request_id: str,
+        conversation_id: str,
+        now: datetime,
+    ) -> RequestRouteCorrelation:
+        request_ref = RequestRef(
+            application_ref=ApplicationRef(application_id),
+            native_request_id=native_request_id,
+        )
+        conversation = ConversationRef("qq-main", conversation_id)
+        return RequestRouteCorrelation(
+            correlation_id=derive_request_correlation_id(
+                request_ref,
+                conversation,
+            ),
+            request_ref=request_ref,
+            thread_ref=ThreadRef(application_id, f"thread-{application_id}"),
+            turn_id=f"turn-{application_id}",
+            conversation_ref=conversation,
+            delivery_id=f"delivery-{application_id}-{conversation_id}",
+            response_shape=ApprovalResponseShape(
+                ("approve_once", "approve_session", "decline", "cancel")
+            ),
+            state=RequestRouteState.OPEN,
+            created_at=now,
+            updated_at=now,
+        )
+
+    async def test_request_correlations_are_scoped_by_application_and_epoch(
+        self,
+    ) -> None:
+        now = datetime.now(UTC)
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_state = SQLiteGatewayState(Path(directory) / "requests.sqlite3")
+            repositories = (
+                InMemoryRequestCorrelationRepository(),
+                sqlite_state,
+            )
+            try:
+                for repository in repositories:
+                    with self.subTest(repository=type(repository).__name__):
+                        first = self._request_correlation(
+                            application_id="app-a",
+                            native_request_id="epoch-1:request-7",
+                            conversation_id="conversation-a",
+                            now=now,
+                        )
+                        same_native_id_other_app = self._request_correlation(
+                            application_id="app-b",
+                            native_request_id="epoch-1:request-7",
+                            conversation_id="conversation-a",
+                            now=now,
+                        )
+                        reused_transport_id_next_epoch = self._request_correlation(
+                            application_id="app-a",
+                            native_request_id="epoch-2:request-7",
+                            conversation_id="conversation-a",
+                            now=now,
+                        )
+                        for correlation in (
+                            first,
+                            same_native_id_other_app,
+                            reused_transport_id_next_epoch,
+                        ):
+                            await repository.put_request_correlation(correlation)
+
+                        transitioned = await repository.transition_request_correlations(
+                            first.request_ref,
+                            expected_states=(RequestRouteState.OPEN,),
+                            state=RequestRouteState.RESPONDED,
+                            updated_at=now + timedelta(seconds=1),
+                        )
+                        self.assertEqual(len(transitioned), 1)
+                        self.assertEqual(
+                            (
+                                await repository.list_request_correlations(
+                                    request_ref=same_native_id_other_app.request_ref
+                                )
+                            )[0].state,
+                            RequestRouteState.OPEN,
+                        )
+                        self.assertEqual(
+                            (
+                                await repository.list_request_correlations(
+                                    request_ref=reused_transport_id_next_epoch.request_ref
+                                )
+                            )[0].state,
+                            RequestRouteState.OPEN,
+                        )
+                        with self.assertRaises(RequestCorrelationConflict):
+                            await repository.transition_request_correlations(
+                                first.request_ref,
+                                expected_states=(RequestRouteState.OPEN,),
+                                state=RequestRouteState.STALE,
+                                updated_at=now + timedelta(seconds=2),
+                            )
+            finally:
+                await sqlite_state.close()
+
+    async def test_request_correlation_shape_and_state_survive_restart(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "request-restart.sqlite3"
+            now = datetime.now(UTC)
+            correlation = self._request_correlation(
+                application_id="app-a",
+                native_request_id="epoch-1:request-7",
+                conversation_id="conversation-a",
+                now=now,
+            )
+            first = SQLiteGatewayState(path)
+            await first.put_request_correlation(correlation)
+            await first.close()
+
+            second = SQLiteGatewayState(path)
+            try:
+                self.assertEqual(
+                    await second.list_request_correlations(request_ref=correlation.request_ref),
+                    (correlation,),
+                )
+                with self.assertRaises(ValueError):
+                    await second.delete_request_correlations()
+            finally:
+                await second.close()
+
+    async def test_late_request_destination_inherits_request_wide_state(
+        self,
+    ) -> None:
+        now = datetime.now(UTC)
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_state = SQLiteGatewayState(Path(directory) / "late-route.sqlite3")
+            repositories = (
+                InMemoryRequestCorrelationRepository(),
+                sqlite_state,
+            )
+            try:
+                for repository in repositories:
+                    with self.subTest(repository=type(repository).__name__):
+                        first = self._request_correlation(
+                            application_id="app-a",
+                            native_request_id="epoch-1:request-late-route",
+                            conversation_id="conversation-a",
+                            now=now,
+                        )
+                        await repository.put_request_correlation(first)
+                        await repository.transition_request_correlations(
+                            first.request_ref,
+                            expected_states=(RequestRouteState.OPEN,),
+                            state=RequestRouteState.RESPONDED,
+                            updated_at=now + timedelta(seconds=1),
+                        )
+                        late = self._request_correlation(
+                            application_id="app-a",
+                            native_request_id="epoch-1:request-late-route",
+                            conversation_id="conversation-b",
+                            now=now + timedelta(seconds=2),
+                        )
+                        stored = await repository.put_request_correlation(late)
+                        self.assertIs(stored.state, RequestRouteState.RESPONDED)
+
+                        await repository.transition_request_correlations(
+                            first.request_ref,
+                            expected_states=(RequestRouteState.RESPONDED,),
+                            state=RequestRouteState.RESOLVED,
+                            updated_at=now + timedelta(seconds=3),
+                        )
+                        latest = self._request_correlation(
+                            application_id="app-a",
+                            native_request_id="epoch-1:request-late-route",
+                            conversation_id="conversation-c",
+                            now=now + timedelta(seconds=4),
+                        )
+                        stored = await repository.put_request_correlation(latest)
+                        self.assertIs(stored.state, RequestRouteState.RESOLVED)
+
+                        stale = self._request_correlation(
+                            application_id="app-a",
+                            native_request_id="epoch-1:request-stale",
+                            conversation_id="conversation-a",
+                            now=now,
+                        )
+                        await repository.put_request_correlation(stale)
+                        await repository.transition_request_correlations(
+                            stale.request_ref,
+                            expected_states=(RequestRouteState.OPEN,),
+                            state=RequestRouteState.STALE,
+                            updated_at=now + timedelta(seconds=1),
+                        )
+                        repeated = await repository.put_request_correlation(
+                            self._request_correlation(
+                                application_id="app-a",
+                                native_request_id="epoch-1:request-stale",
+                                conversation_id="conversation-a",
+                                now=now + timedelta(seconds=2),
+                            )
+                        )
+                        self.assertIs(repeated.state, RequestRouteState.STALE)
+            finally:
+                await sqlite_state.close()
+
     async def test_bindings_and_completed_idempotency_survive_restart(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "gateway.sqlite3"
@@ -33,21 +255,36 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                     ),
                 )
             )
-            self.assertTrue(await first.claim("inbound:qq-main", "message-1"))
+            self.assertEqual(
+                await first.claim("inbound:qq-main", "message-1"),
+                IdempotencyClaimStatus.ACQUIRED,
+            )
             await first.complete("inbound:qq-main", "message-1")
             await first.close()
 
             second = SQLiteGatewayState(path)
             try:
                 self.assertEqual(await second.get(conversation), stored)
-                self.assertFalse(await second.claim("inbound:qq-main", "message-1"))
-                self.assertTrue(await second.claim("inbound:qq-main", "released-message"))
+                self.assertEqual(
+                    await second.claim("inbound:qq-main", "message-1"),
+                    IdempotencyClaimStatus.ALREADY_COMPLETED,
+                )
+                self.assertEqual(
+                    await second.claim("inbound:qq-main", "released-message"),
+                    IdempotencyClaimStatus.ACQUIRED,
+                )
                 await second.release(
                     "inbound:qq-main",
                     "released-message",
                 )
-                self.assertTrue(await second.claim("inbound:qq-main", "released-message"))
-                self.assertTrue(await second.claim("inbound:qq-main", "stale-message"))
+                self.assertEqual(
+                    await second.claim("inbound:qq-main", "released-message"),
+                    IdempotencyClaimStatus.ACQUIRED,
+                )
+                self.assertEqual(
+                    await second.claim("inbound:qq-main", "stale-message"),
+                    IdempotencyClaimStatus.ACQUIRED,
+                )
             finally:
                 await second.close()
 
@@ -56,10 +293,350 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                 stale_claim_after_seconds=0,
             )
             try:
-                self.assertTrue(await recovered.claim("inbound:qq-main", "stale-message"))
-                self.assertFalse(await recovered.claim("inbound:qq-main", "message-1"))
+                self.assertEqual(
+                    await recovered.claim("inbound:qq-main", "stale-message"),
+                    IdempotencyClaimStatus.ACQUIRED,
+                )
+                self.assertEqual(
+                    await recovered.claim("inbound:qq-main", "message-1"),
+                    IdempotencyClaimStatus.ALREADY_COMPLETED,
+                )
             finally:
                 await recovered.close()
+
+    async def test_side_effect_started_claim_is_not_reclaimed_after_restart(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "gateway.sqlite3"
+            first = SQLiteGatewayState(path)
+            self.assertEqual(
+                await first.claim("inbound:qq-main", "message-unknown"),
+                IdempotencyClaimStatus.ACQUIRED,
+            )
+            await first.mark_side_effect_started(
+                "inbound:qq-main",
+                "message-unknown",
+            )
+            await first.close()
+
+            recovered = SQLiteGatewayState(
+                path,
+                stale_claim_after_seconds=0,
+            )
+            try:
+                self.assertEqual(
+                    await recovered.claim("inbound:qq-main", "message-unknown"),
+                    IdempotencyClaimStatus.IN_FLIGHT,
+                )
+            finally:
+                await recovered.close()
+
+    async def test_reclaimed_lease_fences_stale_owner_mutations(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state = SQLiteGatewayState(
+                Path(directory) / "gateway.sqlite3",
+                stale_claim_after_seconds=0,
+            )
+            scope = "inbound:qq-main"
+            key = "overlapping-message"
+            try:
+                self.assertEqual(
+                    await state.claim(scope, key, owner_token="owner-a"),
+                    IdempotencyClaimStatus.ACQUIRED,
+                )
+                self.assertEqual(
+                    await state.claim(scope, key, owner_token="owner-b"),
+                    IdempotencyClaimStatus.ACQUIRED,
+                )
+                with self.assertRaisesRegex(RuntimeError, "not owned"):
+                    await state.mark_side_effect_started(
+                        scope,
+                        key,
+                        owner_token="owner-a",
+                    )
+                await state.release(scope, key, owner_token="owner-a")
+                await state.mark_side_effect_started(
+                    scope,
+                    key,
+                    owner_token="owner-b",
+                )
+                await state.release(scope, key, owner_token="owner-a")
+                self.assertEqual(
+                    await state.claim(scope, key, owner_token="owner-c"),
+                    IdempotencyClaimStatus.IN_FLIGHT,
+                )
+            finally:
+                await state.close()
+
+    async def test_existing_database_migrates_without_losing_bridge_state(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "legacy.sqlite3"
+            now = datetime.now(UTC)
+            conversation = ConversationRef("qq-main", "c2c:user-1")
+            project = ProjectRef("t3-main", "project-1")
+            thread = ThreadRef("t3-main", "thread-1", project)
+            route_id = derive_projection_route_id(thread, conversation)
+            connection = sqlite3.connect(path)
+            try:
+                connection.executescript(
+                    """
+                    CREATE TABLE conversation_bindings (
+                        channel_instance_id TEXT NOT NULL,
+                        native_conversation_id TEXT NOT NULL,
+                        application_instance_id TEXT,
+                        project_id TEXT,
+                        thread_id TEXT,
+                        revision INTEGER NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        PRIMARY KEY (channel_instance_id, native_conversation_id)
+                    );
+                    CREATE TABLE idempotency_records (
+                        scope TEXT NOT NULL,
+                        record_key TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        PRIMARY KEY (scope, record_key)
+                    );
+                    CREATE TABLE thread_projection_routes (
+                        route_id TEXT NOT NULL PRIMARY KEY,
+                        application_instance_id TEXT NOT NULL,
+                        project_id TEXT NOT NULL,
+                        thread_id TEXT NOT NULL,
+                        channel_instance_id TEXT NOT NULL,
+                        native_conversation_id TEXT NOT NULL,
+                        reply_to_message_id TEXT,
+                        updated_at TEXT NOT NULL,
+                        UNIQUE (
+                            application_instance_id,
+                            project_id,
+                            thread_id,
+                            channel_instance_id,
+                            native_conversation_id
+                        )
+                    );
+                    """
+                )
+                connection.execute(
+                    """
+                    INSERT INTO conversation_bindings
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        conversation.channel_instance_id,
+                        conversation.native_conversation_id,
+                        "t3-main",
+                        "project-1",
+                        "thread-1",
+                        7,
+                        now.isoformat(),
+                    ),
+                )
+                connection.execute(
+                    "INSERT INTO idempotency_records VALUES (?, ?, ?, ?)",
+                    ("outbound:qq-main", "delivery-1", "completed", now.isoformat()),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO thread_projection_routes
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        route_id,
+                        "t3-main",
+                        "project-1",
+                        "thread-1",
+                        conversation.channel_instance_id,
+                        conversation.native_conversation_id,
+                        "legacy-reply",
+                        now.isoformat(),
+                    ),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            state = SQLiteGatewayState(path)
+            try:
+                binding = await state.get(conversation)
+                assert binding is not None
+                self.assertEqual(binding.revision, 7)
+                self.assertEqual(binding.thread_ref, thread)
+                self.assertEqual(
+                    await state.claim("outbound:qq-main", "delivery-1"),
+                    IdempotencyClaimStatus.ALREADY_COMPLETED,
+                )
+                legacy_route = (await state.list_projection_routes(thread))[0]
+                self.assertIsNone(legacy_route.reply_to_message_id)
+                self.assertIsNone(legacy_route.checkpoint_agent_item_id)
+
+                checkpointed_at = now + timedelta(seconds=1)
+                advanced = await state.advance_projection_checkpoint(
+                    route_id,
+                    expected_agent_item_id=None,
+                    agent_item_id="agent-item-1",
+                    checkpointed_at=checkpointed_at,
+                )
+                refreshed = await state.put_projection_route(
+                    ThreadProjectionRoute(
+                        route_id=route_id,
+                        thread_ref=thread,
+                        conversation_ref=conversation,
+                        reply_to_message_id=None,
+                    )
+                )
+                self.assertEqual(
+                    refreshed.checkpoint_agent_item_id,
+                    advanced.checkpoint_agent_item_id,
+                )
+
+                correlation = TurnReplyCorrelation(
+                    correlation_id=derive_turn_reply_correlation_id(
+                        thread,
+                        "turn-1",
+                    ),
+                    thread_ref=thread,
+                    turn_id="turn-1",
+                    client_message_id="client-message-1",
+                    conversation_ref=conversation,
+                    reply_to_message_id="origin-message-1",
+                    created_at=now,
+                )
+                await state.put_turn_reply_correlation(correlation)
+                self.assertEqual(
+                    await state.get_turn_reply_correlation(thread, "turn-1"),
+                    correlation,
+                )
+                self.assertTrue(await state.delete_turn_reply_correlation(thread, "turn-1"))
+                await state.put_turn_reply_correlation(correlation)
+                self.assertEqual(
+                    await state.delete_turn_reply_correlations(thread_ref=thread),
+                    1,
+                )
+
+                request_correlation = self._request_correlation(
+                    application_id="t3-main",
+                    native_request_id="epoch-1:request-legacy",
+                    conversation_id=conversation.native_conversation_id,
+                    now=now,
+                )
+                await state.put_request_correlation(request_correlation)
+                self.assertEqual(
+                    await state.list_request_correlations(
+                        request_ref=request_correlation.request_ref
+                    ),
+                    (request_correlation,),
+                )
+                transitioned = await state.transition_request_correlations(
+                    request_correlation.request_ref,
+                    expected_states=(RequestRouteState.OPEN,),
+                    state=RequestRouteState.RESOLVED,
+                    updated_at=now + timedelta(seconds=2),
+                )
+                self.assertEqual(transitioned[0].state, RequestRouteState.RESOLVED)
+                self.assertEqual(
+                    await state.delete_request_correlations(
+                        request_ref=request_correlation.request_ref
+                    ),
+                    1,
+                )
+            finally:
+                await state.close()
+
+    async def test_migration_clears_legacy_latest_reply_for_external_turn(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "legacy-route.sqlite3"
+            application = FakeAgentApplicationAdapter(
+                application_instance_id="fake-agent",
+                project_mode=ProjectMode.FLAT,
+            )
+            thread = await application.create_thread()
+            conversation = ConversationRef("fake-channel", "conversation")
+            route_id = derive_projection_route_id(thread.ref, conversation)
+            connection = sqlite3.connect(path)
+            try:
+                connection.executescript(
+                    """
+                    CREATE TABLE thread_projection_routes (
+                        route_id TEXT NOT NULL PRIMARY KEY,
+                        application_instance_id TEXT NOT NULL,
+                        project_id TEXT NOT NULL,
+                        thread_id TEXT NOT NULL,
+                        channel_instance_id TEXT NOT NULL,
+                        native_conversation_id TEXT NOT NULL,
+                        reply_to_message_id TEXT,
+                        updated_at TEXT NOT NULL,
+                        UNIQUE (
+                            application_instance_id,
+                            project_id,
+                            thread_id,
+                            channel_instance_id,
+                            native_conversation_id
+                        )
+                    );
+                    """
+                )
+                connection.execute(
+                    """
+                    INSERT INTO thread_projection_routes
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        route_id,
+                        thread.ref.application_instance_id,
+                        "",
+                        thread.ref.native_thread_id,
+                        conversation.channel_instance_id,
+                        conversation.native_conversation_id,
+                        "stale-latest-inbound",
+                        datetime.now(UTC).isoformat(),
+                    ),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            state = SQLiteGatewayState(path)
+            channel = FakeChannelAdapter()
+            await state.put(
+                ConversationBinding(
+                    conversation_ref=conversation,
+                    application_ref=application.summary.ref,
+                    thread_ref=thread.ref,
+                )
+            )
+            gateway = ImAgentGateway(
+                channels=[channel],
+                applications=[application],
+                bindings=state,
+                projections=state,
+                idempotency=state,
+            )
+            await gateway.start()
+            try:
+                migrated = (await state.list_projection_routes(thread.ref))[0]
+                self.assertIsNone(migrated.reply_to_message_id)
+                await application.send_input(
+                    thread.ref,
+                    AgentInput(
+                        client_message_id="external-after-upgrade",
+                        content=(TextContent("external"),),
+                    ),
+                )
+                async with asyncio.timeout(1):
+                    while len(channel.sent) < 2:
+                        await asyncio.sleep(0)
+                self.assertEqual(
+                    [message.reply_to for message in channel.sent],
+                    [None, None],
+                )
+            finally:
+                await gateway.stop()
+                await state.close()
 
 
 if __name__ == "__main__":

@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.imagent.dev/v1/history.schema.json",
+  "title": "IM Agent catch-up and thread history results",
+  "$defs": {
+    "TurnStatus": {
+      "enum": [
+        "idle",
+        "running",
+        "completed",
+        "failed",
+        "interrupted",
+        "unknown"
+      ]
+    },
+    "TurnCatchup": {
+      "type": "object",
+      "required": ["threadRef", "turnId", "status", "messages"],
+      "properties": {
+        "threadRef": {
+          "$ref": "resources.schema.json#/$defs/ThreadRef"
+        },
+        "turnId": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "status": { "$ref": "#/$defs/TurnStatus" },
+        "messages": {
+          "type": "array",
+          "items": { "$ref": "messages.schema.json#/$defs/AgentMessage" }
+        },
+        "updatedAt": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Timestamp" },
+            { "type": "null" }
+          ]
+        },
+        "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
+      },
+      "additionalProperties": false
+    },
+    "TurnHistoryEntry": {
+      "type": "object",
+      "required": [
+        "turnId",
+        "status",
+        "userMessage",
+        "agentMessages",
+        "error",
+        "hadCompaction"
+      ],
+      "properties": {
+        "turnId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "status": { "$ref": "#/$defs/TurnStatus" },
+        "userMessage": {
+          "oneOf": [
+            { "$ref": "messages.schema.json#/$defs/AgentMessage" },
+            { "type": "null" }
+          ]
+        },
+        "agentMessages": {
+          "type": "array",
+          "items": { "$ref": "messages.schema.json#/$defs/AgentMessage" }
+        },
+        "error": { "type": ["string", "null"] },
+        "hadCompaction": { "type": "boolean" },
+        "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
+      },
+      "additionalProperties": false
+    },
+    "ThreadHistory": {
+      "type": "object",
+      "required": ["threadRef", "turns", "page", "hasOlder"],
+      "properties": {
+        "threadRef": {
+          "$ref": "resources.schema.json#/$defs/ThreadRef"
+        },
+        "turns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/TurnHistoryEntry" }
+        },
+        "page": { "type": "integer", "minimum": 1 },
+        "hasOlder": { "type": "boolean" },
+        "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

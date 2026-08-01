@@ -3,42 +3,101 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
+from functools import partial
 from uuid import uuid4
 
 from .adapters import (
     AgentApplicationAdapter,
     BindingRepository,
     ChannelAdapter,
+    DeliveryAuthorizer,
+    DeliverySubmissionConflict,
+    DeliverySubmissionRepository,
+    IdempotencyClaimStatus,
     IdempotencyRepository,
+    ProjectionRouteRepository,
+    RequestCorrelationConflict,
+    RequestCorrelationRepository,
 )
-from .commands import SlashCommand, parse_slash_command
+from .bindings import BindingConflict
 from .contracts import (
-    AgentEventType,
     AgentInput,
-    AgentMessage,
-    ChannelMessage,
+    ApplicationInputOutcomeUnknown,
+    ApplicationOperation,
+    ApplicationOperationFailed,
+    ApplicationOperationResult,
+    ApplicationsListed,
+    BindConversationToProject,
+    BindConversationToThread,
+    ClearConversationThread,
+    ContractError,
+    ContractViolation,
     ConversationBinding,
-    MessageRole,
-    Operation,
-    OperationResult,
-    OperationResultStatus,
-    OperationTarget,
-    OperationType,
-    Page,
-    ProjectSummary,
+    ConversationBound,
+    ConversationRef,
+    CreateThread,
+    DeliveryIntent,
+    DeliverySubmissionState,
+    DeliveryTarget,
+    GatewayOperation,
+    GatewayOperationFailed,
+    GatewayOperationResult,
+    GetProject,
+    GetThread,
+    InboundMessage,
+    ListApplications,
+    ObserveThread,
+    OperationErrorCode,
+    OutboundMessage,
+    ProactiveDeliveryResult,
+    ProjectionPolicy,
+    ProjectMode,
+    ProjectRead,
+    RequestDuplicateError,
+    RequestResolvedError,
+    RequestResponded,
+    RequestResponseRouted,
+    RequestRouteState,
+    RequestStaleError,
+    RespondRequest,
+    RespondToRequest,
+    SelectApplication,
     TextContent,
     TextFormat,
-    ThreadStatus,
-    ThreadSummary,
+    ThreadCreated,
+    ThreadObserved,
+    ThreadRead,
+    ThreadRef,
     derive_client_message_id,
+    operation_error,
+    validate_application_operation,
+    validate_application_operation_result,
+    validate_gateway_operation,
+    validate_gateway_operation_result,
+    validate_request_response,
 )
+from .controllers import ControllerActions, InboundController, RequestPresenter
+from .delivery_coordination import DeliveryCoordinator
+from .delivery_planning import DeliveryPlanningError
+from .keyed_locks import KeyedLockRegistry
+from .proactive_delivery import (
+    InMemoryDeliverySubmissionRepository,
+    ProactiveDeliveryService,
+)
+from .projection_runtime import InputPostAcceptanceError, ThreadProjectionRuntime
+from .projections import (
+    InMemoryProjectionRouteRepository,
+    ProjectionWorkerHealth,
+    RetryableDeliveryError,
+)
+from .request_correlations import InMemoryRequestCorrelationRepository
 from .storage import InMemoryIdempotencyRepository
 
 logger = logging.getLogger(__name__)
 
 
 class ImAgentGateway:
-    """The public deep module joining Channel and Agent application seams."""
+    """Channel/application orchestration independent from one interaction grammar."""
 
     def __init__(
         self,
@@ -47,6 +106,24 @@ class ImAgentGateway:
         applications: list[AgentApplicationAdapter],
         bindings: BindingRepository,
         idempotency: IdempotencyRepository | None = None,
+        delivery_submissions: DeliverySubmissionRepository | None = None,
+        delivery_authorizer: DeliveryAuthorizer | None = None,
+        delivery_coordinator: DeliveryCoordinator | None = None,
+        projections: ProjectionRouteRepository | None = None,
+        request_correlations: RequestCorrelationRepository | None = None,
+        projection_policy: ProjectionPolicy = ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
+        controller: InboundController | None = None,
+        request_presenter: RequestPresenter | None = None,
+        baseline_history_limit: int = 3,
+        recovery_history_page_size: int = 10,
+        recovery_max_pages: int = 5,
+        catchup_limit: int = 10,
+        projection_item_limit: int = 20,
+        request_delivery_max_pending: int = 256,
+        subscription_retry_initial_seconds: float = 0.05,
+        subscription_retry_max_seconds: float = 2.0,
+        turn_correlation_retention_seconds: float = 7 * 24 * 60 * 60,
+        request_correlation_retention_seconds: float = 7 * 24 * 60 * 60,
     ) -> None:
         self._channels = {channel.channel_instance_id: channel for channel in channels}
         self._applications = {
@@ -55,633 +132,739 @@ class ImAgentGateway:
         }
         self._bindings = bindings
         self._idempotency = idempotency or InMemoryIdempotencyRepository()
+        self._request_correlations = request_correlations or InMemoryRequestCorrelationRepository()
+        self._delivery_coordinator = delivery_coordinator or DeliveryCoordinator()
+        self._controller = controller
         self._locks: dict[object, asyncio.Lock] = {}
-        self._tasks: set[asyncio.Task[None]] = set()
-        self._project_views: dict[object, tuple[ProjectSummary, ...]] = {}
-        self._thread_views: dict[object, tuple[ThreadSummary, ...]] = {}
+        self._request_locks = KeyedLockRegistry()
+        self._outbound_deliveries: dict[
+            tuple[str, str],
+            asyncio.Task[IdempotencyClaimStatus],
+        ] = {}
+        self._starting = False
+        self._startup_messages: list[InboundMessage] = []
+        self._startup_operations: list[GatewayOperation] = []
+        projection_repository = projections or InMemoryProjectionRouteRepository()
+        self._projection_runtime = ThreadProjectionRuntime(
+            applications=self._applications,
+            bindings=bindings,
+            projections=projection_repository,
+            request_correlations=self._request_correlations,
+            request_presenter=request_presenter,
+            projection_policy=projection_policy,
+            execute_application=self.execute_application,
+            deliver_outbound=self._deliver_outbound,
+            deliver_request_outbound=partial(
+                self._deliver_outbound,
+                cancellable=True,
+            ),
+            baseline_history_limit=baseline_history_limit,
+            recovery_history_page_size=recovery_history_page_size,
+            recovery_max_pages=recovery_max_pages,
+            catchup_limit=catchup_limit,
+            projection_item_limit=projection_item_limit,
+            request_delivery_max_pending=request_delivery_max_pending,
+            subscription_retry_initial_seconds=subscription_retry_initial_seconds,
+            subscription_retry_max_seconds=subscription_retry_max_seconds,
+            turn_correlation_retention_seconds=turn_correlation_retention_seconds,
+            request_correlation_retention_seconds=request_correlation_retention_seconds,
+        )
+        self._delivery_service = ProactiveDeliveryService(
+            channels=self._channels,
+            submissions=delivery_submissions or InMemoryDeliverySubmissionRepository(),
+            resolve_thread_routes=self._projection_runtime.active_routes,
+            authorizer=delivery_authorizer,
+            coordinator=self._delivery_coordinator,
+        )
 
     async def start(self) -> None:
-        for application in self._applications.values():
-            await application.start()
-        for channel in self._channels.values():
-            await channel.start(self._handle_message, self._handle_operation)
+        self._delivery_coordinator.start()
+        self._starting = True
+        self._startup_messages.clear()
+        self._startup_operations.clear()
+        started_applications: list[AgentApplicationAdapter] = []
+        started_channels: list[ChannelAdapter] = []
+        try:
+            await self._projection_runtime.cleanup_stale_correlations()
+            restart_open_requests = await self._projection_runtime.open_request_refs()
+            await self._projection_runtime.restore()
+            for application in self._applications.values():
+                await application.start()
+                started_applications.append(application)
+            for channel in self._channels.values():
+                await channel.start(
+                    self._handle_message_entry,
+                    self._handle_operation_entry,
+                )
+                started_channels.append(channel)
+            self._projection_runtime.mark_delivery_ready()
+            await self._projection_runtime.reconcile_pending_requests(restart_open_requests)
+            self._starting = False
+            startup_messages = tuple(self._startup_messages)
+            startup_operations = tuple(self._startup_operations)
+            self._startup_messages.clear()
+            self._startup_operations.clear()
+            for message in startup_messages:
+                await self._handle_message(message)
+            for operation in startup_operations:
+                await self._handle_operation(operation)
+        except BaseException:
+            self._starting = False
+            self._startup_messages.clear()
+            self._startup_operations.clear()
+            await self._projection_runtime.stop()
+            await self._delivery_coordinator.close()
+            for channel in reversed(started_channels):
+                await channel.stop()
+            for application in reversed(started_applications):
+                await application.stop()
+            raise
 
     async def stop(self) -> None:
+        await self._projection_runtime.stop()
+        await self._delivery_coordinator.close()
         for channel in reversed(tuple(self._channels.values())):
             await channel.stop()
-        tasks = tuple(self._tasks)
-        for task in tasks:
-            task.cancel()
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
         for application in reversed(tuple(self._applications.values())):
             await application.stop()
 
-    async def _handle_message(self, message: ChannelMessage) -> None:
-        scope = f"inbound:{message.conversation_ref.channel_instance_id}"
-        key = f"{message.conversation_ref.native_conversation_id}:{message.message_id}"
-        if not await self._idempotency.claim(scope, key):
+    def get_projection_health(
+        self,
+        thread_ref: ThreadRef,
+    ) -> ProjectionWorkerHealth | None:
+        """Return process-local infrastructure health for one projection worker."""
+        return self._projection_runtime.get_health(thread_ref)
+
+    def list_projection_health(self) -> tuple[ProjectionWorkerHealth, ...]:
+        """Return process-local projection health without Agent Turn state."""
+        return self._projection_runtime.list_health()
+
+    async def execute_application(
+        self,
+        operation: ApplicationOperation,
+    ) -> ApplicationOperationResult:
+        """Route one typed application operation without mutating a binding."""
+        try:
+            validate_application_operation(operation)
+            application = self._applications[operation.application_ref.application_instance_id]
+            result = await application.execute(operation)
+            validate_application_operation_result(operation, result)
+            return result
+        except Exception as error:
+            return ApplicationOperationFailed(
+                operation_id=operation.operation_id,
+                type=operation.type,
+                completed_at=datetime.now(UTC),
+                error=_contract_error(error),
+            )
+
+    async def execute_gateway(
+        self,
+        operation: GatewayOperation,
+    ) -> GatewayOperationResult:
+        """Execute one typed Gateway operation under Conversation serialization."""
+        lock = self._locks.setdefault(operation.conversation_ref, asyncio.Lock())
+        async with lock:
+            return await self._execute_gateway_locked(operation)
+
+    async def get_binding(
+        self,
+        conversation_ref: ConversationRef,
+    ) -> ConversationBinding | None:
+        return await self._bindings.get(conversation_ref)
+
+    async def deliver_proactively(
+        self,
+        intent: DeliveryIntent,
+        *,
+        credential: str,
+    ) -> ProactiveDeliveryResult:
+        """Deliver caller-provided content through an authorized Gateway target."""
+        return await self._delivery_service.deliver(intent, credential=credential)
+
+    async def authorize_proactive_target(
+        self,
+        target: DeliveryTarget,
+        *,
+        credential: str,
+    ) -> None:
+        """Fail closed before an ingress materializes caller-provided artifacts."""
+        await self._delivery_service.authorize(target, credential=credential)
+
+    async def _execute_gateway_locked(
+        self,
+        operation: GatewayOperation,
+    ) -> GatewayOperationResult:
+        try:
+            validate_gateway_operation(operation)
+            result = await self._apply_gateway_operation(operation)
+            validate_gateway_operation_result(operation, result)
+            return result
+        except _GatewayActionError as error:
+            contract_error = error.error
+        except Exception as error:
+            contract_error = _contract_error(error)
+        return GatewayOperationFailed(
+            operation_id=operation.operation_id,
+            type=operation.type,
+            completed_at=datetime.now(UTC),
+            error=contract_error,
+        )
+
+    async def _apply_gateway_operation(
+        self,
+        operation: GatewayOperation,
+    ) -> GatewayOperationResult:
+        completed_at = datetime.now(UTC)
+        if isinstance(operation, ListApplications):
+            return ApplicationsListed(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                applications=tuple(
+                    application.summary for application in self._applications.values()
+                ),
+            )
+        if isinstance(operation, SelectApplication):
+            self._require_application(operation.application_ref.application_instance_id)
+            previous = await self._bindings.get(operation.conversation_ref)
+            binding = await self._bindings.put(
+                ConversationBinding(
+                    conversation_ref=operation.conversation_ref,
+                    application_ref=operation.application_ref,
+                ),
+                expected_revision=operation.expected_revision,
+            )
+            await self._projection_runtime.handle_binding_change(previous, binding)
+            return ConversationBound(
+                operation_id=operation.operation_id,
+                type=operation.type,
+                completed_at=completed_at,
+                binding=binding,
+            )
+        if isinstance(operation, BindConversationToProject):
+            application = self._require_application(operation.project_ref.application_instance_id)
+            read = await self.execute_application(
+                GetProject(
+                    operation_id=f"{operation.operation_id}:validate-project",
+                    application_ref=application.summary.ref,
+                    project_ref=operation.project_ref,
+                    created_at=operation.created_at,
+                )
+            )
+            if isinstance(read, ApplicationOperationFailed):
+                raise _GatewayActionError(read.error)
+            if not isinstance(read, ProjectRead):
+                raise RuntimeError("project.get returned an incompatible result")
+            previous = await self._bindings.get(operation.conversation_ref)
+            binding = await self._bindings.put(
+                ConversationBinding(
+                    conversation_ref=operation.conversation_ref,
+                    application_ref=application.summary.ref,
+                    project_ref=read.project.ref,
+                ),
+                expected_revision=operation.expected_revision,
+            )
+            await self._projection_runtime.handle_binding_change(previous, binding)
+            return ConversationBound(
+                operation_id=operation.operation_id,
+                type=operation.type,
+                completed_at=completed_at,
+                binding=binding,
+            )
+        if isinstance(operation, BindConversationToThread):
+            application = self._require_application(operation.thread_ref.application_instance_id)
+            read = await self.execute_application(
+                GetThread(
+                    operation_id=f"{operation.operation_id}:validate-thread",
+                    application_ref=application.summary.ref,
+                    thread_ref=operation.thread_ref,
+                    created_at=operation.created_at,
+                )
+            )
+            if isinstance(read, ApplicationOperationFailed):
+                raise _GatewayActionError(read.error)
+            if not isinstance(read, ThreadRead):
+                raise RuntimeError("thread.get returned an incompatible result")
+            previous = await self._bindings.get(operation.conversation_ref)
+            binding = await self._bindings.put(
+                ConversationBinding(
+                    conversation_ref=operation.conversation_ref,
+                    application_ref=application.summary.ref,
+                    project_ref=read.thread.ref.project_ref,
+                    thread_ref=read.thread.ref,
+                ),
+                expected_revision=operation.expected_revision,
+            )
+            await self._projection_runtime.handle_binding_change(previous, binding)
+            return ConversationBound(
+                operation_id=operation.operation_id,
+                type=operation.type,
+                completed_at=completed_at,
+                binding=binding,
+            )
+        if isinstance(operation, ObserveThread):
+            application = self._require_application(operation.thread_ref.application_instance_id)
+            read = await self.execute_application(
+                GetThread(
+                    operation_id=f"{operation.operation_id}:validate-thread",
+                    application_ref=application.summary.ref,
+                    thread_ref=operation.thread_ref,
+                    created_at=operation.created_at,
+                )
+            )
+            if isinstance(read, ApplicationOperationFailed):
+                raise _GatewayActionError(read.error)
+            if not isinstance(read, ThreadRead):
+                raise RuntimeError("thread.get returned an incompatible result")
+            route = await self._projection_runtime.observe_thread(
+                application,
+                read.thread.ref,
+                operation.conversation_ref,
+                reply_to_message_id=operation.reply_to_message_id,
+            )
+            return ThreadObserved(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                route=route,
+            )
+        if isinstance(operation, RespondToRequest):
+            async with self._request_locks.hold(operation.request_ref):
+                return await self._respond_to_request(
+                    operation,
+                    completed_at=completed_at,
+                )
+        if isinstance(operation, ClearConversationThread):
+            current = await self._bindings.get(operation.conversation_ref)
+            if current is None:
+                raise ValueError("Conversation has no binding")
+            binding = await self._bindings.put(
+                ConversationBinding(
+                    conversation_ref=current.conversation_ref,
+                    application_ref=current.application_ref,
+                    project_ref=current.project_ref,
+                ),
+                expected_revision=operation.expected_revision,
+            )
+            await self._projection_runtime.handle_binding_change(current, binding)
+            return ConversationBound(
+                operation_id=operation.operation_id,
+                type=operation.type,
+                completed_at=completed_at,
+                binding=binding,
+            )
+        raise NotImplementedError(operation.type.value)
+
+    async def _respond_to_request(
+        self,
+        operation: RespondToRequest,
+        *,
+        completed_at: datetime,
+    ) -> RequestResponseRouted:
+        correlations = await self._request_correlations.list_request_correlations(
+            request_ref=operation.request_ref
+        )
+        if not correlations:
+            raise RequestStaleError("request is unknown, expired, or no longer answerable")
+        destination = next(
+            (
+                correlation
+                for correlation in correlations
+                if correlation.conversation_ref == operation.conversation_ref
+            ),
+            None,
+        )
+        if destination is None:
+            raise _GatewayActionError(
+                ContractError(
+                    code=OperationErrorCode.UNAUTHORIZED_DESTINATION.value,
+                    message="this Conversation did not receive the request",
+                )
+            )
+        if destination.state is RequestRouteState.RESPONDED:
+            raise RequestDuplicateError("request already has a submitted response")
+        if destination.state is RequestRouteState.RESOLVED:
+            raise RequestResolvedError("request is already resolved")
+        if destination.state is RequestRouteState.STALE:
+            raise RequestStaleError("request response handle is stale")
+        now = datetime.now(UTC)
+        if destination.expires_at is not None and destination.expires_at <= now:
+            await self._transition_request_state(
+                operation,
+                state=RequestRouteState.STALE,
+                expected_states=(RequestRouteState.OPEN,),
+                updated_at=now,
+            )
+            raise RequestStaleError("request has expired")
+        validate_request_response(operation.response, destination.response_shape)
+        application = self._require_application(
+            operation.request_ref.application_ref.application_instance_id
+        )
+        native = await self.execute_application(
+            RespondRequest(
+                operation_id=f"{operation.operation_id}:request.respond",
+                application_ref=application.summary.ref,
+                request_ref=operation.request_ref,
+                response=operation.response,
+                thread_ref=destination.thread_ref,
+                created_at=operation.created_at,
+            )
+        )
+        if isinstance(native, ApplicationOperationFailed):
+            await self._converge_native_request_failure(operation, native)
+            raise _GatewayActionError(native.error)
+        if not isinstance(native, RequestResponded):
+            raise RuntimeError("request.respond returned an incompatible result")
+        try:
+            await self._transition_request_state(
+                operation,
+                state=RequestRouteState.RESPONDED,
+                expected_states=(RequestRouteState.OPEN,),
+                updated_at=completed_at,
+            )
+        except RequestCorrelationConflict:
+            current = await self._request_correlations.list_request_correlations(
+                request_ref=operation.request_ref
+            )
+            if not current or any(
+                correlation.state
+                not in {
+                    RequestRouteState.RESPONDED,
+                    RequestRouteState.RESOLVED,
+                }
+                for correlation in current
+            ):
+                raise
+        return RequestResponseRouted(
+            operation_id=operation.operation_id,
+            request_ref=operation.request_ref,
+            completed_at=completed_at,
+        )
+
+    async def _converge_native_request_failure(
+        self,
+        operation: RespondToRequest,
+        result: ApplicationOperationFailed,
+    ) -> None:
+        target = {
+            OperationErrorCode.REQUEST_DUPLICATE.value: RequestRouteState.RESPONDED,
+            OperationErrorCode.REQUEST_RESOLVED.value: RequestRouteState.RESOLVED,
+            OperationErrorCode.REQUEST_STALE.value: RequestRouteState.STALE,
+        }.get(result.error.code)
+        if target is None:
             return
         try:
-            await self._process_message(message)
-        except BaseException:
-            await self._idempotency.release(scope, key)
-            raise
-        await self._idempotency.complete(scope, key)
+            await self._transition_request_state(
+                operation,
+                state=target,
+                expected_states=(RequestRouteState.OPEN,),
+                updated_at=result.completed_at,
+            )
+        except (KeyError, RequestCorrelationConflict):
+            pass
 
-    async def _process_message(self, message: ChannelMessage) -> None:
+    async def _transition_request_state(
+        self,
+        operation: RespondToRequest,
+        *,
+        state: RequestRouteState,
+        expected_states: tuple[RequestRouteState, ...],
+        updated_at: datetime,
+    ):
+        return await self._request_correlations.transition_request_correlations(
+            operation.request_ref,
+            expected_states=expected_states,
+            state=state,
+            updated_at=updated_at,
+        )
+
+    async def _handle_message(self, message: InboundMessage) -> None:
+        scope = f"inbound:{message.conversation_ref.channel_instance_id}"
+        key = f"{message.conversation_ref.native_conversation_id}:{message.message_id}"
+        owner_token = uuid4().hex
+        claim = await self._idempotency.claim(scope, key, owner_token=owner_token)
+        if claim is not IdempotencyClaimStatus.ACQUIRED:
+            return
+        try:
+            await self._process_message(message, idempotency_owner_token=owner_token)
+        except InputPostAcceptanceError as exc:
+            # The native Application already accepted the Turn. Redelivery is
+            # unsafe when the Application has no native input-idempotency key.
+            try:
+                await self._idempotency.complete(scope, key, owner_token=owner_token)
+            except BaseException as terminal_error:
+                raise terminal_error from exc.cause
+            raise exc.cause.with_traceback(exc.cause.__traceback__) from None
+        except ApplicationInputOutcomeUnknown as exc:
+            # Dispatch crossed the native side-effect boundary without a
+            # definitive outcome. Keep the protected claim sticky.
+            raise exc.cause.with_traceback(exc.cause.__traceback__) from None
+        except BaseException:
+            await self._idempotency.release(scope, key, owner_token=owner_token)
+            raise
+        await self._idempotency.complete(scope, key, owner_token=owner_token)
+
+    async def _handle_message_entry(self, message: InboundMessage) -> None:
+        if self._starting:
+            self._startup_messages.append(message)
+            return
+        await self._handle_message(message)
+
+    async def _process_message(
+        self,
+        message: InboundMessage,
+        *,
+        idempotency_owner_token: str,
+    ) -> None:
         lock = self._locks.setdefault(message.conversation_ref, asyncio.Lock())
         async with lock:
-            try:
-                command = parse_slash_command(message)
-            except ValueError as error:
-                await self._deliver_error(message, str(error))
-                return
-            if command is not None:
-                await self._handle_command(message, command)
-                return
+            thread_was_created = False
+            if self._controller is not None:
+                outputs = await self._controller.handle(
+                    message,
+                    _LockedControllerActions(self),
+                )
+                if outputs is not None:
+                    for output in outputs:
+                        if output.conversation_ref != message.conversation_ref:
+                            raise ValueError(
+                                "Controller output belongs to a different Conversation"
+                            )
+                        await self._deliver_outbound(output)
+                    return
             binding = await self._bindings.get(message.conversation_ref)
             application = self._bound_application(binding)
             if binding is None or binding.application_ref is None:
                 application = self._single_application_or_none()
                 if application is None:
-                    await self._deliver_text(
-                        message,
-                        "Choose an Agent application first with `/apps` and "
-                        "`/app <number-or-name>`.",
-                    )
+                    await self._deliver_error(message, "No Agent application is selected.")
                     return
-                binding = await self._bindings.put(
-                    ConversationBinding(
+                selection = await self._execute_gateway_locked(
+                    SelectApplication(
+                        operation_id=_operation_id(message, "application.select"),
                         conversation_ref=message.conversation_ref,
+                        actor=message.sender,
                         application_ref=application.summary.ref,
+                        expected_revision=binding.revision if binding is not None else None,
+                        created_at=message.created_at,
                     )
                 )
+                if not isinstance(selection, ConversationBound):
+                    await self._deliver_operation_error(message, selection)
+                    return
+                binding = selection.binding
             if application is None:
                 raise RuntimeError("bound Agent application is unavailable")
             if binding.thread_ref is None:
                 if (
-                    application.summary.capabilities.projects.mode.value == "managed"
+                    application.summary.capabilities.projects.mode is ProjectMode.MANAGED
                     and binding.project_ref is None
                 ):
-                    await self._deliver_text(
-                        message,
-                        "Choose a project first with `/projects` and `/use <number>`.",
-                    )
+                    await self._deliver_error(message, "No project is selected.")
                     return
-                create = self._operation(
-                    message,
-                    OperationType.THREAD_CREATE,
-                    OperationTarget(
+                result = await self.execute_application(
+                    CreateThread(
+                        operation_id=_operation_id(message, "thread.create"),
                         application_ref=application.summary.ref,
                         project_ref=binding.project_ref,
-                    ),
-                    {},
+                        created_at=message.created_at,
+                    )
                 )
-                result = await application.execute(create)
-                if result.status is not OperationResultStatus.SUCCEEDED:
+                if not isinstance(result, ThreadCreated):
                     await self._deliver_operation_error(message, result)
                     return
-                thread = result.value
-                if not isinstance(thread, ThreadSummary):
-                    await self._deliver_error(
-                        message,
-                        "Agent application did not return the created thread.",
+                bound = await self._execute_gateway_locked(
+                    BindConversationToThread(
+                        operation_id=_operation_id(
+                            message,
+                            "conversation.bind_thread",
+                        ),
+                        conversation_ref=message.conversation_ref,
+                        actor=message.sender,
+                        thread_ref=result.thread.ref,
+                        expected_revision=binding.revision,
+                        created_at=message.created_at,
                     )
-                    return
-                binding = await self._bindings.put(
-                    ConversationBinding(
-                        conversation_ref=binding.conversation_ref,
-                        application_ref=binding.application_ref,
-                        project_ref=binding.project_ref,
-                        thread_ref=thread.ref,
-                    ),
-                    expected_revision=binding.revision,
                 )
+                if not isinstance(bound, ConversationBound):
+                    await self._deliver_operation_error(message, bound)
+                    return
+                binding = bound.binding
+                thread_was_created = True
             thread_ref = binding.thread_ref
             if thread_ref is None:
                 raise RuntimeError("thread binding was not established")
-            agent_input = AgentInput(
-                client_message_id=derive_client_message_id(
-                    message.conversation_ref,
-                    message.message_id,
+            await self._projection_runtime.prepare_input_route(
+                application,
+                thread_ref,
+                message.conversation_ref,
+                thread_was_created=thread_was_created,
+            )
+            client_message_id = derive_client_message_id(
+                message.conversation_ref,
+                message.message_id,
+            )
+            await self._projection_runtime.send_input(
+                application,
+                thread_ref,
+                AgentInput(
+                    client_message_id=client_message_id,
+                    content=message.content,
+                    sender=message.sender,
                 ),
-                content=message.content,
-                sender=message.sender,
-                metadata={"channel_message_id": message.message_id},
-            )
-            accepted = await application.send_input(thread_ref, agent_input)
-            task = asyncio.create_task(
-                self._project_turn(
-                    message=message,
-                    application=application,
-                    accepted=accepted,
-                )
-            )
-            self._tasks.add(task)
-            task.add_done_callback(self._finish_task)
-
-    def _finish_task(self, task: asyncio.Task[None]) -> None:
-        self._tasks.discard(task)
-        if task.cancelled():
-            return
-        error = task.exception()
-        if error is not None:
-            logger.exception(
-                "Agent event projection failed",
-                exc_info=(type(error), error, error.__traceback__),
-            )
-
-    async def _handle_command(
-        self,
-        message: ChannelMessage,
-        command: SlashCommand,
-    ) -> None:
-        if command.name in {"help", "start"}:
-            await self._deliver_text(message, _HELP)
-            return
-        if command.name == "apps":
-            await self._deliver_text(message, self._render_applications())
-            return
-        if command.name == "app":
-            await self._select_application(message, command)
-            return
-
-        binding, application = await self._ensure_application_binding(message)
-        if binding is None or application is None:
-            return
-        if command.name == "projects":
-            result = await application.execute(
-                self._operation(
-                    message,
-                    OperationType.PROJECT_LIST,
-                    OperationTarget(application_ref=application.summary.ref),
-                    {"query": " ".join(command.arguments)},
-                )
-            )
-            projects = self._page_items(result, ProjectSummary)
-            if projects is None:
-                await self._deliver_operation_error(message, result)
-                return
-            self._project_views[message.conversation_ref] = projects
-            await self._deliver_text(message, _render_projects(projects))
-            return
-        if command.name in {"use", "project"}:
-            await self._select_project(message, command, binding, application)
-            return
-        if command.name == "threads":
-            result = await application.execute(
-                self._operation(
-                    message,
-                    OperationType.THREAD_LIST,
-                    OperationTarget(
-                        application_ref=application.summary.ref,
-                        project_ref=binding.project_ref,
-                    ),
-                    {"query": " ".join(command.arguments)},
-                )
-            )
-            threads = self._page_items(result, ThreadSummary)
-            if threads is None:
-                await self._deliver_operation_error(message, result)
-                return
-            self._thread_views[message.conversation_ref] = threads
-            await self._deliver_text(message, _render_threads(threads))
-            return
-        if command.name in {"pick", "thread"}:
-            await self._select_thread(message, command, binding, application)
-            return
-        if command.name == "new":
-            await self._create_thread(message, command, binding, application)
-            return
-        if command.name in {"delete", "archive"}:
-            await self._delete_thread(message, binding, application)
-            return
-        if command.name == "status":
-            await self._thread_status(message, binding, application)
-            return
-        await self._deliver_error(
-            message,
-            f"Unknown command `/{command.name}`. Use `/help`.",
-        )
-
-    async def _select_application(
-        self,
-        message: ChannelMessage,
-        command: SlashCommand,
-    ) -> None:
-        if not command.arguments:
-            await self._deliver_text(message, self._render_applications())
-            return
-        applications = tuple(self._applications.values())
-        selected = _select(
-            applications,
-            " ".join(command.arguments),
-            id_of=lambda item: item.summary.ref.application_instance_id,
-            label_of=lambda item: item.summary.display_name,
-        )
-        if selected is None:
-            await self._deliver_error(message, "Agent application not found.")
-            return
-        current = await self._bindings.get(message.conversation_ref)
-        await self._bindings.put(
-            ConversationBinding(
                 conversation_ref=message.conversation_ref,
-                application_ref=selected.summary.ref,
-            ),
-            expected_revision=current.revision if current is not None else None,
-        )
-        self._clear_views(message)
-        await self._deliver_text(
-            message,
-            f"Selected application **{selected.summary.display_name}** "
-            f"(`{selected.summary.ref.application_instance_id}`).",
-        )
-
-    async def _select_project(
-        self,
-        message: ChannelMessage,
-        command: SlashCommand,
-        binding: ConversationBinding,
-        application: AgentApplicationAdapter,
-    ) -> None:
-        if not command.arguments:
-            await self._deliver_error(
-                message,
-                "Use `/use <number-or-project>` after `/projects`.",
-            )
-            return
-        projects = self._project_views.get(message.conversation_ref)
-        if projects is None:
-            result = await application.execute(
-                self._operation(
-                    message,
-                    OperationType.PROJECT_LIST,
-                    OperationTarget(application_ref=application.summary.ref),
-                    {},
-                )
-            )
-            projects = self._page_items(result, ProjectSummary)
-            if projects is None:
-                await self._deliver_operation_error(message, result)
-                return
-            self._project_views[message.conversation_ref] = projects
-        project = _select(
-            projects,
-            " ".join(command.arguments),
-            id_of=lambda item: item.ref.native_project_id,
-            label_of=lambda item: item.display_name,
-        )
-        if project is None:
-            await self._deliver_error(message, "Project not found.")
-            return
-        result = await application.execute(
-            self._operation(
-                message,
-                OperationType.PROJECT_SELECT,
-                OperationTarget(
-                    application_ref=application.summary.ref,
-                    project_ref=project.ref,
+                reply_to_message_id=message.message_id,
+                before_application_send=partial(
+                    self._idempotency.mark_side_effect_started,
+                    f"inbound:{message.conversation_ref.channel_instance_id}",
+                    (f"{message.conversation_ref.native_conversation_id}:{message.message_id}"),
+                    owner_token=idempotency_owner_token,
                 ),
-                {},
             )
-        )
-        if result.status is not OperationResultStatus.SUCCEEDED:
-            await self._deliver_operation_error(message, result)
-            return
-        await self._bindings.put(
-            ConversationBinding(
-                conversation_ref=binding.conversation_ref,
-                application_ref=binding.application_ref,
-                project_ref=project.ref,
-            ),
-            expected_revision=binding.revision,
-        )
-        self._thread_views.pop(message.conversation_ref, None)
-        await self._deliver_text(
-            message,
-            f"Selected project **{project.display_name}** (`{project.ref.native_project_id}`).",
-        )
 
-    async def _create_thread(
+    async def _handle_operation(self, operation: GatewayOperation) -> None:
+        result = await self.execute_gateway(operation)
+        if isinstance(result, GatewayOperationFailed):
+            logger.warning(
+                "Gateway operation %s failed: %s",
+                operation.operation_id,
+                result.error.message,
+            )
+
+    async def _handle_operation_entry(
         self,
-        message: ChannelMessage,
-        command: SlashCommand,
-        binding: ConversationBinding,
-        application: AgentApplicationAdapter,
+        operation: GatewayOperation,
     ) -> None:
-        if (
-            application.summary.capabilities.projects.mode.value == "managed"
-            and binding.project_ref is None
-        ):
-            await self._deliver_error(
-                message,
-                "Choose a project first with `/projects` and `/use <number>`.",
-            )
+        if self._starting:
+            self._startup_operations.append(operation)
             return
-        result = await application.execute(
-            self._operation(
-                message,
-                OperationType.THREAD_CREATE,
-                OperationTarget(
-                    application_ref=application.summary.ref,
-                    project_ref=binding.project_ref,
-                ),
-                {"title": " ".join(command.arguments) or "IM task"},
-            )
-        )
-        if result.status is not OperationResultStatus.SUCCEEDED or not isinstance(
-            result.value, ThreadSummary
-        ):
-            await self._deliver_operation_error(message, result)
-            return
-        thread = result.value
-        await self._bindings.put(
-            ConversationBinding(
-                conversation_ref=binding.conversation_ref,
-                application_ref=binding.application_ref,
-                project_ref=binding.project_ref,
-                thread_ref=thread.ref,
-            ),
-            expected_revision=binding.revision,
-        )
-        self._thread_views.pop(message.conversation_ref, None)
-        await self._deliver_text(
-            message,
-            f"Created thread **{thread.title or thread.ref.native_thread_id}** "
-            f"(`{thread.ref.native_thread_id}`).",
-        )
-
-    async def _select_thread(
-        self,
-        message: ChannelMessage,
-        command: SlashCommand,
-        binding: ConversationBinding,
-        application: AgentApplicationAdapter,
-    ) -> None:
-        if not command.arguments:
-            await self._deliver_error(
-                message,
-                "Use `/pick <number-or-thread>` after `/threads`.",
-            )
-            return
-        threads = self._thread_views.get(message.conversation_ref)
-        if threads is None:
-            result = await application.execute(
-                self._operation(
-                    message,
-                    OperationType.THREAD_LIST,
-                    OperationTarget(
-                        application_ref=application.summary.ref,
-                        project_ref=binding.project_ref,
-                    ),
-                    {},
-                )
-            )
-            threads = self._page_items(result, ThreadSummary)
-            if threads is None:
-                await self._deliver_operation_error(message, result)
-                return
-            self._thread_views[message.conversation_ref] = threads
-        thread = _select(
-            threads,
-            " ".join(command.arguments),
-            id_of=lambda item: item.ref.native_thread_id,
-            label_of=lambda item: item.title or "",
-        )
-        if thread is None:
-            await self._deliver_error(message, "Thread not found.")
-            return
-        result = await application.execute(
-            self._operation(
-                message,
-                OperationType.THREAD_SWITCH,
-                OperationTarget(
-                    application_ref=application.summary.ref,
-                    project_ref=binding.project_ref,
-                    thread_ref=thread.ref,
-                ),
-                {},
-            )
-        )
-        if result.status is not OperationResultStatus.SUCCEEDED:
-            await self._deliver_operation_error(message, result)
-            return
-        await self._bindings.put(
-            ConversationBinding(
-                conversation_ref=binding.conversation_ref,
-                application_ref=binding.application_ref,
-                project_ref=binding.project_ref,
-                thread_ref=thread.ref,
-            ),
-            expected_revision=binding.revision,
-        )
-        await self._deliver_text(
-            message,
-            f"Selected thread **{thread.title or thread.ref.native_thread_id}** "
-            f"(`{thread.ref.native_thread_id}`).",
-        )
-
-    async def _delete_thread(
-        self,
-        message: ChannelMessage,
-        binding: ConversationBinding,
-        application: AgentApplicationAdapter,
-    ) -> None:
-        if binding.thread_ref is None:
-            await self._deliver_error(message, "No thread is selected.")
-            return
-        result = await application.execute(
-            self._operation(
-                message,
-                OperationType.THREAD_DELETE,
-                OperationTarget(
-                    application_ref=application.summary.ref,
-                    project_ref=binding.project_ref,
-                    thread_ref=binding.thread_ref,
-                ),
-                {},
-            )
-        )
-        if result.status is not OperationResultStatus.SUCCEEDED:
-            await self._deliver_operation_error(message, result)
-            return
-        deleted_id = binding.thread_ref.native_thread_id
-        await self._bindings.put(
-            ConversationBinding(
-                conversation_ref=binding.conversation_ref,
-                application_ref=binding.application_ref,
-                project_ref=binding.project_ref,
-            ),
-            expected_revision=binding.revision,
-        )
-        self._thread_views.pop(message.conversation_ref, None)
-        await self._deliver_text(message, f"Archived thread `{deleted_id}`.")
-
-    async def _thread_status(
-        self,
-        message: ChannelMessage,
-        binding: ConversationBinding,
-        application: AgentApplicationAdapter,
-    ) -> None:
-        if binding.thread_ref is None:
-            await self._deliver_error(message, "No thread is selected.")
-            return
-        result = await application.execute(
-            self._operation(
-                message,
-                OperationType.THREAD_STATUS,
-                OperationTarget(
-                    application_ref=application.summary.ref,
-                    project_ref=binding.project_ref,
-                    thread_ref=binding.thread_ref,
-                ),
-                {},
-            )
-        )
-        if result.status is not OperationResultStatus.SUCCEEDED:
-            await self._deliver_operation_error(message, result)
-            return
-        status = result.value.value if isinstance(result.value, ThreadStatus) else str(result.value)
-        await self._deliver_text(
-            message,
-            f"Thread `{binding.thread_ref.native_thread_id}` is **{status}**.",
-        )
-
-    async def _ensure_application_binding(
-        self,
-        message: ChannelMessage,
-    ) -> tuple[
-        ConversationBinding | None,
-        AgentApplicationAdapter | None,
-    ]:
-        binding = await self._bindings.get(message.conversation_ref)
-        application = self._bound_application(binding)
-        if application is not None and binding is not None:
-            return binding, application
-        application = self._single_application_or_none()
-        if application is None:
-            await self._deliver_text(
-                message,
-                "Choose an Agent application with `/apps` and `/app <number>`.",
-            )
-            return None, None
-        binding = await self._bindings.put(
-            ConversationBinding(
-                conversation_ref=message.conversation_ref,
-                application_ref=application.summary.ref,
-            ),
-            expected_revision=binding.revision if binding is not None else None,
-        )
-        return binding, application
-
-    async def _handle_operation(self, operation: Operation) -> None:
-        del operation
-        raise NotImplementedError("native channel operations are not implemented yet")
-
-    async def _project_turn(
-        self,
-        *,
-        message: ChannelMessage,
-        application: AgentApplicationAdapter,
-        accepted,
-    ) -> None:
-        async for event in application.subscribe_thread(accepted.thread_ref):
-            if event.turn_id not in {None, accepted.turn_id}:
-                continue
-            if event.type is AgentEventType.MESSAGE_COMPLETED:
-                agent_message = event.data.get("message")
-                if isinstance(agent_message, AgentMessage):
-                    await self._deliver_agent_message(message, agent_message)
-            if event.type in {
-                AgentEventType.TURN_COMPLETED,
-                AgentEventType.TURN_FAILED,
-                AgentEventType.TURN_INTERRUPTED,
-            }:
-                return
-
-    async def _deliver_agent_message(
-        self,
-        inbound: ChannelMessage,
-        agent_message: AgentMessage,
-    ) -> None:
-        channel = self._channels[inbound.conversation_ref.channel_instance_id]
-        delivery_id = (
-            f"imagent:delivery:{agent_message.thread_ref.native_thread_id}:"
-            f"{agent_message.agent_item_id}"
-        )
-        scope = f"outbound:{inbound.conversation_ref.channel_instance_id}"
-        if not await self._idempotency.claim(scope, delivery_id):
-            return
-        try:
-            await channel.send(
-                ChannelMessage(
-                    message_id=agent_message.agent_item_id,
-                    conversation_ref=inbound.conversation_ref,
-                    sender=agent_message.thread_ref.application_instance_id,
-                    content=tuple(
-                        TextContent(item.text, TextFormat.MARKDOWN)
-                        if isinstance(item, TextContent)
-                        else item
-                        for item in agent_message.content
-                    ),
-                    created_at=agent_message.created_at,
-                    role=MessageRole.ASSISTANT,
-                    reply_to=inbound.message_id,
-                    client_message_id=delivery_id,
-                )
-            )
-        except BaseException:
-            await self._idempotency.release(scope, delivery_id)
-            raise
-        await self._idempotency.complete(scope, delivery_id)
+        await self._handle_operation(operation)
 
     async def _deliver_error(
         self,
-        inbound: ChannelMessage,
+        inbound: InboundMessage,
         text: str,
     ) -> None:
-        channel = self._channels[inbound.conversation_ref.channel_instance_id]
-        await channel.send(
-            ChannelMessage(
-                message_id=f"error:{uuid4()}",
+        await self._deliver_outbound(
+            OutboundMessage(
+                delivery_id=(
+                    f"imagent:gateway:{inbound.conversation_ref.channel_instance_id}:"
+                    f"{inbound.conversation_ref.native_conversation_id}:"
+                    f"{inbound.message_id}:error"
+                ),
                 conversation_ref=inbound.conversation_ref,
-                sender="im-agent-sdk",
                 content=(TextContent(f"**Error:** {text}", TextFormat.MARKDOWN),),
                 created_at=datetime.now(UTC),
-                role=MessageRole.SYSTEM,
                 reply_to=inbound.message_id,
             )
         )
 
     async def _deliver_operation_error(
         self,
-        inbound: ChannelMessage,
-        result: OperationResult,
+        inbound: InboundMessage,
+        result: ApplicationOperationResult | GatewayOperationResult,
     ) -> None:
+        error = (
+            result.error
+            if isinstance(result, (ApplicationOperationFailed, GatewayOperationFailed))
+            else None
+        )
         await self._deliver_error(
             inbound,
-            result.error.message
-            if result.error is not None
-            else "Agent application operation failed.",
+            error.message if error is not None else "Operation returned an incompatible result.",
         )
 
-    async def _deliver_text(
+    async def _deliver_outbound(
         self,
-        inbound: ChannelMessage,
-        text: str,
-    ) -> None:
-        channel = self._channels[inbound.conversation_ref.channel_instance_id]
-        await channel.send(
-            ChannelMessage(
-                message_id=f"system:{uuid4()}",
-                conversation_ref=inbound.conversation_ref,
-                sender="im-agent-sdk",
-                content=(TextContent(text, TextFormat.MARKDOWN),),
-                created_at=datetime.now(UTC),
-                role=MessageRole.SYSTEM,
-                reply_to=inbound.message_id,
+        message: OutboundMessage,
+        *,
+        cancellable: bool = False,
+    ) -> IdempotencyClaimStatus:
+        scope = f"outbound:{message.conversation_ref.channel_instance_id}"
+        key = (scope, message.delivery_id)
+        existing = self._outbound_deliveries.get(key)
+        if existing is not None:
+            result = await existing if cancellable else await asyncio.shield(existing)
+            return (
+                IdempotencyClaimStatus.ALREADY_COMPLETED
+                if result is IdempotencyClaimStatus.ACQUIRED
+                else result
             )
+        task = asyncio.create_task(
+            self._deliver_outbound_once(message, scope=scope),
+            name=f"imagent-outbound:{message.delivery_id}",
+        )
+        self._outbound_deliveries[key] = task
+        try:
+            return await task if cancellable else await asyncio.shield(task)
+        finally:
+            if self._outbound_deliveries.get(key) is task:
+                self._outbound_deliveries.pop(key, None)
+
+    async def _deliver_outbound_once(
+        self,
+        message: OutboundMessage,
+        *,
+        scope: str,
+    ) -> IdempotencyClaimStatus:
+        owner_token = uuid4().hex
+        claim = await self._idempotency.claim(
+            scope,
+            message.delivery_id,
+            owner_token=owner_token,
+        )
+        if claim is not IdempotencyClaimStatus.ACQUIRED:
+            return claim
+        try:
+            result = await self._delivery_service.deliver_internal(message)
+        except (
+            ContractViolation,
+            DeliveryPlanningError,
+            DeliverySubmissionConflict,
+        ):
+            await self._idempotency.release(
+                scope,
+                message.delivery_id,
+                owner_token=owner_token,
+            )
+            raise
+        destination = result.destinations[0]
+        if result.state is DeliverySubmissionState.IN_FLIGHT:
+            return IdempotencyClaimStatus.IN_FLIGHT
+        if result.state is not DeliverySubmissionState.ACCEPTED:
+            if result.state is DeliverySubmissionState.RETRYABLE:
+                await self._idempotency.release(
+                    scope,
+                    message.delivery_id,
+                    owner_token=owner_token,
+                )
+                raise RetryableDeliveryError(
+                    destination.error
+                    or f"Channel delivery was deferred safely: {message.delivery_id}",
+                    retry_after_seconds=(
+                        destination.receipt.retry_after_seconds
+                        if destination.receipt is not None
+                        else None
+                    ),
+                )
+            if result.state is DeliverySubmissionState.REJECTED:
+                await self._idempotency.release(
+                    scope,
+                    message.delivery_id,
+                    owner_token=owner_token,
+                )
+            raise RuntimeError(
+                destination.error
+                or f"Channel delivery did not complete successfully: {message.delivery_id}"
+            )
+        await self._idempotency.complete(
+            scope,
+            message.delivery_id,
+            owner_token=owner_token,
+        )
+        return (
+            IdempotencyClaimStatus.ALREADY_COMPLETED
+            if destination.replayed
+            else IdempotencyClaimStatus.ACQUIRED
         )
 
     def _bound_application(
@@ -700,96 +883,52 @@ class ImAgentGateway:
             return None
         return next(iter(self._applications.values()))
 
-    def _render_applications(self) -> str:
-        lines = ["## Agent applications", ""]
-        for index, application in enumerate(self._applications.values(), start=1):
-            lines.append(
-                f"{index}. **{application.summary.display_name}** "
-                f"(`{application.summary.ref.application_instance_id}`)"
-            )
-        lines.extend(["", "Use `/app <number-or-name>`."])
-        return "\n".join(lines)
-
-    def _clear_views(self, message: ChannelMessage) -> None:
-        self._project_views.pop(message.conversation_ref, None)
-        self._thread_views.pop(message.conversation_ref, None)
-
-    @staticmethod
-    def _page_items(result: OperationResult, item_type):
-        if (
-            result.status is not OperationResultStatus.SUCCEEDED
-            or not isinstance(result.value, Page)
-            or not all(isinstance(item, item_type) for item in result.value.items)
-        ):
-            return None
-        return result.value.items
-
-    @staticmethod
-    def _operation(
-        message: ChannelMessage,
-        operation_type: OperationType,
-        target: OperationTarget,
-        arguments: dict[str, object],
-    ) -> Operation:
-        return Operation(
-            operation_id=f"imagent:operation:{message.message_id}:{operation_type.value}",
-            conversation_ref=message.conversation_ref,
-            actor=message.sender,
-            type=operation_type,
-            target=target,
-            arguments=arguments,
-            created_at=message.created_at,
-        )
+    def _require_application(
+        self,
+        application_instance_id: str,
+    ) -> AgentApplicationAdapter:
+        try:
+            return self._applications[application_instance_id]
+        except KeyError as error:
+            raise KeyError(
+                f"Agent application is not registered: {application_instance_id}"
+            ) from error
 
 
-def _select(items, query: str, *, id_of, label_of):
-    normalized = query.strip().casefold()
-    if normalized.isdigit():
-        index = int(normalized) - 1
-        if 0 <= index < len(items):
-            return items[index]
-    exact = [
-        item for item in items if normalized in {id_of(item).casefold(), label_of(item).casefold()}
-    ]
-    if len(exact) == 1:
-        return exact[0]
-    partial = [
-        item
-        for item in items
-        if normalized in id_of(item).casefold() or normalized in label_of(item).casefold()
-    ]
-    return partial[0] if len(partial) == 1 else None
+class _LockedControllerActions(ControllerActions):
+    def __init__(self, gateway: ImAgentGateway) -> None:
+        self._gateway = gateway
+
+    async def execute_application(
+        self,
+        operation: ApplicationOperation,
+    ) -> ApplicationOperationResult:
+        return await self._gateway.execute_application(operation)
+
+    async def execute_gateway(
+        self,
+        operation: GatewayOperation,
+    ) -> GatewayOperationResult:
+        return await self._gateway._execute_gateway_locked(operation)
+
+    async def get_binding(
+        self,
+        conversation_ref: ConversationRef,
+    ) -> ConversationBinding | None:
+        return await self._gateway.get_binding(conversation_ref)
 
 
-def _render_projects(projects: tuple[ProjectSummary, ...]) -> str:
-    if not projects:
-        return "No projects found."
-    lines = ["## Projects", ""]
-    for index, project in enumerate(projects, start=1):
-        lines.append(f"{index}. **{project.display_name}** (`{project.ref.native_project_id}`)")
-    lines.extend(["", "Use `/use <number-or-project>`."])
-    return "\n".join(lines)
+class _GatewayActionError(RuntimeError):
+    def __init__(self, error: ContractError) -> None:
+        super().__init__(error.message)
+        self.error = error
 
 
-def _render_threads(threads: tuple[ThreadSummary, ...]) -> str:
-    if not threads:
-        return "No threads found."
-    lines = ["## Threads", ""]
-    for index, thread in enumerate(threads, start=1):
-        lines.append(
-            f"{index}. **{thread.title or 'Untitled'}** "
-            f"(`{thread.ref.native_thread_id}`) — {thread.status.value}"
-        )
-    lines.extend(["", "Use `/pick <number-or-thread>`."])
-    return "\n".join(lines)
+def _contract_error(error: Exception) -> ContractError:
+    if isinstance(error, BindingConflict):
+        return operation_error(error, code=OperationErrorCode.CONFLICT)
+    return operation_error(error)
 
 
-_HELP = """## IM Agent commands
-
-- `/apps` and `/app <selector>` — list or select an Agent application
-- `/projects` and `/use <selector>` — list or select a project
-- `/threads` and `/pick <selector>` — list or select a thread
-- `/new [title]` — create and select a thread
-- `/delete` — archive/delete the selected thread
-- `/status` — show the selected thread status
-"""
+def _operation_id(message: InboundMessage, operation_type: str) -> str:
+    return f"imagent:operation:{message.message_id}:{operation_type}"
