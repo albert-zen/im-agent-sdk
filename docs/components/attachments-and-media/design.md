@@ -29,6 +29,10 @@ It does not own:
 
 Channel integrations may stage native media and emit a typed source.
 Application integrations accept only source kinds declared by capability.
+Native Channel staging begins only after stable identity and access checks have
+acquired the opaque durable admission lease defined by ADR 0011. A duplicate
+that receives no lease performs no download, staging, parsing, or quota work;
+the lease persists identity and ownership only, never media content or paths.
 
 `LocalPath` conveys a location, not authority. Deployment configuration must
 establish a shared filesystem namespace and root. Resolution rejects missing
@@ -65,4 +69,5 @@ trust helper into a delivery subsystem.
 
 Changes require attachment trust tests, concrete adapter media tests, and a
 review of [the common protocol](../contracts/protocol.md). Security-relevant
-trust changes require an accepted ADR.
+trust changes require an accepted ADR. Changes to native materialization order
+also require restart-duplicate and pre-handoff failure coverage.

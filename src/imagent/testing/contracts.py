@@ -94,9 +94,13 @@ async def verify_channel_adapter(
     async def on_operation(operation):
         received_operations.append(operation)
 
-    await adapter.start(on_message, on_operation)
+    async def on_admission(_conversation_ref, _message_id):
+        return None
+
+    await adapter.start(on_message, on_operation, on_admission)
     await adapter.stop()
     checks.append(ContractCheck("start and stop lifecycle"))
+    checks.append(ContractCheck("admission callback accepted at startup"))
 
     if sample_message is not None:
         outbound = OutboundMessage(

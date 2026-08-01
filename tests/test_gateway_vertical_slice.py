@@ -35,6 +35,7 @@ from imagent.contracts import (
 )
 from imagent.controllers import SlashController
 from imagent.gateway import ImAgentGateway
+from imagent.storage import SQLiteGatewayState
 
 
 class NativeQQChannel:
@@ -292,6 +293,73 @@ class YieldingNativeT3Client(NativeT3Client):
 
 
 class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_restart_duplicate_is_rejected_before_native_media_preparation(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "gateway.sqlite3"
+            seeded = SQLiteGatewayState(path)
+            await seeded.claim(
+                "inbound:qq-main",
+                "c2c:user-1:duplicate-message",
+                owner_token="seed-owner",
+            )
+            await seeded.complete(
+                "inbound:qq-main",
+                "c2c:user-1:duplicate-message",
+                owner_token="seed-owner",
+            )
+            await seeded.close()
+
+            native_channel = NativeQQChannel()
+            channel = NativeTransportChannelAdapter(
+                channel_instance_id="qq-main",
+                channel_id="qq",
+                native_factory=lambda middleware: self._bind_channel(
+                    native_channel,
+                    middleware,
+                ),
+            )
+            recovered = SQLiteGatewayState(path)
+            gateway = ImAgentGateway(
+                channels=[channel],
+                applications=[],
+                bindings=recovered,
+                idempotency=recovered,
+            )
+            prepared = False
+
+            async def prepare(inbound):
+                nonlocal prepared
+                prepared = True
+                return inbound
+
+            await gateway.start()
+            try:
+                await native_channel.middleware.handle_inbound(
+                    native_channel,
+                    SimpleNamespace(
+                        channel_id="qq",
+                        conversation_id="c2c:user-1",
+                        user_id="user-1",
+                        message_id="duplicate-message",
+                        text="duplicate",
+                        attachments=(),
+                        quote=None,
+                        input_error=None,
+                        reply_to_message_id=None,
+                        sent_at=None,
+                        trace_id=None,
+                    ),
+                    prepare_inbound=prepare,
+                    pending_attachment_count=1,
+                )
+            finally:
+                await gateway.stop()
+                await recovered.close()
+
+            self.assertFalse(prepared)
+
     async def test_codex_binding_does_not_implicitly_resume_native_thread(self) -> None:
         native_app = NativeZenClient()
         application = CodexApplicationAdapter(
