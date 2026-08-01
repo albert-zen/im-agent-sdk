@@ -81,6 +81,17 @@ class InMemoryIdempotencyRepository:
                 raise RuntimeError("idempotency claim is not owned by caller")
             self._records[record] = ("side_effect_started", owner_token)
 
+    async def refresh(
+        self,
+        scope: str,
+        key: str,
+        *,
+        owner_token: str | None = None,
+    ) -> None:
+        async with self._lock:
+            if self._records.get((scope, key)) != ("in_flight", owner_token):
+                raise RuntimeError("idempotency claim is not owned by caller")
+
     async def release(
         self,
         scope: str,
@@ -787,6 +798,28 @@ class SQLiteGatewayState(
                 """
                 UPDATE idempotency_records
                 SET status = 'side_effect_started', updated_at = ?
+                WHERE scope = ? AND record_key = ? AND status = 'in_flight'
+                  AND owner_token IS ?
+                """,
+                (datetime.now(UTC).isoformat(), scope, key, owner_token),
+            )
+            if cursor.rowcount != 1:
+                self._connection.rollback()
+                raise RuntimeError("idempotency claim is not owned by caller")
+            self._connection.commit()
+
+    async def refresh(
+        self,
+        scope: str,
+        key: str,
+        *,
+        owner_token: str | None = None,
+    ) -> None:
+        async with self._lock:
+            cursor = self._connection.execute(
+                """
+                UPDATE idempotency_records
+                SET updated_at = ?
                 WHERE scope = ? AND record_key = ? AND status = 'in_flight'
                   AND owner_token IS ?
                 """,

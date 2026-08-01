@@ -12,6 +12,8 @@ Ports owns:
 
 - the Python package's top-level typed public surface;
 - `ChannelAdapter` lifecycle, inbound callback, and send signatures;
+- the opaque `InboundAdmission` lease and handler used before Channel media
+  preparation;
 - `AgentApplicationAdapter` lifecycle, typed operation, input, and Thread
   subscription signatures;
 - `ApplicationInputOutcomeUnknown`, which marks a dispatched native input
@@ -66,6 +68,18 @@ reclaimable lease from work that may already have changed a remote system.
 Implementations must never age the protected state back into permission to
 retry. A caller that supplies an owner token on acquisition must reuse it as a
 fencing token for every later state mutation.
+
+`InboundAdmissionHandler` carries only stable Conversation/message identity.
+It returns a one-shot opaque lease or no lease for duplicate/in-flight work.
+Channel adapters release only preparation failures before handoff; after
+`InboundAdmission.deliver`, Gateway owns the terminal transition.
+`IdempotencyRepository.refresh` fences the handoff by updating only the owned
+`in_flight` timestamp.
+
+Gateway preserves the legacy two-callback `ChannelAdapter.start` shape during
+migration by inspecting its signature before invocation. Such adapters retain
+late Gateway idempotency but cannot claim the pre-media guarantee. A Channel
+that accepts the new optional callback must use a returned lease for media work.
 
 ## Change obligations
 

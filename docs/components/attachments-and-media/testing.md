@@ -8,6 +8,8 @@ Required scenarios:
 - undeclared source kinds are rejected;
 - `RemoteUrl` is not fetched by an unrestricted common downloader;
 - Channel staging produces typed sources rather than Metadata;
+- restart duplicates are rejected durably before Channel media preparation,
+  and preparation failure releases only the untransferred owned admission;
 - proactive ingress refuses unauthorized work before decoding/staging, checks
   declared size, confines paths, preserves content order, and removes staged
   bytes after delivery;
