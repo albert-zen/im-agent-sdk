@@ -72,3 +72,32 @@ while AppServer (Codex/Zen) and T3 use separate mapping entries.
 Any change to module layout, component docs, global intent paths, CI, or
 launcher pin must update `agentkit.yml`, navigation, mapping tests, and
 doctor/check/routing smoke evidence.
+
+## Maintainability budget policy
+
+Maintainability budgets are named responsibility review triggers, not generic
+file-size targets. Each budget keeps limited headroom beyond the measured
+implementation. A warning is resolved in one of two ways:
+
+- extract a state-owning boundary or pure mapping/transport seam that can be
+  tested independently; or
+- calibrate a responsibility-specific budget when splitting would duplicate
+  state or break an ordering or transaction invariant.
+
+The Gateway remains the single bridge composition root, so its orchestration
+budget is 1,100 lines and 40 functions. Projection runtime coordination has a
+separate 950-line budget because input acceptance, bounded event admission,
+route barriers, and worker recovery share one per-Thread ordering invariant.
+SQLite gateway state has a separate 925-line budget because its repository
+protocols share one connection and transaction boundary.
+
+Where stable seams exist, code is split instead of expanding the original
+budget. App Server process/WebSocket transports live in `transports.py`, and
+stateless native response mapping lives in `appserver_mapping.py`. The reusable
+App Server client keeps a 1,750-line ceiling after that extraction. Extracted
+mapping, wire-transport, and diagnostic-state modules have their own narrow
+budgets so they cannot silently regrow to the client or adapter ceiling.
+
+A budget change must include before-and-after metrics, the responsibility or
+invariant that justifies the result, zero maintainability warnings, mapping and
+layer checks, focused behavior tests, and the full repository verification.
