@@ -453,6 +453,35 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
             OperationErrorCode.REQUEST_STALE.value,
         )
 
+    async def test_capacity_one_reset_preserves_stale_before_terminal_gap(self) -> None:
+        client = InteractiveClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-capacity-one",
+            client=cast(Any, client),
+            cwd="D:/repo",
+            event_buffer_max_pending=1,
+        )
+        thread_ref = ThreadRef("codex-capacity-one", "thread-1")
+        events = cast(Any, adapter.subscribe_thread(thread_ref))
+        try:
+            await client.emit_request(
+                _server_request(
+                    method="item/commandExecution/requestApproval",
+                    params={"availableDecisions": ["accept", "decline"]},
+                )
+            )
+            opened = await anext(events)
+            self.assertIs(opened.type, AgentEventType.REQUEST_OPENED)
+
+            await client.reset()
+
+            stale = await anext(events)
+            self.assertIs(stale.type, AgentEventType.REQUEST_RESOLVED)
+            with self.assertRaises(EventStreamReset):
+                await anext(events)
+        finally:
+            await events.aclose()
+
     async def test_native_resolution_wins_during_response_writeback(self) -> None:
         opened = asyncio.create_task(anext(self.events))
         await asyncio.sleep(0)

@@ -50,10 +50,12 @@ class FanoutSubscription(AsyncIterator[V], Generic[K, V]):
         self,
         key: K,
         queue: asyncio.Queue[V | _TerminalSignal],
+        max_pending: int,
         close: Callable[[K, FanoutSubscription[K, V]], None],
     ) -> None:
         self._key = key
         self._queue = queue
+        self._max_pending = max_pending
         self._close_callback = close
         self._closed = False
         self._terminal_error: EventStreamGap | None = None
@@ -93,11 +95,10 @@ class FanoutSubscription(AsyncIterator[V], Generic[K, V]):
     def _publish(self, event: V) -> bool:
         if self._closed or self._terminal_error is not None:
             return False
-        try:
-            self._queue.put_nowait(event)
-        except asyncio.QueueFull:
-            self._fail(EventStreamOverflow(max_pending=self._queue.maxsize))
+        if self._queue.qsize() >= self._max_pending:
+            self._fail(EventStreamOverflow(max_pending=self._max_pending))
             return True
+        self._queue.put_nowait(event)
         return False
 
     def _fail(self, error: EventStreamGap, *, discard_pending: bool = True) -> None:
@@ -106,8 +107,6 @@ class FanoutSubscription(AsyncIterator[V], Generic[K, V]):
         if discard_pending:
             while not self._queue.empty():
                 self._queue.get_nowait()
-        elif self._queue.full():
-            self._queue.get_nowait()
         self._terminal_error = error
         self._queue.put_nowait(_TERMINAL_SIGNAL)
         self._close_callback(self._key, self)
@@ -130,7 +129,8 @@ class EventBroadcaster(Generic[K, V]):
     ) -> FanoutSubscription[K, V]:
         subscription = FanoutSubscription(
             key,
-            asyncio.Queue[V | _TerminalSignal](maxsize=self._max_pending),
+            asyncio.Queue[V | _TerminalSignal](maxsize=self._max_pending + 1),
+            self._max_pending,
             self._remove,
         )
         self._subscribers.setdefault(key, set()).add(subscription)
