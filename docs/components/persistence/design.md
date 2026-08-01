@@ -113,7 +113,8 @@ databases retain bindings, routes, Turn correlations, and idempotency records.
 Adding proactive delivery storage is also additive. The root table contains an
 SDK-origin-and-principal-derived submission ID, caller delivery ID, the
 SDK-controlled origin, principal/target/payload fingerprints, and timestamps.
-Child rows contain the pinned destination route identity and typed outcome.
+Child rows contain the pinned destination route identity and typed outcome,
+including explicit retryable failure and an optional retry-after hint.
 Neither table stores text, inline artifact bytes, local paths from message
 content, bot credentials, or a replayable job body. An `in_flight` row left by
 a crash is truthful ambiguity, not evidence that a resend is safe.

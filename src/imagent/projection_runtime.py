@@ -37,6 +37,7 @@ from .projections import (
     ProjectedAgentMessage,
     ProjectionWorkerHealth,
     ProjectionWorkerState,
+    RetryableDeliveryError,
     derive_projection_route_id,
     derive_turn_reply_correlation_id,
     get_projection_route,
@@ -66,11 +67,13 @@ class ThreadProjectionRuntime:
         projection_policy: ProjectionPolicy,
         execute_application: ExecuteApplication,
         deliver_outbound: DeliverOutbound,
+        deliver_request_outbound: DeliverOutbound,
         baseline_history_limit: int = 3,
         recovery_history_page_size: int = 10,
         recovery_max_pages: int = 5,
         catchup_limit: int = 10,
         projection_item_limit: int = 20,
+        request_delivery_max_pending: int = 256,
         subscription_retry_initial_seconds: float = 0.05,
         subscription_retry_max_seconds: float = 2.0,
         turn_correlation_retention_seconds: float = 7 * 24 * 60 * 60,
@@ -118,7 +121,9 @@ class ThreadProjectionRuntime:
             request_correlations=request_correlations,
             request_presenter=request_presenter,
             execute_application=execute_application,
+            active_routes=self._active_routes,
             deliver_outbound=deliver_outbound,
+            deliver_request_outbound=deliver_request_outbound,
             wait_for_acceptance=self._wait_for_acceptance,
             record_gap=self._record_gap,
             record_delivery_failure=self._record_delivery_failure,
@@ -127,12 +132,14 @@ class ThreadProjectionRuntime:
             recovery_max_pages=recovery_max_pages,
             catchup_limit=catchup_limit,
             projection_item_limit=projection_item_limit,
+            request_delivery_max_pending=request_delivery_max_pending,
         )
         self._request_projection = InteractiveRequestProjection(
             applications=applications,
             correlations=request_correlations,
             active_routes=self._active_routes,
             deliver_request=self._routes.deliver_request_to_routes,
+            cancel_request=self._routes.cancel_request_deliveries,
         )
         self._stopping = False
 
@@ -187,6 +194,7 @@ class ThreadProjectionRuntime:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._tasks.clear()
         self._ready.clear()
+        await self._routes.stop()
         self._routes.reset()
         for thread_ref in tuple(self._health):
             self._update_health(
@@ -332,6 +340,7 @@ class ThreadProjectionRuntime:
         if previous_thread == current.thread_ref:
             return
         if previous_thread is not None:
+            await self._routes.cancel_inactive_request_deliveries(previous_thread)
             await self._stop_if_unobserved(previous_thread)
         if current.thread_ref is None:
             return
@@ -397,7 +406,7 @@ class ThreadProjectionRuntime:
                         thread_ref=thread_ref,
                         conversation_ref=removed.conversation_ref,
                     )
-            self._routes.forget_routes(
+            await self._routes.forget_routes(
                 tuple(
                     removed
                     for removed in existing
@@ -553,6 +562,8 @@ class ThreadProjectionRuntime:
                     self._subscription_retry_initial_seconds * (2**exponent),
                     self._subscription_retry_max_seconds,
                 )
+                if isinstance(error, RetryableDeliveryError):
+                    delay = max(delay, error.retry_after_seconds or 0)
                 await asyncio.sleep(delay)
                 needs_recovery = True
             finally:
@@ -631,7 +642,7 @@ class ThreadProjectionRuntime:
             await self._projections.delete_projection_routes(thread_ref)
             await self._projections.delete_turn_reply_correlations(thread_ref=thread_ref)
             await self._request_correlations.delete_request_correlations(thread_ref=thread_ref)
-            self._routes.forget_routes(routes)
+            await self._routes.forget_routes(routes)
 
     async def _active_routes(
         self,

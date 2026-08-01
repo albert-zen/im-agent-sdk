@@ -14,8 +14,9 @@ Channel adapters own:
 - native account, Conversation, sender, and message identity;
 - signature/authentication verification and access-control inputs;
 - admission, normalization, duplicate checks, and media staging;
-- native Markdown/cards/buttons/replies/mentions;
-- chunking, escaping, rate limits, native idempotency, retries, and receipts;
+- native Markdown/cards/buttons/replies/mentions and escaping;
+- platform API limits, credentials, native idempotency, rate-limit mapping,
+  final validation, and receipts;
 - real platform capabilities and limits.
 
 They do not own:
@@ -38,14 +39,18 @@ Access and deduplication happen before attachment download and Agent mutation.
 
 ## Outbound flow
 
-The adapter accepts `OutboundMessage`, converts Markdown or falls back to plain
-text, segments within native limits, applies rate limits, and returns a
-`DeliveryReceipt`. The receipt reports native acceptance/rejection/unknown; it
-does not claim device display. When one platform call returns one native
-message ID, the receipt preserves it. A segmented text or mixed
-text/attachment delivery may produce several native IDs; the current singular
-public field remains unset and the receipt detail reports the accepted count
-rather than choosing a misleading ID.
+Gateway normally passes the adapter one segment produced from the Channel's
+declared `DeliveryProfile`. The adapter performs native encoding, escaping,
+upload/API calls, final platform validation, rate-limit interpretation, and
+returns a `DeliveryReceipt`. The receipt reports native acceptance, rejection,
+explicitly retryable failure, or unknown outcome; it does not claim device
+display. When one platform call returns one native message ID, the receipt
+preserves it.
+
+An adapter may defensively split or reject an invalid direct call, but that is
+not a second planning authority. Its advertised profile must make the common
+planner's segment a valid native unit. Platform-specific cards or batching may
+remain internal as long as receipts map every source content item truthfully.
 
 Native artifact helpers also map each attempted attachment back to its stable
 SDK `attachment_id`. Successful and permanently failed uploads become typed
@@ -58,8 +63,9 @@ consumer or delivery component has materialized them as an explicit
 `LocalPath` in a filesystem namespace trusted by that Channel instance.
 `RemoteUrl` and `AttachmentHandle` are rejected rather than fetched or silently
 dropped. The optional proactive ingress materializes inline bytes into this
-trusted `LocalPath` boundary. General segmentation, grouping, rate limiting,
-and coordinated retry remain Issue #12.
+trusted `LocalPath` boundary. Common segmentation/grouping and ordered bounded
+execution are defined by ADR 0010; native throttling and response mapping stay
+here.
 
 Completed Agent messages are the default IM unit. Token-by-token native
 messages are not a common requirement.

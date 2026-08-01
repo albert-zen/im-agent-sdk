@@ -27,7 +27,7 @@ It does not own:
 - native resource registries, transcript, Turn, request, or execution truth;
 - native active/open Thread state;
 - Slash grammar, command aliases, or fixed presentation;
-- Channel Markdown, chunking, rate limits, or credentials;
+- Channel-native encoding, escaping, rate limits, or credentials;
 - Application workspace, model, provider, sandbox, or runtime mode;
 - a durable job system or retry policy not proven by consumers.
 
@@ -61,14 +61,17 @@ may import Gateway.
    identity with the caller delivery ID, immutable route snapshots, and
    payload/authority fingerprints. The authorizer cannot select the origin
    namespace.
-6. Every destination uses the same outbound execution seam as projection and
-   interactive-request presentation.
+6. Every destination uses the same pure planner and ordered/bounded
+   Coordinator as projection and interactive-request presentation.
 7. Typed receipts preserve accepted, rejected, partial, and unknown outcomes.
 
 The optional `ProactiveDeliveryJsonHandler` is an ingress adapter, not a web
 server. A consumer mounts it in its own authenticated loopback service. It
 checks authorization before decoding inline artifacts, uses only a private
 configured staging root, and removes staged bytes after the synchronous call.
+If the ingress request is cancelled, its awaited Coordinator worker is first
+cancelled and joined, the destination becomes `unknown`, and only then are the
+staged paths removed.
 The reference `imagent-send` client accepts only loopback HTTP(S), reads a
 scoped credential from a file or stdin, and never reads Gateway persistence or
 Channel credentials.
@@ -109,16 +112,16 @@ For IM-originated input, Gateway persists a minimal mapping from the returned
 the event/history Turn envelope and applies the reply only to that same
 destination. An external Turn does not inherit a prior IM message.
 
-Current projection delivery awaits the Channel send in a Thread worker.
+Projection delivery awaits one logical Coordinator result in a Thread worker.
 Application notification callbacks remain non-blocking because they publish
-into independent subscriber queues, but those queues are not yet bounded.
-Bounded delivery execution, backpressure, and retry belong to the planned
-Delivery Coordinator work in
-[Issue #12](https://github.com/albert-zen/im-agent-sdk/issues/12); until then
-memory pressure from a persistently slow Channel is an explicit limitation.
+into independent subscriber queues. Coordinator admission and native sends are
+bounded, but the event subscriber queues themselves remain unbounded; a
+persistently stalled projection can therefore still create memory pressure.
 
 Projection workers resubscribe after Application subscription/recovery failure
 with bounded backoff and expose process-local infrastructure health.
+Known zero-side-effect Coordinator backpressure follows that same bounded
+backoff and authoritative recovery path; it does not sticky-block a route.
 Foreground workers are reclaimed/restored from binding policy; remembered and
 all-observer workers follow their durable routes. A per-route Channel failure
 is recorded with its route ID and cannot kill or restart the Application
@@ -128,11 +131,12 @@ single-event-loop, pre-suspension registration invariant.
 Gateway's ordered checkpoint decision does not make Channel side effects and
 SQLite atomic. Stable delivery IDs make completed work convergent; a crash
 between native send and durable completion can still yield an ambiguous
-side-effect outcome. Receipt-aware retry/backpressure remains Issue #12.
+side-effect outcome. The Coordinator never retries that unknown outcome.
 
 Proactive submission persistence likewise is not a durable job queue. An
 `in_flight` or `unknown` record blocks automatic duplicate delivery after a
-crash or ambiguous Channel outcome. Rejected preflight results are persisted
+crash or ambiguous Channel outcome. An explicit `retryable` outcome may resume
+the same pinned destination identity. Rejected preflight results are persisted
 too, so the same delivery ID cannot change destinations and later become a
 send merely because routes or capabilities changed.
 
@@ -142,6 +146,14 @@ An Application `request.opened` event is projected only through active output
 routes. A configured Request Presenter renders the request; Gateway stores a
 minimal per-destination correlation only after that stable delivery is
 accepted or already completed.
+
+Presentation work is bounded separately from ordinary projection. It starts as
+a managed, cancellable task before entering Channel coordination; cancellation
+propagates through queued Coordinator work. Native resolution, expiry,
+foreground-route deactivation, and Gateway stop cancel and join those tasks.
+When all presentation slots are occupied, the current consumed request event
+waits instead of relying on optional native replay; fan-out larger than the
+configured backlog is delivered in bounded batches.
 
 Slash text and Channel-native actions submit
 `conversation.respond_request`. Gateway then:

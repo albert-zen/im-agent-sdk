@@ -534,10 +534,13 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
             ["qq-main", "telegram-main", "feishu-main", "weixin-main"],
         )
         self.assertTrue(all("start and stop lifecycle" in report.check_names for report in reports))
-        self.assertEqual(adapters[0].capabilities.markdown, SupportLevel.NATIVE)
+        self.assertEqual(
+            adapters[0].capabilities.delivery.markdown,
+            SupportLevel.NATIVE,
+        )
         self.assertTrue(
             all(
-                adapter.capabilities.markdown is not SupportLevel.UNSUPPORTED
+                adapter.capabilities.delivery.markdown is not SupportLevel.UNSUPPORTED
                 for adapter in adapters
             )
         )

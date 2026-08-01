@@ -32,6 +32,7 @@ DeliverRequest = Callable[
     [tuple[ThreadProjectionRoute, ...], InteractiveRequest],
     Awaitable[None],
 ]
+CancelRequest = Callable[[RequestRef], Awaitable[None]]
 
 
 class InteractiveRequestProjection:
@@ -44,11 +45,13 @@ class InteractiveRequestProjection:
         correlations: RequestCorrelationRepository,
         active_routes: ActiveRoutes,
         deliver_request: DeliverRequest,
+        cancel_request: CancelRequest,
     ) -> None:
         self._applications = applications
         self._correlations = correlations
         self._active_routes = active_routes
         self._deliver_request = deliver_request
+        self._cancel_request = cancel_request
 
     async def cleanup_older_than(self, older_than: datetime) -> None:
         await self._correlations.delete_request_correlations(older_than=older_than)
@@ -96,6 +99,7 @@ class InteractiveRequestProjection:
     async def handle_event(self, event: AgentEvent) -> None:
         resolution = event.request_resolution
         if event.type is AgentEventType.REQUEST_RESOLVED and resolution is not None:
+            await self._cancel_request(resolution.request_ref)
             state = (
                 RequestRouteState.RESOLVED
                 if resolution.status is RequestResolutionStatus.RESOLVED

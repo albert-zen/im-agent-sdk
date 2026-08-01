@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -16,6 +17,7 @@ from .model import (
     DeliveryItemStatus,
     DeliveryReceipt,
     DeliveryReceiptStatus,
+    DeliverySegmentStatus,
     LocalPath,
     Metadata,
     RemoteUrl,
@@ -33,6 +35,7 @@ class DeliverySubmissionState(StrEnum):
     IN_FLIGHT = "in_flight"
     ACCEPTED = "accepted"
     REJECTED = "rejected"
+    RETRYABLE = "retryable"
     PARTIAL = "partial"
     UNKNOWN = "unknown"
 
@@ -241,6 +244,15 @@ def validate_delivery_submission_record(record: DeliverySubmissionRecord) -> Non
 def validate_delivery_receipt(receipt: DeliveryReceipt) -> None:
     if not isinstance(receipt.status, DeliveryReceiptStatus):
         raise ContractViolation("delivery receipt status is invalid")
+    if receipt.retry_after_seconds is not None:
+        if receipt.status is not DeliveryReceiptStatus.RETRYABLE_FAILURE:
+            raise ContractViolation(
+                "retry_after_seconds is valid only for retryable delivery failures"
+            )
+        if not math.isfinite(receipt.retry_after_seconds):
+            raise ContractViolation("retry_after_seconds must be finite")
+        if receipt.retry_after_seconds < 0:
+            raise ContractViolation("retry_after_seconds cannot be negative")
     seen_indexes: set[int] = set()
     for item in receipt.items:
         if item.content_index < 0:
@@ -250,8 +262,82 @@ def validate_delivery_receipt(receipt: DeliveryReceipt) -> None:
         seen_indexes.add(item.content_index)
         if not isinstance(item.status, DeliveryItemStatus):
             raise ContractViolation("delivery item receipt status is invalid")
+        if (
+            item.status is DeliveryItemStatus.RETRYABLE_FAILURE
+            and item.native_message_id is not None
+        ):
+            raise ContractViolation(
+                "retryable delivery item cannot contain native acceptance identity"
+            )
         if item.attachment_id is not None:
             require_identifier(item.attachment_id, "attachment_id")
+    seen_segment_indexes: set[int] = set()
+    seen_segment_ids: set[str] = set()
+    for segment in receipt.segments:
+        if segment.segment_index < 0:
+            raise ContractViolation("delivery segment index cannot be negative")
+        if segment.segment_index in seen_segment_indexes:
+            raise ContractViolation("delivery segment indexes must be unique")
+        seen_segment_indexes.add(segment.segment_index)
+        require_identifier(segment.delivery_id, "segment.delivery_id")
+        if segment.delivery_id in seen_segment_ids:
+            raise ContractViolation("delivery segment IDs must be unique")
+        seen_segment_ids.add(segment.delivery_id)
+        if not segment.source_content_indexes:
+            raise ContractViolation("delivery segment requires source content indexes")
+        if len(set(segment.source_content_indexes)) != len(segment.source_content_indexes):
+            raise ContractViolation("delivery segment source indexes must be unique")
+        if any(index < 0 for index in segment.source_content_indexes):
+            raise ContractViolation("delivery segment source index cannot be negative")
+        if not isinstance(segment.status, DeliverySegmentStatus):
+            raise ContractViolation("delivery segment status is invalid")
+        if (
+            segment.status is DeliverySegmentStatus.RETRYABLE_FAILURE
+            and segment.native_message_id is not None
+        ):
+            raise ContractViolation(
+                "retryable delivery segment cannot contain native acceptance identity"
+            )
+        if segment.retry_after_seconds is not None:
+            if segment.status is not DeliverySegmentStatus.RETRYABLE_FAILURE:
+                raise ContractViolation(
+                    "segment retry_after_seconds is valid only for retryable failures"
+                )
+            if not math.isfinite(segment.retry_after_seconds):
+                raise ContractViolation("segment retry_after_seconds must be finite")
+            if segment.retry_after_seconds < 0:
+                raise ContractViolation("segment retry_after_seconds cannot be negative")
+    if receipt.status is DeliveryReceiptStatus.RETRYABLE_FAILURE:
+        if receipt.native_message_id is not None:
+            raise ContractViolation(
+                "retryable delivery receipt cannot contain native acceptance identity"
+            )
+        if any(
+            item.status in {DeliveryItemStatus.ACCEPTED, DeliveryItemStatus.UNKNOWN}
+            for item in receipt.items
+        ):
+            raise ContractViolation(
+                "retryable delivery receipt cannot contain accepted or unknown items"
+            )
+        if any(item.native_message_id is not None for item in receipt.items):
+            raise ContractViolation(
+                "retryable delivery receipt items cannot contain native acceptance identity"
+            )
+        if any(
+            segment.status
+            in {
+                DeliverySegmentStatus.ACCEPTED_BY_PLATFORM,
+                DeliverySegmentStatus.UNKNOWN,
+            }
+            for segment in receipt.segments
+        ):
+            raise ContractViolation(
+                "retryable delivery receipt cannot contain accepted or unknown segments"
+            )
+        if any(segment.native_message_id is not None for segment in receipt.segments):
+            raise ContractViolation(
+                "retryable delivery receipt segments cannot contain native acceptance identity"
+            )
 
 
 def validate_delivery_receipt_for_content(
@@ -275,6 +361,9 @@ def validate_delivery_receipt_for_content(
             raise ContractViolation(
                 "delivery item receipt attachment_id does not match submitted content"
             )
+    for segment in receipt.segments:
+        if any(index >= len(content) for index in segment.source_content_indexes):
+            raise ContractViolation("delivery segment source index is outside submitted content")
 
 
 def derive_delivery_target_fingerprint(target: DeliveryTarget) -> str:

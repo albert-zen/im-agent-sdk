@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import tempfile
 import unittest
@@ -11,10 +12,14 @@ from imagent.bindings import InMemoryBindingRepository
 from imagent.cli.send import main as send_main
 from imagent.contracts import (
     AttachmentContent,
+    AttachmentGrouping,
     AttachmentSourceKind,
     ChannelCapabilities,
     ConversationRef,
     DeliveryPrincipal,
+    DeliveryReceipt,
+    DeliverySubmissionOrigin,
+    DeliverySubmissionState,
     LocalPath,
     ProjectionPolicy,
     ProjectMode,
@@ -22,10 +27,14 @@ from imagent.contracts import (
     TextContent,
     ThreadProjectionRoute,
     ThreadRef,
+    derive_delivery_submission_id,
 )
 from imagent.delivery_ingress import ProactiveDeliveryJsonHandler
 from imagent.gateway import ImAgentGateway
-from imagent.proactive_delivery import ScopedDeliveryAuthorizer
+from imagent.proactive_delivery import (
+    InMemoryDeliverySubmissionRepository,
+    ScopedDeliveryAuthorizer,
+)
 from imagent.projections import InMemoryProjectionRouteRepository
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
@@ -34,16 +43,17 @@ class _ReadingChannel(FakeChannelAdapter):
     def __init__(self) -> None:
         super().__init__("channel")
         self._capabilities = ChannelCapabilities(
+            markdown=SupportLevel.FALLBACK,
             attachments=SupportLevel.NATIVE,
             attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
+            attachment_grouping=AttachmentGrouping.MIXED,
             max_attachment_count=4,
             max_attachment_size=1024,
         )
         self.artifact_bytes: list[bytes] = []
 
-    async def send(self, message):
+    async def send(self, message) -> DeliveryReceipt:
         attachments = [item for item in message.content if isinstance(item, AttachmentContent)]
-        self.artifact_bytes = []
         for item in attachments:
             self.assert_local_path(item.source)
             assert isinstance(item.source, LocalPath)
@@ -54,6 +64,28 @@ class _ReadingChannel(FakeChannelAdapter):
     def assert_local_path(source) -> None:
         if not isinstance(source, LocalPath):
             raise AssertionError("ingress must stage inline artifacts as LocalPath")
+
+
+class _BlockingReadingChannel(_ReadingChannel):
+    def __init__(self) -> None:
+        super().__init__()
+        self.started_read = asyncio.Event()
+        self.cancelled_read = asyncio.Event()
+        self.staged_path: Path | None = None
+        self.path_existed_when_cancelled = False
+
+    async def send(self, message) -> DeliveryReceipt:
+        attachment = next(item for item in message.content if isinstance(item, AttachmentContent))
+        assert isinstance(attachment.source, LocalPath)
+        self.staged_path = Path(attachment.source.path)
+        self.started_read.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            self.path_existed_when_cancelled = self.staged_path.exists()
+            self.cancelled_read.set()
+            raise
+        raise AssertionError("blocking test Channel was unexpectedly released")
 
 
 class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
@@ -136,7 +168,7 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
             assert isinstance(destinations, list)
             self.assertNotIn("conversationRef", destinations[0])
             self.assertEqual(self.channel.artifact_bytes, [b"one", b"two"])
-            sent_content = self.channel.sent[0].content
+            sent_content = tuple(item for sent in self.channel.sent for item in sent.content)
             self.assertIsInstance(sent_content[0], TextContent)
             first_artifact = sent_content[1]
             self.assertIsInstance(first_artifact, AttachmentContent)
@@ -148,6 +180,72 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
             assert isinstance(second_artifact, AttachmentContent)
             self.assertEqual(second_artifact.attachment_id, "artifact-2")
             self.assertEqual(list(staging_root.glob("**/*")), [])
+
+    async def test_cancelled_ingress_joins_send_before_cleanup_and_records_unknown(self) -> None:
+        channel = _BlockingReadingChannel()
+        submissions = InMemoryDeliverySubmissionRepository()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[
+                FakeAgentApplicationAdapter(
+                    application_instance_id="application",
+                    project_mode=ProjectMode.FLAT,
+                )
+            ],
+            bindings=InMemoryBindingRepository(),
+            projections=self.routes,
+            delivery_submissions=submissions,
+            delivery_authorizer=self.authorizer,
+            projection_policy=ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            staging_root = Path(directory, "ingress")
+            handler = ProactiveDeliveryJsonHandler(gateway, staging_root=staging_root)
+            request = asyncio.create_task(
+                handler.handle(
+                    {
+                        "deliveryId": "delivery-cancelled",
+                        "target": {
+                            "kind": "threadRoutes",
+                            "applicationInstanceId": "application",
+                            "nativeThreadId": "thread-1",
+                        },
+                        "content": [
+                            {
+                                "type": "inlineArtifact",
+                                "attachmentId": "artifact-1",
+                                "filename": "one.bin",
+                                "mediaType": "application/octet-stream",
+                                "contentBase64": base64.b64encode(b"one").decode(),
+                            }
+                        ],
+                    },
+                    credential=self.credential,
+                )
+            )
+            await channel.started_read.wait()
+            assert channel.staged_path is not None
+            self.assertTrue(channel.staged_path.exists())
+
+            request.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await request
+
+            self.assertTrue(channel.cancelled_read.is_set())
+            self.assertTrue(channel.path_existed_when_cancelled)
+            self.assertEqual(list(staging_root.glob("**/*")), [])
+
+        record = await submissions.get_delivery_submission(
+            derive_delivery_submission_id(
+                DeliverySubmissionOrigin.EXTERNAL,
+                "agent-task",
+                "delivery-cancelled",
+            )
+        )
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.assertIs(record.destinations[0].state, DeliverySubmissionState.UNKNOWN)
+        await gateway.stop()
 
     async def test_invalid_credential_is_rejected_before_artifact_staging(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

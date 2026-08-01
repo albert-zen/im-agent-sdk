@@ -131,5 +131,5 @@ Full Access products can leave the capability idle. Multi-observer products
 must choose their projection and sender-admission policy consciously; Core
 does not select an approver. A crash between native Channel side effect and
 durable correlation can still leave an unanswerable delivered prompt when no
-authoritative request replay exists. Delivery receipts and retry coordination
-remain Issue #12 work.
+authoritative request replay exists. ADR 0010 coordinates delivery receipts,
+but cannot make that Channel/persistence boundary atomic.

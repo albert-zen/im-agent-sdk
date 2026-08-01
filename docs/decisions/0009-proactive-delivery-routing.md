@@ -16,9 +16,9 @@ route on every retry can therefore send one logical delivery to two people.
 Conversely, silently retrying an ambiguous Channel outcome can duplicate a
 native message on platforms without native idempotency.
 
-Issue #12 will add deterministic planning, bounded execution, backpressure, and
-receipt-aware retry. This decision must provide its common input and result
-contracts without implementing a second temporary delivery pipeline.
+ADR 0010 adds deterministic planning, bounded execution, backpressure, and
+receipt-aware retry on this same input/result seam rather than creating a
+second temporary delivery pipeline.
 
 ## Decision
 
@@ -80,7 +80,8 @@ The delivery repository stores only:
 - principal and target identity fingerprints;
 - a canonical payload fingerprint;
 - the resolved route snapshots;
-- per-destination `in_flight`, `accepted`, `rejected`, or `unknown` state;
+- per-destination `in_flight`, `accepted`, `retryable`, `rejected`, or
+  `unknown` state;
 - typed per-destination Channel receipts and timestamps.
 
 It does not store message or artifact content and is not a transcript or
@@ -90,8 +91,8 @@ fails as a conflict. The same identity returns its existing typed result.
 
 An `in_flight` record prevents a concurrent duplicate. If a process dies after
 the Channel side effect but before completion, the surviving record is
-ambiguous and is not automatically resent. Issue #12 may coordinate safe retry
-only when a receipt or native idempotency capability proves it.
+ambiguous and is not automatically resent. A later retry is safe only after an
+explicit retryable receipt; unknown outcomes remain sticky.
 
 ### Capability preflight and receipts
 
@@ -105,8 +106,9 @@ Gateway validates the complete intent before reserving or invoking a Channel:
   the Channel verifies while reading its trusted spool;
 - one malformed artifact prevents every side effect.
 
-Channel adapters still own native upload, escaping, segmentation, and final
-platform validation. `DeliveryReceipt` may contain per-content item receipts
+The common planner owns capability-driven segmentation and grouping. Channel
+adapters still own native upload, escaping, API encoding, and final platform
+validation. `DeliveryReceipt` may contain per-content item receipts
 so partial native success remains visible. Gateway never converts `unknown`
 into accepted or hides a rejected item behind an aggregate boolean.
 
@@ -142,6 +144,6 @@ implementations or persistence details. Route movement is deterministic per
 delivery identity, and ambiguous side effects remain explicit.
 
 Products still decide how a local Agent process obtains a scoped credential and
-where the JSON handler is mounted. Channel-native idempotency, planning,
-segmentation, bounded queues, throttling, and conservative retry remain Issue
-#12 work and will consume the contracts established here.
+where the JSON handler is mounted. Channel-native idempotency and throttling
+remain adapter concerns. Capability planning, bounded queues, and conservative
+retry follow ADR 0010 and consume the contracts established here.

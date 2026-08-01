@@ -78,12 +78,22 @@ class RequestRouteState(StrEnum):
 class DeliveryReceiptStatus(StrEnum):
     ACCEPTED_BY_PLATFORM = "accepted_by_platform"
     REJECTED_BY_PLATFORM = "rejected_by_platform"
+    RETRYABLE_FAILURE = "retryable_failure"
     UNKNOWN = "unknown"
 
 
 class DeliveryItemStatus(StrEnum):
     ACCEPTED = "accepted"
     REJECTED = "rejected"
+    RETRYABLE_FAILURE = "retryable_failure"
+    UNKNOWN = "unknown"
+    SKIPPED = "skipped"
+
+
+class DeliverySegmentStatus(StrEnum):
+    ACCEPTED_BY_PLATFORM = "accepted_by_platform"
+    REJECTED_BY_PLATFORM = "rejected_by_platform"
+    RETRYABLE_FAILURE = "retryable_failure"
     UNKNOWN = "unknown"
     SKIPPED = "skipped"
 
@@ -104,6 +114,23 @@ class AttachmentSourceKind(StrEnum):
     LOCAL_PATH = "local_path"
     REMOTE_URL = "remote_url"
     ATTACHMENT_HANDLE = "attachment_handle"
+
+
+class TextLengthUnit(StrEnum):
+    CODE_POINTS = "code_points"
+    UTF16_CODE_UNITS = "utf16_code_units"
+    UTF8_BYTES = "utf8_bytes"
+
+
+class AttachmentGrouping(StrEnum):
+    NONE = "none"
+    SAME_MEDIA_FAMILY = "same_media_family"
+    MIXED = "mixed"
+
+
+class ReplyReferenceScope(StrEnum):
+    FIRST_SEGMENT = "first_segment"
+    EVERY_SEGMENT = "every_segment"
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,7 +172,27 @@ class ApplicationCapabilities:
 
 
 @dataclass(frozen=True, slots=True)
+class DeliveryProfile:
+    plain_text: SupportLevel = SupportLevel.NATIVE
+    markdown: SupportLevel = SupportLevel.UNSUPPORTED
+    attachments: SupportLevel = SupportLevel.UNSUPPORTED
+    attachment_sources: tuple[AttachmentSourceKind, ...] = ()
+    attachment_media_types: tuple[str, ...] = ()
+    attachment_grouping: AttachmentGrouping = AttachmentGrouping.NONE
+    reply_references: SupportLevel = SupportLevel.UNSUPPORTED
+    reply_reference_scope: ReplyReferenceScope = ReplyReferenceScope.FIRST_SEGMENT
+    text_length_unit: TextLengthUnit = TextLengthUnit.CODE_POINTS
+    max_text_length: int | None = None
+    max_attachment_size: int | None = None
+    max_attachment_count: int | None = None
+    max_attachment_group_size: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ChannelCapabilities:
+    # Keep the v1 flat constructor/attribute surface. ``delivery`` below is a
+    # derived planning view, so there is one source of capability truth and
+    # existing Channel adapters do not need a flag-day migration.
     plain_text: SupportLevel = SupportLevel.NATIVE
     markdown: SupportLevel = SupportLevel.UNSUPPORTED
     message_edits: SupportLevel = SupportLevel.UNSUPPORTED
@@ -159,6 +206,31 @@ class ChannelCapabilities:
     max_text_length: int | None = None
     max_attachment_size: int | None = None
     max_attachment_count: int | None = None
+    attachment_media_types: tuple[str, ...] = ()
+    attachment_grouping: AttachmentGrouping = AttachmentGrouping.NONE
+    reply_reference_scope: ReplyReferenceScope = ReplyReferenceScope.FIRST_SEGMENT
+    text_length_unit: TextLengthUnit = TextLengthUnit.CODE_POINTS
+    max_attachment_group_size: int | None = None
+
+    @property
+    def delivery(self) -> DeliveryProfile:
+        """Return the deterministic planner view without duplicating state."""
+
+        return DeliveryProfile(
+            plain_text=self.plain_text,
+            markdown=self.markdown,
+            attachments=self.attachments,
+            attachment_sources=self.attachment_sources,
+            attachment_media_types=self.attachment_media_types,
+            attachment_grouping=self.attachment_grouping,
+            reply_references=self.reply_references,
+            reply_reference_scope=self.reply_reference_scope,
+            text_length_unit=self.text_length_unit,
+            max_text_length=self.max_text_length,
+            max_attachment_size=self.max_attachment_size,
+            max_attachment_count=self.max_attachment_count,
+            max_attachment_group_size=self.max_attachment_group_size,
+        )
 
 
 class ThreadStatus(StrEnum):
@@ -549,8 +621,21 @@ class DeliveryItemReceipt:
 
 
 @dataclass(frozen=True, slots=True)
+class DeliverySegmentReceipt:
+    segment_index: int
+    delivery_id: str
+    source_content_indexes: tuple[int, ...]
+    status: DeliverySegmentStatus
+    native_message_id: str | None = None
+    detail: str | None = None
+    retry_after_seconds: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class DeliveryReceipt:
     status: DeliveryReceiptStatus
     native_message_id: str | None = None
     detail: str | None = None
     items: tuple[DeliveryItemReceipt, ...] = ()
+    segments: tuple[DeliverySegmentReceipt, ...] = ()
+    retry_after_seconds: float | None = None

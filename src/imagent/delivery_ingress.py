@@ -420,6 +420,7 @@ def _result_json(result: ProactiveDeliveryResult) -> dict[str, object]:
                         "status": destination.receipt.status.value,
                         "nativeMessageId": destination.receipt.native_message_id,
                         "detail": destination.receipt.detail,
+                        "retryAfterSeconds": (destination.receipt.retry_after_seconds),
                         "items": [
                             {
                                 "contentIndex": item.content_index,
@@ -429,6 +430,18 @@ def _result_json(result: ProactiveDeliveryResult) -> dict[str, object]:
                                 "detail": item.detail,
                             }
                             for item in destination.receipt.items
+                        ],
+                        "segments": [
+                            {
+                                "segmentIndex": segment.segment_index,
+                                "deliveryId": segment.delivery_id,
+                                "sourceContentIndexes": list(segment.source_content_indexes),
+                                "status": segment.status.value,
+                                "nativeMessageId": segment.native_message_id,
+                                "detail": segment.detail,
+                                "retryAfterSeconds": segment.retry_after_seconds,
+                            }
+                            for segment in destination.receipt.segments
                         ],
                     }
                 ),

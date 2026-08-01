@@ -16,18 +16,13 @@ future work is an isolated IMCodex migration:
 
 Issue #9 remains open until that consumer-side removal is complete.
 
-## Issue #10: request response loop
+## Issue #10: downstream request-loop evidence
 
-Complete approval and user-input request observation/response while preserving
-native Application request truth. The common surface may represent request
-identity, capability, and typed responses. Full Access and automatic approval
-are consumer/Application policy.
-
-Open design evidence:
-
-- compare Codex approval/user-input lifecycle with at least Zen and T3;
-- define authoritative request recovery after reconnect;
-- keep sandbox and IM admission separate.
+The SDK owner-side typed approval/user-input loop, destination-safe response
+correlation, native pending-request reconciliation, and conformance coverage
+are complete. Remaining evidence is consumer mounting against additional
+native Agent Applications. Full Access and automatic approval remain
+consumer/Application policy.
 
 ## Issue #11: proactive content and Artifact send
 
@@ -41,19 +36,16 @@ exercise the one-command path against its configured Channels. Artifact upload
 remains Channel-owned; no Application adapter needs an artificial Artifact
 send API.
 
-## Issue #12: one delivery chain
+## Issue #12: downstream delivery-profile evidence
 
-Unify proactive delivery and event projection:
+The SDK owner-side pure `DeliveryPlanner`, typed `DeliveryProfile`, shared
+projection/proactive `DeliveryCoordinator`, destination ordering, bounded
+admission, and conservative retry outcomes are complete. Remaining evidence
+is downstream operation against real configured Channels and tuning profiles
+without overstating native limits.
 
-- a pure deterministic `DeliveryPlanner` maps authoritative content and
-  destination capabilities to delivery steps;
-- a `DeliveryCoordinator` performs ordered execution, bounded backpressure,
-  idempotency, and explicit retry outcomes;
-- native Channel adapters retain formatting, credentials, API limits, and
-  platform retry semantics.
-
-Do not introduce a durable job system until multiple real consumers prove that
-the SDK, rather than a product/orchestrator, must own it.
+A durable job system remains out of scope until multiple real consumers prove
+that the SDK, rather than a product/orchestrator, must own it.
 
 ## Issue #13: backlog
 

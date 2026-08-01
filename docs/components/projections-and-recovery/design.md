@@ -117,8 +117,9 @@ checkpoint is explicitly degraded, while a new route establishes a bounded
 recent baseline. Temporary authoritative read failure enters the same bounded
 supervisor retry loop as subscription failure.
 
-This is ordering isolation, not bounded backpressure. Queue bounds and the
-common Delivery Coordinator remain Issue #12 work.
+This bootstrap queue is ordering isolation, not the Delivery Coordinator's
+admission queue. Channel planning/execution is bounded after projection;
+Application event subscriber and bootstrap queues remain unbounded.
 
 ## Recovery
 
@@ -157,19 +158,31 @@ ordered recovery. An `already_completed` stable delivery may advance a lagging
 checkpoint there; `in_flight` never advances it. Live duplicate events do not
 rewrite a different checkpoint because opaque item IDs provide no ordering.
 
-One route's Channel failure blocks that route's later ordered decisions and
-records the route ID, without terminating/restarting the Application
-subscription or preventing other routes from succeeding. The health snapshot
-is SDK infrastructure state, never Agent Turn/request truth.
+One route's permanent or ambiguous Channel failure blocks that route's later
+ordered decisions and records the route ID, without terminating/restarting the
+Application subscription or preventing other routes from succeeding. A
+zero-side-effect Coordinator capacity rejection is different: it re-enters
+bounded supervisor backoff and authoritative recovery, and never enters the
+sticky blocked-route set. The health snapshot is SDK infrastructure state,
+never Agent Turn/request truth.
+
+Interactive requests cannot assume that recovery history contains the prompt
+or that every Application supports a pending-request snapshot. The route
+coordinator therefore owns a bounded, process-local presentation task from the
+first attempt, including attempts already admitted but queued behind Channel
+work. Resolution, expiry, route deactivation, and stop cancel and join it. A
+full presentation backlog holds the one consumed event until capacity returns,
+and fan-out is admitted in bounded batches, so overload is explicit backpressure
+rather than silent request loss or an unbounded hidden queue.
 
 The accepted state and failure-domain design is
 [ADR 0007](../../decisions/0007-projection-lifecycle-and-delivery-boundaries.md).
 Interactive request routing is defined by
 [ADR 0008](../../decisions/0008-interactive-request-routing.md).
 
-Bounded Channel delivery execution/backpressure/retry is separate
-[Issue #12](https://github.com/albert-zen/im-agent-sdk/issues/12) work. Current
-subscriber queues remain unbounded.
+Bounded Channel delivery execution and conservative receipt-aware retry use
+the common Delivery Coordinator. Application subscriber queues remain
+unbounded and are recovered from authoritative history when gaps occur.
 
 ## Dependencies and change obligations
 

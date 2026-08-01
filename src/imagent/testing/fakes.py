@@ -120,7 +120,10 @@ def make_capabilities(project_mode: ProjectMode) -> ApplicationCapabilities:
 class FakeChannelAdapter:
     def __init__(self, channel_instance_id: str = "fake-channel") -> None:
         self._channel_instance_id = channel_instance_id
-        self._capabilities = ChannelCapabilities()
+        self._capabilities = ChannelCapabilities(
+            markdown=SupportLevel.NATIVE,
+            reply_references=SupportLevel.NATIVE,
+        )
         self.started = False
         self.sent: list[OutboundMessage] = []
 
@@ -505,6 +508,7 @@ class FakeAgentApplicationAdapter:
             RequestChoice("decline", "Deny"),
             RequestChoice("cancel", "Cancel"),
         ),
+        expires_at: datetime | None = None,
     ) -> ApprovalRequest:
         request = ApprovalRequest(
             request_ref=self._new_request_ref(),
@@ -512,6 +516,7 @@ class FakeAgentApplicationAdapter:
             turn_id=turn_id,
             prompt=prompt,
             choices=choices,
+            expires_at=expires_at,
         )
         self._open_requests[request.request_ref] = request
         self._publish(

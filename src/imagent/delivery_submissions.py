@@ -16,6 +16,8 @@ from .contracts import (
     DeliveryReceiptStatus,
     DeliveryReservation,
     DeliveryRouteSnapshot,
+    DeliverySegmentReceipt,
+    DeliverySegmentStatus,
     DeliverySubmissionOrigin,
     DeliverySubmissionRecord,
     DeliverySubmissionState,
@@ -345,6 +347,7 @@ def _encode_receipt(receipt: DeliveryReceipt | None) -> str | None:
             "status": receipt.status.value,
             "native_message_id": receipt.native_message_id,
             "detail": receipt.detail,
+            "retry_after_seconds": receipt.retry_after_seconds,
             "items": [
                 {
                     "content_index": item.content_index,
@@ -354,6 +357,18 @@ def _encode_receipt(receipt: DeliveryReceipt | None) -> str | None:
                     "detail": item.detail,
                 }
                 for item in receipt.items
+            ],
+            "segments": [
+                {
+                    "segment_index": segment.segment_index,
+                    "delivery_id": segment.delivery_id,
+                    "source_content_indexes": list(segment.source_content_indexes),
+                    "status": segment.status.value,
+                    "native_message_id": segment.native_message_id,
+                    "detail": segment.detail,
+                    "retry_after_seconds": segment.retry_after_seconds,
+                }
+                for segment in receipt.segments
             ],
         },
         ensure_ascii=False,
@@ -370,6 +385,7 @@ def _decode_receipt(value: object) -> DeliveryReceipt | None:
         status=DeliveryReceiptStatus(str(payload["status"])),
         native_message_id=payload.get("native_message_id"),
         detail=payload.get("detail"),
+        retry_after_seconds=payload.get("retry_after_seconds"),
         items=tuple(
             DeliveryItemReceipt(
                 content_index=int(item["content_index"]),
@@ -379,6 +395,20 @@ def _decode_receipt(value: object) -> DeliveryReceipt | None:
                 detail=item.get("detail"),
             )
             for item in payload.get("items", [])
+        ),
+        segments=tuple(
+            DeliverySegmentReceipt(
+                segment_index=int(segment["segment_index"]),
+                delivery_id=str(segment["delivery_id"]),
+                source_content_indexes=tuple(
+                    int(index) for index in segment["source_content_indexes"]
+                ),
+                status=DeliverySegmentStatus(str(segment["status"])),
+                native_message_id=segment.get("native_message_id"),
+                detail=segment.get("detail"),
+                retry_after_seconds=segment.get("retry_after_seconds"),
+            )
+            for segment in payload.get("segments", [])
         ),
     )
 

@@ -47,8 +47,9 @@ These cases are covered by `test_projection_hardening.py`,
 Server and T3 `AcceptedTurn` identities reach a reply-capable QQ projection;
 the flat/no-reply fake Channel profile proves that reply context remains
 optional and destination-safe. Native rendering details stay adapter tests.
-Bounded delivery/backpressure and receipt-aware retry tests remain
-[Issue #12](https://github.com/albert-zen/im-agent-sdk/issues/12).
+Bounded delivery/backpressure and receipt-aware retry are tested in the
+delivery planning and coordination component; projection tests prove this
+component enters that same injected Coordinator path.
 
 Run:
 

@@ -4,7 +4,7 @@ import asyncio
 import secrets
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from .adapters import (
     ChannelAdapter,
@@ -24,6 +24,7 @@ from .contracts import (
     DeliveryReceiptStatus,
     DeliveryReservation,
     DeliveryRouteSnapshot,
+    DeliverySegmentStatus,
     DeliverySubmissionOrigin,
     DeliverySubmissionRecord,
     DeliverySubmissionState,
@@ -33,7 +34,6 @@ from .contracts import (
     LocalPath,
     OutboundMessage,
     ProactiveDeliveryResult,
-    SupportLevel,
     ThreadProjectionRoute,
     ThreadRef,
     ThreadRouteDeliveryTarget,
@@ -46,6 +46,8 @@ from .contracts import (
     validate_delivery_receipt_for_content,
     validate_delivery_submission_record,
 )
+from .delivery_coordination import DeliveryCoordinator
+from .delivery_planning import DeliveryPlanningError
 
 ResolveThreadRoutes = Callable[
     [ThreadRef],
@@ -158,11 +160,13 @@ class ProactiveDeliveryService:
         submissions: DeliverySubmissionRepository,
         resolve_thread_routes: ResolveThreadRoutes,
         authorizer: DeliveryAuthorizer | None,
+        coordinator: DeliveryCoordinator,
     ) -> None:
         self._channels = channels
         self._submissions = submissions
         self._resolve_thread_routes = resolve_thread_routes
         self._authorizer = authorizer
+        self._coordinator = coordinator
 
     async def deliver(
         self,
@@ -215,6 +219,9 @@ class ProactiveDeliveryService:
         principal: DeliveryPrincipal,
         authorize: bool,
     ) -> ProactiveDeliveryResult:
+        # Cardinality is the only check that must precede generic contract
+        # validation and fingerprinting: both walk every content item.
+        self._coordinator.validate_source_item_count(len(intent.content))
         validate_delivery_intent(intent)
         origin = (
             DeliverySubmissionOrigin.EXTERNAL
@@ -240,6 +247,14 @@ class ProactiveDeliveryService:
             )
             if authorize:
                 authorize_delivery_target(principal, intent.target)
+            if any(
+                destination.state is DeliverySubmissionState.RETRYABLE
+                for destination in existing.destinations
+            ):
+                existing = await self._resume_retryable_destinations(
+                    intent,
+                    existing,
+                )
             return _result_from_record(
                 existing,
                 replayed=True,
@@ -361,6 +376,54 @@ class ProactiveDeliveryService:
             ),
         )
 
+    async def _resume_retryable_destinations(
+        self,
+        intent: DeliveryIntent,
+        record: DeliverySubmissionRecord,
+    ) -> DeliverySubmissionRecord:
+        claimed: list[DestinationDeliveryRecord] = []
+        now = datetime.now(UTC)
+        for destination in record.destinations:
+            if destination.state is not DeliverySubmissionState.RETRYABLE:
+                continue
+            receipt = destination.receipt
+            if (
+                receipt is not None
+                and receipt.retry_after_seconds is not None
+                and now < destination.updated_at + timedelta(seconds=receipt.retry_after_seconds)
+            ):
+                continue
+            in_flight = replace(
+                destination,
+                state=DeliverySubmissionState.IN_FLIGHT,
+                receipt=None,
+                error=None,
+                updated_at=now,
+            )
+            try:
+                await self._submissions.update_delivery_destination(
+                    record.submission_id,
+                    destination.delivery_id,
+                    expected_state=DeliverySubmissionState.RETRYABLE,
+                    destination=in_flight,
+                )
+            except DeliverySubmissionConflict:
+                continue
+            claimed.append(in_flight)
+        if len(claimed) == 1:
+            await self._send_destination(intent, record.submission_id, claimed[0])
+        elif claimed:
+            await asyncio.gather(
+                *(
+                    self._send_destination(intent, record.submission_id, destination)
+                    for destination in claimed
+                )
+            )
+        current = await self._submissions.get_delivery_submission(record.submission_id)
+        if current is None:
+            raise RuntimeError("delivery submission disappeared during retry")
+        return current
+
     async def _resolve_snapshots(
         self,
         intent: DeliveryIntent,
@@ -403,7 +466,6 @@ class ProactiveDeliveryService:
         intent: DeliveryIntent,
         snapshots: tuple[DeliveryRouteSnapshot, ...],
     ) -> str | None:
-        attachments = tuple(item for item in intent.content if isinstance(item, AttachmentContent))
         for snapshot in snapshots:
             channel = self._channels.get(snapshot.conversation_ref.channel_instance_id)
             if channel is None:
@@ -411,34 +473,20 @@ class ProactiveDeliveryService:
                     "destination Channel is not registered: "
                     f"{snapshot.conversation_ref.channel_instance_id}"
                 )
-            capabilities = channel.capabilities
-            if attachments and capabilities.attachments is SupportLevel.UNSUPPORTED:
-                return "destination Channel does not support attachments"
-            if (
-                capabilities.max_attachment_count is not None
-                and len(attachments) > capabilities.max_attachment_count
-            ):
-                return (
-                    "attachment count exceeds destination Channel limit "
-                    f"({capabilities.max_attachment_count})"
+            try:
+                self._coordinator.preflight(
+                    channel,
+                    OutboundMessage(
+                        delivery_id=intent.delivery_id,
+                        conversation_ref=snapshot.conversation_ref,
+                        content=intent.content,
+                        created_at=intent.created_at,
+                        reply_to=intent.reply_to or snapshot.reply_to_message_id,
+                        metadata=intent.metadata,
+                    ),
                 )
-            for attachment in attachments:
-                if attachment.source.kind not in capabilities.attachment_sources:
-                    return (
-                        "attachment source is unsupported by destination Channel: "
-                        f"{attachment.source.kind.value}"
-                    )
-                if isinstance(attachment.source, LocalPath) and attachment.size_bytes is None:
-                    return "LocalPath attachments require a declared size"
-                if (
-                    capabilities.max_attachment_size is not None
-                    and attachment.size_bytes is not None
-                    and attachment.size_bytes > capabilities.max_attachment_size
-                ):
-                    return (
-                        f"attachment {attachment.attachment_id} exceeds destination "
-                        f"Channel size limit ({capabilities.max_attachment_size})"
-                    )
+            except DeliveryPlanningError as error:
+                return str(error)
         return None
 
     async def _send_destination(
@@ -449,8 +497,10 @@ class ProactiveDeliveryService:
     ) -> None:
         snapshot = destination.snapshot
         channel = self._channels[snapshot.conversation_ref.channel_instance_id]
+        cancellation: asyncio.CancelledError | None = None
         try:
-            receipt = await channel.send(
+            receipt = await self._coordinator.deliver(
+                channel,
                 OutboundMessage(
                     delivery_id=destination.delivery_id,
                     conversation_ref=snapshot.conversation_ref,
@@ -458,7 +508,7 @@ class ProactiveDeliveryService:
                     created_at=intent.created_at,
                     reply_to=intent.reply_to or snapshot.reply_to_message_id,
                     metadata=intent.metadata,
-                )
+                ),
             )
             validate_delivery_receipt_for_content(receipt, intent.content)
             state = _state_from_receipt(receipt)
@@ -472,8 +522,26 @@ class ProactiveDeliveryService:
                 }
                 else None
             )
+        except DeliveryPlanningError as delivery_error:
+            receipt = DeliveryReceipt(
+                status=DeliveryReceiptStatus.REJECTED_BY_PLATFORM,
+                detail=str(delivery_error),
+            )
+            state = DeliverySubmissionState.REJECTED
+            error = receipt.detail
+        except asyncio.CancelledError as delivery_error:
+            # Cancellation means the native outcome cannot be trusted, but it
+            # must not strand durable state at IN_FLIGHT. Persist UNKNOWN
+            # before propagating so ingress may then remove staged artifacts.
+            receipt = DeliveryReceipt(
+                status=DeliveryReceiptStatus.UNKNOWN,
+                detail="delivery cancelled before the native outcome was confirmed",
+            )
+            state = DeliverySubmissionState.UNKNOWN
+            error = receipt.detail
+            cancellation = delivery_error
         except BaseException as delivery_error:
-            if isinstance(delivery_error, (KeyboardInterrupt, SystemExit, asyncio.CancelledError)):
+            if isinstance(delivery_error, (KeyboardInterrupt, SystemExit)):
                 raise
             receipt = DeliveryReceipt(
                 status=DeliveryReceiptStatus.UNKNOWN,
@@ -494,6 +562,8 @@ class ProactiveDeliveryService:
             expected_state=DeliverySubmissionState.IN_FLIGHT,
             destination=replacement,
         )
+        if cancellation is not None:
+            raise cancellation
 
 
 def authorize_delivery_target(
@@ -516,15 +586,30 @@ def authorize_delivery_target(
 
 
 def _state_from_receipt(receipt: DeliveryReceipt) -> DeliverySubmissionState:
+    item_states = {item.status for item in receipt.items}
+    segment_states = {segment.status for segment in receipt.segments}
+    has_acceptance = (
+        DeliveryItemStatus.ACCEPTED in item_states
+        or DeliverySegmentStatus.ACCEPTED_BY_PLATFORM in segment_states
+    )
     if receipt.status is DeliveryReceiptStatus.UNKNOWN:
         return DeliverySubmissionState.UNKNOWN
+    if receipt.status is DeliveryReceiptStatus.RETRYABLE_FAILURE:
+        return DeliverySubmissionState.RETRYABLE
     if receipt.status is DeliveryReceiptStatus.REJECTED_BY_PLATFORM:
-        return DeliverySubmissionState.REJECTED
-    item_states = {item.status for item in receipt.items}
+        return (
+            DeliverySubmissionState.PARTIAL if has_acceptance else DeliverySubmissionState.REJECTED
+        )
     if item_states & {
         DeliveryItemStatus.REJECTED,
+        DeliveryItemStatus.RETRYABLE_FAILURE,
         DeliveryItemStatus.UNKNOWN,
         DeliveryItemStatus.SKIPPED,
+    } or segment_states & {
+        DeliverySegmentStatus.REJECTED_BY_PLATFORM,
+        DeliverySegmentStatus.RETRYABLE_FAILURE,
+        DeliverySegmentStatus.UNKNOWN,
+        DeliverySegmentStatus.SKIPPED,
     }:
         return DeliverySubmissionState.PARTIAL
     return DeliverySubmissionState.ACCEPTED
@@ -644,6 +729,14 @@ def _redact_receipt(
                 detail=None,
             )
             for item in receipt.items
+        ),
+        segments=tuple(
+            replace(
+                segment,
+                native_message_id=None,
+                detail=None,
+            )
+            for segment in receipt.segments
         ),
     )
 

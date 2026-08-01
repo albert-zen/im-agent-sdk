@@ -64,16 +64,18 @@ _CHANNEL_CAPABILITIES = {
         attachments=SupportLevel.NATIVE,
         attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
         reply_references=SupportLevel.NATIVE,
+        # Match the SDK-owned native adapter's defensive limit so one
+        # planned segment remains one native send unit.
+        max_text_length=4_000,
         native_threads_or_topics=SupportLevel.NATIVE,
-        max_text_length=4_096,
     ),
     "feishu": ChannelCapabilities(
         markdown=SupportLevel.FALLBACK,
         attachments=SupportLevel.NATIVE,
         attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
         reply_references=SupportLevel.NATIVE,
-        native_threads_or_topics=SupportLevel.NATIVE,
         max_text_length=3_500,
+        native_threads_or_topics=SupportLevel.NATIVE,
     ),
     "weixin": ChannelCapabilities(
         markdown=SupportLevel.FALLBACK,

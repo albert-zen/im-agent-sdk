@@ -125,7 +125,10 @@ class OptionalControllerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(binding)
         assert binding is not None
         self.assertEqual(binding.application_ref, ApplicationRef("fake-agent-2"))
-        self.assertEqual(channel.sent[0].delivery_id, "button:message-1:response")
+        self.assertEqual(
+            channel.sent[0].metadata["source_delivery_id"],
+            "button:message-1:response",
+        )
 
     async def test_default_controller_preserves_common_command_workflow(self) -> None:
         channel = FakeChannelAdapter()

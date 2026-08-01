@@ -33,7 +33,9 @@ Designs classify behavior as:
 - stable event identity and one-worker observation are Core infrastructure
   across Codex/T3/Zen and QQ/Telegram/other Channels;
 - native replay is an optional capability because Applications differ;
-- QQ segmentation and T3 attachment encoding are adapter policy;
+- text length units, attachment grouping, and destination FIFO are shared
+  Channel-side contracts/infrastructure proven across QQ, Telegram, Feishu,
+  and Weixin; native escaping and upload encoding remain adapter policy;
 - IMCodex Full Access and command/config choices are consumer policy.
 
 ## Consequences

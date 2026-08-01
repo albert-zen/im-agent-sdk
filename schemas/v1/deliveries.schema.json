@@ -4,7 +4,14 @@
   "title": "IM Agent proactive delivery",
   "$defs": {
     "DeliverySubmissionState": {
-      "enum": ["in_flight", "accepted", "rejected", "partial", "unknown"]
+      "enum": [
+        "in_flight",
+        "accepted",
+        "rejected",
+        "retryable",
+        "partial",
+        "unknown"
+      ]
     },
     "ConversationDeliveryTarget": {
       "type": "object",
@@ -83,7 +90,15 @@
       "required": ["contentIndex", "status"],
       "properties": {
         "contentIndex": { "type": "integer", "minimum": 0 },
-        "status": { "enum": ["accepted", "rejected", "unknown", "skipped"] },
+        "status": {
+          "enum": [
+            "accepted",
+            "rejected",
+            "retryable_failure",
+            "unknown",
+            "skipped"
+          ]
+        },
         "attachmentId": {
           "oneOf": [
             { "$ref": "common.schema.json#/$defs/Identifier" },
@@ -98,7 +113,82 @@
         },
         "detail": { "type": ["string", "null"] }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": ["status"],
+            "properties": { "status": { "const": "retryable_failure" } }
+          },
+          "then": {
+            "properties": { "nativeMessageId": { "type": "null" } }
+          }
+        }
+      ]
+    },
+    "DeliverySegmentReceipt": {
+      "type": "object",
+      "required": [
+        "segmentIndex",
+        "deliveryId",
+        "sourceContentIndexes",
+        "status"
+      ],
+      "properties": {
+        "segmentIndex": { "type": "integer", "minimum": 0 },
+        "deliveryId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "sourceContentIndexes": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "status": {
+          "enum": [
+            "accepted_by_platform",
+            "rejected_by_platform",
+            "retryable_failure",
+            "unknown",
+            "skipped"
+          ]
+        },
+        "nativeMessageId": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        },
+        "detail": { "type": ["string", "null"] },
+        "retryAfterSeconds": {
+          "type": ["number", "null"],
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": ["status"],
+            "properties": { "status": { "const": "retryable_failure" } }
+          },
+          "then": {
+            "properties": { "nativeMessageId": { "type": "null" } }
+          }
+        },
+        {
+          "if": {
+            "required": ["retryAfterSeconds"],
+            "properties": {
+              "retryAfterSeconds": { "type": "number" }
+            }
+          },
+          "then": {
+            "properties": {
+              "status": { "const": "retryable_failure" }
+            }
+          }
+        }
+      ]
     },
     "DeliveryReceipt": {
       "type": "object",
@@ -108,6 +198,7 @@
           "enum": [
             "accepted_by_platform",
             "rejected_by_platform",
+            "retryable_failure",
             "unknown"
           ]
         },
@@ -118,12 +209,70 @@
           ]
         },
         "detail": { "type": ["string", "null"] },
+        "retryAfterSeconds": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
         "items": {
           "type": "array",
           "items": { "$ref": "#/$defs/DeliveryItemReceipt" }
+        },
+        "segments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DeliverySegmentReceipt" }
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": ["status"],
+            "properties": { "status": { "const": "retryable_failure" } }
+          },
+          "then": {
+            "properties": {
+              "nativeMessageId": { "type": "null" },
+              "items": {
+                "items": {
+                  "properties": {
+                    "status": {
+                      "enum": ["rejected", "retryable_failure", "skipped"]
+                    },
+                    "nativeMessageId": { "type": "null" }
+                  }
+                }
+              },
+              "segments": {
+                "items": {
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "rejected_by_platform",
+                        "retryable_failure",
+                        "skipped"
+                      ]
+                    },
+                    "nativeMessageId": { "type": "null" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["retryAfterSeconds"],
+            "properties": {
+              "retryAfterSeconds": { "type": "number" }
+            }
+          },
+          "then": {
+            "properties": {
+              "status": { "const": "retryable_failure" }
+            }
+          }
+        }
+      ]
     },
     "DeliveryRouteSnapshot": {
       "type": "object",

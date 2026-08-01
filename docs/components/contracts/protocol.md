@@ -105,6 +105,14 @@ Inbound native identity, an outbound delivery request, and an authoritative
 Agent item are deliberately different envelopes. A Channel returns native
 delivery identity in `DeliveryReceipt`.
 
+A logical outbound message may require several Channel-compatible sends.
+`DeliveryReceipt.segments` records every planned segment's stable delivery ID,
+source content indexes, and accepted, rejected, retryable, unknown, or skipped
+outcome. `DeliveryReceipt.items` aggregates those outcomes back to the logical
+content. If one source item spans an accepted prefix and a failed or skipped
+suffix, its item status is `unknown`; the segment receipts retain the exact
+boundary. This is delivery evidence, not transcript or Agent execution truth.
+
 Initial content parts are `TextContent` and `AttachmentContent`.
 
 ```text
@@ -280,6 +288,15 @@ Metadata for native request routing.
 Capabilities distinguish native support, declared fallback, and unsupported
 behavior. Project mode, Thread deletion, native activation, attachment source
 kinds, replay, gap detection, and sequence scope are separate facts.
+The v1 `ChannelCapabilities` wire/Python constructor remains flat.
+`ChannelCapabilities.delivery` is a derived typed `DeliveryProfile` covering
+the same text format/length units, attachment source/media/grouping limits,
+and reply scope; it describes what the common planner may produce, not
+credentials or a native API contract. New v1 planning properties and
+`DeliveryReceipt.segments` are optional extensions, so documents valid before
+ADR 0010 remain valid. Existing positional constructor fields also retain
+their original order; new planning fields are appended after the legacy v1
+surface.
 
 Unsupported, stale-reference, authentication, access, binding, unavailable,
 rejected-operation, delivery, gap, and cursor-expired outcomes remain explicit.
@@ -296,8 +313,11 @@ from:
 (destination, authoritativeMessageItemId, segmentIndex)
 ```
 
-A receipt distinguishes platform acceptance, rejection, and unknown outcome.
+A receipt distinguishes platform acceptance, rejection, explicit retryable
+failure, and unknown outcome.
 Platform acceptance does not claim device display or read.
+Retryable top-level, item, and segment evidence cannot carry a native message
+identity: observed native acceptance makes automatic replay unsafe.
 
 `DeliveryReceipt.items` carries typed per-content outcomes when a native
 delivery can partially succeed. A completed Channel call may therefore have
@@ -344,9 +364,9 @@ SDK-controlled external/internal origin and the trusted principal, so two
 principals cannot poison each other and an authorizer cannot impersonate the
 Gateway-internal domain. Within one principal, reusing a delivery ID with a
 different target or payload is a conflict. A retry returns the stored
-accepted, rejected, partial, in-flight, or unknown result; it never silently
-follows a route that moved after the first submission. Unknown remains
-ambiguous and is not treated as permission to resend.
+accepted, retryable, rejected, partial, in-flight, or unknown result; it never
+silently follows a route that moved after the first submission. Unknown
+remains ambiguous and is not treated as permission to resend.
 
 Internal persistence retains the resolved Conversation snapshot. A
 Thread-targeted public result exposes only its route ID, state, and sanitized

@@ -49,8 +49,9 @@ baseline reading. A per-route bootstrap barrier holds that route's projection
 consumer until the bounded baseline finishes. Native producers still publish
 to independent subscriber queues without awaiting Gateway or Channel work.
 
-The current queues remain unbounded. Bounded queueing, delivery execution,
-receipt-aware retry, and backpressure belong to Issue #12.
+Application subscriber/bootstrap queues remain unbounded. ADR 0010 adds
+bounded Channel-delivery admission, ordered execution, receipt-aware retry,
+and explicit backpressure after projection.
 
 ### Reply correlation is explicit minimal bridge state
 
@@ -102,5 +103,5 @@ contract.
 
 Projection state remains small and rebuildable from authoritative Application
 content. A destination can recover independently without replaying a complete
-archive. Delivery retry/backpressure remains available for Issue #12 without
-coupling Application subscription health to Channel availability.
+archive. Delivery retry/backpressure follows ADR 0010 without coupling
+Application subscription health to Channel availability.

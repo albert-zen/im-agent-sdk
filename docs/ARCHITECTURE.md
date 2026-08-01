@@ -17,6 +17,7 @@ Gateway also composes:
   Persistence ← bindings, routes, idempotency
   Projections and recovery ← live fan-out, reconciliation, checkpoints
   Attachments/media ← explicit source and trust boundary
+  Delivery planning/coordination ← capability plans, ordered bounded sends
   Optional delivery ingress ← scoped local tool/Artifact submission
 ```
 
@@ -33,6 +34,7 @@ separate Agent state tier.
 | Projections and recovery | live observation, routes, authoritative reconciliation mechanics | transcript/event journal | [design](components/projections-and-recovery/design.md) |
 | Persistence | minimal Gateway-owned state | Agent transcript/Turn/request state | [design](components/persistence/design.md) |
 | Attachments and media | explicit source/trust/materialization boundary | universal blob store or product media policy | [design](components/attachments-and-media/design.md) |
+| Delivery planning and coordination | pure capability plans, per-destination FIFO, bounded execution and honest receipts | native platform encoding, durable jobs, or product retry policy | [design](components/delivery-planning-and-coordination/design.md) |
 | Controllers | optional common UX over typed Operations | Core semantics or binding authority | [design](components/controllers/design.md) |
 | Channel integrations | native admission, rendering, media, delivery, reconnect | Agent resources/execution | [design](components/channel-adapters/design.md) |
 | Application integrations | native resource/input/event/history/request translation | native resource/execution ownership | [design](components/application-adapters/design.md) |
@@ -112,7 +114,9 @@ Per-user group selection is a future consumer policy, not current Core.
    before sending input.
 7. Application accepts input and emits authoritative user/Agent events.
 8. Projection resolves current destinations at delivery time.
-9. Channel performs native rendering/delivery and returns a receipt.
+9. Delivery planning maps the logical message to deterministic segments.
+10. The Coordinator executes them through the Channel's ordered bounded lane.
+11. Channel performs native encoding/delivery and returns typed receipts.
 
 ## Proactive output flow
 
@@ -121,8 +125,9 @@ Agent task / operator tool
   → scoped credential + stable delivery ID + Thread target
   → optional loopback JSON ingress
   → Gateway authorization and projection-policy route resolution
-  → immutable destination snapshot + capability preflight
-  → common Channel send seam
+  → immutable destination snapshot + pure capability plan
+  → common ordered/bounded Delivery Coordinator
+  → native Channel segment send
   → typed destination and per-artifact receipts
 ```
 
@@ -172,6 +177,10 @@ contains no transcript or Turn truth.
 - native event publication fans out without awaiting Channel delivery.
 - independent subscriber queues prevent observers from stealing events.
 - Gateway stores durable routes and uses delivery idempotency.
+- projection, interactive presentation, and proactive output share one
+  capability-driven Delivery Coordinator;
+- work is FIFO per Conversation, concurrent across unrelated Conversations,
+  and admitted under bounded global/per-destination capacity;
 - `_ensure_projection` records a newly created worker before its first
   suspension point, so callers on the Gateway event loop cannot interleave
   lookup and registration. Concurrent-observer coverage protects this
@@ -192,11 +201,9 @@ contains no transcript or Turn truth.
   records its route ID in worker health, and does not restart the Application
   subscription.
 
-Subscriber queues are currently unbounded and projection delivery awaits
-Channel send. This protects native notification callbacks from slow IM but
-does not provide bounded memory/backpressure. The target Delivery Coordinator
-is tracked by [Issue #12](https://github.com/albert-zen/im-agent-sdk/issues/12);
-it is not implemented by the current Gateway.
+Application event subscriber queues remain unbounded. Coordinator admission
+bounds planned Channel delivery but does not yet bound native event fan-out
+memory; authoritative history/recovery remains the convergence mechanism.
 
 ## Failure model
 
@@ -206,9 +213,10 @@ rejected operation, attachment source/trust, delivery outcome, worker health,
 gap, and cursor expiration.
 
 Core does not choose product retry counts, permission prompts, or Full Access.
-Safe Application resubscription is bounded infrastructure recovery. Channel
-delivery retry/backpressure remains explicit future coordinator/consumer
-policy rather than a hidden loop in the projection worker.
+Safe Application resubscription is bounded infrastructure recovery. Delivery
+defaults to one attempt; only a Channel's explicit retryable receipt can be
+retried when consumer configuration opts in. Unknown outcomes are never
+retried.
 
 ## Security and policy boundaries
 

@@ -1,7 +1,15 @@
+# pyright: reportMissingModuleSource=false
 from __future__ import annotations
 
+import json
 import unittest
 from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from jsonschema import ValidationError
+from jsonschema.validators import validator_for
+from referencing import Registry, Resource
 
 from imagent.contracts import (
     AgentEvent,
@@ -13,12 +21,20 @@ from imagent.contracts import (
     ApprovalRequest,
     ApprovalResponse,
     ApprovalResponseShape,
+    AttachmentSourceKind,
     BindConversationToThread,
+    ChannelCapabilities,
     ContractError,
     ContractViolation,
     ConversationBinding,
     ConversationBound,
     ConversationRef,
+    DeliveryItemReceipt,
+    DeliveryItemStatus,
+    DeliveryReceipt,
+    DeliveryReceiptStatus,
+    DeliverySegmentReceipt,
+    DeliverySegmentStatus,
     EventSequenceScope,
     GatewayOperationType,
     GetThreadHistory,
@@ -51,6 +67,7 @@ from imagent.contracts import (
     validate_application_operation,
     validate_application_operation_result,
     validate_binding,
+    validate_delivery_receipt,
     validate_gateway_operation,
     validate_gateway_operation_result,
     validate_interactive_request,
@@ -496,6 +513,168 @@ class OperationTests(unittest.TestCase):
                     error=ContractError(code="thread_not_found", message=""),
                 ),
             )
+
+
+class VersionOneSchemaCompatibilityTests(unittest.TestCase):
+    def test_retryable_receipts_cannot_carry_native_acceptance_identity(self) -> None:
+        receipts = (
+            DeliveryReceipt(
+                status=DeliveryReceiptStatus.RETRYABLE_FAILURE,
+                items=(
+                    DeliveryItemReceipt(
+                        content_index=0,
+                        status=DeliveryItemStatus.RETRYABLE_FAILURE,
+                        native_message_id="native-item",
+                    ),
+                ),
+            ),
+            DeliveryReceipt(
+                status=DeliveryReceiptStatus.RETRYABLE_FAILURE,
+                segments=(
+                    DeliverySegmentReceipt(
+                        segment_index=0,
+                        delivery_id="segment-0",
+                        source_content_indexes=(0,),
+                        status=DeliverySegmentStatus.RETRYABLE_FAILURE,
+                        native_message_id="native-segment",
+                    ),
+                ),
+            ),
+        )
+        for receipt in receipts:
+            with self.subTest(receipt=receipt):
+                with self.assertRaisesRegex(
+                    ContractViolation,
+                    "native acceptance identity",
+                ):
+                    validate_delivery_receipt(receipt)
+
+        self._assert_invalid_definition(
+            "deliveries.schema.json",
+            "DeliveryReceipt",
+            {
+                "status": "retryable_failure",
+                "nativeMessageId": "native-top",
+                "items": [],
+            },
+        )
+        self._assert_invalid_definition(
+            "deliveries.schema.json",
+            "DeliveryReceipt",
+            {
+                "status": "retryable_failure",
+                "items": [
+                    {
+                        "contentIndex": 0,
+                        "status": "retryable_failure",
+                        "nativeMessageId": "native-item",
+                    }
+                ],
+            },
+        )
+        self._assert_invalid_definition(
+            "deliveries.schema.json",
+            "DeliverySegmentReceipt",
+            {
+                "segmentIndex": 0,
+                "deliveryId": "segment-0",
+                "sourceContentIndexes": [0],
+                "status": "retryable_failure",
+                "nativeMessageId": "native-segment",
+            },
+        )
+
+    def test_channel_capabilities_keep_the_v1_positional_constructor_order(self) -> None:
+        capabilities = ChannelCapabilities(
+            SupportLevel.FALLBACK,
+            SupportLevel.NATIVE,
+            SupportLevel.FALLBACK,
+            SupportLevel.NATIVE,
+            SupportLevel.FALLBACK,
+            SupportLevel.NATIVE,
+            SupportLevel.FALLBACK,
+            SupportLevel.NATIVE,
+            SupportLevel.FALLBACK,
+            (AttachmentSourceKind.REMOTE_URL,),
+            101,
+            202,
+            3,
+        )
+
+        self.assertIs(capabilities.reply_references, SupportLevel.NATIVE)
+        self.assertIs(capabilities.native_threads_or_topics, SupportLevel.FALLBACK)
+        self.assertEqual(
+            capabilities.attachment_sources,
+            (AttachmentSourceKind.REMOTE_URL,),
+        )
+        self.assertEqual(capabilities.max_text_length, 101)
+        self.assertEqual(capabilities.max_attachment_size, 202)
+        self.assertEqual(capabilities.max_attachment_count, 3)
+
+    def test_channel_capabilities_keep_the_flat_v1_surface(self) -> None:
+        capabilities = ChannelCapabilities(
+            markdown=SupportLevel.NATIVE,
+            max_text_length=4_000,
+        )
+        self.assertIs(capabilities.markdown, SupportLevel.NATIVE)
+        self.assertIs(capabilities.delivery.markdown, SupportLevel.NATIVE)
+        self.assertEqual(capabilities.delivery.max_text_length, 4_000)
+
+        self._validate_definition(
+            "capabilities.schema.json",
+            "ChannelCapabilities",
+            {
+                "plainText": "native",
+                "markdown": "native",
+                "messageEdits": "unsupported",
+                "attachments": "unsupported",
+                "interactiveActions": "unsupported",
+            },
+        )
+
+    def test_delivery_receipt_segments_remain_an_optional_v1_extension(self) -> None:
+        self._validate_definition(
+            "deliveries.schema.json",
+            "DeliveryReceipt",
+            {
+                "status": "accepted_by_platform",
+                "items": [],
+            },
+        )
+
+    @staticmethod
+    def _validate_definition(filename: str, definition: str, instance: Any) -> None:
+        _definition_validator(filename, definition).validate(instance)
+
+    def _assert_invalid_definition(
+        self,
+        filename: str,
+        definition: str,
+        instance: Any,
+    ) -> None:
+        with self.assertRaises(ValidationError):
+            _definition_validator(filename, definition).validate(instance)
+
+
+def _definition_validator(filename: str, definition: str) -> Any:
+    schema_directory = Path(__file__).resolve().parents[1] / "schemas" / "v1"
+    resources: list[tuple[str, Resource[Any]]] = []
+    documents: dict[str, Any] = {}
+    for path in schema_directory.glob("*.json"):
+        document = json.loads(path.read_text(encoding="utf-8"))
+        documents[path.name] = document
+        resources.append((document["$id"], Resource.from_contents(document)))
+    document = documents[filename]
+    schema = {
+        "$schema": document["$schema"],
+        "$id": document["$id"],
+        "$defs": document["$defs"],
+        "$ref": f"#/$defs/{definition}",
+    }
+    return validator_for(schema)(
+        schema,
+        registry=Registry().with_resources(resources),
+    )
 
 
 if __name__ == "__main__":

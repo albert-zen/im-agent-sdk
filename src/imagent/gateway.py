@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
+from functools import partial
 
 from .adapters import (
     AgentApplicationAdapter,
@@ -74,13 +75,19 @@ from .contracts import (
     validate_request_response,
 )
 from .controllers import ControllerActions, InboundController, RequestPresenter
+from .delivery_coordination import DeliveryCoordinator
+from .delivery_planning import DeliveryPlanningError
 from .keyed_locks import KeyedLockRegistry
 from .proactive_delivery import (
     InMemoryDeliverySubmissionRepository,
     ProactiveDeliveryService,
 )
 from .projection_runtime import ThreadProjectionRuntime
-from .projections import InMemoryProjectionRouteRepository, ProjectionWorkerHealth
+from .projections import (
+    InMemoryProjectionRouteRepository,
+    ProjectionWorkerHealth,
+    RetryableDeliveryError,
+)
 from .request_correlations import InMemoryRequestCorrelationRepository
 from .storage import InMemoryIdempotencyRepository
 
@@ -99,6 +106,7 @@ class ImAgentGateway:
         idempotency: IdempotencyRepository | None = None,
         delivery_submissions: DeliverySubmissionRepository | None = None,
         delivery_authorizer: DeliveryAuthorizer | None = None,
+        delivery_coordinator: DeliveryCoordinator | None = None,
         projections: ProjectionRouteRepository | None = None,
         request_correlations: RequestCorrelationRepository | None = None,
         projection_policy: ProjectionPolicy = ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
@@ -109,6 +117,7 @@ class ImAgentGateway:
         recovery_max_pages: int = 5,
         catchup_limit: int = 10,
         projection_item_limit: int = 20,
+        request_delivery_max_pending: int = 256,
         subscription_retry_initial_seconds: float = 0.05,
         subscription_retry_max_seconds: float = 2.0,
         turn_correlation_retention_seconds: float = 7 * 24 * 60 * 60,
@@ -122,9 +131,14 @@ class ImAgentGateway:
         self._bindings = bindings
         self._idempotency = idempotency or InMemoryIdempotencyRepository()
         self._request_correlations = request_correlations or InMemoryRequestCorrelationRepository()
+        self._delivery_coordinator = delivery_coordinator or DeliveryCoordinator()
         self._controller = controller
         self._locks: dict[object, asyncio.Lock] = {}
         self._request_locks = KeyedLockRegistry()
+        self._outbound_deliveries: dict[
+            tuple[str, str],
+            asyncio.Task[IdempotencyClaimStatus],
+        ] = {}
         self._starting = False
         self._startup_messages: list[InboundMessage] = []
         self._startup_operations: list[GatewayOperation] = []
@@ -138,11 +152,16 @@ class ImAgentGateway:
             projection_policy=projection_policy,
             execute_application=self.execute_application,
             deliver_outbound=self._deliver_outbound,
+            deliver_request_outbound=partial(
+                self._deliver_outbound,
+                cancellable=True,
+            ),
             baseline_history_limit=baseline_history_limit,
             recovery_history_page_size=recovery_history_page_size,
             recovery_max_pages=recovery_max_pages,
             catchup_limit=catchup_limit,
             projection_item_limit=projection_item_limit,
+            request_delivery_max_pending=request_delivery_max_pending,
             subscription_retry_initial_seconds=subscription_retry_initial_seconds,
             subscription_retry_max_seconds=subscription_retry_max_seconds,
             turn_correlation_retention_seconds=turn_correlation_retention_seconds,
@@ -153,9 +172,11 @@ class ImAgentGateway:
             submissions=delivery_submissions or InMemoryDeliverySubmissionRepository(),
             resolve_thread_routes=self._projection_runtime.active_routes,
             authorizer=delivery_authorizer,
+            coordinator=self._delivery_coordinator,
         )
 
     async def start(self) -> None:
+        self._delivery_coordinator.start()
         self._starting = True
         self._startup_messages.clear()
         self._startup_operations.clear()
@@ -190,6 +211,7 @@ class ImAgentGateway:
             self._startup_messages.clear()
             self._startup_operations.clear()
             await self._projection_runtime.stop()
+            await self._delivery_coordinator.close()
             for channel in reversed(started_channels):
                 await channel.stop()
             for application in reversed(started_applications):
@@ -198,6 +220,7 @@ class ImAgentGateway:
 
     async def stop(self) -> None:
         await self._projection_runtime.stop()
+        await self._delivery_coordinator.close()
         for channel in reversed(tuple(self._channels.values())):
             await channel.stop()
         for application in reversed(tuple(self._applications.values())):
@@ -727,20 +750,63 @@ class ImAgentGateway:
     async def _deliver_outbound(
         self,
         message: OutboundMessage,
+        *,
+        cancellable: bool = False,
     ) -> IdempotencyClaimStatus:
         scope = f"outbound:{message.conversation_ref.channel_instance_id}"
+        key = (scope, message.delivery_id)
+        existing = self._outbound_deliveries.get(key)
+        if existing is not None:
+            result = await existing if cancellable else await asyncio.shield(existing)
+            return (
+                IdempotencyClaimStatus.ALREADY_COMPLETED
+                if result is IdempotencyClaimStatus.ACQUIRED
+                else result
+            )
+        task = asyncio.create_task(
+            self._deliver_outbound_once(message, scope=scope),
+            name=f"imagent-outbound:{message.delivery_id}",
+        )
+        self._outbound_deliveries[key] = task
+        try:
+            return await task if cancellable else await asyncio.shield(task)
+        finally:
+            if self._outbound_deliveries.get(key) is task:
+                self._outbound_deliveries.pop(key, None)
+
+    async def _deliver_outbound_once(
+        self,
+        message: OutboundMessage,
+        *,
+        scope: str,
+    ) -> IdempotencyClaimStatus:
         claim = await self._idempotency.claim(scope, message.delivery_id)
         if claim is not IdempotencyClaimStatus.ACQUIRED:
             return claim
         try:
             result = await self._delivery_service.deliver_internal(message)
-        except (ContractViolation, DeliverySubmissionConflict):
+        except (
+            ContractViolation,
+            DeliveryPlanningError,
+            DeliverySubmissionConflict,
+        ):
             await self._idempotency.release(scope, message.delivery_id)
             raise
         destination = result.destinations[0]
         if result.state is DeliverySubmissionState.IN_FLIGHT:
             return IdempotencyClaimStatus.IN_FLIGHT
         if result.state is not DeliverySubmissionState.ACCEPTED:
+            if result.state is DeliverySubmissionState.RETRYABLE:
+                await self._idempotency.release(scope, message.delivery_id)
+                raise RetryableDeliveryError(
+                    destination.error
+                    or f"Channel delivery was deferred safely: {message.delivery_id}",
+                    retry_after_seconds=(
+                        destination.receipt.retry_after_seconds
+                        if destination.receipt is not None
+                        else None
+                    ),
+                )
             if result.state is DeliverySubmissionState.REJECTED:
                 await self._idempotency.release(scope, message.delivery_id)
             raise RuntimeError(

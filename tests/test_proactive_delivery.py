@@ -21,6 +21,8 @@ from imagent.contracts import (
     DeliveryPrincipal,
     DeliveryReceipt,
     DeliveryReceiptStatus,
+    DeliverySegmentStatus,
+    DeliverySubmissionOrigin,
     DeliverySubmissionState,
     LocalPath,
     OutboundMessage,
@@ -31,7 +33,10 @@ from imagent.contracts import (
     ThreadProjectionRoute,
     ThreadRef,
     ThreadRouteDeliveryTarget,
+    derive_delivery_submission_id,
 )
+from imagent.delivery_coordination import DeliveryCoordinator, DeliveryCoordinatorConfig
+from imagent.delivery_planning import DeliveryPlanningError
 from imagent.gateway import ImAgentGateway
 from imagent.proactive_delivery import (
     DeliveryAuthorizationError,
@@ -55,6 +60,7 @@ class _OutcomeChannel(FakeChannelAdapter):
         super().__init__(channel_instance_id)
         self.receipt_status = receipt_status
         self.receipt_detail: str | None = None
+        self.retry_after_seconds: float | None = None
         self.native_message_id: str | None = None
         self.receipt_items: tuple[DeliveryItemReceipt, ...] = ()
         if capabilities is not None:
@@ -88,6 +94,7 @@ class _OutcomeChannel(FakeChannelAdapter):
                 )
             ),
             items=self.receipt_items,
+            retry_after_seconds=self.retry_after_seconds,
         )
 
 
@@ -120,6 +127,7 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
         *,
         policy: ProjectionPolicy = ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
         submissions=None,
+        coordinator: DeliveryCoordinator | None = None,
     ) -> ImAgentGateway:
         return ImAgentGateway(
             channels=[self.channel_a, self.channel_b],
@@ -134,6 +142,7 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
             delivery_submissions=submissions or self.submissions,
             delivery_authorizer=self.authorizer,
             projection_policy=policy,
+            delivery_coordinator=coordinator,
         )
 
     def intent(self, delivery_id: str = "delivery-1", text: str = "hello"):
@@ -362,6 +371,63 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(replay.destinations[0].replayed)
         self.assertEqual(len(self.channel_a.sent), 1)
 
+    async def test_retryable_outcome_resumes_same_pinned_submission(self) -> None:
+        await self.put_route(self.conversation_a, route_id="route-a")
+        self.channel_a.receipt_status = DeliveryReceiptStatus.RETRYABLE_FAILURE
+        self.channel_a.retry_after_seconds = 0
+        gateway = self.gateway()
+
+        first = await gateway.deliver_proactively(
+            self.intent(delivery_id="delivery-retryable"),
+            credential=self.thread_token,
+        )
+        await self.projections.replace_thread_projection_routes(
+            ThreadProjectionRoute(
+                route_id="route-b",
+                thread_ref=self.thread_ref,
+                conversation_ref=self.conversation_b,
+                updated_at=datetime.now(UTC),
+            )
+        )
+        self.channel_a.receipt_status = DeliveryReceiptStatus.ACCEPTED_BY_PLATFORM
+        self.channel_a.retry_after_seconds = None
+        resumed = await gateway.deliver_proactively(
+            self.intent(delivery_id="delivery-retryable"),
+            credential=self.thread_token,
+        )
+
+        self.assertEqual(first.state, DeliverySubmissionState.RETRYABLE)
+        self.assertEqual(first.destinations[0].route_id, "route-a")
+        assert first.destinations[0].receipt is not None
+        self.assertEqual(first.destinations[0].receipt.retry_after_seconds, 0)
+        self.assertEqual(resumed.state, DeliverySubmissionState.ACCEPTED)
+        self.assertTrue(resumed.destinations[0].replayed)
+        self.assertEqual(resumed.destinations[0].route_id, "route-a")
+        self.assertEqual(len(self.channel_a.sent), 2)
+        self.assertEqual(self.channel_b.sent, [])
+
+    async def test_retryable_outcome_honors_retry_after_before_resume(self) -> None:
+        await self.put_route(self.conversation_a, route_id="route-a")
+        self.channel_a.receipt_status = DeliveryReceiptStatus.RETRYABLE_FAILURE
+        self.channel_a.retry_after_seconds = 2
+        gateway = self.gateway()
+
+        first = await gateway.deliver_proactively(
+            self.intent(delivery_id="delivery-retry-after"),
+            credential=self.thread_token,
+        )
+        self.channel_a.receipt_status = DeliveryReceiptStatus.ACCEPTED_BY_PLATFORM
+        self.channel_a.retry_after_seconds = None
+        too_early = await gateway.deliver_proactively(
+            self.intent(delivery_id="delivery-retry-after"),
+            credential=self.thread_token,
+        )
+
+        self.assertEqual(first.state, DeliverySubmissionState.RETRYABLE)
+        self.assertEqual(too_early.state, DeliverySubmissionState.RETRYABLE)
+        self.assertTrue(too_early.destinations[0].replayed)
+        self.assertEqual(len(self.channel_a.sent), 1)
+
     async def test_thread_result_redacts_native_conversation_identity(self) -> None:
         await self.put_route(self.conversation_a, route_id="route-a")
         self.channel_a.receipt_status = DeliveryReceiptStatus.UNKNOWN
@@ -389,6 +455,9 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(destination.receipt.native_message_id)
         self.assertIsNone(destination.receipt.items[0].native_message_id)
         self.assertIsNone(destination.receipt.items[0].detail)
+        self.assertTrue(destination.receipt.segments)
+        self.assertIsNone(destination.receipt.segments[0].native_message_id)
+        self.assertIsNone(destination.receipt.segments[0].detail)
 
     async def test_thread_preflight_result_omits_hidden_channel_details(self) -> None:
         hidden_conversation = ConversationRef("removed-channel", "hidden-conversation")
@@ -442,6 +511,60 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(receipt)
         assert receipt is not None
         self.assertTrue(receipt.items)
+
+    async def test_proactive_preflight_uses_coordinator_source_and_segment_bounds(self) -> None:
+        await self.put_route(self.conversation_a, route_id="route-a")
+        self.channel_a._capabilities = ChannelCapabilities(max_text_length=1)
+        coordinator = DeliveryCoordinator(
+            config=DeliveryCoordinatorConfig(
+                max_source_items_per_delivery=1,
+                max_segments_per_delivery=1,
+            )
+        )
+        gateway = self.gateway(coordinator=coordinator)
+
+        oversized_source = replace(
+            self.intent("oversized-source"),
+            content=(TextContent("first"), TextContent("second")),
+        )
+        with self.assertRaisesRegex(DeliveryPlanningError, "source item limit"):
+            await gateway.deliver_proactively(
+                oversized_source,
+                credential=self.thread_token,
+            )
+
+        oversized_plan = replace(
+            self.intent("oversized-plan", "ab"),
+            target=ConversationDeliveryTarget(self.conversation_a),
+        )
+        result = await gateway.deliver_proactively(
+            oversized_plan,
+            credential=self.conversation_token,
+        )
+        self.assertIs(result.state, DeliverySubmissionState.REJECTED)
+        self.assertIn("segment limit", result.destinations[0].error or "")
+        self.assertEqual(self.channel_a.sent, [])
+
+    async def test_internal_source_bound_releases_gateway_idempotency_claim(self) -> None:
+        coordinator = DeliveryCoordinator(
+            config=DeliveryCoordinatorConfig(max_source_items_per_delivery=1)
+        )
+        gateway = self.gateway(coordinator=coordinator)
+        oversized = OutboundMessage(
+            delivery_id="internal-oversized-source",
+            conversation_ref=self.conversation_a,
+            content=(TextContent("first"), TextContent("second")),
+            created_at=datetime.now(UTC),
+        )
+
+        for _attempt in range(2):
+            with self.assertRaisesRegex(DeliveryPlanningError, "source item limit"):
+                await gateway._deliver_outbound(oversized)
+
+        accepted = await gateway._deliver_outbound(
+            replace(oversized, content=(TextContent("now-valid"),))
+        )
+        self.assertIs(accepted, IdempotencyClaimStatus.ACQUIRED)
 
     async def test_proactive_local_path_requires_content_digest(self) -> None:
         self.channel_a._capabilities = ChannelCapabilities(
@@ -579,6 +702,50 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(replay.destinations[0].conversation_ref)
         self.assertTrue(replay.destinations[0].replayed)
         self.assertEqual(len(self.channel_b.sent), 0)
+
+    async def test_sqlite_retryable_receipt_survives_restart_and_can_resume(self) -> None:
+        await self.put_route(self.conversation_a, route_id="route-a")
+        self.channel_a.receipt_status = DeliveryReceiptStatus.RETRYABLE_FAILURE
+        self.channel_a.retry_after_seconds = 0
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "gateway.sqlite")
+            state = SQLiteGatewayState(path)
+            first = await self.gateway(submissions=state).deliver_proactively(
+                self.intent(delivery_id="delivery-sqlite-retryable"),
+                credential=self.thread_token,
+            )
+            await state.close()
+
+            self.channel_a.receipt_status = DeliveryReceiptStatus.ACCEPTED_BY_PLATFORM
+            self.channel_a.retry_after_seconds = None
+            reopened = SQLiteGatewayState(path)
+            restored = await reopened.get_delivery_submission(
+                derive_delivery_submission_id(
+                    DeliverySubmissionOrigin.EXTERNAL,
+                    "agent-task",
+                    "delivery-sqlite-retryable",
+                )
+            )
+            self.assertIsNotNone(restored)
+            assert restored is not None
+            restored_receipt = restored.destinations[0].receipt
+            self.assertIsNotNone(restored_receipt)
+            assert restored_receipt is not None
+            self.assertEqual(
+                [segment.status for segment in restored_receipt.segments],
+                [DeliverySegmentStatus.RETRYABLE_FAILURE],
+            )
+            resumed = await self.gateway(submissions=reopened).deliver_proactively(
+                self.intent(delivery_id="delivery-sqlite-retryable"),
+                credential=self.thread_token,
+            )
+            await reopened.close()
+
+        self.assertEqual(first.state, DeliverySubmissionState.RETRYABLE)
+        assert first.destinations[0].receipt is not None
+        self.assertEqual(first.destinations[0].receipt.retry_after_seconds, 0)
+        self.assertEqual(resumed.state, DeliverySubmissionState.ACCEPTED)
+        self.assertEqual(len(self.channel_a.sent), 2)
 
 
 if __name__ == "__main__":

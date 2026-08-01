@@ -9,8 +9,51 @@
     "AttachmentSourceKind": {
       "enum": ["local_path", "remote_url", "attachment_handle"]
     },
+    "TextLengthUnit": {
+      "enum": ["code_points", "utf16_code_units", "utf8_bytes"]
+    },
+    "AttachmentGrouping": {
+      "enum": ["none", "same_media_family", "mixed"]
+    },
+    "ReplyReferenceScope": {
+      "enum": ["first_segment", "every_segment"]
+    },
     "EventSequenceScope": {
       "enum": ["none", "thread", "application"]
+    },
+    "DeliveryProfile": {
+      "type": "object",
+      "required": [
+        "plainText",
+        "markdown",
+        "attachments",
+        "attachmentSources",
+        "replyReferences"
+      ],
+      "properties": {
+        "plainText": { "$ref": "#/$defs/SupportLevel" },
+        "markdown": { "$ref": "#/$defs/SupportLevel" },
+        "attachments": { "$ref": "#/$defs/SupportLevel" },
+        "attachmentSources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/AttachmentSourceKind" },
+          "uniqueItems": true
+        },
+        "attachmentMediaTypes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "attachmentGrouping": { "$ref": "#/$defs/AttachmentGrouping" },
+        "replyReferences": { "$ref": "#/$defs/SupportLevel" },
+        "replyReferenceScope": { "$ref": "#/$defs/ReplyReferenceScope" },
+        "textLengthUnit": { "$ref": "#/$defs/TextLengthUnit" },
+        "maxTextLength": { "type": ["integer", "null"], "minimum": 1 },
+        "maxAttachmentSize": { "type": ["integer", "null"], "minimum": 1 },
+        "maxAttachmentCount": { "type": ["integer", "null"], "minimum": 1 },
+        "maxAttachmentGroupSize": { "type": ["integer", "null"], "minimum": 1 }
+      },
+      "additionalProperties": false
     },
     "ChannelCapabilities": {
       "type": "object",
@@ -34,11 +77,20 @@
           "items": { "$ref": "#/$defs/AttachmentSourceKind" },
           "uniqueItems": true
         },
+        "attachmentMediaTypes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "attachmentGrouping": { "$ref": "#/$defs/AttachmentGrouping" },
         "replyReferences": { "$ref": "#/$defs/SupportLevel" },
+        "replyReferenceScope": { "$ref": "#/$defs/ReplyReferenceScope" },
+        "textLengthUnit": { "$ref": "#/$defs/TextLengthUnit" },
         "nativeThreadsOrTopics": { "$ref": "#/$defs/SupportLevel" },
         "maxTextLength": { "type": ["integer", "null"], "minimum": 1 },
         "maxAttachmentSize": { "type": ["integer", "null"], "minimum": 1 },
-        "maxAttachmentCount": { "type": ["integer", "null"], "minimum": 1 }
+        "maxAttachmentCount": { "type": ["integer", "null"], "minimum": 1 },
+        "maxAttachmentGroupSize": { "type": ["integer", "null"], "minimum": 1 }
       },
       "additionalProperties": false
     },

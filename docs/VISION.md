@@ -114,10 +114,12 @@ never silently approximated.
 
 ### Small shared core
 
-Channel Markdown, chunking, media, reply, credential, and delivery behavior
-stays in Channel adapters. Application workspace, provider/model, sandbox,
-request, and runtime behavior stays in Application adapters. Product commands
-and permissions stay in Controllers or consumers.
+Common delivery planning and bounded destination ordering use declared Channel
+capabilities. Native Markdown escaping, platform APIs, media upload,
+credentials, final validation, and native receipt mapping stay in Channel
+adapters. Application workspace, provider/model, sandbox, request, and runtime
+behavior stays in Application adapters. Product commands, permissions,
+capacity, and retry appetite stay in Controllers or consumers.
 
 ### Maintainability is a boundary property
 

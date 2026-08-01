@@ -74,11 +74,14 @@ async def verify_channel_adapter(
     checks.append(ContractCheck("stable channel identity"))
 
     capabilities = adapter.capabilities
-    if capabilities.plain_text is SupportLevel.UNSUPPORTED:
+    profile = capabilities.delivery
+    if profile.plain_text is SupportLevel.UNSUPPORTED:
         raise AssertionError("Channel adapter must support plain text natively or by fallback")
-    if capabilities.max_text_length is not None and capabilities.max_text_length < 1:
+    if profile.max_text_length is not None and profile.max_text_length < 1:
         raise AssertionError("max_text_length must be positive")
-    if capabilities.max_attachment_size is not None and capabilities.max_attachment_size < 1:
+    if profile.max_attachment_count is not None and profile.max_attachment_count < 1:
+        raise AssertionError("max_attachment_count must be positive")
+    if profile.max_attachment_size is not None and profile.max_attachment_size < 1:
         raise AssertionError("max_attachment_size must be positive")
     checks.append(ContractCheck("valid channel capabilities"))
 
@@ -107,6 +110,7 @@ async def verify_channel_adapter(
         if receipt.status not in {
             "accepted_by_platform",
             "rejected_by_platform",
+            "retryable_failure",
             "unknown",
         }:
             raise AssertionError("delivery receipt has an unknown status")

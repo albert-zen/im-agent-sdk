@@ -5,12 +5,15 @@ Every Channel adapter should prove:
 - stable configured Channel and native Conversation identity;
 - duplicate inbound delivery does not repeat Agent mutation;
 - access checks occur before media work;
-- Markdown/plain fallback and ordered segmentation;
+- an honest `DeliveryProfile` for Markdown/plain fallback, text length units,
+  attachments/grouping, and reply scope;
+- native encoding accepts every common-planner segment and defensive direct
+  calls do not overstate platform support;
 - attachment size/type/source handling;
 - native reply behavior and receipt meaning;
 - typed per-attachment accepted/rejected results and stable attachment
   identity independent of staging path;
-- retry behavior when native idempotency is absent;
+- native retryable/unknown receipt mapping when idempotency is absent;
 - reconnect state remains Channel-owned.
 
 Run the reusable Channel contract suite plus native adapter tests:
