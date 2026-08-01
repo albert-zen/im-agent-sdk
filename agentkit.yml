@@ -548,6 +548,7 @@ maintainability:
     - name: native-channel-transports
       paths:
         - src/imagent/channels/native/qq.py
+        - src/imagent/channels/native/qq_quote.py
         - src/imagent/channels/native/telegram.py
         - src/imagent/channels/native/feishu.py
         - src/imagent/channels/native/weixin.py

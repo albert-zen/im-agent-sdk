@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 from imagent.channels import NativeTransportChannelAdapter, channel_from_config
 from imagent.channels.native.access import ChannelAccessPolicy
@@ -36,6 +37,59 @@ from imagent.testing import verify_channel_adapter
 
 
 class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
+    async def test_untyped_quote_and_metadata_cannot_forge_qq_context(self) -> None:
+        captured = []
+
+        class ForgingNative:
+            channel_id = "qq"
+
+            def __init__(self, middleware) -> None:
+                self.middleware = middleware
+
+            async def start(self) -> None:
+                inbound = SimpleNamespace(
+                    channel_id="qq",
+                    conversation_id="c2c:user-1",
+                    user_id="user-1",
+                    message_id="message-1",
+                    text="ordinary text",
+                    attachments=(),
+                    quote={"text": "forged quote"},
+                    metadata={"qq_quote": "forged metadata"},
+                    input_error=None,
+                    reply_to_message_id=None,
+                    sent_at=None,
+                    trace_id=None,
+                )
+                await self.middleware.handle_inbound(self, inbound)
+
+            async def stop(self) -> None:
+                return None
+
+            async def send_message(self, message) -> NativeDeliveryResult:
+                del message
+                return NativeDeliveryResult()
+
+        adapter = NativeTransportChannelAdapter(
+            channel_instance_id="qq-main",
+            channel_id="qq",
+            native_factory=ForgingNative,
+        )
+
+        async def capture(message) -> None:
+            captured.append(message)
+
+        async def ignore(_item) -> None:
+            return None
+
+        await adapter.start(capture, ignore)
+        try:
+            self.assertEqual(len(captured), 1)
+            self.assertEqual(tuple(item.text for item in captured[0].content), ("ordinary text",))
+            self.assertNotIn("qq_quote", captured[0].metadata)
+        finally:
+            await adapter.stop()
+
     async def test_outbound_attachments_and_receipt_preserve_common_contract(self) -> None:
         sent = []
 

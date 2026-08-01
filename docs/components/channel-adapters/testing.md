@@ -16,6 +16,13 @@ Every Channel adapter should prove:
 - native retryable/unknown receipt mapping when idempotency is absent;
 - reconnect state remains Channel-owned.
 
+QQ-only quote fixtures additionally cover direct and group events, missing and
+malformed provider fields, every text/field/count bound, ignored nested history
+and media URLs, anti-forgery boundaries, and one
+native-to-common-to-Application vertical slice. The tests also prove that this
+single-Channel feature does not change common capabilities, schemas, Metadata,
+or routing/approval identity.
+
 Run the reusable Channel contract suite plus native adapter tests:
 
 ```sh

@@ -15,20 +15,6 @@ class InboundAttachment:
     source_message_id: str = ""
 
 
-@dataclass(frozen=True, slots=True)
-class InboundQuoteAttachment:
-    kind: Literal["image", "voice", "video", "file", "attachment"]
-    filename: str | None = None
-    transcript: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class InboundQuote:
-    reference_id: str | None = None
-    text: str = ""
-    attachments: tuple[InboundQuoteAttachment, ...] = ()
-
-
 @dataclass(slots=True)
 class InboundMessage:
     channel_id: str
@@ -37,7 +23,6 @@ class InboundMessage:
     message_id: str
     text: str
     attachments: tuple[InboundAttachment, ...] = ()
-    quote: InboundQuote | None = None
     input_error: str | None = None
     reply_to_message_id: str | None = None
     sent_at: str | None = None
