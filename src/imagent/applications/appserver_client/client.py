@@ -653,6 +653,7 @@ class AppServerClient:
                 "input": self._resolve_turn_input(text=text, input_items=input_items),
             },
             expected_local_image_epoch=expected_local_image_epoch,
+            outcome_unknown_on_dispatch=True,
         )
 
     @staticmethod

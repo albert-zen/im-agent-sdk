@@ -52,6 +52,7 @@ components:
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
+      - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - src/imagent/adapters.py
       - src/imagent/__init__.py
       - src/imagent/py.typed
@@ -75,12 +76,14 @@ components:
       - docs/decisions/README.md
       - docs/decisions/0003-attachment-sources-and-trust.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
+      - docs/migrations/imcodex-followup-blockers.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
       - src/imagent/attachments.py
       - tests/test_attachments.py
     docs:
       - docs/components/attachments-and-media/design.md
       - docs/components/attachments-and-media/testing.md
+      - docs/migrations/imcodex-followup-blockers.md
     required_docs:
       - design
       - testing
@@ -129,7 +132,9 @@ components:
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0009-proactive-delivery-routing.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
+      - docs/migrations/imcodex-followup-blockers.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
+      - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - src/imagent/inbound_admission.py
       - src/imagent/gateway.py
       - src/imagent/delivery_ingress.py
@@ -143,6 +148,7 @@ components:
     docs:
       - docs/components/gateway/design.md
       - docs/components/gateway/testing.md
+      - docs/migrations/imcodex-followup-blockers.md
     required_docs:
       - design
       - testing
@@ -163,7 +169,9 @@ components:
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
+      - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
+      - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/events.py
       - src/imagent/projection_routes.py
       - src/imagent/projection_runtime.py
@@ -177,6 +185,7 @@ components:
     docs:
       - docs/components/projections-and-recovery/design.md
       - docs/components/projections-and-recovery/testing.md
+      - docs/migrations/imcodex-followup-blockers.md
     required_docs:
       - design
       - testing
@@ -198,6 +207,7 @@ components:
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
+      - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/decisions/0009-proactive-delivery-routing.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
@@ -257,6 +267,7 @@ components:
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
       - docs/migrations/issue-9-imcodex-owner-transfer.md
+      - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/channels/**
       - tests/test_native_channels.py
       - tests/test_channel_qq.py
@@ -271,6 +282,7 @@ components:
       - docs/components/channel-adapters/adapters/feishu.md
       - docs/components/channel-adapters/adapters/weixin.md
       - docs/migrations/issue-9-imcodex-owner-transfer.md
+      - docs/migrations/imcodex-followup-blockers.md
     required_docs:
       - design
       - testing
@@ -295,13 +307,16 @@ components:
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
+      - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/migrations/issue-9-imcodex-owner-transfer.md
+      - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/applications/__init__.py
       - src/imagent/applications/appserver.py
       - src/imagent/applications/appserver_request_runtime.py
       - src/imagent/applications/appserver_requests.py
       - src/imagent/applications/appserver_client/**
       - tests/test_appserver_client.py
+      - tests/test_appserver_input.py
       - tests/test_appserver_requests.py
       - tests/test_appserver_transport.py
     docs:
@@ -310,6 +325,7 @@ components:
       - docs/components/application-adapters/adapters/codex.md
       - docs/components/application-adapters/adapters/zen.md
       - docs/migrations/issue-9-imcodex-owner-transfer.md
+      - docs/migrations/imcodex-followup-blockers.md
     required_docs:
       - design
       - testing
@@ -333,6 +349,8 @@ components:
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
+      - docs/decisions/0012-input-continuation-and-reply-correlation.md
+      - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/applications/__init__.py
       - src/imagent/applications/t3.py
       - src/imagent/applications/t3_client.py
@@ -341,6 +359,7 @@ components:
       - docs/components/application-adapters/design.md
       - docs/components/application-adapters/testing.md
       - docs/components/application-adapters/adapters/t3.md
+      - docs/migrations/imcodex-followup-blockers.md
     required_docs:
       - design
       - testing
@@ -407,6 +426,7 @@ components:
     docs:
       - docs/components/repository-maintainability/design.md
       - docs/components/repository-maintainability/testing.md
+      - docs/migrations/imcodex-followup-blockers.md
     required_docs:
       - design
       - testing

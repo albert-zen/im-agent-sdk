@@ -58,6 +58,21 @@ class ProjectionPolicy(StrEnum):
     ALL_OBSERVERS = "all_observers"
 
 
+class InputContinuationPreference(StrEnum):
+    PREFER_ACTIVE_TURN = "prefer_active_turn"
+    START_NEW_TURN = "start_new_turn"
+
+
+class InputDisposition(StrEnum):
+    STARTED = "started"
+    STEERED = "steered"
+
+
+class TurnReplyCorrelationPolicy(StrEnum):
+    CREATE_NEW = "create_new"
+    PRESERVE_EXISTING = "preserve_existing"
+
+
 class InteractiveRequestKind(StrEnum):
     APPROVAL = "approval"
     USER_INPUT = "user_input"
@@ -423,6 +438,17 @@ class AcceptedTurn:
     thread_ref: ThreadRef
     turn_id: str
     client_message_id: str
+    disposition: InputDisposition = InputDisposition.STARTED
+    correlation_policy: TurnReplyCorrelationPolicy = TurnReplyCorrelationPolicy.CREATE_NEW
+
+
+@dataclass(frozen=True, slots=True)
+class ApplicationInputDispatch:
+    thread_ref: ThreadRef
+    client_message_id: str
+    disposition: InputDisposition
+    correlation_policy: TurnReplyCorrelationPolicy
+    expected_turn_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

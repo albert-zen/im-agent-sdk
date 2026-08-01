@@ -32,13 +32,32 @@ They do not own:
 ## Resource and operation surface
 
 Each adapter exposes a summary, `start`, `stop`, typed `execute`, `send_input`,
-and fan-out-safe `subscribe_thread`.
+and fan-out-safe `subscribe_thread`. `send_input` accepts the SDK's default
+`prefer_active_turn` preference and returns the actual `started` or `steered`
+disposition plus its correlation policy. An adapter without evidenced native
+continuation returns `started`; it does not imitate another protocol.
 
 An adapter may report an ordinary failure only while it knows native input was
 not dispatched. After dispatch, an absent acceptance response is an
 `ApplicationInputOutcomeUnknown` unless the native API proves retries
 idempotent. This is transport outcome classification, not bridge-owned Turn
 truth.
+
+The common continuation preference is an SDK input rule; the native mechanism
+remains adapter-specific. Codex `turn/steer` is an optional native capability
+that its concrete adapter enables by default and deployments may disable. A
+discovery read is not authority over a later mutation: the adapter must accept
+the native mutation response as the result, preserve an ambiguous outcome,
+and never mask a native rejection or automatically start a second Turn after a
+read/mutation race.
+
+After local validation and native candidate discovery, every adapter calls the
+typed pre-dispatch hook exactly once immediately before mutation. A planned
+start declares `create_new`; a planned steer declares `preserve_existing` with
+the expected Turn ID. No adapter may dispatch when that hook rejects. The
+returned result must match the authorized plan; native replacement after a
+steer is accepted native truth but an explicit post-acceptance bridge
+degradation, never permission to retarget or retry.
 
 Managed Applications expose real Projects. Flat/fixed Applications omit them.
 Thread lookup is independent of Conversation selection. Native activation is

@@ -93,7 +93,9 @@ state. Observing a Thread does not select it for future input.
 
 Conversation mutations use revision guards and serialize per Conversation.
 Idempotency claims are completed only after the scoped operation succeeds and
-are released on failure known to precede a native side effect. Once an
+are released on failure known to precede a native side effect. The adapter's
+typed pre-dispatch hook protects the inbound claim immediately before native
+mutation and authorizes its correlation policy. Once an
 Application returns `AcceptedTurn`, the inbound claim becomes terminal even if
 reply-correlation persistence or buffered projection draining then fails. The
 post-acceptance failure remains observable, but Channel redelivery cannot
@@ -130,7 +132,9 @@ Channel that immediately produces input from racing restoration; queued input
 then drains through the normal Conversation locks.
 
 For IM-originated input, Gateway persists a minimal mapping from the returned
-`AcceptedTurn` to the originating Conversation/reply ID. Projection preserves
+`started/create_new` result to the originating Conversation/reply ID. A
+`steered/preserve_existing` result is authorized only when that exact native
+Turn already has a mapping, and it never replaces the destination. Projection preserves
 the event/history Turn envelope and applies the reply only to that same
 destination. An external Turn does not inherit a prior IM message.
 

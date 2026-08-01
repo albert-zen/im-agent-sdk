@@ -137,6 +137,30 @@ The Gateway derives or preserves a stable client message ID from:
 The authoritative user-item event repeats that ID so clients can deduplicate
 optimistic local echo.
 
+## Application input acceptance
+
+`InputContinuationPreference` is `prefer_active_turn` by default or explicitly
+`start_new_turn`. The default is a preference: an adapter returns the actual
+disposition supported by its native Application.
+
+Immediately before native mutation the adapter supplies:
+
+```text
+ApplicationInputDispatch {
+  threadRef
+  clientMessageId
+  disposition = started | steered
+  correlationPolicy = create_new | preserve_existing
+  expectedTurnId?
+}
+```
+
+`started` requires `create_new` and no expected Turn. `steered` requires
+`preserve_existing` and an expected Turn ID. The accepted result repeats the
+Thread, native Turn, client-message identity, disposition, and correlation
+policy. These values describe native acceptance and bridge routing policy;
+they do not transfer Turn authority into the SDK.
+
 ## Typed operations
 
 Application operations mutate or read one native Agent Application:

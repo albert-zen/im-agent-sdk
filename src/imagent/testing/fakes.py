@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import UTC, datetime
 
+from imagent.adapters import ApplicationInputDispatchHandler
 from imagent.contracts import (
     AcceptedTurn,
     ActivateNativeThread,
@@ -13,6 +14,7 @@ from imagent.contracts import (
     AgentInput,
     AgentMessage,
     ApplicationCapabilities,
+    ApplicationInputDispatch,
     ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,
@@ -31,6 +33,8 @@ from imagent.contracts import (
     GetThreadStatus,
     GetTurnCatchup,
     InboundMessage,
+    InputContinuationPreference,
+    InputDisposition,
     InterruptTurn,
     ListProjects,
     ListThreads,
@@ -76,6 +80,7 @@ from imagent.contracts import (
     TurnCatchupRead,
     TurnHistoryEntry,
     TurnInterrupted,
+    TurnReplyCorrelationPolicy,
     TurnStatus,
     UserInputQuestion,
     UserInputRequest,
@@ -381,7 +386,27 @@ class FakeAgentApplicationAdapter:
     async def read_thread(self, thread_ref: ThreadRef, cursor=None) -> ThreadSnapshot:
         return ThreadSnapshot(thread=self._threads[thread_ref], messages=(), cursor=cursor)
 
-    async def send_input(self, thread_ref: ThreadRef, message: AgentInput) -> AcceptedTurn:
+    async def send_input(
+        self,
+        thread_ref: ThreadRef,
+        message: AgentInput,
+        *,
+        continuation: InputContinuationPreference = (
+            InputContinuationPreference.PREFER_ACTIVE_TURN
+        ),
+        before_dispatch: ApplicationInputDispatchHandler | None = None,
+    ) -> AcceptedTurn:
+        if not isinstance(continuation, InputContinuationPreference):
+            raise ValueError("unknown input continuation preference")
+        if before_dispatch is not None:
+            await before_dispatch(
+                ApplicationInputDispatch(
+                    thread_ref=thread_ref,
+                    client_message_id=message.client_message_id,
+                    disposition=InputDisposition.STARTED,
+                    correlation_policy=TurnReplyCorrelationPolicy.CREATE_NEW,
+                )
+            )
         self._inputs.append((thread_ref, message))
         turn_id = f"turn-{len(self._inputs)}"
         self._threads[thread_ref] = replace(

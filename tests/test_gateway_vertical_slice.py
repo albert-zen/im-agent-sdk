@@ -95,6 +95,9 @@ class NativeZenClient:
     def add_notification_handler(self, handler) -> None:
         self.handlers.append(handler)
 
+    def local_image_paths_epoch(self) -> int:
+        return 1
+
     async def list_threads(self, **_params):
         return {"data": list(self.threads.values())}
 

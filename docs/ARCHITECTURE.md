@@ -121,7 +121,10 @@ Per-user group selection is a future consumer policy, not current Core.
 7. Gateway resolves the Conversation binding.
 8. It records/refreshes output observation and establishes live subscription
    before sending input.
-9. Application accepts input and emits authoritative user/Agent events.
+9. Gateway supplies the default `prefer_active_turn` input preference. The
+   adapter declares `started/create_new` or `steered/preserve_existing`
+   immediately before native dispatch; Gateway authorizes the correlation
+   policy, then the Application accepts input and emits authoritative events.
 10. Projection resolves current destinations at delivery time.
 11. Delivery planning maps the logical message to deterministic segments.
 12. The Coordinator executes them through the Channel's ordered bounded lane.
@@ -183,6 +186,11 @@ contains no transcript or Turn truth.
 - Conversation binding mutations serialize per Conversation.
 - Gateway does not manufacture a cross-Conversation input sequence; native
   Application acceptance and execution ordering remains authoritative.
+- The default input preference is to continue an active Turn. Every
+  Application adapter reports whether the native result was actually
+  `started` or `steered`; Codex may use native steer, while T3 and Zen
+  currently start because their evidenced protocols do not provide that
+  mutation.
 - native event publication fans out without awaiting Channel delivery.
 - independent subscriber queues prevent observers from stealing events.
 - Gateway stores durable routes and uses delivery idempotency.
@@ -201,9 +209,12 @@ contains no transcript or Turn truth.
 - `foreground_only` reclaims workers with no active binding route and restores
   the bound route after restart; remembered/all-observer policies retain
   workers while their routes exist;
-- `AcceptedTurn` creates minimal per-Turn reply correlation. Only a matching
-  destination may use it; external/recovered Turns without a correlation use
-  no reply unless the route carries an explicit destination/topic default;
+- a `started` acceptance creates minimal per-Turn reply correlation, while a
+  `steered` acceptance preserves the correlation authorized before dispatch.
+  Reusing the Thread/Turn key can never replace its original Conversation or
+  reply ID. Only a matching destination may use it; external/recovered Turns
+  without a correlation use no reply unless the route carries an explicit
+  destination/topic default;
 - per-route bootstrap barriers serialize bounded baseline before queued live
   delivery decisions without blocking native event publication;
 - one route's Channel failure blocks that route's later delivery decisions,
