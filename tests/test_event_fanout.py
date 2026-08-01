@@ -25,7 +25,7 @@ from imagent.contracts import (
     TextContent,
     ThreadRef,
 )
-from imagent.events import EventBroadcaster, EventStreamOverflow
+from imagent.events import EventBroadcaster, EventStreamOverflow, EventStreamReset
 from imagent.gateway import ImAgentGateway
 from imagent.gateway_startup import GatewayNotRunning, GatewayStartupOverflow
 from imagent.request_correlations import InMemoryRequestCorrelationRepository
@@ -87,6 +87,21 @@ class EventBroadcasterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await anext(unrelated), "unrelated")
         await fast.aclose()
         await unrelated.aclose()
+
+    async def test_explicit_stream_reset_terminates_current_subscribers(self) -> None:
+        broadcaster = EventBroadcaster[str, str](max_pending=2)
+        first = broadcaster.subscribe("first")
+        second = broadcaster.subscribe("second")
+        broadcaster.publish("first", "discarded")
+
+        broadcaster.fail_all(EventStreamReset)
+
+        self.assertEqual(broadcaster.subscriber_count("first"), 0)
+        self.assertEqual(broadcaster.subscriber_count("second"), 0)
+        with self.assertRaises(EventStreamReset):
+            await anext(first)
+        with self.assertRaises(EventStreamReset):
+            await anext(second)
 
     async def test_appserver_fans_out_multiple_messages_before_terminal_event(self) -> None:
         native = NativeZenClient()
@@ -195,6 +210,38 @@ class EventBroadcasterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(adapter._events.subscriber_count("thread-1"), 1)
         await _close(fast)
 
+    async def test_appserver_connection_reset_becomes_application_event_gap(self) -> None:
+        native = NativeZenClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=native,
+            cwd="/repo",
+        )
+        events = adapter.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        await native._notify(
+            {
+                "method": "item/completed",
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "item": {
+                        "id": "lost-on-reset",
+                        "type": "agentMessage",
+                        "phase": "final_answer",
+                        "text": "recover from native history",
+                    },
+                },
+            }
+        )
+
+        await native.reset_connection()
+
+        completed = await anext(events)
+        self.assertEqual(completed.type, AgentEventType.MESSAGE_COMPLETED)
+        with self.assertRaises(EventStreamReset) as raised:
+            await anext(events)
+        self.assertEqual(raised.exception.gap_code, "application_event_connection_reset")
+
 
 class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
     async def test_concurrent_turns_on_one_thread_do_not_steal_events(self) -> None:
@@ -284,6 +331,64 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertFalse(overflow_health.interactive_request_recovery_degraded)
             self.assertEqual(healthy_health.event_overflow_count, 1)
+        finally:
+            await gateway.stop()
+
+    async def test_appserver_transport_reset_enters_authoritative_projection_recovery(
+        self,
+    ) -> None:
+        channel = FakeChannelAdapter()
+        native = NativeZenClient()
+        application = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=native,
+            cwd="/repo",
+        )
+        thread_ref = ThreadRef("codex-main", "thread-1")
+        native.threads[thread_ref.native_thread_id] = {
+            "id": thread_ref.native_thread_id,
+            "cwd": "/repo",
+            "preview": "Recover reset output",
+            "status": {"type": "idle"},
+        }
+        conversation = ConversationRef("fake-channel", "appserver-reset")
+        bindings = InMemoryBindingRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+                thread_ref=thread_ref,
+            )
+        )
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=bindings,
+            subscription_retry_initial_seconds=0,
+            subscription_retry_max_seconds=0,
+        )
+        await gateway.start()
+        try:
+            await channel.on_message(_inbound(conversation, "before-reset"))
+            async with asyncio.timeout(1):
+                while gateway.get_projection_health(thread_ref) is None:
+                    await asyncio.sleep(0)
+            await native.reset_connection()
+            async with asyncio.timeout(1):
+                while True:
+                    health = gateway.get_projection_health(thread_ref)
+                    if (
+                        health is not None
+                        and health.state.value == "running"
+                        and health.restart_count == 1
+                    ):
+                        break
+                    await asyncio.sleep(0)
+            self.assertEqual(
+                health.last_event_gap,
+                "application_event_connection_reset",
+            )
+            self.assertIsNone(health.last_event_overflow)
         finally:
             await gateway.stop()
 

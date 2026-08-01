@@ -36,7 +36,7 @@ from .contracts import (
     TurnReplyCorrelationPolicy,
 )
 from .controllers import RequestPresenter
-from .events import EventBufferOverflow
+from .events import EventBufferOverflow, EventStreamGap
 from .projection_routes import ProjectionRouteCoordinator
 from .projections import (
     DeliverOutbound,
@@ -623,6 +623,7 @@ class ThreadProjectionRuntime:
         recover_requests_after_gap = False
         while not self._stopping:
             events: AsyncIterator[AgentEvent] | None = None
+            application: AgentApplicationAdapter | None = None
             try:
                 if not await self._observation_required(thread_ref):
                     return
@@ -677,32 +678,49 @@ class ThreadProjectionRuntime:
             except Exception as error:
                 restart_count += 1
                 ready.set()
+                recover_requests_after_gap = True
                 error_changes: dict[str, Any]
                 if isinstance(error, ProjectionRecoveryUnavailable):
                     error_changes = {
                         "last_recovery_error": str(error),
                         "last_subscription_error": None,
                     }
-                elif isinstance(error, EventBufferOverflow):
+                elif isinstance(error, EventStreamGap):
                     current = self._health.get(thread_ref)
                     error_changes = {
                         "last_gap": error.gap_code,
-                        "last_event_overflow": error.gap_code,
+                        "last_event_gap": error.gap_code,
                         "last_subscription_error": None,
-                        "event_overflow_count": (
-                            current.event_overflow_count + 1 if current is not None else 1
-                        ),
                         "interactive_request_recovery_degraded": (
-                            self._request_recovery_is_degraded(
-                                self._application(thread_ref.application_instance_id)
-                            )
+                            self._request_recovery_is_degraded(application)
+                            if application is not None
+                            else False
                         ),
                     }
-                    recover_requests_after_gap = True
+                    if isinstance(error, EventBufferOverflow):
+                        error_changes.update(
+                            last_event_overflow=error.gap_code,
+                            event_overflow_count=(
+                                current.event_overflow_count + 1 if current is not None else 1
+                            ),
+                        )
                 else:
                     error_changes = {
                         "last_subscription_error": str(error),
+                        "interactive_request_recovery_degraded": (
+                            self._request_recovery_is_degraded(application)
+                            if application is not None
+                            else False
+                        ),
                     }
+                error_changes.setdefault(
+                    "interactive_request_recovery_degraded",
+                    (
+                        self._request_recovery_is_degraded(application)
+                        if application is not None
+                        else False
+                    ),
+                )
                 self._update_health(
                     thread_ref,
                     state=ProjectionWorkerState.RETRYING,

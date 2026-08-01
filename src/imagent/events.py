@@ -8,23 +8,30 @@ K = TypeVar("K", bound=Hashable)
 V = TypeVar("V")
 
 
-class _OverflowSignal:
+class _TerminalSignal:
     pass
 
 
-_OVERFLOW_SIGNAL = _OverflowSignal()
+_TERMINAL_SIGNAL = _TerminalSignal()
 
 
 class CursorExpired(ValueError):
     pass
 
 
-class EventBufferOverflow(RuntimeError):
-    """A bounded live projection lost events and requires reconciliation."""
+class EventStreamGap(RuntimeError):
+    """A live Application observation lost continuity and requires reconciliation."""
+
+    def __init__(self, gap_code: str, message: str) -> None:
+        super().__init__(message)
+        self.gap_code = gap_code
+
+
+class EventBufferOverflow(EventStreamGap):
+    """A bounded live projection overflowed and requires reconciliation."""
 
     def __init__(self, gap_code: str, *, max_pending: int) -> None:
-        super().__init__(f"{gap_code} (capacity={max_pending})")
-        self.gap_code = gap_code
+        super().__init__(gap_code, f"{gap_code} (capacity={max_pending})")
         self.max_pending = max_pending
 
 
@@ -33,18 +40,23 @@ class EventStreamOverflow(EventBufferOverflow):
         super().__init__("application_event_fanout_overflow", max_pending=max_pending)
 
 
+class EventStreamReset(EventStreamGap):
+    def __init__(self, gap_code: str = "application_event_connection_reset") -> None:
+        super().__init__(gap_code, gap_code)
+
+
 class FanoutSubscription(AsyncIterator[V], Generic[K, V]):
     def __init__(
         self,
         key: K,
-        queue: asyncio.Queue[V | _OverflowSignal],
+        queue: asyncio.Queue[V | _TerminalSignal],
         close: Callable[[K, FanoutSubscription[K, V]], None],
     ) -> None:
         self._key = key
         self._queue = queue
         self._close_callback = close
         self._closed = False
-        self._overflow: EventStreamOverflow | None = None
+        self._terminal_error: EventStreamGap | None = None
 
     def __aiter__(self) -> FanoutSubscription[K, V]:
         return self
@@ -57,12 +69,12 @@ class FanoutSubscription(AsyncIterator[V], Generic[K, V]):
         except asyncio.CancelledError:
             await self.aclose()
             raise
-        if item is _OVERFLOW_SIGNAL:
-            error = self._overflow
-            self._overflow = None
+        if item is _TERMINAL_SIGNAL:
+            error = self._terminal_error
+            self._terminal_error = None
             self._closed = True
             if error is None:
-                raise RuntimeError("event stream ended with an invalid overflow signal")
+                raise RuntimeError("event stream ended with an invalid terminal signal")
             raise error
         return cast(V, item)
 
@@ -74,23 +86,31 @@ class FanoutSubscription(AsyncIterator[V], Generic[K, V]):
 
     @property
     def pending_count(self) -> int:
-        if self._overflow is not None:
-            return 0
+        if self._terminal_error is not None:
+            return max(0, self._queue.qsize() - 1)
         return self._queue.qsize()
 
     def _publish(self, event: V) -> bool:
-        if self._closed or self._overflow is not None:
+        if self._closed or self._terminal_error is not None:
             return False
         try:
             self._queue.put_nowait(event)
         except asyncio.QueueFull:
-            while not self._queue.empty():
-                self._queue.get_nowait()
-            self._overflow = EventStreamOverflow(max_pending=self._queue.maxsize)
-            self._queue.put_nowait(_OVERFLOW_SIGNAL)
-            self._close_callback(self._key, self)
+            self._fail(EventStreamOverflow(max_pending=self._queue.maxsize))
             return True
         return False
+
+    def _fail(self, error: EventStreamGap, *, discard_pending: bool = True) -> None:
+        if self._closed or self._terminal_error is not None:
+            return
+        if discard_pending:
+            while not self._queue.empty():
+                self._queue.get_nowait()
+        elif self._queue.full():
+            self._queue.get_nowait()
+        self._terminal_error = error
+        self._queue.put_nowait(_TERMINAL_SIGNAL)
+        self._close_callback(self._key, self)
 
 
 class EventBroadcaster(Generic[K, V]):
@@ -110,7 +130,7 @@ class EventBroadcaster(Generic[K, V]):
     ) -> FanoutSubscription[K, V]:
         subscription = FanoutSubscription(
             key,
-            asyncio.Queue[V | _OverflowSignal](maxsize=self._max_pending),
+            asyncio.Queue[V | _TerminalSignal](maxsize=self._max_pending),
             self._remove,
         )
         self._subscribers.setdefault(key, set()).add(subscription)
@@ -124,6 +144,22 @@ class EventBroadcaster(Generic[K, V]):
 
     def subscriber_count(self, key: K) -> int:
         return len(self._subscribers.get(key, ()))
+
+    def fail_all(
+        self,
+        error_factory: Callable[[], EventStreamGap],
+        *,
+        discard_pending: bool = True,
+    ) -> None:
+        """Terminate every current subscriber with an explicit recoverable gap."""
+
+        subscriptions = tuple(
+            subscription
+            for subscribers in self._subscribers.values()
+            for subscription in subscribers
+        )
+        for subscription in subscriptions:
+            subscription._fail(error_factory(), discard_pending=discard_pending)
 
     def _remove(
         self,

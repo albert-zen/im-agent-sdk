@@ -61,6 +61,7 @@ class ProjectionWorkerHealth:
     last_delivery_error: str | None = None
     last_delivery_route_id: str | None = None
     last_gap: str | None = None
+    last_event_gap: str | None = None
     last_event_overflow: str | None = None
     interactive_request_recovery_degraded: bool = False
     updated_at: datetime | None = None

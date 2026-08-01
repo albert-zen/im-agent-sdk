@@ -45,6 +45,8 @@ Protect these historical and known failure modes:
   failing to enter bounded authoritative recovery;
 - an event gap pretending a transient interactive request is recoverable when
   no native pending snapshot exists;
+- a clean subscription end, generic observation failure, or App Server reset
+  recovering completed output while skipping request snapshot/degraded state;
 - one Thread's pending-request snapshot recovery bypassing another Thread's
   acceptance ordering or presentation backlog;
 - a request response being accepted from a destination where request delivery

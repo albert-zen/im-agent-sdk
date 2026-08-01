@@ -71,7 +71,7 @@ from ..contracts import (
     validate_application_operation,
     validate_application_operation_result,
 )
-from ..events import EventBroadcaster
+from ..events import EventBroadcaster, EventStreamReset
 from .appserver_request_runtime import (
     AppServerRequestRuntime,
     ServerRequestMapper,
@@ -144,6 +144,9 @@ class _AppServerApplicationAdapter:
             mapper=server_request_mapper,
             publish_event=self._events.publish,
         )
+        add_reset_handler = getattr(self._client, "add_connection_reset_handler", None)
+        if callable(add_reset_handler):
+            add_reset_handler(self._handle_event_connection_reset)
         self._interactive_requests_enabled = self._request_runtime.enabled
         capabilities = ApplicationCapabilities(
             projects=ProjectCapabilities(
@@ -641,6 +644,10 @@ class _AppServerApplicationAdapter:
             raise NotImplementedError("Codex App Server does not support event replay")
         self._require_own_thread(thread_ref)
         return self._events.subscribe(thread_ref.native_thread_id)
+
+    async def _handle_event_connection_reset(self, connection_epoch: int) -> None:
+        del connection_epoch
+        self._events.fail_all(EventStreamReset, discard_pending=False)
 
     async def _handle_notification(self, notification: dict) -> None:
         method = str(notification.get("method") or "")

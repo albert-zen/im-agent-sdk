@@ -33,6 +33,7 @@ from imagent.contracts import (
     OutboundMessage,
     ProjectionPolicy,
     ProjectMode,
+    SupportLevel,
     TextContent,
     ThreadHistoryRead,
     ThreadProjectionRoute,
@@ -1642,11 +1643,64 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             assert health is not None
             self.assertEqual(health.restart_count, 1)
             self.assertEqual(application.subscription_calls, 2)
+            self.assertEqual(application.pending_snapshot_calls, 2)
+            self.assertFalse(health.interactive_request_recovery_degraded)
             await application.send_input(
                 thread.ref,
                 AgentInput(client_message_id="external", content=(TextContent("go"),)),
             )
             await _wait_until(lambda: len(channel.sent) == 2)
+        finally:
+            await gateway.stop()
+
+    async def test_subscription_failure_marks_request_recovery_degraded_without_snapshot(
+        self,
+    ) -> None:
+        application = FlakySubscriptionApplication()
+        application._summary = replace(
+            application.summary,
+            capabilities=replace(
+                application.summary.capabilities,
+                runtime=replace(
+                    application.summary.capabilities.runtime,
+                    pending_request_snapshot=SupportLevel.UNSUPPORTED,
+                ),
+            ),
+        )
+        thread = await application.create_thread()
+        conversation = ConversationRef("fake-channel", "degraded-subscription")
+        bindings = InMemoryBindingRepository()
+        projections = InMemoryProjectionRouteRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+                thread_ref=thread.ref,
+            )
+        )
+        await projections.put_projection_route(_route(thread.ref, conversation))
+        gateway = ImAgentGateway(
+            channels=[FakeChannelAdapter()],
+            applications=[application],
+            bindings=bindings,
+            projections=projections,
+            subscription_retry_initial_seconds=0,
+            subscription_retry_max_seconds=0,
+        )
+        await gateway.start()
+        try:
+            await _wait_until(
+                lambda: _health_state_is(
+                    gateway,
+                    thread.ref,
+                    ProjectionWorkerState.RUNNING,
+                )
+            )
+            health = gateway.get_projection_health(thread.ref)
+            assert health is not None
+            self.assertEqual(health.restart_count, 1)
+            self.assertTrue(health.interactive_request_recovery_degraded)
+            self.assertEqual(application.pending_snapshot_calls, 0)
         finally:
             await gateway.stop()
 
@@ -2227,6 +2281,14 @@ class CountingSubscriptionApplication(FakeAgentApplicationAdapter):
 
 
 class FlakySubscriptionApplication(CountingSubscriptionApplication):
+    def __init__(self) -> None:
+        super().__init__()
+        self.pending_snapshot_calls = 0
+
+    async def list_pending_requests(self):
+        self.pending_snapshot_calls += 1
+        return await super().list_pending_requests()
+
     def subscribe_thread(
         self,
         thread_ref: ThreadRef,

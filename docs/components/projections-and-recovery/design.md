@@ -208,12 +208,13 @@ Interactive request routing is defined by
 [ADR 0008](../../decisions/0008-interactive-request-routing.md).
 
 Bounded Channel delivery execution and conservative receipt-aware retry use
-the common Delivery Coordinator. Application subscriber overflow recovers
+the common Delivery Coordinator. Application subscriber overflow, App Server
+connection reset, and any other unexpected observation restart recover
 completed messages from bounded authoritative history. If the Application has
-an authoritative pending-request snapshot, it is reconciled after the same
-gap for only the affected Thread; otherwise process-local worker health stays
-explicitly degraded for interactive-request recovery. Gap recovery never
-pulls an unrelated Thread's pending request around that Thread's own
+an authoritative pending-request snapshot, it is reconciled after the same gap
+for only the affected Thread; otherwise process-local worker health stays
+explicitly degraded for interactive-request recovery. Gap recovery never pulls
+an unrelated Thread's pending request around that Thread's own
 acceptance-order boundary.
 
 Health stores only bounded counters, stable gap codes, and route identities.

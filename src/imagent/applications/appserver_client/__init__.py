@@ -7,7 +7,11 @@ from .client import (
     AppServerClient,
     AppServerError,
 )
-from .handoff import APP_SERVER_DISPATCH_POSITION_KEY, AppServerDispatchPosition
+from .handoff import (
+    APP_SERVER_DISPATCH_POSITION_KEY,
+    AppServerDispatchPosition,
+    AppServerResponse,
+)
 from .supervisor import AppServerSupervisor
 
 
@@ -42,6 +46,7 @@ __all__ = [
     "AppServerClient",
     "AppServerDispatchPosition",
     "AppServerError",
+    "AppServerResponse",
     "AppServerSupervisor",
     "APP_SERVER_DISPATCH_POSITION_KEY",
     "codex_app_server_client",

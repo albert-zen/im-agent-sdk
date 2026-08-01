@@ -39,9 +39,13 @@ The App Server reader keeps JSON-RPC responses on its socket fast path. Before
 completing a response, every earlier notification or server request has either
 been admitted to its bounded callback lane or has failed the connection with
 explicit overflow. Each admitted callback carries a public
-`AppServerDispatchPosition(connection_epoch, sequence)`, and the client exposes
-the last admitted position as the response-side fence. Positions are monotonic
-only within one connection epoch and reset to zero on reconnect.
+`AppServerDispatchPosition(connection_epoch, sequence)`. Calls that need an
+ordering gate use `call_with_dispatch_position` and receive an immutable
+`AppServerResponse` containing the exact position observed at that response,
+so frames read after the response or after reconnect cannot widen its fence.
+Positions are monotonic only within one connection epoch and reset to zero on
+reconnect. The mutable last-admitted position is diagnostic/compatibility
+state, not a response fence.
 
 Notification and server-request handlers may complete out of order because
 their lanes are intentionally isolated. A consumer that must hold live native
@@ -59,6 +63,14 @@ Publishing remains synchronous and non-blocking with respect to Channel
 delivery. When one subscriber fills, the broadcaster removes that subscriber,
 discards its bounded queued projection, and makes its next read raise a typed
 overflow error. Other subscribers and Threads continue normally.
+
+An App Server callback-lane overflow resets its connection. That reset
+terminates every current App Server Application subscription with an explicit
+connection-scoped event gap, so Gateway cannot remain falsely healthy after
+completed notifications or not-yet-mapped server requests were lost. Any
+unexpected projection-worker restart likewise triggers pending-request
+snapshot reconciliation when native support exists, or truthful degraded
+request health when it does not.
 
 A per-Thread acceptance-buffer overflow raises the same class of explicit
 infrastructure gap. Input already accepted by the Application remains beyond

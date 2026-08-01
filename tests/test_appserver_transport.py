@@ -318,7 +318,7 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
         try:
             result = await client.list_threads()
             self.assertEqual(result, {"threads": []})
-            self.assertTrue(handler_started.is_set())
+            await asyncio.wait_for(handler_started.wait(), timeout=1)
         finally:
             release_handler.set()
             await client.close()
@@ -326,7 +326,8 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
     async def test_public_dispatch_fence_orders_bounded_callback_lanes(self) -> None:
         process = _ScriptedProcess(
             {
-                "initialize": [
+                "initialize": [{"result": {"ok": True}}],
+                "thread/list": [
                     {
                         "method": "thread/status/changed",
                         "params": {"threadId": "thread-1", "status": "idle"},
@@ -336,8 +337,12 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
                         "method": "item/commandExecution/requestApproval",
                         "params": {"threadId": "thread-1", "turnId": "turn-1"},
                     },
-                    {"result": {"ok": True}},
-                ]
+                    {"result": {"threads": []}},
+                    {
+                        "method": "thread/status/changed",
+                        "params": {"threadId": "thread-2", "status": "idle"},
+                    },
+                ],
             }
         )
         client = _client(process, request_timeout_s=0.2)
@@ -358,12 +363,17 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
         client.add_notification_handler(slow_notification)
         client.add_server_request_handler(capture_request)
         try:
-            self.assertEqual(await client.initialize(), {"ok": True})
+            response = await client.call_with_dispatch_position("thread/list")
+            self.assertEqual(response.result, {"threads": []})
+            self.assertEqual(
+                response.dispatch_position,
+                AppServerDispatchPosition(connection_epoch=1, sequence=2),
+            )
             await asyncio.wait_for(notification_started.wait(), timeout=1)
             await asyncio.wait_for(request_received.wait(), timeout=1)
             self.assertEqual(
                 client.last_admitted_dispatch_position,
-                AppServerDispatchPosition(connection_epoch=1, sequence=2),
+                AppServerDispatchPosition(connection_epoch=1, sequence=3),
             )
             self.assertEqual(
                 sorted(positions, key=lambda position: position.sequence),

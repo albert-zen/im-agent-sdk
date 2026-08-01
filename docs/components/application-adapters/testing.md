@@ -40,11 +40,13 @@ Every adapter should prove:
 - bounded terminal diagnostics emit stale before evicting an unresolved
   responded request's final Thread/Turn routing scope;
 - App Server notification/server-request queue overflow remains explicit and
-  connection-scoped, while T3 subscription overflow does not leak polling
-  work;
+  connection-scoped; its reset becomes an Application observation gap and
+  Gateway authoritative recovery, while T3 subscription overflow does not leak
+  polling work;
 - App Server callback positions preserve wire admission order across its
   independent notification/request lanes, fence a later response, and restart
-  at the next connection epoch without claiming replay semantics;
+  at the next connection epoch without claiming replay semantics; frames read
+  after a response cannot widen that response's immutable fence;
 - duplicate response and unsupported request shapes fail explicitly rather
   than selecting approval/sandbox policy.
 

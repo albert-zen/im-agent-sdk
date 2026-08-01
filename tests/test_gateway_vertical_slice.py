@@ -88,6 +88,7 @@ class NativeQQChannel:
 class NativeZenClient:
     def __init__(self) -> None:
         self.handlers = []
+        self.reset_handlers = []
         self.started_threads = []
         self.started_turns = []
         self.resumed_threads = []
@@ -95,6 +96,15 @@ class NativeZenClient:
 
     def add_notification_handler(self, handler) -> None:
         self.handlers.append(handler)
+
+    def add_connection_reset_handler(self, handler) -> None:
+        self.reset_handlers.append(handler)
+
+    async def reset_connection(self, connection_epoch: int = 1) -> None:
+        for handler in tuple(self.reset_handlers):
+            result = handler(connection_epoch)
+            if inspect.isawaitable(result):
+                await result
 
     def local_image_paths_epoch(self) -> int:
         return 1

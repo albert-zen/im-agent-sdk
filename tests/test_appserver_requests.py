@@ -31,6 +31,7 @@ from imagent.contracts import (
     UserInputResponse,
 )
 from imagent.controllers import MarkdownRequestPresenter
+from imagent.events import EventStreamReset
 
 
 class AppServerRequestMappingTests(unittest.TestCase):
@@ -572,6 +573,9 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0)
         await self.client.reset()
         await stale
+        with self.assertRaises(EventStreamReset):
+            await anext(self.events)
+        self.events = cast(Any, self.adapter.subscribe_thread(self.thread))
 
         second_opened = asyncio.create_task(anext(self.events))
         await asyncio.sleep(0)
