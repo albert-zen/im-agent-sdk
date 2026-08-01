@@ -107,6 +107,7 @@ class T3ApplicationAdapter:
         interaction_mode: str = "default",
         poll_interval: float = 0.25,
         shared_filesystem_root: str | Path | None = None,
+        event_buffer_max_pending: int = 1024,
     ) -> None:
         self._application_instance_id = application_instance_id
         self._client = client
@@ -115,7 +116,7 @@ class T3ApplicationAdapter:
         self._poll_interval = poll_interval
         self._shared_filesystem_root = configure_shared_filesystem_root(shared_filesystem_root)
         self._turn_baselines: dict[tuple[str, str], frozenset[str]] = {}
-        self._events = EventBroadcaster[str, AgentEvent]()
+        self._events = EventBroadcaster[str, AgentEvent](max_pending=event_buffer_max_pending)
         self._poll_tasks: dict[str, asyncio.Task[None]] = {}
         self._send_locks: dict[str, asyncio.Lock] = {}
         self._seen_messages: dict[str, set[str]] = {}

@@ -55,11 +55,15 @@ class ProjectionWorkerHealth:
     state: ProjectionWorkerState
     restart_count: int = 0
     delivery_failure_count: int = 0
+    event_overflow_count: int = 0
     last_subscription_error: str | None = None
     last_recovery_error: str | None = None
     last_delivery_error: str | None = None
     last_delivery_route_id: str | None = None
     last_gap: str | None = None
+    last_event_gap: str | None = None
+    last_event_overflow: str | None = None
+    interactive_request_recovery_degraded: bool = False
     updated_at: datetime | None = None
 
 

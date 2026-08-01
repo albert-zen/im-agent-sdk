@@ -29,6 +29,8 @@ Every adapter should prove:
 - canonical user and Agent message events;
 - multiple completed messages before an explicit terminal Turn event;
 - fan-out-safe subscriptions;
+- bounded fan-out overflow isolates the slow subscriber and leaves unrelated
+  Threads/subscribers progressing;
 - authoritative snapshot/history plus live reconciliation;
 - honest replay, cursor, sequence, attachment, request, and unsupported
   capabilities.
@@ -37,6 +39,14 @@ Every adapter should prove:
 - native resolution racing response writeback remains resolved;
 - bounded terminal diagnostics emit stale before evicting an unresolved
   responded request's final Thread/Turn routing scope;
+- App Server notification/server-request queue overflow remains explicit and
+  connection-scoped; its reset becomes an Application observation gap and
+  Gateway authoritative recovery, while T3 subscription overflow does not leak
+  polling work;
+- App Server callback positions preserve wire admission order across its
+  independent notification/request lanes, fence a later response, and restart
+  at the next connection epoch without claiming replay semantics; frames read
+  after a response cannot widen that response's immutable fence;
 - duplicate response and unsupported request shapes fail explicitly rather
   than selecting approval/sandbox policy.
 

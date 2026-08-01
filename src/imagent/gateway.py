@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections import deque
 from datetime import UTC, datetime
 from functools import partial
 from uuid import uuid4
@@ -81,6 +80,10 @@ from .contracts import (
 from .controllers import ControllerActions, InboundController, RequestPresenter
 from .delivery_coordination import DeliveryCoordinator
 from .delivery_planning import DeliveryPlanningError
+from .gateway_startup import (
+    GatewayNotRunning,
+    GatewayStartupAdmission,
+)
 from .inbound_admission import (
     ClaimedInbound,
     InboundAdmissionService,
@@ -128,6 +131,8 @@ class ImAgentGateway:
         catchup_limit: int = 10,
         projection_item_limit: int = 20,
         request_delivery_max_pending: int = 256,
+        startup_buffer_max_pending: int = 256,
+        turn_acceptance_event_max_pending: int = 256,
         subscription_retry_initial_seconds: float = 0.05,
         subscription_retry_max_seconds: float = 2.0,
         turn_correlation_retention_seconds: float = 7 * 24 * 60 * 60,
@@ -151,8 +156,9 @@ class ImAgentGateway:
         ] = {}
         self._starting = False
         self._accepting_inbound = False
-        self._startup_messages: list[ClaimedInbound] = []
-        self._startup_operations: list[GatewayOperation] = []
+        self._startup_admission = GatewayStartupAdmission[ClaimedInbound | GatewayOperation](
+            max_pending=startup_buffer_max_pending
+        )
         projection_repository = projections or InMemoryProjectionRouteRepository()
         self._projection_runtime = ThreadProjectionRuntime(
             applications=self._applications,
@@ -173,6 +179,7 @@ class ImAgentGateway:
             catchup_limit=catchup_limit,
             projection_item_limit=projection_item_limit,
             request_delivery_max_pending=request_delivery_max_pending,
+            turn_acceptance_event_max_pending=turn_acceptance_event_max_pending,
             subscription_retry_initial_seconds=subscription_retry_initial_seconds,
             subscription_retry_max_seconds=subscription_retry_max_seconds,
             turn_correlation_retention_seconds=turn_correlation_retention_seconds,
@@ -194,9 +201,7 @@ class ImAgentGateway:
         self._delivery_coordinator.start()
         self._starting = True
         self._accepting_inbound = True
-        self._startup_messages.clear()
-        self._startup_operations.clear()
-        pending_startup_messages: deque[ClaimedInbound] = deque()
+        self._startup_admission.reset()
         started_applications: list[AgentApplicationAdapter] = []
         started_channels: list[ChannelAdapter] = []
         try:
@@ -206,50 +211,59 @@ class ImAgentGateway:
             for application in self._applications.values():
                 await application.start()
                 started_applications.append(application)
+                self._startup_admission.raise_if_overflowed()
             for channel in self._channels.values():
-                await start_channel_with_admission(
-                    channel,
-                    self._handle_message_entry,
-                    self._handle_operation_entry,
-                    partial(self._begin_inbound, channel.channel_instance_id),
-                )
+                try:
+                    await start_channel_with_admission(
+                        channel,
+                        self._handle_message_entry,
+                        self._handle_operation_entry,
+                        partial(self._begin_inbound, channel.channel_instance_id),
+                    )
+                except BaseException as start_error:
+                    try:
+                        await channel.stop()
+                    except BaseException as stop_error:
+                        start_error.add_note(
+                            f"Channel cleanup after startup failure also failed: {stop_error!r}"
+                        )
+                        logger.exception(
+                            "Channel cleanup after startup failure failed",
+                            exc_info=stop_error,
+                        )
+                    raise
                 started_channels.append(channel)
+                self._startup_admission.raise_if_overflowed()
             self._projection_runtime.mark_delivery_ready()
             await self._projection_runtime.reconcile_pending_requests(restart_open_requests)
-            while True:
-                pending_startup_messages.extend(self._startup_messages)
-                startup_operations = tuple(self._startup_operations)
-                self._startup_messages.clear()
-                self._startup_operations.clear()
-                while pending_startup_messages:
-                    claimed = pending_startup_messages.popleft()
-                    await self._handle_claimed_message(claimed)
-                for operation in startup_operations:
-                    await self._handle_operation(operation)
-                if not self._startup_messages and not self._startup_operations:
-                    self._starting = False
-                    break
+            self._startup_admission.raise_if_overflowed()
+            while self._startup_admission:
+                entry = self._startup_admission.popleft()
+                if isinstance(entry, ClaimedInbound):
+                    await self._handle_claimed_message(entry)
+                else:
+                    await self._handle_operation(entry)
+                self._startup_admission.raise_if_overflowed()
+            self._starting = False
         except BaseException as error:
             self._accepting_inbound = False
             self._starting = False
-            startup_messages = (
-                *self._startup_messages,
-                *pending_startup_messages,
-            )
-            self._startup_messages.clear()
-            self._startup_operations.clear()
-            for claimed in startup_messages:
+            while self._startup_admission:
+                entry = self._startup_admission.popleft()
+                if not isinstance(entry, ClaimedInbound):
+                    continue
                 try:
                     await self._idempotency.release(
-                        claimed.scope,
-                        claimed.key,
-                        owner_token=claimed.owner_token,
+                        entry.scope,
+                        entry.key,
+                        owner_token=entry.owner_token,
                     )
                 except BaseException as release_error:
                     error.add_note(
                         "Failed to release a pre-side-effect inbound claim during "
                         f"Gateway startup rollback: {release_error!r}"
                     )
+            self._startup_admission.clear()
             await self._projection_runtime.stop()
             await self._delivery_coordinator.close()
             for channel in reversed(started_channels):
@@ -260,6 +274,7 @@ class ImAgentGateway:
 
     async def stop(self) -> None:
         self._accepting_inbound = False
+        self._starting = False
         await self._projection_runtime.stop()
         await self._delivery_coordinator.close()
         for channel in reversed(tuple(self._channels.values())):
@@ -652,6 +667,8 @@ class ImAgentGateway:
         )
 
     async def _handle_message_entry(self, message: InboundMessage) -> None:
+        if not self._accepting_inbound:
+            raise GatewayNotRunning("gateway is not accepting Channel callbacks")
         admission = await self._begin_inbound(
             message.conversation_ref.channel_instance_id,
             message.conversation_ref,
@@ -688,7 +705,21 @@ class ImAgentGateway:
             )
             return
         if self._starting:
-            self._startup_messages.append(claimed)
+            try:
+                self._startup_admission.admit(claimed)
+            except BaseException as error:
+                try:
+                    await self._idempotency.release(
+                        claimed.scope,
+                        claimed.key,
+                        owner_token=claimed.owner_token,
+                    )
+                except BaseException as release_error:
+                    error.add_note(
+                        "Failed to release an inbound claim rejected by bounded "
+                        f"startup admission: {release_error!r}"
+                    )
+                raise
             return
         await self._handle_claimed_message(claimed)
 
@@ -827,8 +858,10 @@ class ImAgentGateway:
         operation: GatewayOperation,
     ) -> None:
         if self._starting:
-            self._startup_operations.append(operation)
+            self._startup_admission.admit(operation)
             return
+        if not self._accepting_inbound:
+            raise GatewayNotRunning("gateway is not accepting Channel callbacks")
         await self._handle_operation(operation)
 
     async def _deliver_error(

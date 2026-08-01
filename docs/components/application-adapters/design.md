@@ -68,9 +68,33 @@ message phases remain namespaced Metadata until common reuse is proven.
 
 ## Events and recovery
 
-Native notification producers publish into independent subscriber queues
-without awaiting Channel delivery. The adapter emits a separate explicit
-terminal Turn event after any number of completed messages.
+Native notification producers publish into independent, bounded subscriber
+queues without awaiting Channel delivery. Filling one subscriber terminates
+only that live subscription with an explicit overflow; Gateway resubscribes
+and reconciles native-authoritative state. The adapter emits a separate
+explicit terminal Turn event after any number of completed messages.
+
+App Server notification and server-request dispatch use separate bounded
+queues whose overflow resets that connection. The adapter translates the
+reset into an explicit gap for every current Application subscription; Gateway
+then performs authoritative completed-output recovery and pending-request
+snapshot recovery, or reports degraded request recovery when no snapshot
+exists. T3 polling uses the shared bounded per-subscriber fan-out and does not
+keep polling solely for an overflowed subscriber. Queue capacity is injectable
+adapter infrastructure; product retry and degraded UX remain consumer policy.
+
+The App Server client also exposes an adapter-only ordered admission fence
+across those two lanes. Earlier non-response frames are admitted before a
+later JSON-RPC response completes; callback payloads carry a public
+`AppServerDispatchPosition`. A caller that needs the exact response fence uses
+`call_with_dispatch_position`, which returns an immutable `AppServerResponse`.
+Frames admitted after that response cannot widen its fence; the mutable
+last-admitted position is diagnostic/compatibility state only. Handler
+completion may still be out of order. The position resets with the connection
+epoch and is neither a Core `AgentEvent.sequence` nor a replay cursor. Gateway
+projection uses its acceptance buffer and authoritative recovery rather than
+persisting or interpreting this transport fence; products with an IM-specific
+immediate-response gate may consume it as adapter policy.
 
 Replay, gap detection, and sequence scope are separate capabilities. When the
 native endpoint lacks replay or restart-safe sequence, fields are omitted and

@@ -33,6 +33,7 @@ from imagent.contracts import (
     OutboundMessage,
     ProjectionPolicy,
     ProjectMode,
+    SupportLevel,
     TextContent,
     ThreadHistoryRead,
     ThreadProjectionRoute,
@@ -43,6 +44,7 @@ from imagent.contracts import (
 from imagent.controllers import ControllerActions
 from imagent.delivery_coordination import DeliveryCoordinator, DeliveryCoordinatorConfig
 from imagent.gateway import ImAgentGateway
+from imagent.projection_runtime import TurnAcceptanceBufferOverflow
 from imagent.projections import (
     InMemoryProjectionRouteRepository,
     ProjectionWorkerState,
@@ -427,6 +429,69 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                 IdempotencyClaimStatus.ALREADY_COMPLETED,
             )
         finally:
+            await gateway.stop()
+
+    async def test_acceptance_buffer_overflow_keeps_input_terminal_and_recovers(
+        self,
+    ) -> None:
+        application = OverflowingAcceptanceApplication()
+        thread = await application.create_thread()
+        conversation = ConversationRef("fake-channel", "conversation")
+        bindings = InMemoryBindingRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+                thread_ref=thread.ref,
+            )
+        )
+        channel = FakeChannelAdapter()
+        idempotency = InMemoryIdempotencyRepository()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=bindings,
+            idempotency=idempotency,
+            turn_acceptance_event_max_pending=1,
+            subscription_retry_initial_seconds=0,
+            subscription_retry_max_seconds=0,
+        )
+        await gateway.start()
+        inbound = _inbound(conversation, "acceptance-overflow")
+        handling = asyncio.create_task(channel.on_message(inbound))
+        try:
+            await application.turn_persisted.wait()
+            await _wait_until(
+                lambda: (
+                    (health := gateway.get_projection_health(thread.ref)) is not None
+                    and health.event_overflow_count == 1
+                )
+            )
+            application.release_acceptance.set()
+            with self.assertRaises(TurnAcceptanceBufferOverflow):
+                await handling
+
+            await channel.on_message(inbound)
+            await _wait_until(lambda: len(channel.sent) == 2)
+            self.assertEqual(len(application._inputs), 1)
+            self.assertEqual(
+                await idempotency.claim(
+                    "inbound:fake-channel",
+                    "conversation:acceptance-overflow",
+                ),
+                IdempotencyClaimStatus.ALREADY_COMPLETED,
+            )
+            health = gateway.get_projection_health(thread.ref)
+            assert health is not None
+            self.assertEqual(
+                health.last_event_overflow,
+                "turn_acceptance_buffer_overflow",
+            )
+        finally:
+            application.release_acceptance.set()
+            if not handling.done():
+                handling.cancel()
+                await asyncio.gather(handling, return_exceptions=True)
             await gateway.stop()
 
     async def test_pre_acceptance_failure_releases_inbound_for_retry(self) -> None:
@@ -1578,11 +1643,64 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             assert health is not None
             self.assertEqual(health.restart_count, 1)
             self.assertEqual(application.subscription_calls, 2)
+            self.assertEqual(application.pending_snapshot_calls, 2)
+            self.assertFalse(health.interactive_request_recovery_degraded)
             await application.send_input(
                 thread.ref,
                 AgentInput(client_message_id="external", content=(TextContent("go"),)),
             )
             await _wait_until(lambda: len(channel.sent) == 2)
+        finally:
+            await gateway.stop()
+
+    async def test_subscription_failure_marks_request_recovery_degraded_without_snapshot(
+        self,
+    ) -> None:
+        application = FlakySubscriptionApplication()
+        application._summary = replace(
+            application.summary,
+            capabilities=replace(
+                application.summary.capabilities,
+                runtime=replace(
+                    application.summary.capabilities.runtime,
+                    pending_request_snapshot=SupportLevel.UNSUPPORTED,
+                ),
+            ),
+        )
+        thread = await application.create_thread()
+        conversation = ConversationRef("fake-channel", "degraded-subscription")
+        bindings = InMemoryBindingRepository()
+        projections = InMemoryProjectionRouteRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+                thread_ref=thread.ref,
+            )
+        )
+        await projections.put_projection_route(_route(thread.ref, conversation))
+        gateway = ImAgentGateway(
+            channels=[FakeChannelAdapter()],
+            applications=[application],
+            bindings=bindings,
+            projections=projections,
+            subscription_retry_initial_seconds=0,
+            subscription_retry_max_seconds=0,
+        )
+        await gateway.start()
+        try:
+            await _wait_until(
+                lambda: _health_state_is(
+                    gateway,
+                    thread.ref,
+                    ProjectionWorkerState.RUNNING,
+                )
+            )
+            health = gateway.get_projection_health(thread.ref)
+            assert health is not None
+            self.assertEqual(health.restart_count, 1)
+            self.assertTrue(health.interactive_request_recovery_degraded)
+            self.assertEqual(application.pending_snapshot_calls, 0)
         finally:
             await gateway.stop()
 
@@ -2163,6 +2281,14 @@ class CountingSubscriptionApplication(FakeAgentApplicationAdapter):
 
 
 class FlakySubscriptionApplication(CountingSubscriptionApplication):
+    def __init__(self) -> None:
+        super().__init__()
+        self.pending_snapshot_calls = 0
+
+    async def list_pending_requests(self):
+        self.pending_snapshot_calls += 1
+        return await super().list_pending_requests()
+
     def subscribe_thread(
         self,
         thread_ref: ThreadRef,
@@ -2202,6 +2328,33 @@ class AcceptanceRecoveryRaceApplication(CountingSubscriptionApplication):
             self.history_started.set()
             await self.release_history.wait()
         return await super().execute(operation)
+
+    async def send_input(
+        self,
+        thread_ref: ThreadRef,
+        message: AgentInput,
+        *,
+        continuation: InputContinuationPreference = (
+            InputContinuationPreference.PREFER_ACTIVE_TURN
+        ),
+        before_dispatch: ApplicationInputDispatchHandler | None = None,
+    ) -> AcceptedTurn:
+        accepted = await super().send_input(
+            thread_ref,
+            message,
+            continuation=continuation,
+            before_dispatch=before_dispatch,
+        )
+        self.turn_persisted.set()
+        await self.release_acceptance.wait()
+        return accepted
+
+
+class OverflowingAcceptanceApplication(CountingSubscriptionApplication):
+    def __init__(self) -> None:
+        super().__init__()
+        self.turn_persisted = asyncio.Event()
+        self.release_acceptance = asyncio.Event()
 
     async def send_input(
         self,

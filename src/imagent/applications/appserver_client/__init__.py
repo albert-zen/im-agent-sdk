@@ -3,7 +3,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from ... import __version__
-from .client import AppServerClient, AppServerError
+from .client import (
+    AppServerClient,
+    AppServerError,
+)
+from .handoff import (
+    APP_SERVER_DISPATCH_POSITION_KEY,
+    AppServerDispatchPosition,
+    AppServerResponse,
+)
 from .supervisor import AppServerSupervisor
 
 
@@ -36,7 +44,10 @@ def codex_app_server_client(
 
 __all__ = [
     "AppServerClient",
+    "AppServerDispatchPosition",
     "AppServerError",
+    "AppServerResponse",
     "AppServerSupervisor",
+    "APP_SERVER_DISPATCH_POSITION_KEY",
     "codex_app_server_client",
 ]

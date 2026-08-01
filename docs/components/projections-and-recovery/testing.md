@@ -38,7 +38,17 @@ Protect these historical and known failure modes:
 - one route's Channel delivery failure killing or restarting the Application
   subscription;
 - worker health conflating infrastructure state with Agent Turn/request truth;
-- an unbounded subscriber queue hiding slow-delivery memory pressure.
+- an unbounded subscriber queue hiding slow-delivery memory pressure;
+- one slow subscriber overflow stopping a healthy subscriber or unrelated
+  Thread;
+- a Turn-acceptance buffer overflow releasing accepted inbound idempotency or
+  failing to enter bounded authoritative recovery;
+- an event gap pretending a transient interactive request is recoverable when
+  no native pending snapshot exists;
+- a clean subscription end, generic observation failure, or App Server reset
+  recovering completed output while skipping request snapshot/degraded state;
+- one Thread's pending-request snapshot recovery bypassing another Thread's
+  acceptance ordering or presentation backlog;
 - a request response being accepted from a destination where request delivery
   failed or never occurred;
 - one failed request destination blocking another destination or creating an

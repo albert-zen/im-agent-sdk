@@ -126,10 +126,15 @@ recent/active baseline. Existing routes scan newest pages toward their
 checkpoint under strict configured bounds; a missing checkpoint is explicit
 degraded health. Gateway never loads an SDK transcript.
 
-During `start()`, Channel callbacks are admitted into a short process-local
-buffer until durable projection routes have been restored. This prevents a
-Channel that immediately produces input from racing restoration; queued input
-then drains through the normal Conversation locks.
+During `start()`, Channel callbacks are admitted into one bounded,
+process-local FIFO shared by messages and typed operations until durable
+projection routes have been restored. This prevents a Channel that immediately
+produces input from racing restoration while preserving cross-kind arrival
+order. Overflow fails startup explicitly and normal teardown cancels/joins
+owned component work; no inbound mutation is silently discarded.
+`startup_buffer_max_pending` configures this shared bound.
+If startup fails, or once shutdown begins, the live admission gate rejects
+later Channel callbacks until another start completes successfully.
 
 For IM-originated input, Gateway persists a minimal mapping from the returned
 `started/create_new` result to the originating Conversation/reply ID. A
@@ -140,9 +145,11 @@ destination. An external Turn does not inherit a prior IM message.
 
 Projection delivery awaits one logical Coordinator result in a Thread worker.
 Application notification callbacks remain non-blocking because they publish
-into independent subscriber queues. Coordinator admission and native sends are
-bounded, but the event subscriber queues themselves remain unbounded; a
-persistently stalled projection can therefore still create memory pressure.
+into independent bounded subscriber queues. Filling one queue terminates only
+that observation and enters bounded resubscription plus native-authoritative
+reconciliation.
+`turn_acceptance_event_max_pending` independently bounds events consumed while
+one Thread still awaits native input acceptance and reply-correlation write.
 
 Projection workers resubscribe after Application subscription/recovery failure
 with bounded backoff and expose process-local infrastructure health.

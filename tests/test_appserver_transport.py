@@ -5,7 +5,12 @@ import json
 import unittest
 from unittest.mock import patch
 
-from imagent.applications.appserver_client.client import AppServerClient, AppServerError
+from imagent.applications.appserver_client import (
+    APP_SERVER_DISPATCH_POSITION_KEY,
+    AppServerClient,
+    AppServerDispatchPosition,
+    AppServerError,
+)
 from imagent.applications.appserver_client.supervisor import (
     AppServerSupervisor,
     MissingAppServerDependencyError,
@@ -120,7 +125,13 @@ class _TemporarilyUnkillableProcess(_StubbornProcess):
         super().kill()
 
 
-def _client(process: _ScriptedProcess, *, request_timeout_s: float = 15.0) -> AppServerClient:
+def _client(
+    process: _ScriptedProcess,
+    *,
+    request_timeout_s: float = 15.0,
+    notification_queue_size: int = 1024,
+    server_request_queue_size: int = 64,
+) -> AppServerClient:
     return AppServerClient(
         supervisor=AppServerSupervisor(
             app_server_url="stdio://",
@@ -128,6 +139,8 @@ def _client(process: _ScriptedProcess, *, request_timeout_s: float = 15.0) -> Ap
         ),
         client_info={"name": "sdk-test", "title": "SDK Test", "version": "0"},
         request_timeout_s=request_timeout_s,
+        notification_queue_size=notification_queue_size,
+        server_request_queue_size=server_request_queue_size,
     )
 
 
@@ -313,7 +326,187 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
         try:
             result = await client.list_threads()
             self.assertEqual(result, {"threads": []})
-            self.assertTrue(handler_started.is_set())
+            await asyncio.wait_for(handler_started.wait(), timeout=1)
+        finally:
+            release_handler.set()
+            await client.close()
+
+    async def test_public_dispatch_fence_orders_bounded_callback_lanes(self) -> None:
+        process = _ScriptedProcess(
+            {
+                "initialize": [{"result": {"ok": True}}],
+                "thread/list": [
+                    {
+                        "method": "thread/status/changed",
+                        "params": {"threadId": "thread-1", "status": "idle"},
+                    },
+                    {
+                        "id": 91,
+                        "method": "item/commandExecution/requestApproval",
+                        "params": {"threadId": "thread-1", "turnId": "turn-1"},
+                    },
+                    {"result": {"threads": []}},
+                    {
+                        "method": "thread/status/changed",
+                        "params": {"threadId": "thread-2", "status": "idle"},
+                    },
+                ],
+            }
+        )
+        client = _client(process, request_timeout_s=0.2)
+        notification_started = asyncio.Event()
+        release_notification = asyncio.Event()
+        request_received = asyncio.Event()
+        positions: list[AppServerDispatchPosition] = []
+
+        async def slow_notification(notification: dict) -> None:
+            positions.append(notification[APP_SERVER_DISPATCH_POSITION_KEY])
+            notification_started.set()
+            await release_notification.wait()
+
+        def capture_request(request: dict) -> None:
+            positions.append(request[APP_SERVER_DISPATCH_POSITION_KEY])
+            request_received.set()
+
+        client.add_notification_handler(slow_notification)
+        client.add_server_request_handler(capture_request)
+        try:
+            response = await client.call_with_dispatch_position("thread/list")
+            self.assertEqual(response.result, {"threads": []})
+            self.assertEqual(
+                response.dispatch_position,
+                AppServerDispatchPosition(connection_epoch=1, sequence=2),
+            )
+            await asyncio.wait_for(notification_started.wait(), timeout=1)
+            await asyncio.wait_for(request_received.wait(), timeout=1)
+            self.assertEqual(
+                client.last_admitted_dispatch_position,
+                AppServerDispatchPosition(connection_epoch=1, sequence=3),
+            )
+            self.assertEqual(
+                sorted(positions, key=lambda position: position.sequence),
+                [
+                    AppServerDispatchPosition(connection_epoch=1, sequence=1),
+                    AppServerDispatchPosition(connection_epoch=1, sequence=2),
+                ],
+            )
+        finally:
+            release_notification.set()
+            await client.close()
+
+    async def test_dispatch_fence_resets_at_reconnect_epoch(self) -> None:
+        first = _ScriptedProcess(
+            {
+                "initialize": [
+                    {"method": "thread/status/changed", "params": {}},
+                    {"result": {"ok": True}},
+                ]
+            }
+        )
+        second = _ScriptedProcess(
+            {
+                "initialize": [{"result": {"ok": True}}],
+                "thread/list": [{"result": {"threads": []}}],
+            }
+        )
+        processes = iter((first, second))
+        client = AppServerClient(
+            supervisor=AppServerSupervisor(
+                app_server_url="stdio://",
+                spawn_process=lambda *_args: next(processes),
+            ),
+            client_info={"name": "sdk-test", "title": "SDK Test", "version": "0"},
+        )
+        client.add_notification_handler(lambda _notification: None)
+        try:
+            await client.initialize()
+            self.assertEqual(
+                client.last_admitted_dispatch_position,
+                AppServerDispatchPosition(connection_epoch=1, sequence=1),
+            )
+            first.stdout.lines.put_nowait(b"")
+            await asyncio.sleep(0)
+            self.assertEqual(await client.list_threads(), {"threads": []})
+            self.assertEqual(
+                client.last_admitted_dispatch_position,
+                AppServerDispatchPosition(connection_epoch=2, sequence=0),
+            )
+        finally:
+            await client.close()
+
+    async def test_notification_dispatch_overflow_resets_connection_explicitly(self) -> None:
+        notifications = [
+            {"method": "thread/status/changed", "params": {"threadId": f"thread-{index}"}}
+            for index in range(3)
+        ]
+        process = _ScriptedProcess(
+            {
+                "initialize": [{"result": {"ok": True}}],
+                "thread/list": [*notifications, {"result": {"threads": []}}],
+            }
+        )
+        client = _client(
+            process,
+            request_timeout_s=0.2,
+            notification_queue_size=1,
+        )
+        handler_started = asyncio.Event()
+        release_handler = asyncio.Event()
+        reset_epochs: list[int] = []
+
+        async def block_notification(_notification: dict) -> None:
+            handler_started.set()
+            await release_handler.wait()
+
+        client.add_notification_handler(block_notification)
+        client.add_connection_reset_handler(reset_epochs.append)
+        try:
+            await client.initialize()
+            with self.assertRaisesRegex(AppServerError, "notification dispatch queue overflowed"):
+                await client.list_threads()
+            self.assertEqual(reset_epochs, [1])
+        finally:
+            release_handler.set()
+            await client.close()
+
+    async def test_server_request_dispatch_overflow_resets_connection_explicitly(self) -> None:
+        requests = [
+            {
+                "id": 90 + index,
+                "method": "item/commandExecution/requestApproval",
+                "params": {"threadId": "thread-1", "turnId": "turn-1"},
+            }
+            for index in range(3)
+        ]
+        process = _ScriptedProcess(
+            {
+                "initialize": [{"result": {"ok": True}}],
+                "thread/list": [*requests, {"result": {"threads": []}}],
+            }
+        )
+        client = _client(
+            process,
+            request_timeout_s=0.2,
+            server_request_queue_size=1,
+        )
+        handler_started = asyncio.Event()
+        release_handler = asyncio.Event()
+        reset_epochs: list[int] = []
+
+        async def block_request(_request: dict) -> None:
+            handler_started.set()
+            await release_handler.wait()
+
+        client.add_server_request_handler(block_request)
+        client.add_connection_reset_handler(reset_epochs.append)
+        try:
+            await client.initialize()
+            with self.assertRaisesRegex(
+                AppServerError,
+                "server_request dispatch queue overflowed",
+            ):
+                await client.list_threads()
+            self.assertEqual(reset_epochs, [1])
         finally:
             release_handler.set()
             await client.close()

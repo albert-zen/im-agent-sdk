@@ -45,7 +45,10 @@ native terminal Turn event separately.
 
 The current App Server seam does not claim native replay when unavailable. It
 omits cursor/sequence fields and uses authoritative Thread/Turn reads plus a
-fresh live subscription.
+fresh live subscription. `event_buffer_max_pending` bounds each live
+subscriber. Overflow is an explicit completed-message recovery gap; because
+the current protocol has no pending-request snapshot, projection health also
+remains degraded for possibly missed transient requests.
 
 Interactive requests use the locally installed Codex App Server generated
 schema and SDK-owned transport tests as the wire authority. The common mapping

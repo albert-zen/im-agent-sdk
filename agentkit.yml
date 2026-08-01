@@ -135,8 +135,10 @@ components:
       - docs/migrations/imcodex-followup-blockers.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
+      - docs/decisions/0013-bounded-application-event-admission.md
       - src/imagent/inbound_admission.py
       - src/imagent/gateway.py
+      - src/imagent/gateway_startup.py
       - src/imagent/delivery_ingress.py
       - src/imagent/proactive_delivery.py
       - src/imagent/cli/**
@@ -170,6 +172,7 @@ components:
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
+      - docs/decisions/0013-bounded-application-event-admission.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/events.py
@@ -308,6 +311,7 @@ components:
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
+      - docs/decisions/0013-bounded-application-event-admission.md
       - docs/migrations/issue-9-imcodex-owner-transfer.md
       - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/applications/__init__.py
@@ -350,6 +354,7 @@ components:
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
+      - docs/decisions/0013-bounded-application-event-admission.md
       - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/applications/__init__.py
       - src/imagent/applications/t3.py
@@ -382,6 +387,7 @@ components:
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
+      - docs/decisions/0013-bounded-application-event-admission.md
       - src/imagent/testing/**
       - tests/test_adapter_contracts.py
     docs:

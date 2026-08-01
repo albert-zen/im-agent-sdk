@@ -35,6 +35,7 @@ from imagent.contracts import (
     ThreadRef,
 )
 from imagent.controllers import SlashController
+from imagent.events import EventStreamOverflow
 from imagent.gateway import ImAgentGateway
 from imagent.storage import SQLiteGatewayState
 
@@ -87,6 +88,7 @@ class NativeQQChannel:
 class NativeZenClient:
     def __init__(self) -> None:
         self.handlers = []
+        self.reset_handlers = []
         self.started_threads = []
         self.started_turns = []
         self.resumed_threads = []
@@ -94,6 +96,15 @@ class NativeZenClient:
 
     def add_notification_handler(self, handler) -> None:
         self.handlers.append(handler)
+
+    def add_connection_reset_handler(self, handler) -> None:
+        self.reset_handlers.append(handler)
+
+    async def reset_connection(self, connection_epoch: int = 1) -> None:
+        for handler in tuple(self.reset_handlers):
+            result = handler(connection_epoch)
+            if inspect.isawaitable(result):
+                await result
 
     def local_image_paths_epoch(self) -> int:
         return 1
@@ -959,6 +970,57 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             ),
         )
         self.assertNotEqual(first.turn_id, second.turn_id)
+
+    async def test_t3_slow_subscription_overflow_does_not_stop_fast_subscription(
+        self,
+    ) -> None:
+        native_app = NativeT3Client()
+        native_app.threads["thread-1"] = {
+            "id": "thread-1",
+            "projectId": "project-1",
+            "title": "Fanout",
+            "modelSelection": {},
+            "runtimeMode": "full-access",
+            "latestTurn": {"turnId": "turn-1", "state": "running"},
+            "messages": [],
+            "activities": [],
+            "archivedAt": None,
+            "deletedAt": None,
+        }
+        application = T3ApplicationAdapter(
+            application_instance_id="t3-main",
+            client=native_app,
+            poll_interval=60,
+            event_buffer_max_pending=1,
+        )
+        thread_ref = ThreadRef(
+            "t3-main",
+            "thread-1",
+            ProjectRef("t3-main", "project-1"),
+        )
+        fast = application.subscribe_thread(thread_ref)
+        slow = application.subscribe_thread(thread_ref)
+        try:
+            for index in range(2):
+                native_app.threads["thread-1"]["messages"].append(
+                    {
+                        "id": f"assistant-{index}",
+                        "role": "assistant",
+                        "text": f"message-{index}",
+                        "turnId": "turn-1",
+                    }
+                )
+                application._publish_thread_state(
+                    thread_ref,
+                    native_app.threads["thread-1"],
+                )
+                if index == 0:
+                    self.assertEqual((await anext(fast)).event_id.endswith("assistant-0"), True)
+            with self.assertRaises(EventStreamOverflow):
+                await anext(slow)
+            self.assertTrue((await anext(fast)).event_id.endswith("assistant-1"))
+        finally:
+            await application.stop()
 
     @staticmethod
     def _bind_channel(native_channel, middleware):

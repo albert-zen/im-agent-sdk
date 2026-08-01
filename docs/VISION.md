@@ -93,6 +93,11 @@ Completed messages and recovery come from native authoritative
 history/snapshot/catch-up. SDK projections can be cached or checkpointed only
 when deletion and reconciliation reproduce the same Agent truth.
 
+Live bridge buffers are bounded infrastructure, never a substitute event log.
+Overflow is explicit and converges through native replay, authoritative
+history, or truthful degraded health when a transient native request cannot be
+reconstructed.
+
 ### Deterministic, separated routing
 
 Conversation input selection, optional native Thread activation, and outbound

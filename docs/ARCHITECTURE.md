@@ -220,17 +220,19 @@ contains no transcript or Turn truth.
 - one route's Channel failure blocks that route's later delivery decisions,
   records its route ID in worker health, and does not restart the Application
   subscription.
-
-Application event subscriber queues remain unbounded. Coordinator admission
-bounds planned Channel delivery but does not yet bound native event fan-out
-memory; authoritative history/recovery remains the convergence mechanism.
+- Application event subscribers, Gateway startup admission, and per-Thread
+  Turn-acceptance buffering have independently configurable finite limits;
+  overflow is an explicit per-Thread gap that enters authoritative recovery.
+- native pending-request snapshots reconcile request events after a gap when
+  supported; otherwise worker health truthfully retains an interactive-request
+  recovery degradation instead of manufacturing request state.
 
 ## Failure model
 
 Failures are explicit and scoped: unsupported capability, invalid/stale
 reference, access/authentication, missing binding, unavailable Application,
 rejected operation, attachment source/trust, delivery outcome, worker health,
-gap, and cursor expiration.
+bounded-admission overflow, gap, and cursor expiration.
 
 Core does not choose product retry counts, permission prompts, or Full Access.
 Safe Application resubscription is bounded infrastructure recovery. Delivery

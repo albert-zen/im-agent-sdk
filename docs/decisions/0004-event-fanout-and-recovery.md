@@ -32,6 +32,7 @@ synthetic event journal.
 ## Consequences
 
 Multiple IM/client observers see the same canonical events. Recovery remains
-native-authoritative. Independent queues isolate producer latency but are not
-by themselves bounded backpressure; Delivery Coordinator work must address
-queue limits and execution policy.
+native-authoritative. [ADR 0013](0013-bounded-application-event-admission.md)
+bounds each independent live queue, terminates only an overflowed subscriber,
+and enters explicit authoritative gap recovery. Delivery execution policy
+remains separately bounded by ADR 0010.

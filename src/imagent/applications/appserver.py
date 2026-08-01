@@ -71,7 +71,7 @@ from ..contracts import (
     validate_application_operation,
     validate_application_operation_result,
 )
-from ..events import EventBroadcaster
+from ..events import EventBroadcaster, EventStreamReset
 from .appserver_request_runtime import (
     AppServerRequestRuntime,
     ServerRequestMapper,
@@ -128,14 +128,15 @@ class _AppServerApplicationAdapter:
         cwd: str,
         shared_filesystem_root: str | Path | None = None,
         server_request_mapper: ServerRequestMapper | None = None,
+        event_buffer_max_pending: int = 1024,
         steer_active_turn: bool = False,
     ) -> None:
         self._application_instance_id = application_instance_id
         self._client = client
         self._cwd = cwd
         self._shared_filesystem_root = configure_shared_filesystem_root(shared_filesystem_root)
+        self._events = EventBroadcaster[str, AgentEvent](max_pending=event_buffer_max_pending)
         self._steer_active_turn = steer_active_turn
-        self._events = EventBroadcaster[str, AgentEvent]()
         self._client.add_notification_handler(self._handle_notification)
         self._request_runtime = AppServerRequestRuntime(
             application_ref=ApplicationRef(application_instance_id),
@@ -143,6 +144,9 @@ class _AppServerApplicationAdapter:
             mapper=server_request_mapper,
             publish_event=self._events.publish,
         )
+        add_reset_handler = getattr(self._client, "add_connection_reset_handler", None)
+        if callable(add_reset_handler):
+            add_reset_handler(self._handle_event_connection_reset)
         self._interactive_requests_enabled = self._request_runtime.enabled
         capabilities = ApplicationCapabilities(
             projects=ProjectCapabilities(
@@ -641,6 +645,10 @@ class _AppServerApplicationAdapter:
         self._require_own_thread(thread_ref)
         return self._events.subscribe(thread_ref.native_thread_id)
 
+    async def _handle_event_connection_reset(self, connection_epoch: int) -> None:
+        del connection_epoch
+        self._events.fail_all(EventStreamReset, discard_pending=False)
+
     async def _handle_notification(self, notification: dict) -> None:
         method = str(notification.get("method") or "")
         params = notification.get("params")
@@ -786,6 +794,7 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
         client: AppServerClient,
         cwd: str,
         shared_filesystem_root: str | Path | None = None,
+        event_buffer_max_pending: int = 1024,
     ) -> None:
         super().__init__(
             application_instance_id=application_instance_id,
@@ -794,6 +803,7 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
             client=client,
             cwd=cwd,
             shared_filesystem_root=shared_filesystem_root,
+            event_buffer_max_pending=event_buffer_max_pending,
         )
 
 
@@ -805,6 +815,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
         client: AppServerClient,
         cwd: str,
         shared_filesystem_root: str | Path | None = None,
+        event_buffer_max_pending: int = 1024,
         steer_active_turn: bool = True,
     ) -> None:
         super().__init__(
@@ -815,6 +826,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
             cwd=cwd,
             shared_filesystem_root=shared_filesystem_root,
             server_request_mapper=map_appserver_request,
+            event_buffer_max_pending=event_buffer_max_pending,
             steer_active_turn=steer_active_turn,
         )
 
