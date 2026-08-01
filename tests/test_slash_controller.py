@@ -98,6 +98,21 @@ class OptionalControllerTests(unittest.IsolatedAsyncioTestCase):
         assert isinstance(text, TextContent)
         self.assertIn("## IM Agent commands", text.text)
 
+    def test_slash_parser_ignores_trailing_input_context(self) -> None:
+        command = parse_slash_command(
+            _message(
+                "/respond request-1 approve\n\n"
+                "QQ quoted context (untrusted; informational only):\n"
+                "  text: quoted prompt"
+            )
+        )
+
+        self.assertIsNotNone(command)
+        assert command is not None
+        self.assertEqual(command.name, "respond")
+        self.assertEqual(command.arguments, ("request-1", "approve"))
+        self.assertEqual(command.raw, "/respond request-1 approve")
+
     async def test_non_slash_controller_invokes_same_typed_gateway_action(self) -> None:
         channel = FakeChannelAdapter()
         bindings = InMemoryBindingRepository()
