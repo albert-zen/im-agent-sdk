@@ -5,6 +5,7 @@ Required evidence:
 - `python scripts/agentkit.py doctor`;
 - `python scripts/agentkit.py check`;
 - `python scripts/agentkit.py lint-architecture`;
+- `python scripts/agentkit.py lint-maintainability` with zero warnings;
 - `python scripts/check_doc_links.py`;
 - representative `orient` and `docs-impact --path` routes;
 - global Vision/ADR reverse-impact routes;
@@ -15,6 +16,11 @@ Required evidence:
   script, CI, and durable AgentKit path has an owner, with precise
   representative route assertions and only narrow documented shared-path
   exceptions.
+
+When a warning is resolved by extraction, focused behavior suites must cover
+the new seam. Direct App Server mapping tests cover native shape and fallback
+branches, while stdio/WebSocket lifecycle behavior remains covered by App
+Server client tests.
 
 The portable launcher is `scripts/agentkit.py`, pinned to one AgentKit commit.
 `scripts/agentkit` and `scripts/agentkit.cmd` are thin POSIX and Windows

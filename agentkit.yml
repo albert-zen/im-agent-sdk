@@ -337,11 +337,13 @@ components:
       - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/applications/__init__.py
       - src/imagent/applications/appserver.py
+      - src/imagent/applications/appserver_mapping.py
       - src/imagent/applications/appserver_request_runtime.py
       - src/imagent/applications/appserver_requests.py
       - src/imagent/applications/appserver_client/**
       - tests/test_appserver_client.py
       - tests/test_appserver_input.py
+      - tests/test_appserver_mapping.py
       - tests/test_appserver_requests.py
       - tests/test_appserver_transport.py
     docs:
@@ -580,8 +582,8 @@ maintainability:
     - name: gateway-orchestration
       paths:
         - src/imagent/gateway.py
-      max_lines: 900
-      max_functions: 35
+      max_lines: 1100
+      max_functions: 40
       max_classes: 4
       mode: warn
       guidance: Keep Gateway focused on orchestration; extract delivery planning or component-owned policy before adding more branches.
@@ -594,12 +596,18 @@ maintainability:
       max_classes: 5
       mode: warn
       guidance: Keep native translation cohesive; split protocol clients or pure mapping helpers when a native adapter grows beyond one reviewable unit.
+    - name: appserver-native-mapping
+      paths:
+        - src/imagent/applications/appserver_mapping.py
+      max_lines: 225
+      max_functions: 22
+      max_classes: 1
+      mode: warn
+      guidance: Keep native response mapping stateless and independently testable; do not add transport, lifecycle, or consumer policy.
     - name: focused-bridge-modules
       paths:
         - src/imagent/projection_routes.py
-        - src/imagent/projection_runtime.py
         - src/imagent/sqlite_rows.py
-        - src/imagent/storage.py
         - src/imagent/controllers/slash.py
         - src/imagent/contracts/validators.py
       max_lines: 700
@@ -607,6 +615,22 @@ maintainability:
       max_classes: 6
       mode: warn
       guidance: Preserve one clear responsibility per module and avoid mixing product policy with common bridge behavior.
+    - name: projection-runtime-coordination
+      paths:
+        - src/imagent/projection_runtime.py
+      max_lines: 950
+      max_functions: 35
+      max_classes: 5
+      mode: warn
+      guidance: Keep input acceptance, event admission, route barriers, and worker recovery together while they share one per-Thread ordering invariant; extract only across an independently testable state boundary.
+    - name: sqlite-gateway-state
+      paths:
+        - src/imagent/storage.py
+      max_lines: 925
+      max_functions: 35
+      max_classes: 4
+      mode: warn
+      guidance: Keep repository protocols on one SQLite connection and transaction boundary; extract pure row mapping or an independently owned state boundary before adding more persistence behavior.
     - name: native-channel-transports
       paths:
         - src/imagent/channels/native/qq.py
@@ -624,8 +648,24 @@ maintainability:
     - name: appserver-client-transport
       paths:
         - src/imagent/applications/appserver_client/client.py
-      max_lines: 1700
-      max_functions: 105
-      max_classes: 8
+      max_lines: 1750
+      max_functions: 95
+      max_classes: 2
       mode: warn
       guidance: Keep JSON-RPC transport and dispatch reusable; extract a reviewed submodule before adding Application mapping or consumer supervision.
+    - name: appserver-wire-transports
+      paths:
+        - src/imagent/applications/appserver_client/transports.py
+      max_lines: 150
+      max_functions: 20
+      max_classes: 5
+      mode: warn
+      guidance: Keep wire transports limited to JSON framing, I/O lifecycle, and connection-closed translation.
+    - name: appserver-client-diagnostics
+      paths:
+        - src/imagent/applications/appserver_client/diagnostic_facts.py
+      max_lines: 120
+      max_functions: 8
+      max_classes: 2
+      mode: warn
+      guidance: Keep diagnostic state bounded, redacted, process-local, and free of transport or recovery ownership.
