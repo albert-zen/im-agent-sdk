@@ -144,14 +144,11 @@ class NativeTransportChannelAdapter:
 
     def diagnostic_facts(self) -> NativeChannelDiagnosticSnapshot:
         native = self._native
-        if native is not None:
-            facts = _native_connection_facts(native)
-            if facts is not None:
-                self._last_connection_facts = facts
+        facts = _native_connection_facts(native) if native is not None else None
         return NativeChannelDiagnosticSnapshot(
             channel_instance_id=self._channel_instance_id,
             kind=self._channel_id,
-            connection=self._last_connection_facts,
+            connection=facts if native is not None else self._last_connection_facts,
         )
 
     @property
@@ -173,6 +170,7 @@ class NativeTransportChannelAdapter:
             on_admission=on_admission,
         )
         native = self._native_factory(middleware)
+        self._last_connection_facts = None
         self._native = native
         try:
             await native.start()

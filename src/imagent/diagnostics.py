@@ -314,13 +314,17 @@ def collect_channel_diagnostics(
     for channel in channels:
         channel_instance_id = str(getattr(channel, "channel_instance_id", ""))
         kind = str(getattr(channel, "kind", "unknown"))
-        provider = getattr(channel, "diagnostic_facts", None)
         try:
+            provider = getattr(channel, "diagnostic_facts", None)
             facts = provider() if callable(provider) else None
         except Exception:
             facts = None
-        provider_instance_id = getattr(facts, "channel_instance_id", None)
-        provider_kind = getattr(facts, "kind", None)
+        try:
+            provider_instance_id = getattr(facts, "channel_instance_id", None)
+            provider_kind = getattr(facts, "kind", None)
+        except Exception:
+            provider_instance_id = None
+            provider_kind = None
         if (
             not isinstance(provider_instance_id, str)
             or provider_instance_id != channel_instance_id
@@ -357,7 +361,12 @@ def _coerce_channel_connection(value: object) -> ConnectionDiagnosticFacts | Non
         or not isinstance(worker_degraded, bool)
     ):
         raise TypeError("invalid Channel diagnostic fact types")
-    queues = tuple(_coerce_channel_queue(queue) for queue in getattr(value, "queues", ()))
+    raw_queues = getattr(value, "queues", ())
+    if not isinstance(raw_queues, tuple) or len(raw_queues) > 1:
+        raise TypeError("invalid Channel diagnostic queue collection")
+    queues = tuple(_coerce_channel_queue(queue) for queue in raw_queues)
+    if any(queue.name is not QueueDiagnosticName.CHANNEL_INBOUND for queue in queues):
+        raise ValueError("invalid Channel diagnostic queue scope")
     return ConnectionDiagnosticFacts(
         state=state,
         connection_epoch=connection_epoch,

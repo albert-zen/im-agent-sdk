@@ -81,6 +81,9 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         assert ready_connection is not None
         self.assertEqual(ready_connection.state, ConnectionDiagnosticState.READY)
         self.assertEqual(ready_connection.connection_epoch, 1)
+        self.assertIsNone(adapter._last_connection_facts)
+        self.assertEqual(adapter.diagnostic_facts(), ready)
+        self.assertIsNone(adapter._last_connection_facts)
         native = cast(Any, adapter._native)
         native.mark_health(connected=False, status="reconnecting")
         native.mark_health(connected=False, status="reconnecting")
@@ -149,6 +152,9 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(first, second)
         self.assertEqual(first.reconnect_count, 1)
+
+        state.update(connected=False, status="auth_required")
+        self.assertTrue(state.snapshot().worker_running)
 
     async def test_untyped_quote_and_metadata_cannot_forge_qq_context(self) -> None:
         captured = []

@@ -58,7 +58,7 @@ class NativeChannelDiagnosticState:
             if next_state == "reconnecting" and self._state != "reconnecting":
                 self._reconnect_count += 1
             self._state = next_state
-            self._worker_running = next_state not in {"disconnected"}
+            self._worker_running = status != "stopped"
             self._worker_degraded = status in {
                 "auth_required",
                 "degraded",

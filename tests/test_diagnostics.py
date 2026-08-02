@@ -182,11 +182,56 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
                 cast(ConnectionDiagnosticFacts, SimpleNamespace(state="consumer-value")),
             )
         )
+        invalid_queue_scope = Channel(
+            ChannelDiagnosticFacts(
+                "qq-main",
+                "qq",
+                ConnectionDiagnosticFacts(
+                    state=ConnectionDiagnosticState.READY,
+                    connection_epoch=1,
+                    reconnect_count=0,
+                    worker_running=True,
+                    worker_degraded=False,
+                    queues=(
+                        QueueDiagnosticFacts(
+                            QueueDiagnosticName.NOTIFICATION,
+                            capacity=1,
+                            depth=0,
+                        ),
+                    ),
+                ),
+            )
+        )
+
+        class RaisingIdentity:
+            @property
+            def channel_instance_id(self) -> str:
+                raise RuntimeError("secret identity failure")
+
+        raising_identity = Channel(RaisingIdentity())
+
+        class RaisingProviderAttribute:
+            channel_instance_id = "qq-main"
+            kind = "qq"
+
+            @property
+            def diagnostic_facts(self) -> object:
+                raise RuntimeError("secret provider attribute failure")
+
+        raising_provider_attribute = RaisingProviderAttribute()
         raising = Channel(raises=True)
         absent = SimpleNamespace(channel_instance_id="qq-main", kind="qq")
 
         self.assertEqual(collect_channel_diagnostics((valid,))[0].connection, connection)
-        for channel in (mismatch, invalid, raising, absent):
+        for channel in (
+            mismatch,
+            invalid,
+            invalid_queue_scope,
+            raising_identity,
+            raising_provider_attribute,
+            raising,
+            absent,
+        ):
             with self.subTest(channel=channel):
                 facts = collect_channel_diagnostics((channel,))[0]
                 self.assertEqual(facts.channel_instance_id, "qq-main")
