@@ -882,6 +882,9 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
                 for channel_id, config in configurations.items()
             ]
 
+            for adapter in adapters:
+                adapter.validate_startup_configuration()
+
             async def ignore(_item) -> None:
                 return None
 
@@ -908,6 +911,15 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
                 for adapter in adapters
             )
         )
+
+    def test_sdk_channel_preflight_uses_resolved_native_configuration(self) -> None:
+        adapter = channel_from_config(
+            "telegram",
+            config={"enabled": True, "bot_token": ""},
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "token"):
+            adapter.validate_startup_configuration()
 
 
 if __name__ == "__main__":

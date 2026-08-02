@@ -51,6 +51,7 @@ class NativeChannel(Protocol):
 
 
 NativeFactory = Callable[[object], NativeChannel]
+StartupValidator = Callable[[], None]
 
 
 class _ChannelConnectionSnapshot(Protocol):
@@ -129,14 +130,23 @@ class NativeTransportChannelAdapter:
         channel_instance_id: str,
         channel_id: str,
         native_factory: NativeFactory,
+        startup_validator: StartupValidator | None = None,
     ) -> None:
         if channel_id not in _CHANNEL_CAPABILITIES:
             raise ValueError(f"unsupported native channel: {channel_id}")
         self._channel_instance_id = channel_instance_id
         self._channel_id = channel_id
         self._native_factory = native_factory
+        self._startup_validator = startup_validator
         self._native: NativeChannel | None = None
         self._last_connection_facts: _ChannelConnectionSnapshot | None = None
+
+    def validate_startup_configuration(self) -> None:
+        """Validate resolved native settings without starting transport I/O."""
+
+        validator = self._startup_validator
+        if validator is not None:
+            validator()
 
     @property
     def channel_instance_id(self) -> str:
@@ -286,6 +296,14 @@ def channel_from_config(
     resolved_config = dict(config)
     if channel_id == "qq":
         resolved_config.setdefault("markdown_enabled", True)
+
+    def validate_startup_configuration() -> None:
+        native = NativeAdapter.from_config(
+            config=resolved_config,
+            middleware=object(),
+        )
+        native.validate_startup_configuration()
+
     return NativeTransportChannelAdapter(
         channel_instance_id=channel_instance_id or channel_id,
         channel_id=channel_id,
@@ -293,6 +311,7 @@ def channel_from_config(
             config=resolved_config,
             middleware=middleware,
         ),
+        startup_validator=validate_startup_configuration,
     )
 
 

@@ -105,6 +105,12 @@ media helpers, admission policy, and one common `channel_from_config` seam.
 Protocol dependencies remain optional extras; importing Contracts, Ports, or
 Gateway does not import them.
 
+The common adapter exposes a side-effect-free
+`validate_startup_configuration()` using the same resolved configuration and
+native validation as `start()`. Operator restart preflight may call it without
+opening a network connection, starting a worker, publishing credentials, or
+mutating persistent state.
+
 Native behavior and limitations are documented separately:
 
 - [QQ](adapters/qq.md)
