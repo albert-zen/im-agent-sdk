@@ -33,6 +33,15 @@ consumer-implemented typed protocol. It receives only a fixed bounded failure
 phase plus Gateway-fixed Conversation, reply, and delivery identities; it
 never receives the exception, claim, repositories, or dispatch authority.
 
+A1 non-artifact presentation is configured only on the concrete Application
+adapter that owns the native shape. Codex live activity and T3 recoverable
+activity use separate typed protocols over bounded normalized facts; neither
+receives a raw notification or Application client. Adapters fix native
+item/event, Thread, Turn, role, and namespaced metadata identity and accept only
+bounded text presentation. Codex live-only output is `message.created` and
+never advances a completion checkpoint. T3 output is `message.completed` only
+because the same association is reproduced through authoritative history.
+
 IM is another access surface over the native Agent Application. It is not a
 separate Agent state tier.
 

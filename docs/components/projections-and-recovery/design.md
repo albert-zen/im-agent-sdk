@@ -104,6 +104,13 @@ explicit value. Advance uses an expected checkpoint compare-and-swap; opaque
 Agent item IDs are never sorted to infer progress. Live-only presentation is
 never a completion boundary.
 
+An adapter-emitted `message.created` A1 presentation uses the same active-route
+lookup, bootstrap barrier, route ordering, outbound idempotency, and common
+Coordinator as a completion, but its delivery identity is namespaced by the
+stable event ID. It is distinct from a later `message.completed` for the same
+native item and returns without checkpoint compare-and-swap. It is not added
+to authoritative reconciliation; reconnect/overflow may truthfully lose it.
+
 Per-Turn reply correlation is separate minimal projection state keyed by
 authoritative Thread/Turn/client-message identity. It stores the originating
 Conversation and IM reply ID, never message content or Turn status. Gateway

@@ -94,6 +94,43 @@ history; live-only output remains explicitly non-replayable. Candidate bytes,
 filesystem trust, leases, quotas, and durable spool state remain consumer
 policy outside the adapter and Core.
 
+The non-artifact A1 surface is deliberately split by native evidence.
+`CodexLiveActivityPresenter` receives a frozen `CodexLiveActivityFacts` value
+whose kind, summary, plan entries, and file/status details were already
+allowlisted and bounded by the Codex adapter. `T3ActivityPresenter` receives a
+frozen `T3ActivityFacts` value whose stable activity/Thread/Turn identity,
+namespaced kind, summary, detail, and native creation time were already
+bounded by the T3 adapter. These are separate concrete-adapter protocols, not
+a common `AgentApplicationAdapter` method, stage-enum callback, raw event
+callback, or context bag.
+
+Both presenters return only `ApplicationTextPresentation`: a non-empty finite
+tuple of typed text values under a total-character bound. They cannot choose
+item/event identity, role, Thread, Turn, recoverability, event type, native
+metadata, checkpoint behavior, attachments, paths, or delivery destination.
+`None` means that native fact has no canonical presentation; destination-
+specific visibility, suppression, decoration, and branding remain O1 or
+consumer policy.
+
+Presenter invocation is async with finite lifetime and concurrency. Active
+tasks, including cancellation overruns, retain capacity and receive bounded
+adapter shutdown cleanup. Codex invocation inherits the existing bounded App
+Server notification dispatch lane and therefore never runs on its socket read
+loop. T3 invocation runs in its existing polling/history normalization flow;
+it creates no subscriber or polling lane. Failure is explicit through the
+owning adapter path and fixed process-local presentation diagnostics retain no
+facts, output, identity, or exception text.
+
+Codex A1 output is live-only. A stable native event ID is preserved when
+available (otherwise a process-local generated identity is honest), the
+adapter emits `message.created`, and reconnect/overflow may lose it. It is not
+read from history and never advances a completion checkpoint. T3 A1 output is
+recoverable: the adapter invokes the same presenter over the same normalized
+activity facts in polling, catch-up, and history, fixes the stable activity ID
+as `AgentMessage.agent_item_id`, and emits `message.completed`. Presenter
+implementations must be replay-safe; SDK persistence stores neither facts nor
+rendered output.
+
 ## Events and recovery
 
 Native notification producers publish into independent, bounded subscriber

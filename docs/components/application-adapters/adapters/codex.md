@@ -41,6 +41,23 @@ merely because it shares the transport.
 `message.completed` does not terminate a Codex Turn. The adapter emits the
 native terminal Turn event separately.
 
+## Optional non-artifact live presentation
+
+`CodexApplicationAdapter` may be configured with the concrete
+`CodexLiveActivityPresenter`. The adapter allowlists supported plan, diff,
+Thread-status, compaction, and model-reroute notifications into bounded frozen
+`CodexLiveActivityFacts` before invoking consumer code in the existing ordered
+notification dispatch lane. Raw JSON-RPC, client access, credentials, paths,
+and arbitrary payload fields never cross the seam.
+
+The presenter returns bounded text only. The adapter fixes the original
+Thread/Turn and event identity, system role, native method/kind metadata, and
+`live_only=True`, then emits `message.created`. Gateway may deliver that live
+event under stable outbound idempotency but never advances an authoritative
+completion checkpoint. Reconnect or overflow may lose it; no SDK history or
+replay is invented. Without the presenter, these notifications remain
+invisible exactly as before. Zen does not inherit this Codex option.
+
 ## Recovery guarantees
 
 The current App Server seam does not claim native replay when unavailable. It

@@ -13,6 +13,9 @@ Protect these historical and known failure modes:
 - live `message.completed` and authoritative-history output losing normalized
   Agent Metadata, sharing a mutable top-level mapping, or changing delivery and
   checkpoint identity;
+- live-only `message.created` sharing a delivery identity with a later
+  completion, advancing a route checkpoint, entering authoritative replay, or
+  bypassing the route bootstrap/order/idempotency path;
 - cross-Thread counters producing false gaps;
 - accepting an expired cursor without authoritative recovery;
 - manufacturing replay/sequence support;
