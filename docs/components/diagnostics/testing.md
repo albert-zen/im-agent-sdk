@@ -25,6 +25,10 @@ Required coverage:
   timeout, cancellation-overrun, and capacity facts; message, destination,
   policy output, and exception text are absent, and an absent policy exposes no
   fabricated O1 facts;
+- configured O2 exposes only fixed notification/success/failure/timeout,
+  cancellation-overrun, and capacity facts; logical content, identities,
+  receipts, errors, observer output, and exception text are absent, and an
+  absent observer exposes no fabricated O2 facts;
 - App Server ready/reconnect epoch and queue overflow transitions for both
   notification and server-request lanes;
 - queue depth never exceeds configured capacity in a returned snapshot;

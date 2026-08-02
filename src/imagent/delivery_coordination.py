@@ -34,7 +34,10 @@ class DeliveryHandle:
 
     async def result(self) -> DeliveryReceipt:
         try:
-            return await asyncio.shield(self._future)
+            receipt = await asyncio.shield(self._future)
+            if self._task is not None:
+                await asyncio.shield(self._task)
+            return receipt
         except asyncio.CancelledError:
             # Awaited delivery owns its worker lifetime. Join cancellation so
             # callers may safely release temporary artifacts afterwards.

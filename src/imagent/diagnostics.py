@@ -66,6 +66,16 @@ class OutboundPresentationFailureCode(StrEnum):
     CAPACITY_EXHAUSTED = "capacity_exhausted"
 
 
+class DeliveryOutcomeObserverFailureCode(StrEnum):
+    """Fixed O2 failure categories without delivery or observer-controlled detail."""
+
+    INVALID_FACTS = "invalid_facts"
+    OBSERVER_FAILED = "observer_failed"
+    TIMED_OUT = "timed_out"
+    CANCELLED = "cancelled"
+    CAPACITY_EXHAUSTED = "capacity_exhausted"
+
+
 class QueueDiagnosticName(StrEnum):
     """Fixed queue names keep consumer metric labels bounded."""
 
@@ -372,6 +382,48 @@ class OutboundPresentationDiagnosticFacts:
 
 
 @dataclass(frozen=True, slots=True)
+class DeliveryOutcomeObserverDiagnosticFacts:
+    """Redacted process-lifetime counters for configured O2 observation."""
+
+    notification_count: int = 0
+    success_count: int = 0
+    failure_count: int = 0
+    timeout_count: int = 0
+    cancellation_count: int = 0
+    cancellation_overrun_count: int = 0
+    capacity_rejection_count: int = 0
+    last_failure_code: DeliveryOutcomeObserverFailureCode | None = None
+
+    def __post_init__(self) -> None:
+        counts = (
+            self.notification_count,
+            self.success_count,
+            self.failure_count,
+            self.timeout_count,
+            self.cancellation_count,
+            self.cancellation_overrun_count,
+            self.capacity_rejection_count,
+        )
+        if any(
+            not isinstance(count, int) or isinstance(count, bool) or count < 0 for count in counts
+        ):
+            raise TypeError("delivery outcome diagnostic counts must be non-negative integers")
+        if self.success_count + self.failure_count > self.notification_count:
+            raise ValueError("delivery outcome observer results cannot exceed notifications")
+        if self.timeout_count + self.cancellation_count > self.failure_count:
+            raise ValueError("delivery outcome observer failure counts are inconsistent")
+        if self.cancellation_overrun_count > self.timeout_count + self.cancellation_count:
+            raise ValueError("delivery outcome cancellation overruns exceed cancellations")
+        if self.capacity_rejection_count > self.failure_count:
+            raise ValueError("delivery outcome capacity rejections exceed failures")
+        if self.last_failure_code is not None and not isinstance(
+            self.last_failure_code,
+            DeliveryOutcomeObserverFailureCode,
+        ):
+            raise ValueError("delivery outcome failure code must use the fixed vocabulary")
+
+
+@dataclass(frozen=True, slots=True)
 class GatewayDiagnosticFacts:
     """Bounded process-local Gateway admission facts."""
 
@@ -381,6 +433,7 @@ class GatewayDiagnosticFacts:
     inbound_content_transformer: InboundContentTransformerDiagnosticFacts | None = None
     inbound_failure_presenter: InboundFailurePresenterDiagnosticFacts | None = None
     outbound_presentation: OutboundPresentationDiagnosticFacts | None = None
+    delivery_outcome_observer: DeliveryOutcomeObserverDiagnosticFacts | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -391,7 +444,7 @@ class DiagnosticsSnapshot:
     projections: ProjectionDiagnosticFacts
     gateway: GatewayDiagnosticFacts
     generated_at: datetime
-    schema_version: int = 6
+    schema_version: int = 7
     authoritative: bool = False
     channels: tuple[ChannelDiagnosticFacts, ...] = ()
 

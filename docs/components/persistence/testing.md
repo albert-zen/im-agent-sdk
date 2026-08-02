@@ -44,6 +44,8 @@ Required scenarios:
   losing existing bridge state;
 - proactive route snapshots and per-item receipts survive restart without
   storing message/artifact content;
+- O2 observes only newly executed Coordinator attempts; restart/replay creates
+  no notification row, callback state, content copy, cleanup job, or outbox;
 - concurrent proactive reservation has one winner and mismatched reuse of a
   delivery ID fails;
 - SDK-controlled origin and principal namespaces prevent external identities

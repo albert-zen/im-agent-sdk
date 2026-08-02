@@ -74,6 +74,12 @@ from .contracts import (
 )
 from .controllers import ControllerActions
 from .delivery_coordination import DeliveryCoordinator
+from .delivery_outcomes import (
+    DeliveryOutcomeObserver as DeliveryOutcomeObserver,
+)
+from .delivery_outcomes import (
+    DeliveryOutcomeObserverRuntime,
+)
 from .delivery_planning import DeliveryPlanningError
 from .diagnostics import (
     DiagnosticsSnapshot,
@@ -187,6 +193,17 @@ class ImAgentGateway:
             if extensions.outbound_presentation is not None
             else None
         )
+        self._delivery_outcome_observer_runtime = (
+            DeliveryOutcomeObserverRuntime(
+                extensions.delivery_outcome_observer,
+                timeout_seconds=limits.delivery_outcome_observer_timeout_seconds,
+                max_items=limits.delivery_outcome_observer_max_items,
+                max_text_characters=limits.delivery_outcome_observer_max_text_characters,
+                max_concurrency=limits.delivery_outcome_observer_max_concurrency,
+            )
+            if extensions.delivery_outcome_observer is not None
+            else None
+        )
         self._locks: dict[object, asyncio.Lock] = {}
         self._request_locks = KeyedLockRegistry()
         self._outbound_deliveries: dict[
@@ -232,6 +249,7 @@ class ImAgentGateway:
             resolve_thread_routes=self._projection_runtime.active_routes,
             authorizer=delivery_authorizer,
             coordinator=self._delivery_coordinator,
+            outcome_observer=self._delivery_outcome_observer_runtime,
         )
         self._inbound_admission = InboundAdmissionService(
             self._idempotency,
@@ -240,6 +258,8 @@ class ImAgentGateway:
 
     async def start(self) -> None:
         self._delivery_coordinator.start()
+        if self._delivery_outcome_observer_runtime is not None:
+            self._delivery_outcome_observer_runtime.start()
         self._starting = True
         self._accepting_inbound = True
         self._startup_admission.reset()
@@ -315,6 +335,8 @@ class ImAgentGateway:
                 await self._inbound_content_transform_runtime.close()
             if self._inbound_failure_presentation_runtime is not None:
                 await self._inbound_failure_presentation_runtime.close()
+            if self._delivery_outcome_observer_runtime is not None:
+                await self._delivery_outcome_observer_runtime.close()
             for application in reversed(started_applications):
                 await application.stop()
             raise
@@ -332,6 +354,8 @@ class ImAgentGateway:
             await self._inbound_content_transform_runtime.close()
         if self._inbound_failure_presentation_runtime is not None:
             await self._inbound_failure_presentation_runtime.close()
+        if self._delivery_outcome_observer_runtime is not None:
+            await self._delivery_outcome_observer_runtime.close()
         for application in reversed(tuple(self._applications.values())):
             await application.stop()
 
@@ -376,6 +400,11 @@ class ImAgentGateway:
                 outbound_presentation=(
                     self._outbound_presentation_runtime.diagnostic_facts()
                     if self._outbound_presentation_runtime is not None
+                    else None
+                ),
+                delivery_outcome_observer=(
+                    self._delivery_outcome_observer_runtime.diagnostic_facts()
+                    if self._delivery_outcome_observer_runtime is not None
                     else None
                 ),
             ),

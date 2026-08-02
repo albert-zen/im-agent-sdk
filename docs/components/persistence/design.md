@@ -77,6 +77,12 @@ checkpoint compare-and-swap. An already-completed claim can therefore
 converge a lagging route boundary after restart without persisting content,
 visibility settings, or a second outcome authority.
 
+O2 adds no outcome-notification, callback, content, cleanup, spool, or outbox
+state. Durable delivery destinations and receipts remain the only bridge
+record. A replayed record does not fabricate a Coordinator attempt or replay a
+process-local observer notification; consumers that require crash-safe cleanup
+own their bounded ledger and startup sweep.
+
 A request route correlation stores no prompt, requested permissions, or
 response. Its persisted response shape is only routing-validation state, not
 native request truth. `RequestRef` scopes the opaque native ID by Application,

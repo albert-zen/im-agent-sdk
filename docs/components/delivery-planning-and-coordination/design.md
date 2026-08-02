@@ -78,12 +78,28 @@ same stable event-scoped outbound idempotency but never advances a projection
 checkpoint. O1 tasks have finite concurrency and lifetime and do not run on an
 Application or Channel socket-read callback.
 
-An ADR 0015 O2 observer runs once only after one logical Coordinator attempt
-has produced its final aggregate receipt or bounded execution error; internal
-segment retries do not create observer calls. Observation is best-effort and
-process-local. It cannot change the receipt, schedule retry, hold Coordinator
-cleanup, or become a durable outcome stream; consumers needing crash-safe
-resource cleanup own a bounded ledger or startup sweep.
+An ADR 0015 O2 observer is offered one notification only after one logical
+Coordinator attempt has released its lane/capacity and produced its final
+aggregate receipt or a fixed bounded execution-error category. One attempt is
+one destination submission to the Coordinator: internal segment retries do
+not create observer calls, while a later explicitly resumed retryable
+destination is a new attempt. Authorization failure, pure preflight rejection,
+durable submission replay, completed projection recovery, and O1 suppression
+never entered a Coordinator attempt and therefore do not invoke O2.
+
+O2 receives an immutable bounded snapshot of the original destination message
+and exactly one typed receipt or bounded error. Its configured item and string
+budgets cover attachment identifiers/sources and receipt identifiers as well
+as message text; facts outside those budgets are omitted from the observer and
+reported only as a fixed diagnostic failure. Notification uses a separate
+finite task/lifetime runtime after the destination persistence attempt; the
+delivery caller, retry decision, Coordinator cleanup, and staged-resource
+cleanup never await observer completion. Capacity exhaustion, timeout,
+cancellation, invalid facts, and observer failure affect only fixed redacted
+diagnostics. Observation is best-effort and process-local: a crash may lose it,
+completed recovery does not replay it, and SDK persistence gains no callback,
+content, cleanup, or outbox record. Consumers needing crash-safe cleanup own a
+bounded ledger or startup sweep.
 
 The global semaphore surrounds only a native send attempt. A retry delay keeps
 the destination lane, preserving order, but releases the global slot so other

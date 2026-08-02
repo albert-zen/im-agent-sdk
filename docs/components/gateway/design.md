@@ -119,6 +119,16 @@ precede Channel side effects releases only the matching owned claim and enters
 the existing projection recovery path. An absent policy is the exact identity
 behavior.
 
+O2 is the independent post-outcome extension in `GatewayExtensions`. Gateway
+composes its bounded runtime into the shared delivery service, but the observer
+receives no Gateway, Coordinator, Channel, repository, retry, or checkpoint
+authority. Each actual per-destination Coordinator attempt offers one detached
+notification after Coordinator cleanup and the destination persistence attempt.
+The same rule covers projection, interactive-request, and proactive delivery;
+authorization/preflight failures, durable replay, O1 suppression, and completed
+idempotency recovery did not make an attempt and are not observed. Absence is
+behaviorally identical to the existing delivery path.
+
 ## Proactive delivery flow
 
 1. A caller submits a typed `DeliveryIntent` and opaque credential.
