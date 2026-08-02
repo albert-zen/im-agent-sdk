@@ -67,6 +67,12 @@ attach consumer-materialized `AttachmentContent` or provide one terminal
 fallback message. It does not receive a raw notification envelope and does not
 create another subscription.
 
+Two narrower optional protocols may be implemented by the same object. A live
+message hook may suppress or decorate an already-normalized live-only message,
+and a delta observer may retain bounded presentation state for a later terminal
+fallback. Delta observation does not make fragments authoritative history and
+does not cause default delta delivery.
+
 Artifact candidate locators remain untrusted. The hook consumer owns validation,
 filesystem authority, byte materialization, durable spool lifetime, retry, and
 cleanup. Core and the Application adapter store neither candidate bytes nor

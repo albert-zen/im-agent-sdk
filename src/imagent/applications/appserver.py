@@ -849,6 +849,14 @@ class _AppServerApplicationAdapter:
             else None
         )
         if live_message is not None:
+            presenter = getattr(self._presentation_hook, "present_live_message", None)
+            if callable(presenter):
+                live_message = presenter(
+                    AppServerPresentationContext(thread_ref, turn_id, False),
+                    live_message,
+                )
+            if live_message is None:
+                return
             self._emit(
                 thread_id,
                 AgentEventType.MESSAGE_CREATED,
@@ -862,10 +870,17 @@ class _AppServerApplicationAdapter:
             )
             return
         if method == "item/agentMessage/delta":
+            delta = str(params.get("delta") or "")
+            observer = getattr(self._presentation_hook, "observe_delta", None)
+            if callable(observer):
+                observer(
+                    AppServerPresentationContext(thread_ref, turn_id, False),
+                    delta,
+                )
             self._emit(
                 thread_id,
                 AgentEventType.MESSAGE_DELTA,
-                {"delta": str(params.get("delta") or "")},
+                {"delta": delta},
                 event_id=(
                     str(params.get("eventId") or params.get("event_id") or "")
                     or f"{self._application_instance_id}:live:{uuid.uuid4()}"

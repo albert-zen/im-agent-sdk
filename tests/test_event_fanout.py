@@ -409,6 +409,68 @@ class EventBroadcasterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(events.pending_count, 0)
         await _close(events)
 
+    async def test_appserver_optional_live_filter_and_delta_observer_share_dispatch_path(
+        self,
+    ) -> None:
+        deltas = []
+        live_kinds = []
+
+        class Hook:
+            def present_completed_item(self, context, item, default_message):
+                del context, item
+                return default_message
+
+            def present_turn_terminal(self, context, status):
+                del context, status
+                return None
+
+            def present_live_message(self, context, message):
+                del context
+                live_kinds.append(message.metadata["native_item_kind"])
+                return None
+
+            def observe_delta(self, context, delta):
+                del context
+                deltas.append(delta)
+
+        native = NativeZenClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=native,
+            cwd="/repo",
+            project_native_activity_messages=True,
+            presentation_hook=Hook(),
+        )
+        events = adapter.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        await native._notify(
+            {
+                "method": "item/agentMessage/delta",
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "delta": "partial",
+                },
+            }
+        )
+        await native._notify(
+            {
+                "method": "turn/plan/updated",
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "plan": [],
+                },
+            }
+        )
+
+        event = await anext(events)
+        self.assertEqual(event.type, AgentEventType.MESSAGE_DELTA)
+        self.assertEqual(deltas, ["partial"])
+        self.assertEqual(live_kinds, ["plan_updated"])
+        assert isinstance(events, FanoutSubscription)
+        self.assertEqual(events.pending_count, 0)
+        await _close(events)
+
     async def test_t3_activity_uses_same_completed_message_projection_contract(self) -> None:
         class UnusedClient:
             async def shell_snapshot(self):

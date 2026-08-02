@@ -3,6 +3,8 @@ from .appserver_client import codex_app_server_client
 from .appserver_presentation import (
     AppServerArtifactCandidate,
     AppServerArtifactSourceKind,
+    AppServerDeltaObserver,
+    AppServerLivePresentationHook,
     AppServerPresentationContext,
     AppServerPresentationHook,
     AppServerPresentationItem,
@@ -14,6 +16,8 @@ __all__ = [
     "CodexApplicationAdapter",
     "AppServerArtifactCandidate",
     "AppServerArtifactSourceKind",
+    "AppServerDeltaObserver",
+    "AppServerLivePresentationHook",
     "AppServerPresentationContext",
     "AppServerPresentationHook",
     "AppServerPresentationItem",

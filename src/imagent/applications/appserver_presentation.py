@@ -70,6 +70,22 @@ class AppServerPresentationHook(Protocol):
     ) -> AgentMessage | None: ...
 
 
+class AppServerLivePresentationHook(Protocol):
+    def present_live_message(
+        self,
+        context: AppServerPresentationContext,
+        message: AgentMessage,
+    ) -> AgentMessage | None: ...
+
+
+class AppServerDeltaObserver(Protocol):
+    def observe_delta(
+        self,
+        context: AppServerPresentationContext,
+        delta: str,
+    ) -> None: ...
+
+
 def appserver_presentation_item(
     item: Mapping[str, object],
 ) -> AppServerPresentationItem:

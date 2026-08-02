@@ -32,6 +32,8 @@ Every adapter should prove:
 - the optional App Server presentation hook observes typed candidates in live
   and authoritative order, can enrich a final message or emit a terminal
   fallback, and is inert when absent;
+- optional live-message filtering and delta observation run in the same
+  dispatch order without making deltas deliverable or replayable by default;
 - multiple completed messages before an explicit terminal Turn event;
 - fan-out-safe subscriptions;
 - bounded fan-out overflow isolates the slow subscriber and leaves unrelated

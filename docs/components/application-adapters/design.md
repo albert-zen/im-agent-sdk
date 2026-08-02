@@ -76,6 +76,9 @@ untrusted artifact candidates, never raw protocol envelopes. A consumer may
 materialize attachments or emit a terminal artifact fallback without adding a
 second subscription. Storage, trust, retry, and cleanup remain outside the
 adapter, and absence of a hook preserves default behavior.
+Optional narrower live-message and delta-observer protocols let that same
+consumer apply visibility or build a bounded terminal fallback without turning
+fragments into history or opening another native event path.
 
 ## Events and recovery
 
