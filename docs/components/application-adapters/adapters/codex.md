@@ -24,6 +24,10 @@ The additional native activity projection is an explicit adapter option and
 defaults off, preserving the existing completed-Agent-message surface for
 consumers that have not supplied visibility policy. IMCodex enables it in its
 composition layer.
+An independent optional `AppServerPresentationHook` receives typed completed
+item facts and bounded image candidates in the same ordered event/history path.
+It exists for consumer-owned materialization and terminal fallback; it is not a
+raw notification callback and does not make the adapter a blob store.
 - native notification IDs are stable event IDs.
 
 `turn/start` and `turn/steer` have no SDK-controlled native idempotency key.
@@ -56,6 +60,8 @@ another consumer may apply visibility policy at its Channel composition
 boundary without subscribing to raw App Server notifications. Raw native
 envelopes, commands beyond the bounded rendered summary, diffs, paths outside
 the rendered file list, and exception text do not cross as Metadata.
+Artifact candidate locators cross only through the adapter-specific hook and
+remain untrusted until consumer policy validates and materializes them.
 
 ## Recovery guarantees
 

@@ -70,6 +70,13 @@ return the same stable item from bounded history. Live-only presentation uses
 and activity kinds remain namespaced Metadata until common reuse is proven;
 projection preserves them without interpreting them, as defined by ADR 0015.
 
+Codex/Zen additionally expose an optional typed presentation hook inside the
+single Application dispatch/history path. It receives bounded item facts and
+untrusted artifact candidates, never raw protocol envelopes. A consumer may
+materialize attachments or emit a terminal artifact fallback without adding a
+second subscription. Storage, trust, retry, and cleanup remain outside the
+adapter, and absence of a hook preserves default behavior.
+
 ## Events and recovery
 
 Native notification producers publish into independent, bounded subscriber

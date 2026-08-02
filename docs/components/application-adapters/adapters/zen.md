@@ -20,6 +20,9 @@ history, and retention.
 
 That additional native activity projection is disabled by default and must be
 enabled explicitly by a consumer that owns its visibility policy.
+The shared optional App Server presentation hook is also available for typed
+artifact-candidate materialization, but Zen does not infer Codex artifact
+shapes or storage policy when its native items provide no such candidates.
 - because the shared transport has no native input-idempotency key, a lost
   `turn/start` acceptance response is reported as an unknown input outcome and
   must not be retried automatically.

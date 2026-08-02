@@ -58,12 +58,29 @@ normalized message according to product visibility settings. Suppression is a
 presentation decision over an already ingested event; it is not a second
 Application subscription, transcript, or recovery authority.
 
+The Codex/Zen adapter may also receive one optional `AppServerPresentationHook`.
+Before publishing a completed item it supplies bounded typed item facts and
+typed artifact candidates to that hook in the adapter's existing ordered
+dispatch path. The same hook runs while bounded native history is normalized
+and immediately before a live or authoritative Turn terminal boundary. It may
+attach consumer-materialized `AttachmentContent` or provide one terminal
+fallback message. It does not receive a raw notification envelope and does not
+create another subscription.
+
+Artifact candidate locators remain untrusted. The hook consumer owns validation,
+filesystem authority, byte materialization, durable spool lifetime, retry, and
+cleanup. Core and the Application adapter store neither candidate bytes nor
+consumer delivery state. With no hook, existing adapter behavior is unchanged.
+
 ## Classification and evidence
 
 - Preserving normalized message Metadata and keeping live-only observations
   out of completion checkpoints are Core fidelity invariants.
 - Mapping native item/event shapes and producing bounded presentation text are
   Application-adapter policy.
+- Typed App Server artifact-candidate extraction and ordered hook invocation are
+  adapter-specific extension mechanics; materialization and lifetime remain
+  consumer policy.
 - Visibility defaults, commands, branding, and final rendering are consumer
   policy.
 

@@ -29,6 +29,9 @@ Every adapter should prove:
 - canonical user and Agent message events;
 - recoverable activity/tool items use completed messages, while live-only
   presentation uses created messages with bounded namespaced Metadata;
+- the optional App Server presentation hook observes typed candidates in live
+  and authoritative order, can enrich a final message or emit a terminal
+  fallback, and is inert when absent;
 - multiple completed messages before an explicit terminal Turn event;
 - fan-out-safe subscriptions;
 - bounded fan-out overflow isolates the slow subscriber and leaves unrelated

@@ -25,6 +25,12 @@ It does not own:
 - unrestricted remote URL fetching;
 - a product decision about where staging directories live.
 
+The App Server presentation hook may expose bounded typed local-path, file-URL,
+or image-data-URL candidates. Those candidates convey native intent, not trust.
+The consumer materializer must validate bytes and deployment authority before
+returning `AttachmentContent`; durable spool and cleanup ownership never move
+into SDK Core.
+
 ## Trust and flow
 
 Channel integrations may stage native media and emit a typed source.

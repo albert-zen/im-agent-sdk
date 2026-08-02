@@ -121,6 +121,14 @@ from .appserver_mapping import (
 from .appserver_mapping import (
     turn_updated_at as _turn_updated_at,
 )
+from .appserver_presentation import AppServerPresentationContext, AppServerPresentationHook
+from .appserver_presentation import (
+    appserver_completed_item_message as _appserver_completed_item_message,
+)
+from .appserver_presentation import appserver_live_message as _appserver_live_message
+from .appserver_presentation import (
+    appserver_presentation_item as _appserver_presentation_item,
+)
 from .appserver_request_runtime import (
     AppServerRequestRuntime,
     ServerRequestMapper,
@@ -180,6 +188,7 @@ class _AppServerApplicationAdapter:
         event_buffer_max_pending: int = 1024,
         steer_active_turn: bool = False,
         project_native_activity_messages: bool = False,
+        presentation_hook: AppServerPresentationHook | None = None,
     ) -> None:
         self._application_instance_id = application_instance_id
         self._client = client
@@ -188,6 +197,7 @@ class _AppServerApplicationAdapter:
         self._events = EventBroadcaster[str, AgentEvent](max_pending=event_buffer_max_pending)
         self._steer_active_turn = steer_active_turn
         self._project_native_activity_messages = project_native_activity_messages
+        self._presentation_hook = presentation_hook
         self._client.add_notification_handler(self._handle_notification)
         self._request_runtime = AppServerRequestRuntime(
             application_ref=ApplicationRef(application_instance_id),
@@ -365,12 +375,21 @@ class _AppServerApplicationAdapter:
                     ),
                 )
             turn = turns[-1]
+            catchup_turn_id = _turn_id(turn)
             commentary = tuple(
                 message
                 for item in _turn_items(turn)
                 if _is_agent_item(item)
                 and str(item.get("phase") or "").casefold() == "commentary"
-                and (message := self._item_message(thread_ref, item)) is not None
+                and (
+                    message := self._item_message(
+                        thread_ref,
+                        item,
+                        turn_id=catchup_turn_id,
+                        authoritative=True,
+                    )
+                )
+                is not None
             )
             return TurnCatchupRead(
                 operation_id=operation.operation_id,
@@ -487,20 +506,44 @@ class _AppServerApplicationAdapter:
         user_message: AgentMessage | None = None
         agent_messages: list[AgentMessage] = []
         had_compaction = False
+        turn_id = _turn_id(turn)
         for item in _turn_items(turn):
             item_type = _normalized_item_type(item)
             if item_type == "contextcompaction":
                 had_compaction = True
-            message = self._item_message(thread_ref, item)
+            message = self._item_message(
+                thread_ref,
+                item,
+                turn_id=turn_id,
+                authoritative=True,
+            )
             if message is None:
                 continue
             if message.role is MessageRole.USER and user_message is None:
                 user_message = message
             if message.role is MessageRole.ASSISTANT:
                 agent_messages.append(message)
+        turn_status = _turn_status(turn.get("status"))
+        terminal_message = (
+            self._present_turn_terminal(
+                thread_ref,
+                turn_id=turn_id,
+                status=turn_status.value,
+                authoritative=True,
+            )
+            if turn_status
+            in {
+                TurnStatus.COMPLETED,
+                TurnStatus.FAILED,
+                TurnStatus.INTERRUPTED,
+            }
+            else None
+        )
+        if terminal_message is not None:
+            agent_messages.append(terminal_message)
         return TurnHistoryEntry(
-            turn_id=_turn_id(turn),
-            status=_turn_status(turn.get("status")),
+            turn_id=turn_id,
+            status=turn_status,
             user_message=user_message,
             agent_messages=tuple(agent_messages),
             error=_turn_error(turn),
@@ -512,19 +555,29 @@ class _AppServerApplicationAdapter:
         self,
         thread_ref: ThreadRef,
         item: Mapping[str, object],
+        *,
+        turn_id: str = "",
+        authoritative: bool = True,
     ) -> AgentMessage | None:
         item_type = _normalized_item_type(item)
         if "user" not in item_type:
-            if (
-                "agent" not in item_type
-                and "assistant" not in item_type
-                and not self._project_native_activity_messages
-            ):
-                return None
             message = _appserver_completed_item_message(
                 thread_ref,
                 item,
                 native_application=self._summary.kind,
+            )
+            if (
+                message is not None
+                and message.metadata.get("native_item_kind") != "agent_message"
+                and not self._project_native_activity_messages
+            ):
+                message = None
+            message = self._present_completed_item(
+                thread_ref,
+                turn_id=turn_id,
+                item=item,
+                default_message=message,
+                authoritative=authoritative,
             )
             if message is None:
                 return None
@@ -565,6 +618,40 @@ class _AppServerApplicationAdapter:
                 "phase": str(item.get("phase") or ""),
                 "native_application": self._summary.kind,
             },
+        )
+
+    def _present_completed_item(
+        self,
+        thread_ref: ThreadRef,
+        *,
+        turn_id: str,
+        item: Mapping[str, object],
+        default_message: AgentMessage | None,
+        authoritative: bool,
+    ) -> AgentMessage | None:
+        hook = self._presentation_hook
+        if hook is None:
+            return default_message
+        return hook.present_completed_item(
+            AppServerPresentationContext(thread_ref, turn_id, authoritative),
+            _appserver_presentation_item(item),
+            default_message,
+        )
+
+    def _present_turn_terminal(
+        self,
+        thread_ref: ThreadRef,
+        *,
+        turn_id: str,
+        status: str,
+        authoritative: bool,
+    ) -> AgentMessage | None:
+        hook = self._presentation_hook
+        if hook is None:
+            return None
+        return hook.present_turn_terminal(
+            AppServerPresentationContext(thread_ref, turn_id, authoritative),
+            status,
         )
 
     async def send_input(
@@ -798,12 +885,20 @@ class _AppServerApplicationAdapter:
                 native_method=method,
                 native_application=self._summary.kind,
             )
-            if message is None:
-                return
             if (
-                message.metadata.get("native_item_kind") != "agent_message"
+                message is not None
+                and message.metadata.get("native_item_kind") != "agent_message"
                 and not self._project_native_activity_messages
             ):
+                message = None
+            message = self._present_completed_item(
+                thread_ref,
+                turn_id=turn_id,
+                item=item,
+                default_message=message,
+                authoritative=False,
+            )
+            if message is None:
                 return
             item_id = message.agent_item_id
             self._emit(
@@ -827,6 +922,24 @@ class _AppServerApplicationAdapter:
                 "interrupted": AgentEventType.TURN_INTERRUPTED,
             }.get(status, AgentEventType.TURN_COMPLETED)
             terminal_id = turn_id or f"live-{uuid.uuid4()}"
+            terminal_message = self._present_turn_terminal(
+                thread_ref,
+                turn_id=turn_id,
+                status=status or "completed",
+                authoritative=False,
+            )
+            if terminal_message is not None:
+                self._emit(
+                    thread_id,
+                    AgentEventType.MESSAGE_COMPLETED,
+                    {"message": terminal_message},
+                    event_id=(
+                        f"{self._application_instance_id}:thread:{thread_id}:"
+                        f"message:{terminal_message.agent_item_id}:completed"
+                    ),
+                    thread_ref=thread_ref,
+                    turn_id=turn_id or None,
+                )
             self._emit(
                 thread_id,
                 event_type,
@@ -900,6 +1013,7 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
         shared_filesystem_root: str | Path | None = None,
         event_buffer_max_pending: int = 1024,
         project_native_activity_messages: bool = False,
+        presentation_hook: AppServerPresentationHook | None = None,
     ) -> None:
         super().__init__(
             application_instance_id=application_instance_id,
@@ -910,6 +1024,7 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
             shared_filesystem_root=shared_filesystem_root,
             event_buffer_max_pending=event_buffer_max_pending,
             project_native_activity_messages=project_native_activity_messages,
+            presentation_hook=presentation_hook,
         )
 
 
@@ -924,6 +1039,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
         event_buffer_max_pending: int = 1024,
         steer_active_turn: bool = True,
         project_native_activity_messages: bool = False,
+        presentation_hook: AppServerPresentationHook | None = None,
     ) -> None:
         super().__init__(
             application_instance_id=application_instance_id,
@@ -936,136 +1052,5 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
             event_buffer_max_pending=event_buffer_max_pending,
             steer_active_turn=steer_active_turn,
             project_native_activity_messages=project_native_activity_messages,
+            presentation_hook=presentation_hook,
         )
-
-
-_PRESENTATION_TEXT_LIMIT = 8_000
-_PRESENTATION_LIST_LIMIT = 100
-
-
-def _appserver_completed_item_message(
-    thread_ref: ThreadRef,
-    item: Mapping[str, object],
-    *,
-    fallback_item_id: str | None = None,
-    native_method: str = "item/completed",
-    native_application: str = "appserver",
-) -> AgentMessage | None:
-    item_type = _normalized_item_type(item)
-    text = ""
-    kind = ""
-    if "agent" in item_type or "assistant" in item_type:
-        text = _item_text(item)
-        kind = "agent_message"
-    elif item_type == "commandexecution":
-        command = _bounded_text(item.get("command"))
-        if command:
-            text = f"Executed `{command}`"
-            kind = "command_execution"
-    elif item_type == "filechange":
-        changes = item.get("changes")
-        paths = (
-            tuple(
-                _bounded_text(change.get("path"), limit=1_000)
-                for change in changes[:_PRESENTATION_LIST_LIMIT]
-                if isinstance(change, Mapping) and change.get("path")
-            )
-            if isinstance(changes, list)
-            else ()
-        )
-        paths = tuple(path for path in paths if path)
-        if paths:
-            text = "\n".join(("Changed files:", *(f"- {path}" for path in paths)))
-            kind = "file_change"
-    if not text:
-        return None
-    item_id = str(item.get("id") or fallback_item_id or "") or f"live-{uuid.uuid4()}"
-    metadata = {
-        "native_application": native_application,
-        "native_method": native_method,
-        "native_item_kind": kind,
-    }
-    phase = str(item.get("phase") or "")
-    if phase or kind == "agent_message":
-        metadata["phase"] = phase
-    return AgentMessage(
-        agent_item_id=item_id,
-        thread_ref=thread_ref,
-        role=MessageRole.ASSISTANT,
-        content=(TextContent(text[:_PRESENTATION_TEXT_LIMIT], TextFormat.MARKDOWN),),
-        created_at=datetime.now(UTC),
-        metadata=metadata,
-    )
-
-
-def _appserver_live_message(
-    thread_ref: ThreadRef,
-    *,
-    method: str,
-    params: Mapping[str, object],
-    native_application: str = "appserver",
-) -> AgentMessage | None:
-    kind = ""
-    text = ""
-    if method == "turn/plan/updated":
-        kind = "plan_updated"
-        lines = ["[Plan update]"]
-        explanation = _bounded_text(params.get("explanation"))
-        if explanation:
-            lines.append(explanation)
-        plan = params.get("plan")
-        if isinstance(plan, list):
-            for entry in plan[:_PRESENTATION_LIST_LIMIT]:
-                if not isinstance(entry, Mapping):
-                    continue
-                step = _bounded_text(entry.get("step"), limit=1_000)
-                status = _bounded_text(entry.get("status"), limit=100)
-                if step and status:
-                    lines.append(f"[{status}] {step}")
-        text = "\n".join(lines)
-    elif method == "turn/diff/updated":
-        kind = "diff_updated"
-        lines = [_bounded_text(params.get("summary")) or "Diff updated."]
-        files = params.get("files")
-        if isinstance(files, list):
-            paths = tuple(
-                path
-                for value in files[:_PRESENTATION_LIST_LIMIT]
-                if (path := _bounded_text(value, limit=1_000))
-            )
-            if paths:
-                lines.extend(("Files:", *(f"- {path}" for path in paths)))
-        text = "\n".join(lines)
-    elif method == "thread/status/changed":
-        kind = "thread_status_changed"
-        status = params.get("status")
-        if isinstance(status, Mapping):
-            status = status.get("type") or status.get("status")
-        text = f"Thread status changed: {_bounded_text(status, limit=100) or 'updated'}."
-    elif method == "thread/compacted":
-        kind = "thread_compacted"
-        summary = _bounded_text(params.get("summary"))
-        text = "Thread compacted." if not summary else f"Thread compacted. {summary}"
-    elif method == "model/rerouted":
-        kind = "model_rerouted"
-        text = _bounded_text(params.get("message")) or "Model rerouted."
-    if not text:
-        return None
-    event_id = str(params.get("eventId") or params.get("event_id") or "")
-    return AgentMessage(
-        agent_item_id=event_id or f"live-{uuid.uuid4()}",
-        thread_ref=thread_ref,
-        role=MessageRole.SYSTEM,
-        content=(TextContent(text[:_PRESENTATION_TEXT_LIMIT], TextFormat.MARKDOWN),),
-        created_at=datetime.now(UTC),
-        metadata={
-            "native_application": native_application,
-            "native_method": method,
-            "native_item_kind": kind,
-            "live_only": True,
-        },
-    )
-
-
-def _bounded_text(value: object, *, limit: int = _PRESENTATION_TEXT_LIMIT) -> str:
-    return str(value or "").strip()[:limit]

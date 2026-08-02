@@ -9,15 +9,22 @@ from datetime import UTC, datetime
 
 from test_gateway_vertical_slice import NativeZenClient
 
-from imagent.applications import CodexApplicationAdapter, T3ApplicationAdapter
+from imagent.applications import (
+    AppServerArtifactSourceKind,
+    CodexApplicationAdapter,
+    T3ApplicationAdapter,
+)
 from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AgentEventType,
     AgentMessage,
     ApplicationRef,
+    AttachmentContent,
     ConversationBinding,
     ConversationRef,
     InboundMessage,
+    LocalPath,
+    MessageRole,
     ProjectionPolicy,
     ProjectMode,
     SelectApplication,
@@ -39,6 +46,306 @@ from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 
 class EventBroadcasterTests(unittest.IsolatedAsyncioTestCase):
+    async def test_appserver_presentation_hook_materializes_in_single_ordered_path(
+        self,
+    ) -> None:
+        calls: list[tuple[str, bool]] = []
+        pending_candidates = []
+
+        class Hook:
+            def present_completed_item(self, context, item, default_message):
+                calls.append((item.item_kind, context.authoritative))
+                pending_candidates.extend(item.artifact_candidates)
+                if default_message is None or item.phase != "final_answer":
+                    return default_message
+                attachments = tuple(
+                    AttachmentContent(
+                        attachment_id=candidate.candidate_id,
+                        media_type="image/png",
+                        filename="output.png",
+                        size_bytes=3,
+                        source=LocalPath("/staged/output.png"),
+                    )
+                    for candidate in pending_candidates
+                )
+                pending_candidates.clear()
+                return replace(
+                    default_message,
+                    content=(*default_message.content, *attachments),
+                )
+
+            def present_turn_terminal(self, context, status):
+                calls.append((f"terminal:{status}", context.authoritative))
+                return None
+
+        native = NativeZenClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=native,
+            cwd="/repo",
+            presentation_hook=Hook(),
+        )
+        events = adapter.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+
+        await native._notify(
+            {
+                "method": "item/completed",
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "item": {
+                        "id": "tool-1",
+                        "type": "dynamicToolCall",
+                        "contentItems": [
+                            {
+                                "type": "inputImage",
+                                "imageUrl": "file:///native/output.png",
+                            }
+                        ],
+                    },
+                },
+            }
+        )
+        await native._notify(
+            {
+                "method": "item/completed",
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "item": {
+                        "id": "answer-1",
+                        "type": "agentMessage",
+                        "phase": "final_answer",
+                        "text": "Done",
+                    },
+                },
+            }
+        )
+
+        event = await anext(events)
+        message = event.data["message"]
+        assert isinstance(message, AgentMessage)
+        attachment = message.content[-1]
+        assert isinstance(attachment, AttachmentContent)
+        self.assertEqual(attachment.attachment_id, "tool-1:image:0")
+        self.assertEqual(
+            calls,
+            [("dynamictoolcall", False), ("agentmessage", False)],
+        )
+        candidate_kind = AppServerArtifactSourceKind.FILE_URL
+        self.assertEqual(candidate_kind.value, "file_url")
+        await _close(events)
+
+    async def test_appserver_presentation_hook_emits_artifact_terminal_fallback_before_turn(
+        self,
+    ) -> None:
+        pending = False
+
+        class Hook:
+            def present_completed_item(self, context, item, default_message):
+                del context
+                nonlocal pending
+                pending = pending or bool(item.artifact_candidates)
+                return default_message
+
+            def present_turn_terminal(self, context, status):
+                nonlocal pending
+                if not pending:
+                    return None
+                pending = False
+                return AgentMessage(
+                    agent_item_id=f"{context.turn_id}:artifact-fallback",
+                    thread_ref=context.thread_ref,
+                    role=MessageRole.ASSISTANT,
+                    content=(
+                        AttachmentContent(
+                            attachment_id="tool-1:image:0",
+                            media_type="image/png",
+                            filename="output.png",
+                            size_bytes=3,
+                            source=LocalPath("/staged/output.png"),
+                        ),
+                    ),
+                    created_at=datetime.now(UTC),
+                    metadata={"status": status, "artifact_fallback": True},
+                )
+
+        native = NativeZenClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=native,
+            cwd="/repo",
+            presentation_hook=Hook(),
+        )
+        events = adapter.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        await native._notify(
+            {
+                "method": "item/completed",
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "item": {
+                        "id": "tool-1",
+                        "type": "dynamicToolCall",
+                        "contentItems": [
+                            {
+                                "type": "inputImage",
+                                "imageUrl": "data:image/png;base64,eA==",
+                            }
+                        ],
+                    },
+                },
+            }
+        )
+        await native._notify(
+            {
+                "method": "turn/completed",
+                "params": {
+                    "threadId": "thread-1",
+                    "turn": {"id": "turn-1", "status": "completed"},
+                },
+            }
+        )
+
+        projected = [await anext(events) for _ in range(2)]
+        self.assertEqual(
+            [event.type for event in projected],
+            [AgentEventType.MESSAGE_COMPLETED, AgentEventType.TURN_COMPLETED],
+        )
+        fallback = projected[0].data["message"]
+        assert isinstance(fallback, AgentMessage)
+        self.assertTrue(fallback.metadata["artifact_fallback"])
+        await _close(events)
+
+    def test_appserver_presentation_hook_runs_for_authoritative_history(self) -> None:
+        calls: list[tuple[str, bool]] = []
+
+        class Hook:
+            def present_completed_item(self, context, item, default_message):
+                calls.append((item.item_kind, context.authoritative))
+                return default_message
+
+            def present_turn_terminal(self, context, status):
+                calls.append((f"terminal:{status}", context.authoritative))
+                return None
+
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=NativeZenClient(),
+            cwd="/repo",
+            presentation_hook=Hook(),
+        )
+
+        entry = adapter._history_entry(
+            ThreadRef("codex-main", "thread-1"),
+            {
+                "id": "turn-1",
+                "status": "completed",
+                "items": [
+                    {
+                        "id": "tool-1",
+                        "type": "imageGeneration",
+                        "savedPath": "/native/output.png",
+                    },
+                    {
+                        "id": "answer-1",
+                        "type": "agentMessage",
+                        "phase": "final_answer",
+                        "text": "Done",
+                    },
+                ],
+            },
+        )
+
+        self.assertEqual(len(entry.agent_messages), 1)
+        self.assertEqual(
+            calls,
+            [
+                ("imagegeneration", True),
+                ("agentmessage", True),
+                ("terminal:completed", True),
+            ],
+        )
+
+    def test_appserver_artifact_candidates_are_typed_and_count_bounded(self) -> None:
+        captured = []
+
+        class Hook:
+            def present_completed_item(self, context, item, default_message):
+                del context
+                captured.extend(item.artifact_candidates)
+                return default_message
+
+            def present_turn_terminal(self, context, status):
+                del context, status
+                return None
+
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=NativeZenClient(),
+            cwd="/repo",
+            presentation_hook=Hook(),
+        )
+        adapter._item_message(
+            ThreadRef("codex-main", "thread-1"),
+            {
+                "id": "tool-1",
+                "type": "dynamicToolCall",
+                "contentItems": [
+                    {
+                        "type": "inputImage",
+                        "imageUrl": f"file:///native/{index}.png",
+                    }
+                    for index in range(6)
+                ],
+            },
+            turn_id="turn-1",
+            authoritative=False,
+        )
+
+        self.assertEqual(len(captured), 4)
+        self.assertTrue(
+            all(
+                candidate.source_kind is AppServerArtifactSourceKind.FILE_URL
+                for candidate in captured
+            )
+        )
+        captured.clear()
+        for path in ("/native/first.png", "/native/second.png"):
+            adapter._item_message(
+                ThreadRef("codex-main", "thread-1"),
+                {"type": "imageGeneration", "savedPath": path},
+                turn_id="turn-1",
+                authoritative=False,
+            )
+        self.assertEqual(len({candidate.candidate_id for candidate in captured}), 2)
+
+    def test_appserver_running_history_does_not_flush_presentation_terminal(self) -> None:
+        terminal_calls = []
+
+        class Hook:
+            def present_completed_item(self, context, item, default_message):
+                del context, item
+                return default_message
+
+            def present_turn_terminal(self, context, status):
+                terminal_calls.append((context.turn_id, status))
+                return None
+
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=NativeZenClient(),
+            cwd="/repo",
+            presentation_hook=Hook(),
+        )
+
+        adapter._history_entry(
+            ThreadRef("codex-main", "thread-1"),
+            {"id": "turn-1", "status": "inProgress", "items": []},
+        )
+
+        self.assertEqual(terminal_calls, [])
+
     def test_appserver_history_preserves_assistant_alias_and_native_timestamp(self) -> None:
         adapter = CodexApplicationAdapter(
             application_instance_id="codex-main",
