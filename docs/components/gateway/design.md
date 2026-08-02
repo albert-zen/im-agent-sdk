@@ -20,6 +20,8 @@ The Gateway owns:
   send callbacks;
 - applying an optional product presentation policy only after a concrete
   destination is known and before delivery planning;
+- notifying an optional consumer observer once after a complete logical
+  delivery attempt so transient resources can be released;
 - validating that an interactive response comes from a Conversation that
   actually received the request and routing the typed native response;
 - per-Conversation serialization and explicit delivery errors.
@@ -86,6 +88,15 @@ request, and proactive output omit them.
 6. Every destination uses the same pure planner and ordered/bounded
    Coordinator as projection and interactive-request presentation.
 7. Typed receipts preserve accepted, rejected, partial, and unknown outcomes.
+8. After every logical attempt, including authorization/preflight failure or
+   replay, an optional outcome observer receives the original intent and typed
+   result/error exactly once. Observer failure is logged and cannot rewrite
+   the delivery outcome.
+
+The observer is a lifecycle notification, not an outbox or retry hook. It runs
+after all destination plans and segments for that attempt have finished. This
+lets consumers release temporary `LocalPath` resources without releasing them
+after the first segment or asking the SDK to persist message content.
 
 The optional `ProactiveDeliveryJsonHandler` is an ingress adapter, not a web
 server. A consumer mounts it in its own authenticated loopback service. It

@@ -98,6 +98,17 @@ class _OutcomeChannel(FakeChannelAdapter):
         )
 
 
+class _OutcomeObserver:
+    def __init__(self, *, fail: bool = False) -> None:
+        self.fail = fail
+        self.calls = []
+
+    async def observe_delivery_outcome(self, intent, *, result, error) -> None:
+        self.calls.append((intent, result, error))
+        if self.fail:
+            raise RuntimeError("observer failed")
+
+
 class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.thread_ref = ThreadRef("app", "thread")
@@ -128,6 +139,7 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
         policy: ProjectionPolicy = ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
         submissions=None,
         coordinator: DeliveryCoordinator | None = None,
+        outcome_observer=None,
     ) -> ImAgentGateway:
         return ImAgentGateway(
             channels=[self.channel_a, self.channel_b],
@@ -143,6 +155,7 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
             delivery_authorizer=self.authorizer,
             projection_policy=policy,
             delivery_coordinator=coordinator,
+            delivery_outcome_observer=outcome_observer,
         )
 
     def intent(self, delivery_id: str = "delivery-1", text: str = "hello"):
@@ -185,6 +198,56 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result.state, DeliverySubmissionState.ACCEPTED)
         self.assertEqual(self.channel_a.sent[0].conversation_ref, self.conversation_a)
+
+    async def test_delivery_outcome_observer_runs_once_after_logical_delivery(self) -> None:
+        observer = _OutcomeObserver()
+        intent = replace(
+            self.intent("delivery-observed"),
+            target=ConversationDeliveryTarget(self.conversation_a),
+        )
+
+        result = await self.gateway(outcome_observer=observer).deliver_proactively(
+            intent,
+            credential=self.conversation_token,
+        )
+
+        self.assertEqual(len(observer.calls), 1)
+        observed_intent, observed_result, observed_error = observer.calls[0]
+        self.assertIs(observed_intent, intent)
+        self.assertIs(observed_result, result)
+        self.assertIsNone(observed_error)
+
+    async def test_delivery_outcome_observer_failure_does_not_change_result(self) -> None:
+        observer = _OutcomeObserver(fail=True)
+        intent = replace(
+            self.intent("delivery-observer-failure"),
+            target=ConversationDeliveryTarget(self.conversation_a),
+        )
+
+        result = await self.gateway(outcome_observer=observer).deliver_proactively(
+            intent,
+            credential=self.conversation_token,
+        )
+
+        self.assertEqual(result.state, DeliverySubmissionState.ACCEPTED)
+        self.assertEqual(len(observer.calls), 1)
+
+    async def test_delivery_outcome_observer_sees_authorization_error(self) -> None:
+        observer = _OutcomeObserver()
+        intent = replace(
+            self.intent("delivery-observer-error"),
+            target=ConversationDeliveryTarget(self.conversation_a),
+        )
+
+        with self.assertRaises(DeliveryAuthorizationError) as caught:
+            await self.gateway(outcome_observer=observer).deliver_proactively(
+                intent,
+                credential=self.thread_token,
+            )
+
+        self.assertEqual(len(observer.calls), 1)
+        self.assertIsNone(observer.calls[0][1])
+        self.assertIs(observer.calls[0][2], caught.exception)
 
     async def test_thread_route_missing_and_foreground_inactive_are_explicit(self) -> None:
         gateway = self.gateway()

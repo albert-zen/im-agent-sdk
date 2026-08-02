@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import secrets
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
@@ -9,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from .adapters import (
     ChannelAdapter,
     DeliveryAuthorizer,
+    DeliveryOutcomeObserver,
     DeliverySubmissionConflict,
     DeliverySubmissionRepository,
 )
@@ -53,6 +55,8 @@ ResolveThreadRoutes = Callable[
     [ThreadRef],
     Awaitable[tuple[ThreadProjectionRoute, ...]],
 ]
+
+logger = logging.getLogger(__name__)
 
 
 class DeliveryAuthorizationError(PermissionError):
@@ -161,12 +165,14 @@ class ProactiveDeliveryService:
         resolve_thread_routes: ResolveThreadRoutes,
         authorizer: DeliveryAuthorizer | None,
         coordinator: DeliveryCoordinator,
+        outcome_observer: DeliveryOutcomeObserver | None = None,
     ) -> None:
         self._channels = channels
         self._submissions = submissions
         self._resolve_thread_routes = resolve_thread_routes
         self._authorizer = authorizer
         self._coordinator = coordinator
+        self._outcome_observer = outcome_observer
 
     async def deliver(
         self,
@@ -174,8 +180,17 @@ class ProactiveDeliveryService:
         *,
         credential: str,
     ) -> ProactiveDeliveryResult:
-        principal = await self.authorize(intent.target, credential=credential)
-        return await self._submit(intent, principal=principal, authorize=True)
+        result: ProactiveDeliveryResult | None = None
+        error: BaseException | None = None
+        try:
+            principal = await self.authorize(intent.target, credential=credential)
+            result = await self._submit(intent, principal=principal, authorize=True)
+            return result
+        except BaseException as exc:
+            error = exc
+            raise
+        finally:
+            await self._observe_outcome(intent, result=result, error=error)
 
     async def authorize(
         self,
@@ -203,14 +218,44 @@ class ProactiveDeliveryService:
             reply_to=message.reply_to,
             metadata=message.metadata,
         )
-        return await self._submit(
-            intent,
-            principal=DeliveryPrincipal(
-                principal_id="imagent:gateway-internal",
-                allowed_conversations=(message.conversation_ref,),
-            ),
-            authorize=False,
-        )
+        result: ProactiveDeliveryResult | None = None
+        error: BaseException | None = None
+        try:
+            result = await self._submit(
+                intent,
+                principal=DeliveryPrincipal(
+                    principal_id="imagent:gateway-internal",
+                    allowed_conversations=(message.conversation_ref,),
+                ),
+                authorize=False,
+            )
+            return result
+        except BaseException as exc:
+            error = exc
+            raise
+        finally:
+            await self._observe_outcome(intent, result=result, error=error)
+
+    async def _observe_outcome(
+        self,
+        intent: DeliveryIntent,
+        *,
+        result: ProactiveDeliveryResult | None,
+        error: BaseException | None,
+    ) -> None:
+        observer = self._outcome_observer
+        if observer is None:
+            return
+        try:
+            await observer.observe_delivery_outcome(
+                intent,
+                result=result,
+                error=error,
+            )
+        except BaseException:
+            # Delivery ownership is already resolved. Observability/resource
+            # callbacks cannot rewrite a platform outcome or retry decision.
+            logger.exception("delivery outcome observer failed")
 
     async def _submit(
         self,

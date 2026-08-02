@@ -16,6 +16,7 @@ from .contracts import (
     ChannelCapabilities,
     ConversationBinding,
     ConversationRef,
+    DeliveryIntent,
     DeliveryPrincipal,
     DeliveryReceipt,
     DeliveryReservation,
@@ -27,6 +28,7 @@ from .contracts import (
     InputContinuationPreference,
     InteractiveRequest,
     OutboundMessage,
+    ProactiveDeliveryResult,
     RequestRef,
     RequestRouteCorrelation,
     RequestRouteState,
@@ -265,6 +267,18 @@ class IdempotencyRepository(Protocol):
 
 class DeliveryAuthorizer(Protocol):
     async def authenticate(self, credential: str) -> DeliveryPrincipal: ...
+
+
+class DeliveryOutcomeObserver(Protocol):
+    """Observe one completed logical delivery attempt without owning its outcome."""
+
+    async def observe_delivery_outcome(
+        self,
+        intent: DeliveryIntent,
+        *,
+        result: ProactiveDeliveryResult | None,
+        error: BaseException | None,
+    ) -> None: ...
 
 
 class DeliverySubmissionRepository(Protocol):

@@ -72,6 +72,14 @@ class _DelayedRequestChannel(FakeChannelAdapter):
         return await super().send(message)
 
 
+class _DeliveryOutcomeObserver:
+    def __init__(self) -> None:
+        self.calls = []
+
+    async def observe_delivery_outcome(self, intent, *, result, error) -> None:
+        self.calls.append((intent, result, error))
+
+
 class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.application = FakeAgentApplicationAdapter()
@@ -155,6 +163,35 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
 
 
 class GatewayLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_internal_projection_delivery_notifies_outcome_observer(self) -> None:
+        observer = _DeliveryOutcomeObserver()
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        channel = FakeChannelAdapter()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=InMemoryBindingRepository(),
+            delivery_outcome_observer=observer,
+        )
+        message = OutboundMessage(
+            delivery_id="observed-internal",
+            conversation_ref=ConversationRef("fake-channel", "observed"),
+            content=(TextContent("observed"),),
+            created_at=_now(),
+        )
+
+        await gateway.start()
+        try:
+            await gateway._deliver_outbound(message)
+        finally:
+            await gateway.stop()
+
+        self.assertEqual(len(observer.calls), 1)
+        intent, result, error = observer.calls[0]
+        self.assertEqual(intent.delivery_id, message.delivery_id)
+        self.assertIsNotNone(result)
+        self.assertIsNone(error)
+
     async def test_same_gateway_can_restart_with_fresh_delivery_lifecycle(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
         channel = FakeChannelAdapter()

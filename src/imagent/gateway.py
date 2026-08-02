@@ -11,6 +11,7 @@ from .adapters import (
     BindingRepository,
     ChannelAdapter,
     DeliveryAuthorizer,
+    DeliveryOutcomeObserver,
     DeliverySubmissionConflict,
     DeliverySubmissionRepository,
     IdempotencyClaimStatus,
@@ -132,6 +133,7 @@ class ImAgentGateway:
         delivery_submissions: DeliverySubmissionRepository | None = None,
         delivery_authorizer: DeliveryAuthorizer | None = None,
         delivery_coordinator: DeliveryCoordinator | None = None,
+        delivery_outcome_observer: DeliveryOutcomeObserver | None = None,
         projections: ProjectionRouteRepository | None = None,
         request_correlations: RequestCorrelationRepository | None = None,
         outbound_presentation: OutboundPresentationPolicy | None = None,
@@ -205,6 +207,7 @@ class ImAgentGateway:
             resolve_thread_routes=self._projection_runtime.active_routes,
             authorizer=delivery_authorizer,
             coordinator=self._delivery_coordinator,
+            outcome_observer=delivery_outcome_observer,
         )
         self._inbound_admission = InboundAdmissionService(
             self._idempotency,

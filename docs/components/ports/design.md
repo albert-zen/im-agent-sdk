@@ -25,6 +25,8 @@ Ports owns:
   `IdempotencyRepository` interfaces;
 - `DeliveryAuthorizer` and `DeliverySubmissionRepository` interfaces for
   scoped proactive delivery, immutable route snapshots, and typed outcomes;
+- the optional `DeliveryOutcomeObserver` used to release consumer-owned
+  transient resources after one complete logical delivery attempt;
 - the optional destination-specific `OutboundPresentationPolicy` used by
   Gateway immediately before delivery planning;
 - callback aliases shared by Gateway and integrations.
@@ -60,6 +62,13 @@ a trusted `DeliveryPrincipal`; the caller cannot declare its own effective
 scope. `DeliverySubmissionRepository.reserve_delivery_submission` is atomic
 and stores identity/snapshots/outcomes only. It is intentionally not a queue,
 content store, or retry scheduler.
+
+`DeliveryOutcomeObserver` receives the original typed intent and either the
+final `ProactiveDeliveryResult` or the raised error. It is invoked once per
+public or Gateway-internal logical attempt, after all destination delivery
+work (including segmentation and Coordinator retries) has completed. Its
+failure is observational only and cannot replace a platform outcome. The
+observer must not create a second content store or infer execution truth.
 
 Application input failures must preserve their side-effect boundary. A
 definitive pre-dispatch rejection may be retried by the caller; once dispatch
