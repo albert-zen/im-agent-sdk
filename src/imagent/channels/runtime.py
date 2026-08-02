@@ -5,6 +5,7 @@ import contextlib
 import inspect
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
@@ -128,6 +129,7 @@ class NativeTransportChannelAdapter:
         self._startup_validator = startup_validator
         self._native: NativeChannel | None = None
         self._last_connection_facts: NativeConnectionDiagnosticSnapshot | None = None
+        self._queue_overflow_offsets: dict[str, int] = {}
 
     def validate_startup_configuration(self) -> None:
         """Validate one detached native instance without starting transport I/O."""
@@ -144,7 +146,11 @@ class NativeTransportChannelAdapter:
 
     def diagnostic_facts(self) -> NativeChannelDiagnosticSnapshot:
         native = self._native
-        facts = _native_connection_facts(native) if native is not None else None
+        facts = (
+            self._with_process_lifetime_overflow(_native_connection_facts(native))
+            if native is not None
+            else None
+        )
         return NativeChannelDiagnosticSnapshot(
             channel_instance_id=self._channel_instance_id,
             kind=self._channel_id,
@@ -186,12 +192,43 @@ class NativeTransportChannelAdapter:
             try:
                 await native.stop()
             except BaseException:
+                facts = self._with_process_lifetime_overflow(_native_connection_facts(native))
+                self._remember_process_lifetime_overflow(facts)
                 self._last_connection_facts = None
                 raise
             else:
-                self._last_connection_facts = _native_connection_facts(native)
+                facts = self._with_process_lifetime_overflow(_native_connection_facts(native))
+                self._remember_process_lifetime_overflow(facts)
+                self._last_connection_facts = facts
             finally:
                 self._native = None
+
+    def _with_process_lifetime_overflow(
+        self,
+        facts: NativeConnectionDiagnosticSnapshot | None,
+    ) -> NativeConnectionDiagnosticSnapshot | None:
+        if facts is None:
+            return None
+        return replace(
+            facts,
+            queues=tuple(
+                replace(
+                    queue,
+                    overflow_count=(
+                        queue.overflow_count + self._queue_overflow_offsets.get(queue.name, 0)
+                    ),
+                )
+                for queue in facts.queues
+            ),
+        )
+
+    def _remember_process_lifetime_overflow(
+        self,
+        facts: NativeConnectionDiagnosticSnapshot | None,
+    ) -> None:
+        if facts is None:
+            return
+        self._queue_overflow_offsets = {queue.name: queue.overflow_count for queue in facts.queues}
 
     async def send(self, message: OutboundMessage) -> DeliveryReceipt:
         native = self._native

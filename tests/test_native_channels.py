@@ -298,6 +298,17 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
                 assert connection is not None
                 self.assertEqual(connection.state, ConnectionDiagnosticState.DISCONNECTED)
 
+            for kind in ("qq", "feishu"):
+                adapter = next(item for item in adapters if item.kind == kind)
+                await adapter.start(ignore, ignore)
+                try:
+                    connection = adapter.diagnostic_facts().connection
+                    self.assertIsNotNone(connection)
+                    assert connection is not None
+                    self.assertEqual(connection.queues[0].overflow_count, 1)
+                finally:
+                    await adapter.stop()
+
     def test_repeated_reconnect_updates_increment_once(self) -> None:
         state = NativeChannelDiagnosticState()
         state.update(connected=False, status="reconnecting")
