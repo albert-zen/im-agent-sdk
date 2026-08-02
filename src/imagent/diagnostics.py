@@ -26,6 +26,15 @@ class DiagnosticFailureCode(StrEnum):
     OTHER = "other"
 
 
+class InboundContentTransformFailureCode(StrEnum):
+    """Fixed I1 failure categories without consumer-controlled detail."""
+
+    INVALID_OUTPUT = "invalid_output"
+    TRANSFORMER_FAILED = "transformer_failed"
+    TIMED_OUT = "timed_out"
+    CANCELLED = "cancelled"
+
+
 class QueueDiagnosticName(StrEnum):
     """Fixed queue names keep consumer metric labels bounded."""
 
@@ -151,12 +160,47 @@ class ProjectionDiagnosticFacts:
 
 
 @dataclass(frozen=True, slots=True)
+class InboundContentTransformerDiagnosticFacts:
+    """Redacted process-lifetime counters for configured I1 execution."""
+
+    invocation_count: int = 0
+    success_count: int = 0
+    failure_count: int = 0
+    timeout_count: int = 0
+    cancellation_count: int = 0
+    last_failure_code: InboundContentTransformFailureCode | None = None
+
+    def __post_init__(self) -> None:
+        counts = (
+            self.invocation_count,
+            self.success_count,
+            self.failure_count,
+            self.timeout_count,
+            self.cancellation_count,
+        )
+        if any(
+            not isinstance(count, int) or isinstance(count, bool) or count < 0 for count in counts
+        ):
+            raise TypeError("inbound transformer diagnostic counts must be non-negative integers")
+        if self.success_count + self.failure_count > self.invocation_count:
+            raise ValueError("inbound transformer outcomes cannot exceed invocations")
+        if self.timeout_count + self.cancellation_count > self.failure_count:
+            raise ValueError("inbound transformer failure counts are inconsistent")
+        if self.last_failure_code is not None and not isinstance(
+            self.last_failure_code,
+            InboundContentTransformFailureCode,
+        ):
+            raise ValueError("inbound transformer failure code must use the fixed vocabulary")
+
+
+@dataclass(frozen=True, slots=True)
 class GatewayDiagnosticFacts:
     """Bounded process-local Gateway admission facts."""
 
     accepting_inbound: bool
     starting: bool
     startup_queue: QueueDiagnosticFacts
+    inbound_content_transformer: InboundContentTransformerDiagnosticFacts | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,7 +211,7 @@ class DiagnosticsSnapshot:
     projections: ProjectionDiagnosticFacts
     gateway: GatewayDiagnosticFacts
     generated_at: datetime
-    schema_version: int = 2
+    schema_version: int = 3
     authoritative: bool = False
     channels: tuple[ChannelDiagnosticFacts, ...] = ()
 

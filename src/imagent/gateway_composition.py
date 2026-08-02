@@ -10,6 +10,7 @@ from .adapters import (
     RequestCorrelationRepository,
 )
 from .controllers import InboundController, RequestPresenter
+from .inbound_content import InboundContentTransformer
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +40,8 @@ class GatewayLimits:
     subscription_retry_max_seconds: float = 2.0
     turn_correlation_retention_seconds: float = 7 * 24 * 60 * 60
     request_correlation_retention_seconds: float = 7 * 24 * 60 * 60
+    inbound_content_transform_timeout_seconds: float = 30.0
+    inbound_content_transform_max_items: int = 64
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,3 +50,4 @@ class GatewayExtensions:
 
     controller: InboundController | None = None
     request_presenter: RequestPresenter | None = None
+    inbound_content_transformer: InboundContentTransformer | None = None
