@@ -116,6 +116,13 @@ are safe to start. It is neither live connection health under ADR 0014 nor a
 message-pipeline extension under ADR 0015, and Gateway never invokes it on a
 Channel socket read path.
 
+Separately, QQ, Telegram, Feishu, and Weixin expose optional ADR 0014
+`diagnostic_facts()` through the SDK native wrapper. Reads use only local
+immutable lifecycle/worker snapshots and fixed queue counters; they never run
+native I/O. QQ and Feishu report their bounded inbound queue, while Telegram
+and Weixin report none. This is not startup validation or an ADR 0015 message
+extension.
+
 Native behavior and limitations are documented separately:
 
 - [QQ](adapters/qq.md)

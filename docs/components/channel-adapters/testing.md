@@ -32,6 +32,10 @@ while a conforming fake/third-party Channel without the structural capability
 remains valid. Construction of the SDK native wrapper without a validator is a
 type and call-shape error rather than a falsely advertised capability.
 
+ADR 0014 diagnostics tests cover lifecycle transitions for all four native
+Channels, bounded QQ/Feishu inbound queue facts, configured identity pinning,
+provider failure/invalid-shape fallback, and repeated side-effect-free reads.
+
 QQ-only quote fixtures additionally cover direct and group events, missing and
 malformed provider fields, every text/field/count bound, ignored nested history
 and media URLs, anti-forgery boundaries, and one

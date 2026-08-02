@@ -21,6 +21,13 @@ world-readable, wildcard-owner, or wrong-shape credential state fails closed.
 Stale credentials require the consumer enrollment flow; the SDK does not ship
 product login commands.
 
+## Diagnostics
+
+The native adapter publishes only bounded local polling lifecycle/worker
+facts. Weixin polling does not own an SDK inbound queue, so diagnostics do not
+synthesize one and never expose credentials, context tokens, cursors,
+endpoints, native user/message identity, media paths, or exception text.
+
 ## Change checks
 
 Changes to `native/weixin.py`, `native/weixin_ilink.py`, or

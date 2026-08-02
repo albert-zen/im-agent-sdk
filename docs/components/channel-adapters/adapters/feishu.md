@@ -20,6 +20,13 @@ Only the named Feishu and Lark domains are accepted. Enabled instances require
 App credentials. SDK subscription/reconnect, token, resource, queue overflow,
 and native delivery failures remain explicit and do not become Agent truth.
 
+## Diagnostics
+
+The native adapter publishes only bounded local lifecycle/worker facts and its
+fixed-capacity `channel_inbound` queue depth plus process-lifetime overflow
+count. It never publishes App credentials, domain endpoints, chat/message
+identity, resource keys, media paths, SDK snapshots, or exception text.
+
 ## Change checks
 
 Changes to `native/feishu.py` require `test_channel_feishu.py`, common native
