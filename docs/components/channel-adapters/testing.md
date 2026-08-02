@@ -22,6 +22,16 @@ Every Channel adapter should prove:
 - native retryable/unknown receipt mapping when idempotency is absent;
 - reconnect state remains Channel-owned.
 
+The four SDK-owned native Channels additionally prove optional startup
+validation with both valid and invalid resolved settings. Preflight must be
+repeatable before and after a lifecycle, leave the live native slot empty, and
+perform no transport start, worker creation, callback registration, credential
+publication, or persistent mutation. Tests also prove the pure validator gates
+the same resolved settings later consumed by the native factory and `start()`,
+while a conforming fake/third-party Channel without the structural capability
+remains valid. Construction of the SDK native wrapper without a validator is a
+type and call-shape error rather than a falsely advertised capability.
+
 QQ-only quote fixtures additionally cover direct and group events, missing and
 malformed provider fields, every text/field/count bound, ignored nested history
 and media URLs, anti-forgery boundaries, and one
@@ -45,7 +55,8 @@ PYTHONPATH=src python -m unittest \
 `test_package_independence.py` additionally guards package metadata, lockfile,
 CI, and `src/imagent` against reintroducing a consumer-package dependency.
 Release validation builds the wheel and constructs every adapter in clean
-environments with only its declared extra:
+environments with only its declared extra; each native clean-wheel case also
+runs disabled, side-effect-free startup validation:
 
 ```sh
 uv build --wheel

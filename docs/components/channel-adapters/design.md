@@ -97,6 +97,25 @@ media helpers, admission policy, and one common `channel_from_config` seam.
 Protocol dependencies remain optional extras; importing Contracts, Ports, or
 Gateway does not import them.
 
+`channel_from_config` also exposes the optional structural
+`ChannelStartupConfigurationValidator` capability. Its
+`validate_startup_configuration()` method invokes the native class's pure
+configuration validator over the same snapshotted, resolved settings used by
+`start()`. It does not construct or install a native adapter, allocate an HTTP
+client or transport, start workers, register callbacks, publish credentials,
+or mutate persistent state. Validation is repeatable before start, while
+stopped, and after a completed lifecycle. Native configuration errors remain
+explicit and bounded. A third-party Channel may omit this capability entirely;
+it is not a method on the common `ChannelAdapter` lifecycle Port.
+Every `NativeTransportChannelAdapter` requires its validator at construction,
+so structural capability detection cannot report support that later degrades
+to `NotImplementedError`.
+
+Startup validation reports whether resolved local settings and prerequisites
+are safe to start. It is neither live connection health under ADR 0014 nor a
+message-pipeline extension under ADR 0015, and Gateway never invokes it on a
+Channel socket read path.
+
 Native behavior and limitations are documented separately:
 
 - [QQ](adapters/qq.md)

@@ -12,6 +12,8 @@ Ports owns:
 
 - the Python package's top-level typed public surface;
 - `ChannelAdapter` lifecycle, inbound callback, and send signatures;
+- the optional structural `ChannelStartupConfigurationValidator`, separate
+  from the common Channel lifecycle;
 - the opaque `InboundAdmission` lease and handler used before Channel media
   preparation;
 - `AgentApplicationAdapter` lifecycle, typed operation, input, and Thread
@@ -43,6 +45,13 @@ depend on Ports.
 Adding a method requires a real caller and at least one implementation. A
 native-specific method stays on a concrete adapter until at least two
 integrations prove a common port.
+
+QQ, Telegram, Feishu, and Weixin prove the startup-validator structure. It
+contains only synchronous `validate_startup_configuration()` and is
+runtime-checkable for operator composition. It does not make validation
+mandatory for `ChannelAdapter`, expose resolved credentials/configuration, or
+carry Gateway, diagnostics, and message-extension authority. Absence means the
+Channel has no SDK startup validator; it does not mean validation succeeded.
 
 ADR 0015 extension protocols are stage-specific Ports only when their issue
 has a real consumer and default counterexample. They carry minimum immutable
