@@ -106,6 +106,20 @@ def _config_bool(value: object, default: bool = False) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _validate_qq_startup(
+    *,
+    enabled: bool,
+    app_id: str,
+    client_secret: str,
+    api_base: str,
+) -> None:
+    if not enabled:
+        return
+    if not app_id.strip() or not client_secret.strip():
+        raise RuntimeError("QQ adapter requires app_id and client_secret when enabled.")
+    validate_http_endpoint(api_base.strip().rstrip("/"), key="QQ API base")
+
+
 class QQChannelAdapter(BaseChannelAdapter):
     channel_id = "qq"
     supports_outbound_artifacts = True
@@ -183,6 +197,7 @@ class QQChannelAdapter(BaseChannelAdapter):
 
     @classmethod
     def from_config(cls, *, config: dict[str, object], middleware):
+        cls.validate_startup_configuration_from_config(config)
         return cls(
             enabled=bool(config.get("enabled")),
             app_id=str(config.get("app_id") or ""),
@@ -195,6 +210,21 @@ class QQChannelAdapter(BaseChannelAdapter):
                 str(config.get("outbound_media_dir") or ".imagent/outbound-media")
             ),
             access_policy=ChannelAccessPolicy.from_config(config),
+        )
+
+    @classmethod
+    def validate_startup_configuration_from_config(
+        cls,
+        config: dict[str, object],
+    ) -> None:
+        del cls
+        ChannelAccessPolicy.from_config(config)
+        _config_bool(config.get("markdown_enabled"))
+        _validate_qq_startup(
+            enabled=bool(config.get("enabled")),
+            app_id=str(config.get("app_id") or ""),
+            client_secret=str(config.get("client_secret") or ""),
+            api_base=str(config.get("api_base") or DEFAULT_API_BASE),
         )
 
     async def start(self) -> None:
@@ -217,11 +247,12 @@ class QQChannelAdapter(BaseChannelAdapter):
         )
 
     def validate_startup_configuration(self) -> None:
-        if not self.enabled:
-            return
-        if not self.app_id or not self.client_secret:
-            raise RuntimeError("QQ adapter requires app_id and client_secret when enabled.")
-        validate_http_endpoint(self.api_base, key="QQ API base")
+        _validate_qq_startup(
+            enabled=self.enabled,
+            app_id=self.app_id,
+            client_secret=self.client_secret,
+            api_base=self.api_base,
+        )
 
     async def stop(self) -> None:
         self._stop_event.set()

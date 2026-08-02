@@ -335,6 +335,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             channel = NativeTransportChannelAdapter(
                 channel_instance_id="qq-main",
                 channel_id="qq",
+                startup_validator=lambda: None,
                 native_factory=lambda middleware: self._bind_channel(
                     native_channel,
                     middleware,
@@ -422,6 +423,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         channel = NativeTransportChannelAdapter(
             channel_instance_id="qq-main",
             channel_id="qq",
+            startup_validator=lambda: None,
             native_factory=lambda middleware: self._bind_channel(
                 native_channel,
                 middleware,
@@ -474,6 +476,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         channel = NativeTransportChannelAdapter(
             channel_instance_id="qq-main",
             channel_id="qq",
+            startup_validator=lambda: None,
             native_factory=lambda middleware: self._bind_channel(
                 native_channel,
                 middleware,
@@ -677,6 +680,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             channel = NativeTransportChannelAdapter(
                 channel_instance_id="qq-main",
                 channel_id="qq",
+                startup_validator=lambda: None,
                 native_factory=lambda middleware: self._bind_channel(
                     native_channel,
                     middleware,
@@ -739,6 +743,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         channel = NativeTransportChannelAdapter(
             channel_instance_id="qq-main",
             channel_id="qq",
+            startup_validator=lambda: None,
             native_factory=lambda middleware: self._bind_channel(
                 native_channel,
                 middleware,
@@ -821,6 +826,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         channel = NativeTransportChannelAdapter(
             channel_instance_id="qq-main",
             channel_id="qq",
+            startup_validator=lambda: None,
             native_factory=native_factory,
         )
         native_app = NativeZenClient()
@@ -876,6 +882,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         channel = NativeTransportChannelAdapter(
             channel_instance_id="qq-main",
             channel_id="qq",
+            startup_validator=lambda: None,
             native_factory=lambda middleware: self._bind_channel(
                 native_channel,
                 middleware,

@@ -151,6 +151,58 @@ def read_telegram_bot_token_file(path: Path) -> str:
     return token
 
 
+def _resolve_telegram_bot_token(bot_token: str, bot_token_file: Path | None) -> str:
+    if bot_token.strip():
+        return bot_token.strip()
+    if bot_token_file is None:
+        return ""
+    return read_telegram_bot_token_file(bot_token_file)
+
+
+def _validate_telegram_startup(
+    *,
+    enabled: bool,
+    bot_token: str,
+    bot_token_file: Path | None,
+    api_base: str,
+) -> None:
+    if not enabled:
+        return
+    if not _resolve_telegram_bot_token(bot_token, bot_token_file):
+        raise RuntimeError("Telegram adapter requires bot_token or bot_token_file when enabled.")
+    validate_http_endpoint(api_base.strip().rstrip("/"), key="Telegram API base")
+
+
+def _load_telegram_offset(
+    state_dir: Path | None,
+) -> tuple[int | None, str, float]:
+    if state_dir is None:
+        return None, "", 0.0
+    path = state_dir / "polling-offset.json"
+    if not path.exists():
+        return None, "", 0.0
+    if path.is_symlink():
+        raise RuntimeError(f"Telegram polling offset must not be a symlink: {path}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("offset state must be an object")
+        offset = payload.get("offset")
+        bot_id = str(payload.get("bot_id") or "")
+        updated_at = float(payload.get("updated_at") or 0.0)
+        resolved_offset = int(offset) if offset is not None else None
+        if resolved_offset is not None and (resolved_offset < 0 or not bot_id):
+            raise ValueError("offset state lacks a valid bot identity")
+        if updated_at < 0:
+            raise ValueError("offset timestamp must be non-negative")
+        return resolved_offset, bot_id, updated_at
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        raise RuntimeError(
+            f"Invalid Telegram polling offset state: {path}. "
+            "Inspect it before removing the file to reset polling explicitly."
+        ) from None
+
+
 class TelegramChannelAdapter(BaseChannelAdapter):
     channel_id = "telegram"
     supports_outbound_artifacts = True
@@ -213,6 +265,7 @@ class TelegramChannelAdapter(BaseChannelAdapter):
 
     @classmethod
     def from_config(cls, *, config: dict[str, object], middleware):
+        cls.validate_startup_configuration_from_config(config)
         token_file = str(config.get("bot_token_file") or "").strip()
         state_dir = str(config.get("state_dir") or "").strip()
         media_dir = str(config.get("media_dir") or "").strip()
@@ -230,6 +283,25 @@ class TelegramChannelAdapter(BaseChannelAdapter):
             media_dir=Path(media_dir) if media_dir else None,
             outbound_media_dir=(Path(outbound_media_dir) if outbound_media_dir else None),
         )
+
+    @classmethod
+    def validate_startup_configuration_from_config(
+        cls,
+        config: dict[str, object],
+    ) -> None:
+        del cls
+        ChannelAccessPolicy.from_config(config)
+        _config_bool(config.get("require_mention"), True)
+        _nonnegative_int(config.get("poll_timeout_s"))
+        token_file = str(config.get("bot_token_file") or "").strip()
+        _validate_telegram_startup(
+            enabled=bool(config.get("enabled")),
+            bot_token=str(config.get("bot_token") or ""),
+            bot_token_file=Path(token_file) if token_file else None,
+            api_base=str(config.get("api_base") or DEFAULT_API_BASE),
+        )
+        state_dir = str(config.get("state_dir") or "").strip()
+        _load_telegram_offset(Path(state_dir) if state_dir else None)
 
     async def start(self) -> None:
         if not self.enabled:
@@ -250,13 +322,12 @@ class TelegramChannelAdapter(BaseChannelAdapter):
         )
 
     def validate_startup_configuration(self) -> None:
-        if not self.enabled:
-            return
-        if not self._resolve_bot_token():
-            raise RuntimeError(
-                "Telegram adapter requires bot_token or bot_token_file when enabled."
-            )
-        validate_http_endpoint(self.api_base, key="Telegram API base")
+        _validate_telegram_startup(
+            enabled=self.enabled,
+            bot_token=self.bot_token,
+            bot_token_file=self.bot_token_file,
+            api_base=self.api_base,
+        )
 
     async def stop(self) -> None:
         errors: list[Exception] = []
@@ -855,36 +926,10 @@ class TelegramChannelAdapter(BaseChannelAdapter):
             return None
 
     def _resolve_bot_token(self) -> str:
-        if self.bot_token:
-            return self.bot_token
-        if self.bot_token_file is None:
-            return ""
-        return read_telegram_bot_token_file(self.bot_token_file)
+        return _resolve_telegram_bot_token(self.bot_token, self.bot_token_file)
 
     def _load_offset(self) -> tuple[int | None, str, float]:
-        path = self._offset_path
-        if path is None or not path.exists():
-            return None, "", 0.0
-        if path.is_symlink():
-            raise RuntimeError(f"Telegram polling offset must not be a symlink: {path}")
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-            if not isinstance(payload, dict):
-                raise ValueError("offset state must be an object")
-            offset = payload.get("offset")
-            bot_id = str(payload.get("bot_id") or "")
-            updated_at = float(payload.get("updated_at") or 0.0)
-            resolved_offset = int(offset) if offset is not None else None
-            if resolved_offset is not None and (resolved_offset < 0 or not bot_id):
-                raise ValueError("offset state lacks a valid bot identity")
-            if updated_at < 0:
-                raise ValueError("offset timestamp must be non-negative")
-            return resolved_offset, bot_id, updated_at
-        except (OSError, ValueError, TypeError, json.JSONDecodeError):
-            raise RuntimeError(
-                f"Invalid Telegram polling offset state: {path}. "
-                "Inspect it before removing the file to reset polling explicitly."
-            ) from None
+        return _load_telegram_offset(self.state_dir)
 
     async def _persist_offset(self) -> None:
         path = self._offset_path

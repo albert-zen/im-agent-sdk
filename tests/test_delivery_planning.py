@@ -153,11 +153,13 @@ class DeliveryPlannerTests(unittest.TestCase):
         qq = NativeTransportChannelAdapter(
             channel_instance_id="qq-test",
             channel_id="qq",
+            startup_validator=lambda: None,
             native_factory=lambda middleware: _UnusedNative(middleware),
         )
         telegram = NativeTransportChannelAdapter(
             channel_instance_id="telegram-test",
             channel_id="telegram",
+            startup_validator=lambda: None,
             native_factory=lambda middleware: _UnusedNative(middleware),
         )
         source = TextContent("**shared** [link](https://example.test)", TextFormat.MARKDOWN)

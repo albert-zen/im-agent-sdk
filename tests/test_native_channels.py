@@ -3,10 +3,12 @@ from __future__ import annotations
 import tempfile
 import unittest
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
+from unittest.mock import patch
 
-from imagent.adapters import InboundAdmission
+from imagent.adapters import ChannelStartupConfigurationValidator, InboundAdmission
 from imagent.channels import NativeTransportChannelAdapter, channel_from_config
 from imagent.channels.native.access import ChannelAccessPolicy
 from imagent.channels.native.artifacts import (
@@ -25,6 +27,7 @@ from imagent.channels.native.models import (
     OutboundMessage as NativeOutboundMessage,
 )
 from imagent.channels.native.text import split_text
+from imagent.channels.native.weixin_state import WeixinCredentials, WeixinStateStore
 from imagent.contracts import (
     AttachmentContent,
     ConversationRef,
@@ -75,6 +78,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         adapter = NativeTransportChannelAdapter(
             channel_instance_id="qq-main",
             channel_id="qq",
+            startup_validator=lambda: None,
             native_factory=ForgingNative,
         )
 
@@ -147,6 +151,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         adapter = NativeTransportChannelAdapter(
             channel_instance_id="qq-main",
             channel_id="qq",
+            startup_validator=lambda: None,
             native_factory=Native,
         )
         await adapter.start(ignore, ignore, admit)
@@ -212,6 +217,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         adapter = NativeTransportChannelAdapter(
             channel_instance_id="qq-main",
             channel_id="qq",
+            startup_validator=lambda: None,
             native_factory=Native,
         )
         await adapter.start(ignore, ignore, admit)
@@ -275,6 +281,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         adapter = NativeTransportChannelAdapter(
             channel_instance_id="qq-main",
             channel_id="qq",
+            startup_validator=lambda: None,
             native_factory=Native,
         )
         await adapter.start(ignore, ignore, admit)
@@ -337,6 +344,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         adapter = NativeTransportChannelAdapter(
             channel_instance_id="qq-main",
             channel_id="qq",
+            startup_validator=lambda: None,
             native_factory=Native,
         )
         await adapter.start(ignore, ignore, admit)
@@ -377,6 +385,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         adapter = NativeTransportChannelAdapter(
             channel_instance_id="qq-main",
             channel_id="qq",
+            startup_validator=lambda: None,
             native_factory=lambda _middleware: CapturingNative(),
         )
 
@@ -442,6 +451,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         adapter = NativeTransportChannelAdapter(
             channel_instance_id="qq-main",
             channel_id="qq",
+            startup_validator=lambda: None,
             native_factory=lambda _middleware: PartiallySuccessfulNative(),
         )
 
@@ -538,6 +548,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         adapter = NativeTransportChannelAdapter(
             channel_instance_id="qq-main",
             channel_id="qq",
+            startup_validator=lambda: None,
             native_factory=lambda _middleware: DisabledNative(),
         )
 
@@ -579,6 +590,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         adapter = NativeTransportChannelAdapter(
             channel_instance_id="telegram-main",
             channel_id="telegram",
+            startup_validator=lambda: None,
             native_factory=lambda _middleware: SegmentedNative(),
         )
 
@@ -623,6 +635,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         adapter = NativeTransportChannelAdapter(
             channel_instance_id="qq-main",
             channel_id="qq",
+            startup_validator=lambda: None,
             native_factory=lambda _middleware: ReceiptReadingNative(),
         )
 
@@ -683,6 +696,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         adapter = NativeTransportChannelAdapter(
             channel_instance_id="telegram-main",
             channel_id="telegram",
+            startup_validator=lambda: None,
             native_factory=lambda _middleware: CapturingNative(),
         )
 
@@ -792,6 +806,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         adapter = NativeTransportChannelAdapter(
             channel_instance_id="qq-main",
             channel_id="qq",
+            startup_validator=lambda: None,
             native_factory=lambda _middleware: FailingNative(),
         )
 
@@ -839,6 +854,15 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
                 for channel_id, config in configurations.items()
             ]
 
+            for adapter in adapters:
+                self.assertIsInstance(
+                    adapter,
+                    ChannelStartupConfigurationValidator,
+                )
+                adapter.validate_startup_configuration()
+                adapter.validate_startup_configuration()
+                self.assertIsNone(adapter._native)
+
             async def ignore(_item) -> None:
                 return None
 
@@ -849,6 +873,10 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
                 await adapters[0].stop()
 
             reports = [await verify_channel_adapter(adapter) for adapter in adapters]
+
+            for adapter in adapters:
+                adapter.validate_startup_configuration()
+                self.assertIsNone(adapter._native)
 
         self.assertEqual(
             [adapter.channel_instance_id for adapter in adapters],
@@ -865,6 +893,142 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
                 for adapter in adapters
             )
         )
+
+    def test_sdk_channel_preflight_accepts_each_valid_resolved_configuration(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            weixin_state_dir = Path(directory) / "weixin"
+            WeixinStateStore(weixin_state_dir).save_credentials(
+                WeixinCredentials(
+                    account_id="bot@im.bot",
+                    bot_token="bot-secret",
+                    base_url="https://ilinkai.weixin.qq.com",
+                    owner_user_id="owner@im.wechat",
+                )
+            )
+            qq_config: dict[str, object] = {
+                "enabled": True,
+                "app_id": "app",
+                "client_secret": "secret",
+            }
+            adapters = (
+                channel_from_config("qq", config=qq_config),
+                channel_from_config(
+                    "telegram",
+                    config={"enabled": True, "bot_token": "token"},
+                ),
+                channel_from_config(
+                    "feishu",
+                    config={
+                        "enabled": True,
+                        "app_id": "app",
+                        "app_secret": "secret",
+                    },
+                ),
+                channel_from_config(
+                    "weixin",
+                    config={"enabled": True, "state_dir": str(weixin_state_dir)},
+                ),
+            )
+            qq_config["app_id"] = ""
+            files_before = tuple(sorted(weixin_state_dir.iterdir()))
+
+            for adapter in adapters:
+                adapter.validate_startup_configuration()
+                adapter.validate_startup_configuration()
+                self.assertIsNone(adapter._native)
+
+            self.assertEqual(tuple(sorted(weixin_state_dir.iterdir())), files_before)
+
+    def test_sdk_channel_preflight_does_not_construct_http_clients(self) -> None:
+        adapters = (
+            channel_from_config("qq", config={"enabled": False}),
+            channel_from_config("telegram", config={"enabled": False}),
+        )
+
+        with (
+            patch("imagent.channels.native.qq.httpx.AsyncClient") as qq_client,
+            patch("imagent.channels.native.telegram.httpx.AsyncClient") as telegram_client,
+        ):
+            for adapter in adapters:
+                adapter.validate_startup_configuration()
+                adapter.validate_startup_configuration()
+
+        qq_client.assert_not_called()
+        telegram_client.assert_not_called()
+        self.assertTrue(all(adapter._native is None for adapter in adapters))
+
+    def test_native_transport_requires_an_honest_startup_validator(self) -> None:
+        with self.assertRaises(TypeError):
+            cast(Any, NativeTransportChannelAdapter)(
+                channel_instance_id="qq-main",
+                channel_id="qq",
+                native_factory=lambda _middleware: object(),
+            )
+        for invalid_validator in (None, "not-callable"):
+            with self.subTest(startup_validator=invalid_validator):
+                with self.assertRaisesRegex(TypeError, "must be callable"):
+                    cast(Any, NativeTransportChannelAdapter)(
+                        channel_instance_id="qq-main",
+                        channel_id="qq",
+                        native_factory=lambda _middleware: object(),
+                        startup_validator=invalid_validator,
+                    )
+
+    def test_sdk_channel_preflight_rejects_each_invalid_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            invalid: tuple[tuple[str, dict[str, object], str], ...] = (
+                ("qq", {"enabled": True}, "app_id and client_secret"),
+                ("telegram", {"enabled": True}, "bot_token or bot_token_file"),
+                ("feishu", {"enabled": True}, "app_id and app_secret"),
+                (
+                    "weixin",
+                    {"enabled": True, "state_dir": directory},
+                    "credentials are missing",
+                ),
+            )
+            for channel_id, config, message in invalid:
+                with self.subTest(channel_id=channel_id):
+                    adapter = channel_from_config(channel_id, config=config)
+                    with self.assertRaisesRegex(RuntimeError, message):
+                        adapter.validate_startup_configuration()
+                    self.assertIsNone(adapter._native)
+
+    def test_telegram_preflight_rejects_unsafe_offset_without_client_creation(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            corrupt_dir = root / "corrupt"
+            corrupt_dir.mkdir()
+            (corrupt_dir / "polling-offset.json").write_text(
+                "not-json",
+                encoding="utf-8",
+            )
+            symlink_dir = root / "symlink"
+            symlink_dir.mkdir()
+            target = root / "offset-target.json"
+            target.write_text("{}", encoding="utf-8")
+            (symlink_dir / "polling-offset.json").symlink_to(target)
+
+            for state_dir in (corrupt_dir, symlink_dir):
+                with self.subTest(state_dir=state_dir.name):
+                    adapter = channel_from_config(
+                        "telegram",
+                        config={
+                            "enabled": True,
+                            "bot_token": "token",
+                            "state_dir": str(state_dir),
+                        },
+                    )
+                    with (
+                        patch("imagent.channels.native.telegram.httpx.AsyncClient") as client,
+                        self.assertRaisesRegex(RuntimeError, "polling offset"),
+                    ):
+                        adapter.validate_startup_configuration()
+                    client.assert_not_called()
+                    self.assertIsNone(adapter._native)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime
 from enum import StrEnum
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from .contracts import (
     AcceptedTurn,
@@ -97,6 +97,13 @@ class ChannelAdapter(Protocol):
     async def stop(self) -> None: ...
 
     async def send(self, message: OutboundMessage) -> DeliveryReceipt: ...
+
+
+@runtime_checkable
+class ChannelStartupConfigurationValidator(Protocol):
+    """Optional side-effect-free validation for resolved Channel settings."""
+
+    def validate_startup_configuration(self) -> None: ...
 
 
 class AgentApplicationAdapter(Protocol):

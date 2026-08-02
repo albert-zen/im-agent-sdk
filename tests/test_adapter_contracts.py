@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 
 from test_gateway_vertical_slice import NativeT3Client, NativeZenClient
 
+from imagent.adapters import ChannelStartupConfigurationValidator
 from imagent.applications import (
     CodexApplicationAdapter,
     T3ApplicationAdapter,
@@ -40,6 +41,10 @@ class ChannelAdapterContractKitTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("stable channel identity", report.check_names)
         self.assertIn("admission callback accepted at startup", report.check_names)
         self.assertIn("delivery receipt semantics", report.check_names)
+        self.assertNotIsInstance(
+            adapter,
+            ChannelStartupConfigurationValidator,
+        )
 
 
 class AgentApplicationContractKitTests(unittest.IsolatedAsyncioTestCase):

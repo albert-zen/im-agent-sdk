@@ -107,6 +107,26 @@ def _config_float(value: object, default: float) -> float:
         return default
 
 
+def _validate_feishu_startup(
+    *,
+    enabled: bool,
+    app_id: str,
+    app_secret: str,
+    channel_factory_configured: bool,
+) -> None:
+    if not enabled:
+        return
+    if not app_id.strip() or not app_secret.strip():
+        raise RuntimeError("Feishu adapter requires app_id and app_secret when enabled.")
+    if not channel_factory_configured:
+        try:
+            import lark_channel  # noqa: F401
+        except ImportError as exc:
+            raise RuntimeError(
+                "Feishu support requires the optional dependency; install im-agent-sdk[feishu]"
+            ) from exc
+
+
 def _feishu_message_id(result: object) -> str:
     candidates = [result]
     data = getattr(result, "data", None)
@@ -211,6 +231,7 @@ class FeishuChannelAdapter(BaseChannelAdapter):
 
     @classmethod
     def from_config(cls, *, config: dict[str, object], middleware):
+        cls.validate_startup_configuration_from_config(config)
         return cls(
             enabled=bool(config.get("enabled")),
             app_id=str(config.get("app_id") or ""),
@@ -226,6 +247,22 @@ class FeishuChannelAdapter(BaseChannelAdapter):
             outbound_media_dir=Path(
                 str(config.get("outbound_media_dir") or ".imagent/outbound-media")
             ),
+        )
+
+    @classmethod
+    def validate_startup_configuration_from_config(
+        cls,
+        config: dict[str, object],
+    ) -> None:
+        cls._normalize_domain(str(config.get("domain") or "feishu"))
+        ChannelAccessPolicy.from_config(config)
+        _config_bool(config.get("require_mention"), True)
+        _config_float(config.get("startup_timeout_s"), 30.0)
+        _validate_feishu_startup(
+            enabled=bool(config.get("enabled")),
+            app_id=str(config.get("app_id") or ""),
+            app_secret=str(config.get("app_secret") or ""),
+            channel_factory_configured=False,
         )
 
     async def start(self) -> None:
@@ -259,17 +296,12 @@ class FeishuChannelAdapter(BaseChannelAdapter):
         )
 
     def validate_startup_configuration(self) -> None:
-        if not self.enabled:
-            return
-        if not self.app_id or not self.app_secret:
-            raise RuntimeError("Feishu adapter requires app_id and app_secret when enabled.")
-        if self.channel_factory is None:
-            try:
-                import lark_channel  # noqa: F401
-            except ImportError as exc:
-                raise RuntimeError(
-                    "Feishu support requires the optional dependency; install im-agent-sdk[feishu]"
-                ) from exc
+        _validate_feishu_startup(
+            enabled=self.enabled,
+            app_id=self.app_id,
+            app_secret=self.app_secret,
+            channel_factory_configured=self.channel_factory is not None,
+        )
 
     async def stop(self) -> None:
         errors: list[Exception] = []
