@@ -31,6 +31,7 @@ CASES = {
         "from imagent.channels import channel_from_config; "
         "adapter=channel_from_config('qq', config={'enabled':False}, "
         "channel_instance_id='qq-clean'); "
+        "adapter.validate_startup_configuration(); "
         "assert adapter.channel_instance_id == 'qq-clean'; "
         "assert importlib.util.find_spec('imcodex') is None",
     ),
@@ -40,6 +41,7 @@ CASES = {
         "from imagent.channels import channel_from_config; "
         "adapter=channel_from_config('telegram', config={'enabled':False}, "
         "channel_instance_id='telegram-clean'); "
+        "adapter.validate_startup_configuration(); "
         "assert adapter.channel_instance_id == 'telegram-clean'; "
         "assert importlib.util.find_spec('imcodex') is None",
     ),
@@ -49,6 +51,7 @@ CASES = {
         "from imagent.channels import channel_from_config; "
         "adapter=channel_from_config('feishu', config={'enabled':False}, "
         "channel_instance_id='feishu-clean'); "
+        "adapter.validate_startup_configuration(); "
         "assert adapter.channel_instance_id == 'feishu-clean'; "
         "assert importlib.util.find_spec('lark_channel') is not None; "
         "assert importlib.util.find_spec('imcodex') is None",
@@ -60,6 +63,7 @@ CASES = {
         "adapter=channel_from_config('weixin', "
         "config={'enabled':False,'state_dir':tempfile.mkdtemp()}, "
         "channel_instance_id='weixin-clean'); "
+        "adapter.validate_startup_configuration(); "
         "assert adapter.channel_instance_id == 'weixin-clean'; "
         "assert importlib.util.find_spec('Crypto') is not None; "
         "assert importlib.util.find_spec('imcodex') is None",

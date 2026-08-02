@@ -21,6 +21,12 @@ stops work without preventing a later reclaim attempt, preparation failure
 releases the lease, handoff transfers terminal ownership to Gateway, and the
 legacy two-callback startup shape remains usable during migration.
 
+Startup-validation coverage checks structural capability detection, all four
+SDK native implementations, bounded explicit failures, configuration parity
+with `start()`, and repeatability around a completed lifecycle. A fake Channel
+without the optional protocol remains a valid `ChannelAdapter`; callers must
+not treat capability absence as successful validation.
+
 Application input coverage must distinguish safe pre-dispatch failure from a
 sent request with an unknown native outcome. The latter remains sticky across
 redelivery and restart. Every implementation must accept the default

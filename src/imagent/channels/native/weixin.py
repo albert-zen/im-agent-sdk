@@ -56,6 +56,21 @@ RECONNECT_MAX_DELAY_S = 30.0
 CONVERSATION_PATTERN = re.compile(r"^user:([^@\s*]+@im\.wechat)$")
 
 
+def _validate_weixin_startup(
+    *,
+    enabled: bool,
+    state_store: WeixinStateStore,
+) -> None:
+    if not enabled:
+        return
+    credentials = state_store.load_credentials()
+    if credentials is None:
+        raise RuntimeError(
+            "Weixin credentials are missing; configure state_dir with consumer-enrolled credentials"
+        )
+    state_store.load_transport_state()
+
+
 class WeixinChannelAdapter(BaseChannelAdapter):
     """Experimental direct-message adapter for Tencent iLink."""
 
@@ -108,6 +123,7 @@ class WeixinChannelAdapter(BaseChannelAdapter):
 
     @classmethod
     def from_config(cls, *, config: dict[str, object], middleware):
+        cls.validate_startup_configuration_from_config(config)
         state_dir = str(config.get("state_dir") or "").strip()
         if not state_dir:
             raise RuntimeError("Weixin adapter requires a state_dir.")
@@ -121,6 +137,21 @@ class WeixinChannelAdapter(BaseChannelAdapter):
             ),
             access_policy=ChannelAccessPolicy.from_config(config),
             poll_timeout_ms=cls._int_value(config.get("poll_timeout_ms")) or 35_000,
+        )
+
+    @classmethod
+    def validate_startup_configuration_from_config(
+        cls,
+        config: dict[str, object],
+    ) -> None:
+        state_dir = str(config.get("state_dir") or "").strip()
+        if not state_dir:
+            raise RuntimeError("Weixin adapter requires a state_dir.")
+        ChannelAccessPolicy.from_config(config)
+        cls._int_value(config.get("poll_timeout_ms"))
+        _validate_weixin_startup(
+            enabled=bool(config.get("enabled")),
+            state_store=WeixinStateStore(Path(state_dir)),
         )
 
     async def start(self) -> None:
@@ -185,10 +216,10 @@ class WeixinChannelAdapter(BaseChannelAdapter):
         )
 
     def validate_startup_configuration(self) -> None:
-        if not self.enabled:
-            return
-        self._validated_credentials()
-        self.state_store.load_transport_state()
+        _validate_weixin_startup(
+            enabled=self.enabled,
+            state_store=self.state_store,
+        )
 
     def _validated_credentials(self) -> WeixinCredentials:
         credentials = self.state_store.load_credentials()

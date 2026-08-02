@@ -50,6 +50,7 @@ class NativeChannel(Protocol):
 
 
 NativeFactory = Callable[[object], NativeChannel]
+StartupValidator = Callable[[], None]
 
 _CHANNEL_CAPABILITIES = {
     "qq": ChannelCapabilities(
@@ -111,13 +112,22 @@ class NativeTransportChannelAdapter:
         channel_instance_id: str,
         channel_id: str,
         native_factory: NativeFactory,
+        startup_validator: StartupValidator,
     ) -> None:
         if channel_id not in _CHANNEL_CAPABILITIES:
             raise ValueError(f"unsupported native channel: {channel_id}")
+        if not callable(startup_validator):
+            raise TypeError("startup_validator must be callable")
         self._channel_instance_id = channel_instance_id
         self._channel_id = channel_id
         self._native_factory = native_factory
+        self._startup_validator = startup_validator
         self._native: NativeChannel | None = None
+
+    def validate_startup_configuration(self) -> None:
+        """Validate one detached native instance without starting transport I/O."""
+
+        self._startup_validator()
 
     @property
     def channel_instance_id(self) -> str:
@@ -229,6 +239,9 @@ def channel_from_config(
         native_factory=lambda middleware: NativeAdapter.from_config(
             config=resolved_config,
             middleware=middleware,
+        ),
+        startup_validator=lambda: NativeAdapter.validate_startup_configuration_from_config(
+            resolved_config
         ),
     )
 
