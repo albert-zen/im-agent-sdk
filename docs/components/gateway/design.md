@@ -63,6 +63,13 @@ every recovery. A policy exception releases a known-pre-side-effect claim.
 Policies cannot change the stable delivery ID or destination, and default
 behavior is unchanged when no policy is configured. This hook is product UX;
 it must not infer or persist Agent execution truth.
+Projected Agent output also exposes two transient reserved metadata fields to
+the policy: `imagent_projection_origin` is `live` or `authoritative`, and
+`imagent_projection_checkpoint` states whether successful presentation may
+advance the route checkpoint. Native/Application metadata cannot forge these
+Gateway facts. SDK strips both before durable delivery planning and Channel
+send, so they do not change the stable submission fingerprint. Controller,
+request, and proactive output omit them.
 
 ## Proactive delivery flow
 

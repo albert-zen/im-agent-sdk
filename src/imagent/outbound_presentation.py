@@ -1,7 +1,14 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from .adapters import IdempotencyRepository, OutboundPresentationPolicy
 from .contracts import ContractViolation, OutboundMessage
+
+PROJECTION_ORIGIN_METADATA_KEY = "imagent_projection_origin"
+PROJECTION_CHECKPOINT_METADATA_KEY = "imagent_projection_checkpoint"
+PROJECTION_ORIGIN_LIVE = "live"
+PROJECTION_ORIGIN_AUTHORITATIVE = "authoritative"
 
 
 async def present_outbound(
@@ -35,4 +42,9 @@ async def present_outbound(
             owner_token=owner_token,
         )
         raise
-    return presented
+    if presented is None:
+        return None
+    metadata = dict(presented.metadata)
+    metadata.pop(PROJECTION_ORIGIN_METADATA_KEY, None)
+    metadata.pop(PROJECTION_CHECKPOINT_METADATA_KEY, None)
+    return replace(presented, metadata=metadata)

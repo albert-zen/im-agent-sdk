@@ -21,6 +21,8 @@
 - duplicate inbound messages and duplicate outbound items are idempotent;
 - destination presentation may transform or suppress one routed message,
   suppression completes idempotency, and identity/rerouting is rejected;
+- projected output exposes reserved live/authoritative and checkpoint context
+  to the policy without trusting Application-provided values;
 - durable inbound duplicates are rejected before Channel attachment
   preparation, including after SQLite restart;
 - preparation failure and startup failure release only the matching fenced

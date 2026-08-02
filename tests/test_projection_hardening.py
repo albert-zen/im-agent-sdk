@@ -46,6 +46,11 @@ from imagent.contracts import (
 from imagent.controllers import ControllerActions
 from imagent.delivery_coordination import DeliveryCoordinator, DeliveryCoordinatorConfig
 from imagent.gateway import ImAgentGateway
+from imagent.outbound_presentation import (
+    PROJECTION_CHECKPOINT_METADATA_KEY,
+    PROJECTION_ORIGIN_LIVE,
+    PROJECTION_ORIGIN_METADATA_KEY,
+)
 from imagent.projection_runtime import TurnAcceptanceBufferOverflow
 from imagent.projections import (
     InMemoryProjectionRouteRepository,
@@ -65,11 +70,19 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         conversation = ConversationRef("fake-channel", "conversation")
         channel = FakeChannelAdapter()
         projections = InMemoryProjectionRouteRepository()
+        presentation_facts: list[dict[str, object]] = []
+
+        class Presentation:
+            async def present(self, message):
+                presentation_facts.append(dict(message.metadata))
+                return message
+
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
             bindings=InMemoryBindingRepository(),
             projections=projections,
+            outbound_presentation=Presentation(),
         )
         await gateway.start()
         try:
@@ -87,7 +100,12 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                         role=MessageRole.SYSTEM,
                         content=(TextContent("Plan updated"),),
                         created_at=datetime.now(UTC),
-                        metadata={"native_application": "fake", "kind": "plan_updated"},
+                        metadata={
+                            "native_application": "fake",
+                            "kind": "plan_updated",
+                            PROJECTION_ORIGIN_METADATA_KEY: "authoritative",
+                            PROJECTION_CHECKPOINT_METADATA_KEY: True,
+                        },
                     )
                 },
             )
@@ -95,6 +113,12 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(channel.sent[0].metadata["native_application"], "fake")
             self.assertEqual(channel.sent[0].metadata["kind"], "plan_updated")
+            self.assertEqual(
+                presentation_facts[0][PROJECTION_ORIGIN_METADATA_KEY],
+                PROJECTION_ORIGIN_LIVE,
+            )
+            self.assertFalse(presentation_facts[0][PROJECTION_CHECKPOINT_METADATA_KEY])
+            self.assertNotIn(PROJECTION_ORIGIN_METADATA_KEY, channel.sent[0].metadata)
             routes = await projections.list_projection_routes(thread.ref)
             self.assertEqual(len(routes), 1)
             self.assertIsNone(routes[0].checkpoint_agent_item_id)

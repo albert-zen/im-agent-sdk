@@ -27,6 +27,12 @@ from .contracts import (
     validate_projection_route,
     validate_turn_reply_correlation,
 )
+from .outbound_presentation import (
+    PROJECTION_CHECKPOINT_METADATA_KEY,
+    PROJECTION_ORIGIN_AUTHORITATIVE,
+    PROJECTION_ORIGIN_LIVE,
+    PROJECTION_ORIGIN_METADATA_KEY,
+)
 
 DeliverOutbound = Callable[
     [OutboundMessage],
@@ -433,6 +439,15 @@ async def deliver_projected_message(
         )
         if correlation is not None and correlation.conversation_ref == route.conversation_ref:
             reply_to = correlation.reply_to_message_id
+    metadata = dict(agent_message.metadata)
+    metadata.update(
+        {
+            PROJECTION_ORIGIN_METADATA_KEY: (
+                PROJECTION_ORIGIN_AUTHORITATIVE if authoritative else PROJECTION_ORIGIN_LIVE
+            ),
+            PROJECTION_CHECKPOINT_METADATA_KEY: projected.checkpoint,
+        }
+    )
     claim = await deliver_outbound(
         OutboundMessage(
             delivery_id=delivery_id,
@@ -445,7 +460,7 @@ async def deliver_projected_message(
             ),
             created_at=agent_message.created_at,
             reply_to=reply_to,
-            metadata=dict(agent_message.metadata),
+            metadata=metadata,
         )
     )
     if claim is IdempotencyClaimStatus.IN_FLIGHT:
