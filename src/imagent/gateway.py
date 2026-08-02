@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from functools import partial
 from uuid import uuid4
@@ -18,7 +19,6 @@ from .adapters import (
 from .bindings import BindingConflict
 from .contracts import (
     AgentInput,
-    ApplicationInputOutcomeUnknown,
     ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,
@@ -98,12 +98,15 @@ from .inbound_admission import (
 )
 from .inbound_content import InboundContentTransformer as InboundContentTransformer
 from .inbound_content import InboundContentTransformRuntime
+from .inbound_failures import InboundFailurePhase as InboundFailurePhase
+from .inbound_failures import InboundFailurePresentationRuntime, handle_claimed_inbound
+from .inbound_failures import InboundFailurePresenter as InboundFailurePresenter
 from .keyed_locks import KeyedLockRegistry
 from .proactive_delivery import (
     InMemoryDeliverySubmissionRepository,
     ProactiveDeliveryService,
 )
-from .projection_runtime import InputPostAcceptanceError, ThreadProjectionRuntime
+from .projection_runtime import ThreadProjectionRuntime
 from .projections import (
     InMemoryProjectionRouteRepository,
     ProjectionWorkerHealth,
@@ -150,6 +153,17 @@ class ImAgentGateway:
                 max_concurrency=limits.inbound_content_transform_max_concurrency,
             )
             if extensions.inbound_content_transformer is not None
+            else None
+        )
+        self._inbound_failure_presentation_runtime = (
+            InboundFailurePresentationRuntime(
+                extensions.inbound_failure_presenter,
+                timeout_seconds=limits.inbound_failure_present_timeout_seconds,
+                max_items=limits.inbound_failure_present_max_items,
+                max_text_characters=limits.inbound_failure_present_max_text_characters,
+                max_concurrency=limits.inbound_failure_present_max_concurrency,
+            )
+            if extensions.inbound_failure_presenter is not None
             else None
         )
         self._locks: dict[object, asyncio.Lock] = {}
@@ -276,6 +290,8 @@ class ImAgentGateway:
                 await channel.stop()
             if self._inbound_content_transform_runtime is not None:
                 await self._inbound_content_transform_runtime.close()
+            if self._inbound_failure_presentation_runtime is not None:
+                await self._inbound_failure_presentation_runtime.close()
             for application in reversed(started_applications):
                 await application.stop()
             raise
@@ -289,6 +305,8 @@ class ImAgentGateway:
             await channel.stop()
         if self._inbound_content_transform_runtime is not None:
             await self._inbound_content_transform_runtime.close()
+        if self._inbound_failure_presentation_runtime is not None:
+            await self._inbound_failure_presentation_runtime.close()
         for application in reversed(tuple(self._applications.values())):
             await application.stop()
 
@@ -323,6 +341,11 @@ class ImAgentGateway:
                 inbound_content_transformer=(
                     self._inbound_content_transform_runtime.diagnostic_facts()
                     if self._inbound_content_transform_runtime is not None
+                    else None
+                ),
+                inbound_failure_presenter=(
+                    self._inbound_failure_presentation_runtime.diagnostic_facts()
+                    if self._inbound_failure_presentation_runtime is not None
                     else None
                 ),
             ),
@@ -667,38 +690,19 @@ class ImAgentGateway:
         )
 
     async def _handle_claimed_message(self, claimed: ClaimedInbound) -> None:
-        try:
+        async def process(before_application_send: Callable[[], Awaitable[None]]) -> None:
             await self._process_message(
                 claimed.message,
                 idempotency_owner_token=claimed.owner_token,
+                before_application_send=before_application_send,
             )
-        except InputPostAcceptanceError as exc:
-            # The native Application already accepted the Turn. Redelivery is
-            # unsafe when the Application has no native input-idempotency key.
-            try:
-                await self._idempotency.complete(
-                    claimed.scope,
-                    claimed.key,
-                    owner_token=claimed.owner_token,
-                )
-            except BaseException as terminal_error:
-                raise terminal_error from exc.cause
-            raise exc.cause.with_traceback(exc.cause.__traceback__) from None
-        except ApplicationInputOutcomeUnknown as exc:
-            # Dispatch crossed the native side-effect boundary without a
-            # definitive outcome. Keep the protected claim sticky.
-            raise exc.cause.with_traceback(exc.cause.__traceback__) from None
-        except BaseException:
-            await self._idempotency.release(
-                claimed.scope,
-                claimed.key,
-                owner_token=claimed.owner_token,
-            )
-            raise
-        await self._idempotency.complete(
-            claimed.scope,
-            claimed.key,
-            owner_token=claimed.owner_token,
+
+        await handle_claimed_inbound(
+            claimed,
+            process=process,
+            idempotency=self._idempotency,
+            presentation=self._inbound_failure_presentation_runtime,
+            deliver=self._deliver_outbound,
         )
 
     async def _handle_message_entry(self, message: InboundMessage) -> None:
@@ -763,6 +767,7 @@ class ImAgentGateway:
         message: InboundMessage,
         *,
         idempotency_owner_token: str,
+        before_application_send: Callable[[], Awaitable[None]],
     ) -> None:
         lock = self._locks.setdefault(message.conversation_ref, asyncio.Lock())
         async with lock:
@@ -876,12 +881,7 @@ class ImAgentGateway:
                 ),
                 conversation_ref=message.conversation_ref,
                 reply_to_message_id=message.message_id,
-                before_application_send=partial(
-                    self._idempotency.mark_side_effect_started,
-                    scope,
-                    key,
-                    owner_token=idempotency_owner_token,
-                ),
+                before_application_send=before_application_send,
             )
 
     async def _handle_operation(self, operation: GatewayOperation) -> None:

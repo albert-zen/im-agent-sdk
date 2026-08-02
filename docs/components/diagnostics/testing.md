@@ -15,6 +15,9 @@ Required coverage:
   identities, content, paths, return values, or exception text; active task
   capacity and its rejection counter are finite, and an absent transformer
   exposes no fabricated I1 facts;
+- configured I2 exposes only its fixed execution/cancellation/capacity facts;
+  no exception text, origin/reply/delivery identity, or rendered output is
+  retained, and an absent presenter exposes no fabricated I2 facts;
 - App Server ready/reconnect epoch and queue overflow transitions for both
   notification and server-request lanes;
 - queue depth never exceeds configured capacity in a returned snapshot;

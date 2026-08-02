@@ -142,6 +142,7 @@ components:
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/inbound_admission.py
       - src/imagent/inbound_content.py
+      - src/imagent/inbound_failures.py
       - src/imagent/gateway.py
       - src/imagent/gateway_composition.py
       - src/imagent/gateway_startup.py
@@ -152,6 +153,7 @@ components:
       - tests/test_gateway_vertical_slice.py
       - tests/test_inbound_admission.py
       - tests/test_inbound_content_transformer.py
+      - tests/test_inbound_failure_presenter.py
       - tests/test_delivery_ingress.py
       - tests/test_proactive_delivery.py
     docs:
@@ -558,6 +560,7 @@ layers:
     paths:
       - src/imagent/inbound_admission.py
       - src/imagent/inbound_content.py
+      - src/imagent/inbound_failures.py
       - src/imagent/gateway.py
       - src/imagent/delivery_ingress.py
       - src/imagent/proactive_delivery.py

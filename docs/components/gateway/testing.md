@@ -21,6 +21,19 @@
   redacted process-lifetime diagnostics;
 - inbound failure presentation cannot reopen a pre-dispatch, unknown, or
   post-acceptance input claim;
+- configured I2 completes a fenced `pre_acceptance` claim before presentation,
+  while absent I2 releases and re-raises; original cancellation also releases
+  without presentation;
+- `outcome_unknown` remains `side_effect_started` and `post_acceptance` remains
+  terminal across presenter validation/failure/timeout/cancellation, Channel
+  failure, duplicate delivery, and restart;
+- I1 failures reach I2 as bounded `pre_acceptance` facts; presenter output
+  cannot change Conversation, reply, or stable delivery identity and fixed
+  diagnostics retain no exception text or callback output;
+- I2 rejects attachment authority, arbitrary metadata, empty text, and output
+  exceeding its finite item or total-character bounds before Channel delivery;
+- cancellation before the native dispatch fence releases the claim, while
+  cancellation after the fence preserves `side_effect_started` across restart;
 - destination presentation cannot change delivery identity/destination, and
   durable suppression has explicit completion-checkpoint behavior;
 - a post-outcome observer runs once per logical attempt rather than per segment

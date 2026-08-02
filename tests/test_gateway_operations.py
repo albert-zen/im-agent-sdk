@@ -102,9 +102,14 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(limits.inbound_content_transform_timeout_seconds, 30.0)
         self.assertEqual(limits.inbound_content_transform_max_items, 64)
         self.assertEqual(limits.inbound_content_transform_max_concurrency, 16)
+        self.assertEqual(limits.inbound_failure_present_timeout_seconds, 30.0)
+        self.assertEqual(limits.inbound_failure_present_max_items, 64)
+        self.assertEqual(limits.inbound_failure_present_max_text_characters, 16_384)
+        self.assertEqual(limits.inbound_failure_present_max_concurrency, 16)
         self.assertIsNone(extensions.controller)
         self.assertIsNone(extensions.request_presenter)
         self.assertIsNone(extensions.inbound_content_transformer)
+        self.assertIsNone(extensions.inbound_failure_presenter)
         with self.assertRaises(FrozenInstanceError):
             limits.baseline_history_limit = 4  # type: ignore[misc]
 

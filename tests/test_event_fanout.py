@@ -488,8 +488,9 @@ class GatewayStartupAdmissionTests(unittest.IsolatedAsyncioTestCase):
             message: InboundMessage,
             *,
             idempotency_owner_token: str,
+            before_application_send,
         ) -> None:
-            del idempotency_owner_token
+            del idempotency_owner_token, before_application_send
             drained.append(f"message:{message.message_id}")
 
         async def record_operation(operation) -> None:

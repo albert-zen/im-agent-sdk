@@ -36,6 +36,16 @@ class InboundContentTransformFailureCode(StrEnum):
     CAPACITY_EXHAUSTED = "capacity_exhausted"
 
 
+class InboundFailurePresentationFailureCode(StrEnum):
+    """Fixed I2 render failure categories without consumer-controlled detail."""
+
+    INVALID_OUTPUT = "invalid_output"
+    PRESENTER_FAILED = "presenter_failed"
+    TIMED_OUT = "timed_out"
+    CANCELLED = "cancelled"
+    CAPACITY_EXHAUSTED = "capacity_exhausted"
+
+
 class QueueDiagnosticName(StrEnum):
     """Fixed queue names keep consumer metric labels bounded."""
 
@@ -203,6 +213,48 @@ class InboundContentTransformerDiagnosticFacts:
 
 
 @dataclass(frozen=True, slots=True)
+class InboundFailurePresenterDiagnosticFacts:
+    """Redacted process-lifetime counters for configured I2 rendering."""
+
+    invocation_count: int = 0
+    success_count: int = 0
+    failure_count: int = 0
+    timeout_count: int = 0
+    cancellation_count: int = 0
+    cancellation_overrun_count: int = 0
+    capacity_rejection_count: int = 0
+    last_failure_code: InboundFailurePresentationFailureCode | None = None
+
+    def __post_init__(self) -> None:
+        counts = (
+            self.invocation_count,
+            self.success_count,
+            self.failure_count,
+            self.timeout_count,
+            self.cancellation_count,
+            self.cancellation_overrun_count,
+            self.capacity_rejection_count,
+        )
+        if any(
+            not isinstance(count, int) or isinstance(count, bool) or count < 0 for count in counts
+        ):
+            raise TypeError("inbound presenter diagnostic counts must be non-negative integers")
+        if self.success_count + self.failure_count > self.invocation_count:
+            raise ValueError("inbound presenter outcomes cannot exceed invocations")
+        if self.timeout_count + self.cancellation_count > self.failure_count:
+            raise ValueError("inbound presenter failure counts are inconsistent")
+        if self.cancellation_overrun_count > self.timeout_count + self.cancellation_count:
+            raise ValueError("inbound presenter cancellation overruns exceed cancellations")
+        if self.capacity_rejection_count > self.failure_count:
+            raise ValueError("inbound presenter capacity rejections exceed failures")
+        if self.last_failure_code is not None and not isinstance(
+            self.last_failure_code,
+            InboundFailurePresentationFailureCode,
+        ):
+            raise ValueError("inbound presenter failure code must use the fixed vocabulary")
+
+
+@dataclass(frozen=True, slots=True)
 class GatewayDiagnosticFacts:
     """Bounded process-local Gateway admission facts."""
 
@@ -210,6 +262,7 @@ class GatewayDiagnosticFacts:
     starting: bool
     startup_queue: QueueDiagnosticFacts
     inbound_content_transformer: InboundContentTransformerDiagnosticFacts | None = None
+    inbound_failure_presenter: InboundFailurePresenterDiagnosticFacts | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,7 +273,7 @@ class DiagnosticsSnapshot:
     projections: ProjectionDiagnosticFacts
     gateway: GatewayDiagnosticFacts
     generated_at: datetime
-    schema_version: int = 3
+    schema_version: int = 4
     authoritative: bool = False
     channels: tuple[ChannelDiagnosticFacts, ...] = ()
 
