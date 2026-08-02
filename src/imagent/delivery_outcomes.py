@@ -130,19 +130,18 @@ class DeliveryOutcomeObserverRuntime:
             self._record_failure(DeliveryOutcomeObserverFailureCode.CAPACITY_EXHAUSTED)
             return
         try:
-            context = DeliveryOutcomeContext(
-                _immutable_message(
-                    message,
-                    max_items=self._max_items,
-                    max_text_characters=self._max_text_characters,
-                )
+            bounded_message, message_string_characters = _immutable_message(
+                message,
+                max_items=self._max_items,
+                max_text_characters=self._max_text_characters,
             )
+            context = DeliveryOutcomeContext(bounded_message)
             outcome = DeliveryOutcome(
                 receipt=(
                     _bounded_receipt(
                         receipt,
                         max_items=self._max_items,
-                        max_text_characters=self._max_text_characters,
+                        max_text_characters=(self._max_text_characters - message_string_characters),
                     )
                     if receipt is not None
                     else None
@@ -253,7 +252,7 @@ def _immutable_message(
     *,
     max_items: int,
     max_text_characters: int,
-) -> OutboundMessage:
+) -> tuple[OutboundMessage, int]:
     if not isinstance(message, OutboundMessage):
         raise TypeError("delivery outcome context requires OutboundMessage")
     if not isinstance(message.content, tuple) or len(message.content) > max_items:
@@ -282,17 +281,23 @@ def _immutable_message(
             strings.append(item.source.handle_id)
         else:
             raise TypeError("delivery outcome attachment source is invalid")
-    _require_bounded_strings(strings, max_characters=max_text_characters)
+    string_characters = _require_bounded_strings(
+        strings,
+        max_characters=max_text_characters,
+    )
     content = tuple(
         replace(item, metadata=_bounded_metadata(item.metadata))
         if isinstance(item, AttachmentContent)
         else item
         for item in message.content
     )
-    return replace(
-        message,
-        content=content,
-        metadata=_bounded_metadata(message.metadata),
+    return (
+        replace(
+            message,
+            content=content,
+            metadata=_bounded_metadata(message.metadata),
+        ),
+        string_characters,
     )
 
 
@@ -373,7 +378,7 @@ def _bounded_receipt(
     )
 
 
-def _require_bounded_strings(strings: list[str], *, max_characters: int) -> None:
+def _require_bounded_strings(strings: list[str], *, max_characters: int) -> int:
     total = 0
     for value in strings:
         if not isinstance(value, str):
@@ -381,6 +386,7 @@ def _require_bounded_strings(strings: list[str], *, max_characters: int) -> None
         total += len(value)
         if total > max_characters:
             raise ValueError("delivery outcome string facts exceed their configured limit")
+    return total
 
 
 async def _cancel_and_join(task: asyncio.Task[None], *, timeout_seconds: float) -> bool:

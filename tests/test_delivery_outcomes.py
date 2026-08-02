@@ -443,13 +443,25 @@ class DeliveryOutcomeObserverTests(unittest.IsolatedAsyncioTestCase):
                     native_message_id="n" * 64,
                 ),
             )
+            runtime.notify(
+                OutboundMessage(
+                    delivery_id="d",
+                    conversation_ref=ConversationRef("c", "v"),
+                    content=(TextContent("x" * 20),),
+                    created_at=datetime(2026, 8, 3, tzinfo=UTC),
+                ),
+                receipt=DeliveryReceipt(
+                    status=DeliveryReceiptStatus.ACCEPTED_BY_PLATFORM,
+                    native_message_id="n" * 20,
+                ),
+            )
         finally:
             await runtime.close()
 
         self.assertEqual(observer.calls, [])
         facts = runtime.diagnostic_facts()
-        self.assertEqual(facts.notification_count, 2)
-        self.assertEqual(facts.failure_count, 2)
+        self.assertEqual(facts.notification_count, 3)
+        self.assertEqual(facts.failure_count, 3)
         self.assertEqual(
             facts.last_failure_code,
             DeliveryOutcomeObserverFailureCode.INVALID_FACTS,
