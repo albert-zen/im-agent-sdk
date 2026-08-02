@@ -10,9 +10,10 @@ Required coverage:
   recovery, and gap aggregates;
 - Gateway startup queue capacity/depth/overflow facts without changing
   admission behavior;
-- configured I1 invocation/success/failure/timeout/cancellation counters and
-  fixed last-failure codes without identities, content, paths, return values,
-  or exception text; an absent transformer exposes no fabricated I1 facts;
+- configured I1 invocation/success/failure/timeout/cancellation and bounded
+  cancellation-overrun counters plus fixed last-failure codes without
+  identities, content, paths, return values, or exception text; an absent
+  transformer exposes no fabricated I1 facts;
 - App Server ready/reconnect epoch and queue overflow transitions for both
   notification and server-request lanes;
 - queue depth never exceeds configured capacity in a returned snapshot;

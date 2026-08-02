@@ -27,6 +27,10 @@ class InboundContentTransformationError(ValueError):
 class InboundContentTransformationTimeout(TimeoutError):
     """Gateway cancelled and joined I1 after its configured lifetime."""
 
+    def __init__(self, message: str, *, cancellation_overrun: bool) -> None:
+        super().__init__(message)
+        self.cancellation_overrun = cancellation_overrun
+
 
 class InboundContentTransformRuntime:
     """One configured I1 invocation boundary and its redacted local facts."""
@@ -50,6 +54,7 @@ class InboundContentTransformRuntime:
         self._failure_count = 0
         self._timeout_count = 0
         self._cancellation_count = 0
+        self._cancellation_overrun_count = 0
         self._last_failure_code: InboundContentTransformFailureCode | None = None
 
     async def transform(self, message: InboundMessage) -> tuple[Content, ...]:
@@ -64,8 +69,10 @@ class InboundContentTransformRuntime:
         except InboundContentTransformationError:
             self._record_failure(InboundContentTransformFailureCode.INVALID_OUTPUT)
             raise
-        except InboundContentTransformationTimeout:
+        except InboundContentTransformationTimeout as error:
             self._timeout_count += 1
+            if error.cancellation_overrun:
+                self._cancellation_overrun_count += 1
             self._record_failure(InboundContentTransformFailureCode.TIMED_OUT)
             raise
         except asyncio.CancelledError:
@@ -85,6 +92,7 @@ class InboundContentTransformRuntime:
             failure_count=self._failure_count,
             timeout_count=self._timeout_count,
             cancellation_count=self._cancellation_count,
+            cancellation_overrun_count=self._cancellation_overrun_count,
             last_failure_code=self._last_failure_code,
         )
 
@@ -109,14 +117,15 @@ async def transform_inbound_content(
     try:
         done, _ = await asyncio.wait((task,), timeout=timeout_seconds)
         if not done:
-            await _cancel_and_join(task)
+            joined = await _cancel_and_join(task, timeout_seconds=timeout_seconds)
             raise InboundContentTransformationTimeout(
-                "inbound content transformer exceeded its configured lifetime"
+                "inbound content transformer exceeded its configured lifetime",
+                cancellation_overrun=not joined,
             )
         content = task.result()
     except BaseException:
         if not task.done():
-            await _cancel_and_join(task)
+            await _cancel_and_join(task, timeout_seconds=timeout_seconds)
         raise
     if not isinstance(content, tuple):
         raise InboundContentTransformationError("inbound content transformer must return a tuple")
@@ -135,10 +144,27 @@ async def transform_inbound_content(
     return content
 
 
-async def _cancel_and_join(task: asyncio.Task[tuple[Content, ...]]) -> None:
+async def _cancel_and_join(
+    task: asyncio.Task[tuple[Content, ...]],
+    *,
+    timeout_seconds: float,
+) -> bool:
     task.cancel()
+    done, _ = await asyncio.wait((task,), timeout=timeout_seconds)
+    if not done:
+        task.cancel()
+        task.add_done_callback(_consume_task_result)
+        return False
     try:
-        await task
+        task.result()
     except BaseException:
         # Cleanup cannot replace the caller's cancellation or the SDK deadline.
-        return
+        pass
+    return True
+
+
+def _consume_task_result(task: asyncio.Task[tuple[Content, ...]]) -> None:
+    try:
+        task.result()
+    except BaseException:
+        pass

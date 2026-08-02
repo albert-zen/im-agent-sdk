@@ -244,8 +244,45 @@ class InboundContentTransformerTests(unittest.IsolatedAsyncioTestCase):
         facts = gateway.diagnostics_snapshot().gateway.inbound_content_transformer
         assert facts is not None
         self.assertEqual(facts.timeout_count, 1)
+        self.assertEqual(facts.cancellation_overrun_count, 0)
         self.assertEqual(facts.failure_count, 1)
         self.assertEqual(application.inputs[0].content, (TextContent("after timeout"),))
+
+    async def test_timeout_cleanup_has_a_second_finite_bound(self) -> None:
+        first_cancel = asyncio.Event()
+        second_cancel = asyncio.Event()
+
+        async def transform(_message: InboundMessage):
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                first_cancel.set()
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    second_cancel.set()
+                    raise
+
+        gateway, channel, application = self._gateway(
+            _FunctionTransformer(transform),
+            limits=GatewayLimits(inbound_content_transform_timeout_seconds=0.01),
+        )
+
+        await gateway.start()
+        try:
+            async with asyncio.timeout(0.1):
+                with self.assertRaises(InboundContentTransformationTimeout):
+                    await channel.emit_message(self._message("cleanup-overrun"))
+            await asyncio.wait_for(second_cancel.wait(), timeout=0.1)
+        finally:
+            await gateway.stop()
+
+        self.assertTrue(first_cancel.is_set())
+        self.assertEqual(application.inputs, ())
+        facts = gateway.diagnostics_snapshot().gateway.inbound_content_transformer
+        assert facts is not None
+        self.assertEqual(facts.timeout_count, 1)
+        self.assertEqual(facts.cancellation_overrun_count, 1)
 
     async def test_transformer_raised_timeout_is_not_sdk_timeout(self) -> None:
         async def transform(_message: InboundMessage):

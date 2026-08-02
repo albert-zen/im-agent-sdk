@@ -189,11 +189,14 @@ I1 executes in the existing Channel inbound/admission task rather than a native
 socket callback, and is bounded by
 `GatewayLimits.inbound_content_transform_timeout_seconds` and
 `GatewayLimits.inbound_content_transform_max_items`. Gateway cancellation
-propagates into the transformer. Its process-lifetime diagnostics contain only
-fixed invocation/success/failure/timeout/cancellation counters plus a fixed
-last-failure code; they retain no exception text, inbound identity, content,
-path, or return value. With no transformer, Gateway neither invokes nor times
-this position and all prior behavior is unchanged.
+propagates into the transformer. Deadline cleanup gets one equally bounded
+cancellation grace; a transformer that still ignores cancellation cannot keep
+the Conversation lock or claim, is cancelled again, and its eventual result is
+discarded. Its process-lifetime diagnostics contain only fixed invocation,
+success, failure, timeout, cancellation, and cancellation-overrun counters plus
+a fixed last-failure code; they retain no exception text, inbound identity,
+content, path, or return value. With no transformer, Gateway neither invokes
+nor times this position and all prior behavior is unchanged.
 
 On restart, Gateway rebuilds required Thread projection workers from persisted
 routes and reconciles from authoritative Application history/catch-up plus

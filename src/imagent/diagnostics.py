@@ -168,6 +168,7 @@ class InboundContentTransformerDiagnosticFacts:
     failure_count: int = 0
     timeout_count: int = 0
     cancellation_count: int = 0
+    cancellation_overrun_count: int = 0
     last_failure_code: InboundContentTransformFailureCode | None = None
 
     def __post_init__(self) -> None:
@@ -177,6 +178,7 @@ class InboundContentTransformerDiagnosticFacts:
             self.failure_count,
             self.timeout_count,
             self.cancellation_count,
+            self.cancellation_overrun_count,
         )
         if any(
             not isinstance(count, int) or isinstance(count, bool) or count < 0 for count in counts
@@ -186,6 +188,8 @@ class InboundContentTransformerDiagnosticFacts:
             raise ValueError("inbound transformer outcomes cannot exceed invocations")
         if self.timeout_count + self.cancellation_count > self.failure_count:
             raise ValueError("inbound transformer failure counts are inconsistent")
+        if self.cancellation_overrun_count > self.timeout_count:
+            raise ValueError("inbound transformer cancellation overruns exceed timeouts")
         if self.last_failure_code is not None and not isinstance(
             self.last_failure_code,
             InboundContentTransformFailureCode,
