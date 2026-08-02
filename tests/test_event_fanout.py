@@ -88,6 +88,24 @@ class EventBroadcasterTests(unittest.IsolatedAsyncioTestCase):
         await fast.aclose()
         await unrelated.aclose()
 
+    async def test_key_scoped_failure_preserves_other_subscriptions(self) -> None:
+        broadcaster = EventBroadcaster[str, str]()
+        failed = broadcaster.subscribe("failed-thread")
+        unrelated = broadcaster.subscribe("other-thread")
+        broadcaster.publish("failed-thread", "before-gap")
+        broadcaster.fail(
+            "failed-thread",
+            lambda: EventStreamReset("application_event_poll_failed"),
+            discard_pending=False,
+        )
+        broadcaster.publish("other-thread", "still-running")
+
+        self.assertEqual(await anext(failed), "before-gap")
+        with self.assertRaisesRegex(EventStreamReset, "application_event_poll_failed"):
+            await anext(failed)
+        self.assertEqual(await anext(unrelated), "still-running")
+        await unrelated.aclose()
+
     async def test_explicit_stream_reset_terminates_current_subscribers(self) -> None:
         broadcaster = EventBroadcaster[str, str](max_pending=2)
         first = broadcaster.subscribe("first")

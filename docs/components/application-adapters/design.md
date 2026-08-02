@@ -124,9 +124,11 @@ an identity leaves that process-local window. Failure is explicit through the
 owning adapter path and fixed process-local presentation diagnostics retain no
 facts, output, identity, or exception text.
 
-T3 post-dispatch observation tolerates A1 failure after native acceptance is
-known, so optional presentation cannot erase the `AcceptedTurn` or its reply
-correlation. The same failure remains visible in fixed diagnostics and a later
+T3 returns known native acceptance before optional A1 work: when a presenter is
+configured, post-send observation is left to the already-owned polling/history
+path. Presenter failure therefore cannot erase the `AcceptedTurn` or delay its
+reply correlation. A polling failure terminates that Thread's live subscription
+with an explicit recoverable gap; fixed diagnostics remain redacted and later
 poll/history recovery may retry the replay-safe presenter.
 
 Codex A1 output is live-only. A stable native event ID is preserved when

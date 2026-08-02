@@ -129,6 +129,33 @@ class _AcceptedT3Client(_T3Client):
         return {}
 
 
+class _PollingFailureT3Client(_T3Client):
+    def __init__(self) -> None:
+        self.reads = 0
+
+    async def thread_detail(self, thread_id: str):
+        self.reads += 1
+        return {
+            "thread": {
+                "id": thread_id,
+                "messages": [],
+                "activities": (
+                    []
+                    if self.reads == 1
+                    else [
+                        {
+                            "id": "activity-fails",
+                            "turnId": "turn-1",
+                            "kind": "tool.progress",
+                            "summary": "Working",
+                            "createdAt": "2026-08-03T10:00:00Z",
+                        }
+                    ]
+                ),
+            }
+        }
+
+
 class _CodexPresenter:
     def __init__(self) -> None:
         self.facts: list[CodexLiveActivityFacts] = []
@@ -462,7 +489,81 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(accepted.turn_id, "turn-accepted")
             diagnostics = application.diagnostic_facts().presentation
             self.assertIsNotNone(diagnostics)
+            self.assertEqual(cast(Any, diagnostics).invocation_count, 0)
+        finally:
+            await application.stop()
+
+    async def test_t3_polling_presentation_failure_is_an_explicit_gap(self) -> None:
+        application = T3ApplicationAdapter(
+            application_instance_id="t3-main",
+            client=_PollingFailureT3Client(),
+            poll_interval=0,
+            activity_presenter=_FailingT3Presenter(),
+        )
+        events = application.subscribe_thread(ThreadRef("t3-main", "thread-1"))
+        try:
+            with self.assertRaisesRegex(EventStreamReset, "application_event_poll_failed"):
+                await asyncio.wait_for(anext(events), 1)
+            diagnostics = application.diagnostic_facts().presentation
+            self.assertIsNotNone(diagnostics)
             self.assertEqual(cast(Any, diagnostics).failure_count, 1)
+        finally:
+            await cast(Any, events).aclose()
+            await application.stop()
+
+    async def test_t3_live_message_and_activity_match_history_order(self) -> None:
+        presenter = _T3Presenter()
+        application = T3ApplicationAdapter(
+            application_instance_id="t3-main",
+            client=_T3Client(),
+            activity_presenter=presenter,
+        )
+        thread_ref = ThreadRef("t3-main", "thread-1")
+        events = application._events.subscribe("thread-1")
+        thread = {
+            "messages": [
+                {
+                    "id": "message-newer",
+                    "turnId": "turn-1",
+                    "role": "assistant",
+                    "text": "Newer message",
+                    "createdAt": "2026-08-03T10:01:00Z",
+                }
+            ],
+            "activities": [
+                {
+                    "id": "activity-older",
+                    "turnId": "turn-1",
+                    "kind": "tool.progress",
+                    "summary": "Older activity",
+                    "createdAt": "2026-08-03T10:00:00Z",
+                }
+            ],
+        }
+        try:
+            await application._publish_thread_state(thread_ref, thread)
+            first = cast(AgentMessage, (await anext(events)).data["message"])
+            second = cast(AgentMessage, (await anext(events)).data["message"])
+            self.assertEqual(first.agent_item_id, "imagent:t3-activity:activity-older")
+            self.assertEqual(second.agent_item_id, "message-newer")
+        finally:
+            await cast(Any, events).aclose()
+            await application.stop()
+
+    async def test_t3_presentation_thread_state_is_finite(self) -> None:
+        application = T3ApplicationAdapter(
+            application_instance_id="t3-main",
+            client=_T3Client(),
+            activity_presenter=_T3Presenter(),
+            presentation_limits=ApplicationPresentationLimits(max_seen_identities=2),
+        )
+        try:
+            for index in range(3):
+                await application._publish_thread_state(
+                    ThreadRef("t3-main", f"thread-{index}"),
+                    {"messages": [], "activities": []},
+                )
+            self.assertEqual(tuple(application._presentation_states), ("thread-1", "thread-2"))
         finally:
             await application.stop()
 

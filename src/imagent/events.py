@@ -161,6 +161,18 @@ class EventBroadcaster(Generic[K, V]):
         for subscription in subscriptions:
             subscription._fail(error_factory(), discard_pending=discard_pending)
 
+    def fail(
+        self,
+        key: K,
+        error_factory: Callable[[], EventStreamGap],
+        *,
+        discard_pending: bool = True,
+    ) -> None:
+        """Terminate one key's subscribers with an explicit recoverable gap."""
+
+        for subscription in tuple(self._subscribers.get(key, ())):
+            subscription._fail(error_factory(), discard_pending=discard_pending)
+
     def _remove(
         self,
         key: K,

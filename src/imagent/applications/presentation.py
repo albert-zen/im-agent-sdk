@@ -173,6 +173,10 @@ class ApplicationPresentationCancelled(RuntimeError):
     """The presenter cancelled its own invocation without cancelling its caller."""
 
 
+class ApplicationPresentationFailed(RuntimeError):
+    """The presenter raised an error whose consumer-controlled detail was discarded."""
+
+
 class ApplicationPresentationRuntime:
     """Bound one concrete adapter's A1 invocations and redacted facts."""
 
@@ -243,7 +247,7 @@ class ApplicationPresentationRuntime:
             if not task.done():
                 await _cancel_and_join(task, timeout_seconds=self._limits.timeout_seconds)
             self._record_failure(ApplicationPresentationFailureCode.PRESENTER_FAILED)
-            raise
+            raise ApplicationPresentationFailed("application presenter failed") from None
         if output is None:
             self._omission_count += 1
         else:
