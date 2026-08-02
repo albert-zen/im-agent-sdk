@@ -112,6 +112,23 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
                 bindings=self.bindings,
             )
 
+    def test_group_defaults_remain_private_to_each_gateway(self) -> None:
+        repositories = GatewayRepositories(bindings=self.bindings)
+        first = ImAgentGateway(channels=[], applications=[], repositories=repositories)
+        second = ImAgentGateway(channels=[], applications=[], repositories=repositories)
+
+        self.assertIsNot(first._idempotency, second._idempotency)
+        self.assertIsNot(first._request_correlations, second._request_correlations)
+        self.assertIsNot(first._delivery_coordinator, second._delivery_coordinator)
+        self.assertIsNot(
+            first._projection_runtime._projections,
+            second._projection_runtime._projections,
+        )
+        self.assertIsNot(
+            first._delivery_service._submissions,
+            second._delivery_service._submissions,
+        )
+
     async def test_resource_listing_never_changes_conversation_binding(self) -> None:
         original = await self.bindings.put(
             ConversationBinding(
