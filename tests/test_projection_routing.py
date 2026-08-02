@@ -31,7 +31,7 @@ from imagent.contracts import (
     ThreadProjectionRoute,
     ThreadRef,
 )
-from imagent.gateway import ImAgentGateway
+from imagent.gateway import GatewayRepositories, ImAgentGateway
 from imagent.projections import (
     InMemoryProjectionRouteRepository,
     ProjectionWorkerState,
@@ -219,8 +219,10 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[],
             applications=[application],
-            bindings=bindings,
-            projections=projections,
+            repositories=GatewayRepositories(
+                bindings=bindings,
+                projections=projections,
+            ),
         )
         await gateway.start()
         try:
@@ -290,7 +292,9 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
-            bindings=bindings,
+            repositories=GatewayRepositories(
+                bindings=bindings,
+            ),
             projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
         )
         await gateway.start()
@@ -390,7 +394,9 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
-            bindings=bindings,
+            repositories=GatewayRepositories(
+                bindings=bindings,
+            ),
             projection_policy=ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
         )
         await gateway.start()
@@ -442,7 +448,9 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
-            bindings=bindings,
+            repositories=GatewayRepositories(
+                bindings=bindings,
+            ),
         )
         await gateway.start()
         try:
@@ -483,9 +491,11 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
             first_gateway = ImAgentGateway(
                 channels=[first_channel],
                 applications=[application],
-                bindings=first_state,
-                idempotency=first_state,
-                projections=first_state,
+                repositories=GatewayRepositories(
+                    bindings=first_state,
+                    idempotency=first_state,
+                    projections=first_state,
+                ),
             )
             await first_gateway.start()
             try:
@@ -508,9 +518,11 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
             second_gateway = ImAgentGateway(
                 channels=[second_channel],
                 applications=[application],
-                bindings=second_state,
-                idempotency=second_state,
-                projections=second_state,
+                repositories=GatewayRepositories(
+                    bindings=second_state,
+                    idempotency=second_state,
+                    projections=second_state,
+                ),
             )
             await second_gateway.start()
             try:

@@ -24,7 +24,7 @@ from imagent.contracts import (
 )
 from imagent.controllers import MarkdownRequestPresenter, SlashController
 from imagent.controllers.slash import parse_slash_command
-from imagent.gateway import ImAgentGateway
+from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 
@@ -60,7 +60,9 @@ class OptionalControllerTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
-            bindings=InMemoryBindingRepository(),
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+            ),
         )
         await gateway.start()
         try:
@@ -82,8 +84,12 @@ class OptionalControllerTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
-            bindings=InMemoryBindingRepository(),
-            controller=SlashController(),
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+            ),
+            extensions=GatewayExtensions(
+                controller=SlashController(),
+            ),
         )
         await gateway.start()
         try:
@@ -122,8 +128,12 @@ class OptionalControllerTests(unittest.IsolatedAsyncioTestCase):
                 FakeAgentApplicationAdapter("fake-agent-1", ProjectMode.FLAT),
                 FakeAgentApplicationAdapter("fake-agent-2", ProjectMode.FLAT),
             ],
-            bindings=bindings,
-            controller=ButtonController(),
+            repositories=GatewayRepositories(
+                bindings=bindings,
+            ),
+            extensions=GatewayExtensions(
+                controller=ButtonController(),
+            ),
         )
         await gateway.start()
         try:
@@ -150,8 +160,12 @@ class OptionalControllerTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[FakeAgentApplicationAdapter()],
-            bindings=InMemoryBindingRepository(),
-            controller=SlashController(),
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+            ),
+            extensions=GatewayExtensions(
+                controller=SlashController(),
+            ),
         )
         commands = (
             "/apps",

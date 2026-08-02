@@ -37,7 +37,7 @@ from imagent.contracts import (
 )
 from imagent.delivery_coordination import DeliveryCoordinator, DeliveryCoordinatorConfig
 from imagent.delivery_planning import DeliveryPlanningError
-from imagent.gateway import ImAgentGateway
+from imagent.gateway import GatewayRepositories, ImAgentGateway
 from imagent.proactive_delivery import (
     DeliveryAuthorizationError,
     DeliveryRouteError,
@@ -137,9 +137,11 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
                     project_mode=ProjectMode.FLAT,
                 )
             ],
-            bindings=self.bindings,
-            projections=self.projections,
-            delivery_submissions=submissions or self.submissions,
+            repositories=GatewayRepositories(
+                bindings=self.bindings,
+                projections=self.projections,
+                delivery_submissions=submissions or self.submissions,
+            ),
             delivery_authorizer=self.authorizer,
             projection_policy=policy,
             delivery_coordinator=coordinator,

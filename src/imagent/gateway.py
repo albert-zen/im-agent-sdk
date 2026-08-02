@@ -8,17 +8,12 @@ from uuid import uuid4
 
 from .adapters import (
     AgentApplicationAdapter,
-    BindingRepository,
     ChannelAdapter,
     DeliveryAuthorizer,
     DeliverySubmissionConflict,
-    DeliverySubmissionRepository,
     IdempotencyClaimStatus,
-    IdempotencyRepository,
     InboundAdmission,
-    ProjectionRouteRepository,
     RequestCorrelationConflict,
-    RequestCorrelationRepository,
 )
 from .bindings import BindingConflict
 from .contracts import (
@@ -77,7 +72,7 @@ from .contracts import (
     validate_gateway_operation_result,
     validate_request_response,
 )
-from .controllers import ControllerActions, InboundController, RequestPresenter
+from .controllers import ControllerActions
 from .delivery_coordination import DeliveryCoordinator
 from .delivery_planning import DeliveryPlanningError
 from .diagnostics import (
@@ -90,6 +85,7 @@ from .diagnostics import (
     new_diagnostics_snapshot,
     summarize_projection_health,
 )
+from .gateway_composition import GatewayExtensions, GatewayLimits, GatewayRepositories
 from .gateway_startup import (
     GatewayNotRunning,
     GatewayStartupAdmission,
@@ -125,39 +121,25 @@ class ImAgentGateway:
         *,
         channels: list[ChannelAdapter],
         applications: list[AgentApplicationAdapter],
-        bindings: BindingRepository,
-        idempotency: IdempotencyRepository | None = None,
-        delivery_submissions: DeliverySubmissionRepository | None = None,
+        repositories: GatewayRepositories,
+        limits: GatewayLimits = GatewayLimits(),
+        extensions: GatewayExtensions = GatewayExtensions(),
         delivery_authorizer: DeliveryAuthorizer | None = None,
         delivery_coordinator: DeliveryCoordinator | None = None,
-        projections: ProjectionRouteRepository | None = None,
-        request_correlations: RequestCorrelationRepository | None = None,
         projection_policy: ProjectionPolicy = ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
-        controller: InboundController | None = None,
-        request_presenter: RequestPresenter | None = None,
-        baseline_history_limit: int = 3,
-        recovery_history_page_size: int = 10,
-        recovery_max_pages: int = 5,
-        catchup_limit: int = 10,
-        projection_item_limit: int = 20,
-        request_delivery_max_pending: int = 256,
-        startup_buffer_max_pending: int = 256,
-        turn_acceptance_event_max_pending: int = 256,
-        subscription_retry_initial_seconds: float = 0.05,
-        subscription_retry_max_seconds: float = 2.0,
-        turn_correlation_retention_seconds: float = 7 * 24 * 60 * 60,
-        request_correlation_retention_seconds: float = 7 * 24 * 60 * 60,
     ) -> None:
         self._channels = {channel.channel_instance_id: channel for channel in channels}
         self._applications = {
             application.summary.ref.application_instance_id: application
             for application in applications
         }
-        self._bindings = bindings
-        self._idempotency = idempotency or InMemoryIdempotencyRepository()
-        self._request_correlations = request_correlations or InMemoryRequestCorrelationRepository()
+        self._bindings = repositories.bindings
+        self._idempotency = repositories.idempotency or InMemoryIdempotencyRepository()
+        self._request_correlations = (
+            repositories.request_correlations or InMemoryRequestCorrelationRepository()
+        )
         self._delivery_coordinator = delivery_coordinator or DeliveryCoordinator()
-        self._controller = controller
+        self._controller = extensions.controller
         self._locks: dict[object, asyncio.Lock] = {}
         self._request_locks = KeyedLockRegistry()
         self._outbound_deliveries: dict[
@@ -167,15 +149,15 @@ class ImAgentGateway:
         self._starting = False
         self._accepting_inbound = False
         self._startup_admission = GatewayStartupAdmission[ClaimedInbound | GatewayOperation](
-            max_pending=startup_buffer_max_pending
+            max_pending=limits.startup_buffer_max_pending
         )
-        projection_repository = projections or InMemoryProjectionRouteRepository()
+        projection_repository = repositories.projections or InMemoryProjectionRouteRepository()
         self._projection_runtime = ThreadProjectionRuntime(
             applications=self._applications,
-            bindings=bindings,
+            bindings=repositories.bindings,
             projections=projection_repository,
             request_correlations=self._request_correlations,
-            request_presenter=request_presenter,
+            request_presenter=extensions.request_presenter,
             projection_policy=projection_policy,
             execute_application=self.execute_application,
             deliver_outbound=self._deliver_outbound,
@@ -183,21 +165,23 @@ class ImAgentGateway:
                 self._deliver_outbound,
                 cancellable=True,
             ),
-            baseline_history_limit=baseline_history_limit,
-            recovery_history_page_size=recovery_history_page_size,
-            recovery_max_pages=recovery_max_pages,
-            catchup_limit=catchup_limit,
-            projection_item_limit=projection_item_limit,
-            request_delivery_max_pending=request_delivery_max_pending,
-            turn_acceptance_event_max_pending=turn_acceptance_event_max_pending,
-            subscription_retry_initial_seconds=subscription_retry_initial_seconds,
-            subscription_retry_max_seconds=subscription_retry_max_seconds,
-            turn_correlation_retention_seconds=turn_correlation_retention_seconds,
-            request_correlation_retention_seconds=request_correlation_retention_seconds,
+            baseline_history_limit=limits.baseline_history_limit,
+            recovery_history_page_size=limits.recovery_history_page_size,
+            recovery_max_pages=limits.recovery_max_pages,
+            catchup_limit=limits.catchup_limit,
+            projection_item_limit=limits.projection_item_limit,
+            request_delivery_max_pending=limits.request_delivery_max_pending,
+            turn_acceptance_event_max_pending=limits.turn_acceptance_event_max_pending,
+            subscription_retry_initial_seconds=limits.subscription_retry_initial_seconds,
+            subscription_retry_max_seconds=limits.subscription_retry_max_seconds,
+            turn_correlation_retention_seconds=limits.turn_correlation_retention_seconds,
+            request_correlation_retention_seconds=(limits.request_correlation_retention_seconds),
         )
         self._delivery_service = ProactiveDeliveryService(
             channels=self._channels,
-            submissions=delivery_submissions or InMemoryDeliverySubmissionRepository(),
+            submissions=(
+                repositories.delivery_submissions or InMemoryDeliverySubmissionRepository()
+            ),
             resolve_thread_routes=self._projection_runtime.active_routes,
             authorizer=delivery_authorizer,
             coordinator=self._delivery_coordinator,

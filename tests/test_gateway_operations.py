@@ -4,9 +4,10 @@ import asyncio
 import shlex
 import tempfile
 import unittest
-from dataclasses import replace
+from dataclasses import FrozenInstanceError, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any, cast
 
 from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
@@ -48,7 +49,7 @@ from imagent.contracts import (
 )
 from imagent.controllers import MarkdownRequestPresenter, SlashController
 from imagent.delivery_coordination import DeliveryCoordinator, DeliveryCoordinatorConfig
-from imagent.gateway import ImAgentGateway
+from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.projections import (
     InMemoryProjectionRouteRepository,
     derive_projection_route_id,
@@ -79,10 +80,37 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
         self.gateway = ImAgentGateway(
             channels=[],
             applications=[self.application],
-            bindings=self.bindings,
+            repositories=GatewayRepositories(
+                bindings=self.bindings,
+            ),
         )
         self.conversation = ConversationRef("fake-channel", "conversation-1")
         self.project = ProjectRef("fake-agent", "contract-project")
+
+    def test_gateway_composition_groups_are_frozen_and_keep_defaults(self) -> None:
+        repositories = GatewayRepositories(bindings=self.bindings)
+        limits = GatewayLimits()
+        extensions = GatewayExtensions()
+
+        self.assertIs(repositories.bindings, self.bindings)
+        self.assertIsNone(repositories.idempotency)
+        self.assertIsNone(repositories.projections)
+        self.assertEqual(limits.baseline_history_limit, 3)
+        self.assertEqual(limits.startup_buffer_max_pending, 256)
+        self.assertEqual(limits.subscription_retry_initial_seconds, 0.05)
+        self.assertEqual(limits.turn_correlation_retention_seconds, 7 * 24 * 60 * 60)
+        self.assertIsNone(extensions.controller)
+        self.assertIsNone(extensions.request_presenter)
+        with self.assertRaises(FrozenInstanceError):
+            limits.baseline_history_limit = 4  # type: ignore[misc]
+
+    def test_flat_gateway_repository_constructor_is_removed(self) -> None:
+        with self.assertRaisesRegex(TypeError, "bindings"):
+            cast(Any, ImAgentGateway)(
+                channels=[],
+                applications=[],
+                bindings=self.bindings,
+            )
 
     async def test_resource_listing_never_changes_conversation_binding(self) -> None:
         original = await self.bindings.put(
@@ -161,7 +189,9 @@ class GatewayLifecycleTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
-            bindings=InMemoryBindingRepository(),
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+            ),
         )
         conversation = ConversationRef("fake-channel", "restart")
 
@@ -211,14 +241,20 @@ class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
         self.gateway = ImAgentGateway(
             channels=[self.channel],
             applications=[self.application],
-            bindings=self.bindings,
-            projections=self.projections,
-            request_correlations=self.correlations,
-            request_presenter=MarkdownRequestPresenter(),
-            controller=SlashController(),
+            repositories=GatewayRepositories(
+                bindings=self.bindings,
+                projections=self.projections,
+                request_correlations=self.correlations,
+            ),
+            extensions=GatewayExtensions(
+                controller=SlashController(),
+                request_presenter=MarkdownRequestPresenter(),
+            ),
             projection_policy=ProjectionPolicy.ALL_OBSERVERS,
             delivery_coordinator=self.coordinator,
-            request_delivery_max_pending=2,
+            limits=GatewayLimits(
+                request_delivery_max_pending=2,
+            ),
         )
         await self.gateway.start()
         self.conversation_a = ConversationRef("fake-channel", "conversation-a")
@@ -253,14 +289,20 @@ class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
         self.gateway = ImAgentGateway(
             channels=[self.channel],
             applications=[self.application],
-            bindings=self.bindings,
-            projections=self.projections,
-            request_correlations=self.correlations,
-            request_presenter=MarkdownRequestPresenter(),
-            controller=SlashController(),
+            repositories=GatewayRepositories(
+                bindings=self.bindings,
+                projections=self.projections,
+                request_correlations=self.correlations,
+            ),
+            extensions=GatewayExtensions(
+                controller=SlashController(),
+                request_presenter=MarkdownRequestPresenter(),
+            ),
             projection_policy=ProjectionPolicy.ALL_OBSERVERS,
             delivery_coordinator=self.coordinator,
-            request_delivery_max_pending=request_delivery_max_pending,
+            limits=GatewayLimits(
+                request_delivery_max_pending=request_delivery_max_pending,
+            ),
         )
         await self.gateway.start()
 
@@ -958,10 +1000,14 @@ class RequestRestartTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
-            bindings=InMemoryBindingRepository(),
-            projections=projections,
-            request_correlations=correlations,
-            request_presenter=MarkdownRequestPresenter(),
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+                projections=projections,
+                request_correlations=correlations,
+            ),
+            extensions=GatewayExtensions(
+                request_presenter=MarkdownRequestPresenter(),
+            ),
             projection_policy=ProjectionPolicy.ALL_OBSERVERS,
         )
         await gateway.start()
@@ -1012,11 +1058,15 @@ class RequestRestartTests(unittest.IsolatedAsyncioTestCase):
             first = ImAgentGateway(
                 channels=[first_channel],
                 applications=[application],
-                bindings=state,
-                projections=state,
-                idempotency=state,
-                request_correlations=state,
-                request_presenter=MarkdownRequestPresenter(),
+                repositories=GatewayRepositories(
+                    bindings=state,
+                    idempotency=state,
+                    projections=state,
+                    request_correlations=state,
+                ),
+                extensions=GatewayExtensions(
+                    request_presenter=MarkdownRequestPresenter(),
+                ),
                 projection_policy=ProjectionPolicy.ALL_OBSERVERS,
             )
             await first.start()
@@ -1045,11 +1095,15 @@ class RequestRestartTests(unittest.IsolatedAsyncioTestCase):
             second = ImAgentGateway(
                 channels=[FakeChannelAdapter()],
                 applications=[application],
-                bindings=state,
-                projections=state,
-                idempotency=state,
-                request_correlations=state,
-                request_presenter=MarkdownRequestPresenter(),
+                repositories=GatewayRepositories(
+                    bindings=state,
+                    idempotency=state,
+                    projections=state,
+                    request_correlations=state,
+                ),
+                extensions=GatewayExtensions(
+                    request_presenter=MarkdownRequestPresenter(),
+                ),
                 projection_policy=ProjectionPolicy.ALL_OBSERVERS,
             )
             await second.start()

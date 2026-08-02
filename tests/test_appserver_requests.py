@@ -38,7 +38,7 @@ from imagent.contracts import (
 )
 from imagent.controllers import MarkdownRequestPresenter
 from imagent.events import EventStreamReset
-from imagent.gateway import ImAgentGateway
+from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
 from imagent.projections import InMemoryProjectionRouteRepository
 from imagent.request_correlations import InMemoryRequestCorrelationRepository
 from imagent.testing import FakeChannelAdapter
@@ -749,10 +749,14 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[adapter],
-            bindings=InMemoryBindingRepository(),
-            projections=InMemoryProjectionRouteRepository(),
-            request_correlations=correlations,
-            request_presenter=MarkdownRequestPresenter(),
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+                projections=InMemoryProjectionRouteRepository(),
+                request_correlations=correlations,
+            ),
+            extensions=GatewayExtensions(
+                request_presenter=MarkdownRequestPresenter(),
+            ),
             projection_policy=ProjectionPolicy.ALL_OBSERVERS,
         )
         conversation = ConversationRef("zen-channel", "conversation-1")

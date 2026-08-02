@@ -36,7 +36,7 @@ from imagent.contracts import (
 )
 from imagent.controllers import SlashController
 from imagent.events import EventStreamOverflow
-from imagent.gateway import ImAgentGateway
+from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
 from imagent.storage import SQLiteGatewayState
 
 
@@ -345,8 +345,10 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             gateway = ImAgentGateway(
                 channels=[channel],
                 applications=[],
-                bindings=recovered,
-                idempotency=recovered,
+                repositories=GatewayRepositories(
+                    bindings=recovered,
+                    idempotency=recovered,
+                ),
             )
             prepared = False
 
@@ -391,7 +393,9 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[],
             applications=[application],
-            bindings=InMemoryBindingRepository(),
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+            ),
         )
         thread_ref = ThreadRef("codex-main", "codex-thread")
         bound = await gateway.execute_gateway(
@@ -448,8 +452,12 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
-            bindings=bindings,
-            controller=SlashController(),
+            repositories=GatewayRepositories(
+                bindings=bindings,
+            ),
+            extensions=GatewayExtensions(
+                controller=SlashController(),
+            ),
         )
 
         await gateway.start()
@@ -555,8 +563,12 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
-            bindings=bindings,
-            controller=SlashController(),
+            repositories=GatewayRepositories(
+                bindings=bindings,
+            ),
+            extensions=GatewayExtensions(
+                controller=SlashController(),
+            ),
         )
 
         await gateway.start()
@@ -758,7 +770,9 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
-            bindings=InMemoryBindingRepository(),
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+            ),
         )
 
         await gateway.start()
@@ -838,7 +852,9 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
-            bindings=InMemoryBindingRepository(),
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+            ),
         )
 
         await gateway.start()
@@ -897,8 +913,12 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
-            bindings=InMemoryBindingRepository(),
-            controller=SlashController(),
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+            ),
+            extensions=GatewayExtensions(
+                controller=SlashController(),
+            ),
         )
 
         await gateway.start()
