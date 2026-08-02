@@ -10,6 +10,9 @@ Protect these historical and known failure modes:
 - one shared queue causing subscribers to steal events;
 - a slow subscriber blocking a socket/read callback;
 - `message.completed` terminating a multi-message Turn;
+- live `message.completed` and authoritative-history output losing normalized
+  Agent Metadata, sharing a mutable top-level mapping, or changing delivery and
+  checkpoint identity;
 - cross-Thread counters producing false gaps;
 - accepting an expired cursor without authoritative recovery;
 - manufacturing replay/sequence support;

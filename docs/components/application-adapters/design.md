@@ -78,6 +78,14 @@ is native and the selection policy belongs to the consumer.
 History contains all completed Agent messages in a Turn. Application-native
 message phases remain namespaced Metadata until common reuse is proven.
 
+Metadata intended for outbound projection contains only bounded non-secret
+scalar presentation facts. Current App Server keys are `phase`,
+`native_application`, and the fixed `native_method`; current T3 keys are
+`kind`, `native_application`, `source`, and `streaming`. Thread/Turn/item IDs
+remain in canonical fields, not Metadata. Raw native payloads, credentials,
+paths, content copies, sender identity, and exception text are excluded before
+the canonical `AgentMessage` crosses the adapter boundary.
+
 ADR 0015 A1 permits a concrete adapter to expose bounded typed presentation or
 artifact-candidate facts inside this same ordered normalization path. It never
 exposes raw notifications or creates a second subscriber. A presentation

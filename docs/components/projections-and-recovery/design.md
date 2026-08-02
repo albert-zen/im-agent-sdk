@@ -68,6 +68,17 @@ after restart. Remembered/all-observer workers follow their durable routes.
 Application subscription/recovery exceptions enter bounded-backoff
 resubscription and update worker health.
 
+Both live `message.completed` events and authoritative history carry the same
+canonical `AgentMessage`. Projection validates at most 16 scalar Metadata facts
+with bounded keys/text/numbers and copies them to `OutboundMessage` as a fresh
+immutable mapping. Unsupported nested, oversized, or non-finite values fail
+before Channel delivery and enter the ordinary projection failure/recovery
+path. Projection assigns no meaning to adapter phase/kind keys. Concrete
+adapters own the non-secret allowlist and must not place raw native payloads,
+credentials, paths, content copies, or resource identity in this map. Metadata
+does not alter stable delivery ID, destination, reply correlation, idempotency,
+or completion-checkpoint compare-and-swap.
+
 ## Projection routes
 
 Input selection, native activation, and output projection are independent.

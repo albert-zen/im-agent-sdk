@@ -27,6 +27,8 @@ Coverage must preserve:
 - binding and projection-route invariants;
 - checkpoint pair validation and Turn reply-correlation identity;
 - multiple completed messages inside one Turn.
+- live completed-event and authoritative-history projection preserve bounded
+  namespaced Agent Metadata without changing delivery/checkpoint semantics.
 
 Any schema change requires a matching Python model/validator change and the
 reverse. Concrete Codex, Zen, T3, IMCodex, and fake adapters must still satisfy
