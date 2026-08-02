@@ -63,6 +63,12 @@ Managed Applications expose real Projects. Flat/fixed Applications omit them.
 Thread lookup is independent of Conversation selection. Native activation is
 an explicit optional operation.
 
+An App Server adapter may receive an immutable, deployment-supplied native
+Thread-start option mapping. This is an adapter configuration seam for native
+sandbox/approval defaults, not a common policy contract: `CreateThread` keeps
+the shared control intent, the adapter-owned `cwd` cannot be overridden, and
+the mapping is neither persisted nor exposed as Agent state.
+
 History contains all completed Agent messages in a Turn. Application-native
 message phases remain namespaced Metadata until common reuse is proven.
 

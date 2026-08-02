@@ -4,8 +4,10 @@ import hashlib
 import inspect
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import Protocol, cast
 
 from ..attachments import configure_shared_filesystem_root, resolve_local_attachment
@@ -179,11 +181,13 @@ class _AppServerApplicationAdapter:
         server_request_mapper: ServerRequestMapper | None = None,
         event_buffer_max_pending: int = 1024,
         steer_active_turn: bool = False,
+        thread_start_options: Mapping[str, object] | None = None,
     ) -> None:
         self._application_instance_id = application_instance_id
         self._client = client
         self._cwd = cwd
         self._shared_filesystem_root = configure_shared_filesystem_root(shared_filesystem_root)
+        self._thread_start_options = _thread_start_options(thread_start_options)
         self._events = EventBroadcaster[str, AgentEvent](max_pending=event_buffer_max_pending)
         self._steer_active_turn = steer_active_turn
         self._client.add_notification_handler(self._handle_notification)
@@ -313,7 +317,10 @@ class _AppServerApplicationAdapter:
         if isinstance(operation, CreateThread):
             if operation.initial_context:
                 raise NotImplementedError("initial thread context is unsupported by App Server")
-            result = await self._client.start_thread(cwd=self._cwd)
+            result = await self._client.start_thread(
+                cwd=self._cwd,
+                **self._thread_start_options,
+            )
             thread = _native_object(result, "thread")
             return ThreadCreated(
                 operation_id=operation.operation_id,
@@ -853,6 +860,7 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
         cwd: str,
         shared_filesystem_root: str | Path | None = None,
         event_buffer_max_pending: int = 1024,
+        thread_start_options: Mapping[str, object] | None = None,
     ) -> None:
         super().__init__(
             application_instance_id=application_instance_id,
@@ -863,6 +871,7 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
             shared_filesystem_root=shared_filesystem_root,
             server_request_mapper=map_zen_appserver_request,
             event_buffer_max_pending=event_buffer_max_pending,
+            thread_start_options=thread_start_options,
         )
 
 
@@ -876,6 +885,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
         shared_filesystem_root: str | Path | None = None,
         event_buffer_max_pending: int = 1024,
         steer_active_turn: bool = True,
+        thread_start_options: Mapping[str, object] | None = None,
     ) -> None:
         super().__init__(
             application_instance_id=application_instance_id,
@@ -887,4 +897,31 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
             server_request_mapper=map_appserver_request,
             event_buffer_max_pending=event_buffer_max_pending,
             steer_active_turn=steer_active_turn,
+            thread_start_options=thread_start_options,
         )
+
+
+def _thread_start_options(
+    options: Mapping[str, object] | None,
+) -> Mapping[str, object]:
+    copied = deepcopy(dict(options or {}))
+    invalid_keys = [key for key in copied if not isinstance(key, str) or not key]
+    if invalid_keys:
+        raise ValueError("App Server thread_start_options keys must be non-empty strings")
+    reserved = sorted({"cwd", "params"}.intersection(copied))
+    if reserved:
+        raise ValueError(
+            "App Server thread_start_options cannot override adapter-owned fields: "
+            + ", ".join(reserved)
+        )
+    aliases = {
+        "approval_policy": "approvalPolicy",
+        "approvals_reviewer": "approvalsReviewer",
+        "sandbox_policy": "sandboxPolicy",
+        "service_name": "serviceName",
+        "thread_id": "threadId",
+    }
+    normalized_keys = [aliases.get(key, key) for key in copied]
+    if len(set(normalized_keys)) != len(normalized_keys):
+        raise ValueError("App Server thread_start_options contain duplicate native fields")
+    return MappingProxyType(copied)

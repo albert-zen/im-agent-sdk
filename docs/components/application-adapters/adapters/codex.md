@@ -89,6 +89,11 @@ Local paths require an explicitly configured shared root. Remote endpoints that
 cannot access or upload a source reject it. Codex workspace, sandbox, approval,
 and Full Access semantics are not chosen by the SDK.
 
+Deployment-owned `thread_start_options` may provide App Server-native defaults
+for newly created Threads. The adapter copies the mapping, rejects ambiguous
+aliases and attempts to replace its configured `cwd`, and does not persist the
+mapping as SDK Thread state.
+
 Local images also carry the connection epoch that proved shared-filesystem
 access. A reconnect between verification and dispatch therefore fails closed.
 App Server exposes no formal generic-file input item, so generic files are
