@@ -567,6 +567,57 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await application.stop()
 
+    async def test_t3_active_poll_state_is_not_evictable(self) -> None:
+        application = T3ApplicationAdapter(
+            application_instance_id="t3-main",
+            client=_T3Client(),
+            activity_presenter=_T3Presenter(),
+            presentation_limits=ApplicationPresentationLimits(max_seen_identities=1),
+        )
+        try:
+            state = application._presentation_state("thread-1")
+            state.pinned_by_poll = True
+            with self.assertRaises(ApplicationPresentationCapacityError):
+                application._presentation_state("thread-2")
+            self.assertIs(application._presentation_states["thread-1"], state)
+        finally:
+            await application.stop()
+
+    async def test_t3_partial_attempt_deduplication_window_is_bounded(self) -> None:
+        application = T3ApplicationAdapter(
+            application_instance_id="t3-main",
+            client=_T3Client(),
+            activity_presenter=_T3Presenter(),
+            presentation_limits=ApplicationPresentationLimits(max_seen_identities=2),
+        )
+        thread_ref = ThreadRef("t3-main", "thread-1")
+
+        def activity(index: int) -> dict[str, object]:
+            return {
+                "id": f"activity-{index}",
+                "turnId": "turn-1",
+                "kind": "tool.progress",
+                "summary": f"Step {index}",
+                "createdAt": f"2026-08-03T10:00:0{index}Z",
+            }
+
+        try:
+            await application._publish_thread_state(
+                thread_ref,
+                {"messages": [], "activities": [activity(0), activity(1)]},
+            )
+            await application._publish_thread_state(
+                thread_ref,
+                {
+                    "messages": [],
+                    "activities": [activity(0), activity(1), activity(2), activity(3)],
+                },
+            )
+            state = application._presentation_states["thread-1"]
+            self.assertEqual(state.seen_activity_ids, {"activity-2", "activity-3"})
+        finally:
+            await application.stop()
+
     async def test_t3_unseen_activity_window_overflow_is_an_explicit_gap(self) -> None:
         application = T3ApplicationAdapter(
             application_instance_id="t3-main",

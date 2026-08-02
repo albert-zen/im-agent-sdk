@@ -98,6 +98,7 @@ class _T3PresentationState:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     seen_activity_ids: set[str] = field(default_factory=set)
     activity_cursor_id: str | None = None
+    pinned_by_poll: bool = False
 
 
 class T3Client(Protocol):
@@ -691,17 +692,27 @@ class T3ApplicationAdapter:
 
     async def _poll_thread(self, thread_ref: ThreadRef) -> None:
         thread_id = thread_ref.native_thread_id
-        while self._events.subscriber_count(thread_id):
-            detail = await self._client.thread_detail(thread_ref.native_thread_id)
-            thread = _object(detail.get("thread"), "thread")
-            initialize = thread_id not in self._initialized_threads
-            await self._publish_thread_state(
-                thread_ref,
-                thread,
-                initialize=initialize,
-            )
-            self._initialized_threads.add(thread_id)
-            await asyncio.sleep(self._poll_interval)
+        presentation_state = (
+            self._presentation_state(thread_id) if self._activity_presenter is not None else None
+        )
+        if presentation_state is not None:
+            presentation_state.pinned_by_poll = True
+        try:
+            while self._events.subscriber_count(thread_id):
+                detail = await self._client.thread_detail(thread_ref.native_thread_id)
+                thread = _object(detail.get("thread"), "thread")
+                initialize = thread_id not in self._initialized_threads
+                await self._publish_thread_state(
+                    thread_ref,
+                    thread,
+                    initialize=initialize,
+                    _presentation_state_override=presentation_state,
+                )
+                self._initialized_threads.add(thread_id)
+                await asyncio.sleep(self._poll_interval)
+        finally:
+            if presentation_state is not None:
+                presentation_state.pinned_by_poll = False
 
     async def _publish_thread_state(
         self,
@@ -710,9 +721,10 @@ class T3ApplicationAdapter:
         *,
         only_turn_id: str | None = None,
         initialize: bool = False,
+        _presentation_state_override: _T3PresentationState | None = None,
     ) -> None:
         state = (
-            self._presentation_state(thread_ref.native_thread_id)
+            _presentation_state_override or self._presentation_state(thread_ref.native_thread_id)
             if self._activity_presenter is not None
             else _T3PresentationState()
         )
@@ -883,7 +895,7 @@ class T3ApplicationAdapter:
                     (
                         key
                         for key, candidate in self._presentation_states.items()
-                        if not candidate.lock.locked()
+                        if not candidate.lock.locked() and not candidate.pinned_by_poll
                     ),
                     None,
                 )
@@ -904,6 +916,7 @@ class T3ApplicationAdapter:
         initialize: bool,
     ) -> tuple[Mapping[str, object], ...]:
         if initialize:
+            presentation_state.seen_activity_ids.clear()
             if activities:
                 final_id = str(activities[-1].get("id") or "")
                 presentation_state.activity_cursor_id = final_id or None
@@ -927,6 +940,10 @@ class T3ApplicationAdapter:
             candidates = activities[cursor_index + 1 :]
         if len(candidates) > self._presentation_limits.max_seen_identities:
             raise EventStreamReset("application_event_poll_window_gap")
+        candidate_ids = {
+            activity_id for activity in candidates if (activity_id := str(activity.get("id") or ""))
+        }
+        presentation_state.seen_activity_ids.intersection_update(candidate_ids)
         return candidates
 
     def _should_publish_t3_message(
@@ -1027,6 +1044,7 @@ class T3ApplicationAdapter:
     ) -> None:
         if self._poll_tasks.get(thread_id) is task:
             self._poll_tasks.pop(thread_id, None)
+        self._initialized_threads.discard(thread_id)
         if task.cancelled():
             return
         error = task.exception()

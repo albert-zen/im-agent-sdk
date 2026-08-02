@@ -52,6 +52,8 @@ Every adapter should prove:
   failure produces an explicit recoverable gap rather than a stalled observer;
 - a missing T3 activity cursor or more unseen activities than the finite live
   window produces a recovery gap before any later checkpoint can advance;
+- active T3 poll state cannot be evicted, capacity exhaustion is explicit, and
+  partial-attempt activity deduplication remains within the configured bound;
 - structured selected values and Codex diff path entries cannot cross the
   typed facts;
 - A1 input/fact collections and text output are finite; timeout, cancellation,
