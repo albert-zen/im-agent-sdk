@@ -21,7 +21,7 @@ from imagent.diagnostics import (
     collect_channel_diagnostics,
     summarize_projection_health,
 )
-from imagent.gateway import ImAgentGateway
+from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.projections import ProjectionWorkerHealth, ProjectionWorkerState
 from imagent.testing.fakes import FakeAgentApplicationAdapter
 
@@ -122,8 +122,12 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
         gateway = ImAgentGateway(
             channels=[],
             applications=[application],
-            bindings=InMemoryBindingRepository(),
-            startup_buffer_max_pending=7,
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+            ),
+            limits=GatewayLimits(
+                startup_buffer_max_pending=7,
+            ),
         )
 
         first = gateway.diagnostics_snapshot()

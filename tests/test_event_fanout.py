@@ -26,7 +26,7 @@ from imagent.contracts import (
     ThreadRef,
 )
 from imagent.events import EventBroadcaster, EventStreamOverflow, EventStreamReset
-from imagent.gateway import ImAgentGateway
+from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway_startup import GatewayNotRunning, GatewayStartupOverflow
 from imagent.request_correlations import InMemoryRequestCorrelationRepository
 from imagent.request_projection_runtime import InteractiveRequestProjection
@@ -262,7 +262,9 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
-            bindings=bindings,
+            repositories=GatewayRepositories(
+                bindings=bindings,
+            ),
             projection_policy=ProjectionPolicy.ALL_OBSERVERS,
         )
         await gateway.start()
@@ -308,10 +310,14 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
-            bindings=bindings,
+            repositories=GatewayRepositories(
+                bindings=bindings,
+            ),
             projection_policy=ProjectionPolicy.ALL_OBSERVERS,
-            subscription_retry_initial_seconds=0,
-            subscription_retry_max_seconds=0,
+            limits=GatewayLimits(
+                subscription_retry_initial_seconds=0,
+                subscription_retry_max_seconds=0,
+            ),
         )
         await gateway.start()
         try:
@@ -363,9 +369,13 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
-            bindings=bindings,
-            subscription_retry_initial_seconds=0,
-            subscription_retry_max_seconds=0,
+            repositories=GatewayRepositories(
+                bindings=bindings,
+            ),
+            limits=GatewayLimits(
+                subscription_retry_initial_seconds=0,
+                subscription_retry_max_seconds=0,
+            ),
         )
         await gateway.start()
         try:
@@ -423,9 +433,13 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
-            bindings=bindings,
-            subscription_retry_initial_seconds=0,
-            subscription_retry_max_seconds=0,
+            repositories=GatewayRepositories(
+                bindings=bindings,
+            ),
+            limits=GatewayLimits(
+                subscription_retry_initial_seconds=0,
+                subscription_retry_max_seconds=0,
+            ),
         )
         await gateway.start()
         try:
@@ -461,8 +475,12 @@ class GatewayStartupAdmissionTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)],
-            bindings=InMemoryBindingRepository(),
-            startup_buffer_max_pending=3,
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+            ),
+            limits=GatewayLimits(
+                startup_buffer_max_pending=3,
+            ),
         )
         drained: list[str] = []
 
@@ -496,8 +514,12 @@ class GatewayStartupAdmissionTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)],
-            bindings=InMemoryBindingRepository(),
-            startup_buffer_max_pending=2,
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+            ),
+            limits=GatewayLimits(
+                startup_buffer_max_pending=2,
+            ),
         )
 
         with self.assertRaises(GatewayStartupOverflow) as raised:
@@ -516,7 +538,9 @@ class GatewayStartupAdmissionTests(unittest.IsolatedAsyncioTestCase):
         gateway = ImAgentGateway(
             channels=[active_channel, failing_channel],
             applications=[application],
-            bindings=InMemoryBindingRepository(),
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+            ),
         )
         starting = asyncio.create_task(gateway.start())
         await active_channel.stopping.wait()

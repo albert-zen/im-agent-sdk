@@ -30,7 +30,7 @@ from imagent.contracts import (
     derive_delivery_submission_id,
 )
 from imagent.delivery_ingress import ProactiveDeliveryJsonHandler
-from imagent.gateway import ImAgentGateway
+from imagent.gateway import GatewayRepositories, ImAgentGateway
 from imagent.proactive_delivery import (
     InMemoryDeliverySubmissionRepository,
     ScopedDeliveryAuthorizer,
@@ -117,8 +117,10 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
                     project_mode=ProjectMode.FLAT,
                 )
             ],
-            bindings=InMemoryBindingRepository(),
-            projections=self.routes,
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+                projections=self.routes,
+            ),
             delivery_authorizer=self.authorizer,
             projection_policy=ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
         )
@@ -192,9 +194,11 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
                     project_mode=ProjectMode.FLAT,
                 )
             ],
-            bindings=InMemoryBindingRepository(),
-            projections=self.routes,
-            delivery_submissions=submissions,
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+                projections=self.routes,
+                delivery_submissions=submissions,
+            ),
             delivery_authorizer=self.authorizer,
             projection_policy=ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
         )

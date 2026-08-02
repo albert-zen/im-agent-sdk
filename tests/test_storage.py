@@ -28,7 +28,7 @@ from imagent.contracts import (
     ThreadRef,
     TurnReplyCorrelation,
 )
-from imagent.gateway import ImAgentGateway
+from imagent.gateway import GatewayRepositories, ImAgentGateway
 from imagent.projections import (
     InMemoryProjectionRouteRepository,
     derive_projection_route_id,
@@ -688,9 +688,11 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
             gateway = ImAgentGateway(
                 channels=[channel],
                 applications=[application],
-                bindings=state,
-                projections=state,
-                idempotency=state,
+                repositories=GatewayRepositories(
+                    bindings=state,
+                    idempotency=state,
+                    projections=state,
+                ),
             )
             await gateway.start()
             try:

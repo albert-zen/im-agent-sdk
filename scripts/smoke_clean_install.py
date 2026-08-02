@@ -11,6 +11,10 @@ CASES = {
     "base": (
         "",
         "import asyncio, importlib.util, imagent; "
+        "from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories; "
+        "assert GatewayRepositories(bindings=object()).bindings is not None; "
+        "assert GatewayLimits().startup_buffer_max_pending == 256; "
+        "assert GatewayExtensions().controller is None; "
         "from imagent.applications import codex_app_server_client; "
         "from imagent.channels import channel_from_config; "
         "assert type(codex_app_server_client(endpoint='stdio://')).__name__ "

@@ -142,6 +142,7 @@ components:
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/inbound_admission.py
       - src/imagent/gateway.py
+      - src/imagent/gateway_composition.py
       - src/imagent/gateway_startup.py
       - src/imagent/delivery_ingress.py
       - src/imagent/proactive_delivery.py

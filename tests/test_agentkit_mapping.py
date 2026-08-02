@@ -84,6 +84,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "src/imagent/adapters.py": {"ports"},
             "src/imagent/attachments.py": {"attachments-and-media"},
             "src/imagent/gateway.py": {"gateway"},
+            "src/imagent/gateway_composition.py": {"gateway"},
             "src/imagent/keyed_locks.py": {"delivery-planning-and-coordination"},
             "src/imagent/delivery_coordination.py": {"delivery-planning-and-coordination"},
             "src/imagent/delivery_planning.py": {"delivery-planning-and-coordination"},
