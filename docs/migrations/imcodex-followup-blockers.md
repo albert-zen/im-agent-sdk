@@ -59,6 +59,12 @@ review, and merges before the next slice is based:
 IMCodex pins none of the intermediate branch commits. Its dependency advances
 only to the final required SDK merge commit present on `main`.
 
+Consumer projection and presentation follow-ups are additionally governed by
+ADR 0015. Metadata fidelity, Channel diagnostics, Application presentation or
+materialization, per-destination policy, delivery outcome observation, and
+Channel startup validation remain independent review slices. They must not be
+recombined into a consumer-migration mega-PR or a generic callback pipeline.
+
 The first slice keeps generic files explicit unsupported rather than adding a
 policy seam without a second concrete downstream encoding. It implements the
 other three items with focused start/steer, TOCTOU, epoch, and Zen/Codex

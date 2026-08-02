@@ -22,6 +22,9 @@ Protect these historical and known failure modes:
   order or delivering twice;
 - route refresh clearing a projection checkpoint, and missing/expired
   checkpoints silently causing an unbounded scan;
+- destination suppression advancing only after outbound idempotency completion,
+  recovery converging a crash between completion and checkpoint CAS without
+  reinvoking policy, and a pre-completion crash safely reevaluating policy;
 - concurrent Turns inheriting the latest inbound message's reply correlation;
 - two Conversations steering the same native Turn replacing its original
   reply destination, including after SQLite restart;

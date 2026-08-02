@@ -17,6 +17,8 @@ This component owns:
   behavior remain consistent.
 - common input assertions that every Application adapter invokes the typed
   pre-dispatch hook and truthfully returns started/steered correlation policy.
+- reusable absent-extension counterexamples and stage-specific assertions for
+  ADR 0015 Ports once each seam is admitted.
 
 It does not own:
 
@@ -39,6 +41,10 @@ A proposed common semantic is accepted only after the contract test can be
 passed honestly by at least two real integrations on the relevant side.
 Capability declarations and explicit unsupported outcomes are valid
 conformance; silent approximation is not.
+
+Extension conformance never provides a generic fake middleware runtime. It
+checks the exact typed position, stable identity, bounded values, default
+absence, and that the extension receives no Gateway/repository authority.
 
 ## Change obligations
 

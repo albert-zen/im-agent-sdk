@@ -44,7 +44,7 @@ It must not store:
 | Thread output route | Gateway | optional in-memory or SQLite |
 | inbound idempotency | Gateway | deployment choice |
 | outbound delivery completion | Gateway | deployment choice |
-| projection completion boundary | Gateway projection state | per route; never transcript content |
+| projection completion boundary | Gateway projection state | per route; completed delivery or durable presentation suppression, never transcript content |
 | Turn reply correlation | Gateway projection state | active IM-originated Turns only |
 | Request route correlation | Gateway projection state | delivered request/destination identity only |
 | Proactive delivery submission | Gateway | fingerprints, route snapshots, outcome/receipt only |
@@ -70,6 +70,12 @@ Insertion is create-only for the Thread/Turn key: an identical repeat is
 idempotent and any different immutable value is a
 `TurnReplyCorrelationConflict`. SQLite uses no destination-replacing upsert.
 Neither state may copy message bodies, Turn status, or native execution state.
+
+ADR 0015 does not add a suppression table or policy payload. O1 uses the same
+stable outbound idempotency claim as delivery: it completes that claim before
+checkpoint compare-and-swap. An already-completed claim can therefore
+converge a lagging route boundary after restart without persisting content,
+visibility settings, or a second outcome authority.
 
 A request route correlation stores no prompt, requested permissions, or
 response. Its persisted response shape is only routing-validation state, not
@@ -108,6 +114,12 @@ write after that boundary is ambiguous, so elapsed wall-clock time never turns
 the protected record back into permission to repeat the operation. Only an
 explicit release on a failure proven to precede dispatch makes it claimable
 again.
+
+When a configured ADR 0015 I2 presenter consumes a `pre_acceptance` failure,
+Gateway explicitly completes the inbound claim before attempting error
+delivery. Persistence still applies the same fenced owner-token transition;
+the presenter cannot mutate or release the record. Without I2, proven
+pre-dispatch failure retains the ordinary explicit-release behavior.
 
 Every acquired lease carries an opaque owner token. Reclaim replaces the
 token, and `refresh`, `mark_side_effect_started`, `complete`, and `release`

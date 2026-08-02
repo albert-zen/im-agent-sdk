@@ -59,6 +59,13 @@ Gateway owns the composed Coordinator lifecycle. Stop cancels admitted work
 before Channel shutdown; a later clean Gateway start reopens the quiescent
 Coordinator rather than retaining stale lanes or capacity.
 
+An ADR 0015 O2 observer runs once only after one logical Coordinator attempt
+has produced its final aggregate receipt or bounded execution error; internal
+segment retries do not create observer calls. Observation is best-effort and
+process-local. It cannot change the receipt, schedule retry, hold Coordinator
+cleanup, or become a durable outcome stream; consumers needing crash-safe
+resource cleanup own a bounded ledger or startup sweep.
+
 The global semaphore surrounds only a native send attempt. A retry delay keeps
 the destination lane, preserving order, but releases the global slot so other
 Conversations can progress. Idle keyed locks are removed.

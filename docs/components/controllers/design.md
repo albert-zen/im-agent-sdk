@@ -23,6 +23,12 @@ It does not own:
 - Channel-specific Markdown escaping, segmentation, or native cards;
 - product-only commands, model/provider selection, or permission policy.
 
+Controllers are not a generic message middleware surface. A Controller may
+consume product interaction grammar and invoke typed actions; it does not
+adapt an unconsumed message for one Application or own failure, projection,
+delivery-outcome, binding, idempotency, or input-continuation policy. Those
+typed extension positions are separately governed by ADR 0015.
+
 ## Flow
 
 Gateway offers an inbound message to the configured Controller. The Controller

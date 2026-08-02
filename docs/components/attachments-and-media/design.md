@@ -65,6 +65,12 @@ If future proactive Artifact delivery needs storage, planning, or retry, those
 responsibilities belong to their owning component rather than expanding this
 trust helper into a delivery subsystem.
 
+An ADR 0015 A1 materializer may return typed `AttachmentContent`, but candidate
+locators remain untrusted and this component does not acquire their bytes or
+lifetime. The consumer validates/materializes into its configured namespace;
+O2 notification may assist clean-process lease release, while crash-safe
+cleanup remains a consumer ledger or startup sweep rather than SDK storage.
+
 ## Change obligations
 
 Changes require attachment trust tests, concrete adapter media tests, and a

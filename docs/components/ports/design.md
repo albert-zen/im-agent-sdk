@@ -44,6 +44,12 @@ Adding a method requires a real caller and at least one implementation. A
 native-specific method stays on a concrete adapter until at least two
 integrations prove a common port.
 
+ADR 0015 extension protocols are stage-specific Ports only when their issue
+has a real consumer and default counterexample. They carry minimum immutable
+typed inputs and never Gateway, repositories, a mutable context bag, or a
+generic stage discriminant. I1 is replay-safe before native dispatch; O2 is a
+best-effort process-local observation rather than a durable subscription.
+
 `ProjectionRouteRepository` owns explicit merge/advance and Turn-correlation
 operations because these are common Gateway projection state across
 Application and Channel implementations. It does not expose transcript or

@@ -20,6 +20,7 @@ Unaccepted directions belong in `docs/ROADMAP.md`.
 | [0012](0012-input-continuation-and-reply-correlation.md) | Accepted | default continuation preference, explicit input results, and immutable Turn reply correlation |
 | [0013](0013-bounded-application-event-admission.md) | Accepted | bounded Application event admission, explicit gaps, and authoritative recovery |
 | [0014](0014-read-only-diagnostics-surface.md) | Accepted | stable redacted process-local diagnostics and consumer observability boundary |
+| [0015](0015-typed-extension-seams-and-composition.md) | Accepted | typed pipeline positions, stage-specific failure/replay semantics, and grouped composition |
 
 Reopening an accepted decision requires updating this index, the ADR, affected
 global/component docs, contracts/tests, and AgentKit mapping when paths or

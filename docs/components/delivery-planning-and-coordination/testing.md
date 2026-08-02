@@ -35,6 +35,9 @@ Coordinator tests prove:
   records `unknown`, and only then releases staging;
 - a clean Gateway restart opens a fresh Coordinator lifecycle;
 - projection and proactive origins use the same injected Coordinator.
+- an ADR 0015 O2 observer runs once after the aggregate logical outcome rather
+  than per segment/retry, cannot rewrite result or cleanup order, and is not
+  replayed as a durable notification after restart;
 - retry timing configuration rejects NaN and infinity.
 
 Projection integration tests must fill Coordinator capacity, then prove a

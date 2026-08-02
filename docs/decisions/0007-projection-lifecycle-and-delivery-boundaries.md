@@ -2,6 +2,9 @@
 
 Status: Accepted
 
+Checkpoint completion semantics were extended by ADR 0015 to include a
+durably suppressed per-destination presentation decision.
+
 ## Context
 
 Live Application events, authoritative history, and IM delivery complete at
@@ -18,23 +21,29 @@ transcript, Turn, request, or execution truth.
 ### Completion checkpoints are per destination route
 
 Each `ThreadProjectionRoute` may carry the stable Agent item ID of its last
-successfully delivered completed message and the time that boundary advanced.
+durably completed projection decision and the time that boundary advanced. A
+decision completes either after successful Channel delivery or after a typed
+per-destination presentation policy durably suppresses it under ADR 0015.
 An ordinary repository route refresh with no checkpoint preserves these
 fields. A `put` carrying a checkpoint must match the stored value; it cannot
-silently advance, clear, or replace it. Successful delivery advances one route
-with an expected-checkpoint compare-and-swap. A stale caller fails explicitly,
-and progress for another Conversation never overwrites it. Agent item IDs are
-opaque and are never compared to guess ordering.
+silently advance, clear, or replace it. A completed delivery or durable
+suppression advances one route with an expected-checkpoint compare-and-swap. A
+stale caller fails explicitly, and progress for another Conversation never
+overwrites it. Agent item IDs are opaque and are never compared to guess
+ordering.
 
 The idempotency claim distinguishes newly acquired work, an already completed
-delivery, and work currently in flight. A fresh successful send advances its
-route checkpoint. During authoritative ordered recovery, an
+delivery decision, and work currently in flight. A fresh successful send or
+typed suppression completes that stable claim before advancing its route
+checkpoint. During authoritative ordered recovery, an
 already-completed stable delivery ID may converge a lagging checkpoint; an
 in-flight claim cannot. Live duplicates never use opaque Agent item IDs to
 guess order. Native Channel send, durable idempotency completion, and
 checkpoint advance are not one transaction. The SDK guarantees one ordered
-delivery decision per stable ID, not strict exactly-once external side effects
-across a process crash.
+projection decision per stable ID, not strict exactly-once external side
+effects across a process crash. Suppression makes no Channel side effect; a
+crash before its idempotency completion may safely reevaluate policy, while a
+crash after completion converges the checkpoint without invoking policy again.
 
 New routes read only a bounded recent baseline plus active Turn catch-up.
 Existing routes scan newest authoritative pages toward their checkpoint with a
@@ -84,7 +93,8 @@ and `all_observers` retain observation while their durable routes exist.
 
 ## Classification
 
-- **Core invariant:** per-route progress, explicit Turn correlation,
+- **Core invariant:** per-route completed delivery-or-suppression progress,
+  explicit Turn correlation,
   baseline-before-live order, one-worker lifecycle, failure-domain isolation.
 - **Optional capability:** native replay/cursor and native reply/topic support.
 - **Adapter-specific policy:** translating optional `reply_to` and native
