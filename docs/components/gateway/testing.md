@@ -43,7 +43,12 @@
   live-only suppression never checkpoints, and pre-side-effect failures
   release only the matching owned claim;
 - a post-outcome observer runs once per logical attempt rather than per segment
-  and cannot rewrite a receipt or cleanup ordering;
+  or internal retry, observes fixed typed receipt/error outcomes only after
+  Coordinator cleanup and destination persistence, and cannot rewrite a
+  receipt, retry, persistence, shutdown, or cleanup ordering;
+- O2 capacity, lifetime, cancellation, and diagnostics are bounded; durable
+  replay, preflight failure, completed recovery, and O1 suppression do not
+  fabricate attempts, and absence preserves every delivery origin;
 - no extension callback runs on a Channel/Application socket read path or
   creates a second native event subscription;
 - resource listing never mutates Conversation binding;

@@ -47,6 +47,10 @@ from .contracts import (
     validate_delivery_submission_record,
 )
 from .delivery_coordination import DeliveryCoordinator
+from .delivery_outcomes import (
+    DeliveryOutcomeErrorCode,
+    DeliveryOutcomeObserverRuntime,
+)
 from .delivery_planning import DeliveryPlanningError
 
 ResolveThreadRoutes = Callable[
@@ -161,12 +165,14 @@ class ProactiveDeliveryService:
         resolve_thread_routes: ResolveThreadRoutes,
         authorizer: DeliveryAuthorizer | None,
         coordinator: DeliveryCoordinator,
+        outcome_observer: DeliveryOutcomeObserverRuntime | None = None,
     ) -> None:
         self._channels = channels
         self._submissions = submissions
         self._resolve_thread_routes = resolve_thread_routes
         self._authorizer = authorizer
         self._coordinator = coordinator
+        self._outcome_observer = outcome_observer
 
     async def deliver(
         self,
@@ -497,19 +503,18 @@ class ProactiveDeliveryService:
     ) -> None:
         snapshot = destination.snapshot
         channel = self._channels[snapshot.conversation_ref.channel_instance_id]
+        message = OutboundMessage(
+            delivery_id=destination.delivery_id,
+            conversation_ref=snapshot.conversation_ref,
+            content=intent.content,
+            created_at=intent.created_at,
+            reply_to=intent.reply_to or snapshot.reply_to_message_id,
+            metadata=intent.metadata,
+        )
         cancellation: asyncio.CancelledError | None = None
+        outcome_error: DeliveryOutcomeErrorCode | None = None
         try:
-            receipt = await self._coordinator.deliver(
-                channel,
-                OutboundMessage(
-                    delivery_id=destination.delivery_id,
-                    conversation_ref=snapshot.conversation_ref,
-                    content=intent.content,
-                    created_at=intent.created_at,
-                    reply_to=intent.reply_to or snapshot.reply_to_message_id,
-                    metadata=intent.metadata,
-                ),
-            )
+            receipt = await self._coordinator.deliver(channel, message)
             validate_delivery_receipt_for_content(receipt, intent.content)
             state = _state_from_receipt(receipt)
             error = (
@@ -523,6 +528,7 @@ class ProactiveDeliveryService:
                 else None
             )
         except DeliveryPlanningError as delivery_error:
+            outcome_error = DeliveryOutcomeErrorCode.PLANNING_FAILED
             receipt = DeliveryReceipt(
                 status=DeliveryReceiptStatus.REJECTED_BY_PLATFORM,
                 detail=str(delivery_error),
@@ -540,6 +546,7 @@ class ProactiveDeliveryService:
             state = DeliverySubmissionState.UNKNOWN
             error = receipt.detail
             cancellation = delivery_error
+            outcome_error = DeliveryOutcomeErrorCode.CANCELLED
         except BaseException as delivery_error:
             if isinstance(delivery_error, (KeyboardInterrupt, SystemExit)):
                 raise
@@ -549,6 +556,7 @@ class ProactiveDeliveryService:
             )
             state = DeliverySubmissionState.UNKNOWN
             error = receipt.detail
+            outcome_error = DeliveryOutcomeErrorCode.EXECUTION_FAILED
         replacement = replace(
             destination,
             state=state,
@@ -556,12 +564,20 @@ class ProactiveDeliveryService:
             error=error,
             updated_at=datetime.now(UTC),
         )
-        await self._submissions.update_delivery_destination(
-            submission_id,
-            destination.delivery_id,
-            expected_state=DeliverySubmissionState.IN_FLIGHT,
-            destination=replacement,
-        )
+        try:
+            await self._submissions.update_delivery_destination(
+                submission_id,
+                destination.delivery_id,
+                expected_state=DeliverySubmissionState.IN_FLIGHT,
+                destination=replacement,
+            )
+        finally:
+            if self._outcome_observer is not None:
+                self._outcome_observer.notify(
+                    message,
+                    receipt=receipt if outcome_error is None else None,
+                    error=outcome_error,
+                )
         if cancellation is not None:
             raise cancellation
 

@@ -135,9 +135,11 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
 
         self.assertIsInstance(first, DiagnosticsSnapshot)
         self.assertFalse(first.authoritative)
-        self.assertEqual(first.schema_version, 6)
+        self.assertEqual(first.schema_version, 7)
         self.assertIsNone(first.gateway.inbound_content_transformer)
         self.assertIsNone(first.gateway.inbound_failure_presenter)
+        self.assertIsNone(first.gateway.outbound_presentation)
+        self.assertIsNone(first.gateway.delivery_outcome_observer)
         self.assertEqual(first.applications, (ApplicationDiagnosticFacts("fake-agent", "fake"),))
         self.assertEqual(first.channels, ())
         self.assertEqual(

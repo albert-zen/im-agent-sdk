@@ -36,6 +36,11 @@ The public facts are:
   overrun, and capacity-rejection counts plus one fixed last-failure category;
   message, route, delivery, policy output, and exception detail are absent. An
   absent policy exposes no fabricated facts.
+- configured O2 delivery-outcome observation: process-lifetime notification,
+  success, failure, timeout, cancellation, cancellation-overrun, and capacity-
+  rejection counts plus one fixed last-failure category; message, destination,
+  receipt, error detail, observer output, and exception text are absent. An
+  absent observer exposes no fabricated facts.
 
 Every collection is bounded by configuration or a fixed vocabulary. Native
 resource IDs, route IDs, request IDs, message IDs, content, exception text,
@@ -68,7 +73,8 @@ exception text.
 does no native or repository I/O. Its `generated_at` is observation time,
 `schema_version` describes the fact shape, and `authoritative=False` is
 permanent semantic guidance. Repeated reads do not mutate counters.
-Schema version 6 adds optional O1 destination-presentation execution facts to
+Schema version 7 adds optional O2 outcome-observation execution facts to
+Gateway facts. Schema version 6 added optional O1 destination-presentation execution facts to
 Gateway facts. Schema version 5 added optional A1 presentation execution facts
 to Application facts. Schema version 4 added optional I2 presenter execution facts; version 3 added
 optional I1 transformer execution facts to the Gateway facts. Version 2 added

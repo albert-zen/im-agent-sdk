@@ -515,7 +515,7 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(len(channel.sent), 1)
         self.assertNotIn("secret transformer failure", json.dumps(asdict(snapshot), default=str))
-        self.assertEqual(snapshot.schema_version, 6)
+        self.assertEqual(snapshot.schema_version, 7)
         self.assertIsNotNone(snapshot.gateway.inbound_failure_presenter)
         assert snapshot.gateway.inbound_failure_presenter is not None
         self.assertEqual(snapshot.gateway.inbound_failure_presenter.invocation_count, 1)

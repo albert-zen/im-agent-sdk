@@ -10,6 +10,7 @@ from .adapters import (
     RequestCorrelationRepository,
 )
 from .controllers import InboundController, RequestPresenter
+from .delivery_outcomes import DeliveryOutcomeObserver
 from .inbound_content import InboundContentTransformer
 from .inbound_failures import InboundFailurePresenter
 from .outbound_presentation import OutboundPresentationPolicy
@@ -53,6 +54,10 @@ class GatewayLimits:
     outbound_presentation_max_items: int = 64
     outbound_presentation_max_text_characters: int = 16_384
     outbound_presentation_max_concurrency: int = 16
+    delivery_outcome_observer_timeout_seconds: float = 30.0
+    delivery_outcome_observer_max_items: int = 256
+    delivery_outcome_observer_max_text_characters: int = 65_536
+    delivery_outcome_observer_max_concurrency: int = 16
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,3 +69,4 @@ class GatewayExtensions:
     inbound_content_transformer: InboundContentTransformer | None = None
     inbound_failure_presenter: InboundFailurePresenter | None = None
     outbound_presentation: OutboundPresentationPolicy | None = None
+    delivery_outcome_observer: DeliveryOutcomeObserver | None = None
