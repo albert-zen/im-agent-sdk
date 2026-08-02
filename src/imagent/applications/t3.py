@@ -713,7 +713,10 @@ class T3ApplicationAdapter:
                                 ),
                             ),
                             created_at=_parse_datetime(message.get("createdAt")),
-                            metadata={"native_application": "t3"},
+                            metadata={
+                                "native_application": "t3",
+                                "streaming": bool(message.get("streaming")),
+                            },
                         )
                     },
                 ),
@@ -971,7 +974,6 @@ def _t3_agent_message(
         content=(TextContent(text, TextFormat.MARKDOWN),),
         created_at=_parse_datetime(message.get("createdAt") or message.get("updatedAt")),
         metadata={
-            "turn_id": str(message.get("turnId") or ""),
             "streaming": bool(message.get("streaming")),
             "native_application": "t3",
         },
@@ -1007,7 +1009,6 @@ def _t3_activity_message(
         created_at=_parse_datetime(activity.get("createdAt")),
         metadata={
             "kind": kind,
-            "turn_id": str(activity.get("turnId") or ""),
             "native_application": "t3",
             "source": "activity",
         },

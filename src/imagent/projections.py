@@ -3,10 +3,13 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-from collections.abc import Awaitable, Callable, Iterable
+import math
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum
+from itertools import islice
+from types import MappingProxyType
 
 from .adapters import (
     IdempotencyClaimStatus,
@@ -32,6 +35,12 @@ DeliverOutbound = Callable[
     [OutboundMessage],
     Awaitable[IdempotencyClaimStatus],
 ]
+
+_PROJECTION_METADATA_MAX_ITEMS = 16
+_PROJECTION_METADATA_MAX_KEY_LENGTH = 64
+_PROJECTION_METADATA_MAX_TEXT_LENGTH = 256
+_PROJECTION_METADATA_MIN_INTEGER = -(2**63)
+_PROJECTION_METADATA_MAX_INTEGER = 2**63 - 1
 
 
 class RetryableDeliveryError(RuntimeError):
@@ -327,6 +336,38 @@ def derive_turn_reply_correlation_id(
     return f"imagent:turn-reply:sha256:{digest}"
 
 
+def immutable_projection_metadata(
+    metadata: Mapping[str, object],
+) -> Mapping[str, object]:
+    """Validate one bounded scalar metadata snapshot for outbound projection."""
+
+    keys = list(islice(metadata, _PROJECTION_METADATA_MAX_ITEMS + 1))
+    if len(keys) > _PROJECTION_METADATA_MAX_ITEMS:
+        raise ValueError(
+            f"AgentMessage projection metadata exceeds {_PROJECTION_METADATA_MAX_ITEMS} items"
+        )
+    copied: dict[str, object] = {}
+    for key in keys:
+        if not isinstance(key, str) or not key or len(key) > _PROJECTION_METADATA_MAX_KEY_LENGTH:
+            raise ValueError("AgentMessage projection metadata keys are invalid or too long")
+        value = metadata[key]
+        if isinstance(value, str):
+            if len(value) > _PROJECTION_METADATA_MAX_TEXT_LENGTH:
+                raise ValueError(
+                    "AgentMessage projection metadata text exceeds "
+                    f"{_PROJECTION_METADATA_MAX_TEXT_LENGTH} characters"
+                )
+        elif value is None or isinstance(value, bool):
+            pass
+        elif isinstance(value, int):
+            if not _PROJECTION_METADATA_MIN_INTEGER <= value <= _PROJECTION_METADATA_MAX_INTEGER:
+                raise ValueError("AgentMessage projection metadata integer is out of range")
+        elif not (isinstance(value, float) and math.isfinite(value)):
+            raise ValueError("AgentMessage projection metadata values must be bounded scalars")
+        copied[key] = value
+    return MappingProxyType(copied)
+
+
 def merge_projection_route(
     existing: ThreadProjectionRoute | None,
     replacement: ThreadProjectionRoute,
@@ -422,6 +463,7 @@ async def deliver_projected_message(
             ),
             created_at=agent_message.created_at,
             reply_to=reply_to,
+            metadata=immutable_projection_metadata(agent_message.metadata),
         )
     )
     if claim is IdempotencyClaimStatus.IN_FLIGHT:
