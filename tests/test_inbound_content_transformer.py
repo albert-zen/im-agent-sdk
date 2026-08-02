@@ -198,7 +198,7 @@ class InboundContentTransformerTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await gateway.stop()
 
-        self.assertEqual(failed.schema_version, 3)
+        self.assertEqual(failed.schema_version, 4)
         failed_facts = failed.gateway.inbound_content_transformer
         completed_facts = completed.gateway.inbound_content_transformer
         assert failed_facts is not None
