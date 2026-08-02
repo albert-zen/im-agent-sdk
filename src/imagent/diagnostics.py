@@ -405,6 +405,7 @@ _KNOWN_RECOVERY_GAPS = frozenset(
         "application_event_connection_reset",
         "application_event_fanout_overflow",
         "application_event_poll_failed",
+        "application_event_poll_window_gap",
         "checkpoint_missing",
         "checkpoint_out_of_window",
         "projection_window_truncated",

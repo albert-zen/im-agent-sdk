@@ -50,6 +50,8 @@ Every adapter should prove:
 - configured T3 input returns native acceptance before presenter work, live
   message/activity candidates retain history ordering, and a polling presenter
   failure produces an explicit recoverable gap rather than a stalled observer;
+- a missing T3 activity cursor or more unseen activities than the finite live
+  window produces a recovery gap before any later checkpoint can advance;
 - structured selected values and Codex diff path entries cannot cross the
   typed facts;
 - A1 input/fact collections and text output are finite; timeout, cancellation,

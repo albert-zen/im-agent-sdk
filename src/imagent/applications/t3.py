@@ -80,7 +80,7 @@ from ..contracts import (
     validate_application_operation_result,
 )
 from ..diagnostics import ApplicationDiagnosticFacts
-from ..events import EventBroadcaster, EventStreamReset
+from ..events import EventBroadcaster, EventStreamGap, EventStreamReset
 from .presentation import (
     ApplicationPresentationCapacityError,
     ApplicationPresentationLimits,
@@ -97,6 +97,7 @@ logger = logging.getLogger(__name__)
 class _T3PresentationState:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     seen_activity_ids: set[str] = field(default_factory=set)
+    activity_cursor_id: str | None = None
 
 
 class T3Client(Protocol):
@@ -755,15 +756,12 @@ class T3ApplicationAdapter:
 
         if self._activity_presenter is not None:
             seen_activities = presentation_state.seen_activity_ids
-            activities = _object_list(thread.get("activities"))[
-                -self._presentation_limits.max_seen_identities :
-            ]
-            current_activity_ids = {
-                activity_id
-                for activity in activities
-                if (activity_id := str(activity.get("id") or ""))
-            }
-            seen_activities.intersection_update(current_activity_ids)
+            all_activities = _object_list(thread.get("activities"))
+            activities = self._new_t3_activities(
+                all_activities,
+                presentation_state=presentation_state,
+                initialize=initialize,
+            )
             ordered: list[tuple[str, int, str, Mapping[str, object]]] = []
             sequence = 0
             for message in messages:
@@ -834,6 +832,10 @@ class T3ApplicationAdapter:
                             {"message": projected},
                         ),
                     )
+            if all_activities:
+                final_activity_id = str(all_activities[-1].get("id") or "")
+                if final_activity_id:
+                    presentation_state.activity_cursor_id = final_activity_id
 
         latest_turn = _optional_object(thread.get("latestTurn"))
         turn_id = (
@@ -893,6 +895,39 @@ class T3ApplicationAdapter:
             state = _T3PresentationState()
         self._presentation_states[thread_id] = state
         return state
+
+    def _new_t3_activities(
+        self,
+        activities: tuple[Mapping[str, object], ...],
+        *,
+        presentation_state: _T3PresentationState,
+        initialize: bool,
+    ) -> tuple[Mapping[str, object], ...]:
+        if initialize:
+            if activities:
+                final_id = str(activities[-1].get("id") or "")
+                presentation_state.activity_cursor_id = final_id or None
+            return ()
+        cursor_id = presentation_state.activity_cursor_id
+        if cursor_id is None:
+            candidates = activities
+        else:
+            cursor_index = next(
+                (
+                    index
+                    for index in range(len(activities) - 1, -1, -1)
+                    if str(activities[index].get("id") or "") == cursor_id
+                ),
+                None,
+            )
+            if cursor_index is None:
+                if not activities:
+                    return ()
+                raise EventStreamReset("application_event_poll_window_gap")
+            candidates = activities[cursor_index + 1 :]
+        if len(candidates) > self._presentation_limits.max_seen_identities:
+            raise EventStreamReset("application_event_poll_window_gap")
+        return candidates
 
     def _should_publish_t3_message(
         self,
@@ -996,9 +1031,14 @@ class T3ApplicationAdapter:
             return
         error = task.exception()
         if error is not None:
+            gap_code = (
+                error.gap_code
+                if isinstance(error, EventStreamGap)
+                else "application_event_poll_failed"
+            )
             self._events.fail(
                 thread_id,
-                lambda: EventStreamReset("application_event_poll_failed"),
+                lambda: EventStreamReset(gap_code),
                 discard_pending=False,
             )
             logger.error("T3 thread polling failed; subscription terminated for recovery")

@@ -567,6 +567,41 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await application.stop()
 
+    async def test_t3_unseen_activity_window_overflow_is_an_explicit_gap(self) -> None:
+        application = T3ApplicationAdapter(
+            application_instance_id="t3-main",
+            client=_T3Client(),
+            activity_presenter=_T3Presenter(),
+            presentation_limits=ApplicationPresentationLimits(max_seen_identities=2),
+        )
+        thread_ref = ThreadRef("t3-main", "thread-1")
+        try:
+            await application._publish_thread_state(
+                thread_ref,
+                {"messages": [], "activities": []},
+                initialize=True,
+            )
+            activities = [
+                {
+                    "id": f"activity-{index}",
+                    "turnId": "turn-1",
+                    "kind": "tool.progress",
+                    "summary": f"Step {index}",
+                    "createdAt": f"2026-08-03T10:00:0{index}Z",
+                }
+                for index in range(3)
+            ]
+            with self.assertRaisesRegex(EventStreamReset, "application_event_poll_window_gap"):
+                await application._publish_thread_state(
+                    thread_ref,
+                    {"messages": [], "activities": activities},
+                )
+            diagnostics = application.diagnostic_facts().presentation
+            self.assertIsNotNone(diagnostics)
+            self.assertEqual(cast(Any, diagnostics).invocation_count, 0)
+        finally:
+            await application.stop()
+
     async def test_t3_poll_and_post_send_share_one_presentation_lane(self) -> None:
         presenter = _BlockingT3Presenter()
         application = T3ApplicationAdapter(
