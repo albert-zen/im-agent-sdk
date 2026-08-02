@@ -110,6 +110,12 @@ class ApplicationDiagnosticFacts:
     kind: str
     connection: ConnectionDiagnosticFacts | None = None
 
+    def __post_init__(self) -> None:
+        if self.connection is not None and any(
+            queue.name is QueueDiagnosticName.CHANNEL_INBOUND for queue in self.connection.queues
+        ):
+            raise ValueError("Channel inbound queue is not Application-scoped")
+
 
 @dataclass(frozen=True, slots=True)
 class ChannelDiagnosticFacts:
@@ -118,6 +124,13 @@ class ChannelDiagnosticFacts:
     channel_instance_id: str
     kind: str
     connection: ConnectionDiagnosticFacts | None = None
+
+    def __post_init__(self) -> None:
+        if self.connection is not None and any(
+            queue.name is not QueueDiagnosticName.CHANNEL_INBOUND
+            for queue in self.connection.queues
+        ):
+            raise ValueError("diagnostic queue is not Channel-scoped")
 
 
 @dataclass(frozen=True, slots=True)
@@ -335,7 +348,7 @@ def collect_channel_diagnostics(
             continue
         try:
             connection = _coerce_channel_connection(getattr(facts, "connection", None))
-        except (AttributeError, TypeError, ValueError):
+        except Exception:
             connection = None
         collected.append(ChannelDiagnosticFacts(channel_instance_id, kind, connection))
     return tuple(sorted(collected, key=lambda facts: facts.channel_instance_id))

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import tempfile
 import unittest
 from datetime import UTC, datetime
@@ -124,24 +125,133 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
             for adapter in adapters:
                 await adapter.start(ignore, ignore)
             try:
+                adapter_by_kind = {adapter.kind: adapter for adapter in adapters}
                 facts = {adapter.kind: adapter.diagnostic_facts() for adapter in adapters}
-                for kind in ("qq", "feishu"):
+                native = {adapter.kind: cast(Any, adapter._native) for adapter in adapters}
+
+                def connection_for(kind: str):
                     connection = facts[kind].connection
                     self.assertIsNotNone(connection)
                     assert connection is not None
+                    return connection
+
+                for kind in ("qq", "feishu"):
+                    connection = connection_for(kind)
                     queues = connection.queues
                     self.assertEqual(len(queues), 1)
                     self.assertEqual(queues[0].name, QueueDiagnosticName.CHANNEL_INBOUND)
                     self.assertGreater(queues[0].capacity, 0)
                     self.assertEqual(queues[0].depth, 0)
                 for kind in ("telegram", "weixin"):
-                    connection = facts[kind].connection
-                    self.assertIsNotNone(connection)
-                    assert connection is not None
+                    connection = connection_for(kind)
                     self.assertEqual(connection.queues, ())
+
+                for kind, concrete in native.items():
+                    concrete.mark_health(connected=False, status="connecting")
+                    connecting = adapter_by_kind[kind].diagnostic_facts().connection
+                    self.assertIsNotNone(connecting)
+                    assert connecting is not None
+                    self.assertEqual(
+                        connecting.state,
+                        ConnectionDiagnosticState.CONNECTING,
+                    )
+                    concrete.mark_health(connected=True, status="connected")
+                    ready = adapter_by_kind[kind].diagnostic_facts().connection
+                    self.assertIsNotNone(ready)
+                    assert ready is not None
+                    self.assertEqual(
+                        ready.state,
+                        ConnectionDiagnosticState.READY,
+                    )
+
+                qq = native["qq"]
+                qq._ensure_inbound_worker = lambda: None
+                qq_capacity = connection_for("qq").queues[0].capacity
+                queued = InboundMessage(
+                    channel_id="qq",
+                    conversation_id="c2c:queued",
+                    user_id="queued",
+                    message_id="queued",
+                    text="queued",
+                )
+                for _ in range(qq_capacity):
+                    qq._inbound_queue.put_nowait((queued, (), (), None, 0))
+                self.assertEqual(
+                    qq.diagnostic_connection_facts().queues[0].depth,
+                    qq_capacity,
+                )
+                with self.assertRaisesRegex(RuntimeError, "queue is full"):
+                    qq._queue_dispatch_event(
+                        "C2C_MESSAGE_CREATE",
+                        {
+                            "id": "overflow",
+                            "content": "overflow",
+                            "author": {"user_openid": "overflow-user"},
+                        },
+                        None,
+                    )
+                self.assertEqual(
+                    qq.diagnostic_connection_facts().queues[0].overflow_count,
+                    1,
+                )
+
+                feishu = native["feishu"]
+                feishu_capacity = connection_for("feishu").queues[0].capacity
+                feishu._main_loop = asyncio.get_running_loop()
+                feishu._inbound_queue = asyncio.Queue(maxsize=feishu_capacity)
+                for index in range(feishu_capacity):
+                    self.assertTrue(feishu._inbound_slots.acquire(blocking=False))
+                    feishu._enqueue_inbound(
+                        InboundMessage(
+                            channel_id="feishu",
+                            conversation_id="chat:queued",
+                            user_id="queued",
+                            message_id=f"queued-{index}",
+                            text="queued",
+                        ),
+                        (),
+                        (),
+                    )
+                self.assertEqual(
+                    feishu.diagnostic_connection_facts().queues[0].depth,
+                    feishu_capacity,
+                )
+                feishu._queue_inbound(
+                    SimpleNamespace(
+                        id="overflow",
+                        message_id="overflow",
+                        raw_content_type="text",
+                        content_text="overflow",
+                        resources=[],
+                        mentioned_bot=False,
+                        conversation=SimpleNamespace(
+                            chat_id="overflow",
+                            chat_type="p2p",
+                            thread_id=None,
+                        ),
+                        sender=SimpleNamespace(open_id="overflow-user"),
+                    )
+                )
+                self.assertEqual(
+                    feishu.diagnostic_connection_facts().queues[0].overflow_count,
+                    1,
+                )
+                feishu._last_overflow_report_at = -100.0
+                feishu._report_inbound_overflow()
+                self.assertEqual(feishu._overflow_count, 0)
+                self.assertEqual(
+                    feishu.diagnostic_connection_facts().queues[0].overflow_count,
+                    1,
+                )
             finally:
                 for adapter in adapters:
                     await adapter.stop()
+
+            for adapter in adapters:
+                connection = adapter.diagnostic_facts().connection
+                self.assertIsNotNone(connection)
+                assert connection is not None
+                self.assertEqual(connection.state, ConnectionDiagnosticState.DISCONNECTED)
 
     def test_repeated_reconnect_updates_increment_once(self) -> None:
         state = NativeChannelDiagnosticState()

@@ -176,17 +176,17 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
         valid = Channel(ChannelDiagnosticFacts("qq-main", "qq", connection))
         mismatch = Channel(ChannelDiagnosticFacts("secret-instance", "qq", connection))
         invalid = Channel(
-            ChannelDiagnosticFacts(
-                "qq-main",
-                "qq",
-                cast(ConnectionDiagnosticFacts, SimpleNamespace(state="consumer-value")),
+            SimpleNamespace(
+                channel_instance_id="qq-main",
+                kind="qq",
+                connection=SimpleNamespace(state="consumer-value"),
             )
         )
         invalid_queue_scope = Channel(
-            ChannelDiagnosticFacts(
-                "qq-main",
-                "qq",
-                ConnectionDiagnosticFacts(
+            SimpleNamespace(
+                channel_instance_id="qq-main",
+                kind="qq",
+                connection=ConnectionDiagnosticFacts(
                     state=ConnectionDiagnosticState.READY,
                     connection_epoch=1,
                     reconnect_count=0,
@@ -219,6 +219,16 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
                 raise RuntimeError("secret provider attribute failure")
 
         raising_provider_attribute = RaisingProviderAttribute()
+
+        class RaisingConnectionAttribute:
+            channel_instance_id = "qq-main"
+            kind = "qq"
+
+            @property
+            def connection(self) -> object:
+                raise RuntimeError("secret connection failure")
+
+        raising_connection_attribute = Channel(RaisingConnectionAttribute())
         raising = Channel(raises=True)
         absent = SimpleNamespace(channel_instance_id="qq-main", kind="qq")
 
@@ -229,6 +239,7 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
             invalid_queue_scope,
             raising_identity,
             raising_provider_attribute,
+            raising_connection_attribute,
             raising,
             absent,
         ):
@@ -241,6 +252,38 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
                 self.assertNotIn("secret-instance", serialized)
                 self.assertNotIn("secret provider failure", serialized)
                 self.assertNotIn("consumer-value", serialized)
+
+    def test_application_and_channel_queue_scopes_remain_distinct(self) -> None:
+        channel_queue = QueueDiagnosticFacts(
+            QueueDiagnosticName.CHANNEL_INBOUND,
+            capacity=1,
+            depth=0,
+        )
+        application_queue = QueueDiagnosticFacts(
+            QueueDiagnosticName.NOTIFICATION,
+            capacity=1,
+            depth=0,
+        )
+        connection = {
+            "state": ConnectionDiagnosticState.READY,
+            "connection_epoch": 1,
+            "reconnect_count": 0,
+            "worker_running": True,
+            "worker_degraded": False,
+        }
+
+        with self.assertRaisesRegex(ValueError, "not Application-scoped"):
+            ApplicationDiagnosticFacts(
+                "app",
+                "appserver",
+                ConnectionDiagnosticFacts(**connection, queues=(channel_queue,)),
+            )
+        with self.assertRaisesRegex(ValueError, "not Channel-scoped"):
+            ChannelDiagnosticFacts(
+                "channel",
+                "qq",
+                ConnectionDiagnosticFacts(**connection, queues=(application_queue,)),
+            )
 
     def test_channel_diagnostics_are_sorted_and_reads_do_not_mutate_provider(self) -> None:
         reads = 0
