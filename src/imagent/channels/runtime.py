@@ -185,10 +185,12 @@ class NativeTransportChannelAdapter:
         if native is not None:
             try:
                 await native.stop()
+            except BaseException:
+                self._last_connection_facts = None
+                raise
+            else:
+                self._last_connection_facts = _native_connection_facts(native)
             finally:
-                facts = _native_connection_facts(native)
-                if facts is not None:
-                    self._last_connection_facts = facts
                 self._native = None
 
     async def send(self, message: OutboundMessage) -> DeliveryReceipt:

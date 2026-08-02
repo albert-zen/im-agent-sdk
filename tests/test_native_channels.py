@@ -19,7 +19,10 @@ from imagent.channels.native.artifacts import (
     stable_artifact_identity,
 )
 from imagent.channels.native.base import BaseChannelAdapter
-from imagent.channels.native.diagnostics import NativeChannelDiagnosticState
+from imagent.channels.native.diagnostics import (
+    NativeChannelDiagnosticState,
+    NativeConnectionDiagnosticSnapshot,
+)
 from imagent.channels.native.models import (
     InboundMessage,
     NativeDeliveryResult,
@@ -45,6 +48,48 @@ from imagent.testing import verify_channel_adapter
 
 
 class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
+    async def test_failed_native_stop_does_not_cache_stale_ready_facts(self) -> None:
+        class Native:
+            channel_id = "qq"
+
+            def __init__(self, middleware) -> None:
+                self.middleware = middleware
+
+            async def start(self) -> None:
+                return None
+
+            async def stop(self) -> None:
+                raise RuntimeError("stop failed")
+
+            async def send_message(self, message) -> NativeDeliveryResult:
+                del message
+                return NativeDeliveryResult()
+
+            def diagnostic_connection_facts(self) -> NativeConnectionDiagnosticSnapshot:
+                return NativeConnectionDiagnosticSnapshot(
+                    state="ready",
+                    connection_epoch=1,
+                    reconnect_count=0,
+                    worker_running=True,
+                    worker_degraded=False,
+                )
+
+        adapter = NativeTransportChannelAdapter(
+            channel_instance_id="qq-main",
+            channel_id="qq",
+            native_factory=Native,
+            startup_validator=lambda: None,
+        )
+
+        async def ignore(_item) -> None:
+            return None
+
+        await adapter.start(ignore, ignore)
+        self.assertIsNotNone(adapter.diagnostic_facts().connection)
+        with self.assertRaisesRegex(RuntimeError, "stop failed"):
+            await adapter.stop()
+        self.assertIsNone(adapter.diagnostic_facts().connection)
+
     async def test_native_channel_diagnostics_track_lifecycle_without_io(self) -> None:
         class Native(BaseChannelAdapter):
             channel_id = "qq"
