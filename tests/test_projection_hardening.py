@@ -4,7 +4,7 @@ import asyncio
 import inspect
 import tempfile
 import unittest
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -16,6 +16,7 @@ from imagent.contracts import (
     AgentEvent,
     AgentEventType,
     AgentInput,
+    AgentMessage,
     ApplicationInputDispatch,
     ApplicationInputOutcomeUnknown,
     ApplicationOperation,
@@ -29,6 +30,7 @@ from imagent.contracts import (
     InboundMessage,
     InputContinuationPreference,
     InputDisposition,
+    MessageRole,
     ObserveThread,
     OutboundMessage,
     ProjectionPolicy,
@@ -51,12 +53,201 @@ from imagent.projections import (
     derive_projection_delivery_id,
     derive_projection_route_id,
     derive_turn_reply_correlation_id,
+    immutable_projection_metadata,
 )
 from imagent.storage import InMemoryIdempotencyRepository, SQLiteGatewayState
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 
+class CapturingOutboundGateway(ImAgentGateway):
+    logical_outbound: list[OutboundMessage]
+
+    async def _deliver_outbound(
+        self,
+        message: OutboundMessage,
+        *,
+        cancellable: bool = False,
+    ) -> IdempotencyClaimStatus:
+        self.logical_outbound.append(message)
+        return await super()._deliver_outbound(message, cancellable=cancellable)
+
+
+class OversizedMetadataProbe(Mapping[str, object]):
+    def __init__(self) -> None:
+        self.iterations = 0
+
+    def __getitem__(self, key: str) -> object:
+        raise AssertionError(f"oversized metadata value was read: {key}")
+
+    def __iter__(self) -> Iterator[str]:
+        for index in range(1_000):
+            self.iterations += 1
+            if self.iterations > 17:
+                raise AssertionError("oversized metadata was iterated past the boundary")
+            yield f"key-{index}"
+
+    def __len__(self) -> int:
+        return 1_000
+
+
 class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
+    def test_projected_metadata_rejects_unbounded_or_mutable_values(self) -> None:
+        invalid = (
+            {f"key-{index}": index for index in range(17)},
+            {"key": "x" * 257},
+            {"key": {"nested": "value"}},
+            {"key": ["mutable"]},
+            {"key": float("inf")},
+            {"key": 2**63},
+        )
+        for metadata in invalid:
+            with self.subTest(metadata=metadata):
+                with self.assertRaises(ValueError):
+                    immutable_projection_metadata(metadata)
+
+        oversized = OversizedMetadataProbe()
+        with self.assertRaises(ValueError):
+            immutable_projection_metadata(oversized)
+        self.assertEqual(oversized.iterations, 17)
+
+        projected = immutable_projection_metadata({"phase": "commentary", "streaming": False})
+        self.assertEqual(
+            dict(projected),
+            {"phase": "commentary", "streaming": False},
+        )
+        self.assertIsNone(getattr(projected, "__setitem__", None))
+
+    async def test_live_completed_message_preserves_immutable_metadata(self) -> None:
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        thread = await application.create_thread()
+        conversation = ConversationRef("fake-channel", "metadata-live")
+        channel = FakeChannelAdapter()
+        projections = InMemoryProjectionRouteRepository()
+        gateway = CapturingOutboundGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=InMemoryBindingRepository(),
+            projections=projections,
+        )
+        gateway.logical_outbound = []
+        await gateway.start()
+        try:
+            await gateway.execute_gateway(
+                _observe("observe-metadata-live", conversation, thread.ref)
+            )
+            source_metadata: dict[str, object] = {
+                "phase": "commentary",
+                "native_application": "fake",
+            }
+            message = AgentMessage(
+                agent_item_id="metadata-live-item",
+                thread_ref=thread.ref,
+                role=MessageRole.ASSISTANT,
+                content=(TextContent("Working"),),
+                created_at=datetime.now(UTC),
+                metadata=source_metadata,
+            )
+            application._publish(
+                thread.ref,
+                AgentEventType.MESSAGE_COMPLETED,
+                "turn-metadata-live",
+                {"message": message},
+            )
+            await _wait_until(lambda: len(channel.sent) == 1)
+
+            outbound = gateway.logical_outbound[0]
+            self.assertEqual(dict(outbound.metadata), source_metadata)
+            self.assertIsNot(outbound.metadata, source_metadata)
+            self.assertEqual(outbound.conversation_ref, conversation)
+            self.assertEqual(outbound.reply_to, None)
+            self.assertEqual(
+                outbound.delivery_id,
+                derive_projection_delivery_id(
+                    conversation,
+                    thread.ref,
+                    message.agent_item_id,
+                ),
+            )
+            source_metadata["phase"] = "mutated-after-projection"
+            self.assertEqual(outbound.metadata["phase"], "commentary")
+            self.assertIsNone(getattr(outbound.metadata, "__setitem__", None))
+            self.assertEqual(channel.sent[0].metadata["phase"], "commentary")
+            self.assertEqual(
+                channel.sent[0].metadata["native_application"],
+                "fake",
+            )
+
+            routes = await projections.list_projection_routes(thread.ref)
+            for _ in range(100):
+                routes = await projections.list_projection_routes(thread.ref)
+                if routes[0].checkpoint_agent_item_id is not None:
+                    break
+                await asyncio.sleep(0)
+            self.assertEqual(routes[0].checkpoint_agent_item_id, message.agent_item_id)
+        finally:
+            await gateway.stop()
+
+    async def test_authoritative_history_preserves_agent_metadata(self) -> None:
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        thread = await application.create_thread()
+        await application.send_input(
+            thread.ref,
+            AgentInput(
+                client_message_id="metadata-history-input",
+                content=(TextContent("Run from history"),),
+            ),
+        )
+        conversation = ConversationRef("fake-channel", "metadata-history")
+        channel = FakeChannelAdapter()
+        projections = InMemoryProjectionRouteRepository()
+        gateway = CapturingOutboundGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=InMemoryBindingRepository(),
+            projections=projections,
+            baseline_history_limit=1,
+        )
+        gateway.logical_outbound = []
+        await gateway.start()
+        try:
+            await gateway.execute_gateway(
+                _observe("observe-metadata-history", conversation, thread.ref)
+            )
+            await _wait_until(lambda: len(channel.sent) == 2)
+
+            self.assertEqual(
+                [dict(message.metadata) for message in gateway.logical_outbound],
+                [{"phase": "commentary"}, {"phase": "final_answer"}],
+            )
+            self.assertEqual(
+                [message.delivery_id for message in gateway.logical_outbound],
+                [
+                    derive_projection_delivery_id(
+                        conversation,
+                        thread.ref,
+                        "turn-1:message:1",
+                    ),
+                    derive_projection_delivery_id(
+                        conversation,
+                        thread.ref,
+                        "turn-1:message:2",
+                    ),
+                ],
+            )
+            self.assertEqual(
+                [message.metadata["phase"] for message in channel.sent],
+                ["commentary", "final_answer"],
+            )
+            routes = await projections.list_projection_routes(thread.ref)
+            for _ in range(100):
+                routes = await projections.list_projection_routes(thread.ref)
+                if routes[0].checkpoint_agent_item_id == "turn-1:message:2":
+                    break
+                await asyncio.sleep(0)
+            self.assertEqual(routes[0].checkpoint_agent_item_id, "turn-1:message:2")
+        finally:
+            await gateway.stop()
+
     async def test_transient_coordinator_backpressure_recovers_without_sticky_route(
         self,
     ) -> None:

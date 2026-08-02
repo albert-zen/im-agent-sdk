@@ -215,6 +215,14 @@ completed Agent message, terminal status, error, and compaction marker.
 Application-specific phases such as commentary or final answer may stay in
 namespaced Metadata.
 
+When an `AgentMessage` is projected to an `OutboundMessage`, its normalized
+Metadata is validated as at most 16 scalar facts, with 64-character keys,
+256-character text values, finite numbers, and signed 64-bit integers. The
+fresh mapping is immutable. Core does not interpret native phase/kind keys,
+synthesize native payloads, or change delivery, destination, reply, and
+checkpoint identity because Metadata is present. Unsupported nested, oversized,
+or non-finite values fail explicitly before Channel delivery.
+
 `message.completed` never means `turn.completed`. Only explicit
 `turn.completed`, `turn.failed`, or `turn.interrupted` events terminate a
 Turn.

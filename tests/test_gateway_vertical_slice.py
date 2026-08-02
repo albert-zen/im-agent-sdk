@@ -780,6 +780,12 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             native_channel.sent[0].metadata["reply_to_message_id"],
             "qq-message-1",
         )
+        self.assertEqual(native_channel.sent[0].metadata["phase"], "final_answer")
+        self.assertEqual(
+            native_channel.sent[0].metadata["native_method"],
+            "item/completed",
+        )
+        self.assertNotIn("turn_id", native_channel.sent[0].metadata)
 
     async def test_qq_quote_reaches_application_as_untrusted_content_only(self) -> None:
         native_holder = {}
@@ -925,6 +931,9 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             t3_output.metadata["reply_to_message_id"],
             "t3-4",
         )
+        self.assertEqual(t3_output.metadata["native_application"], "t3")
+        self.assertIs(t3_output.metadata["streaming"], False)
+        self.assertNotIn("turn_id", t3_output.metadata)
         self.assertTrue(all(message.message_type == "markdown" for message in native_channel.sent))
 
     async def test_t3_concurrent_inputs_return_distinct_accepted_turns(
