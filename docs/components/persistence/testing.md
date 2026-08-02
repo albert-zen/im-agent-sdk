@@ -20,6 +20,11 @@ Required scenarios:
 - route refresh preserves checkpoints and rejects conflicting explicit values;
 - concurrent checkpoint advances use compare-and-swap and cannot overwrite a
   newer boundary;
+- durable destination suppression completes outbound idempotency before
+  checkpoint advance and converges the same boundary after SQLite restart
+  without storing policy/content or reinvoking the suppressor;
+- configured inbound failure presentation completes a fenced pre-acceptance
+  claim before error delivery, while the no-presenter path still releases it;
 - a legacy SQLite database without checkpoint/correlation columns migrates
   without losing binding, route, or idempotency rows;
 - Turn reply correlation is create-only/idempotent-same, rejects a different

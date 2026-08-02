@@ -32,6 +32,11 @@ conflict, immutable snapshots, per-destination compare-and-set updates, and
 restart persistence. Authorization fakes must not infer scope from caller
 Metadata.
 
+An ADR 0015 Port must additionally prove its exact stage position, immutable
+identity fields, bounded input/output, absent-provider compatibility, and
+stage-specific replay/failure rule. Contract suites must reject a generic
+pipeline callback or an extension receiving Gateway/repository authority.
+
 Reject changes that:
 
 - add a method implemented by only one product without reuse evidence;

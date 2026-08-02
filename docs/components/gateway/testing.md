@@ -2,6 +2,19 @@
 
 ## Critical scenarios
 
+- grouped Gateway composition preserves every existing no-extension behavior;
+- each configured extension runs only at its ADR 0015 position with stable
+  identity, bounded lifetime, explicit cancellation, and fixed diagnostics;
+- inbound content transformation cannot change envelope, admission, binding,
+  client-message identity, prefer-active-Turn dispatch, or correlation policy;
+- inbound failure presentation cannot reopen a pre-dispatch, unknown, or
+  post-acceptance input claim;
+- destination presentation cannot change delivery identity/destination, and
+  durable suppression has explicit completion-checkpoint behavior;
+- a post-outcome observer runs once per logical attempt rather than per segment
+  and cannot rewrite a receipt or cleanup ordering;
+- no extension callback runs on a Channel/Application socket read path or
+  creates a second native event subscription;
 - resource listing never mutates Conversation binding;
 - binding a Thread never activates native Application state;
 - a Controller and a native interaction use the same typed action surface;

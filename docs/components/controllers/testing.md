@@ -2,6 +2,10 @@
 
 Required scenarios:
 
+- Controller consumption bypasses later inbound-content transformation, while
+  an unconsumed message reaches that separate typed position exactly once;
+- Controller output and errors do not grant access to Gateway extension state
+  or change prefer-active-Turn input semantics;
 - Gateway without a Controller treats Slash-looking text as normal input;
 - the default Controller consumes supported commands;
 - trailing input context is not parsed as Slash arguments;

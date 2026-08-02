@@ -32,6 +32,9 @@ Every adapter should prove:
 - bounded fan-out overflow isolates the slow subscriber and leaves unrelated
   Threads/subscribers progressing;
 - authoritative snapshot/history plus live reconciliation;
+- an ADR 0015 A1 implementation receives bounded typed facts off the socket
+  read path, preserves native item/Turn ordering, produces the same recoverable
+  association in history, and leaves default adapters unchanged when absent;
 - honest replay, cursor, sequence, attachment, request, and unsupported
   capabilities.
 - request open/respond/resolve wire mapping from a native protocol fixture;

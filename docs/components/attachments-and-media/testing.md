@@ -2,6 +2,9 @@
 
 Required scenarios:
 
+- A1 artifact candidates confer no path/URL trust, and O2 loss on process
+  crash cannot make the SDK a durable spool or cleanup ledger;
+
 - no `LocalPath` acceptance without explicit shared-root trust;
 - relative and outside-root paths are rejected;
 - a valid absolute path inside the configured root resolves;

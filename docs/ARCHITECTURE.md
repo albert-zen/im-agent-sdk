@@ -132,6 +132,37 @@ Per-user group selection is a future consumer policy, not current Core.
 12. The Coordinator executes them through the Channel's ordered bounded lane.
 13. Channel performs native encoding/delivery and returns typed receipts.
 
+## Typed extension positions
+
+Consumer and adapter policy may extend the single bridge path only at the
+typed positions governed by ADR 0015:
+
+```text
+verified/admitted input
+  -> optional Controller
+  -> inbound content transform
+  -> binding + prefer-active-Turn dispatch
+  -> classified inbound failure presentation
+
+native Application event/history
+  -> adapter-owned normalized presentation/materialization
+  -> canonical projection
+  -> destination-specific presentation
+  -> common logical delivery
+  -> post-outcome observation
+```
+
+The positions are separate effect contracts, not one middleware chain.
+Extensions cannot change binding, delivery/destination identity, input
+continuation, Turn/request authority, checkpoints outside their documented
+decision, or native retry safety. They receive bounded typed values and never
+raw protocol envelopes or a mutable Gateway context. Missing extensions leave
+the existing path unchanged.
+
+Side-effect-free Channel startup validation and read-only diagnostic providers
+are adapter capabilities outside this message path. Core fidelity fixes, such
+as preserving normalized message Metadata, are not modeled as consumer hooks.
+
 ## Proactive output flow
 
 ```text

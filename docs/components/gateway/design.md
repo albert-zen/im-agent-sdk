@@ -37,6 +37,21 @@ Gateway may depend on Contracts/Core, adapter ports, bridge-state
 repositories, Controllers, and projection/recovery. None of those components
 may import Gateway.
 
+## Typed extension boundary
+
+Gateway may compose the I1 inbound-content, I2 inbound-failure, O1
+destination-presentation, and O2 delivery-outcome positions defined by ADR
+0015. Each position has a separate typed protocol and fixed failure semantics;
+Gateway does not expose a generic middleware callback, raw event stream, or
+mutable processing context.
+
+Composition groups repositories, runtime limits, and consumer extensions by
+ownership before adding more seams. An extension receives only its minimum
+stage input and cannot access Gateway repositories, bindings, routes,
+checkpoints, correlations, continuation selection, or another extension
+through the SDK contract. Application-native presentation/materialization and
+Channel startup validation remain on their owning concrete adapters.
+
 ## Normal input flow
 
 1. A Channel verifies native identity and access policy.
@@ -45,12 +60,17 @@ may import Gateway.
 3. A duplicate receives no lease and stops. An admitted Channel prepares media
    and hands one verified `InboundMessage` through the lease.
 4. An optional Controller may consume the input through typed actions.
-5. Unconsumed content resolves the current `ConversationBinding`.
-6. Gateway establishes or refreshes a `ThreadProjectionRoute`.
-7. It starts Thread observation before calling `send_input`.
-8. The Application emits authoritative user and Agent events.
-9. Projection resolves destinations at delivery time.
-10. Channel sends an `OutboundMessage`; Gateway records correlation outcome.
+5. An optional I1 transformer may replace only unconsumed typed content.
+6. Unconsumed content resolves the current `ConversationBinding`.
+7. Gateway establishes or refreshes a `ThreadProjectionRoute`.
+8. It starts Thread observation before calling `send_input` with the default
+   continuation preference defined by ADR 0012.
+9. Any inbound processing or dispatch failure is classified before an
+   optional I2 presenter runs; claim state remains Gateway-owned.
+10. The Application emits authoritative user and Agent events.
+11. Projection resolves destinations at delivery time and may apply O1.
+12. Channel sends one coordinated logical `OutboundMessage`; O2 observes only
+    the final typed outcome and cannot change it.
 
 ## Proactive delivery flow
 
@@ -106,6 +126,14 @@ not converted to either success or permission to retry. A failed terminal
 idempotency write likewise leaves the protected claim sticky across restart.
 Ordinary `in_flight` leases remain reclaimable, including outbound projection
 claims whose durable submission record can safely converge a retried worker.
+ADR 0015 adds one explicit opt-in exception to ordinary pre-dispatch release:
+when an I2 inbound-failure presenter is configured, Gateway completes a
+`pre_acceptance` claim before attempting the stable error delivery. That
+consumer-selected presentation is terminal, so presenter or Channel failure
+cannot turn a previously presented error into permission for later native
+input. Without I2, the existing safe release-and-raise behavior is unchanged.
+An `outcome_unknown` claim remains protected as `side_effect_started`, and a
+`post_acceptance` claim remains terminal regardless of presentation outcome.
 Inbound admission refreshes and verifies fenced lease ownership immediately
 before handoff and again after startup buffering and Conversation-lock waiting,
 before Controller or binding work. A stale media-preparation worker cannot use

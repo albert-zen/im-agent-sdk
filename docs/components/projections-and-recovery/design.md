@@ -83,12 +83,15 @@ Supported policies:
 Destinations are resolved at delivery time. One inbound message object is not
 retained as routing truth.
 
-The completion checkpoint is per route because one destination can succeed
-while another fails. It stores only the last successfully delivered stable
-Agent item ID and boundary time. Ordinary route refresh preserves an omitted
-checkpoint and rejects a conflicting explicit value. Advance uses an expected
-checkpoint compare-and-swap; opaque Agent item IDs are never sorted to infer
-progress.
+The completion checkpoint is per route because one destination can deliver,
+suppress, or fail independently. It stores only the last stable Agent item ID
+whose per-destination projection decision durably completed, plus boundary
+time. Completion means accepted/already-completed Channel delivery or an ADR
+0015 O1 suppression whose outbound idempotency claim completed first. Ordinary
+route refresh preserves an omitted checkpoint and rejects a conflicting
+explicit value. Advance uses an expected checkpoint compare-and-swap; opaque
+Agent item IDs are never sorted to infer progress. Live-only presentation is
+never a completion boundary.
 
 Per-Turn reply correlation is separate minimal projection state keyed by
 authoritative Thread/Turn/client-message identity. It stores the originating
@@ -184,6 +187,10 @@ Completed-idempotency and checkpoint state converge during authoritative
 ordered recovery. An `already_completed` stable delivery may advance a lagging
 checkpoint there; `in_flight` never advances it. Live duplicate events do not
 rewrite a different checkpoint because opaque item IDs provide no ordering.
+The same convergence applies to a durably suppressed O1 decision. A crash
+before suppression completes may reevaluate the destination policy without a
+Channel side effect; after completion, recovery advances the lagging
+checkpoint without invoking O1 again.
 
 One route's permanent or ambiguous Channel failure blocks that route's later
 ordered decisions and records the route ID, without terminating/restarting the

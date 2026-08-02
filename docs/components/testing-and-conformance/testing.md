@@ -26,3 +26,8 @@ When adding a new adapter:
 2. pass the common contract kit without false fallback claims;
 3. add focused native mapping/recovery tests;
 4. add a second-integration proof before generalizing new semantics.
+
+When adding an ADR 0015 seam, also run its stage owner tests and one valid
+counterexample with the extension absent. Replay tests distinguish I1
+pre-dispatch re-entry, A1 authoritative recovery, O1 idempotent suppression,
+and non-durable O2 observation.

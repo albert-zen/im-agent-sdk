@@ -66,6 +66,14 @@ an explicit optional operation.
 History contains all completed Agent messages in a Turn. Application-native
 message phases remain namespaced Metadata until common reuse is proven.
 
+ADR 0015 A1 permits a concrete adapter to expose bounded typed presentation or
+artifact-candidate facts inside this same ordered normalization path. It never
+exposes raw notifications or creates a second subscriber. A presentation
+claimed as recoverable must produce the same association from authoritative
+history; live-only output remains explicitly non-replayable. Candidate bytes,
+filesystem trust, leases, quotas, and durable spool state remain consumer
+policy outside the adapter and Core.
+
 ## Events and recovery
 
 Native notification producers publish into independent, bounded subscriber

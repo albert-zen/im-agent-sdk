@@ -53,6 +53,7 @@ components:
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
+      - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/adapters.py
       - src/imagent/__init__.py
       - src/imagent/py.typed
@@ -78,6 +79,7 @@ components:
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/migrations/imcodex-followup-blockers.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
+      - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/attachments.py
       - tests/test_attachments.py
     docs:
@@ -101,6 +103,7 @@ components:
       - docs/decisions/README.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
+      - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/keyed_locks.py
       - src/imagent/delivery_coordination.py
       - src/imagent/delivery_planning.py
@@ -136,6 +139,7 @@ components:
       - docs/decisions/0011-durable-inbound-admission-before-media.md
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/decisions/0013-bounded-application-event-admission.md
+      - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/inbound_admission.py
       - src/imagent/gateway.py
       - src/imagent/gateway_startup.py
@@ -174,6 +178,7 @@ components:
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/decisions/0013-bounded-application-event-admission.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
+      - docs/decisions/0015-typed-extension-seams-and-composition.md
       - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/events.py
       - src/imagent/projection_routes.py
@@ -235,6 +240,7 @@ components:
       - docs/decisions/0009-proactive-delivery-routing.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
+      - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/bindings.py
       - src/imagent/delivery_submissions.py
       - src/imagent/request_correlations.py
@@ -264,6 +270,7 @@ components:
       - docs/decisions/0005-input-activation-and-projection.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0008-interactive-request-routing.md
+      - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/controllers/**
       - tests/test_slash_controller.py
     docs:
@@ -290,6 +297,7 @@ components:
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
+      - docs/decisions/0015-typed-extension-seams-and-composition.md
       - docs/migrations/issue-9-imcodex-owner-transfer.md
       - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/channels/**
@@ -333,6 +341,7 @@ components:
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/decisions/0013-bounded-application-event-admission.md
+      - docs/decisions/0015-typed-extension-seams-and-composition.md
       - docs/migrations/issue-9-imcodex-owner-transfer.md
       - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/applications/__init__.py
@@ -378,6 +387,7 @@ components:
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/decisions/0013-bounded-application-event-admission.md
+      - docs/decisions/0015-typed-extension-seams-and-composition.md
       - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/applications/__init__.py
       - src/imagent/applications/t3.py
@@ -411,6 +421,7 @@ components:
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
       - docs/decisions/0013-bounded-application-event-admission.md
+      - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/testing/**
       - tests/test_adapter_contracts.py
     docs:
