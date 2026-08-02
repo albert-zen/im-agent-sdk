@@ -37,6 +37,28 @@ Gateway may depend on Contracts/Core, adapter ports, bridge-state
 repositories, Controllers, and projection/recovery. None of those components
 may import Gateway.
 
+## Composition groups
+
+Gateway construction groups only owner-scoped dependencies that otherwise
+grow together:
+
+- immutable `GatewayRepositories` holds bindings, idempotency, projection
+  routes, request correlations, and delivery submissions;
+- immutable `GatewayLimits` holds every bounded capacity, recovery page/item
+  limit, retry delay, and correlation retention value;
+- immutable `GatewayExtensions` holds the optional Controller and Request
+  Presenter and is the only group later Gateway-owned ADR 0015 seams extend.
+
+Channels, Applications, projection policy, delivery authorization, and the
+shared Delivery Coordinator remain explicit top-level composition
+dependencies. Application A1 configuration and Channel startup validation do
+not enter `GatewayExtensions`. The groups are frozen typed construction values,
+not service locators: Gateway internals resolve their fields once, and no
+extension receives a group, repository, or Gateway reference. Repository-local
+in-memory defaults and every runtime default/lifecycle ordering remain the same
+as before this refactor. The prior parallel keyword constructor is removed once
+repository call sites migrate, so there is one public composition shape.
+
 ## Typed extension boundary
 
 Gateway may compose the I1 inbound-content, I2 inbound-failure, O1
@@ -170,7 +192,7 @@ projection routes have been restored. This prevents a Channel that immediately
 produces input from racing restoration while preserving cross-kind arrival
 order. Overflow fails startup explicitly and normal teardown cancels/joins
 owned component work; no inbound mutation is silently discarded.
-`startup_buffer_max_pending` configures this shared bound.
+`GatewayLimits.startup_buffer_max_pending` configures this shared bound.
 If startup fails, or once shutdown begins, the live admission gate rejects
 later Channel callbacks until another start completes successfully.
 

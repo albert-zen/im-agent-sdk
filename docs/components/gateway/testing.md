@@ -2,6 +2,12 @@
 
 ## Critical scenarios
 
+- repository, limit, and extension composition groups are immutable, typed,
+  and preserve all former defaults while the removed flat keywords fail
+  explicitly;
+- grouping does not change binding, idempotency, projection recovery,
+  request-correlation, Controller/Presenter, Coordinator, proactive-delivery,
+  startup, or shutdown identity and ordering;
 - grouped Gateway composition preserves every existing no-extension behavior;
 - each configured extension runs only at its ADR 0015 position with stable
   identity, bounded lifetime, explicit cancellation, and fixed diagnostics;
