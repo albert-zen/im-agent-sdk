@@ -128,6 +128,15 @@ from .appserver_request_runtime import (
     ServerRequestMapper,
 )
 from .appserver_requests import map_appserver_request, map_zen_appserver_request
+from .presentation import (
+    ApplicationPresentationLimits,
+    ApplicationPresentationRuntime,
+    CodexLiveActivityFacts,
+    CodexLiveActivityKind,
+    CodexLiveActivityMethod,
+    CodexLiveActivityPresenter,
+    CodexPlanStep,
+)
 
 
 class AppServerClient(Protocol):
@@ -182,6 +191,8 @@ class _AppServerApplicationAdapter:
         event_buffer_max_pending: int = 1024,
         steer_active_turn: bool = False,
         thread_start_options: Mapping[str, object] | None = None,
+        live_activity_presenter: CodexLiveActivityPresenter | None = None,
+        presentation_limits: ApplicationPresentationLimits = ApplicationPresentationLimits(),
     ) -> None:
         self._application_instance_id = application_instance_id
         self._client = client
@@ -190,6 +201,14 @@ class _AppServerApplicationAdapter:
         self._thread_start_options = _thread_start_options(thread_start_options)
         self._events = EventBroadcaster[str, AgentEvent](max_pending=event_buffer_max_pending)
         self._steer_active_turn = steer_active_turn
+        self._live_activity_presenter = live_activity_presenter
+        self._presentation_limits = presentation_limits
+        self._seen_live_activity_ids: dict[tuple[str, str], None] = {}
+        self._presentation_runtime = (
+            ApplicationPresentationRuntime(presentation_limits)
+            if live_activity_presenter is not None
+            else None
+        )
         self._client.add_notification_handler(self._handle_notification)
         self._request_runtime = AppServerRequestRuntime(
             application_ref=ApplicationRef(application_instance_id),
@@ -252,6 +271,11 @@ class _AppServerApplicationAdapter:
             application_instance_id=self._application_instance_id,
             kind=self._summary.kind,
             connection=(connection if isinstance(connection, ConnectionDiagnosticFacts) else None),
+            presentation=(
+                self._presentation_runtime.diagnostic_facts()
+                if self._presentation_runtime is not None
+                else None
+            ),
         )
 
     async def start(self) -> None:
@@ -262,11 +286,15 @@ class _AppServerApplicationAdapter:
                 await result
 
     async def stop(self) -> None:
-        close = getattr(self._client, "close", None)
-        if callable(close):
-            result = close()
-            if inspect.isawaitable(result):
-                await result
+        try:
+            close = getattr(self._client, "close", None)
+            if callable(close):
+                result = close()
+                if inspect.isawaitable(result):
+                    await result
+        finally:
+            if self._presentation_runtime is not None:
+                await self._presentation_runtime.close()
 
     async def list_pending_requests(self) -> tuple[InteractiveRequest, ...]:
         raise NotImplementedError(
@@ -743,6 +771,53 @@ class _AppServerApplicationAdapter:
             params.get("turnId") or (turn.get("id") if isinstance(turn, dict) else "") or ""
         )
         thread_ref = self._thread_ref(thread_id)
+        live_activity_presenter = self._live_activity_presenter
+        if live_activity_presenter is not None:
+            facts = _codex_live_activity_facts(
+                thread_ref,
+                turn_id=turn_id or None,
+                method=method,
+                params=params,
+            )
+            if facts is not None:
+                identity = (thread_id, facts.event_id)
+                if identity in self._seen_live_activity_ids:
+                    return
+                self._seen_live_activity_ids[identity] = None
+                while (
+                    len(self._seen_live_activity_ids)
+                    > self._presentation_limits.max_seen_identities
+                ):
+                    self._seen_live_activity_ids.pop(next(iter(self._seen_live_activity_ids)))
+                runtime = self._presentation_runtime
+                if runtime is None:
+                    raise RuntimeError("Codex live presenter runtime is not configured")
+                presentation = await runtime.invoke(
+                    lambda: live_activity_presenter.present_live_activity(facts)
+                )
+                if presentation is not None:
+                    message = AgentMessage(
+                        agent_item_id=facts.event_id,
+                        thread_ref=thread_ref,
+                        role=MessageRole.SYSTEM,
+                        content=presentation.content,
+                        created_at=datetime.now(UTC),
+                        metadata={
+                            "native_application": self._summary.kind,
+                            "native_method": facts.native_method.value,
+                            "kind": facts.kind.value,
+                            "live_only": True,
+                        },
+                    )
+                    self._emit(
+                        thread_id,
+                        AgentEventType.MESSAGE_CREATED,
+                        {"message": message},
+                        event_id=facts.event_id,
+                        thread_ref=thread_ref,
+                        turn_id=turn_id or None,
+                    )
+                return
         if method == "item/agentMessage/delta":
             self._emit(
                 thread_id,
@@ -899,6 +974,8 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
         event_buffer_max_pending: int = 1024,
         steer_active_turn: bool = True,
         thread_start_options: Mapping[str, object] | None = None,
+        live_activity_presenter: CodexLiveActivityPresenter | None = None,
+        presentation_limits: ApplicationPresentationLimits = ApplicationPresentationLimits(),
     ) -> None:
         super().__init__(
             application_instance_id=application_instance_id,
@@ -911,7 +988,98 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
             event_buffer_max_pending=event_buffer_max_pending,
             steer_active_turn=steer_active_turn,
             thread_start_options=thread_start_options,
+            live_activity_presenter=live_activity_presenter,
+            presentation_limits=presentation_limits,
         )
+
+
+_CODEX_LIVE_METHODS = {
+    CodexLiveActivityMethod.PLAN_UPDATED.value: (
+        CodexLiveActivityMethod.PLAN_UPDATED,
+        CodexLiveActivityKind.PLAN_UPDATED,
+    ),
+    CodexLiveActivityMethod.DIFF_UPDATED.value: (
+        CodexLiveActivityMethod.DIFF_UPDATED,
+        CodexLiveActivityKind.DIFF_UPDATED,
+    ),
+    CodexLiveActivityMethod.THREAD_STATUS_CHANGED.value: (
+        CodexLiveActivityMethod.THREAD_STATUS_CHANGED,
+        CodexLiveActivityKind.THREAD_STATUS_CHANGED,
+    ),
+    CodexLiveActivityMethod.THREAD_COMPACTED.value: (
+        CodexLiveActivityMethod.THREAD_COMPACTED,
+        CodexLiveActivityKind.THREAD_COMPACTED,
+    ),
+    CodexLiveActivityMethod.MODEL_REROUTED.value: (
+        CodexLiveActivityMethod.MODEL_REROUTED,
+        CodexLiveActivityKind.MODEL_REROUTED,
+    ),
+}
+
+
+def _codex_live_activity_facts(
+    thread_ref: ThreadRef,
+    *,
+    turn_id: str | None,
+    method: str,
+    params: Mapping[str, object],
+) -> CodexLiveActivityFacts | None:
+    classification = _CODEX_LIVE_METHODS.get(method)
+    if classification is None:
+        return None
+    native_method, kind = classification
+    event_id = str(params.get("eventId") or params.get("event_id") or "")
+    if not event_id:
+        event_id = f"imagent:appserver-live:{uuid.uuid4()}"
+    summary: str | None = None
+    details: tuple[str, ...] = ()
+    plan: tuple[CodexPlanStep, ...] = ()
+    if kind is CodexLiveActivityKind.PLAN_UPDATED:
+        summary = _bounded_presentation_text(params.get("explanation"))
+        native_plan = params.get("plan")
+        if isinstance(native_plan, list):
+            normalized_plan: list[CodexPlanStep] = []
+            for entry in native_plan[:100]:
+                if not isinstance(entry, Mapping):
+                    continue
+                status = _bounded_presentation_text(entry.get("status"), limit=128)
+                step = _bounded_presentation_text(entry.get("step"))
+                if status is not None and step is not None:
+                    normalized_plan.append(CodexPlanStep(status=status, step=step))
+            plan = tuple(normalized_plan)
+    elif kind is CodexLiveActivityKind.DIFF_UPDATED:
+        summary = _bounded_presentation_text(params.get("summary"))
+        native_files = params.get("files")
+        if isinstance(native_files, list):
+            details = tuple(
+                value
+                for native in native_files[:100]
+                if (value := _bounded_presentation_text(native))
+            )
+    elif kind is CodexLiveActivityKind.THREAD_STATUS_CHANGED:
+        status = params.get("status")
+        if isinstance(status, Mapping):
+            status = status.get("type") or status.get("status")
+        summary = _bounded_presentation_text(status, limit=128)
+    elif kind is CodexLiveActivityKind.THREAD_COMPACTED:
+        summary = _bounded_presentation_text(params.get("summary"))
+    else:
+        summary = _bounded_presentation_text(params.get("message"))
+    return CodexLiveActivityFacts(
+        event_id=event_id,
+        thread_ref=thread_ref,
+        turn_id=turn_id,
+        kind=kind,
+        native_method=native_method,
+        summary=summary,
+        details=details,
+        plan=plan,
+    )
+
+
+def _bounded_presentation_text(value: object, *, limit: int = 8_000) -> str | None:
+    text = str(value or "").strip()
+    return text[:limit] or None
 
 
 def _thread_start_options(

@@ -50,6 +50,7 @@ from imagent.projection_runtime import TurnAcceptanceBufferOverflow
 from imagent.projections import (
     InMemoryProjectionRouteRepository,
     ProjectionWorkerState,
+    derive_live_projection_delivery_id,
     derive_projection_delivery_id,
     derive_projection_route_id,
     derive_turn_reply_correlation_id,
@@ -186,6 +187,56 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                     break
                 await asyncio.sleep(0)
             self.assertEqual(routes[0].checkpoint_agent_item_id, message.agent_item_id)
+        finally:
+            await gateway.stop()
+
+    async def test_live_only_created_message_deduplicates_without_checkpoint(self) -> None:
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        thread = await application.create_thread()
+        conversation = ConversationRef("fake-channel", "live-only")
+        channel = FakeChannelAdapter()
+        projections = InMemoryProjectionRouteRepository()
+        gateway = CapturingOutboundGateway(
+            channels=[channel],
+            applications=[application],
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+                projections=projections,
+            ),
+        )
+        gateway.logical_outbound = []
+        await gateway.start()
+        try:
+            await gateway.execute_gateway(_observe("observe-live-only", conversation, thread.ref))
+            message = AgentMessage(
+                agent_item_id="live-event-1",
+                thread_ref=thread.ref,
+                role=MessageRole.SYSTEM,
+                content=(TextContent("Working"),),
+                created_at=datetime.now(UTC),
+                metadata={"live_only": True},
+            )
+            for _ in range(2):
+                application._publish(
+                    thread.ref,
+                    AgentEventType.MESSAGE_CREATED,
+                    "turn-live-only",
+                    {"message": message},
+                )
+            await _wait_until(lambda: len(gateway.logical_outbound) == 2)
+
+            self.assertEqual(len(channel.sent), 1)
+            self.assertEqual(
+                gateway.logical_outbound[0].delivery_id,
+                derive_live_projection_delivery_id(
+                    conversation,
+                    thread.ref,
+                    f"fake-agent:thread:{thread.ref.native_thread_id}:message:live-event-1",
+                ),
+            )
+            route = (await projections.list_projection_routes(thread.ref))[0]
+            self.assertIsNone(route.checkpoint_agent_item_id)
+            self.assertIsNone(route.checkpointed_at)
         finally:
             await gateway.stop()
 

@@ -1046,7 +1046,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
                         "turnId": "turn-1",
                     }
                 )
-                application._publish_thread_state(
+                await application._publish_thread_state(
                     thread_ref,
                     native_app.threads["thread-1"],
                 )

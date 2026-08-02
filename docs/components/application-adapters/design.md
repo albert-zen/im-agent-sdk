@@ -80,7 +80,8 @@ message phases remain namespaced Metadata until common reuse is proven.
 
 Metadata intended for outbound projection contains only bounded non-secret
 scalar presentation facts. Current App Server keys are `phase`,
-`native_application`, and the fixed `native_method`; current T3 keys are
+`native_application`, the fixed `native_method`/`kind`, and the fixed
+`live_only` marker; current T3 keys are
 `kind`, `native_application`, `source`, and `streaming`. Thread/Turn/item IDs
 remain in canonical fields, not Metadata. Raw native payloads, credentials,
 paths, content copies, sender identity, and exception text are excluded before
@@ -117,7 +118,9 @@ tasks, including cancellation overruns, retain capacity and receive bounded
 adapter shutdown cleanup. Codex invocation inherits the existing bounded App
 Server notification dispatch lane and therefore never runs on its socket read
 loop. T3 invocation runs in its existing polling/history normalization flow;
-it creates no subscriber or polling lane. Failure is explicit through the
+it creates no subscriber or polling lane. Live deduplication identity windows
+are finite; recoverable T3 history may reinvoke a replay-safe presenter after
+an identity leaves that process-local window. Failure is explicit through the
 owning adapter path and fixed process-local presentation diagnostics retain no
 facts, output, identity, or exception text.
 
