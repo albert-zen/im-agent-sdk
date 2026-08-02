@@ -70,6 +70,10 @@ consumer validates and materializes it, returning only bounded typed
 attachments; bytes, spool namespace, quotas, leases, cleanup ledger, startup
 sweep, and error wording remain consumer policy.
 
+Artifact facts require native Turn and item IDs. The adapter fails the live
+observation/history read when either is absent; it never synthesizes A1
+identity from random values, text, locator content, or timestamps.
+
 The adapter invokes the same replay-safe materializer over live and history
 facts. Returned attachments are appended to the canonical item chosen by the
 native ordering/phase association, or one fixed-identity artifact-only message

@@ -12,6 +12,8 @@ Required scenarios:
 - live final-answer association, artifact-only completed/interrupted/failed
   terminal fallback, duplicate live item suppression, and authoritative
   history reproduction preserve stable candidate and message identity;
+- missing native Turn/item identity fails closed, while two native items that
+  reuse one untrusted locator retain distinct candidate identity;
 - materializer failure/timeout/cancellation/capacity is explicit before output
   emission, terminates the affected live Thread with the fixed recovery gap
   despite production dispatch exception containment, and retains only fixed

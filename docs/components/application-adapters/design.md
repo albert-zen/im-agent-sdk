@@ -148,7 +148,9 @@ optional `AppServerArtifactMaterializer` receives frozen
 only bounded stable Thread/Turn/item identity, fixed native item kind/phase,
 bounded presentation scalars, and a finite tuple of typed untrusted artifact
 candidates. No raw mapping, client, credential, byte value, or trusted path is
-exposed. Codex supplies the concrete image-generation/dynamic-tool evidence;
+exposed. Native Turn and item IDs are required: missing IDs fail observation
+or history explicitly and are never replaced by random values, text, locator
+content, or timestamps. Codex supplies the concrete image-generation/dynamic-tool evidence;
 Zen is the shared App Server transport counterexample and changes only when a
 materializer is explicitly configured.
 

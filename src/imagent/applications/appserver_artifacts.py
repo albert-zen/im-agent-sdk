@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import json
 import math
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, replace
@@ -335,13 +333,7 @@ def appserver_completed_item_facts(
     kind = _item_kind(item)
     phase = _item_phase(item)
     candidate_values = _artifact_candidate_values(item, kind=kind, limits=limits)
-    item_id = _stable_item_id(
-        item,
-        kind=kind,
-        phase=phase,
-        candidate_values=candidate_values,
-        default_message_id=default_message_id,
-    )
+    item_id = _stable_item_id(item)
     candidates = tuple(
         AppServerArtifactCandidate(
             candidate_id=f"{item_id}:image:{source_index}",
@@ -430,33 +422,11 @@ def _artifact_candidate_values(
     return tuple(candidates)
 
 
-def _stable_item_id(
-    item: Mapping[str, object],
-    *,
-    kind: AppServerCompletedItemKind,
-    phase: AppServerCompletedItemPhase,
-    candidate_values: tuple[tuple[int, AppServerArtifactSourceKind, str], ...],
-    default_message_id: str | None,
-) -> str:
+def _stable_item_id(item: Mapping[str, object]) -> str:
     native_id = item.get("id") or item.get("itemId")
     if isinstance(native_id, str) and 0 < len(native_id) <= _IDENTITY_MAX_CHARACTERS:
         return native_id
-    if default_message_id is not None and len(default_message_id) <= _IDENTITY_MAX_CHARACTERS:
-        return default_message_id
-    identity = json.dumps(
-        [
-            kind.value,
-            phase.value,
-            [
-                (source_index, source_kind.value, locator)
-                for source_index, source_kind, locator in candidate_values
-            ],
-        ],
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
-    digest = hashlib.sha256(identity.encode()).hexdigest()
-    return f"imagent:appserver-item:sha256:{digest}"
+    raise ValueError("App Server artifact item requires a bounded native item identity")
 
 
 def _validate_materialization(

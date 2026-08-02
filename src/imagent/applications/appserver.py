@@ -1109,7 +1109,7 @@ class _AppServerApplicationAdapter:
                     facts = self._artifact_completed_item_facts(
                         item,
                         thread_ref=thread_ref,
-                        turn_id=turn_id or f"live-{uuid.uuid4()}",
+                        turn_id=turn_id,
                         authoritative=False,
                         default_message_id=(message.agent_item_id if message is not None else None),
                     )
@@ -1151,7 +1151,7 @@ class _AppServerApplicationAdapter:
                 "failed": AgentEventType.TURN_FAILED,
                 "interrupted": AgentEventType.TURN_INTERRUPTED,
             }.get(status, AgentEventType.TURN_COMPLETED)
-            terminal_id = turn_id or f"live-{uuid.uuid4()}"
+            terminal_id = turn_id
             if self._artifact_materializer is not None:
                 try:
                     terminal_status = AppServerTurnTerminalStatus(

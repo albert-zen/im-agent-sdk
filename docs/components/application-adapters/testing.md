@@ -43,6 +43,8 @@ Every adapter should prove:
 - App Server artifact A1 extracts only finite typed image-generation and
   dynamic-tool candidates, keeps locators untrusted, and fixes stable candidate
   identity across duplicate live notification and authoritative history;
+- missing native Turn/item IDs fail closed before consumer work; distinct items
+  that reuse the same locator remain distinct by native item identity;
 - async artifact materialization may return only bounded typed attachments,
   associates them with the native item/final answer in order, and emits at most
   one adapter-identified artifact-only fallback before a completed,

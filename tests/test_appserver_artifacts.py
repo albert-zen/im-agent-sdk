@@ -295,6 +295,7 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
             max_candidate_locator_characters=64,
         )
         item = {
+            "id": "tool-1",
             "type": "dynamicToolCall",
             "contentItems": [
                 {"type": "inputImage", "imageUrl": "data:image/png;base64,eA=="},
@@ -331,7 +332,11 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
             ),
         )
         oversized = appserver_completed_item_facts(
-            {"type": "imageGeneration", "savedPath": "/" + "x" * 65},
+            {
+                "id": "image-1",
+                "type": "imageGeneration",
+                "savedPath": "/" + "x" * 65,
+            },
             thread_ref=thread_ref,
             turn_id="turn-1",
             authoritative=False,
@@ -339,6 +344,27 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
             limits=limits,
         )
         self.assertEqual(oversized.artifact_candidates, ())
+
+        same_locator = {
+            "type": "dynamicToolCall",
+            "contentItems": [{"type": "inputImage", "imageUrl": "file:///native/shared.png"}],
+        }
+        distinct = tuple(
+            appserver_completed_item_facts(
+                {"id": item_id, **same_locator},
+                thread_ref=thread_ref,
+                turn_id="turn-1",
+                authoritative=False,
+                default_message_id=None,
+                limits=limits,
+            )
+            for item_id in ("tool-a", "tool-b")
+        )
+        self.assertNotEqual(distinct[0].item_id, distinct[1].item_id)
+        self.assertNotEqual(
+            distinct[0].artifact_candidates[0].candidate_id,
+            distinct[1].artifact_candidates[0].candidate_id,
+        )
 
     async def test_runtime_bounds_output_timeout_capacity_and_redacted_diagnostics(self) -> None:
         limits = AppServerArtifactMaterializationLimits(
@@ -642,6 +668,75 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(facts.failure_count, 1)
         self.assertEqual(
             facts.last_failure_code,
+            ApplicationArtifactMaterializationFailureCode.INVALID_FACTS,
+        )
+
+    async def test_missing_native_turn_and_item_ids_fail_closed(self) -> None:
+        client = _AppServerClient()
+        materializer = _AssociatingMaterializer()
+        application = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            cwd="/workspace",
+            artifact_materializer=materializer,
+        )
+        thread_ref = ThreadRef("codex-main", "thread-1")
+
+        missing_turn = _artifact_notification()
+        del missing_turn["params"]["turnId"]
+        turn_events = application.subscribe_thread(thread_ref)
+        await client.notify(missing_turn)
+        with self.assertRaises(EventStreamReset) as turn_gap:
+            await anext(turn_events)
+        self.assertEqual(
+            turn_gap.exception.gap_code,
+            "application_artifact_materialization_failed",
+        )
+
+        missing_item = _artifact_notification()
+        del missing_item["params"]["item"]["id"]
+        item_events = application.subscribe_thread(thread_ref)
+        await client.notify(missing_item)
+        with self.assertRaises(EventStreamReset) as item_gap:
+            await anext(item_events)
+        self.assertEqual(
+            item_gap.exception.gap_code,
+            "application_artifact_materialization_failed",
+        )
+
+        missing_terminal_turn = _terminal_notification("completed")
+        del missing_terminal_turn["params"]["turn"]["id"]
+        terminal_events = application.subscribe_thread(thread_ref)
+        await client.notify(missing_terminal_turn)
+        with self.assertRaises(EventStreamReset) as terminal_gap:
+            await anext(terminal_events)
+        self.assertEqual(
+            terminal_gap.exception.gap_code,
+            "application_artifact_materialization_failed",
+        )
+        self.assertEqual(materializer.item_facts, [])
+        self.assertEqual(materializer.terminal_facts, [])
+
+        client.turns = [_native_turn("completed")]
+        del client.turns[0]["items"][0]["id"]
+        result = await application.execute(
+            GetThreadHistory(
+                operation_id="missing-item-history",
+                application_ref=ApplicationRef("codex-main"),
+                thread_ref=thread_ref,
+                limit=10,
+                page=1,
+                created_at=datetime(2026, 8, 3, tzinfo=UTC),
+            )
+        )
+        self.assertIsInstance(result, ApplicationOperationFailed)
+
+        diagnostics = application.diagnostic_facts().artifact_materialization
+        assert diagnostics is not None
+        self.assertEqual(diagnostics.invocation_count, 4)
+        self.assertEqual(diagnostics.failure_count, 4)
+        self.assertEqual(
+            diagnostics.last_failure_code,
             ApplicationArtifactMaterializationFailureCode.INVALID_FACTS,
         )
 
