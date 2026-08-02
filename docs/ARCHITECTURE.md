@@ -64,6 +64,10 @@ An `InboundContentAdapter` is a consumer-owned, pre-dispatch transformation of
 verified unconsumed message content; it cannot change envelope identity,
 admission, routing, or Application semantics.
 
+An `InboundFailurePresenter` is a consumer-owned terminal rendering seam for
+an inbound processing failure whose Conversation, reply, and delivery identity
+remain fixed by Gateway.
+
 ## Authority and persistence
 
 | State | Authority | SDK persistence |

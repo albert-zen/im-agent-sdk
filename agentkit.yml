@@ -137,6 +137,7 @@ components:
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/decisions/0013-bounded-application-event-admission.md
       - src/imagent/inbound_admission.py
+      - src/imagent/inbound_failures.py
       - src/imagent/gateway.py
       - src/imagent/gateway_startup.py
       - src/imagent/delivery_ingress.py
@@ -543,6 +544,7 @@ layers:
   gateway:
     paths:
       - src/imagent/inbound_admission.py
+      - src/imagent/inbound_failures.py
       - src/imagent/gateway.py
       - src/imagent/delivery_ingress.py
       - src/imagent/proactive_delivery.py

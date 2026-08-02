@@ -12,6 +12,7 @@ Controllers owns:
 
 - the `InboundController` and `ControllerActions` UX seam;
 - the `InboundContentAdapter` type for consumer-owned content-only adaptation;
+- the `InboundFailurePresenter` type for consumer-owned terminal error rendering;
 - the SDK-provided common Slash grammar;
 - selection and command-flow presentation state;
 - default Markdown help, lists, history, catch-up, and error rendering.
@@ -68,6 +69,13 @@ unsupported notice and returns `response_supported=False`, so projection
 creates no response correlation. A future Channel-native presenter may accept
 the same typed request only after it proves a secure-input capability.
 
+Gateway may offer a terminal inbound failure to one configured
+`InboundFailurePresenter`. The presenter receives the failure phase and fixed
+Conversation, reply, and stable delivery identities, and returns only the
+`OutboundMessage` rendering. It cannot select another destination or make
+retry decisions. The default remains absent, preserving exception propagation
+for consumers that own retry or reporting elsewhere.
+
 ## Dependencies and state
 
 Controllers depend on Contracts, not Gateway implementation. Gateway supplies
@@ -87,6 +95,13 @@ unreviewed Core semantics.
 An adapter failure, empty result, non-tuple result, or unsupported content item
 fails before the normal pass-through binding/thread creation and Application
 dispatch, and releases the pre-side-effect inbound claim for an explicit retry.
+
+Failure presentation is terminal for that inbound identity. `pre_acceptance`
+means no native Application acceptance was observed; `outcome_unknown` keeps
+the existing sticky side-effect fence; `post_acceptance` keeps the completed
+claim. Gateway validates presenter routing and uses normal outbound delivery
+coordination. If presentation itself fails, inbound safety wins: the terminal
+or sticky claim is not reopened to Application dispatch.
 
 ## Change obligations
 

@@ -8,6 +8,9 @@ Required scenarios:
 - consumed commands bypass content adaptation;
 - invalid adaptation fails before normal pass-through dispatch and releases
   the inbound claim for redelivery;
+- the optional inbound failure presenter preserves fixed destination, reply,
+  and delivery identities for every failure phase;
+- omitting the failure presenter preserves exception propagation;
 - trailing input context is not parsed as Slash arguments;
 - non-Slash interactions invoke the same typed actions;
 - listing never changes selection;

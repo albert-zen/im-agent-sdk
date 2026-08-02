@@ -41,7 +41,7 @@ from imagent.contracts import (
     TurnReplyCorrelation,
     TurnReplyCorrelationPolicy,
 )
-from imagent.controllers import ControllerActions
+from imagent.controllers import ControllerActions, InboundFailurePhase
 from imagent.delivery_coordination import DeliveryCoordinator, DeliveryCoordinatorConfig
 from imagent.gateway import ImAgentGateway
 from imagent.projection_runtime import TurnAcceptanceBufferOverflow
@@ -387,6 +387,96 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await gateway.stop()
 
+    async def test_presented_post_acceptance_failure_keeps_terminal_claim(self) -> None:
+        application = PassiveAcceptanceApplication()
+        thread = await application.create_thread()
+        conversation = ConversationRef("fake-channel", "conversation")
+        bindings = InMemoryBindingRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+                thread_ref=thread.ref,
+            )
+        )
+        channel = FakeChannelAdapter()
+        idempotency = InMemoryIdempotencyRepository()
+        presenter = RecordingFailurePresenter()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=bindings,
+            projections=FailingTurnCorrelationRepository(),
+            idempotency=idempotency,
+            inbound_failure_presenter=presenter,
+        )
+        await gateway.start()
+        inbound = _inbound(conversation, "presented-post-acceptance")
+        try:
+            await channel.on_message(inbound)
+            await channel.on_message(inbound)
+
+            self.assertEqual(application.send_input_calls, 1)
+            self.assertEqual(
+                [entry[0] for entry in presenter.presented],
+                [InboundFailurePhase.POST_ACCEPTANCE],
+            )
+            self.assertEqual(len(channel.sent), 1)
+            content = channel.sent[0].content[0]
+            self.assertIsInstance(content, TextContent)
+            assert isinstance(content, TextContent)
+            self.assertIn("accepted before", content.text)
+            self.assertEqual(
+                await idempotency.claim(
+                    "inbound:fake-channel",
+                    "conversation:presented-post-acceptance",
+                ),
+                IdempotencyClaimStatus.ALREADY_COMPLETED,
+            )
+        finally:
+            await gateway.stop()
+
+    async def test_failure_presentation_delivery_error_does_not_reopen_input(self) -> None:
+        application = FailOnceBeforeAcceptanceApplication()
+        thread = await application.create_thread()
+        conversation = ConversationRef("fake-channel", "conversation")
+        bindings = InMemoryBindingRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+                thread_ref=thread.ref,
+            )
+        )
+        channel = RejectingFailureChannel()
+        idempotency = InMemoryIdempotencyRepository()
+        presenter = RecordingFailurePresenter()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=bindings,
+            idempotency=idempotency,
+            inbound_failure_presenter=presenter,
+        )
+        await gateway.start()
+        inbound = _inbound(conversation, "failure-delivery-error")
+        try:
+            with self.assertRaisesRegex(RuntimeError, "failure delivery rejected"):
+                await channel.on_message(inbound)
+            await channel.on_message(inbound)
+
+            self.assertEqual(application.send_input_calls, 1)
+            self.assertEqual(channel.send_calls, 1)
+            self.assertEqual(
+                await idempotency.claim(
+                    "inbound:fake-channel",
+                    "conversation:failure-delivery-error",
+                ),
+                IdempotencyClaimStatus.ALREADY_COMPLETED,
+            )
+        finally:
+            await gateway.stop()
+
     async def test_post_acceptance_drain_failure_keeps_inbound_terminal(self) -> None:
         application = PassiveAcceptanceApplication()
         thread = await application.create_thread()
@@ -533,6 +623,57 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await gateway.stop()
 
+    async def test_presented_pre_acceptance_failure_is_terminal_and_stable(self) -> None:
+        application = FailOnceBeforeAcceptanceApplication()
+        thread = await application.create_thread()
+        conversation = ConversationRef("fake-channel", "conversation")
+        bindings = InMemoryBindingRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+                thread_ref=thread.ref,
+            )
+        )
+        channel = FakeChannelAdapter()
+        idempotency = InMemoryIdempotencyRepository()
+        presenter = RecordingFailurePresenter()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=bindings,
+            idempotency=idempotency,
+            inbound_failure_presenter=presenter,
+        )
+        await gateway.start()
+        inbound = _inbound(conversation, "presented-pre-acceptance")
+        try:
+            await channel.on_message(inbound)
+            await channel.on_message(inbound)
+
+            self.assertEqual(application.send_input_calls, 1)
+            self.assertEqual(len(presenter.presented), 1)
+            self.assertEqual(presenter.presented[0][0], InboundFailurePhase.PRE_ACCEPTANCE)
+            self.assertEqual(len(channel.sent), 1)
+            self.assertEqual(channel.sent[0].conversation_ref, conversation)
+            self.assertEqual(channel.sent[0].reply_to, inbound.message_id)
+            self.assertEqual(
+                presenter.delivery_ids,
+                [
+                    "imagent:gateway:fake-channel:conversation:"
+                    "presented-pre-acceptance:inbound-failure"
+                ],
+            )
+            self.assertEqual(
+                await idempotency.claim(
+                    "inbound:fake-channel",
+                    "conversation:presented-pre-acceptance",
+                ),
+                IdempotencyClaimStatus.ALREADY_COMPLETED,
+            )
+        finally:
+            await gateway.stop()
+
     async def test_dispatched_unknown_input_keeps_inbound_in_flight(self) -> None:
         application = UnknownOutcomeApplication()
         thread = await application.create_thread()
@@ -565,6 +706,54 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                 await idempotency.claim(
                     "inbound:fake-channel",
                     "conversation:unknown-native-outcome",
+                ),
+                IdempotencyClaimStatus.IN_FLIGHT,
+            )
+        finally:
+            await gateway.stop()
+
+    async def test_presented_unknown_outcome_remains_sticky(self) -> None:
+        application = UnknownOutcomeApplication()
+        thread = await application.create_thread()
+        conversation = ConversationRef("fake-channel", "conversation")
+        bindings = InMemoryBindingRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+                thread_ref=thread.ref,
+            )
+        )
+        channel = FakeChannelAdapter()
+        idempotency = InMemoryIdempotencyRepository()
+        presenter = RecordingFailurePresenter()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=bindings,
+            idempotency=idempotency,
+            inbound_failure_presenter=presenter,
+        )
+        await gateway.start()
+        inbound = _inbound(conversation, "presented-unknown")
+        try:
+            await channel.on_message(inbound)
+            await channel.on_message(inbound)
+
+            self.assertEqual(application.send_input_calls, 1)
+            self.assertEqual(
+                [entry[0] for entry in presenter.presented],
+                [InboundFailurePhase.OUTCOME_UNKNOWN],
+            )
+            self.assertEqual(len(channel.sent), 1)
+            content = channel.sent[0].content[0]
+            self.assertIsInstance(content, TextContent)
+            assert isinstance(content, TextContent)
+            self.assertIn("outcome is unknown", content.text)
+            self.assertEqual(
+                await idempotency.claim(
+                    "inbound:fake-channel",
+                    "conversation:presented-unknown",
                 ),
                 IdempotencyClaimStatus.IN_FLIGHT,
             )
@@ -2498,6 +2687,42 @@ class FailOnceBeforeAcceptanceApplication(PassiveAcceptanceApplication):
             continuation=continuation,
             before_dispatch=before_dispatch,
         )
+
+
+class RecordingFailurePresenter:
+    def __init__(self) -> None:
+        self.presented: list[tuple[InboundFailurePhase, BaseException]] = []
+        self.delivery_ids: list[str] = []
+
+    def present_failure(
+        self,
+        error: BaseException,
+        *,
+        phase: InboundFailurePhase,
+        conversation_ref: ConversationRef,
+        delivery_id: str,
+        reply_to_message_id: str,
+    ) -> OutboundMessage:
+        self.presented.append((phase, error))
+        self.delivery_ids.append(delivery_id)
+        return OutboundMessage(
+            delivery_id=delivery_id,
+            conversation_ref=conversation_ref,
+            content=(TextContent(f"{phase.value}: {error}"),),
+            created_at=datetime.now(UTC),
+            reply_to=reply_to_message_id,
+        )
+
+
+class RejectingFailureChannel(FakeChannelAdapter):
+    def __init__(self) -> None:
+        super().__init__()
+        self.send_calls = 0
+
+    async def send(self, message: OutboundMessage) -> DeliveryReceipt:
+        del message
+        self.send_calls += 1
+        raise RuntimeError("failure delivery rejected")
 
 
 class UnknownOutcomeApplication(PassiveAcceptanceApplication):

@@ -109,6 +109,13 @@ the protected record back into permission to repeat the operation. Only an
 explicit release on a failure proven to precede dispatch makes it claimable
 again.
 
+When a consumer enables terminal inbound failure presentation, Gateway first
+completes a known pre-acceptance failure before attempting the Channel error
+delivery. Unknown outcomes retain `side_effect_started`, and post-acceptance
+failures retain completion. This opt-in ordering prevents an error-delivery
+failure or ambiguity from reopening the original Application input; the error
+delivery has its own stable outbound idempotency identity.
+
 Every acquired lease carries an opaque owner token. Reclaim replaces the
 token, and `refresh`, `mark_side_effect_started`, `complete`, and `release`
 compare it atomically. Refresh updates only the timestamp of the caller's
