@@ -69,6 +69,12 @@ sandbox/approval defaults, not a common policy contract: `CreateThread` keeps
 the shared control intent, the adapter-owned `cwd` cannot be overridden, and
 the mapping is neither persisted nor exposed as Agent state.
 
+A consumer whose conversation UX selects among several native profiles may
+call the concrete adapter's `create_thread_with_options` seam, then bind the
+returned authoritative `ThreadSummary` through the ordinary Gateway operation.
+This remains outside the common Application Port because the option vocabulary
+is native and the selection policy belongs to the consumer.
+
 History contains all completed Agent messages in a Turn. Application-native
 message phases remain namespaced Metadata until common reuse is proven.
 

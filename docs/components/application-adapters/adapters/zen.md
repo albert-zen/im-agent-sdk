@@ -22,6 +22,10 @@ history, and retention.
 - deployment-owned `thread_start_options` may supply Zen-native sandbox and
   approval defaults for new Threads; the adapter copies them, owns `cwd`, and
   does not persist them as SDK Thread state.
+- a consumer with per-Conversation presets may use the concrete
+  `create_thread_with_options` seam and bind its returned native Thread through
+  Gateway; the preset remains client selection/configuration, not Zen or SDK
+  runtime state.
 
 Zen accepts the SDK's default continuation preference but truthfully returns
 `started/create_new`. Codex active-Turn steering is not inferred for Zen from a

@@ -8,6 +8,8 @@ Every adapter should prove:
 - App Server Thread creation preserves default behavior, isolates the caller's
   native option mapping, and rejects attempts to replace adapter-owned `cwd` or
   pass colliding snake/camel-case native fields;
+- concrete per-call App Server creation can select a native profile without
+  mutating the configured default or widening the common `CreateThread`;
 - Thread lookup independent from native activation;
 - actual archive/permanent deletion semantics;
 - stable client-message ID round-trip;

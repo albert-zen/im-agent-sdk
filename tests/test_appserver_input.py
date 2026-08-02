@@ -226,6 +226,34 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
+    async def test_zen_adapter_specific_create_can_select_a_conversation_profile(self) -> None:
+        client = _InputClient()
+        adapter = ZenApplicationAdapter(
+            application_instance_id="zen-main",
+            client=client,
+            cwd="/repo",
+            thread_start_options={"approval_policy": "never"},
+        )
+
+        thread = await adapter.create_thread_with_options(
+            thread_start_options={
+                "sandbox": "danger-full-access",
+                "approval_policy": "on-request",
+            }
+        )
+
+        self.assertEqual(thread.ref, ThreadRef("zen-main", "thread-created"))
+        self.assertEqual(
+            client.created_threads,
+            [
+                {
+                    "cwd": "/repo",
+                    "sandbox": "danger-full-access",
+                    "approval_policy": "on-request",
+                }
+            ],
+        )
+
     def test_thread_creation_profile_cannot_override_adapter_cwd(self) -> None:
         with self.assertRaisesRegex(ValueError, "adapter-owned fields: cwd"):
             ZenApplicationAdapter(

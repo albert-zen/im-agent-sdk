@@ -317,15 +317,10 @@ class _AppServerApplicationAdapter:
         if isinstance(operation, CreateThread):
             if operation.initial_context:
                 raise NotImplementedError("initial thread context is unsupported by App Server")
-            result = await self._client.start_thread(
-                cwd=self._cwd,
-                **self._thread_start_options,
-            )
-            thread = _native_object(result, "thread")
             return ThreadCreated(
                 operation_id=operation.operation_id,
                 completed_at=completed_at,
-                thread=self._thread_summary(thread),
+                thread=await self.create_thread_with_options(),
             )
         if isinstance(operation, (GetThread, GetThreadStatus)):
             result = await self._client.read_thread(operation.thread_ref.native_thread_id)
@@ -431,6 +426,21 @@ class _AppServerApplicationAdapter:
         ):
             raise NotImplementedError(f"{operation.type.value} is unsupported by this application")
         raise NotImplementedError(f"unsupported operation: {operation.type.value}")
+
+    async def create_thread_with_options(
+        self,
+        *,
+        thread_start_options: Mapping[str, object] | None = None,
+    ) -> ThreadSummary:
+        """Create a Thread with explicit adapter-native consumer options."""
+
+        options = (
+            self._thread_start_options
+            if thread_start_options is None
+            else _thread_start_options(thread_start_options)
+        )
+        result = await self._client.start_thread(cwd=self._cwd, **options)
+        return self._thread_summary(_native_object(result, "thread"))
 
     async def _read_turn_page(
         self,
