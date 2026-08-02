@@ -40,6 +40,7 @@ from .events import EventBufferOverflow, EventStreamGap
 from .projection_routes import ProjectionRouteCoordinator
 from .projections import (
     DeliverOutbound,
+    DeliverRequestOutbound,
     ProjectedAgentMessage,
     ProjectionWorkerHealth,
     ProjectionWorkerState,
@@ -94,7 +95,7 @@ class ThreadProjectionRuntime:
         projection_policy: ProjectionPolicy,
         execute_application: ExecuteApplication,
         deliver_outbound: DeliverOutbound,
-        deliver_request_outbound: DeliverOutbound,
+        deliver_request_outbound: DeliverRequestOutbound,
         baseline_history_limit: int = 3,
         recovery_history_page_size: int = 10,
         recovery_max_pages: int = 5,

@@ -56,6 +56,16 @@ class ApplicationPresentationFailureCode(StrEnum):
     CAPACITY_EXHAUSTED = "capacity_exhausted"
 
 
+class OutboundPresentationFailureCode(StrEnum):
+    """Fixed O1 failure categories without message or policy-controlled detail."""
+
+    INVALID_OUTPUT = "invalid_output"
+    POLICY_FAILED = "policy_failed"
+    TIMED_OUT = "timed_out"
+    CANCELLED = "cancelled"
+    CAPACITY_EXHAUSTED = "capacity_exhausted"
+
+
 class QueueDiagnosticName(StrEnum):
     """Fixed queue names keep consumer metric labels bounded."""
 
@@ -315,6 +325,53 @@ class InboundFailurePresenterDiagnosticFacts:
 
 
 @dataclass(frozen=True, slots=True)
+class OutboundPresentationDiagnosticFacts:
+    """Redacted process-lifetime counters for configured O1 presentation."""
+
+    invocation_count: int = 0
+    delivery_count: int = 0
+    suppression_count: int = 0
+    failure_count: int = 0
+    timeout_count: int = 0
+    cancellation_count: int = 0
+    cancellation_overrun_count: int = 0
+    capacity_rejection_count: int = 0
+    last_failure_code: OutboundPresentationFailureCode | None = None
+
+    def __post_init__(self) -> None:
+        counts = (
+            self.invocation_count,
+            self.delivery_count,
+            self.suppression_count,
+            self.failure_count,
+            self.timeout_count,
+            self.cancellation_count,
+            self.cancellation_overrun_count,
+            self.capacity_rejection_count,
+        )
+        if any(
+            not isinstance(count, int) or isinstance(count, bool) or count < 0 for count in counts
+        ):
+            raise TypeError("outbound presentation diagnostic counts must be non-negative integers")
+        if (
+            self.delivery_count + self.suppression_count + self.failure_count
+            > self.invocation_count
+        ):
+            raise ValueError("outbound presentation outcomes cannot exceed invocations")
+        if self.timeout_count + self.cancellation_count > self.failure_count:
+            raise ValueError("outbound presentation failure counts are inconsistent")
+        if self.cancellation_overrun_count > self.timeout_count + self.cancellation_count:
+            raise ValueError("outbound presentation cancellation overruns exceed cancellations")
+        if self.capacity_rejection_count > self.failure_count:
+            raise ValueError("outbound presentation capacity rejections exceed failures")
+        if self.last_failure_code is not None and not isinstance(
+            self.last_failure_code,
+            OutboundPresentationFailureCode,
+        ):
+            raise ValueError("outbound presentation failure code must use the fixed vocabulary")
+
+
+@dataclass(frozen=True, slots=True)
 class GatewayDiagnosticFacts:
     """Bounded process-local Gateway admission facts."""
 
@@ -323,6 +380,7 @@ class GatewayDiagnosticFacts:
     startup_queue: QueueDiagnosticFacts
     inbound_content_transformer: InboundContentTransformerDiagnosticFacts | None = None
     inbound_failure_presenter: InboundFailurePresenterDiagnosticFacts | None = None
+    outbound_presentation: OutboundPresentationDiagnosticFacts | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -333,7 +391,7 @@ class DiagnosticsSnapshot:
     projections: ProjectionDiagnosticFacts
     gateway: GatewayDiagnosticFacts
     generated_at: datetime
-    schema_version: int = 5
+    schema_version: int = 6
     authoritative: bool = False
     channels: tuple[ChannelDiagnosticFacts, ...] = ()
 

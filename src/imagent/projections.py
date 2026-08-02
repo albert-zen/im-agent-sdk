@@ -30,11 +30,16 @@ from .contracts import (
     validate_projection_route,
     validate_turn_reply_correlation,
 )
+from .outbound_presentation import (
+    OutboundPresentationContext,
+    ProjectionPresentationOrigin,
+)
 
 DeliverOutbound = Callable[
-    [OutboundMessage],
+    [OutboundMessage, OutboundPresentationContext],
     Awaitable[IdempotencyClaimStatus],
 ]
+DeliverRequestOutbound = Callable[[OutboundMessage], Awaitable[IdempotencyClaimStatus]]
 
 _PROJECTION_METADATA_MAX_ITEMS = 16
 _PROJECTION_METADATA_MAX_KEY_LENGTH = 64
@@ -501,7 +506,14 @@ async def deliver_projected_message(
             created_at=agent_message.created_at,
             reply_to=reply_to,
             metadata=immutable_projection_metadata(agent_message.metadata),
-        )
+        ),
+        OutboundPresentationContext(
+            origin=(
+                ProjectionPresentationOrigin.AUTHORITATIVE
+                if projected.checkpoint
+                else ProjectionPresentationOrigin.LIVE_ONLY
+            )
+        ),
     )
     if claim is IdempotencyClaimStatus.IN_FLIGHT:
         raise RuntimeError(f"delivery remains in flight: {delivery_id}")

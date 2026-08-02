@@ -12,6 +12,7 @@ from .adapters import (
 from .controllers import InboundController, RequestPresenter
 from .inbound_content import InboundContentTransformer
 from .inbound_failures import InboundFailurePresenter
+from .outbound_presentation import OutboundPresentationPolicy
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +49,10 @@ class GatewayLimits:
     inbound_failure_present_max_items: int = 64
     inbound_failure_present_max_text_characters: int = 16_384
     inbound_failure_present_max_concurrency: int = 16
+    outbound_presentation_timeout_seconds: float = 30.0
+    outbound_presentation_max_items: int = 64
+    outbound_presentation_max_text_characters: int = 16_384
+    outbound_presentation_max_concurrency: int = 16
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,3 +63,4 @@ class GatewayExtensions:
     request_presenter: RequestPresenter | None = None
     inbound_content_transformer: InboundContentTransformer | None = None
     inbound_failure_presenter: InboundFailurePresenter | None = None
+    outbound_presentation: OutboundPresentationPolicy | None = None

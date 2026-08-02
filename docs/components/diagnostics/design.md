@@ -31,6 +31,11 @@ The public facts are:
   overrun, and capacity-rejection counts plus one fixed last-failure category;
   facts/input/output, native item/event identity, and exception text are never
   retained. An absent presenter exposes no fabricated facts.
+- configured O1 destination presentation: process-lifetime invocation,
+  delivery, suppression, failure, timeout, cancellation, cancellation-
+  overrun, and capacity-rejection counts plus one fixed last-failure category;
+  message, route, delivery, policy output, and exception detail are absent. An
+  absent policy exposes no fabricated facts.
 
 Every collection is bounded by configuration or a fixed vocabulary. Native
 resource IDs, route IDs, request IDs, message IDs, content, exception text,
@@ -63,8 +68,9 @@ exception text.
 does no native or repository I/O. Its `generated_at` is observation time,
 `schema_version` describes the fact shape, and `authoritative=False` is
 permanent semantic guidance. Repeated reads do not mutate counters.
-Schema version 5 adds optional A1 presentation execution facts to Application
-facts. Schema version 4 added optional I2 presenter execution facts; version 3 added
+Schema version 6 adds optional O1 destination-presentation execution facts to
+Gateway facts. Schema version 5 added optional A1 presentation execution facts
+to Application facts. Schema version 4 added optional I2 presenter execution facts; version 3 added
 optional I1 transformer execution facts to the Gateway facts. Version 2 added
 the optional Channel collection while preserving the
 pre-Channel positional constructor order.

@@ -24,6 +24,7 @@ from .contracts import (
 from .controllers import RequestPresenter
 from .projections import (
     DeliverOutbound,
+    DeliverRequestOutbound,
     ProjectedAgentMessage,
     RetryableDeliveryError,
     deliver_projected_message,
@@ -60,7 +61,7 @@ class ProjectionRouteCoordinator:
         execute_application: ExecuteApplication,
         active_routes: ActiveRoutes,
         deliver_outbound: DeliverOutbound,
-        deliver_request_outbound: DeliverOutbound,
+        deliver_request_outbound: DeliverRequestOutbound,
         wait_for_acceptance: WaitForAcceptance,
         record_gap: RecordGap,
         record_delivery_failure: RecordDeliveryFailure,

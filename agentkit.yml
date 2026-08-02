@@ -107,7 +107,9 @@ components:
       - src/imagent/keyed_locks.py
       - src/imagent/delivery_coordination.py
       - src/imagent/delivery_planning.py
+      - src/imagent/outbound_presentation.py
       - tests/test_delivery_planning.py
+      - tests/test_outbound_presentation.py
     docs:
       - docs/components/delivery-planning-and-coordination/design.md
       - docs/components/delivery-planning-and-coordination/testing.md
