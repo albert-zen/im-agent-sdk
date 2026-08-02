@@ -4,18 +4,18 @@ import asyncio
 import math
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
 from .adapters import IdempotencyRepository
 from .contracts import (
     ApplicationInputOutcomeUnknown,
-    AttachmentContent,
-    Content,
     ConversationRef,
     InboundMessage,
     OutboundMessage,
     TextContent,
+    TextFormat,
 )
 from .diagnostics import (
     InboundFailurePresentationFailureCode,
@@ -75,12 +75,19 @@ class InboundFailurePresentationRuntime:
         *,
         timeout_seconds: float,
         max_items: int,
+        max_text_characters: int,
         max_concurrency: int,
     ) -> None:
         if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
             raise ValueError("inbound failure presentation timeout must be finite and positive")
         if not isinstance(max_items, int) or isinstance(max_items, bool) or max_items < 1:
             raise ValueError("inbound failure presentation item limit must be positive")
+        if (
+            not isinstance(max_text_characters, int)
+            or isinstance(max_text_characters, bool)
+            or max_text_characters < 1
+        ):
+            raise ValueError("inbound failure presentation text limit must be positive")
         if (
             not isinstance(max_concurrency, int)
             or isinstance(max_concurrency, bool)
@@ -90,6 +97,7 @@ class InboundFailurePresentationRuntime:
         self._presenter = presenter
         self._timeout_seconds = timeout_seconds
         self._max_items = max_items
+        self._max_text_characters = max_text_characters
         self._max_concurrency = max_concurrency
         self._active_tasks: set[asyncio.Task[OutboundMessage]] = set()
         self._invocation_count = 0
@@ -131,7 +139,12 @@ class InboundFailurePresentationRuntime:
                     cancellation_overrun=not joined,
                 )
             output = task.result()
-            _validate_presentation(output, facts, max_items=self._max_items)
+            output = _validate_presentation(
+                output,
+                facts,
+                max_items=self._max_items,
+                max_text_characters=self._max_text_characters,
+            )
         except InboundFailurePresentationError:
             self._record_failure(InboundFailurePresentationFailureCode.INVALID_OUTPUT)
             raise
@@ -142,9 +155,12 @@ class InboundFailurePresentationRuntime:
             self._record_failure(InboundFailurePresentationFailureCode.TIMED_OUT)
             raise
         except asyncio.CancelledError:
+            joined = True
             if not task.done():
-                await _cancel_and_join(task, timeout_seconds=self._timeout_seconds)
+                joined = await _cancel_and_join(task, timeout_seconds=self._timeout_seconds)
             self._cancellation_count += 1
+            if not joined:
+                self._cancellation_overrun_count += 1
             self._record_failure(InboundFailurePresentationFailureCode.CANCELLED)
             raise
         except BaseException:
@@ -195,13 +211,29 @@ class InboundFailurePresentationRuntime:
 async def handle_claimed_inbound(
     claimed: ClaimedInbound,
     *,
-    process: Callable[[], Awaitable[None]],
+    process: Callable[[Callable[[], Awaitable[None]]], Awaitable[None]],
     idempotency: IdempotencyRepository,
     presentation: InboundFailurePresentationRuntime | None,
     deliver: Callable[[OutboundMessage], Awaitable[object]],
 ) -> None:
+    dispatch_fence_entered = False
+    side_effect_started = False
+
+    async def mark_side_effect_started() -> None:
+        nonlocal dispatch_fence_entered, side_effect_started
+        # Once the durable fence transition begins, cancellation is no longer
+        # proof that native dispatch stayed absent. Be conservative even if a
+        # repository commit races cancellation before its await returns.
+        dispatch_fence_entered = True
+        await idempotency.mark_side_effect_started(
+            claimed.scope,
+            claimed.key,
+            owner_token=claimed.owner_token,
+        )
+        side_effect_started = True
+
     try:
-        await process()
+        await process(mark_side_effect_started)
     except InputPostAcceptanceError as error:
         try:
             await idempotency.complete(
@@ -229,13 +261,24 @@ async def handle_claimed_inbound(
             deliver,
         )
     except asyncio.CancelledError:
-        await idempotency.release(
-            claimed.scope,
-            claimed.key,
-            owner_token=claimed.owner_token,
-        )
+        if not dispatch_fence_entered:
+            await idempotency.release(
+                claimed.scope,
+                claimed.key,
+                owner_token=claimed.owner_token,
+            )
         raise
     except BaseException as error:
+        if side_effect_started:
+            if presentation is None or not isinstance(error, Exception):
+                raise
+            await _present_failure(
+                claimed.message,
+                InboundFailurePhase.OUTCOME_UNKNOWN,
+                presentation,
+                deliver,
+            )
+            return
         if presentation is None or not isinstance(error, Exception):
             await idempotency.release(
                 claimed.scope,
@@ -290,7 +333,8 @@ def _validate_presentation(
     facts: InboundFailurePresentation,
     *,
     max_items: int,
-) -> None:
+    max_text_characters: int,
+) -> OutboundMessage:
     if not isinstance(output, OutboundMessage):
         raise InboundFailurePresentationError(
             "inbound failure presenter must return an OutboundMessage"
@@ -307,15 +351,45 @@ def _validate_presentation(
         raise InboundFailurePresentationError(
             "inbound failure presenter changed the reply identity"
         )
-    content: tuple[Content, ...] = output.content
-    if not content or len(content) > max_items:
+    content = output.content
+    if not isinstance(content, tuple) or not content or len(content) > max_items:
         raise InboundFailurePresentationError(
             "inbound failure presenter returned unbounded content"
         )
-    if not all(isinstance(item, (TextContent, AttachmentContent)) for item in content):
+    text_content: list[TextContent] = []
+    for item in content:
+        if not isinstance(item, TextContent):
+            raise InboundFailurePresentationError(
+                "inbound failure presenter must return text-only content"
+            )
+        if not isinstance(item.text, str) or not isinstance(item.format, TextFormat):
+            raise InboundFailurePresentationError(
+                "inbound failure presenter returned invalid text content"
+            )
+        text_content.append(item)
+    if any(not item.text.strip() for item in text_content):
         raise InboundFailurePresentationError(
-            "inbound failure presenter returned unsupported content"
+            "inbound failure presenter returned empty text content"
         )
+    if sum(len(item.text) for item in text_content) > max_text_characters:
+        raise InboundFailurePresentationError(
+            "inbound failure presenter exceeded the configured text limit"
+        )
+    if not isinstance(output.metadata, dict) or output.metadata:
+        raise InboundFailurePresentationError(
+            "inbound failure presenter cannot attach arbitrary metadata"
+        )
+    if not isinstance(output.created_at, datetime):
+        raise InboundFailurePresentationError(
+            "inbound failure presenter returned an invalid creation time"
+        )
+    return OutboundMessage(
+        delivery_id=facts.delivery_id,
+        conversation_ref=facts.conversation_ref,
+        content=tuple(text_content),
+        created_at=output.created_at,
+        reply_to=facts.reply_to_message_id,
+    )
 
 
 async def _cancel_and_join(

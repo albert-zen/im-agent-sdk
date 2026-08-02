@@ -192,11 +192,15 @@ before I2. Presenter validation, timeout, capacity, cancellation, or Channel
 delivery failure is propagated but never changes these transitions or grants
 permission for native input. Cancellation of the original pre-acceptance work
 remains cancellation: Gateway releases the matching fenced claim and does not
-invent user-visible failure delivery.
+invent user-visible failure delivery. If cancellation races after the durable
+dispatch fence, Gateway preserves `side_effect_started` rather than treating
+the work as proven pre-acceptance.
 
 I2 presenter rendering is async and bounded by
 `GatewayLimits.inbound_failure_present_timeout_seconds` and
-`GatewayLimits.inbound_failure_present_max_concurrency`. Active render tasks,
+`GatewayLimits.inbound_failure_present_max_concurrency`. Presenter output is
+text-only with finite item and total-character limits; arbitrary metadata and
+attachment sources are rejected before delivery. Active render tasks,
 including cancellation overruns, retain finite capacity and receive bounded
 shutdown cleanup. Fixed process-lifetime diagnostics count invocations,
 success, failure, timeout, cancellation, cancellation overrun, and capacity

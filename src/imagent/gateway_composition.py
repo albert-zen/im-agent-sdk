@@ -46,6 +46,7 @@ class GatewayLimits:
     inbound_content_transform_max_concurrency: int = 16
     inbound_failure_present_timeout_seconds: float = 30.0
     inbound_failure_present_max_items: int = 64
+    inbound_failure_present_max_text_characters: int = 16_384
     inbound_failure_present_max_concurrency: int = 16
 
 

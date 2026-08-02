@@ -243,8 +243,8 @@ class InboundFailurePresenterDiagnosticFacts:
             raise ValueError("inbound presenter outcomes cannot exceed invocations")
         if self.timeout_count + self.cancellation_count > self.failure_count:
             raise ValueError("inbound presenter failure counts are inconsistent")
-        if self.cancellation_overrun_count > self.timeout_count:
-            raise ValueError("inbound presenter cancellation overruns exceed timeouts")
+        if self.cancellation_overrun_count > self.timeout_count + self.cancellation_count:
+            raise ValueError("inbound presenter cancellation overruns exceed cancellations")
         if self.capacity_rejection_count > self.failure_count:
             raise ValueError("inbound presenter capacity rejections exceed failures")
         if self.last_failure_code is not None and not isinstance(

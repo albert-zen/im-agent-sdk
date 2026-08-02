@@ -13,9 +13,11 @@ from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AcceptedTurn,
     ApplicationInputOutcomeUnknown,
+    AttachmentContent,
     Content,
     ConversationRef,
     InboundMessage,
+    LocalPath,
     OutboundMessage,
     TextContent,
     ThreadRef,
@@ -89,7 +91,7 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
     async def test_absent_presenter_preserves_release_and_raise(self) -> None:
         repository, claimed = await self._claim("absent-pre")
 
-        async def process() -> None:
+        async def process(_before_application_send) -> None:
             raise RuntimeError("original pre-acceptance failure")
 
         with self.assertRaisesRegex(RuntimeError, "original pre-acceptance"):
@@ -114,7 +116,7 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
         runtime = self._runtime(_FunctionPresenter(present))
         deliveries: list[OutboundMessage] = []
 
-        async def process() -> None:
+        async def process(_before_application_send) -> None:
             raise RuntimeError("must not escape to presenter")
 
         await handle_claimed_inbound(
@@ -139,12 +141,8 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
             observed_claims.append(await self._reclaim(repository, claimed))
             return self._output(phase, **identity)
 
-        async def process() -> None:
-            await repository.mark_side_effect_started(
-                claimed.scope,
-                claimed.key,
-                owner_token=claimed.owner_token,
-            )
+        async def process(before_application_send) -> None:
+            await before_application_send()
             cause = RuntimeError("secret unknown native outcome")
             raise ApplicationInputOutcomeUnknown("unknown", cause)
 
@@ -162,6 +160,28 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(deliveries[0].content, (TextContent("bounded outcome_unknown"),))
         self._assert_stable_delivery(claimed.message, deliveries[0])
 
+    async def test_untyped_failure_after_dispatch_fence_is_outcome_unknown(self) -> None:
+        repository, claimed = await self._claim("untyped-after-dispatch")
+        presenter = _RecordingPresenter()
+
+        async def process(before_application_send) -> None:
+            await before_application_send()
+            raise RuntimeError("adapter failed after dispatch fence")
+
+        await handle_claimed_inbound(
+            claimed,
+            process=process,
+            idempotency=repository,
+            presentation=self._runtime(presenter),
+            deliver=self._deliveries([]),
+        )
+
+        self.assertEqual(
+            [facts.phase for facts in presenter.presented],
+            [InboundFailurePhase.OUTCOME_UNKNOWN],
+        )
+        self.assertEqual(await self._reclaim(repository, claimed), IdempotencyClaimStatus.IN_FLIGHT)
+
     async def test_post_acceptance_completes_before_presentation(self) -> None:
         repository, claimed = await self._claim("presented-post")
         observed_claims: list[IdempotencyClaimStatus] = []
@@ -170,7 +190,7 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
             observed_claims.append(await self._reclaim(repository, claimed))
             return self._output(phase, **identity)
 
-        async def process() -> None:
+        async def process(_before_application_send) -> None:
             raise InputPostAcceptanceError(
                 AcceptedTurn(
                     thread_ref=ThreadRef("app", "thread"),
@@ -230,7 +250,7 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
         repository, claimed = await self._claim("original-cancel")
         presenter = _RecordingPresenter()
 
-        async def process() -> None:
+        async def process(_before_application_send) -> None:
             raise asyncio.CancelledError
 
         with self.assertRaises(asyncio.CancelledError):
@@ -245,6 +265,26 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(presenter.presented, [])
         self.assertEqual(await self._reclaim(repository, claimed), IdempotencyClaimStatus.ACQUIRED)
 
+    async def test_cancellation_after_dispatch_fence_keeps_claim_sticky(self) -> None:
+        repository, claimed = await self._claim("cancel-after-dispatch")
+        presenter = _RecordingPresenter()
+
+        async def process(before_application_send) -> None:
+            await before_application_send()
+            raise asyncio.CancelledError
+
+        with self.assertRaises(asyncio.CancelledError):
+            await handle_claimed_inbound(
+                claimed,
+                process=process,
+                idempotency=repository,
+                presentation=self._runtime(presenter),
+                deliver=self._deliveries([]),
+            )
+
+        self.assertEqual(presenter.presented, [])
+        self.assertEqual(await self._reclaim(repository, claimed), IdempotencyClaimStatus.IN_FLIGHT)
+
     async def test_presenter_cancellation_keeps_pre_acceptance_terminal(self) -> None:
         repository, claimed = await self._claim("presenter-cancel")
         entered = asyncio.Event()
@@ -253,7 +293,7 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
             entered.set()
             await asyncio.Event().wait()
 
-        async def process() -> None:
+        async def process(_before_application_send) -> None:
             raise RuntimeError("pre")
 
         task = asyncio.create_task(
@@ -306,6 +346,54 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 await reopened.close()
 
+    async def test_unknown_and_post_acceptance_claims_survive_sqlite_restart(self) -> None:
+        for phase, expected in (
+            (InboundFailurePhase.OUTCOME_UNKNOWN, IdempotencyClaimStatus.IN_FLIGHT),
+            (InboundFailurePhase.POST_ACCEPTANCE, IdempotencyClaimStatus.ALREADY_COMPLETED),
+        ):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "gateway.sqlite3"
+                first = SQLiteGatewayState(path)
+                message = self._message(f"sqlite-{phase.value}")
+                scope = "inbound:fake-channel"
+                key = f"conversation-1:{message.message_id}"
+                owner = f"owner-{phase.value}"
+                self.assertEqual(
+                    await first.claim(scope, key, owner_token=owner),
+                    IdempotencyClaimStatus.ACQUIRED,
+                )
+                claimed = ClaimedInbound(message, scope, key, owner)
+
+                async def process(before_application_send) -> None:
+                    await before_application_send()
+                    if phase is InboundFailurePhase.OUTCOME_UNKNOWN:
+                        raise ApplicationInputOutcomeUnknown(
+                            "unknown",
+                            RuntimeError("unknown"),
+                        )
+                    raise InputPostAcceptanceError(
+                        AcceptedTurn(ThreadRef("app", "thread"), "turn", "client"),
+                        RuntimeError("post"),
+                    )
+
+                await handle_claimed_inbound(
+                    claimed,
+                    process=process,
+                    idempotency=first,
+                    presentation=self._runtime(_RecordingPresenter()),
+                    deliver=self._deliveries([]),
+                )
+                await first.close()
+
+                reopened = SQLiteGatewayState(path)
+                try:
+                    self.assertEqual(
+                        await reopened.claim(scope, key, owner_token="replacement"),
+                        expected,
+                    )
+                finally:
+                    await reopened.close()
+
     async def test_invalid_presenter_identity_is_terminal_before_delivery(self) -> None:
         repository, claimed = await self._claim("invalid-identity")
 
@@ -333,6 +421,68 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             await self._reclaim(repository, claimed), IdempotencyClaimStatus.ALREADY_COMPLETED
         )
+
+    async def test_presenter_output_rejects_authority_metadata_and_unbounded_text(self) -> None:
+        cases = (
+            (
+                (AttachmentContent("artifact", "text/plain", LocalPath("/tmp/secret")),),
+                {},
+                GatewayLimits(),
+                "text-only",
+            ),
+            (
+                (TextContent("12345"),),
+                {},
+                GatewayLimits(inbound_failure_present_max_text_characters=4),
+                "text limit",
+            ),
+            (
+                (TextContent("one"), TextContent("two")),
+                {},
+                GatewayLimits(inbound_failure_present_max_items=1),
+                "unbounded content",
+            ),
+            ((), {}, GatewayLimits(), "unbounded content"),
+            (
+                (TextContent("ok"),),
+                {"consumer": "arbitrary"},
+                GatewayLimits(),
+                "metadata",
+            ),
+        )
+
+        for index, (content, metadata, limits, expected_error) in enumerate(cases):
+            with self.subTest(expected_error=expected_error):
+                repository, claimed = await self._claim(f"invalid-output-{index}")
+
+                async def present(phase, **identity):
+                    output = self._output(phase, **identity)
+                    return OutboundMessage(
+                        delivery_id=output.delivery_id,
+                        conversation_ref=output.conversation_ref,
+                        content=content,
+                        created_at=output.created_at,
+                        reply_to=output.reply_to,
+                        metadata=metadata,
+                    )
+
+                deliveries: list[OutboundMessage] = []
+                with self.assertRaisesRegex(InboundFailurePresentationError, expected_error):
+                    await handle_claimed_inbound(
+                        claimed,
+                        process=self._raising(RuntimeError("pre")),
+                        idempotency=repository,
+                        presentation=self._runtime(
+                            _FunctionPresenter(present),
+                            limits=limits,
+                        ),
+                        deliver=self._deliveries(deliveries),
+                    )
+                self.assertEqual(deliveries, [])
+                self.assertEqual(
+                    await self._reclaim(repository, claimed),
+                    IdempotencyClaimStatus.ALREADY_COMPLETED,
+                )
 
     async def test_i1_failure_is_presented_as_pre_acceptance_without_error_leak(self) -> None:
         channel = FakeChannelAdapter("fake-channel")
@@ -417,12 +567,52 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
             InboundFailurePresentationFailureCode.CAPACITY_EXHAUSTED,
         )
 
+    async def test_external_cancellation_overrun_is_bounded_and_diagnosed(self) -> None:
+        entered = asyncio.Event()
+        cancellation_count = 0
+
+        async def present(_phase, **_identity):
+            nonlocal cancellation_count
+            entered.set()
+            while True:
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    cancellation_count += 1
+                    if cancellation_count >= 2:
+                        raise
+
+        runtime = self._runtime(
+            _FunctionPresenter(present),
+            limits=GatewayLimits(
+                inbound_failure_present_timeout_seconds=0.01,
+                inbound_failure_present_max_concurrency=1,
+            ),
+        )
+        task = asyncio.create_task(runtime.present(self._presentation("external-cancel")))
+        await entered.wait()
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+
+        facts = runtime.diagnostic_facts()
+        self.assertEqual(facts.cancellation_count, 1)
+        self.assertEqual(facts.cancellation_overrun_count, 1)
+        self.assertEqual(
+            facts.last_failure_code,
+            InboundFailurePresentationFailureCode.CANCELLED,
+        )
+        await runtime.close()
+        await asyncio.sleep(0)
+        self.assertEqual(cancellation_count, 2)
+
     @staticmethod
     def _runtime(presenter, *, limits: GatewayLimits = GatewayLimits()):
         return InboundFailurePresentationRuntime(
             presenter,
             timeout_seconds=limits.inbound_failure_present_timeout_seconds,
             max_items=limits.inbound_failure_present_max_items,
+            max_text_characters=limits.inbound_failure_present_max_text_characters,
             max_concurrency=limits.inbound_failure_present_max_concurrency,
         )
 
@@ -474,7 +664,7 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
 
     @staticmethod
     def _raising(error: BaseException):
-        async def process() -> None:
+        async def process(_before_application_send) -> None:
             raise error
 
         return process
@@ -484,12 +674,8 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
             return self._raising(RuntimeError("pre"))
         if phase is InboundFailurePhase.OUTCOME_UNKNOWN:
 
-            async def unknown() -> None:
-                await repository.mark_side_effect_started(
-                    claimed.scope,
-                    claimed.key,
-                    owner_token=claimed.owner_token,
-                )
+            async def unknown(before_application_send) -> None:
+                await before_application_send()
                 raise ApplicationInputOutcomeUnknown("unknown", RuntimeError("unknown"))
 
             return unknown

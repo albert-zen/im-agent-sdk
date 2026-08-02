@@ -120,6 +120,8 @@ Gateway explicitly completes the inbound claim before attempting error
 delivery. Persistence still applies the same fenced owner-token transition;
 the presenter cannot mutate or release the record. Without I2, proven
 pre-dispatch failure retains the ordinary explicit-release behavior.
+Cancellation releases only while dispatch is still proven absent; cancellation
+after the durable dispatch fence preserves `side_effect_started`.
 
 I2 error presentation uses the ordinary outbound-idempotency namespace with a
 stable Gateway-derived delivery identity. Only that existing bridge delivery

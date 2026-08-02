@@ -25,9 +25,10 @@ Required scenarios:
   without storing policy/content or reinvoking the suppressor;
 - configured inbound failure presentation completes a fenced pre-acceptance
   claim before error delivery, while the no-presenter path and original
-  cancellation still release it; unknown remains side-effect-started and
-  post-acceptance remains terminal across presenter/Channel failure and
-  restart, without persisting exception or rendered content;
+  pre-dispatch cancellation still release it; cancellation after the dispatch
+  fence and unknown remain side-effect-started, while post-acceptance remains
+  terminal across presenter/Channel failure and restart, without persisting
+  exception or rendered content;
 - a legacy SQLite database without checkpoint/correlation columns migrates
   without losing binding, route, or idempotency rows;
 - Turn reply correlation is create-only/idempotent-same, rejects a different
