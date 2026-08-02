@@ -208,7 +208,7 @@ Application notification callbacks remain non-blocking because they publish
 into independent bounded subscriber queues. Filling one queue terminates only
 that observation and enters bounded resubscription plus native-authoritative
 reconciliation.
-`turn_acceptance_event_max_pending` independently bounds events consumed while
+`GatewayLimits.turn_acceptance_event_max_pending` independently bounds events consumed while
 one Thread still awaits native input acceptance and reply-correlation write.
 
 Projection workers resubscribe after Application subscription/recovery failure
