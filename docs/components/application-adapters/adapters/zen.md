@@ -59,6 +59,13 @@ the App Server transport. No independently evidenced Zen live activity shape
 is added in the non-artifact A1 slice, and default Zen events/history remain
 unchanged.
 
+Zen shares the concrete App Server artifact materializer constructor surface
+because the completed-item transport shape is common, but configuration is
+optional and default Zen output remains unchanged. The SDK does not infer
+Codex artifact visibility, storage, or cleanup policy for Zen; a configured
+consumer must use the same bounded candidates, replay-safe association, and
+untrusted-locator rules.
+
 ## Product boundary
 
 Zen-specific provider, model, runtime mode, workspace UI, tools, approval

@@ -56,6 +56,17 @@ class ApplicationPresentationFailureCode(StrEnum):
     CAPACITY_EXHAUSTED = "capacity_exhausted"
 
 
+class ApplicationArtifactMaterializationFailureCode(StrEnum):
+    """Fixed A1 artifact failures without candidate or consumer-controlled detail."""
+
+    INVALID_FACTS = "invalid_facts"
+    INVALID_OUTPUT = "invalid_output"
+    MATERIALIZER_FAILED = "materializer_failed"
+    TIMED_OUT = "timed_out"
+    CANCELLED = "cancelled"
+    CAPACITY_EXHAUSTED = "capacity_exhausted"
+
+
 class OutboundPresentationFailureCode(StrEnum):
     """Fixed O1 failure categories without message or policy-controlled detail."""
 
@@ -160,6 +171,7 @@ class ApplicationDiagnosticFacts:
     kind: str
     connection: ConnectionDiagnosticFacts | None = None
     presentation: ApplicationPresentationDiagnosticFacts | None = None
+    artifact_materialization: ApplicationArtifactMaterializationDiagnosticFacts | None = None
 
     def __post_init__(self) -> None:
         if self.connection is not None and any(
@@ -171,6 +183,11 @@ class ApplicationDiagnosticFacts:
             ApplicationPresentationDiagnosticFacts,
         ):
             raise TypeError("application presentation diagnostics must use the typed fact shape")
+        if self.artifact_materialization is not None and not isinstance(
+            self.artifact_materialization,
+            ApplicationArtifactMaterializationDiagnosticFacts,
+        ):
+            raise TypeError("application artifact diagnostics must use the typed fact shape")
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,6 +232,52 @@ class ApplicationPresentationDiagnosticFacts:
             ApplicationPresentationFailureCode,
         ):
             raise ValueError("application presentation failure code must use fixed vocabulary")
+
+
+@dataclass(frozen=True, slots=True)
+class ApplicationArtifactMaterializationDiagnosticFacts:
+    """Redacted process-lifetime counters for configured App Server artifact A1."""
+
+    invocation_count: int = 0
+    success_count: int = 0
+    omission_count: int = 0
+    failure_count: int = 0
+    timeout_count: int = 0
+    cancellation_count: int = 0
+    cancellation_overrun_count: int = 0
+    capacity_rejection_count: int = 0
+    live_duplicate_count: int = 0
+    last_failure_code: ApplicationArtifactMaterializationFailureCode | None = None
+
+    def __post_init__(self) -> None:
+        counts = (
+            self.invocation_count,
+            self.success_count,
+            self.omission_count,
+            self.failure_count,
+            self.timeout_count,
+            self.cancellation_count,
+            self.cancellation_overrun_count,
+            self.capacity_rejection_count,
+            self.live_duplicate_count,
+        )
+        if any(
+            not isinstance(count, int) or isinstance(count, bool) or count < 0 for count in counts
+        ):
+            raise TypeError("application artifact counts must be non-negative integers")
+        if self.success_count + self.omission_count + self.failure_count > self.invocation_count:
+            raise ValueError("application artifact outcomes cannot exceed invocations")
+        if self.timeout_count + self.cancellation_count > self.failure_count:
+            raise ValueError("application artifact failure counts are inconsistent")
+        if self.cancellation_overrun_count > self.timeout_count + self.cancellation_count:
+            raise ValueError("application artifact overruns exceed cancellations")
+        if self.capacity_rejection_count > self.failure_count:
+            raise ValueError("application artifact capacity rejections exceed failures")
+        if self.last_failure_code is not None and not isinstance(
+            self.last_failure_code,
+            ApplicationArtifactMaterializationFailureCode,
+        ):
+            raise ValueError("application artifact failure code must use fixed vocabulary")
 
 
 @dataclass(frozen=True, slots=True)
@@ -444,7 +507,7 @@ class DiagnosticsSnapshot:
     projections: ProjectionDiagnosticFacts
     gateway: GatewayDiagnosticFacts
     generated_at: datetime
-    schema_version: int = 7
+    schema_version: int = 8
     authoritative: bool = False
     channels: tuple[ChannelDiagnosticFacts, ...] = ()
 

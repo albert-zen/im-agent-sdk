@@ -75,6 +75,21 @@ from ..contracts import (
 )
 from ..diagnostics import ApplicationDiagnosticFacts, ConnectionDiagnosticFacts
 from ..events import EventBroadcaster, EventStreamReset
+from .appserver_artifacts import (
+    ApplicationArtifactMaterialization,
+    ApplicationArtifactMaterializationCancelled,
+    ApplicationArtifactMaterializationCapacityError,
+    ApplicationArtifactMaterializationError,
+    ApplicationArtifactMaterializationFailed,
+    ApplicationArtifactMaterializationTimeout,
+    AppServerArtifactMaterializationLimits,
+    AppServerArtifactMaterializationRuntime,
+    AppServerArtifactMaterializer,
+    AppServerCompletedItemFacts,
+    AppServerTurnTerminalFacts,
+    AppServerTurnTerminalStatus,
+    appserver_completed_item_facts,
+)
 from .appserver_mapping import (
     is_agent_item as _is_agent_item,
 )
@@ -138,6 +153,14 @@ from .presentation import (
     CodexPlanStep,
 )
 
+_ARTIFACT_OBSERVATION_ERRORS = (
+    ApplicationArtifactMaterializationError,
+    ApplicationArtifactMaterializationTimeout,
+    ApplicationArtifactMaterializationCapacityError,
+    ApplicationArtifactMaterializationCancelled,
+    ApplicationArtifactMaterializationFailed,
+)
+
 
 class AppServerClient(Protocol):
     def add_notification_handler(self, handler) -> None: ...
@@ -193,6 +216,10 @@ class _AppServerApplicationAdapter:
         thread_start_options: Mapping[str, object] | None = None,
         live_activity_presenter: CodexLiveActivityPresenter | None = None,
         presentation_limits: ApplicationPresentationLimits = ApplicationPresentationLimits(),
+        artifact_materializer: AppServerArtifactMaterializer | None = None,
+        artifact_materialization_limits: AppServerArtifactMaterializationLimits = (
+            AppServerArtifactMaterializationLimits()
+        ),
     ) -> None:
         self._application_instance_id = application_instance_id
         self._client = client
@@ -209,6 +236,14 @@ class _AppServerApplicationAdapter:
             if live_activity_presenter is not None
             else None
         )
+        self._artifact_materializer = artifact_materializer
+        self._artifact_materialization_limits = artifact_materialization_limits
+        self._artifact_materialization_runtime = (
+            AppServerArtifactMaterializationRuntime(artifact_materialization_limits)
+            if artifact_materializer is not None
+            else None
+        )
+        self._seen_live_artifact_identities: dict[tuple[str, str, str], None] = {}
         self._client.add_notification_handler(self._handle_notification)
         self._request_runtime = AppServerRequestRuntime(
             application_ref=ApplicationRef(application_instance_id),
@@ -276,6 +311,11 @@ class _AppServerApplicationAdapter:
                 if self._presentation_runtime is not None
                 else None
             ),
+            artifact_materialization=(
+                self._artifact_materialization_runtime.diagnostic_facts()
+                if self._artifact_materialization_runtime is not None
+                else None
+            ),
         )
 
     async def start(self) -> None:
@@ -295,6 +335,8 @@ class _AppServerApplicationAdapter:
         finally:
             if self._presentation_runtime is not None:
                 await self._presentation_runtime.close()
+            if self._artifact_materialization_runtime is not None:
+                await self._artifact_materialization_runtime.close()
 
     async def list_pending_requests(self) -> tuple[InteractiveRequest, ...]:
         raise NotImplementedError(
@@ -420,12 +462,20 @@ class _AppServerApplicationAdapter:
                 limit=operation.limit,
                 page=operation.page,
             )
+            history_entries: list[TurnHistoryEntry] = []
+            for turn in turns:
+                if self._artifact_materializer is None:
+                    history_entries.append(self._history_entry(thread_ref, turn))
+                else:
+                    history_entries.append(
+                        await self._history_entry_with_artifacts(thread_ref, turn)
+                    )
             return ThreadHistoryRead(
                 operation_id=operation.operation_id,
                 completed_at=completed_at,
                 history=ThreadHistory(
                     thread_ref=thread_ref,
-                    turns=tuple(self._history_entry(thread_ref, turn) for turn in turns),
+                    turns=tuple(history_entries),
                     page=operation.page,
                     has_older=has_older,
                     metadata={"native_application": self._summary.kind},
@@ -552,6 +602,199 @@ class _AppServerApplicationAdapter:
             error=_turn_error(turn),
             had_compaction=had_compaction,
             metadata={"native_application": self._summary.kind},
+        )
+
+    async def _history_entry_with_artifacts(
+        self,
+        thread_ref: ThreadRef,
+        turn: Mapping[str, object],
+    ) -> TurnHistoryEntry:
+        user_message: AgentMessage | None = None
+        agent_messages: list[AgentMessage] = []
+        had_compaction = False
+        turn_id = _turn_id(turn)
+        for item in _turn_items(turn):
+            item_type = _normalized_item_type(item)
+            if item_type == "contextcompaction":
+                had_compaction = True
+            message = self._item_message(thread_ref, item)
+            if self._artifact_materializer is not None and "user" not in item_type:
+                facts = self._artifact_completed_item_facts(
+                    item,
+                    thread_ref=thread_ref,
+                    turn_id=turn_id,
+                    authoritative=True,
+                    default_message_id=(message.agent_item_id if message is not None else None),
+                )
+                message = await self._materialize_completed_item(
+                    facts,
+                    default_message=message,
+                    created_at=_parse_datetime(item.get("createdAt") or item.get("updatedAt")),
+                )
+            if message is None:
+                continue
+            if message.role is MessageRole.USER and user_message is None:
+                user_message = message
+            if message.role is MessageRole.ASSISTANT:
+                agent_messages.append(message)
+        turn_status = _turn_status(turn.get("status"))
+        if self._artifact_materializer is not None and turn_status in {
+            TurnStatus.COMPLETED,
+            TurnStatus.FAILED,
+            TurnStatus.INTERRUPTED,
+        }:
+            terminal_message = await self._materialize_turn_terminal(
+                self._artifact_turn_terminal_facts(
+                    thread_ref=thread_ref,
+                    turn_id=turn_id,
+                    authoritative=True,
+                    status=AppServerTurnTerminalStatus(turn_status.value),
+                ),
+                created_at=_turn_updated_at(turn) or datetime.now(UTC),
+            )
+            if terminal_message is not None:
+                agent_messages.append(terminal_message)
+        return TurnHistoryEntry(
+            turn_id=turn_id,
+            status=turn_status,
+            user_message=user_message,
+            agent_messages=tuple(agent_messages),
+            error=_turn_error(turn),
+            had_compaction=had_compaction,
+            metadata={"native_application": self._summary.kind},
+        )
+
+    def _artifact_completed_item_facts(
+        self,
+        item: Mapping[str, object],
+        *,
+        thread_ref: ThreadRef,
+        turn_id: str,
+        authoritative: bool,
+        default_message_id: str | None,
+    ) -> AppServerCompletedItemFacts:
+        try:
+            return appserver_completed_item_facts(
+                item,
+                thread_ref=thread_ref,
+                turn_id=turn_id,
+                authoritative=authoritative,
+                default_message_id=default_message_id,
+                limits=self._artifact_materialization_limits,
+            )
+        except (TypeError, ValueError):
+            self._reject_invalid_artifact_facts()
+            raise ApplicationArtifactMaterializationFailed(
+                "artifact materialization facts are invalid"
+            ) from None
+
+    def _artifact_turn_terminal_facts(
+        self,
+        *,
+        thread_ref: ThreadRef,
+        turn_id: str,
+        authoritative: bool,
+        status: AppServerTurnTerminalStatus,
+    ) -> AppServerTurnTerminalFacts:
+        try:
+            return AppServerTurnTerminalFacts(
+                thread_ref=thread_ref,
+                turn_id=turn_id,
+                authoritative=authoritative,
+                status=status,
+            )
+        except (TypeError, ValueError):
+            self._reject_invalid_artifact_facts()
+            raise ApplicationArtifactMaterializationFailed(
+                "artifact materialization facts are invalid"
+            ) from None
+
+    def _reject_invalid_artifact_facts(self) -> None:
+        runtime = self._artifact_materialization_runtime
+        if runtime is not None:
+            runtime.reject_invalid_facts()
+
+    async def _materialize_completed_item(
+        self,
+        facts: AppServerCompletedItemFacts,
+        *,
+        default_message: AgentMessage | None,
+        created_at: datetime,
+    ) -> AgentMessage | None:
+        materializer = self._artifact_materializer
+        runtime = self._artifact_materialization_runtime
+        if materializer is None or runtime is None:
+            return default_message
+        output = await runtime.invoke(lambda: materializer.materialize_completed_item(facts))
+        if output is None:
+            return default_message
+        return self._artifact_message(
+            facts.item_id,
+            facts.thread_ref,
+            output,
+            default_message=default_message,
+            created_at=created_at,
+            terminal=False,
+        )
+
+    async def _materialize_turn_terminal(
+        self,
+        facts: AppServerTurnTerminalFacts,
+        *,
+        created_at: datetime,
+    ) -> AgentMessage | None:
+        materializer = self._artifact_materializer
+        runtime = self._artifact_materialization_runtime
+        if materializer is None or runtime is None:
+            return None
+        output = await runtime.invoke(lambda: materializer.materialize_turn_terminal(facts))
+        if output is None:
+            return None
+        identity = hashlib.sha256(
+            (
+                f"{self._application_instance_id}\x1f"
+                f"{facts.thread_ref.native_thread_id}\x1f{facts.turn_id}"
+            ).encode()
+        ).hexdigest()
+        return self._artifact_message(
+            f"imagent:appserver-artifact-terminal:{identity}",
+            facts.thread_ref,
+            output,
+            default_message=None,
+            created_at=created_at,
+            terminal=True,
+        )
+
+    def _artifact_message(
+        self,
+        item_id: str,
+        thread_ref: ThreadRef,
+        output: ApplicationArtifactMaterialization,
+        *,
+        default_message: AgentMessage | None,
+        created_at: datetime,
+        terminal: bool,
+    ) -> AgentMessage:
+        if default_message is not None:
+            return AgentMessage(
+                agent_item_id=default_message.agent_item_id,
+                thread_ref=default_message.thread_ref,
+                role=default_message.role,
+                content=(*default_message.content, *output.attachments),
+                created_at=default_message.created_at,
+                client_message_id=default_message.client_message_id,
+                metadata=default_message.metadata,
+            )
+        return AgentMessage(
+            agent_item_id=item_id,
+            thread_ref=thread_ref,
+            role=MessageRole.ASSISTANT,
+            content=output.attachments,
+            created_at=created_at,
+            metadata={
+                "native_application": self._summary.kind,
+                "kind": ("artifact_terminal_fallback" if terminal else "artifact_materialization"),
+            },
         )
 
     def _item_message(
@@ -755,6 +998,13 @@ class _AppServerApplicationAdapter:
         del connection_epoch
         self._events.fail_all(EventStreamReset, discard_pending=False)
 
+    def _fail_artifact_observation(self, thread_id: str) -> None:
+        self._events.fail(
+            thread_id,
+            lambda: EventStreamReset("application_artifact_materialization_failed"),
+            discard_pending=False,
+        )
+
     async def _handle_notification(self, notification: dict) -> None:
         method = str(notification.get("method") or "")
         params = notification.get("params")
@@ -836,25 +1086,51 @@ class _AppServerApplicationAdapter:
             if not isinstance(item, dict):
                 return
             item_type = str(item.get("type") or "").replace("_", "").casefold()
-            if item_type != "agentmessage":
+            message: AgentMessage | None = None
+            if item_type == "agentmessage":
+                text = str(item.get("text") or "")
+                if text:
+                    item_id = str(item.get("id") or params.get("itemId") or "")
+                    if not item_id:
+                        item_id = f"live-{uuid.uuid4()}"
+                    message = AgentMessage(
+                        agent_item_id=item_id,
+                        thread_ref=thread_ref,
+                        role=MessageRole.ASSISTANT,
+                        content=(TextContent(text, TextFormat.MARKDOWN),),
+                        created_at=datetime.now(UTC),
+                        metadata={
+                            "phase": str(item.get("phase") or ""),
+                            "native_method": method,
+                        },
+                    )
+            if self._artifact_materializer is not None and "user" not in item_type:
+                try:
+                    facts = self._artifact_completed_item_facts(
+                        item,
+                        thread_ref=thread_ref,
+                        turn_id=turn_id,
+                        authoritative=False,
+                        default_message_id=(message.agent_item_id if message is not None else None),
+                    )
+                    identity = (thread_id, facts.turn_id, facts.item_id)
+                    if identity in self._seen_live_artifact_identities:
+                        runtime = self._artifact_materialization_runtime
+                        if runtime is not None:
+                            runtime.record_live_duplicate()
+                        return
+                    message = await self._materialize_completed_item(
+                        facts,
+                        default_message=message,
+                        created_at=_parse_datetime(item.get("createdAt") or item.get("updatedAt")),
+                    )
+                except _ARTIFACT_OBSERVATION_ERRORS:
+                    self._fail_artifact_observation(thread_id)
+                    return
+                self._remember_live_artifact_identity(identity)
+            if message is None:
                 return
-            text = str(item.get("text") or "")
-            if not text:
-                return
-            item_id = str(item.get("id") or params.get("itemId") or "")
-            if not item_id:
-                item_id = f"live-{uuid.uuid4()}"
-            message = AgentMessage(
-                agent_item_id=item_id,
-                thread_ref=thread_ref,
-                role=MessageRole.ASSISTANT,
-                content=(TextContent(text, TextFormat.MARKDOWN),),
-                created_at=datetime.now(UTC),
-                metadata={
-                    "phase": str(item.get("phase") or ""),
-                    "native_method": method,
-                },
-            )
+            item_id = message.agent_item_id
             self._emit(
                 thread_id,
                 AgentEventType.MESSAGE_COMPLETED,
@@ -875,7 +1151,43 @@ class _AppServerApplicationAdapter:
                 "failed": AgentEventType.TURN_FAILED,
                 "interrupted": AgentEventType.TURN_INTERRUPTED,
             }.get(status, AgentEventType.TURN_COMPLETED)
-            terminal_id = turn_id or f"live-{uuid.uuid4()}"
+            terminal_id = turn_id
+            if self._artifact_materializer is not None:
+                try:
+                    terminal_status = AppServerTurnTerminalStatus(
+                        status if status in {"failed", "interrupted"} else "completed"
+                    )
+                    identity = (thread_id, terminal_id, f"terminal:{terminal_status.value}")
+                    if identity in self._seen_live_artifact_identities:
+                        runtime = self._artifact_materialization_runtime
+                        if runtime is not None:
+                            runtime.record_live_duplicate()
+                        return
+                    terminal_message = await self._materialize_turn_terminal(
+                        self._artifact_turn_terminal_facts(
+                            thread_ref=thread_ref,
+                            turn_id=terminal_id,
+                            authoritative=False,
+                            status=terminal_status,
+                        ),
+                        created_at=datetime.now(UTC),
+                    )
+                except _ARTIFACT_OBSERVATION_ERRORS:
+                    self._fail_artifact_observation(thread_id)
+                    return
+                if terminal_message is not None:
+                    self._emit(
+                        thread_id,
+                        AgentEventType.MESSAGE_COMPLETED,
+                        {"message": terminal_message},
+                        event_id=(
+                            f"{self._application_instance_id}:thread:{thread_id}:"
+                            f"message:{terminal_message.agent_item_id}:completed"
+                        ),
+                        thread_ref=thread_ref,
+                        turn_id=turn_id or None,
+                    )
+                self._remember_live_artifact_identity(identity)
             self._emit(
                 thread_id,
                 event_type,
@@ -887,6 +1199,14 @@ class _AppServerApplicationAdapter:
                 thread_ref=thread_ref,
                 turn_id=turn_id or None,
             )
+
+    def _remember_live_artifact_identity(self, identity: tuple[str, str, str]) -> None:
+        self._seen_live_artifact_identities[identity] = None
+        while (
+            len(self._seen_live_artifact_identities)
+            > self._artifact_materialization_limits.max_seen_identities
+        ):
+            self._seen_live_artifact_identities.pop(next(iter(self._seen_live_artifact_identities)))
 
     def _emit(
         self,
@@ -949,6 +1269,10 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
         shared_filesystem_root: str | Path | None = None,
         event_buffer_max_pending: int = 1024,
         thread_start_options: Mapping[str, object] | None = None,
+        artifact_materializer: AppServerArtifactMaterializer | None = None,
+        artifact_materialization_limits: AppServerArtifactMaterializationLimits = (
+            AppServerArtifactMaterializationLimits()
+        ),
     ) -> None:
         super().__init__(
             application_instance_id=application_instance_id,
@@ -960,6 +1284,8 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
             server_request_mapper=map_zen_appserver_request,
             event_buffer_max_pending=event_buffer_max_pending,
             thread_start_options=thread_start_options,
+            artifact_materializer=artifact_materializer,
+            artifact_materialization_limits=artifact_materialization_limits,
         )
 
 
@@ -976,6 +1302,10 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
         thread_start_options: Mapping[str, object] | None = None,
         live_activity_presenter: CodexLiveActivityPresenter | None = None,
         presentation_limits: ApplicationPresentationLimits = ApplicationPresentationLimits(),
+        artifact_materializer: AppServerArtifactMaterializer | None = None,
+        artifact_materialization_limits: AppServerArtifactMaterializationLimits = (
+            AppServerArtifactMaterializationLimits()
+        ),
     ) -> None:
         super().__init__(
             application_instance_id=application_instance_id,
@@ -990,6 +1320,8 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
             thread_start_options=thread_start_options,
             live_activity_presenter=live_activity_presenter,
             presentation_limits=presentation_limits,
+            artifact_materializer=artifact_materializer,
+            artifact_materialization_limits=artifact_materialization_limits,
         )
 
 

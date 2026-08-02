@@ -59,6 +59,33 @@ completion checkpoint. Reconnect or overflow may lose it; no SDK history or
 replay is invented. Without the presenter, these notifications remain
 invisible exactly as before. Zen does not inherit this Codex option.
 
+## Optional artifact materialization
+
+`CodexApplicationAdapter` may separately receive an
+`AppServerArtifactMaterializer`. In the existing ordered completed-item and
+authoritative-history path, image-generation `savedPath` and dynamic-tool
+`file:`/`data:image/` values become finite frozen untrusted candidates with
+stable candidate identity. The adapter never reads or trusts the locator. The
+consumer validates and materializes it, returning only bounded typed
+attachments; bytes, spool namespace, quotas, leases, cleanup ledger, startup
+sweep, and error wording remain consumer policy.
+
+Artifact facts require native Turn and item IDs. The adapter fails the live
+observation/history read when either is absent; it never synthesizes A1
+identity from random values, text, locator content, or timestamps.
+
+The adapter invokes the same replay-safe materializer over live and history
+facts. Returned attachments are appended to the canonical item chosen by the
+native ordering/phase association, or one fixed-identity artifact-only message
+is emitted before a terminal Turn when the consumer returns a terminal
+fallback. Duplicate live item identities are suppressed only within a finite
+process-local window; history may reinvoke after reconnect/restart. Failure is
+an explicit observation/history failure: live failure terminates the affected
+Thread subscription with the fixed artifact-materialization recovery gap even
+though native dispatch contains handler exceptions, and history failure ends
+the read. It never creates a second native subscription or SDK spool. Without
+the materializer, item/event/history output is exactly the existing mapping.
+
 ## Recovery guarantees
 
 The current App Server seam does not claim native replay when unavailable. It

@@ -21,6 +21,10 @@ Required coverage:
 - configured A1 exposes only fixed execution/omission/cancellation/capacity
   facts on its owning Application adapter; native facts, IDs, rendered output,
   and exception text are absent, and default adapters fabricate no A1 facts;
+- configured App Server artifact A1 exposes only its distinct fixed execution,
+  live-duplicate, cancellation, capacity, and failure facts; candidates,
+  locators, paths, identities, attachments, consumer state, and exception text
+  are absent, and an absent materializer fabricates no facts;
 - configured O1 exposes only fixed invocation/delivery/suppression/failure,
   timeout, cancellation-overrun, and capacity facts; message, destination,
   policy output, and exception text are absent, and an absent policy exposes no

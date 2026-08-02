@@ -42,6 +42,14 @@ bounded text presentation. Codex live-only output is `message.created` and
 never advances a completion checkpoint. T3 output is `message.completed` only
 because the same association is reproduced through authoritative history.
 
+App Server artifact materialization is a separate concrete A1 protocol. The
+adapter derives frozen completed-item and terminal facts plus stable untrusted
+artifact-candidate identities in its existing ordered live/history path. A
+consumer may return only bounded typed `AttachmentContent`; the adapter fixes
+message, Thread, Turn, role, event, and recovery identity. Candidate locators
+confer no filesystem or URL trust, and the SDK acquires no bytes, spool,
+quota, lease, cleanup ledger, or second native subscription.
+
 IM is another access surface over the native Agent Application. It is not a
 separate Agent state tier.
 

@@ -1,4 +1,21 @@
 from .appserver import CodexApplicationAdapter, ZenApplicationAdapter
+from .appserver_artifacts import (
+    ApplicationArtifactMaterialization,
+    ApplicationArtifactMaterializationCancelled,
+    ApplicationArtifactMaterializationCapacityError,
+    ApplicationArtifactMaterializationError,
+    ApplicationArtifactMaterializationFailed,
+    ApplicationArtifactMaterializationTimeout,
+    AppServerArtifactCandidate,
+    AppServerArtifactMaterializationLimits,
+    AppServerArtifactMaterializer,
+    AppServerArtifactSourceKind,
+    AppServerCompletedItemFacts,
+    AppServerCompletedItemKind,
+    AppServerCompletedItemPhase,
+    AppServerTurnTerminalFacts,
+    AppServerTurnTerminalStatus,
+)
 from .appserver_client import codex_app_server_client
 from .presentation import (
     ApplicationPresentationCancelled,
@@ -20,6 +37,21 @@ from .t3 import T3ApplicationAdapter
 from .t3_client import HttpT3Client, T3ClientError
 
 __all__ = [
+    "AppServerArtifactCandidate",
+    "AppServerArtifactMaterializationLimits",
+    "AppServerArtifactMaterializer",
+    "AppServerArtifactSourceKind",
+    "AppServerCompletedItemFacts",
+    "AppServerCompletedItemKind",
+    "AppServerCompletedItemPhase",
+    "AppServerTurnTerminalFacts",
+    "AppServerTurnTerminalStatus",
+    "ApplicationArtifactMaterialization",
+    "ApplicationArtifactMaterializationCancelled",
+    "ApplicationArtifactMaterializationCapacityError",
+    "ApplicationArtifactMaterializationError",
+    "ApplicationArtifactMaterializationFailed",
+    "ApplicationArtifactMaterializationTimeout",
     "ApplicationPresentationCapacityError",
     "ApplicationPresentationCancelled",
     "ApplicationPresentationError",

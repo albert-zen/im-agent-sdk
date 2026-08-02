@@ -40,6 +40,21 @@ Every adapter should prove:
 - an ADR 0015 A1 implementation receives bounded typed facts off the socket
   read path, preserves native item/Turn ordering, produces the same recoverable
   association in history, and leaves default adapters unchanged when absent;
+- App Server artifact A1 extracts only finite typed image-generation and
+  dynamic-tool candidates, keeps locators untrusted, and fixes stable candidate
+  identity across duplicate live notification and authoritative history;
+- missing native Turn/item IDs fail closed before consumer work; distinct items
+  that reuse the same locator remain distinct by native item identity;
+- async artifact materialization may return only bounded typed attachments,
+  associates them with the native item/final answer in order, and emits at most
+  one adapter-identified artifact-only fallback before a completed,
+  interrupted, or failed terminal event;
+- live duplicate suppression is finite; history reinvocation is replay-safe;
+  timeout, cancellation/overrun, capacity, malformed output, and consumer
+  failure terminate the affected live Thread with a fixed gap even when the
+  production dispatcher contains the handler exception, without retaining
+  facts, paths, output, or exception text; later notifications cannot cross
+  that gap, while the absent materializer preserves Codex and Zen behavior;
 - Codex live activity presentation receives no raw payload/client, uses stable
   native event identity when present, emits `message.created`, remains ordered
   with surrounding notifications, deduplicates delivery by event identity,
