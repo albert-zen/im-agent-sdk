@@ -16,6 +16,7 @@ from .adapters import (
     IdempotencyClaimStatus,
     IdempotencyRepository,
     InboundAdmission,
+    OutboundPresentationPolicy,
     ProjectionRouteRepository,
     RequestCorrelationConflict,
     RequestCorrelationRepository,
@@ -101,6 +102,7 @@ from .inbound_admission import (
     start_channel_with_admission,
 )
 from .keyed_locks import KeyedLockRegistry
+from .outbound_presentation import present_outbound
 from .proactive_delivery import (
     InMemoryDeliverySubmissionRepository,
     ProactiveDeliveryService,
@@ -132,6 +134,7 @@ class ImAgentGateway:
         delivery_coordinator: DeliveryCoordinator | None = None,
         projections: ProjectionRouteRepository | None = None,
         request_correlations: RequestCorrelationRepository | None = None,
+        outbound_presentation: OutboundPresentationPolicy | None = None,
         projection_policy: ProjectionPolicy = ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
         controller: InboundController | None = None,
         request_presenter: RequestPresenter | None = None,
@@ -158,6 +161,7 @@ class ImAgentGateway:
         self._request_correlations = request_correlations or InMemoryRequestCorrelationRepository()
         self._delivery_coordinator = delivery_coordinator or DeliveryCoordinator()
         self._controller = controller
+        self._outbound_presentation = outbound_presentation
         self._locks: dict[object, asyncio.Lock] = {}
         self._request_locks = KeyedLockRegistry()
         self._outbound_deliveries: dict[
@@ -970,7 +974,13 @@ class ImAgentGateway:
         if claim is not IdempotencyClaimStatus.ACQUIRED:
             return claim
         try:
-            result = await self._delivery_service.deliver_internal(message)
+            policy = self._outbound_presentation
+            presented = await present_outbound(
+                policy, message, self._idempotency, scope, owner_token
+            )
+            if presented is None:
+                return IdempotencyClaimStatus.ACQUIRED
+            result = await self._delivery_service.deliver_internal(presented)
         except (
             ContractViolation,
             DeliveryPlanningError,

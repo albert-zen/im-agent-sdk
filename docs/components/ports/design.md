@@ -25,6 +25,8 @@ Ports owns:
   `IdempotencyRepository` interfaces;
 - `DeliveryAuthorizer` and `DeliverySubmissionRepository` interfaces for
   scoped proactive delivery, immutable route snapshots, and typed outcomes;
+- the optional destination-specific `OutboundPresentationPolicy` used by
+  Gateway immediately before delivery planning;
 - callback aliases shared by Gateway and integrations.
 
 It does not own:
@@ -90,6 +92,12 @@ Gateway preserves the legacy two-callback `ChannelAdapter.start` shape during
 migration by inspecting its signature before invocation. Such adapters retain
 late Gateway idempotency but cannot claim the pre-media guarantee. A Channel
 that accepts the new optional callback must use a returned lease for media work.
+
+`OutboundPresentationPolicy` receives an already-routed `OutboundMessage` and
+may transform content/metadata or suppress that destination. Gateway preserves
+the delivery ID and `ConversationRef`; suppression is a completed presentation
+decision, not a Channel failure. The policy owns no native transcript, Turn,
+request, or execution state.
 
 ## Change obligations
 

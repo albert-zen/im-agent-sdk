@@ -18,6 +18,8 @@ The Gateway owns:
 - establishing Thread observation before input delivery;
 - composing the projection runtime with Application execution and Channel
   send callbacks;
+- applying an optional product presentation policy only after a concrete
+  destination is known and before delivery planning;
 - validating that an interactive response comes from a Conversation that
   actually received the request and routing the typed native response;
 - per-Conversation serialization and explicit delivery errors.
@@ -50,7 +52,17 @@ may import Gateway.
 7. It starts Thread observation before calling `send_input`.
 8. The Application emits authoritative user and Agent events.
 9. Projection resolves destinations at delivery time.
-10. Channel sends an `OutboundMessage`; Gateway records correlation outcome.
+10. An optional destination presentation policy transforms or suppresses that
+    route's `OutboundMessage` without changing its delivery identity.
+11. Channel sends an `OutboundMessage`; Gateway records correlation outcome.
+
+A suppressed message is a completed presentation decision. Gateway completes
+its outbound idempotency claim, allowing an authoritative projection
+checkpoint to advance instead of replaying deliberately hidden activity on
+every recovery. A policy exception releases a known-pre-side-effect claim.
+Policies cannot change the stable delivery ID or destination, and default
+behavior is unchanged when no policy is configured. This hook is product UX;
+it must not infer or persist Agent execution truth.
 
 ## Proactive delivery flow
 

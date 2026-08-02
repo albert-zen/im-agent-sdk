@@ -99,6 +99,14 @@ class ChannelAdapter(Protocol):
     async def send(self, message: OutboundMessage) -> DeliveryReceipt: ...
 
 
+class OutboundPresentationPolicy(Protocol):
+    """Apply product presentation after one concrete destination is known."""
+
+    async def present(self, message: OutboundMessage) -> OutboundMessage | None:
+        """Return a destination-specific message, or consume it without delivery."""
+        ...
+
+
 class AgentApplicationAdapter(Protocol):
     @property
     def summary(self) -> ApplicationSummary: ...

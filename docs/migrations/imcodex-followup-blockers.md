@@ -23,6 +23,7 @@ baseline was `251` unit tests passing.
 | Quoted native message context | QQ adapter-owned optional capability | Only QQ currently has positive native quote parsing evidence; Telegram, Feishu, and a text webhook are counterexamples without this contract | Preserve a bounded QQ-owned native-untrusted snapshot through the public adapter without widening Core or trusting caller-forged metadata. |
 | Deduplication before media work | Core/Channel runtime invariant | Every media-capable Channel can receive provider redelivery | Durable admission must precede attachment download/materialization. A process-local set is only an optimization. |
 | App Server tool/system/artifact projection | App Server adapter-specific event/history capability | T3 activities and Codex items have different native shapes | Completed command/file items and live-only plan/diff/system observations now use normalized messages without a raw side channel. A typed ordered presentation hook exposes bounded artifact candidates for consumer materialization and terminal fallback. Durable spool lifetime, retry, and cleanup remain downstream parity items; proactive typed artifact delivery is already SDK-owned. |
+| Per-destination visibility | Optional Gateway presentation policy | Different observers of one Thread can select different commentary/tool/system visibility | Apply policy only after a concrete `ConversationRef` is selected. Suppression completes delivery idempotency/checkpoint progress; the policy cannot change delivery identity or destination and owns no Agent truth. |
 | Subscriber/startup/acceptance buffering | Core runtime safety; capacity and overflow UX are consumer policy | Codex, Zen, and T3 can all outpace a slow Channel | Bound every internal accumulation point or define an explicit overflow/reconciliation path before removing the consumer's bounded stage. |
 | Adapter diagnostics/health | Optional adapter capability plus consumer presentation policy | Every long-lived native Channel/Application needs operability; products may render health differently | Expose bounded non-secret adapter facts; IMCodex keeps its `health.json` and event UX. |
 
@@ -57,6 +58,9 @@ review, and merges before the next slice is based:
    presentation, Metadata fidelity, and optional Channel facts. Downstream
    artifact-spool durability remains consumer-owned and must be proven during
    composition rather than hidden behind raw notification processing.
+4. **Destination presentation:** Issue #34 keeps product visibility out of
+   Application adapters by adding one optional per-route policy immediately
+   before Gateway delivery planning.
 
 IMCodex pins none of the intermediate branch commits. Its dependency advances
 only to the final required SDK merge commit present on `main`.

@@ -19,6 +19,8 @@
 - binding selection changes never retarget a previously delivered request;
 - live observation is established before synchronous native notifications;
 - duplicate inbound messages and duplicate outbound items are idempotent;
+- destination presentation may transform or suppress one routed message,
+  suppression completes idempotency, and identity/rerouting is rejected;
 - durable inbound duplicates are rejected before Channel attachment
   preparation, including after SQLite restart;
 - preparation failure and startup failure release only the matching fenced

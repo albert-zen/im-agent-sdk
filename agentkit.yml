@@ -139,12 +139,14 @@ components:
       - src/imagent/inbound_admission.py
       - src/imagent/gateway.py
       - src/imagent/gateway_startup.py
+      - src/imagent/outbound_presentation.py
       - src/imagent/delivery_ingress.py
       - src/imagent/proactive_delivery.py
       - src/imagent/cli/**
       - tests/test_gateway_operations.py
       - tests/test_gateway_vertical_slice.py
       - tests/test_inbound_admission.py
+      - tests/test_outbound_presentation.py
       - tests/test_delivery_ingress.py
       - tests/test_proactive_delivery.py
     docs:
