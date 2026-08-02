@@ -4,6 +4,9 @@ Required scenarios:
 
 - Gateway without a Controller treats Slash-looking text as normal input;
 - the default Controller consumes supported commands;
+- the optional inbound failure presenter preserves fixed destination, reply,
+  and delivery identities for every failure phase;
+- omitting the failure presenter preserves exception propagation;
 - trailing input context is not parsed as Slash arguments;
 - non-Slash interactions invoke the same typed actions;
 - listing never changes selection;

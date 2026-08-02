@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Protocol
 
 from ..contracts import (
@@ -40,6 +41,26 @@ class InboundController(Protocol):
         actions: ControllerActions,
     ) -> tuple[OutboundMessage, ...] | None:
         """Return None to pass through, otherwise deliveries for a consumed input."""
+        ...
+
+
+class InboundFailurePhase(StrEnum):
+    PRE_ACCEPTANCE = "pre_acceptance"
+    OUTCOME_UNKNOWN = "outcome_unknown"
+    POST_ACCEPTANCE = "post_acceptance"
+
+
+class InboundFailurePresenter(Protocol):
+    def present_failure(
+        self,
+        error: BaseException,
+        *,
+        phase: InboundFailurePhase,
+        conversation_ref: ConversationRef,
+        delivery_id: str,
+        reply_to_message_id: str,
+    ) -> OutboundMessage:
+        """Render one terminal inbound failure for its original destination."""
         ...
 
 

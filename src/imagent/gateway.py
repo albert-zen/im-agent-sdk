@@ -23,7 +23,6 @@ from .adapters import (
 from .bindings import BindingConflict
 from .contracts import (
     AgentInput,
-    ApplicationInputOutcomeUnknown,
     ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,
@@ -77,7 +76,12 @@ from .contracts import (
     validate_gateway_operation_result,
     validate_request_response,
 )
-from .controllers import ControllerActions, InboundController, RequestPresenter
+from .controllers import (
+    ControllerActions,
+    InboundController,
+    InboundFailurePresenter,
+    RequestPresenter,
+)
 from .delivery_coordination import DeliveryCoordinator
 from .delivery_planning import DeliveryPlanningError
 from .diagnostics import (
@@ -99,12 +103,13 @@ from .inbound_admission import (
     inbound_idempotency_identity,
     start_channel_with_admission,
 )
+from .inbound_failures import handle_claimed_inbound
 from .keyed_locks import KeyedLockRegistry
 from .proactive_delivery import (
     InMemoryDeliverySubmissionRepository,
     ProactiveDeliveryService,
 )
-from .projection_runtime import InputPostAcceptanceError, ThreadProjectionRuntime
+from .projection_runtime import ThreadProjectionRuntime
 from .projections import (
     InMemoryProjectionRouteRepository,
     ProjectionWorkerHealth,
@@ -133,6 +138,7 @@ class ImAgentGateway:
         request_correlations: RequestCorrelationRepository | None = None,
         projection_policy: ProjectionPolicy = ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
         controller: InboundController | None = None,
+        inbound_failure_presenter: InboundFailurePresenter | None = None,
         request_presenter: RequestPresenter | None = None,
         baseline_history_limit: int = 3,
         recovery_history_page_size: int = 10,
@@ -157,6 +163,7 @@ class ImAgentGateway:
         self._request_correlations = request_correlations or InMemoryRequestCorrelationRepository()
         self._delivery_coordinator = delivery_coordinator or DeliveryCoordinator()
         self._controller = controller
+        self._inbound_failure_presenter = inbound_failure_presenter
         self._locks: dict[object, asyncio.Lock] = {}
         self._request_locks = KeyedLockRegistry()
         self._outbound_deliveries: dict[
@@ -660,38 +667,16 @@ class ImAgentGateway:
         )
 
     async def _handle_claimed_message(self, claimed: ClaimedInbound) -> None:
-        try:
-            await self._process_message(
+        await handle_claimed_inbound(
+            claimed,
+            process=partial(
+                self._process_message,
                 claimed.message,
                 idempotency_owner_token=claimed.owner_token,
-            )
-        except InputPostAcceptanceError as exc:
-            # The native Application already accepted the Turn. Redelivery is
-            # unsafe when the Application has no native input-idempotency key.
-            try:
-                await self._idempotency.complete(
-                    claimed.scope,
-                    claimed.key,
-                    owner_token=claimed.owner_token,
-                )
-            except BaseException as terminal_error:
-                raise terminal_error from exc.cause
-            raise exc.cause.with_traceback(exc.cause.__traceback__) from None
-        except ApplicationInputOutcomeUnknown as exc:
-            # Dispatch crossed the native side-effect boundary without a
-            # definitive outcome. Keep the protected claim sticky.
-            raise exc.cause.with_traceback(exc.cause.__traceback__) from None
-        except BaseException:
-            await self._idempotency.release(
-                claimed.scope,
-                claimed.key,
-                owner_token=claimed.owner_token,
-            )
-            raise
-        await self._idempotency.complete(
-            claimed.scope,
-            claimed.key,
-            owner_token=claimed.owner_token,
+            ),
+            idempotency=self._idempotency,
+            presenter=self._inbound_failure_presenter,
+            deliver=self._deliver_outbound,
         )
 
     async def _handle_message_entry(self, message: InboundMessage) -> None:

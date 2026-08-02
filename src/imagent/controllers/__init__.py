@@ -1,6 +1,8 @@
 from .base import (
     ControllerActions,
     InboundController,
+    InboundFailurePhase,
+    InboundFailurePresenter,
     RequestPresentation,
     RequestPresenter,
 )
@@ -9,6 +11,8 @@ from .slash import SlashController
 
 __all__ = [
     "ControllerActions",
+    "InboundFailurePhase",
+    "InboundFailurePresenter",
     "InboundController",
     "MarkdownRequestPresenter",
     "RequestPresentation",

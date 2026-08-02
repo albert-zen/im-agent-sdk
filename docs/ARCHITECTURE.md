@@ -60,6 +60,10 @@ The precise current import graph and allowed edges are documented in
 Components describe responsibility; lint layers describe imports. They need
 not have identical names.
 
+An `InboundFailurePresenter` is a consumer-owned terminal rendering seam for
+an inbound processing failure whose Conversation, reply, and delivery identity
+remain fixed by Gateway.
+
 ## Authority and persistence
 
 | State | Authority | SDK persistence |

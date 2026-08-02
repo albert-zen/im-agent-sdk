@@ -31,6 +31,10 @@
 - correlation or projection-drain failure after `AcceptedTurn` keeps inbound
   idempotency terminal, while a failure before native acceptance remains
   retryable;
+- configured inbound failure presentation is destination/reply stable and
+  terminal across pre-acceptance, unknown-outcome, and post-acceptance phases;
+- failure-presentation delivery failure never reopens Application dispatch,
+  while the unconfigured default preserves the existing exception behavior;
 - cancellation or response loss after native input dispatch and failure of a
   post-acceptance terminal write remain sticky across redelivery/restart;
 - stale outbound leases are reclaimed, while an already-accepted durable

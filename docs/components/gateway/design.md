@@ -117,7 +117,11 @@ Startup buffering also remains active while queued input drains, so a drain
 failure cannot expose a temporary live-processing window before rollback.
 
 Application and Channel failures remain typed or explicitly reported. Gateway
-does not convert unknown delivery into success.
+does not convert unknown delivery into success. When a consumer configures an
+inbound failure presenter, Gateway terminates known pre-acceptance failures
+before presenting them, preserves sticky unknown outcomes, and preserves
+completed post-acceptance claims. Presentation uses a stable outbound identity;
+its own failure never reopens the original input for Application dispatch.
 
 On restart, Gateway rebuilds required Thread projection workers from persisted
 routes and reconciles from authoritative Application history/catch-up plus
