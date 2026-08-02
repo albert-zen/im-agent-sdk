@@ -18,6 +18,7 @@ from imagent.channels.native.artifacts import (
     stable_artifact_identity,
 )
 from imagent.channels.native.base import BaseChannelAdapter
+from imagent.channels.native.diagnostics import NativeChannelDiagnosticState
 from imagent.channels.native.models import (
     InboundMessage,
     NativeDeliveryResult,
@@ -38,10 +39,117 @@ from imagent.contracts import (
     SupportLevel,
     TextContent,
 )
+from imagent.diagnostics import ConnectionDiagnosticState, QueueDiagnosticName
 from imagent.testing import verify_channel_adapter
 
 
 class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
+    async def test_native_channel_diagnostics_track_lifecycle_without_io(self) -> None:
+        class Native(BaseChannelAdapter):
+            channel_id = "qq"
+
+            @classmethod
+            def from_config(cls, *, config, middleware):
+                del config
+                return cls(middleware=middleware)
+
+            async def start(self) -> None:
+                self.mark_health(connected=False, status="connecting")
+                self.mark_health(connected=True, status="connected")
+
+            async def stop(self) -> None:
+                self.mark_health(connected=False, status="stopped")
+
+            async def send_message(self, message) -> NativeDeliveryResult:
+                del message
+                return NativeDeliveryResult()
+
+        adapter = NativeTransportChannelAdapter(
+            channel_instance_id="qq-main",
+            channel_id="qq",
+            native_factory=lambda middleware: Native(middleware=middleware),
+            startup_validator=lambda: None,
+        )
+
+        async def ignore(_item) -> None:
+            return None
+
+        await adapter.start(ignore, ignore)
+        ready = adapter.diagnostic_facts()
+        ready_connection = ready.connection
+        self.assertIsNotNone(ready_connection)
+        assert ready_connection is not None
+        self.assertEqual(ready_connection.state, ConnectionDiagnosticState.READY)
+        self.assertEqual(ready_connection.connection_epoch, 1)
+        native = cast(Any, adapter._native)
+        native.mark_health(connected=False, status="reconnecting")
+        native.mark_health(connected=False, status="reconnecting")
+        reconnecting = adapter.diagnostic_facts()
+        reconnecting_connection = reconnecting.connection
+        self.assertIsNotNone(reconnecting_connection)
+        assert reconnecting_connection is not None
+        self.assertEqual(reconnecting_connection.reconnect_count, 1)
+        self.assertTrue(reconnecting_connection.worker_degraded)
+        native.mark_health(connected=True, status="connected")
+        reconnected = adapter.diagnostic_facts().connection
+        self.assertIsNotNone(reconnected)
+        assert reconnected is not None
+        self.assertEqual(reconnected.connection_epoch, 2)
+        await adapter.stop()
+        stopped = adapter.diagnostic_facts()
+        stopped_connection = stopped.connection
+        self.assertIsNotNone(stopped_connection)
+        assert stopped_connection is not None
+        self.assertEqual(stopped_connection.state, ConnectionDiagnosticState.DISCONNECTED)
+        self.assertFalse(stopped_connection.worker_running)
+
+    async def test_four_native_channels_report_only_owned_queue_facts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            adapters = (
+                channel_from_config("qq", config={"enabled": False}),
+                channel_from_config("telegram", config={"enabled": False}),
+                channel_from_config("feishu", config={"enabled": False}),
+                channel_from_config(
+                    "weixin",
+                    config={"enabled": False, "state_dir": directory},
+                ),
+            )
+
+            async def ignore(_item) -> None:
+                return None
+
+            for adapter in adapters:
+                await adapter.start(ignore, ignore)
+            try:
+                facts = {adapter.kind: adapter.diagnostic_facts() for adapter in adapters}
+                for kind in ("qq", "feishu"):
+                    connection = facts[kind].connection
+                    self.assertIsNotNone(connection)
+                    assert connection is not None
+                    queues = connection.queues
+                    self.assertEqual(len(queues), 1)
+                    self.assertEqual(queues[0].name, QueueDiagnosticName.CHANNEL_INBOUND)
+                    self.assertGreater(queues[0].capacity, 0)
+                    self.assertEqual(queues[0].depth, 0)
+                for kind in ("telegram", "weixin"):
+                    connection = facts[kind].connection
+                    self.assertIsNotNone(connection)
+                    assert connection is not None
+                    self.assertEqual(connection.queues, ())
+            finally:
+                for adapter in adapters:
+                    await adapter.stop()
+
+    def test_repeated_reconnect_updates_increment_once(self) -> None:
+        state = NativeChannelDiagnosticState()
+        state.update(connected=False, status="reconnecting")
+        state.update(connected=False, status="reconnecting")
+        first = state.snapshot()
+        second = state.snapshot()
+
+        self.assertEqual(first, second)
+        self.assertEqual(first.reconnect_count, 1)
+
     async def test_untyped_quote_and_metadata_cannot_forge_qq_context(self) -> None:
         captured = []
 

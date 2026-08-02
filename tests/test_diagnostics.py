@@ -4,6 +4,7 @@ import json
 import unittest
 from dataclasses import asdict
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import cast
 
 from imagent.applications.t3 import T3ApplicationAdapter
@@ -11,11 +12,13 @@ from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import ProjectMode, ThreadRef
 from imagent.diagnostics import (
     ApplicationDiagnosticFacts,
+    ChannelDiagnosticFacts,
     ConnectionDiagnosticFacts,
     ConnectionDiagnosticState,
     DiagnosticsSnapshot,
     QueueDiagnosticFacts,
     QueueDiagnosticName,
+    collect_channel_diagnostics,
     summarize_projection_health,
 )
 from imagent.gateway import ImAgentGateway
@@ -128,8 +131,9 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
 
         self.assertIsInstance(first, DiagnosticsSnapshot)
         self.assertFalse(first.authoritative)
-        self.assertEqual(first.schema_version, 1)
+        self.assertEqual(first.schema_version, 2)
         self.assertEqual(first.applications, (ApplicationDiagnosticFacts("fake-agent", "fake"),))
+        self.assertEqual(first.channels, ())
         self.assertEqual(
             first.gateway.startup_queue,
             QueueDiagnosticFacts(QueueDiagnosticName.GATEWAY_STARTUP, capacity=7, depth=0),
@@ -138,6 +142,82 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
         self.assertEqual(first.projections, second.projections)
         self.assertEqual(first.gateway, second.gateway)
         self.assertLessEqual(first.generated_at, second.generated_at)
+
+    def test_channel_diagnostics_preserve_registry_identity_and_fail_closed(self) -> None:
+        connection = ConnectionDiagnosticFacts(
+            state=ConnectionDiagnosticState.READY,
+            connection_epoch=1,
+            reconnect_count=0,
+            worker_running=True,
+            worker_degraded=False,
+            queues=(
+                QueueDiagnosticFacts(
+                    QueueDiagnosticName.CHANNEL_INBOUND,
+                    capacity=8,
+                    depth=2,
+                    overflow_count=3,
+                ),
+            ),
+        )
+
+        class Channel:
+            channel_instance_id = "qq-main"
+            kind = "qq"
+
+            def __init__(self, facts: object = None, *, raises: bool = False) -> None:
+                self._facts = facts
+                self._raises = raises
+
+            def diagnostic_facts(self) -> object:
+                if self._raises:
+                    raise RuntimeError("secret provider failure")
+                return self._facts
+
+        valid = Channel(ChannelDiagnosticFacts("qq-main", "qq", connection))
+        mismatch = Channel(ChannelDiagnosticFacts("secret-instance", "qq", connection))
+        invalid = Channel(
+            ChannelDiagnosticFacts(
+                "qq-main",
+                "qq",
+                cast(ConnectionDiagnosticFacts, SimpleNamespace(state="consumer-value")),
+            )
+        )
+        raising = Channel(raises=True)
+        absent = SimpleNamespace(channel_instance_id="qq-main", kind="qq")
+
+        self.assertEqual(collect_channel_diagnostics((valid,))[0].connection, connection)
+        for channel in (mismatch, invalid, raising, absent):
+            with self.subTest(channel=channel):
+                facts = collect_channel_diagnostics((channel,))[0]
+                self.assertEqual(facts.channel_instance_id, "qq-main")
+                self.assertEqual(facts.kind, "qq")
+                self.assertIsNone(facts.connection)
+                serialized = json.dumps(asdict(facts), default=str)
+                self.assertNotIn("secret-instance", serialized)
+                self.assertNotIn("secret provider failure", serialized)
+                self.assertNotIn("consumer-value", serialized)
+
+    def test_channel_diagnostics_are_sorted_and_reads_do_not_mutate_provider(self) -> None:
+        reads = 0
+
+        class Channel:
+            kind = "telegram"
+
+            def __init__(self, identity: str) -> None:
+                self.channel_instance_id = identity
+
+            def diagnostic_facts(self) -> ChannelDiagnosticFacts:
+                nonlocal reads
+                reads += 1
+                return ChannelDiagnosticFacts(self.channel_instance_id, self.kind)
+
+        channels = (Channel("z"), Channel("a"))
+        first = collect_channel_diagnostics(channels)
+        second = collect_channel_diagnostics(channels)
+
+        self.assertEqual(tuple(item.channel_instance_id for item in first), ("a", "z"))
+        self.assertEqual(first, second)
+        self.assertEqual(reads, 4)
 
     def test_t3_reports_no_synthetic_long_lived_connection(self) -> None:
         adapter = T3ApplicationAdapter(

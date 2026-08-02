@@ -27,6 +27,10 @@ from ..contracts import (
     TextFormat,
 )
 from .native.base import ChannelRouteContext
+from .native.diagnostics import (
+    NativeChannelDiagnosticSnapshot,
+    NativeConnectionDiagnosticSnapshot,
+)
 from .native.models import (
     NativeDeliveryResult,
 )
@@ -123,6 +127,7 @@ class NativeTransportChannelAdapter:
         self._native_factory = native_factory
         self._startup_validator = startup_validator
         self._native: NativeChannel | None = None
+        self._last_connection_facts: NativeConnectionDiagnosticSnapshot | None = None
 
     def validate_startup_configuration(self) -> None:
         """Validate one detached native instance without starting transport I/O."""
@@ -132,6 +137,22 @@ class NativeTransportChannelAdapter:
     @property
     def channel_instance_id(self) -> str:
         return self._channel_instance_id
+
+    @property
+    def kind(self) -> str:
+        return self._channel_id
+
+    def diagnostic_facts(self) -> NativeChannelDiagnosticSnapshot:
+        native = self._native
+        if native is not None:
+            facts = _native_connection_facts(native)
+            if facts is not None:
+                self._last_connection_facts = facts
+        return NativeChannelDiagnosticSnapshot(
+            channel_instance_id=self._channel_instance_id,
+            kind=self._channel_id,
+            connection=self._last_connection_facts,
+        )
 
     @property
     def capabilities(self) -> ChannelCapabilities:
@@ -163,9 +184,14 @@ class NativeTransportChannelAdapter:
 
     async def stop(self) -> None:
         native = self._native
-        self._native = None
         if native is not None:
-            await native.stop()
+            try:
+                await native.stop()
+            finally:
+                facts = _native_connection_facts(native)
+                if facts is not None:
+                    self._last_connection_facts = facts
+                self._native = None
 
     async def send(self, message: OutboundMessage) -> DeliveryReceipt:
         native = self._native
@@ -210,6 +236,17 @@ class NativeTransportChannelAdapter:
             detail=detail,
             items=item_receipts,
         )
+
+
+def _native_connection_facts(native: object) -> NativeConnectionDiagnosticSnapshot | None:
+    provider = getattr(native, "diagnostic_connection_facts", None)
+    if not callable(provider):
+        return None
+    try:
+        facts = provider()
+        return facts if isinstance(facts, NativeConnectionDiagnosticSnapshot) else None
+    except Exception:
+        return None
 
 
 def channel_from_config(

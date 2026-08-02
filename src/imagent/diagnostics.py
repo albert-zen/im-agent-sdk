@@ -32,6 +32,7 @@ class QueueDiagnosticName(StrEnum):
     GATEWAY_STARTUP = "gateway_startup"
     NOTIFICATION = "notification"
     SERVER_REQUEST = "server_request"
+    CHANNEL_INBOUND = "channel_inbound"
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +47,11 @@ class QueueDiagnosticFacts:
     def __post_init__(self) -> None:
         if not isinstance(self.name, QueueDiagnosticName):
             raise ValueError("diagnostic queue name must use the fixed vocabulary")
+        if any(
+            not isinstance(item, int) or isinstance(item, bool)
+            for item in (self.capacity, self.depth, self.overflow_count)
+        ):
+            raise TypeError("diagnostic queue counts must be integers")
         if self.capacity < 1:
             raise ValueError("diagnostic queue capacity must be positive")
         if not 0 <= self.depth <= self.capacity:
@@ -73,10 +79,25 @@ class ConnectionDiagnosticFacts:
             self.last_failure_code, DiagnosticFailureCode
         ):
             raise ValueError("diagnostic failure code must use the fixed vocabulary")
+        if (
+            not isinstance(self.connection_epoch, int)
+            or isinstance(self.connection_epoch, bool)
+            or self.connection_epoch < 0
+            or not isinstance(self.reconnect_count, int)
+            or isinstance(self.reconnect_count, bool)
+            or self.reconnect_count < 0
+            or not isinstance(self.worker_running, bool)
+            or not isinstance(self.worker_degraded, bool)
+        ):
+            raise TypeError("invalid diagnostic connection fact types")
         names = tuple(queue.name for queue in self.queues)
         if len(names) != len(set(names)):
             raise ValueError("diagnostic connection queue names must be unique")
-        allowed = {QueueDiagnosticName.NOTIFICATION, QueueDiagnosticName.SERVER_REQUEST}
+        allowed = {
+            QueueDiagnosticName.NOTIFICATION,
+            QueueDiagnosticName.SERVER_REQUEST,
+            QueueDiagnosticName.CHANNEL_INBOUND,
+        }
         if not set(names).issubset(allowed):
             raise ValueError("diagnostic connection queue name is not connection-scoped")
 
@@ -86,6 +107,15 @@ class ApplicationDiagnosticFacts:
     """Optional Application-adapter facts without native resource identities."""
 
     application_instance_id: str
+    kind: str
+    connection: ConnectionDiagnosticFacts | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ChannelDiagnosticFacts:
+    """Optional Channel-adapter facts without native Conversation identities."""
+
+    channel_instance_id: str
     kind: str
     connection: ConnectionDiagnosticFacts | None = None
 
@@ -124,14 +154,21 @@ class DiagnosticsSnapshot:
     projections: ProjectionDiagnosticFacts
     gateway: GatewayDiagnosticFacts
     generated_at: datetime
-    schema_version: int = 1
+    schema_version: int = 2
     authoritative: bool = False
+    channels: tuple[ChannelDiagnosticFacts, ...] = ()
 
 
 class DiagnosticsProvider(Protocol):
     """Optional structural seam; it is not a required Core adapter capability."""
 
     def diagnostic_facts(self) -> ApplicationDiagnosticFacts: ...
+
+
+class ChannelDiagnosticsProvider(Protocol):
+    """Optional structural Channel seam; not a required lifecycle capability."""
+
+    def diagnostic_facts(self) -> ChannelDiagnosticFacts: ...
 
 
 class _ProjectionHealth(Protocol):
@@ -268,14 +305,97 @@ def collect_application_diagnostics(
     return tuple(sorted(collected, key=lambda facts: facts.application_instance_id))
 
 
+def collect_channel_diagnostics(
+    channels: Iterable[object],
+) -> tuple[ChannelDiagnosticFacts, ...]:
+    """Read optional providers while preserving configured Channel identity."""
+
+    collected: list[ChannelDiagnosticFacts] = []
+    for channel in channels:
+        channel_instance_id = str(getattr(channel, "channel_instance_id", ""))
+        kind = str(getattr(channel, "kind", "unknown"))
+        provider = getattr(channel, "diagnostic_facts", None)
+        try:
+            facts = provider() if callable(provider) else None
+        except Exception:
+            facts = None
+        provider_instance_id = getattr(facts, "channel_instance_id", None)
+        provider_kind = getattr(facts, "kind", None)
+        if (
+            not isinstance(provider_instance_id, str)
+            or provider_instance_id != channel_instance_id
+            or not isinstance(provider_kind, str)
+            or provider_kind != kind
+        ):
+            collected.append(ChannelDiagnosticFacts(channel_instance_id, kind))
+            continue
+        try:
+            connection = _coerce_channel_connection(getattr(facts, "connection", None))
+        except (AttributeError, TypeError, ValueError):
+            connection = None
+        collected.append(ChannelDiagnosticFacts(channel_instance_id, kind, connection))
+    return tuple(sorted(collected, key=lambda facts: facts.channel_instance_id))
+
+
+def _coerce_channel_connection(value: object) -> ConnectionDiagnosticFacts | None:
+    if value is None:
+        return None
+    state = ConnectionDiagnosticState(str(getattr(value, "state")))
+    failure = getattr(value, "last_failure_code", None)
+    connection_epoch = getattr(value, "connection_epoch")
+    reconnect_count = getattr(value, "reconnect_count")
+    worker_running = getattr(value, "worker_running")
+    worker_degraded = getattr(value, "worker_degraded")
+    if (
+        not isinstance(connection_epoch, int)
+        or isinstance(connection_epoch, bool)
+        or connection_epoch < 0
+        or not isinstance(reconnect_count, int)
+        or isinstance(reconnect_count, bool)
+        or reconnect_count < 0
+        or not isinstance(worker_running, bool)
+        or not isinstance(worker_degraded, bool)
+    ):
+        raise TypeError("invalid Channel diagnostic fact types")
+    queues = tuple(_coerce_channel_queue(queue) for queue in getattr(value, "queues", ()))
+    return ConnectionDiagnosticFacts(
+        state=state,
+        connection_epoch=connection_epoch,
+        reconnect_count=reconnect_count,
+        worker_running=worker_running,
+        worker_degraded=worker_degraded,
+        last_failure_code=(DiagnosticFailureCode(str(failure)) if failure is not None else None),
+        queues=queues,
+    )
+
+
+def _coerce_channel_queue(value: object) -> QueueDiagnosticFacts:
+    capacity = getattr(value, "capacity")
+    depth = getattr(value, "depth")
+    overflow_count = getattr(value, "overflow_count")
+    if any(
+        not isinstance(item, int) or isinstance(item, bool)
+        for item in (capacity, depth, overflow_count)
+    ):
+        raise TypeError("invalid Channel diagnostic queue fact types")
+    return QueueDiagnosticFacts(
+        name=QueueDiagnosticName(str(getattr(value, "name"))),
+        capacity=capacity,
+        depth=depth,
+        overflow_count=overflow_count,
+    )
+
+
 def new_diagnostics_snapshot(
     *,
     applications: tuple[ApplicationDiagnosticFacts, ...],
+    channels: tuple[ChannelDiagnosticFacts, ...],
     projections: ProjectionDiagnosticFacts,
     gateway: GatewayDiagnosticFacts,
 ) -> DiagnosticsSnapshot:
     return DiagnosticsSnapshot(
         applications=applications,
+        channels=channels,
         projections=projections,
         gateway=gateway,
         generated_at=datetime.now(UTC),

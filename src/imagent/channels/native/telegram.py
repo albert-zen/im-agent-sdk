@@ -24,7 +24,7 @@ from .artifacts import (
     read_managed_artifact,
 )
 from .base import BaseChannelAdapter
-from .diagnostics import emit_event, mark_channel_health
+from .diagnostics import emit_event
 from .endpoints import validate_http_endpoint
 from .media import (
     MAX_FILE_COUNT,
@@ -313,8 +313,7 @@ class TelegramChannelAdapter(BaseChannelAdapter):
         self._stop_event.clear()
         if self._runner_task is None or self._runner_task.done():
             self._runner_task = asyncio.create_task(self._run_forever())
-        mark_channel_health(
-            "telegram",
+        self.mark_health(
             enabled=True,
             connected=False,
             status="connecting",
@@ -354,7 +353,7 @@ class TelegramChannelAdapter(BaseChannelAdapter):
                 await self.http_client.aclose()
             except Exception as exc:
                 errors.append(exc)
-        mark_channel_health("telegram", connected=False, status="stopped")
+        self.mark_health(connected=False, status="stopped")
         if errors:
             raise ExceptionGroup("Telegram shutdown failed", errors)
 
@@ -537,8 +536,7 @@ class TelegramChannelAdapter(BaseChannelAdapter):
         while not self._stop_event.is_set():
             try:
                 await self._probe_bot()
-                mark_channel_health(
-                    "telegram",
+                self.mark_health(
                     connected=True,
                     status="connected",
                     bot_username=self._bot_username,
@@ -561,8 +559,7 @@ class TelegramChannelAdapter(BaseChannelAdapter):
                     delay = max(delay, exc.retry_after)
                 logger.warning("Telegram polling failed; retrying in %.1fs: %s", delay, exc)
                 logger.debug("Telegram polling failure details", exc_info=True)
-                mark_channel_health(
-                    "telegram",
+                self.mark_health(
                     connected=False,
                     status="reconnecting",
                     error_type=type(exc).__name__,
