@@ -20,9 +20,10 @@ Issue #9 remains open until that consumer-side removal is complete.
 
 The SDK owner-side typed approval/user-input loop, destination-safe response
 correlation, native pending-request reconciliation, and conformance coverage
-are complete. Remaining evidence is consumer mounting against additional
-native Agent Applications. Full Access and automatic approval remain
-consumer/Application policy.
+are complete. IMZen now supplies native Zen command approval evidence over
+the App Server adapter. Remaining evidence is consumer mounting against an
+additional non-App-Server Agent Application. Full Access and automatic
+approval remain consumer/Application policy.
 
 ## Issue #11: proactive content and Artifact send
 

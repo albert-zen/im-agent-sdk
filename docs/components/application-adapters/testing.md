@@ -54,12 +54,13 @@ Every adapter should prove:
 - duplicate response and unsupported request shapes fail explicitly rather
   than selecting approval/sandbox policy.
 
-Codex request mapping is covered by `test_appserver_requests.py`, including
+Codex and Zen request mapping is covered by `test_appserver_requests.py`, including
 permission response fidelity, secret sensitivity, transport-epoch staleness,
 JSON-RPC error classification, terminal-cache bounds, and adversarial
-Markdown fields. Zen and T3 currently assert `unsupported`; a second real
-adapter still requires its own native request/response evidence before Issue
-#10 can be fully accepted.
+Markdown fields. Zen's command approval round trip is backed by the IMZen
+native App Server integration, while unevidenced Zen request kinds fail
+explicitly. T3 remains `unsupported` until its own native request/response
+evidence exists.
 
 Run:
 

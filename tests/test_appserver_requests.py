@@ -13,6 +13,7 @@ from imagent.applications.appserver_requests import (
     build_appserver_response,
     derive_appserver_request_ref,
     map_appserver_request,
+    map_zen_appserver_request,
 )
 from imagent.contracts import (
     AgentEventType,
@@ -72,6 +73,19 @@ class AppServerRequestMappingTests(unittest.TestCase):
             ),
             {"decision": amendment},
         )
+
+    def test_zen_mapper_rejects_unevidenced_appserver_request_shapes(self) -> None:
+        with self.assertRaisesRegex(
+            NotImplementedError,
+            "unsupported Zen App Server request method",
+        ):
+            map_zen_appserver_request(
+                ApplicationRef("zen-main"),
+                _server_request(
+                    method="item/tool/requestUserInput",
+                    params={"questions": []},
+                ),
+            )
 
     def test_user_input_is_explicitly_single_select_and_maps_option_labels(
         self,
@@ -643,7 +657,7 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIsInstance(result, RequestResponded)
 
-    async def test_zen_does_not_claim_unevidenced_codex_request_protocol(
+    async def test_zen_native_approval_round_trip_uses_evidenced_appserver_protocol(
         self,
     ) -> None:
         client = InteractiveClient()
@@ -654,9 +668,43 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIs(
             adapter.summary.capabilities.runtime.interactive_requests,
-            SupportLevel.UNSUPPORTED,
+            SupportLevel.NATIVE,
         )
-        self.assertEqual(client.server_request_handlers, [])
+        self.assertEqual(len(client.server_request_handlers), 1)
+        thread = ThreadRef("zen-main", "thread-1")
+        events = cast(Any, adapter.subscribe_thread(thread))
+        try:
+            opened = asyncio.create_task(anext(events))
+            await asyncio.sleep(0)
+            await client.emit_request(
+                _server_request(
+                    method="item/commandExecution/requestApproval",
+                    params={
+                        "command": "printf hello",
+                        "cwd": "D:/repo",
+                        "availableDecisions": ["accept", "decline", "cancel"],
+                    },
+                )
+            )
+            event = await opened
+            self.assertIs(event.type, AgentEventType.REQUEST_OPENED)
+            assert isinstance(event.request, ApprovalRequest)
+            self.assertEqual(event.request.thread_ref, thread)
+
+            result = await adapter.execute(
+                RespondRequest(
+                    operation_id="zen-respond-1",
+                    application_ref=adapter.summary.ref,
+                    request_ref=event.request.request_ref,
+                    response=ApprovalResponse("accept"),
+                    thread_ref=thread,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(result, RequestResponded)
+            self.assertEqual(client.replies, [(7, {"decision": "accept"}, 3)])
+        finally:
+            await events.aclose()
 
     async def test_terminal_request_diagnostics_are_bounded(self) -> None:
         for request_id in range(300):

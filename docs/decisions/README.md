@@ -13,7 +13,7 @@ Unaccepted directions belong in `docs/ROADMAP.md`.
 | [0005](0005-input-activation-and-projection.md) | Accepted | binding, native activation, and output projection separation |
 | [0006](0006-core-admission-and-policy-ownership.md) | Accepted | evidence threshold and Core/capability/adapter/consumer classification |
 | [0007](0007-projection-lifecycle-and-delivery-boundaries.md) | Accepted | per-route checkpoints, Turn reply correlation, bootstrap order, and failure domains |
-| [0008](0008-interactive-request-routing.md) | Accepted | typed interactive requests, destination-safe response correlation, and reconnect honesty |
+| [0008](0008-interactive-request-routing.md) | Accepted | Codex/Zen typed interactive requests, destination-safe response correlation, and reconnect honesty |
 | [0009](0009-proactive-delivery-routing.md) | Accepted | scoped proactive delivery, pinned route snapshots, and durable idempotent outcomes |
 | [0010](0010-capability-driven-delivery-coordination.md) | Accepted | pure capability-driven planning and bounded destination-ordered delivery |
 | [0011](0011-durable-inbound-admission-before-media.md) | Accepted | fenced durable inbound admission before Channel media preparation |
