@@ -135,6 +135,7 @@ class T3ApplicationAdapter:
         self._events = EventBroadcaster[str, AgentEvent](max_pending=event_buffer_max_pending)
         self._poll_tasks: dict[str, asyncio.Task[None]] = {}
         self._send_locks: dict[str, asyncio.Lock] = {}
+        self._publish_locks: dict[str, asyncio.Lock] = {}
         self._seen_messages: dict[str, set[str]] = {}
         self._seen_activities: dict[str, set[str]] = {}
         self._terminal_turns: dict[str, set[str]] = {}
@@ -206,6 +207,7 @@ class T3ApplicationAdapter:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._poll_tasks.clear()
         self._send_locks.clear()
+        self._publish_locks.clear()
         try:
             close = getattr(self._client, "aclose", None)
             if callable(close):
@@ -647,6 +649,7 @@ class T3ApplicationAdapter:
             thread_ref,
             thread,
             only_turn_id=turn_id,
+            tolerate_presentation_failure=True,
         )
         return AcceptedTurn(
             thread_ref=thread_ref,
@@ -699,6 +702,26 @@ class T3ApplicationAdapter:
         *,
         only_turn_id: str | None = None,
         initialize: bool = False,
+        tolerate_presentation_failure: bool = False,
+    ) -> None:
+        lock = self._publish_locks.setdefault(thread_ref.native_thread_id, asyncio.Lock())
+        async with lock:
+            await self._publish_thread_state_locked(
+                thread_ref,
+                thread,
+                only_turn_id=only_turn_id,
+                initialize=initialize,
+                tolerate_presentation_failure=tolerate_presentation_failure,
+            )
+
+    async def _publish_thread_state_locked(
+        self,
+        thread_ref: ThreadRef,
+        thread: Mapping[str, object],
+        *,
+        only_turn_id: str | None = None,
+        initialize: bool = False,
+        tolerate_presentation_failure: bool = False,
     ) -> None:
         thread_id = thread_ref.native_thread_id
         seen = self._seen_messages.setdefault(thread_id, set())
@@ -770,7 +793,12 @@ class T3ApplicationAdapter:
                 if initialize and self._turn_baselines.get((thread_id, activity_turn_id)) is None:
                     seen_activities.add(activity_id)
                     continue
-                projected = await self._t3_activity_message(thread_ref, activity)
+                try:
+                    projected = await self._t3_activity_message(thread_ref, activity)
+                except Exception:
+                    if tolerate_presentation_failure:
+                        continue
+                    raise
                 seen_activities.add(activity_id)
                 if projected is None:
                     continue
@@ -1111,7 +1139,8 @@ def _t3_activity_facts(
     thread_ref: ThreadRef,
     activity: Mapping[str, object],
 ) -> T3ActivityFacts | None:
-    kind = str(activity.get("kind") or "")
+    native_kind = activity.get("kind")
+    kind = native_kind.strip() if isinstance(native_kind, str) else ""
     if kind in {
         "approval.requested",
         "approval.resolved",
@@ -1119,8 +1148,10 @@ def _t3_activity_facts(
         "user-input.resolved",
     }:
         return None
-    activity_id = str(activity.get("id") or "")
-    turn_id = str(activity.get("turnId") or "")
+    native_activity_id = activity.get("id")
+    native_turn_id = activity.get("turnId")
+    activity_id = native_activity_id.strip() if isinstance(native_activity_id, str) else ""
+    turn_id = native_turn_id.strip() if isinstance(native_turn_id, str) else ""
     created_at = _parse_optional_datetime(activity.get("createdAt"))
     if not activity_id or not turn_id or not kind or created_at is None:
         return None
@@ -1141,7 +1172,9 @@ def _t3_activity_facts(
 
 
 def _bounded_activity_text(value: object, *, limit: int = 8_000) -> str | None:
-    text = str(value or "").strip()
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
     return text[:limit] or None
 
 

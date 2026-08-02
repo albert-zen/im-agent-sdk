@@ -7,6 +7,8 @@ from typing import Any, cast
 
 from imagent.adapters import IdempotencyClaimStatus
 from imagent.applications import (
+    ApplicationPresentationCancelled,
+    ApplicationPresentationCapacityError,
     ApplicationPresentationError,
     ApplicationPresentationLimits,
     ApplicationPresentationTimeout,
@@ -22,6 +24,7 @@ from imagent.applications import (
 from imagent.applications.presentation import ApplicationPresentationRuntime
 from imagent.contracts import (
     AgentEventType,
+    AgentInput,
     AgentMessage,
     ConversationRef,
     MessageRole,
@@ -30,6 +33,7 @@ from imagent.contracts import (
     ThreadRef,
 )
 from imagent.diagnostics import ApplicationPresentationFailureCode
+from imagent.events import EventStreamReset
 from imagent.projections import (
     InMemoryProjectionRouteRepository,
     ProjectedAgentMessage,
@@ -91,6 +95,40 @@ class _T3Client:
         return {}
 
 
+class _AcceptedT3Client(_T3Client):
+    def __init__(self) -> None:
+        self.dispatched = False
+
+    async def thread_detail(self, thread_id: str):
+        return {
+            "thread": {
+                "id": thread_id,
+                "messages": [],
+                "activities": (
+                    [
+                        {
+                            "id": "activity-after-acceptance",
+                            "turnId": "turn-accepted",
+                            "kind": "tool.progress",
+                            "summary": "Working",
+                            "createdAt": "2026-08-03T10:00:00Z",
+                        }
+                    ]
+                    if self.dispatched
+                    else []
+                ),
+                "latestTurn": (
+                    {"turnId": "turn-accepted", "state": "running"} if self.dispatched else None
+                ),
+            }
+        }
+
+    async def dispatch(self, command):
+        del command
+        self.dispatched = True
+        return {}
+
+
 class _CodexPresenter:
     def __init__(self) -> None:
         self.facts: list[CodexLiveActivityFacts] = []
@@ -113,6 +151,28 @@ class _T3Presenter:
     ) -> ApplicationTextPresentation:
         self.facts.append(facts)
         return ApplicationTextPresentation((TextContent(f"Activity: {facts.summary}"),))
+
+
+class _FailingT3Presenter:
+    async def present_activity(self, facts: T3ActivityFacts) -> ApplicationTextPresentation:
+        del facts
+        raise RuntimeError("consumer detail must not escape")
+
+
+class _BlockingT3Presenter(_T3Presenter):
+    def __init__(self) -> None:
+        super().__init__()
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def present_activity(
+        self,
+        facts: T3ActivityFacts,
+    ) -> ApplicationTextPresentation:
+        self.facts.append(facts)
+        self.started.set()
+        await self.release.wait()
+        return ApplicationTextPresentation((TextContent("Activity"),))
 
 
 class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
@@ -203,6 +263,36 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
                 cwd="/workspace",
                 live_activity_presenter=_CodexPresenter(),
             )
+
+    async def test_codex_reconnect_exposes_gap_without_replaying_live_presentation(self) -> None:
+        client = _AppServerClient()
+        presenter = _CodexPresenter()
+        application = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            cwd="/workspace",
+            live_activity_presenter=presenter,
+        )
+        events = application.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        try:
+            await client.handlers[0](
+                {
+                    "method": "thread/status/changed",
+                    "params": {
+                        "threadId": "thread-1",
+                        "eventId": "status-1",
+                        "status": {"type": "active"},
+                    },
+                }
+            )
+            self.assertEqual((await anext(events)).type, AgentEventType.MESSAGE_CREATED)
+            await application._handle_event_connection_reset(2)
+            with self.assertRaises(EventStreamReset):
+                await anext(events)
+            self.assertEqual(len(presenter.facts), 1)
+        finally:
+            await cast(Any, events).aclose()
+            await application.stop()
 
     async def test_t3_recoverable_presentation_is_stable_across_replay(self) -> None:
         presenter = _T3Presenter()
@@ -302,6 +392,160 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(facts.timeout_count, 1)
         self.assertEqual(facts.last_failure_code, ApplicationPresentationFailureCode.TIMED_OUT)
         await runtime.close()
+
+    async def test_runtime_bounds_cancellation_overrun_and_capacity(self) -> None:
+        runtime = ApplicationPresentationRuntime(
+            ApplicationPresentationLimits(
+                timeout_seconds=0.01,
+                max_concurrency=1,
+            )
+        )
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        async def stubborn() -> ApplicationTextPresentation:
+            started.set()
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                await release.wait()
+            return ApplicationTextPresentation((TextContent("done"),))
+
+        invocation = asyncio.create_task(runtime.invoke(stubborn))
+        await started.wait()
+        invocation.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await invocation
+        with self.assertRaises(ApplicationPresentationCapacityError):
+            await runtime.invoke(
+                lambda: asyncio.sleep(
+                    0,
+                    result=ApplicationTextPresentation((TextContent("other"),)),
+                )
+            )
+        facts = runtime.diagnostic_facts()
+        self.assertEqual(facts.cancellation_count, 1)
+        self.assertEqual(facts.cancellation_overrun_count, 1)
+        self.assertEqual(facts.capacity_rejection_count, 1)
+        release.set()
+        await asyncio.sleep(0)
+        await runtime.close()
+
+    async def test_presenter_self_cancellation_is_an_explicit_failure(self) -> None:
+        runtime = ApplicationPresentationRuntime(ApplicationPresentationLimits())
+
+        async def self_cancel() -> ApplicationTextPresentation:
+            raise asyncio.CancelledError
+
+        with self.assertRaises(ApplicationPresentationCancelled):
+            await runtime.invoke(self_cancel)
+        facts = runtime.diagnostic_facts()
+        self.assertEqual(facts.failure_count, 1)
+        self.assertEqual(facts.cancellation_count, 1)
+        await runtime.close()
+
+    async def test_t3_post_acceptance_presentation_failure_preserves_acceptance(self) -> None:
+        client = _AcceptedT3Client()
+        application = T3ApplicationAdapter(
+            application_instance_id="t3-main",
+            client=client,
+            activity_presenter=_FailingT3Presenter(),
+        )
+        try:
+            accepted = await application.send_input(
+                ThreadRef("t3-main", "thread-1"),
+                AgentInput(
+                    client_message_id="input-1",
+                    content=(TextContent("Run"),),
+                ),
+            )
+            self.assertEqual(accepted.turn_id, "turn-accepted")
+            diagnostics = application.diagnostic_facts().presentation
+            self.assertIsNotNone(diagnostics)
+            self.assertEqual(cast(Any, diagnostics).failure_count, 1)
+        finally:
+            await application.stop()
+
+    async def test_t3_poll_and_post_send_share_one_presentation_lane(self) -> None:
+        presenter = _BlockingT3Presenter()
+        application = T3ApplicationAdapter(
+            application_instance_id="t3-main",
+            client=_T3Client(),
+            activity_presenter=presenter,
+        )
+        thread_ref = ThreadRef("t3-main", "thread-1")
+        thread = {
+            "messages": [],
+            "activities": [
+                {
+                    "id": "activity-1",
+                    "turnId": "turn-1",
+                    "kind": "tool.progress",
+                    "summary": "Compiling",
+                    "createdAt": "2026-08-03T10:00:00Z",
+                }
+            ],
+        }
+        first = asyncio.create_task(application._publish_thread_state(thread_ref, thread))
+        await presenter.started.wait()
+        second = asyncio.create_task(application._publish_thread_state(thread_ref, thread))
+        await asyncio.sleep(0)
+        self.assertEqual(len(presenter.facts), 1)
+        presenter.release.set()
+        try:
+            await asyncio.gather(first, second)
+            self.assertEqual(len(presenter.facts), 1)
+        finally:
+            await application.stop()
+
+    async def test_structured_native_values_and_diff_paths_do_not_cross_facts(self) -> None:
+        codex_presenter = _CodexPresenter()
+        client = _AppServerClient()
+        codex = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            cwd="/workspace",
+            live_activity_presenter=codex_presenter,
+        )
+        await client.handlers[0](
+            {
+                "method": "turn/diff/updated",
+                "params": {
+                    "threadId": "thread-1",
+                    "eventId": "diff-1",
+                    "summary": {"raw": "mapping"},
+                    "files": ["/secret/worktree/token.txt", {"path": "/secret/two"}],
+                },
+            }
+        )
+        codex_facts = codex_presenter.facts[0]
+        self.assertIsNone(codex_facts.summary)
+        self.assertEqual(codex_facts.changed_file_count, 2)
+        self.assertFalse(hasattr(codex_facts, "details"))
+        await codex.stop()
+
+        t3_presenter = _T3Presenter()
+        t3 = T3ApplicationAdapter(
+            application_instance_id="t3-main",
+            client=_T3Client(),
+            activity_presenter=t3_presenter,
+        )
+        try:
+            await t3._t3_activity_message(
+                ThreadRef("t3-main", "thread-1"),
+                {
+                    "id": "activity-1",
+                    "turnId": "turn-1",
+                    "kind": "tool.progress",
+                    "summary": {"raw": "mapping"},
+                    "payload": {"detail": ["raw", "list"]},
+                    "createdAt": "2026-08-03T10:00:00Z",
+                },
+            )
+            self.assertIsNone(t3_presenter.facts[0].summary)
+            self.assertIsNone(t3_presenter.facts[0].detail)
+        finally:
+            await t3.stop()
 
     async def test_live_projection_is_idempotent_without_advancing_checkpoint(self) -> None:
         repository = InMemoryProjectionRouteRepository()

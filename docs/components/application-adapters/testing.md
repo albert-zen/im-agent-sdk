@@ -47,6 +47,10 @@ Every adapter should prove:
 - T3 activity presentation uses a distinct typed fact shape, separate message
   and activity identity domains, one ordered polling lane, and the same stable
   association in live polling, catch-up, and history;
+- concurrent T3 poll/post-send observation invokes one presenter lane, and a
+  presenter failure after native acceptance cannot erase `AcceptedTurn`;
+- structured selected values and Codex diff path entries cannot cross the
+  typed facts;
 - A1 input/fact collections and text output are finite; timeout, cancellation,
   cancellation overrun, capacity exhaustion, malformed output, reconnect/gap,
   duplicate notification, terminal Turn, and shutdown remain explicit and

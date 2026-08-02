@@ -54,7 +54,7 @@ class CodexLiveActivityFacts:
     kind: CodexLiveActivityKind
     native_method: CodexLiveActivityMethod
     summary: str | None = None
-    details: tuple[str, ...] = ()
+    changed_file_count: int | None = None
     plan: tuple[CodexPlanStep, ...] = ()
 
     def __post_init__(self) -> None:
@@ -77,7 +77,12 @@ class CodexLiveActivityFacts:
                 "Codex live summary",
                 limit=_FACT_TEXT_MAX_CHARACTERS,
             )
-        _validate_text_tuple(self.details, "Codex live details")
+        if self.changed_file_count is not None and (
+            not isinstance(self.changed_file_count, int)
+            or isinstance(self.changed_file_count, bool)
+            or not 0 <= self.changed_file_count <= _FACT_ITEMS_MAX
+        ):
+            raise ValueError("Codex changed file count must be a bounded integer")
         if not isinstance(self.plan, tuple) or len(self.plan) > _FACT_ITEMS_MAX:
             raise ValueError("Codex live plan must be a bounded tuple")
         if not all(isinstance(item, CodexPlanStep) for item in self.plan):
@@ -164,6 +169,10 @@ class ApplicationPresentationCapacityError(RuntimeError):
     """The configured finite A1 task capacity is occupied."""
 
 
+class ApplicationPresentationCancelled(RuntimeError):
+    """The presenter cancelled its own invocation without cancelling its caller."""
+
+
 class ApplicationPresentationRuntime:
     """Bound one concrete adapter's A1 invocations and redacted facts."""
 
@@ -201,6 +210,12 @@ class ApplicationPresentationRuntime:
             if not done:
                 joined = await _cancel_and_join(task, timeout_seconds=self._limits.timeout_seconds)
                 raise ApplicationPresentationTimeout(cancellation_overrun=not joined)
+            if task.cancelled():
+                self._cancellation_count += 1
+                self._record_failure(ApplicationPresentationFailureCode.CANCELLED)
+                raise ApplicationPresentationCancelled(
+                    "application presenter cancelled its invocation"
+                )
             output = task.result()
             if output is not None:
                 output = _validate_output(output, self._limits)
@@ -212,6 +227,8 @@ class ApplicationPresentationRuntime:
             if error.cancellation_overrun:
                 self._cancellation_overrun_count += 1
             self._record_failure(ApplicationPresentationFailureCode.TIMED_OUT)
+            raise
+        except ApplicationPresentationCancelled:
             raise
         except asyncio.CancelledError:
             joined = True
@@ -306,13 +323,6 @@ def _validate_output(
 def _validate_bounded_text(value: str, label: str, *, limit: int) -> None:
     if not isinstance(value, str) or not value or len(value) > limit:
         raise ValueError(f"{label} must be non-empty and at most {limit} characters")
-
-
-def _validate_text_tuple(values: tuple[str, ...], label: str) -> None:
-    if not isinstance(values, tuple) or len(values) > _FACT_ITEMS_MAX:
-        raise ValueError(f"{label} must be a bounded tuple")
-    for value in values:
-        _validate_bounded_text(value, label, limit=_FACT_TEXT_MAX_CHARACTERS)
 
 
 async def _cancel_and_join(

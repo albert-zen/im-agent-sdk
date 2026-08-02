@@ -1032,7 +1032,7 @@ def _codex_live_activity_facts(
     if not event_id:
         event_id = f"imagent:appserver-live:{uuid.uuid4()}"
     summary: str | None = None
-    details: tuple[str, ...] = ()
+    changed_file_count: int | None = None
     plan: tuple[CodexPlanStep, ...] = ()
     if kind is CodexLiveActivityKind.PLAN_UPDATED:
         summary = _bounded_presentation_text(params.get("explanation"))
@@ -1051,11 +1051,7 @@ def _codex_live_activity_facts(
         summary = _bounded_presentation_text(params.get("summary"))
         native_files = params.get("files")
         if isinstance(native_files, list):
-            details = tuple(
-                value
-                for native in native_files[:100]
-                if (value := _bounded_presentation_text(native))
-            )
+            changed_file_count = min(len(native_files), 100)
     elif kind is CodexLiveActivityKind.THREAD_STATUS_CHANGED:
         status = params.get("status")
         if isinstance(status, Mapping):
@@ -1072,13 +1068,15 @@ def _codex_live_activity_facts(
         kind=kind,
         native_method=native_method,
         summary=summary,
-        details=details,
+        changed_file_count=changed_file_count,
         plan=plan,
     )
 
 
 def _bounded_presentation_text(value: object, *, limit: int = 8_000) -> str | None:
-    text = str(value or "").strip()
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
     return text[:limit] or None
 
 

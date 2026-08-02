@@ -97,7 +97,7 @@ policy outside the adapter and Core.
 
 The non-artifact A1 surface is deliberately split by native evidence.
 `CodexLiveActivityPresenter` receives a frozen `CodexLiveActivityFacts` value
-whose kind, summary, plan entries, and file/status details were already
+whose kind, scalar summary, plan entries, changed-file count, and status were already
 allowlisted and bounded by the Codex adapter. `T3ActivityPresenter` receives a
 frozen `T3ActivityFacts` value whose stable activity/Thread/Turn identity,
 namespaced kind, summary, detail, and native creation time were already
@@ -123,6 +123,11 @@ are finite; recoverable T3 history may reinvoke a replay-safe presenter after
 an identity leaves that process-local window. Failure is explicit through the
 owning adapter path and fixed process-local presentation diagnostics retain no
 facts, output, identity, or exception text.
+
+T3 post-dispatch observation tolerates A1 failure after native acceptance is
+known, so optional presentation cannot erase the `AcceptedTurn` or its reply
+correlation. The same failure remains visible in fixed diagnostics and a later
+poll/history recovery may retry the replay-safe presenter.
 
 Codex A1 output is live-only. A stable native event ID is preserved when
 available (otherwise a process-local generated identity is honest), the

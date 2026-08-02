@@ -48,7 +48,8 @@ native terminal Turn event separately.
 Thread-status, compaction, and model-reroute notifications into bounded frozen
 `CodexLiveActivityFacts` before invoking consumer code in the existing ordered
 notification dispatch lane. Raw JSON-RPC, client access, credentials, paths,
-and arbitrary payload fields never cross the seam.
+and arbitrary payload fields never cross the seam. Diff facts expose only a
+bounded changed-file count, never native file/path values.
 
 The presenter returns bounded text only. The adapter fixes the original
 Thread/Turn and event identity, system role, native method/kind metadata, and

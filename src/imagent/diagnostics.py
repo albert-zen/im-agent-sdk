@@ -146,6 +146,11 @@ class ApplicationDiagnosticFacts:
             queue.name is QueueDiagnosticName.CHANNEL_INBOUND for queue in self.connection.queues
         ):
             raise ValueError("Channel inbound queue is not Application-scoped")
+        if self.presentation is not None and not isinstance(
+            self.presentation,
+            ApplicationPresentationDiagnosticFacts,
+        ):
+            raise TypeError("application presentation diagnostics must use the typed fact shape")
 
 
 @dataclass(frozen=True, slots=True)

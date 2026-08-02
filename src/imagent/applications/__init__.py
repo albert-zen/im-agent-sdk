@@ -1,6 +1,7 @@
 from .appserver import CodexApplicationAdapter, ZenApplicationAdapter
 from .appserver_client import codex_app_server_client
 from .presentation import (
+    ApplicationPresentationCancelled,
     ApplicationPresentationCapacityError,
     ApplicationPresentationError,
     ApplicationPresentationLimits,
@@ -19,6 +20,7 @@ from .t3_client import HttpT3Client, T3ClientError
 
 __all__ = [
     "ApplicationPresentationCapacityError",
+    "ApplicationPresentationCancelled",
     "ApplicationPresentationError",
     "ApplicationPresentationLimits",
     "ApplicationPresentationTimeout",
