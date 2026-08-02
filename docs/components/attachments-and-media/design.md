@@ -71,9 +71,36 @@ lifetime. The consumer validates/materializes into its configured namespace;
 O2 notification may assist clean-process lease release, while crash-safe
 cleanup remains a consumer ledger or startup sweep rather than SDK storage.
 
+The App Server A1 seam exposes only frozen bounded candidates from completed
+native items. Image-generation `savedPath` values are typed as untrusted local
+path candidates; dynamic-tool input images may be typed as untrusted `file:`
+or `data:image/` candidates. Candidate count and locator characters are
+bounded before consumer invocation. Stable native item identity is preferred;
+when absent or outside the fact bound, a deterministic digest of the native
+kind and exact bounded locator supplies candidate identity. The adapter never
+opens, resolves, decodes, copies, deletes, or declares trust in a candidate.
+
+The consumer materializer owns validation and any byte acquisition, then may
+return a finite `ApplicationArtifactMaterialization` containing typed
+`AttachmentContent`. Output validation bounds attachment count, aggregate
+string facts, metadata cardinality/scalars, and source shape without treating
+a path or URL as trusted. Materialization invocation is async with finite
+concurrency and lifetime in the adapter's existing ordered dispatch/history
+flow. Its result may attach artifacts to the corresponding canonical Agent
+message; one terminal invocation may produce an artifact-only fallback when a
+completed, interrupted, or failed Turn has no associated text message.
+
+Live duplicate suppression is process-local and bounded. Authoritative
+history may invoke the materializer again, so consumers use stable candidate
+identity for idempotent materialization and reproduce the same item/terminal
+association. Neither facts nor output are persisted. Live-only candidates
+remain non-replayable and cannot advance a completion checkpoint. A failure is
+an explicit Application observation failure before that item/terminal result
+is emitted; recovery may retry from authoritative history.
+
 The #48 non-artifact A1 presenters return text only and confer no attachment,
 path, URL, byte, spool, quota, or cleanup authority. Those concerns remain in
-the later #33 materialization slice.
+the separate #33 materialization protocol.
 
 ## Change obligations
 

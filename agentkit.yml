@@ -355,6 +355,7 @@ components:
       - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/applications/__init__.py
       - src/imagent/applications/appserver.py
+      - src/imagent/applications/appserver_artifacts.py
       - src/imagent/applications/presentation.py
       - src/imagent/applications/appserver_mapping.py
       - src/imagent/applications/appserver_request_runtime.py
@@ -366,6 +367,7 @@ components:
       - tests/test_appserver_requests.py
       - tests/test_appserver_transport.py
       - tests/test_application_presentation.py
+      - tests/test_appserver_artifacts.py
     docs:
       - docs/components/application-adapters/design.md
       - docs/components/application-adapters/testing.md

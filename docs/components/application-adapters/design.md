@@ -141,6 +141,40 @@ as `AgentMessage.agent_item_id`, and emits `message.completed`. Presenter
 implementations must be replay-safe; SDK persistence stores neither facts nor
 rendered output.
 
+App Server artifact A1 is separate from both non-artifact presenters. An
+optional `AppServerArtifactMaterializer` receives frozen
+`AppServerCompletedItemFacts` for every completed native item and one
+`AppServerTurnTerminalFacts` after all items of a terminal Turn. Facts contain
+only bounded stable Thread/Turn/item identity, fixed native item kind/phase,
+bounded presentation scalars, and a finite tuple of typed untrusted artifact
+candidates. No raw mapping, client, credential, byte value, or trusted path is
+exposed. Codex supplies the concrete image-generation/dynamic-tool evidence;
+Zen is the shared App Server transport counterexample and changes only when a
+materializer is explicitly configured.
+
+The materializer returns `ApplicationArtifactMaterialization` or `None`.
+Output contains only a finite tuple of validated typed `AttachmentContent`;
+it cannot choose Agent message/event identity, role, Thread, Turn, terminal
+status, checkpoint behavior, or destination. For an ordinary item the adapter
+appends returned attachments to that item's canonical message, if any. At a
+completed/interrupted/failed terminal it may emit one adapter-identified
+artifact-only fallback immediately before the terminal event. This supports a
+replay-safe consumer that accumulates candidates by stable identity and
+associates them with a final answer or terminal fallback without transferring
+that state to SDK persistence.
+
+Invocation uses a distinct async finite runtime but stays in the App Server
+adapter's existing ordered notification/history lane, off the socket reader.
+Duplicate live completed-item identities are suppressed within a finite
+process-local window. Authoritative history deliberately may reinvoke the
+materializer; consumers must make candidate processing idempotent and return
+the same association. Failure terminates the current observation/history
+attempt before its materialized result is emitted, so normal gap/recovery
+semantics apply. Facts, materialized attachments, consumer state, and cleanup
+work are never stored or replayed by the SDK. O2 may release a clean-process
+consumer lease after delivery, while crash-safe cleanup remains a consumer
+ledger/startup sweep.
+
 ## Events and recovery
 
 Native notification producers publish into independent, bounded subscriber

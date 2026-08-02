@@ -1,6 +1,6 @@
 # IMCodex consumer follow-up blockers
 
-Status: App Server input slice implemented; review and remaining slices pending
+Status: SDK ADR 0015 rollout through O2 merged; A1 artifact materialization and downstream cutover pending
 
 This note records the SDK-side gaps found while attempting the downstream
 IMCodex migration from SDK merge commit
@@ -64,6 +64,13 @@ ADR 0015. Metadata fidelity, Channel diagnostics, Application presentation or
 materialization, per-destination policy, delivery outcome observation, and
 Channel startup validation remain independent review slices. They must not be
 recombined into a consumer-migration mega-PR or a generic callback pipeline.
+
+The #33 SDK slice exposes only bounded untrusted App Server artifact
+candidates and accepts bounded typed attachment results. IMCodex continues to
+own bytes, candidate validation, spool paths, quotas, stable materialization
+idempotency, clean-process O2 lease release, crash-safe cleanup ledger, and
+startup sweep. No SDK repository stores candidate, attachment, lease, cleanup,
+or outbox content.
 
 The first slice keeps generic files explicit unsupported rather than adding a
 policy seam without a second concrete downstream encoding. It implements the

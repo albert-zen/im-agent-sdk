@@ -135,7 +135,7 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
 
         self.assertIsInstance(first, DiagnosticsSnapshot)
         self.assertFalse(first.authoritative)
-        self.assertEqual(first.schema_version, 7)
+        self.assertEqual(first.schema_version, 8)
         self.assertIsNone(first.gateway.inbound_content_transformer)
         self.assertIsNone(first.gateway.inbound_failure_presenter)
         self.assertIsNone(first.gateway.outbound_presentation)
