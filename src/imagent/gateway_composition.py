@@ -42,6 +42,7 @@ class GatewayLimits:
     request_correlation_retention_seconds: float = 7 * 24 * 60 * 60
     inbound_content_transform_timeout_seconds: float = 30.0
     inbound_content_transform_max_items: int = 64
+    inbound_content_transform_max_concurrency: int = 16
 
 
 @dataclass(frozen=True, slots=True)

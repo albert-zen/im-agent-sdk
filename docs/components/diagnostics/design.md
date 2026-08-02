@@ -21,8 +21,8 @@ The public facts are:
 - Gateway startup admission: capacity, current depth, lifetime overflow count,
   and current admission state;
 - configured I1 inbound-content transformation: process-lifetime invocation,
-  success, failure, timeout, cancellation, and cancellation-overrun counts plus
-  one fixed last-failure classification.
+  success, failure, timeout, cancellation, cancellation-overrun, and capacity-
+  rejection counts plus one fixed last-failure classification.
 
 Every collection is bounded by configuration or a fixed vocabulary. Native
 resource IDs, route IDs, request IDs, message IDs, content, exception text,

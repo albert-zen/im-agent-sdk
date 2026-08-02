@@ -147,6 +147,7 @@ class ImAgentGateway:
                 extensions.inbound_content_transformer,
                 timeout_seconds=limits.inbound_content_transform_timeout_seconds,
                 max_items=limits.inbound_content_transform_max_items,
+                max_concurrency=limits.inbound_content_transform_max_concurrency,
             )
             if extensions.inbound_content_transformer is not None
             else None
@@ -273,6 +274,8 @@ class ImAgentGateway:
             await self._delivery_coordinator.close()
             for channel in reversed(started_channels):
                 await channel.stop()
+            if self._inbound_content_transform_runtime is not None:
+                await self._inbound_content_transform_runtime.close()
             for application in reversed(started_applications):
                 await application.stop()
             raise
@@ -284,6 +287,8 @@ class ImAgentGateway:
         await self._delivery_coordinator.close()
         for channel in reversed(tuple(self._channels.values())):
             await channel.stop()
+        if self._inbound_content_transform_runtime is not None:
+            await self._inbound_content_transform_runtime.close()
         for application in reversed(tuple(self._applications.values())):
             await application.stop()
 

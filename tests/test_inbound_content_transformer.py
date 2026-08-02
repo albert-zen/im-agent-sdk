@@ -29,6 +29,7 @@ from imagent.gateway import (
     InboundContentTransformer,
 )
 from imagent.inbound_content import (
+    InboundContentTransformationCapacityError,
     InboundContentTransformationError,
     InboundContentTransformationTimeout,
     transform_inbound_content,
@@ -284,6 +285,50 @@ class InboundContentTransformerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(facts.timeout_count, 1)
         self.assertEqual(facts.cancellation_overrun_count, 1)
 
+    async def test_cancellation_overrun_stays_capacity_bounded_and_stops(self) -> None:
+        cancellation_count = 0
+
+        async def transform(_message: InboundMessage):
+            nonlocal cancellation_count
+            while True:
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    cancellation_count += 1
+                    if cancellation_count >= 3:
+                        raise
+
+        gateway, channel, application = self._gateway(
+            _FunctionTransformer(transform),
+            limits=GatewayLimits(
+                inbound_content_transform_timeout_seconds=0.01,
+                inbound_content_transform_max_concurrency=1,
+            ),
+        )
+
+        await gateway.start()
+        with self.assertRaises(InboundContentTransformationTimeout):
+            await channel.emit_message(self._message("overrun-first"))
+        with self.assertRaises(InboundContentTransformationCapacityError):
+            await channel.emit_message(self._message("overrun-second"))
+        self.assertEqual(application.inputs, ())
+        before_stop = gateway.diagnostics_snapshot().gateway.inbound_content_transformer
+        assert before_stop is not None
+        self.assertEqual(before_stop.cancellation_overrun_count, 1)
+        self.assertEqual(before_stop.capacity_rejection_count, 1)
+
+        await gateway.stop()
+        await asyncio.sleep(0)
+
+        self.assertEqual(cancellation_count, 3)
+        self.assertFalse(
+            any(
+                task.get_name() == "imagent-inbound-content"
+                for task in asyncio.all_tasks()
+                if task is not asyncio.current_task()
+            )
+        )
+
     async def test_transformer_raised_timeout_is_not_sdk_timeout(self) -> None:
         async def transform(_message: InboundMessage):
             raise TimeoutError("consumer dependency timed out")
@@ -422,6 +467,11 @@ class InboundContentTransformerTests(unittest.IsolatedAsyncioTestCase):
             self._gateway(
                 cast(InboundContentTransformer, object()),
                 limits=GatewayLimits(inbound_content_transform_max_items=0),
+            )
+        with self.assertRaisesRegex(ValueError, "concurrency"):
+            self._gateway(
+                cast(InboundContentTransformer, object()),
+                limits=GatewayLimits(inbound_content_transform_max_concurrency=0),
             )
 
     def _gateway(

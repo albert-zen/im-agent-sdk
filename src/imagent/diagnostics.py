@@ -33,6 +33,7 @@ class InboundContentTransformFailureCode(StrEnum):
     TRANSFORMER_FAILED = "transformer_failed"
     TIMED_OUT = "timed_out"
     CANCELLED = "cancelled"
+    CAPACITY_EXHAUSTED = "capacity_exhausted"
 
 
 class QueueDiagnosticName(StrEnum):
@@ -169,6 +170,7 @@ class InboundContentTransformerDiagnosticFacts:
     timeout_count: int = 0
     cancellation_count: int = 0
     cancellation_overrun_count: int = 0
+    capacity_rejection_count: int = 0
     last_failure_code: InboundContentTransformFailureCode | None = None
 
     def __post_init__(self) -> None:
@@ -179,6 +181,7 @@ class InboundContentTransformerDiagnosticFacts:
             self.timeout_count,
             self.cancellation_count,
             self.cancellation_overrun_count,
+            self.capacity_rejection_count,
         )
         if any(
             not isinstance(count, int) or isinstance(count, bool) or count < 0 for count in counts
@@ -190,6 +193,8 @@ class InboundContentTransformerDiagnosticFacts:
             raise ValueError("inbound transformer failure counts are inconsistent")
         if self.cancellation_overrun_count > self.timeout_count:
             raise ValueError("inbound transformer cancellation overruns exceed timeouts")
+        if self.capacity_rejection_count > self.failure_count:
+            raise ValueError("inbound transformer capacity rejections exceed failures")
         if self.last_failure_code is not None and not isinstance(
             self.last_failure_code,
             InboundContentTransformFailureCode,

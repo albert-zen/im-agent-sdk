@@ -101,6 +101,7 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(limits.turn_correlation_retention_seconds, 7 * 24 * 60 * 60)
         self.assertEqual(limits.inbound_content_transform_timeout_seconds, 30.0)
         self.assertEqual(limits.inbound_content_transform_max_items, 64)
+        self.assertEqual(limits.inbound_content_transform_max_concurrency, 16)
         self.assertIsNone(extensions.controller)
         self.assertIsNone(extensions.request_presenter)
         self.assertIsNone(extensions.inbound_content_transformer)
