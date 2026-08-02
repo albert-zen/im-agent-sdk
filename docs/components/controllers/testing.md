@@ -4,6 +4,10 @@ Required scenarios:
 
 - Gateway without a Controller treats Slash-looking text as normal input;
 - the default Controller consumes supported commands;
+- unconsumed input may be content-adapted without changing envelope identity;
+- consumed commands bypass content adaptation;
+- invalid adaptation fails before normal pass-through dispatch and releases
+  the inbound claim for redelivery;
 - trailing input context is not parsed as Slash arguments;
 - non-Slash interactions invoke the same typed actions;
 - listing never changes selection;

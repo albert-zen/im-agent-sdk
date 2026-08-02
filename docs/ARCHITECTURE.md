@@ -60,6 +60,10 @@ The precise current import graph and allowed edges are documented in
 Components describe responsibility; lint layers describe imports. They need
 not have identical names.
 
+An `InboundContentAdapter` is a consumer-owned, pre-dispatch transformation of
+verified unconsumed message content; it cannot change envelope identity,
+admission, routing, or Application semantics.
+
 ## Authority and persistence
 
 | State | Authority | SDK persistence |
@@ -119,18 +123,19 @@ Per-user group selection is a future consumer policy, not current Core.
    to Gateway. Preparation failure releases only the owned pre-side-effect
    lease.
 5. Optional Controller translates UX into typed actions.
-6. Gateway derives/preserves a stable client message ID.
-7. Gateway resolves the Conversation binding.
-8. It records/refreshes output observation and establishes live subscription
+6. An optional consumer content adapter transforms only unconsumed content.
+7. Gateway derives/preserves a stable client message ID.
+8. Gateway resolves the Conversation binding.
+9. It records/refreshes output observation and establishes live subscription
    before sending input.
-9. Gateway supplies the default `prefer_active_turn` input preference. The
+10. Gateway supplies the default `prefer_active_turn` input preference. The
    adapter declares `started/create_new` or `steered/preserve_existing`
    immediately before native dispatch; Gateway authorizes the correlation
    policy, then the Application accepts input and emits authoritative events.
-10. Projection resolves current destinations at delivery time.
-11. Delivery planning maps the logical message to deterministic segments.
-12. The Coordinator executes them through the Channel's ordered bounded lane.
-13. Channel performs native encoding/delivery and returns typed receipts.
+11. Projection resolves current destinations at delivery time.
+12. Delivery planning maps the logical message to deterministic segments.
+13. The Coordinator executes them through the Channel's ordered bounded lane.
+14. Channel performs native encoding/delivery and returns typed receipts.
 
 ## Proactive output flow
 

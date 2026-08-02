@@ -5,6 +5,8 @@
 - resource listing never mutates Conversation binding;
 - binding a Thread never activates native Application state;
 - a Controller and a native interaction use the same typed action surface;
+- content adaptation runs only for unconsumed input, preserves envelope-derived
+  identity, and rejects invalid output before normal Application dispatch;
 - Slash and native-action request responses create the same Application
   `request.respond` operation;
 - request responses require an actual successful destination correlation and

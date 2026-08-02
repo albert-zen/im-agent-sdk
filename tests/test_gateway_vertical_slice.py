@@ -781,6 +781,135 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             "qq-message-1",
         )
 
+    async def test_unconsumed_content_adapter_preserves_envelope_identity(self) -> None:
+        native_channel = NativeQQChannel()
+        channel = NativeTransportChannelAdapter(
+            channel_instance_id="qq-main",
+            channel_id="qq",
+            native_factory=lambda middleware: self._bind_channel(
+                native_channel,
+                middleware,
+            ),
+        )
+        native_app = NativeZenClient()
+        application = ZenApplicationAdapter(
+            application_instance_id="zen-main",
+            client=native_app,
+            cwd="/repo",
+        )
+        seen = []
+
+        async def adapt(message):
+            seen.append(message)
+            return (TextContent("[Files]\n- design.pdf: /staged/design.pdf"),)
+
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=InMemoryBindingRepository(),
+            content_adapter=adapt,
+        )
+
+        await gateway.start()
+        try:
+            await native_channel.receive("original", message_id="adapted-message")
+            await asyncio.wait_for(native_channel.delivered.wait(), timeout=1)
+            await native_channel.receive("original", message_id="adapted-message")
+        finally:
+            await gateway.stop()
+
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(seen[0].message_id, "adapted-message")
+        self.assertEqual(seen[0].sender, "user-1")
+        self.assertEqual(
+            seen[0].conversation_ref,
+            ConversationRef("qq-main", "c2c:user-1"),
+        )
+        self.assertEqual(
+            native_app.started_turns,
+            [("zen-thread-1", "[Files]\n- design.pdf: /staged/design.pdf")],
+        )
+
+    async def test_consumed_controller_input_bypasses_content_adapter(self) -> None:
+        native_channel = NativeQQChannel()
+        channel = NativeTransportChannelAdapter(
+            channel_instance_id="qq-main",
+            channel_id="qq",
+            native_factory=lambda middleware: self._bind_channel(
+                native_channel,
+                middleware,
+            ),
+        )
+
+        def must_not_run(_message):
+            raise AssertionError("content adapter ran for a consumed command")
+
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[],
+            bindings=InMemoryBindingRepository(),
+            controller=SlashController(),
+            content_adapter=must_not_run,
+        )
+
+        await gateway.start()
+        try:
+            await native_channel.receive("/help", message_id="help-message")
+        finally:
+            await gateway.stop()
+
+        self.assertEqual(len(native_channel.sent), 1)
+        self.assertIn("IM Agent commands", native_channel.sent[0].text)
+
+    async def test_invalid_content_adaptation_releases_claim_for_redelivery(self) -> None:
+        native_channel = NativeQQChannel()
+        channel = NativeTransportChannelAdapter(
+            channel_instance_id="qq-main",
+            channel_id="qq",
+            native_factory=lambda middleware: self._bind_channel(
+                native_channel,
+                middleware,
+            ),
+        )
+        native_app = NativeZenClient()
+        application = ZenApplicationAdapter(
+            application_instance_id="zen-main",
+            client=native_app,
+            cwd="/repo",
+        )
+        calls = 0
+
+        def adapt(_message):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return [TextContent("invalid container")]
+            return (TextContent("retry accepted"),)
+
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=InMemoryBindingRepository(),
+            content_adapter=cast(Any, adapt),
+        )
+
+        await gateway.start()
+        try:
+            with self.assertRaisesRegex(TypeError, "must return a tuple"):
+                await native_channel.receive("original", message_id="retry-message")
+            self.assertEqual(native_app.started_threads, [])
+            await native_channel.receive("original", message_id="retry-message")
+            await asyncio.wait_for(native_channel.delivered.wait(), timeout=1)
+        finally:
+            await gateway.stop()
+
+        self.assertEqual(calls, 2)
+        self.assertEqual(native_app.started_threads, [{"cwd": "/repo"}])
+        self.assertEqual(
+            native_app.started_turns,
+            [("zen-thread-1", "retry accepted")],
+        )
+
     async def test_qq_quote_reaches_application_as_untrusted_content_only(self) -> None:
         native_holder = {}
 

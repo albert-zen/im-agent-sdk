@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Protocol
 
 from ..contracts import (
     ApplicationOperation,
     ApplicationOperationResult,
+    Content,
     ConversationBinding,
     ConversationRef,
     GatewayOperation,
@@ -14,6 +16,11 @@ from ..contracts import (
     InteractiveRequest,
     OutboundMessage,
 )
+
+InboundContentAdapter = Callable[
+    [InboundMessage],
+    tuple[Content, ...] | Awaitable[tuple[Content, ...]],
+]
 
 
 class ControllerActions(Protocol):
