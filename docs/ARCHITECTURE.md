@@ -22,6 +22,12 @@ Gateway also composes:
   Optional delivery ingress ← scoped local tool/Artifact submission
 ```
 
+The optional I1 inbound-content transformer is a Gateway-owned, consumer-
+implemented typed protocol. It can replace only the `Content` tuple of a
+verified, Controller-unconsumed `InboundMessage`; the verified envelope and
+all routing, admission, continuation, dispatch, and correlation decisions stay
+inside Gateway.
+
 IM is another access surface over the native Agent Application. It is not a
 separate Agent state tier.
 
@@ -87,6 +93,10 @@ recovery rather than pretending the prior delivery boundary is known.
 Inbound admission uses the same Gateway-owned idempotency state before Channel
 media preparation. Its fenced `in_flight` lease stores identity and ownership
 only; media content, paths, and sender data remain outside persistence.
+I1 runs only after that lease is refreshed and the optional Controller has
+declined the input. Its result is process-local and is never persisted: a
+confirmed pre-dispatch release or restart may invoke it again for the same
+stable inbound identity, so consumer implementations must be replay-safe.
 
 ## Input selection and output routing
 

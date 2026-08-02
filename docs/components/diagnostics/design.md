@@ -19,7 +19,10 @@ The public facts are:
 - projection aggregate: worker lifecycle/degradation, restart, delivery
   failure, overflow, request-recovery degradation, and bounded gap codes;
 - Gateway startup admission: capacity, current depth, lifetime overflow count,
-  and current admission state.
+  and current admission state;
+- configured I1 inbound-content transformation: process-lifetime invocation,
+  success, failure, timeout, and cancellation counts plus one fixed last-
+  failure classification.
 
 Every collection is bounded by configuration or a fixed vocabulary. Native
 resource IDs, route IDs, request IDs, message IDs, content, exception text,
@@ -52,7 +55,8 @@ exception text.
 does no native or repository I/O. Its `generated_at` is observation time,
 `schema_version` describes the fact shape, and `authoritative=False` is
 permanent semantic guidance. Repeated reads do not mutate counters.
-Schema version 2 adds the optional Channel collection while preserving the
+Schema version 3 adds optional I1 transformer execution facts to the Gateway
+facts. Version 2 added the optional Channel collection while preserving the
 pre-Channel positional constructor order.
 
 Projection details are aggregated before publication. Known SDK event gaps
