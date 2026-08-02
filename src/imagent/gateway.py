@@ -1030,13 +1030,22 @@ class ImAgentGateway:
                     message,
                     presentation_context,
                 )
-            except BaseException:
+            except asyncio.CancelledError:
                 await self._idempotency.release(
                     scope,
                     message.delivery_id,
                     owner_token=owner_token,
                 )
                 raise
+            except BaseException as error:
+                await self._idempotency.release(
+                    scope,
+                    message.delivery_id,
+                    owner_token=owner_token,
+                )
+                raise RetryableDeliveryError(
+                    "outbound presentation failed before Channel side effect"
+                ) from error
             if presented is None:
                 await self._idempotency.complete(
                     scope,

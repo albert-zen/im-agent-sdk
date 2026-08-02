@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import math
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from itertools import islice
 from types import MappingProxyType
@@ -114,6 +114,15 @@ class OutboundPresentationRuntime:
             raise OutboundPresentationCapacityError(
                 "outbound presentation policy task capacity is exhausted"
             )
+        try:
+            message = _immutable_outbound_message(
+                message,
+                max_items=self._max_items,
+                max_text_characters=self._max_text_characters,
+            )
+        except OutboundPresentationError:
+            self._record_failure(OutboundPresentationFailureCode.INVALID_OUTPUT)
+            raise
         task = asyncio.create_task(
             self._policy.present(message, context),
             name="imagent-outbound-presentation",
@@ -209,10 +218,11 @@ def validate_outbound_presentation(
     max_items: int,
     max_text_characters: int,
 ) -> OutboundMessage:
-    if not isinstance(output, OutboundMessage):
-        raise OutboundPresentationError(
-            "outbound presentation policy must return OutboundMessage or None"
-        )
+    output = _immutable_outbound_message(
+        output,
+        max_items=max_items,
+        max_text_characters=max_text_characters,
+    )
     if (
         output.delivery_id != original.delivery_id
         or output.conversation_ref != original.conversation_ref
@@ -222,20 +232,6 @@ def validate_outbound_presentation(
         raise OutboundPresentationError(
             "outbound presentation policy cannot change delivery routing identity"
         )
-    if not isinstance(output.content, tuple) or not output.content:
-        raise OutboundPresentationError("outbound presentation content must be non-empty")
-    if len(output.content) > max_items:
-        raise OutboundPresentationError(
-            "outbound presentation content exceeds the configured item limit"
-        )
-    if not all(isinstance(item, (TextContent, AttachmentContent)) for item in output.content):
-        raise OutboundPresentationError(
-            "outbound presentation contains an unsupported content item"
-        )
-    if sum(len(item.text) for item in output.content if isinstance(item, TextContent)) > (
-        max_text_characters
-    ):
-        raise OutboundPresentationError("outbound presentation exceeds the configured text limit")
     original_attachments = tuple(
         item for item in original.content if isinstance(item, AttachmentContent)
     )
@@ -246,16 +242,43 @@ def validate_outbound_presentation(
         raise OutboundPresentationError(
             "outbound presentation policy cannot change attachment authority"
         )
-    metadata = _bounded_metadata(output.metadata)
-    if metadata is output.metadata:
-        return output
-    return OutboundMessage(
-        delivery_id=output.delivery_id,
-        conversation_ref=output.conversation_ref,
-        content=output.content,
-        created_at=output.created_at,
-        reply_to=output.reply_to,
-        metadata=metadata,
+    return output
+
+
+def _immutable_outbound_message(
+    message: object,
+    *,
+    max_items: int,
+    max_text_characters: int,
+) -> OutboundMessage:
+    if not isinstance(message, OutboundMessage):
+        raise OutboundPresentationError(
+            "outbound presentation policy must receive and return OutboundMessage"
+        )
+    if not isinstance(message.content, tuple) or not message.content:
+        raise OutboundPresentationError("outbound presentation content must be non-empty")
+    if len(message.content) > max_items:
+        raise OutboundPresentationError(
+            "outbound presentation content exceeds the configured item limit"
+        )
+    if not all(isinstance(item, (TextContent, AttachmentContent)) for item in message.content):
+        raise OutboundPresentationError(
+            "outbound presentation contains an unsupported content item"
+        )
+    if sum(len(item.text) for item in message.content if isinstance(item, TextContent)) > (
+        max_text_characters
+    ):
+        raise OutboundPresentationError("outbound presentation exceeds the configured text limit")
+    content = tuple(
+        replace(item, metadata=_bounded_metadata(item.metadata))
+        if isinstance(item, AttachmentContent)
+        else item
+        for item in message.content
+    )
+    return replace(
+        message,
+        content=content,
+        metadata=_bounded_metadata(message.metadata),
     )
 
 

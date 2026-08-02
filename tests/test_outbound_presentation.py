@@ -9,9 +9,11 @@ from datetime import UTC, datetime
 from imagent.adapters import IdempotencyClaimStatus
 from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
+    AgentInput,
     AgentMessage,
     AttachmentContent,
     AttachmentHandle,
+    ConversationBinding,
     ConversationRef,
     MessageRole,
     OutboundMessage,
@@ -33,6 +35,7 @@ from imagent.outbound_presentation import (
 from imagent.projections import (
     InMemoryProjectionRouteRepository,
     ProjectedAgentMessage,
+    RetryableDeliveryError,
     deliver_projected_message,
     derive_projection_route_id,
 )
@@ -219,8 +222,12 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
         context = OutboundPresentationContext(ProjectionPresentationOrigin.AUTHORITATIVE)
         await gateway.start()
         try:
-            with self.assertRaisesRegex(RuntimeError, "consumer secret"):
+            with self.assertRaisesRegex(
+                RetryableDeliveryError,
+                "failed before Channel side effect",
+            ) as raised:
                 await gateway._deliver_outbound(message, context)
+            self.assertIsInstance(raised.exception.__cause__, RuntimeError)
             result = await gateway._deliver_outbound(message, context)
         finally:
             await gateway.stop()
@@ -231,6 +238,69 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
         assert facts is not None
         self.assertEqual(facts.failure_count, 1)
         self.assertEqual(facts.last_failure_code, OutboundPresentationFailureCode.POLICY_FAILED)
+
+    async def test_policy_failure_reenters_authoritative_route_recovery(self) -> None:
+        attempts = 0
+
+        def present(
+            message: OutboundMessage,
+            _context: OutboundPresentationContext,
+        ) -> OutboundMessage:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("transient policy failure")
+            return message
+
+        policy = _Policy(present)
+        application = FakeAgentApplicationAdapter()
+        thread = await application.create_thread()
+        await application.send_input(
+            thread.ref,
+            AgentInput(client_message_id="seed", content=(TextContent("run"),)),
+        )
+        conversation = ConversationRef("fake-channel", "recover-policy")
+        bindings = InMemoryBindingRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+                thread_ref=thread.ref,
+            )
+        )
+        projections = InMemoryProjectionRouteRepository()
+        await projections.put_projection_route(_route(thread.ref, conversation))
+        channel = FakeChannelAdapter()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            repositories=GatewayRepositories(
+                bindings=bindings,
+                projections=projections,
+            ),
+            limits=GatewayLimits(
+                subscription_retry_initial_seconds=0,
+                subscription_retry_max_seconds=0,
+            ),
+            extensions=GatewayExtensions(outbound_presentation=policy),
+        )
+
+        await gateway.start()
+        try:
+            await _wait_until(lambda: len(channel.sent) == 2)
+            routes = await _wait_for_checkpoint(
+                projections,
+                thread.ref,
+                "turn-1:message:2",
+            )
+        finally:
+            await gateway.stop()
+
+        self.assertGreaterEqual(attempts, 3)
+        self.assertEqual(routes[0].checkpoint_agent_item_id, "turn-1:message:2")
+        health = gateway.get_projection_health(thread.ref)
+        assert health is not None
+        self.assertGreaterEqual(health.restart_count, 1)
 
     async def test_live_only_suppression_never_advances_checkpoint(self) -> None:
         policy = _Policy(lambda _message, _context: None)
@@ -270,8 +340,10 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
         context = OutboundPresentationContext(ProjectionPresentationOrigin.AUTHORITATIVE)
         await gateway.start()
         try:
-            with self.assertRaisesRegex(OutboundPresentationError, "routing identity"):
+            with self.assertRaises(RetryableDeliveryError) as raised:
                 await gateway._deliver_outbound(_message("invalid"), context)
+            self.assertIsInstance(raised.exception.__cause__, OutboundPresentationError)
+            self.assertIn("routing identity", str(raised.exception.__cause__))
         finally:
             await gateway.stop()
         self.assertEqual(channel.sent, [])
@@ -287,10 +359,53 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
         context = OutboundPresentationContext(ProjectionPresentationOrigin.AUTHORITATIVE)
         await gateway.start()
         try:
-            with self.assertRaisesRegex(OutboundPresentationError, "attachment authority"):
+            with self.assertRaises(RetryableDeliveryError) as raised:
                 await gateway._deliver_outbound(_message("attachment"), context)
+            self.assertIsInstance(raised.exception.__cause__, OutboundPresentationError)
+            self.assertIn("attachment authority", str(raised.exception.__cause__))
         finally:
             await gateway.stop()
+        self.assertEqual(channel.sent, [])
+
+    async def test_policy_input_and_nested_attachment_metadata_are_immutable(self) -> None:
+        observed: list[tuple[object, object]] = []
+
+        def present(
+            message: OutboundMessage,
+            _context: OutboundPresentationContext,
+        ) -> OutboundMessage | None:
+            attachment = message.content[1]
+            assert isinstance(attachment, AttachmentContent)
+            observed.append(
+                (
+                    getattr(message.metadata, "__setitem__", None),
+                    getattr(attachment.metadata, "__setitem__", None),
+                )
+            )
+            return None
+
+        attachment = AttachmentContent(
+            attachment_id="existing",
+            media_type="image/png",
+            source=AttachmentHandle("existing-handle"),
+            metadata={"sha256": "a" * 64},
+        )
+        message = replace(
+            _message("immutable"),
+            content=(TextContent("original"), attachment),
+        )
+        policy = _Policy(present)
+        gateway, channel, _ = self._gateway(policy)
+        await gateway.start()
+        try:
+            await gateway._deliver_outbound(
+                message,
+                OutboundPresentationContext(ProjectionPresentationOrigin.AUTHORITATIVE),
+            )
+        finally:
+            await gateway.stop()
+
+        self.assertEqual(observed, [(None, None)])
         self.assertEqual(channel.sent, [])
 
     async def test_timeout_is_bounded_redacted_and_tracks_cancellation_overrun(self) -> None:
@@ -325,15 +440,17 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
         first = asyncio.create_task(gateway._deliver_outbound(_message("capacity-1"), context))
         await policy.entered.wait()
         try:
-            with self.assertRaises(OutboundPresentationCapacityError):
+            with self.assertRaises(RetryableDeliveryError) as raised:
                 await gateway._deliver_outbound(_message("capacity-2"), context)
+            self.assertIsInstance(raised.exception.__cause__, OutboundPresentationCapacityError)
             policy.release.set()
             await first
+            await gateway._deliver_outbound(_message("capacity-2"), context)
         finally:
             policy.release.set()
             await gateway.stop()
 
-        self.assertEqual(len(channel.sent), 1)
+        self.assertEqual(len(channel.sent), 2)
         facts = gateway.diagnostics_snapshot().gateway.outbound_presentation
         assert facts is not None
         self.assertEqual(facts.capacity_rejection_count, 1)
@@ -422,3 +539,23 @@ def _outbound(
         created_at=projected.message.created_at,
         metadata={"phase": "final"},
     )
+
+
+async def _wait_until(predicate: Callable[[], bool], timeout: float = 1.0) -> None:
+    async with asyncio.timeout(timeout):
+        while not predicate():
+            await asyncio.sleep(0)
+
+
+async def _wait_for_checkpoint(
+    repository: InMemoryProjectionRouteRepository,
+    thread_ref: ThreadRef,
+    checkpoint: str,
+    timeout: float = 1.0,
+) -> tuple[ThreadProjectionRoute, ...]:
+    async with asyncio.timeout(timeout):
+        while True:
+            routes = await repository.list_projection_routes(thread_ref)
+            if routes[0].checkpoint_agent_item_id == checkpoint:
+                return routes
+            await asyncio.sleep(0)
