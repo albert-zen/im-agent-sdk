@@ -8,14 +8,19 @@ from typing import cast
 
 from imagent.applications.t3 import T3ApplicationAdapter
 from imagent.bindings import InMemoryBindingRepository
+from imagent.channels.native.diagnostics import NativeChannelDiagnosticState
 from imagent.contracts import ProjectMode, ThreadRef
 from imagent.diagnostics import (
     ApplicationDiagnosticFacts,
+    ChannelDiagnosticFacts,
     ConnectionDiagnosticFacts,
     ConnectionDiagnosticState,
     DiagnosticsSnapshot,
+    GatewayDiagnosticFacts,
+    ProjectionDiagnosticFacts,
     QueueDiagnosticFacts,
     QueueDiagnosticName,
+    collect_channel_diagnostics,
     summarize_projection_health,
 )
 from imagent.gateway import ImAgentGateway
@@ -37,6 +42,55 @@ class _UnusedT3Client:
 
 
 class DiagnosticsSurfaceTests(unittest.TestCase):
+    def test_snapshot_keeps_the_pre_channel_positional_constructor_order(self) -> None:
+        gateway = GatewayDiagnosticFacts(
+            accepting_inbound=False,
+            starting=False,
+            startup_queue=QueueDiagnosticFacts(
+                QueueDiagnosticName.GATEWAY_STARTUP,
+                capacity=1,
+                depth=0,
+            ),
+        )
+        generated_at = datetime.now(UTC)
+
+        snapshot = DiagnosticsSnapshot((), ProjectionDiagnosticFacts(), gateway, generated_at)
+        legacy_explicit = DiagnosticsSnapshot(
+            (), ProjectionDiagnosticFacts(), gateway, generated_at, 1, True
+        )
+
+        self.assertEqual(snapshot.channels, ())
+        self.assertEqual(snapshot.projections, ProjectionDiagnosticFacts())
+        self.assertIs(snapshot.gateway, gateway)
+        self.assertIs(snapshot.generated_at, generated_at)
+        self.assertEqual(legacy_explicit.schema_version, 1)
+        self.assertTrue(legacy_explicit.authoritative)
+        self.assertEqual(legacy_explicit.channels, ())
+
+    def test_native_channel_lifecycle_facts_are_redacted_and_monotonic(self) -> None:
+        state = NativeChannelDiagnosticState()
+        state.update(status="connecting", connected=False)
+        state.update(status="connected", connected=True, bot_username="secret-bot")
+        first = state.snapshot()
+        state.update(
+            status="reconnecting",
+            connected=False,
+            error_type="SecretTransportError",
+        )
+        retrying = state.snapshot()
+        state.update(status="connected", connected=True)
+        recovered = state.snapshot()
+
+        self.assertEqual(first.state, ConnectionDiagnosticState.READY)
+        self.assertEqual(first.connection_epoch, 1)
+        self.assertEqual(retrying.state, ConnectionDiagnosticState.RECONNECTING)
+        self.assertEqual(retrying.reconnect_count, 1)
+        self.assertTrue(retrying.worker_degraded)
+        self.assertEqual(retrying.last_failure_code, "transport_failed")
+        self.assertEqual(recovered.connection_epoch, 2)
+        self.assertIsNone(recovered.last_failure_code)
+        self.assertNotIn("secret", json.dumps(asdict(recovered), default=str).casefold())
+
     def test_queue_fact_vocabulary_and_bounds_are_enforced(self) -> None:
         with self.assertRaisesRegex(ValueError, "fixed vocabulary"):
             QueueDiagnosticFacts(
@@ -128,8 +182,9 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
 
         self.assertIsInstance(first, DiagnosticsSnapshot)
         self.assertFalse(first.authoritative)
-        self.assertEqual(first.schema_version, 1)
+        self.assertEqual(first.schema_version, 2)
         self.assertEqual(first.applications, (ApplicationDiagnosticFacts("fake-agent", "fake"),))
+        self.assertEqual(first.channels, ())
         self.assertEqual(
             first.gateway.startup_queue,
             QueueDiagnosticFacts(QueueDiagnosticName.GATEWAY_STARTUP, capacity=7, depth=0),
@@ -138,6 +193,44 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
         self.assertEqual(first.projections, second.projections)
         self.assertEqual(first.gateway, second.gateway)
         self.assertLessEqual(first.generated_at, second.generated_at)
+
+    def test_optional_channel_facts_fail_closed_on_provider_error_or_identity_mismatch(
+        self,
+    ) -> None:
+        class Channel:
+            channel_instance_id = "channel-a"
+            kind = "polling"
+
+            def __init__(self, result) -> None:
+                self.result = result
+
+            def diagnostic_facts(self):
+                if isinstance(self.result, Exception):
+                    raise self.result
+                return self.result
+
+        ready = ConnectionDiagnosticFacts(
+            state=ConnectionDiagnosticState.READY,
+            connection_epoch=1,
+            reconnect_count=0,
+            worker_running=True,
+            worker_degraded=False,
+        )
+        valid = Channel(ChannelDiagnosticFacts("channel-a", "polling", ready))
+        mismatch = Channel(ChannelDiagnosticFacts("other-channel", "polling", ready))
+        broken = Channel(RuntimeError("secret endpoint failed"))
+
+        self.assertEqual(
+            collect_channel_diagnostics((valid,)),
+            (ChannelDiagnosticFacts("channel-a", "polling", ready),),
+        )
+        self.assertEqual(
+            collect_channel_diagnostics((mismatch, broken)),
+            (
+                ChannelDiagnosticFacts("channel-a", "polling"),
+                ChannelDiagnosticFacts("channel-a", "polling"),
+            ),
+        )
 
     def test_t3_reports_no_synthetic_long_lived_connection(self) -> None:
         adapter = T3ApplicationAdapter(

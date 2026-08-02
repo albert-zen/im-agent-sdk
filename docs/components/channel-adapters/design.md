@@ -90,6 +90,14 @@ Native authentication, access, rate-limit, transport, size, formatting, and
 receipt failures remain explicit. Channel reconnect cursors belong to the
 Channel adapter; they are not Agent event replay cursors.
 
+The transferred long-lived native adapters keep one process-local redacted
+lifecycle recorder per configured instance. Their optional
+`diagnostic_facts()` reports only the fixed connection state, monotonically
+observed ready epoch/reconnect count, worker/degraded booleans, and bounded
+failure classification. Provider reads are synchronous and perform no network
+or repository I/O. Native usernames, session/cursor IDs, errors, endpoints,
+credentials, and Conversation identities remain excluded.
+
 ## Current implementation
 
 The SDK owns the reusable QQ, Telegram, Feishu, and Weixin native transports,

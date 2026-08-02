@@ -1,6 +1,6 @@
 # IMCodex consumer follow-up blockers
 
-Status: App Server input slice implemented; review and remaining slices pending
+Status: input/ingress/bounded-runtime slices implemented; downstream composition pending
 
 This note records the SDK-side gaps found while attempting the downstream
 IMCodex migration from SDK merge commit
@@ -22,7 +22,7 @@ baseline was `251` unit tests passing.
 | Generic local files | App Server capability plus consumer encoding/exposure policy | T3 has its own media/data encoding; a remote upload Application must not expose a host path | Default to explicit unsupported while App Server has no native file input. The adapter may validate a configured root and bounds, but whether an absolute path may be exposed and the prompt/encoding template require an explicit downstream callback or policy. |
 | Quoted native message context | QQ adapter-owned optional capability | Only QQ currently has positive native quote parsing evidence; Telegram, Feishu, and a text webhook are counterexamples without this contract | Preserve a bounded QQ-owned native-untrusted snapshot through the public adapter without widening Core or trusting caller-forged metadata. |
 | Deduplication before media work | Core/Channel runtime invariant | Every media-capable Channel can receive provider redelivery | Durable admission must precede attachment download/materialization. A process-local set is only an optimization. |
-| App Server tool/system/artifact projection | App Server adapter-specific event/history capability | T3 activities and Codex items have different native shapes | Preserve the native items needed for declared visibility and artifact delivery without a consumer raw-notification side channel. |
+| App Server tool/system/artifact projection | App Server adapter-specific event/history capability | T3 activities and Codex items have different native shapes | Completed command/file items and live-only plan/diff/system observations now use normalized messages without a raw side channel. Agent-produced artifact materialization and durable spool lifetime remain a downstream parity item; proactive typed artifact delivery is already SDK-owned. |
 | Subscriber/startup/acceptance buffering | Core runtime safety; capacity and overflow UX are consumer policy | Codex, Zen, and T3 can all outpace a slow Channel | Bound every internal accumulation point or define an explicit overflow/reconciliation path before removing the consumer's bounded stage. |
 | Adapter diagnostics/health | Optional adapter capability plus consumer presentation policy | Every long-lived native Channel/Application needs operability; products may render health differently | Expose bounded non-secret adapter facts; IMCodex keeps its `health.json` and event UX. |
 
@@ -52,9 +52,11 @@ review, and merges before the next slice is based:
    concrete downstream encoding/exposure policy justifies a separate seam.
 2. **Channel ingress correctness:** QQ-owned quote preservation and an SDK
    Gateway-owned durable admission boundary before expensive media work.
-3. **Bounded buffers, projection, and diagnostics:** only the items still
-   proven to block downstream cutover, with an explicit overflow/recovery
-   design rather than opportunistic queue edits.
+3. **Bounded buffers, projection, and diagnostics:** bounded admission and
+   Application diagnostics merged first; Issue #31 adds normalized live-only
+   presentation, Metadata fidelity, and optional Channel facts. Downstream
+   artifact-spool durability remains consumer-owned and must be proven during
+   composition rather than hidden behind raw notification processing.
 
 IMCodex pins none of the intermediate branch commits. Its dependency advances
 only to the final required SDK merge commit present on `main`.

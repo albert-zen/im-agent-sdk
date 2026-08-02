@@ -21,6 +21,8 @@ Every Channel adapter should prove:
   identity independent of staging path;
 - native retryable/unknown receipt mapping when idempotency is absent;
 - reconnect state remains Channel-owned.
+- optional diagnostic reads preserve configured identity and expose only
+  redacted per-instance lifecycle facts without native I/O.
 
 QQ-only quote fixtures additionally cover direct and group events, missing and
 malformed provider fields, every text/field/count bound, ignored nested history

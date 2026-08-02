@@ -72,6 +72,7 @@ class ProjectedAgentMessage:
     message: AgentMessage
     turn_id: str | None
     event_id: str | None = None
+    checkpoint: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -305,6 +306,20 @@ def derive_projection_delivery_id(
     return f"imagent:delivery:sha256:{digest}"
 
 
+def derive_live_projection_delivery_id(
+    conversation_ref: ConversationRef,
+    thread_ref: ThreadRef,
+    event_id: str,
+) -> str:
+    """Keep a live observation distinct from a later completion of the same item."""
+
+    return derive_projection_delivery_id(
+        conversation_ref,
+        thread_ref,
+        f"imagent:live-event:{event_id}",
+    )
+
+
 def derive_turn_reply_correlation_id(
     thread_ref: ThreadRef,
     turn_id: str,
@@ -397,10 +412,18 @@ async def deliver_projected_message(
 ) -> ThreadProjectionRoute:
     """Make one ordered route decision without adding retry/backpressure."""
     agent_message = projected.message
-    delivery_id = derive_projection_delivery_id(
-        route.conversation_ref,
-        agent_message.thread_ref,
-        agent_message.agent_item_id,
+    delivery_id = (
+        derive_projection_delivery_id(
+            route.conversation_ref,
+            agent_message.thread_ref,
+            agent_message.agent_item_id,
+        )
+        if projected.checkpoint
+        else derive_live_projection_delivery_id(
+            route.conversation_ref,
+            agent_message.thread_ref,
+            projected.event_id or agent_message.agent_item_id,
+        )
     )
     reply_to = route.reply_to_message_id
     if projected.turn_id is not None:
@@ -422,11 +445,14 @@ async def deliver_projected_message(
             ),
             created_at=agent_message.created_at,
             reply_to=reply_to,
+            metadata=dict(agent_message.metadata),
         )
     )
     if claim is IdempotencyClaimStatus.IN_FLIGHT:
         raise RuntimeError(f"delivery remains in flight: {delivery_id}")
     if claim is IdempotencyClaimStatus.ALREADY_COMPLETED and not authoritative:
+        return route
+    if not projected.checkpoint:
         return route
     if route.checkpoint_agent_item_id == agent_message.agent_item_id:
         return route

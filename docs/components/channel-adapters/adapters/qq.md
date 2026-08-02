@@ -39,6 +39,10 @@ and unsupported group-file failures remain explicit. Media is staged inside
 the Channel-owned bounded spool before it crosses the explicit attachment
 source boundary.
 
+The optional diagnostic provider reports only the configured adapter identity
+and redacted connection/reconnect worker facts; QQ session and bot identities
+remain private.
+
 ## Change checks
 
 Changes to `native/qq.py` or `native/qq_media.py` require

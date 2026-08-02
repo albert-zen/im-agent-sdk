@@ -73,6 +73,10 @@ class ConnectionDiagnosticFacts:
             self.last_failure_code, DiagnosticFailureCode
         ):
             raise ValueError("diagnostic failure code must use the fixed vocabulary")
+        if self.connection_epoch < 0:
+            raise ValueError("diagnostic connection epoch must not be negative")
+        if self.reconnect_count < 0:
+            raise ValueError("diagnostic reconnect count must not be negative")
         names = tuple(queue.name for queue in self.queues)
         if len(names) != len(set(names)):
             raise ValueError("diagnostic connection queue names must be unique")
@@ -86,6 +90,15 @@ class ApplicationDiagnosticFacts:
     """Optional Application-adapter facts without native resource identities."""
 
     application_instance_id: str
+    kind: str
+    connection: ConnectionDiagnosticFacts | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ChannelDiagnosticFacts:
+    """Optional Channel-adapter facts without native Conversation identities."""
+
+    channel_instance_id: str
     kind: str
     connection: ConnectionDiagnosticFacts | None = None
 
@@ -124,8 +137,9 @@ class DiagnosticsSnapshot:
     projections: ProjectionDiagnosticFacts
     gateway: GatewayDiagnosticFacts
     generated_at: datetime
-    schema_version: int = 1
+    schema_version: int = 2
     authoritative: bool = False
+    channels: tuple[ChannelDiagnosticFacts, ...] = ()
 
 
 class DiagnosticsProvider(Protocol):
@@ -268,14 +282,73 @@ def collect_application_diagnostics(
     return tuple(sorted(collected, key=lambda facts: facts.application_instance_id))
 
 
+def collect_channel_diagnostics(
+    channels: Iterable[object],
+) -> tuple[ChannelDiagnosticFacts, ...]:
+    """Read optional providers while preserving configured Channel identity."""
+
+    collected: list[ChannelDiagnosticFacts] = []
+    for channel in channels:
+        channel_instance_id = str(getattr(channel, "channel_instance_id", ""))
+        kind = str(getattr(channel, "kind", "unknown"))
+        provider = getattr(channel, "diagnostic_facts", None)
+        try:
+            facts = provider() if callable(provider) else None
+        except Exception:
+            facts = None
+        if (
+            str(getattr(facts, "channel_instance_id", "")) != channel_instance_id
+            or str(getattr(facts, "kind", "")) != kind
+        ):
+            collected.append(ChannelDiagnosticFacts(channel_instance_id, kind))
+            continue
+        try:
+            connection = _coerce_channel_connection(getattr(facts, "connection", None))
+        except (AttributeError, TypeError, ValueError):
+            connection = None
+        collected.append(ChannelDiagnosticFacts(channel_instance_id, kind, connection))
+    return tuple(sorted(collected, key=lambda facts: facts.channel_instance_id))
+
+
+def _coerce_channel_connection(value: object) -> ConnectionDiagnosticFacts | None:
+    if value is None:
+        return None
+    if isinstance(value, ConnectionDiagnosticFacts):
+        return value
+    failure = getattr(value, "last_failure_code", None)
+    connection_epoch = getattr(value, "connection_epoch")
+    reconnect_count = getattr(value, "reconnect_count")
+    worker_running = getattr(value, "worker_running")
+    worker_degraded = getattr(value, "worker_degraded")
+    if (
+        not isinstance(connection_epoch, int)
+        or isinstance(connection_epoch, bool)
+        or not isinstance(reconnect_count, int)
+        or isinstance(reconnect_count, bool)
+        or not isinstance(worker_running, bool)
+        or not isinstance(worker_degraded, bool)
+    ):
+        raise TypeError("invalid Channel diagnostic fact types")
+    return ConnectionDiagnosticFacts(
+        state=ConnectionDiagnosticState(str(getattr(value, "state"))),
+        connection_epoch=connection_epoch,
+        reconnect_count=reconnect_count,
+        worker_running=worker_running,
+        worker_degraded=worker_degraded,
+        last_failure_code=(DiagnosticFailureCode(str(failure)) if failure is not None else None),
+    )
+
+
 def new_diagnostics_snapshot(
     *,
     applications: tuple[ApplicationDiagnosticFacts, ...],
+    channels: tuple[ChannelDiagnosticFacts, ...],
     projections: ProjectionDiagnosticFacts,
     gateway: GatewayDiagnosticFacts,
 ) -> DiagnosticsSnapshot:
     return DiagnosticsSnapshot(
         applications=applications,
+        channels=channels,
         projections=projections,
         gateway=gateway,
         generated_at=datetime.now(UTC),

@@ -138,6 +138,10 @@ class FakeChannelAdapter:
         return self._channel_instance_id
 
     @property
+    def kind(self) -> str:
+        return "fake"
+
+    @property
     def capabilities(self) -> ChannelCapabilities:
         return self._capabilities
 

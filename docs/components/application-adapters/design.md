@@ -63,8 +63,12 @@ Managed Applications expose real Projects. Flat/fixed Applications omit them.
 Thread lookup is independent of Conversation selection. Native activation is
 an explicit optional operation.
 
-History contains all completed Agent messages in a Turn. Application-native
-message phases remain namespaced Metadata until common reuse is proven.
+History contains all completed Agent messages in a Turn. Recoverable native
+activities may also become completed `AgentMessage` values when the adapter can
+return the same stable item from bounded history. Live-only presentation uses
+`message.created` and never claims recovery. Application-native message phases
+and activity kinds remain namespaced Metadata until common reuse is proven;
+projection preserves them without interpreting them, as defined by ADR 0015.
 
 ## Events and recovery
 

@@ -14,6 +14,16 @@ that control surface.
   input map to native App Server calls when supported.
 - native user and Agent items become canonical completed message events;
   commentary/final-answer phases remain Metadata.
+- recoverable command-execution and file-change items become bounded completed
+  messages with adapter-namespaced item-kind Metadata;
+- live-only plan, diff, Thread-status, compaction, and model-reroute
+  observations become bounded `message.created` values and never claim an
+  authoritative history checkpoint.
+
+The additional native activity projection is an explicit adapter option and
+defaults off, preserving the existing completed-Agent-message surface for
+consumers that have not supplied visibility policy. IMCodex enables it in its
+composition layer.
 - native notification IDs are stable event IDs.
 
 `turn/start` and `turn/steer` have no SDK-controlled native idempotency key.
@@ -40,6 +50,12 @@ merely because it shares the transport.
 
 `message.completed` does not terminate a Codex Turn. The adapter emits the
 native terminal Turn event separately.
+
+Projection preserves the normalized phase/item-kind Metadata. IMCodex or
+another consumer may apply visibility policy at its Channel composition
+boundary without subscribing to raw App Server notifications. Raw native
+envelopes, commands beyond the bounded rendered summary, diffs, paths outside
+the rendered file list, and exception text do not cross as Metadata.
 
 ## Recovery guarantees
 

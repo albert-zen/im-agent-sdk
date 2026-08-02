@@ -16,6 +16,7 @@ from imagent.contracts import (
     AgentEvent,
     AgentEventType,
     AgentInput,
+    AgentMessage,
     ApplicationInputDispatch,
     ApplicationInputOutcomeUnknown,
     ApplicationOperation,
@@ -29,6 +30,7 @@ from imagent.contracts import (
     InboundMessage,
     InputContinuationPreference,
     InputDisposition,
+    MessageRole,
     ObserveThread,
     OutboundMessage,
     ProjectionPolicy,
@@ -57,6 +59,72 @@ from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 
 class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
+    async def test_live_created_message_preserves_metadata_without_checkpoint(self) -> None:
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        thread = await application.create_thread()
+        conversation = ConversationRef("fake-channel", "conversation")
+        channel = FakeChannelAdapter()
+        projections = InMemoryProjectionRouteRepository()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            bindings=InMemoryBindingRepository(),
+            projections=projections,
+        )
+        await gateway.start()
+        try:
+            await gateway.execute_gateway(
+                _observe("observe-live-created", conversation, thread.ref)
+            )
+            application._publish(
+                thread.ref,
+                AgentEventType.MESSAGE_CREATED,
+                "turn-live",
+                {
+                    "message": AgentMessage(
+                        agent_item_id="live-plan-1",
+                        thread_ref=thread.ref,
+                        role=MessageRole.SYSTEM,
+                        content=(TextContent("Plan updated"),),
+                        created_at=datetime.now(UTC),
+                        metadata={"native_application": "fake", "kind": "plan_updated"},
+                    )
+                },
+            )
+            await _wait_until(lambda: len(channel.sent) == 1)
+
+            self.assertEqual(channel.sent[0].metadata["native_application"], "fake")
+            self.assertEqual(channel.sent[0].metadata["kind"], "plan_updated")
+            routes = await projections.list_projection_routes(thread.ref)
+            self.assertEqual(len(routes), 1)
+            self.assertIsNone(routes[0].checkpoint_agent_item_id)
+
+            application._publish(
+                thread.ref,
+                AgentEventType.MESSAGE_COMPLETED,
+                "turn-live",
+                {
+                    "message": AgentMessage(
+                        agent_item_id="live-plan-1",
+                        thread_ref=thread.ref,
+                        role=MessageRole.SYSTEM,
+                        content=(TextContent("Plan completed"),),
+                        created_at=datetime.now(UTC),
+                        metadata={"kind": "plan_completed"},
+                    )
+                },
+            )
+            await _wait_until(lambda: len(channel.sent) == 2)
+            self.assertNotEqual(channel.sent[0].delivery_id, channel.sent[1].delivery_id)
+            for _ in range(100):
+                routes = await projections.list_projection_routes(thread.ref)
+                if routes[0].checkpoint_agent_item_id is not None:
+                    break
+                await asyncio.sleep(0)
+            self.assertEqual(routes[0].checkpoint_agent_item_id, "live-plan-1")
+        finally:
+            await gateway.stop()
+
     async def test_transient_coordinator_backpressure_recovers_without_sticky_route(
         self,
     ) -> None:

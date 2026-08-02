@@ -5,9 +5,10 @@ import contextlib
 import inspect
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
 from ..adapters import InboundAdmissionHandler, MessageHandler, OperationHandler
 from ..contracts import (
@@ -50,6 +51,23 @@ class NativeChannel(Protocol):
 
 
 NativeFactory = Callable[[object], NativeChannel]
+
+
+class _ChannelConnectionSnapshot(Protocol):
+    state: str
+    connection_epoch: int
+    reconnect_count: int
+    worker_running: bool
+    worker_degraded: bool
+    last_failure_code: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _ChannelDiagnosticSnapshot:
+    channel_instance_id: str
+    kind: str
+    connection: _ChannelConnectionSnapshot | None = None
+
 
 _CHANNEL_CAPABILITIES = {
     "qq": ChannelCapabilities(
@@ -118,10 +136,25 @@ class NativeTransportChannelAdapter:
         self._channel_id = channel_id
         self._native_factory = native_factory
         self._native: NativeChannel | None = None
+        self._last_connection_facts: _ChannelConnectionSnapshot | None = None
 
     @property
     def channel_instance_id(self) -> str:
         return self._channel_instance_id
+
+    @property
+    def kind(self) -> str:
+        return self._channel_id
+
+    def diagnostic_facts(self) -> _ChannelDiagnosticSnapshot:
+        connection = self._read_native_connection_facts(self._native)
+        if connection is not None:
+            self._last_connection_facts = connection
+        return _ChannelDiagnosticSnapshot(
+            channel_instance_id=self._channel_instance_id,
+            kind=self._channel_id,
+            connection=connection or self._last_connection_facts,
+        )
 
     @property
     def capabilities(self) -> ChannelCapabilities:
@@ -155,7 +188,37 @@ class NativeTransportChannelAdapter:
         native = self._native
         self._native = None
         if native is not None:
-            await native.stop()
+            try:
+                await native.stop()
+            finally:
+                connection = self._read_native_connection_facts(native)
+                if connection is not None:
+                    self._last_connection_facts = connection
+
+    @staticmethod
+    def _read_native_connection_facts(
+        native: NativeChannel | None,
+    ) -> _ChannelConnectionSnapshot | None:
+        provider = getattr(native, "diagnostic_connection_facts", None)
+        if not callable(provider):
+            return None
+        try:
+            facts = provider()
+        except Exception:
+            return None
+        required = (
+            "state",
+            "connection_epoch",
+            "reconnect_count",
+            "worker_running",
+            "worker_degraded",
+            "last_failure_code",
+        )
+        return (
+            cast(_ChannelConnectionSnapshot, facts)
+            if all(hasattr(facts, name) for name in required)
+            else None
+        )
 
     async def send(self, message: OutboundMessage) -> DeliveryReceipt:
         native = self._native

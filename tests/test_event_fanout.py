@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 from test_gateway_vertical_slice import NativeZenClient
 
-from imagent.applications import CodexApplicationAdapter
+from imagent.applications import CodexApplicationAdapter, T3ApplicationAdapter
 from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AgentEventType,
@@ -25,7 +25,12 @@ from imagent.contracts import (
     TextContent,
     ThreadRef,
 )
-from imagent.events import EventBroadcaster, EventStreamOverflow, EventStreamReset
+from imagent.events import (
+    EventBroadcaster,
+    EventStreamOverflow,
+    EventStreamReset,
+    FanoutSubscription,
+)
 from imagent.gateway import ImAgentGateway
 from imagent.gateway_startup import GatewayNotRunning, GatewayStartupOverflow
 from imagent.request_correlations import InMemoryRequestCorrelationRepository
@@ -34,6 +39,175 @@ from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 
 class EventBroadcasterTests(unittest.IsolatedAsyncioTestCase):
+    def test_appserver_history_preserves_assistant_alias_and_native_timestamp(self) -> None:
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=NativeZenClient(),
+            cwd="/repo",
+        )
+
+        message = adapter._item_message(
+            ThreadRef("codex-main", "thread-1"),
+            {
+                "id": "assistant-1",
+                "type": "assistantMessage",
+                "text": "Recovered answer",
+                "createdAt": "2026-08-02T01:02:03Z",
+            },
+        )
+
+        self.assertIsNotNone(message)
+        assert message is not None
+        self.assertEqual(message.agent_item_id, "assistant-1")
+        self.assertEqual(message.created_at, datetime(2026, 8, 2, 1, 2, 3, tzinfo=UTC))
+        self.assertEqual(message.metadata["native_item_kind"], "agent_message")
+        self.assertEqual(message.metadata["phase"], "")
+
+    async def test_additional_native_activity_projection_defaults_off(self) -> None:
+        native = NativeZenClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=native,
+            cwd="/repo",
+        )
+        events = adapter.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+
+        await native._notify(
+            {
+                "method": "item/completed",
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "item": {
+                        "id": "command-hidden",
+                        "type": "commandExecution",
+                        "command": "secret command",
+                    },
+                },
+            }
+        )
+        await native._notify(
+            {
+                "method": "turn/plan/updated",
+                "params": {
+                    "eventId": "plan-hidden",
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "plan": [],
+                },
+            }
+        )
+
+        assert isinstance(events, FanoutSubscription)
+        self.assertEqual(events.pending_count, 0)
+        await _close(events)
+
+    async def test_t3_activity_uses_same_completed_message_projection_contract(self) -> None:
+        class UnusedClient:
+            async def shell_snapshot(self):
+                return {}
+
+            async def thread_detail(self, thread_id):
+                del thread_id
+                return {}
+
+            async def dispatch(self, command):
+                del command
+                return {}
+
+        adapter = T3ApplicationAdapter(
+            application_instance_id="t3-main",
+            client=UnusedClient(),
+            project_live_activities=True,
+        )
+        thread_ref = ThreadRef("t3-main", "thread-1")
+        events = adapter._events.subscribe("thread-1")
+
+        adapter._publish_thread_state(
+            thread_ref,
+            {
+                "messages": [],
+                "activities": [
+                    {
+                        "id": "activity-1",
+                        "kind": "task.progress",
+                        "summary": "Inspecting repository",
+                        "turnId": "turn-1",
+                    }
+                ],
+                "latestTurn": {"id": "turn-1", "state": "running"},
+            },
+            only_turn_id="turn-1",
+        )
+
+        event = await anext(events)
+        self.assertEqual(event.type, AgentEventType.MESSAGE_COMPLETED)
+        message = event.data["message"]
+        assert isinstance(message, AgentMessage)
+        self.assertEqual(message.metadata["source"], "activity")
+        self.assertEqual(message.metadata["kind"], "task.progress")
+        await _close(events)
+
+    async def test_t3_message_and_activity_ids_have_independent_deduplication_domains(
+        self,
+    ) -> None:
+        class UnusedClient:
+            async def shell_snapshot(self):
+                return {}
+
+            async def thread_detail(self, thread_id):
+                del thread_id
+                return {}
+
+            async def dispatch(self, command):
+                del command
+                return {}
+
+        adapter = T3ApplicationAdapter(
+            application_instance_id="t3-main",
+            client=UnusedClient(),
+            project_live_activities=True,
+        )
+        thread_ref = ThreadRef("t3-main", "thread-1")
+        events = adapter._events.subscribe("thread-1")
+
+        adapter._publish_thread_state(
+            thread_ref,
+            {
+                "messages": [
+                    {
+                        "id": "shared-native-id",
+                        "role": "assistant",
+                        "text": "answer",
+                        "turnId": "turn-1",
+                    }
+                ],
+                "activities": [
+                    {
+                        "id": "shared-native-id",
+                        "kind": "task.progress",
+                        "summary": "activity",
+                        "turnId": "turn-1",
+                    }
+                ],
+                "latestTurn": {"id": "turn-1", "state": "running"},
+            },
+            only_turn_id="turn-1",
+        )
+
+        projected = [await anext(events) for _ in range(2)]
+        messages = [event.data["message"] for event in projected]
+        self.assertTrue(all(isinstance(message, AgentMessage) for message in messages))
+        self.assertEqual(
+            [
+                message.metadata.get("source")
+                for message in messages
+                if isinstance(message, AgentMessage)
+            ],
+            [None, "activity"],
+        )
+        await _close(events)
+
     def test_capacity_must_be_positive(self) -> None:
         with self.assertRaisesRegex(ValueError, "max_pending must be positive"):
             EventBroadcaster[str, str](max_pending=0)
@@ -171,6 +345,81 @@ class EventBroadcasterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(phases, ["commentary", "final_answer"])
         await _close(first)
         await _close(second)
+
+    async def test_appserver_normalizes_tool_items_and_live_plan_without_raw_side_channel(
+        self,
+    ) -> None:
+        native = NativeZenClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=native,
+            cwd="/repo",
+            project_native_activity_messages=True,
+        )
+        events = adapter.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+
+        for item in (
+            {
+                "id": "command-1",
+                "type": "commandExecution",
+                "command": "uv run tests",
+            },
+            {
+                "id": "files-1",
+                "type": "fileChange",
+                "changes": [{"path": "src/example.py"}],
+            },
+        ):
+            await native._notify(
+                {
+                    "method": "item/completed",
+                    "params": {
+                        "threadId": "thread-1",
+                        "turnId": "turn-1",
+                        "item": item,
+                    },
+                }
+            )
+        await native._notify(
+            {
+                "method": "turn/plan/updated",
+                "params": {
+                    "eventId": "plan-event-1",
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "explanation": "Migrate in slices",
+                    "plan": [{"status": "in_progress", "step": "Use Gateway"}],
+                },
+            }
+        )
+
+        received = [await anext(events) for _ in range(3)]
+        self.assertEqual(
+            [event.type for event in received],
+            [
+                AgentEventType.MESSAGE_COMPLETED,
+                AgentEventType.MESSAGE_COMPLETED,
+                AgentEventType.MESSAGE_CREATED,
+            ],
+        )
+        messages: list[AgentMessage] = []
+        for event in received:
+            message = event.data["message"]
+            assert isinstance(message, AgentMessage)
+            messages.append(message)
+        self.assertEqual(
+            [message.metadata["native_item_kind"] for message in messages],
+            ["command_execution", "file_change", "plan_updated"],
+        )
+        first_content = messages[0].content[0]
+        second_content = messages[1].content[0]
+        assert isinstance(first_content, TextContent)
+        assert isinstance(second_content, TextContent)
+        self.assertEqual(first_content.text, "Executed `uv run tests`")
+        self.assertEqual(second_content.text, "Changed files:\n- src/example.py")
+        self.assertTrue(messages[2].metadata["live_only"])
+        self.assertEqual(messages[2].agent_item_id, "plan-event-1")
+        await _close(events)
 
     async def test_appserver_overflow_is_subscription_scoped(self) -> None:
         native = NativeZenClient()

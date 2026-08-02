@@ -27,6 +27,8 @@ Every adapter should prove:
   positive shared-base Zen case, while generic files remain explicit
   unsupported without a downstream exposure/encoding policy;
 - canonical user and Agent message events;
+- recoverable activity/tool items use completed messages, while live-only
+  presentation uses created messages with bounded namespaced Metadata;
 - multiple completed messages before an explicit terminal Turn event;
 - fan-out-safe subscriptions;
 - bounded fan-out overflow isolates the slow subscriber and leaves unrelated

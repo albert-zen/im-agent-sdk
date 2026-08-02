@@ -58,8 +58,11 @@
   than reaching a stopping Application;
 - Application event overflow is visible in bounded health and recovers only
   the affected Thread without restarting unrelated Applications;
-- stable diagnostics aggregate worker and startup admission facts without
-  exposing Thread/route/error identities or mutating runtime state;
+- stable diagnostics aggregate Application, Channel, worker, and startup
+  admission facts without exposing Thread/route/error identities or mutating
+  runtime state;
+- live-only created messages share route ordering and idempotent delivery but
+  never advance authoritative completion checkpoints;
 - concurrent Threads and Turns do not steal events or routes;
 - restart rebuilds projection from routes plus bounded authoritative history;
 - started/steered reply correlation is per Turn and destination-safe across

@@ -14,7 +14,10 @@ Required coverage:
   notification and server-request lanes;
 - queue depth never exceeds configured capacity in a returned snapshot;
 - T3 returns no fabricated long-lived connection;
-- adapters without the optional provider still appear safely;
+- Channel providers preserve configured identity/kind and native lifecycle
+  transitions without leaking provider fields;
+- adapters without the optional provider, providers that raise, and providers
+  returning mismatched identity still appear safely;
 - repeated reads do not mutate state and no exporter or callback is required.
 
 Run the full suite after changing the public facts because Gateway,

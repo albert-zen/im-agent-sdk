@@ -215,6 +215,13 @@ completed Agent message, terminal status, error, and compaction marker.
 Application-specific phases such as commentary or final answer may stay in
 namespaced Metadata.
 
+An authoritative item that bounded history can reproduce uses
+`message.completed` and may advance projection completion. A live-only
+normalized observation uses `message.created`; it may be delivered in route
+order but never advances the authoritative completion checkpoint. Both carry
+an `AgentMessage`, and projection preserves its bounded namespaced Metadata
+without assigning common meaning to native phases or activity kinds.
+
 `message.completed` never means `turn.completed`. Only explicit
 `turn.completed`, `turn.failed`, or `turn.interrupted` events terminate a
 Turn.

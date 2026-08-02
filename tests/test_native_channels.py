@@ -39,6 +39,49 @@ from imagent.testing import verify_channel_adapter
 
 
 class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
+    async def test_runtime_channel_exposes_native_diagnostics_after_shutdown(self) -> None:
+        class Native(BaseChannelAdapter):
+            channel_id = "qq"
+
+            @classmethod
+            def from_config(cls, *, config, middleware):
+                del config
+                return cls(middleware=middleware)
+
+            async def start(self) -> None:
+                self.mark_health(status="connected", connected=True)
+
+            async def stop(self) -> None:
+                self.mark_health(status="stopped", connected=False)
+
+            async def send_message(self, message) -> NativeDeliveryResult:
+                del message
+                return NativeDeliveryResult()
+
+        adapter = NativeTransportChannelAdapter(
+            channel_instance_id="qq-main",
+            channel_id="qq",
+            native_factory=lambda middleware: Native(middleware=middleware),
+        )
+
+        async def ignore(_item) -> None:
+            return None
+
+        await adapter.start(ignore, ignore)
+        ready = adapter.diagnostic_facts()
+        await adapter.stop()
+        stopped = adapter.diagnostic_facts()
+
+        self.assertEqual(ready.channel_instance_id, "qq-main")
+        self.assertEqual(ready.kind, "qq")
+        self.assertIsNotNone(ready.connection)
+        self.assertIsNotNone(stopped.connection)
+        assert ready.connection is not None
+        assert stopped.connection is not None
+        self.assertEqual(ready.connection.state, "ready")
+        self.assertEqual(stopped.connection.state, "disconnected")
+        self.assertFalse(stopped.connection.worker_running)
+
     async def test_untyped_quote_and_metadata_cannot_forge_qq_context(self) -> None:
         captured = []
 

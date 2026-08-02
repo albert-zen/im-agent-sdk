@@ -26,7 +26,7 @@ from .artifacts import (
     stable_artifact_identity,
 )
 from .base import BaseChannelAdapter
-from .diagnostics import emit_event, mark_channel_health
+from .diagnostics import emit_event
 from .endpoints import validate_http_endpoint
 from .media import materialize_inbound_media
 from .models import (
@@ -208,8 +208,7 @@ class QQChannelAdapter(BaseChannelAdapter):
         self._ensure_inbound_worker()
         if self._runner_task is None or self._runner_task.done():
             self._runner_task = asyncio.create_task(self._run_forever())
-        mark_channel_health(
-            "qq",
+        self.mark_health(
             enabled=True,
             connected=False,
             status="connecting",
@@ -623,8 +622,7 @@ class QQChannelAdapter(BaseChannelAdapter):
                                 message="QQ gateway ready",
                                 data={"session_id": self._session_id},
                             )
-                            mark_channel_health(
-                                "qq",
+                            self.mark_health(
                                 connected=True,
                                 session_id=self._session_id,
                                 status="connected",
@@ -639,8 +637,7 @@ class QQChannelAdapter(BaseChannelAdapter):
                                 event="qq.gateway.resumed",
                                 message="QQ gateway resumed",
                             )
-                            mark_channel_health(
-                                "qq",
+                            self.mark_health(
                                 connected=True,
                                 session_id=self._session_id,
                                 status="connected",
@@ -826,7 +823,7 @@ class QQChannelAdapter(BaseChannelAdapter):
             "status": status,
         }
         payload.update(changes)
-        mark_channel_health("qq", **payload)
+        self.mark_health(**payload)
 
     async def _heartbeat_loop(self, websocket, interval_seconds: float) -> None:
         while not self._stop_event.is_set():

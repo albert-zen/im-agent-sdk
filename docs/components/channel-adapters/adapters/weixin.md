@@ -21,6 +21,10 @@ world-readable, wildcard-owner, or wrong-shape credential state fails closed.
 Stale credentials require the consumer enrollment flow; the SDK does not ship
 product login commands.
 
+The optional diagnostic provider reports only redacted polling/reconnect worker
+facts; iLink credentials, cursors, context tokens, endpoint, and native error
+text remain private.
+
 ## Change checks
 
 Changes to `native/weixin.py`, `native/weixin_ilink.py`, or

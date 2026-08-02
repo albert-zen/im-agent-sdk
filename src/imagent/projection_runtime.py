@@ -798,7 +798,10 @@ class ThreadProjectionRuntime:
         thread_ref = event.thread_ref
         if thread_ref is None:
             return
-        if event.type is AgentEventType.MESSAGE_COMPLETED:
+        if event.type in {
+            AgentEventType.MESSAGE_CREATED,
+            AgentEventType.MESSAGE_COMPLETED,
+        }:
             agent_message = event.data.get("message")
             if isinstance(agent_message, AgentMessage):
                 await self._routes.deliver_to_routes(
@@ -807,6 +810,7 @@ class ThreadProjectionRuntime:
                         message=agent_message,
                         turn_id=event.turn_id,
                         event_id=event.event_id,
+                        checkpoint=event.type is AgentEventType.MESSAGE_COMPLETED,
                     ),
                 )
         if (

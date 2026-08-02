@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from threading import Lock
 
 from .access import ChannelAccessPolicy
-from .diagnostics import emit_event, mark_channel_health
+from .diagnostics import NativeChannelDiagnosticState, emit_event, mark_channel_health
 from .models import InboundMessage, NativeDeliveryResult, OutboundMessage
 
 logger = logging.getLogger(__name__)
@@ -59,6 +59,14 @@ class BaseChannelAdapter(ABC):
         self.middleware = middleware
         self.access_policy = access_policy or ChannelAccessPolicy()
         self._access_denial_limiter = _AccessDenialLimiter()
+        self._diagnostic_state = NativeChannelDiagnosticState()
+
+    def mark_health(self, **state: object) -> None:
+        self._diagnostic_state.update(**state)
+        mark_channel_health(self.channel_id, **state)
+
+    def diagnostic_connection_facts(self):
+        return self._diagnostic_state.snapshot()
 
     def inbound_allowed(self, inbound: InboundMessage) -> bool:
         return self.access_policy.allows(
@@ -107,8 +115,7 @@ class BaseChannelAdapter(ABC):
             message_id=inbound.message_id,
             data={"suppressed_since_last": suppressed},
         )
-        mark_channel_health(
-            self.channel_id,
+        self.mark_health(
             **self.access_policy_health(),
             last_inbound_access_denied_at=datetime.now(UTC).isoformat(),
             last_inbound_access_denial_reason=denial_reason,

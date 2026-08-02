@@ -19,6 +19,9 @@ Enabled instances require a direct token or a private token file and an
 HTTP(S) API endpoint without embedded credentials. Corrupt offsets fail
 closed; Bot API descriptions are surfaced without leaking tokens.
 
+The optional diagnostic provider reports only redacted polling lifecycle facts;
+bot username, offset, endpoint, and API error text remain private.
+
 ## Change checks
 
 Changes to `native/telegram.py` require `test_channel_telegram.py`, common

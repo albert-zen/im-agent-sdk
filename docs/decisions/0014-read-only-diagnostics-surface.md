@@ -14,8 +14,10 @@ second data surface with unsafe cardinality and retention.
 
 Codex/Zen App Server has a meaningful connection epoch and two dispatch lanes.
 T3 uses independent HTTP request/response calls and has no equivalent
-long-lived connection epoch. This counterexample rules out making connection
-diagnostics a required Application port.
+long-lived connection epoch. Long-polling Channels have different connection
+and worker evidence again, while a request/response webhook Channel may have
+none. These counterexamples rule out making connection diagnostics a required
+Application or Channel port.
 
 ## Decision
 
@@ -34,6 +36,14 @@ It is an optional adapter capability, not a required Core port. App Server
 reports connection state/epoch, reconnect count, dispatch worker state, queue
 capacity/depth/overflow, and a bounded last-failure code. T3 reports its
 Application identity and no synthetic connection facts.
+
+Channel adapters may implement the parallel structural
+`diagnostic_facts()` seam. Channel facts preserve the configured
+`channel_instance_id` and adapter kind, and expose only lifecycle evidence the
+native transport actually owns. An adapter without a meaningful long-lived
+connection returns no synthetic connection facts. Provider failure or identity
+mismatch falls back to identity-only facts so one diagnostic adapter cannot
+break the whole snapshot.
 
 Gateway aggregates projection facts by count and classification. Existing
 per-Thread worker health remains an internal troubleshooting API; the stable

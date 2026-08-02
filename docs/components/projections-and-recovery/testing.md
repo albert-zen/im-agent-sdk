@@ -10,6 +10,8 @@ Protect these historical and known failure modes:
 - one shared queue causing subscribers to steal events;
 - a slow subscriber blocking a socket/read callback;
 - `message.completed` terminating a multi-message Turn;
+- `message.created` advancing a completed-item checkpoint or losing normalized
+  presentation Metadata;
 - cross-Thread counters producing false gaps;
 - accepting an expired cursor without authoritative recovery;
 - manufacturing replay/sequence support;

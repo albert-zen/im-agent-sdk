@@ -20,6 +20,10 @@ Only the named Feishu and Lark domains are accepted. Enabled instances require
 App credentials. SDK subscription/reconnect, token, resource, queue overflow,
 and native delivery failures remain explicit and do not become Agent truth.
 
+The optional diagnostic provider reports only redacted connection/reconnect
+worker facts; App identity, tokens, endpoint, and native error text remain
+private.
+
 ## Change checks
 
 Changes to `native/feishu.py` require `test_channel_feishu.py`, common native

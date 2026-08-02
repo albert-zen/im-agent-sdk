@@ -80,6 +80,8 @@ from ..contracts import (
 )
 from ..diagnostics import ApplicationDiagnosticFacts
 from ..events import EventBroadcaster
+from .t3_messages import t3_activity_message as _t3_activity_message
+from .t3_messages import t3_agent_message as _t3_agent_message
 
 _ID_NAMESPACE = uuid.UUID("15440f13-a923-4a4c-8791-637914777e5e")
 logger = logging.getLogger(__name__)
@@ -109,6 +111,7 @@ class T3ApplicationAdapter:
         poll_interval: float = 0.25,
         shared_filesystem_root: str | Path | None = None,
         event_buffer_max_pending: int = 1024,
+        project_live_activities: bool = False,
     ) -> None:
         self._application_instance_id = application_instance_id
         self._client = client
@@ -116,11 +119,13 @@ class T3ApplicationAdapter:
         self._interaction_mode = interaction_mode
         self._poll_interval = poll_interval
         self._shared_filesystem_root = configure_shared_filesystem_root(shared_filesystem_root)
+        self._project_live_activities = project_live_activities
         self._turn_baselines: dict[tuple[str, str], frozenset[str]] = {}
         self._events = EventBroadcaster[str, AgentEvent](max_pending=event_buffer_max_pending)
         self._poll_tasks: dict[str, asyncio.Task[None]] = {}
         self._send_locks: dict[str, asyncio.Lock] = {}
         self._seen_messages: dict[str, set[str]] = {}
+        self._seen_activities: dict[str, set[str]] = {}
         self._terminal_turns: dict[str, set[str]] = {}
         self._initialized_threads: set[str] = set()
         self._summary = ApplicationSummary(
@@ -719,6 +724,34 @@ class T3ApplicationAdapter:
                 ),
             )
 
+        seen_activities = self._seen_activities.setdefault(thread_id, set())
+        for activity in (
+            _object_list(thread.get("activities")) if self._project_live_activities else ()
+        ):
+            activity_id = str(activity.get("id") or "")
+            turn_id = str(activity.get("turnId") or "")
+            if (
+                not activity_id
+                or activity_id in seen_activities
+                or (only_turn_id is not None and turn_id != only_turn_id)
+            ):
+                continue
+            projected = _t3_activity_message(thread_ref, activity)
+            if projected is None:
+                continue
+            seen_activities.add(activity_id)
+            if initialize and self._turn_baselines.get((thread_id, turn_id)) is None:
+                continue
+            self._events.publish(
+                thread_id,
+                self._event(
+                    AgentEventType.MESSAGE_COMPLETED,
+                    thread_ref,
+                    turn_id or None,
+                    {"message": projected},
+                ),
+            )
+
         latest_turn = _optional_object(thread.get("latestTurn"))
         turn_id = (
             str(latest_turn.get("turnId") or latest_turn.get("id") or "")
@@ -948,70 +981,6 @@ def _turn_status(value: object) -> TurnStatus:
         "cancelled": TurnStatus.INTERRUPTED,
         "canceled": TurnStatus.INTERRUPTED,
     }.get(normalized, TurnStatus.UNKNOWN)
-
-
-def _t3_agent_message(
-    thread_ref: ThreadRef,
-    message: Mapping[str, object],
-) -> AgentMessage | None:
-    role_value = str(message.get("role") or "")
-    role = {
-        "user": MessageRole.USER,
-        "assistant": MessageRole.ASSISTANT,
-        "system": MessageRole.SYSTEM,
-    }.get(role_value)
-    text = str(message.get("text") or "").strip()
-    message_id = _message_id(message)
-    if role is None or not text or not message_id:
-        return None
-    return AgentMessage(
-        agent_item_id=message_id,
-        thread_ref=thread_ref,
-        role=role,
-        content=(TextContent(text, TextFormat.MARKDOWN),),
-        created_at=_parse_datetime(message.get("createdAt") or message.get("updatedAt")),
-        metadata={
-            "turn_id": str(message.get("turnId") or ""),
-            "streaming": bool(message.get("streaming")),
-            "native_application": "t3",
-        },
-    )
-
-
-def _t3_activity_message(
-    thread_ref: ThreadRef,
-    activity: Mapping[str, object],
-) -> AgentMessage | None:
-    kind = str(activity.get("kind") or "")
-    if kind in {
-        "approval.requested",
-        "approval.resolved",
-        "user-input.requested",
-        "user-input.resolved",
-    }:
-        return None
-    summary = str(activity.get("summary") or "").strip()
-    payload = _optional_object(activity.get("payload")) or {}
-    detail = str(
-        payload.get("detail") or payload.get("message") or payload.get("summary") or ""
-    ).strip()
-    text = "\n\n".join(part for part in (summary, detail) if part)
-    activity_id = str(activity.get("id") or "")
-    if not text or not activity_id:
-        return None
-    return AgentMessage(
-        agent_item_id=activity_id,
-        thread_ref=thread_ref,
-        role=MessageRole.ASSISTANT,
-        content=(TextContent(text, TextFormat.MARKDOWN),),
-        created_at=_parse_datetime(activity.get("createdAt")),
-        metadata={
-            "kind": kind,
-            "turn_id": str(activity.get("turnId") or ""),
-            "native_application": "t3",
-            "source": "activity",
-        },
-    )
 
 
 def _t3_turn_error(

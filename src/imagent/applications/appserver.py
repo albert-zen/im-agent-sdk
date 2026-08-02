@@ -179,6 +179,7 @@ class _AppServerApplicationAdapter:
         server_request_mapper: ServerRequestMapper | None = None,
         event_buffer_max_pending: int = 1024,
         steer_active_turn: bool = False,
+        project_native_activity_messages: bool = False,
     ) -> None:
         self._application_instance_id = application_instance_id
         self._client = client
@@ -186,6 +187,7 @@ class _AppServerApplicationAdapter:
         self._shared_filesystem_root = configure_shared_filesystem_root(shared_filesystem_root)
         self._events = EventBroadcaster[str, AgentEvent](max_pending=event_buffer_max_pending)
         self._steer_active_turn = steer_active_turn
+        self._project_native_activity_messages = project_native_activity_messages
         self._client.add_notification_handler(self._handle_notification)
         self._request_runtime = AppServerRequestRuntime(
             application_ref=ApplicationRef(application_instance_id),
@@ -512,12 +514,38 @@ class _AppServerApplicationAdapter:
         item: Mapping[str, object],
     ) -> AgentMessage | None:
         item_type = _normalized_item_type(item)
-        if "user" in item_type:
-            role = MessageRole.USER
-        elif "agent" in item_type or "assistant" in item_type:
-            role = MessageRole.ASSISTANT
-        else:
-            return None
+        if "user" not in item_type:
+            if (
+                "agent" not in item_type
+                and "assistant" not in item_type
+                and not self._project_native_activity_messages
+            ):
+                return None
+            message = _appserver_completed_item_message(
+                thread_ref,
+                item,
+                native_application=self._summary.kind,
+            )
+            if message is None:
+                return None
+            text = "\n".join(
+                content.text for content in message.content if isinstance(content, TextContent)
+            )
+            item_id = str(item.get("id") or item.get("itemId") or "")
+            if not item_id:
+                digest = hashlib.sha256(
+                    (f"{thread_ref.native_thread_id}\x1f{message.role.value}\x1f{text}").encode()
+                ).hexdigest()
+                item_id = f"imagent:appserver-item:{digest}"
+            return AgentMessage(
+                agent_item_id=item_id,
+                thread_ref=thread_ref,
+                role=message.role,
+                content=message.content,
+                created_at=_parse_datetime(item.get("createdAt") or item.get("updatedAt")),
+                metadata=message.metadata,
+            )
+        role = MessageRole.USER
         text = _item_text(item)
         if not text:
             return None
@@ -723,6 +751,29 @@ class _AppServerApplicationAdapter:
             params.get("turnId") or (turn.get("id") if isinstance(turn, dict) else "") or ""
         )
         thread_ref = self._thread_ref(thread_id)
+        live_message = (
+            _appserver_live_message(
+                thread_ref,
+                method=method,
+                params=params,
+                native_application=self._summary.kind,
+            )
+            if self._project_native_activity_messages
+            else None
+        )
+        if live_message is not None:
+            self._emit(
+                thread_id,
+                AgentEventType.MESSAGE_CREATED,
+                {"message": live_message},
+                event_id=(
+                    str(params.get("eventId") or params.get("event_id") or "")
+                    or f"{self._application_instance_id}:live:{uuid.uuid4()}"
+                ),
+                thread_ref=thread_ref,
+                turn_id=turn_id or None,
+            )
+            return
         if method == "item/agentMessage/delta":
             self._emit(
                 thread_id,
@@ -740,26 +791,21 @@ class _AppServerApplicationAdapter:
             item = params.get("item")
             if not isinstance(item, dict):
                 return
-            item_type = str(item.get("type") or "").replace("_", "").casefold()
-            if item_type != "agentmessage":
-                return
-            text = str(item.get("text") or "")
-            if not text:
-                return
-            item_id = str(item.get("id") or params.get("itemId") or "")
-            if not item_id:
-                item_id = f"live-{uuid.uuid4()}"
-            message = AgentMessage(
-                agent_item_id=item_id,
-                thread_ref=thread_ref,
-                role=MessageRole.ASSISTANT,
-                content=(TextContent(text, TextFormat.MARKDOWN),),
-                created_at=datetime.now(UTC),
-                metadata={
-                    "phase": str(item.get("phase") or ""),
-                    "native_method": method,
-                },
+            message = _appserver_completed_item_message(
+                thread_ref,
+                item,
+                fallback_item_id=str(params.get("itemId") or "") or None,
+                native_method=method,
+                native_application=self._summary.kind,
             )
+            if message is None:
+                return
+            if (
+                message.metadata.get("native_item_kind") != "agent_message"
+                and not self._project_native_activity_messages
+            ):
+                return
+            item_id = message.agent_item_id
             self._emit(
                 thread_id,
                 AgentEventType.MESSAGE_COMPLETED,
@@ -853,6 +899,7 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
         cwd: str,
         shared_filesystem_root: str | Path | None = None,
         event_buffer_max_pending: int = 1024,
+        project_native_activity_messages: bool = False,
     ) -> None:
         super().__init__(
             application_instance_id=application_instance_id,
@@ -862,6 +909,7 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
             cwd=cwd,
             shared_filesystem_root=shared_filesystem_root,
             event_buffer_max_pending=event_buffer_max_pending,
+            project_native_activity_messages=project_native_activity_messages,
         )
 
 
@@ -875,6 +923,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
         shared_filesystem_root: str | Path | None = None,
         event_buffer_max_pending: int = 1024,
         steer_active_turn: bool = True,
+        project_native_activity_messages: bool = False,
     ) -> None:
         super().__init__(
             application_instance_id=application_instance_id,
@@ -886,4 +935,137 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
             server_request_mapper=map_appserver_request,
             event_buffer_max_pending=event_buffer_max_pending,
             steer_active_turn=steer_active_turn,
+            project_native_activity_messages=project_native_activity_messages,
         )
+
+
+_PRESENTATION_TEXT_LIMIT = 8_000
+_PRESENTATION_LIST_LIMIT = 100
+
+
+def _appserver_completed_item_message(
+    thread_ref: ThreadRef,
+    item: Mapping[str, object],
+    *,
+    fallback_item_id: str | None = None,
+    native_method: str = "item/completed",
+    native_application: str = "appserver",
+) -> AgentMessage | None:
+    item_type = _normalized_item_type(item)
+    text = ""
+    kind = ""
+    if "agent" in item_type or "assistant" in item_type:
+        text = _item_text(item)
+        kind = "agent_message"
+    elif item_type == "commandexecution":
+        command = _bounded_text(item.get("command"))
+        if command:
+            text = f"Executed `{command}`"
+            kind = "command_execution"
+    elif item_type == "filechange":
+        changes = item.get("changes")
+        paths = (
+            tuple(
+                _bounded_text(change.get("path"), limit=1_000)
+                for change in changes[:_PRESENTATION_LIST_LIMIT]
+                if isinstance(change, Mapping) and change.get("path")
+            )
+            if isinstance(changes, list)
+            else ()
+        )
+        paths = tuple(path for path in paths if path)
+        if paths:
+            text = "\n".join(("Changed files:", *(f"- {path}" for path in paths)))
+            kind = "file_change"
+    if not text:
+        return None
+    item_id = str(item.get("id") or fallback_item_id or "") or f"live-{uuid.uuid4()}"
+    metadata = {
+        "native_application": native_application,
+        "native_method": native_method,
+        "native_item_kind": kind,
+    }
+    phase = str(item.get("phase") or "")
+    if phase or kind == "agent_message":
+        metadata["phase"] = phase
+    return AgentMessage(
+        agent_item_id=item_id,
+        thread_ref=thread_ref,
+        role=MessageRole.ASSISTANT,
+        content=(TextContent(text[:_PRESENTATION_TEXT_LIMIT], TextFormat.MARKDOWN),),
+        created_at=datetime.now(UTC),
+        metadata=metadata,
+    )
+
+
+def _appserver_live_message(
+    thread_ref: ThreadRef,
+    *,
+    method: str,
+    params: Mapping[str, object],
+    native_application: str = "appserver",
+) -> AgentMessage | None:
+    kind = ""
+    text = ""
+    if method == "turn/plan/updated":
+        kind = "plan_updated"
+        lines = ["[Plan update]"]
+        explanation = _bounded_text(params.get("explanation"))
+        if explanation:
+            lines.append(explanation)
+        plan = params.get("plan")
+        if isinstance(plan, list):
+            for entry in plan[:_PRESENTATION_LIST_LIMIT]:
+                if not isinstance(entry, Mapping):
+                    continue
+                step = _bounded_text(entry.get("step"), limit=1_000)
+                status = _bounded_text(entry.get("status"), limit=100)
+                if step and status:
+                    lines.append(f"[{status}] {step}")
+        text = "\n".join(lines)
+    elif method == "turn/diff/updated":
+        kind = "diff_updated"
+        lines = [_bounded_text(params.get("summary")) or "Diff updated."]
+        files = params.get("files")
+        if isinstance(files, list):
+            paths = tuple(
+                path
+                for value in files[:_PRESENTATION_LIST_LIMIT]
+                if (path := _bounded_text(value, limit=1_000))
+            )
+            if paths:
+                lines.extend(("Files:", *(f"- {path}" for path in paths)))
+        text = "\n".join(lines)
+    elif method == "thread/status/changed":
+        kind = "thread_status_changed"
+        status = params.get("status")
+        if isinstance(status, Mapping):
+            status = status.get("type") or status.get("status")
+        text = f"Thread status changed: {_bounded_text(status, limit=100) or 'updated'}."
+    elif method == "thread/compacted":
+        kind = "thread_compacted"
+        summary = _bounded_text(params.get("summary"))
+        text = "Thread compacted." if not summary else f"Thread compacted. {summary}"
+    elif method == "model/rerouted":
+        kind = "model_rerouted"
+        text = _bounded_text(params.get("message")) or "Model rerouted."
+    if not text:
+        return None
+    event_id = str(params.get("eventId") or params.get("event_id") or "")
+    return AgentMessage(
+        agent_item_id=event_id or f"live-{uuid.uuid4()}",
+        thread_ref=thread_ref,
+        role=MessageRole.SYSTEM,
+        content=(TextContent(text[:_PRESENTATION_TEXT_LIMIT], TextFormat.MARKDOWN),),
+        created_at=datetime.now(UTC),
+        metadata={
+            "native_application": native_application,
+            "native_method": method,
+            "native_item_kind": kind,
+            "live_only": True,
+        },
+    )
+
+
+def _bounded_text(value: object, *, limit: int = _PRESENTATION_TEXT_LIMIT) -> str:
+    return str(value or "").strip()[:limit]

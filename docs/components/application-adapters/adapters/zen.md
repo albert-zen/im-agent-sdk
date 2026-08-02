@@ -14,6 +14,12 @@ history, and retention.
   history/catch-up, interruption, and notifications.
 - every completed Agent item is preserved before the explicit terminal Turn
   event.
+- when Zen emits the shared App Server command/file or live plan/status shapes,
+  they use the same bounded completed/created message mapping; no Codex product
+  visibility default is inferred.
+
+That additional native activity projection is disabled by default and must be
+enabled explicitly by a consumer that owns its visibility policy.
 - because the shared transport has no native input-idempotency key, a lost
   `turn/start` acceptance response is reported as an unknown input outcome and
   must not be retried automatically.

@@ -86,6 +86,7 @@ from .diagnostics import (
     QueueDiagnosticFacts,
     QueueDiagnosticName,
     collect_application_diagnostics,
+    collect_channel_diagnostics,
     new_diagnostics_snapshot,
     summarize_projection_health,
 )
@@ -308,6 +309,7 @@ class ImAgentGateway:
         startup = self._startup_admission
         return new_diagnostics_snapshot(
             applications=collect_application_diagnostics(self._applications.values()),
+            channels=collect_channel_diagnostics(self._channels.values()),
             projections=summarize_projection_health(self._projection_runtime.list_health()),
             gateway=GatewayDiagnosticFacts(
                 accepting_inbound=self._accepting_inbound,

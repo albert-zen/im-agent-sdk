@@ -12,6 +12,8 @@ The public facts are:
 
 - per configured Application: stable instance/kind plus optional connection
   facts;
+- per configured Channel: stable instance/kind plus optional evidenced
+  lifecycle/connection facts;
 - per connection: lifecycle state, epoch, reconnect count, worker state, a
   bounded last-failure classification, and fixed-name queue facts;
 - projection aggregate: worker lifecycle/degradation, restart, delivery
@@ -33,9 +35,10 @@ port implementation.
 
 Codex and Zen share App Server connection facts. T3 is the second Application
 counterexample: its HTTP request/response client returns `connection=None`.
-The same rule applies to Channels: a future Channel provider must expose only
-facts evidenced by its native transport; this ADR does not silently promote a
-Codex transport model to Channel Core.
+The same rule applies to Channels. A Channel provider exposes only facts
+evidenced by its native transport; this does not silently promote a Codex
+transport model to Channel Core. Provider exceptions or mismatched configured
+identity degrade to identity-only facts rather than failing the snapshot.
 
 ## Snapshot semantics
 
@@ -43,6 +46,8 @@ Codex transport model to Channel Core.
 does no native or repository I/O. Its `generated_at` is observation time,
 `schema_version` describes the fact shape, and `authoritative=False` is
 permanent semantic guidance. Repeated reads do not mutate counters.
+Schema version 2 adds the optional per-Channel collection; version 1 contained
+Application, projection, and Gateway facts only.
 
 Projection details are aggregated before publication. Known SDK event gaps
 retain a stable code; every other string maps to `other`. App Server overflow

@@ -382,6 +382,7 @@ components:
       - src/imagent/applications/__init__.py
       - src/imagent/applications/t3.py
       - src/imagent/applications/t3_client.py
+      - src/imagent/applications/t3_messages.py
       - tests/test_t3_client.py
     docs:
       - docs/components/application-adapters/design.md

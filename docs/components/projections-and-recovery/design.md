@@ -68,6 +68,16 @@ after restart. Remembered/all-observer workers follow their durable routes.
 Application subscription/recovery exceptions enter bounded-backoff
 resubscription and update worker health.
 
+`message.created` may carry an adapter-normalized live-only `AgentMessage`.
+It uses the same route bootstrap barrier, per-route delivery serialization,
+idempotency, and Delivery Coordinator as completed output, but never advances
+the authoritative completion checkpoint. Its event-namespaced delivery ID
+cannot consume the later completed-item delivery identity. It is not replayed
+or reconstructed from SDK state after a gap. Namespaced `AgentMessage.metadata` survives both
+created and completed outbound projection so consumer presentation policy does
+not require a raw native notification side channel. The accepted boundary is
+[ADR 0015](../../decisions/0015-application-message-presentation-fidelity.md).
+
 ## Projection routes
 
 Input selection, native activation, and output projection are independent.

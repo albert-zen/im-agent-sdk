@@ -127,10 +127,11 @@ checkpoint under strict configured bounds; a missing checkpoint is explicit
 degraded health. Gateway never loads an SDK transcript.
 
 Gateway also exposes a synchronous diagnostics snapshot of its process-local
-infrastructure. The stable surface aggregates projection health and startup
-admission facts without Thread, Conversation, route, error-text, or message
-identities. It performs no repository/native I/O and remains explicitly
-non-authoritative; consumer health rendering and export are outside Gateway.
+infrastructure. The stable surface aggregates optional Application and Channel
+facts, projection health, and startup admission facts without Thread,
+Conversation, route, error-text, or message identities. It performs no
+repository/native I/O and remains explicitly non-authoritative; consumer health
+rendering and export are outside Gateway.
 
 During `start()`, Channel callbacks are admitted into one bounded,
 process-local FIFO shared by messages and typed operations until durable
