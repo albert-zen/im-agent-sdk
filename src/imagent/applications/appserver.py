@@ -77,7 +77,11 @@ from ..diagnostics import ApplicationDiagnosticFacts, ConnectionDiagnosticFacts
 from ..events import EventBroadcaster, EventStreamReset
 from .appserver_artifacts import (
     ApplicationArtifactMaterialization,
+    ApplicationArtifactMaterializationCancelled,
+    ApplicationArtifactMaterializationCapacityError,
+    ApplicationArtifactMaterializationError,
     ApplicationArtifactMaterializationFailed,
+    ApplicationArtifactMaterializationTimeout,
     AppServerArtifactMaterializationLimits,
     AppServerArtifactMaterializationRuntime,
     AppServerArtifactMaterializer,
@@ -147,6 +151,14 @@ from .presentation import (
     CodexLiveActivityMethod,
     CodexLiveActivityPresenter,
     CodexPlanStep,
+)
+
+_ARTIFACT_OBSERVATION_ERRORS = (
+    ApplicationArtifactMaterializationError,
+    ApplicationArtifactMaterializationTimeout,
+    ApplicationArtifactMaterializationCapacityError,
+    ApplicationArtifactMaterializationCancelled,
+    ApplicationArtifactMaterializationFailed,
 )
 
 
@@ -986,6 +998,13 @@ class _AppServerApplicationAdapter:
         del connection_epoch
         self._events.fail_all(EventStreamReset, discard_pending=False)
 
+    def _fail_artifact_observation(self, thread_id: str) -> None:
+        self._events.fail(
+            thread_id,
+            lambda: EventStreamReset("application_artifact_materialization_failed"),
+            discard_pending=False,
+        )
+
     async def _handle_notification(self, notification: dict) -> None:
         method = str(notification.get("method") or "")
         params = notification.get("params")
@@ -1086,24 +1105,28 @@ class _AppServerApplicationAdapter:
                         },
                     )
             if self._artifact_materializer is not None and "user" not in item_type:
-                facts = self._artifact_completed_item_facts(
-                    item,
-                    thread_ref=thread_ref,
-                    turn_id=turn_id or f"live-{uuid.uuid4()}",
-                    authoritative=False,
-                    default_message_id=(message.agent_item_id if message is not None else None),
-                )
-                identity = (thread_id, facts.turn_id, facts.item_id)
-                if identity in self._seen_live_artifact_identities:
-                    runtime = self._artifact_materialization_runtime
-                    if runtime is not None:
-                        runtime.record_live_duplicate()
+                try:
+                    facts = self._artifact_completed_item_facts(
+                        item,
+                        thread_ref=thread_ref,
+                        turn_id=turn_id or f"live-{uuid.uuid4()}",
+                        authoritative=False,
+                        default_message_id=(message.agent_item_id if message is not None else None),
+                    )
+                    identity = (thread_id, facts.turn_id, facts.item_id)
+                    if identity in self._seen_live_artifact_identities:
+                        runtime = self._artifact_materialization_runtime
+                        if runtime is not None:
+                            runtime.record_live_duplicate()
+                        return
+                    message = await self._materialize_completed_item(
+                        facts,
+                        default_message=message,
+                        created_at=_parse_datetime(item.get("createdAt") or item.get("updatedAt")),
+                    )
+                except _ARTIFACT_OBSERVATION_ERRORS:
+                    self._fail_artifact_observation(thread_id)
                     return
-                message = await self._materialize_completed_item(
-                    facts,
-                    default_message=message,
-                    created_at=_parse_datetime(item.get("createdAt") or item.get("updatedAt")),
-                )
                 self._remember_live_artifact_identity(identity)
             if message is None:
                 return
@@ -1130,24 +1153,28 @@ class _AppServerApplicationAdapter:
             }.get(status, AgentEventType.TURN_COMPLETED)
             terminal_id = turn_id or f"live-{uuid.uuid4()}"
             if self._artifact_materializer is not None:
-                terminal_status = AppServerTurnTerminalStatus(
-                    status if status in {"failed", "interrupted"} else "completed"
-                )
-                identity = (thread_id, terminal_id, f"terminal:{terminal_status.value}")
-                if identity in self._seen_live_artifact_identities:
-                    runtime = self._artifact_materialization_runtime
-                    if runtime is not None:
-                        runtime.record_live_duplicate()
+                try:
+                    terminal_status = AppServerTurnTerminalStatus(
+                        status if status in {"failed", "interrupted"} else "completed"
+                    )
+                    identity = (thread_id, terminal_id, f"terminal:{terminal_status.value}")
+                    if identity in self._seen_live_artifact_identities:
+                        runtime = self._artifact_materialization_runtime
+                        if runtime is not None:
+                            runtime.record_live_duplicate()
+                        return
+                    terminal_message = await self._materialize_turn_terminal(
+                        self._artifact_turn_terminal_facts(
+                            thread_ref=thread_ref,
+                            turn_id=terminal_id,
+                            authoritative=False,
+                            status=terminal_status,
+                        ),
+                        created_at=datetime.now(UTC),
+                    )
+                except _ARTIFACT_OBSERVATION_ERRORS:
+                    self._fail_artifact_observation(thread_id)
                     return
-                terminal_message = await self._materialize_turn_terminal(
-                    self._artifact_turn_terminal_facts(
-                        thread_ref=thread_ref,
-                        turn_id=terminal_id,
-                        authoritative=False,
-                        status=terminal_status,
-                    ),
-                    created_at=datetime.now(UTC),
-                )
                 if terminal_message is not None:
                     self._emit(
                         thread_id,

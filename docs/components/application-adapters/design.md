@@ -168,12 +168,16 @@ adapter's existing ordered notification/history lane, off the socket reader.
 Duplicate live completed-item identities are suppressed within a finite
 process-local window. Authoritative history deliberately may reinvoke the
 materializer; consumers must make candidate processing idempotent and return
-the same association. Failure terminates the current observation/history
-attempt before its materialized result is emitted, so normal gap/recovery
-semantics apply. Facts, materialized attachments, consumer state, and cleanup
-work are never stored or replayed by the SDK. O2 may release a clean-process
-consumer lease after delivery, while crash-safe cleanup remains a consumer
-ledger/startup sweep.
+the same association. A live facts, timeout, capacity, cancellation, output,
+or consumer failure explicitly terminates that Thread's current subscription
+with the fixed `application_artifact_materialization_failed` recovery gap,
+preserving already queued events before the gap and preventing later native
+notifications from crossing it. The adapter establishes this gap itself
+because the production App Server dispatcher contains handler exceptions.
+Authoritative history fails the read attempt instead. Facts, materialized
+attachments, consumer state, and cleanup work are never stored or replayed by
+the SDK. O2 may release a clean-process consumer lease after delivery, while
+crash-safe cleanup remains a consumer ledger/startup sweep.
 
 ## Events and recovery
 

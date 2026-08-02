@@ -49,8 +49,10 @@ Every adapter should prove:
   interrupted, or failed terminal event;
 - live duplicate suppression is finite; history reinvocation is replay-safe;
   timeout, cancellation/overrun, capacity, malformed output, and consumer
-  failure are explicit without retaining facts, paths, output, or exception
-  text, while the absent materializer preserves Codex and Zen behavior;
+  failure terminate the affected live Thread with a fixed gap even when the
+  production dispatcher contains the handler exception, without retaining
+  facts, paths, output, or exception text; later notifications cannot cross
+  that gap, while the absent materializer preserves Codex and Zen behavior;
 - Codex live activity presentation receives no raw payload/client, uses stable
   native event identity when present, emits `message.created`, remains ordered
   with surrounding notifications, deduplicates delivery by event identity,

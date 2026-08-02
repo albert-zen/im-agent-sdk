@@ -13,8 +13,9 @@ Required scenarios:
   terminal fallback, duplicate live item suppression, and authoritative
   history reproduction preserve stable candidate and message identity;
 - materializer failure/timeout/cancellation/capacity is explicit before output
-  emission and retains only fixed redacted diagnostics; absence preserves
-  exact Codex/Zen behavior;
+  emission, terminates the affected live Thread with the fixed recovery gap
+  despite production dispatch exception containment, and retains only fixed
+  redacted diagnostics; absence preserves exact Codex/Zen behavior;
 
 - no `LocalPath` acceptance without explicit shared-root trust;
 - relative and outside-root paths are rejected;

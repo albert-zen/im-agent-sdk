@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import unittest
 from datetime import UTC, datetime
+from typing import Any, cast
 
 from imagent.applications import (
     ApplicationArtifactMaterialization,
@@ -21,6 +22,7 @@ from imagent.applications.appserver_artifacts import (
     AppServerArtifactMaterializationRuntime,
     appserver_completed_item_facts,
 )
+from imagent.applications.appserver_client import AppServerClient as NativeAppServerClient
 from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AgentEventType,
@@ -40,6 +42,7 @@ from imagent.contracts import (
     ThreadRef,
 )
 from imagent.diagnostics import ApplicationArtifactMaterializationFailureCode
+from imagent.events import EventStreamReset
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
@@ -507,11 +510,24 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
             cwd="/workspace",
             artifact_materializer=Failing(),
         )
-        with self.assertRaisesRegex(RuntimeError, "artifact materializer failed") as first:
-            await client.notify(_artifact_notification())
+        first_events = application.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        await client.notify(_artifact_notification())
+        with self.assertRaises(EventStreamReset) as first:
+            await anext(first_events)
+        self.assertEqual(
+            first.exception.gap_code,
+            "application_artifact_materialization_failed",
+        )
         self.assertNotIn("secret", str(first.exception))
-        with self.assertRaisesRegex(RuntimeError, "artifact materializer failed"):
-            await client.notify(_artifact_notification())
+
+        retry_events = application.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        await client.notify(_artifact_notification())
+        with self.assertRaises(EventStreamReset) as retry:
+            await anext(retry_events)
+        self.assertEqual(
+            retry.exception.gap_code,
+            "application_artifact_materialization_failed",
+        )
 
         result = await application.execute(
             GetThreadHistory(
@@ -535,6 +551,67 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
             ApplicationArtifactMaterializationFailureCode.MATERIALIZER_FAILED,
         )
 
+    async def test_production_dispatch_contains_failure_but_cannot_cross_gap(self) -> None:
+        class FailingArtifactOnly:
+            def __init__(self) -> None:
+                self.invocations = 0
+
+            async def materialize_completed_item(self, facts):
+                self.invocations += 1
+                if facts.artifact_candidates:
+                    raise RuntimeError("consumer path /secret")
+                return None
+
+            async def materialize_turn_terminal(self, facts):
+                del facts
+                return None
+
+        client = NativeAppServerClient(
+            supervisor=object(),
+            client_info={"name": "sdk-test", "title": "SDK Test", "version": "0"},
+        )
+        materializer = FailingArtifactOnly()
+        application = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=cast(Any, client),
+            cwd="/workspace",
+            artifact_materializer=materializer,
+        )
+        events = application.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+
+        await client._dispatch_one(
+            {
+                "method": "item/agentMessage/delta",
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "delta": "before",
+                },
+            },
+            1,
+            queue_kind="notification",
+        )
+        await client._dispatch_one(
+            _artifact_notification(),
+            1,
+            queue_kind="notification",
+        )
+        await client._dispatch_one(
+            _answer_notification(),
+            1,
+            queue_kind="notification",
+        )
+
+        before = await anext(events)
+        self.assertEqual(before.type, AgentEventType.MESSAGE_DELTA)
+        with self.assertRaises(EventStreamReset) as gap:
+            await anext(events)
+        self.assertEqual(
+            gap.exception.gap_code,
+            "application_artifact_materialization_failed",
+        )
+        self.assertEqual(materializer.invocations, 2)
+
     async def test_invalid_native_identity_fails_before_consumer_with_fixed_diagnostics(
         self,
     ) -> None:
@@ -548,10 +625,16 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
         )
         notification = _artifact_notification()
         notification["params"]["threadId"] = "secret" * 100
-        with self.assertRaisesRegex(RuntimeError, "materialization facts are invalid") as raised:
-            await client.notify(notification)
+        events = application.subscribe_thread(ThreadRef("codex-main", "secret" * 100))
+        await client.notify(notification)
+        with self.assertRaises(EventStreamReset) as raised:
+            await anext(events)
 
         self.assertNotIn("secret", str(raised.exception))
+        self.assertEqual(
+            raised.exception.gap_code,
+            "application_artifact_materialization_failed",
+        )
         self.assertEqual(materializer.item_facts, [])
         facts = application.diagnostic_facts().artifact_materialization
         assert facts is not None

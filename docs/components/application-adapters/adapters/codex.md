@@ -76,9 +76,11 @@ native ordering/phase association, or one fixed-identity artifact-only message
 is emitted before a terminal Turn when the consumer returns a terminal
 fallback. Duplicate live item identities are suppressed only within a finite
 process-local window; history may reinvoke after reconnect/restart. Failure is
-an explicit observation/history failure and never creates a second native
-subscription or SDK spool. Without the materializer, item/event/history output
-is exactly the existing mapping.
+an explicit observation/history failure: live failure terminates the affected
+Thread subscription with the fixed artifact-materialization recovery gap even
+though native dispatch contains handler exceptions, and history failure ends
+the read. It never creates a second native subscription or SDK spool. Without
+the materializer, item/event/history output is exactly the existing mapping.
 
 ## Recovery guarantees
 
