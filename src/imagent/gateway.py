@@ -96,6 +96,8 @@ from .inbound_admission import (
     inbound_idempotency_identity,
     start_channel_with_admission,
 )
+from .inbound_content import InboundContentTransformer as InboundContentTransformer
+from .inbound_content import InboundContentTransformRuntime
 from .keyed_locks import KeyedLockRegistry
 from .proactive_delivery import (
     InMemoryDeliverySubmissionRepository,
@@ -140,6 +142,16 @@ class ImAgentGateway:
         )
         self._delivery_coordinator = delivery_coordinator or DeliveryCoordinator()
         self._controller = extensions.controller
+        self._inbound_content_transform_runtime = (
+            InboundContentTransformRuntime(
+                extensions.inbound_content_transformer,
+                timeout_seconds=limits.inbound_content_transform_timeout_seconds,
+                max_items=limits.inbound_content_transform_max_items,
+                max_concurrency=limits.inbound_content_transform_max_concurrency,
+            )
+            if extensions.inbound_content_transformer is not None
+            else None
+        )
         self._locks: dict[object, asyncio.Lock] = {}
         self._request_locks = KeyedLockRegistry()
         self._outbound_deliveries: dict[
@@ -262,6 +274,8 @@ class ImAgentGateway:
             await self._delivery_coordinator.close()
             for channel in reversed(started_channels):
                 await channel.stop()
+            if self._inbound_content_transform_runtime is not None:
+                await self._inbound_content_transform_runtime.close()
             for application in reversed(started_applications):
                 await application.stop()
             raise
@@ -273,6 +287,8 @@ class ImAgentGateway:
         await self._delivery_coordinator.close()
         for channel in reversed(tuple(self._channels.values())):
             await channel.stop()
+        if self._inbound_content_transform_runtime is not None:
+            await self._inbound_content_transform_runtime.close()
         for application in reversed(tuple(self._applications.values())):
             await application.stop()
 
@@ -303,6 +319,11 @@ class ImAgentGateway:
                     capacity=startup.capacity,
                     depth=startup.depth,
                     overflow_count=startup.overflow_count,
+                ),
+                inbound_content_transformer=(
+                    self._inbound_content_transform_runtime.diagnostic_facts()
+                    if self._inbound_content_transform_runtime is not None
+                    else None
                 ),
             ),
         )
@@ -768,6 +789,11 @@ class ImAgentGateway:
                             )
                         await self._deliver_outbound(output)
                     return
+            content = (
+                await self._inbound_content_transform_runtime.transform(message)
+                if self._inbound_content_transform_runtime is not None
+                else message.content
+            )
             binding = await self._bindings.get(message.conversation_ref)
             application = self._bound_application(binding)
             if binding is None or binding.application_ref is None:
@@ -845,7 +871,7 @@ class ImAgentGateway:
                 thread_ref,
                 AgentInput(
                     client_message_id=client_message_id,
-                    content=message.content,
+                    content=content,
                     sender=message.sender,
                 ),
                 conversation_ref=message.conversation_ref,

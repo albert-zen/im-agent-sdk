@@ -46,8 +46,9 @@ grow together:
   routes, request correlations, and delivery submissions;
 - immutable `GatewayLimits` holds every bounded capacity, recovery page/item
   limit, retry delay, and correlation retention value;
-- immutable `GatewayExtensions` holds the optional Controller and Request
-  Presenter and is the only group later Gateway-owned ADR 0015 seams extend.
+- immutable `GatewayExtensions` holds the optional Controller, Request
+  Presenter, and I1 inbound-content transformer and is the only group later
+  Gateway-owned ADR 0015 seams extend.
 
 Channels, Applications, projection policy, delivery authorization, and the
 shared Delivery Coordinator remain explicit top-level composition
@@ -82,7 +83,10 @@ Channel startup validation remain on their owning concrete adapters.
 3. A duplicate receives no lease and stops. An admitted Channel prepares media
    and hands one verified `InboundMessage` through the lease.
 4. An optional Controller may consume the input through typed actions.
-5. An optional I1 transformer may replace only unconsumed typed content.
+5. An optional I1 `InboundContentTransformer` may replace only unconsumed
+   typed content. Gateway awaits it under the configured finite lifetime and
+   validates a non-empty, bounded tuple of `TextContent` and
+   `AttachmentContent` before continuing.
 6. Unconsumed content resolves the current `ConversationBinding`.
 7. Gateway establishes or refreshes a `ThreadProjectionRoute`.
 8. It starts Thread observation before calling `send_input` with the default
@@ -169,6 +173,35 @@ failure cannot expose a temporary live-processing window before rollback.
 Application and Channel failures remain typed or explicitly reported. Gateway
 does not convert unknown delivery into success.
 
+I1 receives the original frozen `InboundMessage`, not a context bag or Gateway
+reference. Its return value becomes only `AgentInput.content`; Gateway still
+derives the binding, route, client message ID, sender, reply correlation, and
+default `prefer_active_turn` dispatch from the original envelope. A consumed
+Controller input and a durable duplicate do not invoke I1. Invalid output,
+exception, timeout, or cancellation happens before Application dispatch and
+uses the existing fenced pre-side-effect release path. A later reclaim or
+process restart can therefore invoke I1 again for the same stable inbound
+identity; transformer implementations must be replay-safe and cannot treat an
+invocation as an external side-effect or one-time signal. No transformed
+content or invocation result is persisted.
+
+I1 executes in the existing Channel inbound/admission task rather than a native
+socket callback, and is bounded by
+`GatewayLimits.inbound_content_transform_timeout_seconds` and
+`GatewayLimits.inbound_content_transform_max_items`, with active transformer
+tasks capped by `GatewayLimits.inbound_content_transform_max_concurrency`.
+Capacity exhaustion fails explicitly before dispatch. Gateway cancellation
+propagates into the transformer. Deadline cleanup gets one equally bounded
+cancellation grace; a transformer that still ignores cancellation cannot keep
+the Conversation lock or claim, is cancelled again, and its eventual result is
+discarded. Overrun tasks remain tracked against that finite capacity and get
+another bounded cancellation pass during Gateway shutdown. Its process-
+lifetime diagnostics contain only fixed invocation, success, failure, timeout,
+cancellation, cancellation-overrun, and capacity-rejection counters plus a
+fixed last-failure code; they retain no exception text, inbound identity,
+content, path, or return value. With no transformer, Gateway neither invokes
+nor times this position and all prior behavior is unchanged.
+
 On restart, Gateway rebuilds required Thread projection workers from persisted
 routes and reconciles from authoritative Application history/catch-up plus
 per-route completion checkpoints. New routes receive only a configured
@@ -179,7 +212,7 @@ degraded health. Gateway never loads an SDK transcript.
 Gateway also exposes a synchronous diagnostics snapshot of its process-local
 infrastructure. The stable surface aggregates configured Application and
 Channel identity/kind, optional bounded connection/queue facts, projection
-health, and startup admission facts without native resource, Thread,
+health, startup admission, and configured I1 execution facts without native resource, Thread,
 Conversation, route, error-text, or message identities. Configured registry
 identity wins over optional provider output, and an absent, raising, invalid,
 or mismatched provider degrades to identity-only facts. Collection performs no

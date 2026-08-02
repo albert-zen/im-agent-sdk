@@ -13,6 +13,12 @@
   identity, bounded lifetime, explicit cancellation, and fixed diagnostics;
 - inbound content transformation cannot change envelope, admission, binding,
   client-message identity, prefer-active-Turn dispatch, or correlation policy;
+- I1 accepts bounded text/image/file content, rejects non-tuple, empty,
+  unsupported, and oversized output, and releases its fenced claim on invalid
+  output, exception, timeout, or cancellation before any Application dispatch;
+- I1 is bypassed for Controller-consumed and durable-duplicate input, may run
+  again after a confirmed pre-dispatch reclaim/restart, and records only fixed
+  redacted process-lifetime diagnostics;
 - inbound failure presentation cannot reopen a pre-dispatch, unknown, or
   post-acceptance input claim;
 - destination presentation cannot change delivery identity/destination, and
