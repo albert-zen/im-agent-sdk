@@ -77,7 +77,13 @@ from .contracts import (
     validate_gateway_operation_result,
     validate_request_response,
 )
-from .controllers import ControllerActions, InboundController, RequestPresenter
+from .controllers import (
+    ControllerActions,
+    InboundContentAdapter,
+    InboundController,
+    RequestPresenter,
+)
+from .controllers.content import adapt_inbound_content
 from .delivery_coordination import DeliveryCoordinator
 from .delivery_planning import DeliveryPlanningError
 from .diagnostics import (
@@ -133,6 +139,7 @@ class ImAgentGateway:
         request_correlations: RequestCorrelationRepository | None = None,
         projection_policy: ProjectionPolicy = ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
         controller: InboundController | None = None,
+        content_adapter: InboundContentAdapter | None = None,
         request_presenter: RequestPresenter | None = None,
         baseline_history_limit: int = 3,
         recovery_history_page_size: int = 10,
@@ -157,6 +164,7 @@ class ImAgentGateway:
         self._request_correlations = request_correlations or InMemoryRequestCorrelationRepository()
         self._delivery_coordinator = delivery_coordinator or DeliveryCoordinator()
         self._controller = controller
+        self._content_adapter = content_adapter
         self._locks: dict[object, asyncio.Lock] = {}
         self._request_locks = KeyedLockRegistry()
         self._outbound_deliveries: dict[
@@ -782,6 +790,7 @@ class ImAgentGateway:
                             )
                         await self._deliver_outbound(output)
                     return
+            content = await adapt_inbound_content(self._content_adapter, message)
             binding = await self._bindings.get(message.conversation_ref)
             application = self._bound_application(binding)
             if binding is None or binding.application_ref is None:
@@ -859,7 +868,7 @@ class ImAgentGateway:
                 thread_ref,
                 AgentInput(
                     client_message_id=client_message_id,
-                    content=message.content,
+                    content=content,
                     sender=message.sender,
                 ),
                 conversation_ref=message.conversation_ref,

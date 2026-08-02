@@ -45,12 +45,14 @@ may import Gateway.
 3. A duplicate receives no lease and stops. An admitted Channel prepares media
    and hands one verified `InboundMessage` through the lease.
 4. An optional Controller may consume the input through typed actions.
-5. Unconsumed content resolves the current `ConversationBinding`.
-6. Gateway establishes or refreshes a `ThreadProjectionRoute`.
-7. It starts Thread observation before calling `send_input`.
-8. The Application emits authoritative user and Agent events.
-9. Projection resolves destinations at delivery time.
-10. Channel sends an `OutboundMessage`; Gateway records correlation outcome.
+5. An optional consumer adapter may replace only unconsumed content while the
+   verified envelope identity remains unchanged.
+6. Unconsumed content resolves the current `ConversationBinding`.
+7. Gateway establishes or refreshes a `ThreadProjectionRoute`.
+8. It starts Thread observation before calling `send_input`.
+9. The Application emits authoritative user and Agent events.
+10. Projection resolves destinations at delivery time.
+11. Channel sends an `OutboundMessage`; Gateway records correlation outcome.
 
 ## Proactive delivery flow
 

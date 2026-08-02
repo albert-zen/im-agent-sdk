@@ -11,6 +11,7 @@ operations used by non-text callers.
 Controllers owns:
 
 - the `InboundController` and `ControllerActions` UX seam;
+- the `InboundContentAdapter` type for consumer-owned content-only adaptation;
 - the SDK-provided common Slash grammar;
 - selection and command-flow presentation state;
 - default Markdown help, lists, history, catch-up, and error rendering.
@@ -43,6 +44,15 @@ is the command and its arguments. Trailing Channel-supplied or user-supplied
 context is not interpreted as control syntax. Channels therefore remain
 unaware of the optional Slash product behavior.
 
+After a Controller passes an input through, Gateway may call one configured
+`InboundContentAdapter`. The adapter receives the verified envelope but returns
+only replacement `Content`; it cannot rewrite message, sender, Conversation,
+reply, timestamp, admission, binding, or derived client-message identity. This
+is a consumer deployment seam for product-specific mappings such as converting
+a staged generic file into an explicit text manifest. It is not a second
+Channel normalizer or a source of common attachment semantics. Consumed
+Controller inputs never invoke it. The default is identity.
+
 The official Markdown Request Presenter renders typed approval/user-input
 requests without inventing policy. The optional Slash Controller maps an
 explicit Application instance plus native request ID and choice/answers to the
@@ -63,7 +73,8 @@ the same typed request only after it proves a secure-input capability.
 Controllers depend on Contracts, not Gateway implementation. Gateway supplies
 a locked `ControllerActions` implementation.
 
-Controller view caches are ephemeral UX state. They are not resource,
+Controller view caches and content-adapter behavior are ephemeral UX state.
+They are not resource,
 transcript, or binding authority and may be discarded.
 
 ## Failure
@@ -72,6 +83,10 @@ Unsupported capability, missing binding, stale reference, invalid arguments,
 and native failures are rendered from typed outcomes. A Controller must not
 silently approximate destructive operations or turn arbitrary chat text into
 unreviewed Core semantics.
+
+An adapter failure, empty result, non-tuple result, or unsupported content item
+fails before the normal pass-through binding/thread creation and Application
+dispatch, and releases the pre-side-effect inbound claim for an explicit retry.
 
 ## Change obligations
 
