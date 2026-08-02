@@ -112,6 +112,20 @@ def map_appserver_request(
     )
 
 
+def map_zen_appserver_request(
+    application_ref: ApplicationRef,
+    message: Mapping[str, object],
+) -> PendingAppServerRequest:
+    """Map only the interactive request surface evidenced by native Zen."""
+
+    method = str(message.get("method") or "")
+    if method != COMMAND_APPROVAL:
+        raise UnsupportedAppServerRequest(
+            f"unsupported Zen App Server request method: {method or '<missing>'}"
+        )
+    return map_appserver_request(application_ref, message)
+
+
 def build_appserver_response(
     pending: PendingAppServerRequest,
     response: RequestResponse,

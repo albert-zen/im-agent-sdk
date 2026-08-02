@@ -125,7 +125,7 @@ from .appserver_request_runtime import (
     AppServerRequestRuntime,
     ServerRequestMapper,
 )
-from .appserver_requests import map_appserver_request
+from .appserver_requests import map_appserver_request, map_zen_appserver_request
 
 
 class AppServerClient(Protocol):
@@ -861,6 +861,7 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
             client=client,
             cwd=cwd,
             shared_filesystem_root=shared_filesystem_root,
+            server_request_mapper=map_zen_appserver_request,
             event_buffer_max_pending=event_buffer_max_pending,
         )
 

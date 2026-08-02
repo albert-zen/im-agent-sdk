@@ -13,7 +13,9 @@ from imagent.applications.appserver_requests import (
     build_appserver_response,
     derive_appserver_request_ref,
     map_appserver_request,
+    map_zen_appserver_request,
 )
+from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AgentEventType,
     ApplicationOperationFailed,
@@ -21,9 +23,13 @@ from imagent.contracts import (
     ApprovalRequest,
     ApprovalResponse,
     ConversationRef,
+    ObserveThread,
     OperationErrorCode,
+    ProjectionPolicy,
     RequestResponded,
+    RequestResponseRouted,
     RespondRequest,
+    RespondToRequest,
     SupportLevel,
     TextContent,
     ThreadRef,
@@ -32,6 +38,10 @@ from imagent.contracts import (
 )
 from imagent.controllers import MarkdownRequestPresenter
 from imagent.events import EventStreamReset
+from imagent.gateway import ImAgentGateway
+from imagent.projections import InMemoryProjectionRouteRepository
+from imagent.request_correlations import InMemoryRequestCorrelationRepository
+from imagent.testing import FakeChannelAdapter
 
 
 class AppServerRequestMappingTests(unittest.TestCase):
@@ -72,6 +82,19 @@ class AppServerRequestMappingTests(unittest.TestCase):
             ),
             {"decision": amendment},
         )
+
+    def test_zen_mapper_rejects_unevidenced_appserver_request_shapes(self) -> None:
+        with self.assertRaisesRegex(
+            NotImplementedError,
+            "unsupported Zen App Server request method",
+        ):
+            map_zen_appserver_request(
+                ApplicationRef("zen-main"),
+                _server_request(
+                    method="item/tool/requestUserInput",
+                    params={"questions": []},
+                ),
+            )
 
     def test_user_input_is_explicitly_single_select_and_maps_option_labels(
         self,
@@ -333,6 +356,19 @@ class InteractiveClient:
             result = handler(previous)
             if asyncio.iscoroutine(result):
                 await result
+
+    async def read_thread(self, thread_id: str, *, include_turns: bool = False):
+        return {
+            "thread": {
+                "id": thread_id,
+                "cwd": "D:/repo",
+                "status": {"type": "idle"},
+                "turns": [] if include_turns else None,
+            }
+        }
+
+    async def list_thread_turns(self, _thread_id: str, **_params):
+        return {"data": [], "nextCursor": None}
 
 
 class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
@@ -643,7 +679,7 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIsInstance(result, RequestResponded)
 
-    async def test_zen_does_not_claim_unevidenced_codex_request_protocol(
+    async def test_zen_native_approval_round_trip_uses_evidenced_appserver_protocol(
         self,
     ) -> None:
         client = InteractiveClient()
@@ -654,9 +690,119 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIs(
             adapter.summary.capabilities.runtime.interactive_requests,
-            SupportLevel.UNSUPPORTED,
+            SupportLevel.NATIVE,
         )
-        self.assertEqual(client.server_request_handlers, [])
+        self.assertEqual(len(client.server_request_handlers), 1)
+        thread = ThreadRef("zen-main", "thread-1")
+        events = cast(Any, adapter.subscribe_thread(thread))
+        try:
+            opened = asyncio.create_task(anext(events))
+            await asyncio.sleep(0)
+            await client.emit_request(
+                _server_request(
+                    method="item/commandExecution/requestApproval",
+                    params={
+                        "command": "printf hello",
+                        "cwd": "D:/repo",
+                        "availableDecisions": ["accept", "decline", "cancel"],
+                    },
+                )
+            )
+            event = await opened
+            self.assertIs(event.type, AgentEventType.REQUEST_OPENED)
+            assert isinstance(event.request, ApprovalRequest)
+            self.assertEqual(event.request.thread_ref, thread)
+
+            result = await adapter.execute(
+                RespondRequest(
+                    operation_id="zen-respond-1",
+                    application_ref=adapter.summary.ref,
+                    request_ref=event.request.request_ref,
+                    response=ApprovalResponse("accept"),
+                    thread_ref=thread,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(result, RequestResponded)
+            self.assertEqual(client.replies, [(7, {"decision": "accept"}, 3)])
+
+            await client.emit_request(
+                _server_request(
+                    method="item/tool/requestUserInput",
+                    params={"questions": []},
+                    transport_request_id=8,
+                )
+            )
+            self.assertEqual(client.errors[0][1], -32601)
+        finally:
+            await events.aclose()
+
+    async def test_zen_approval_projects_and_responds_through_gateway(self) -> None:
+        client = InteractiveClient()
+        adapter = ZenApplicationAdapter(
+            application_instance_id="zen-gateway",
+            client=cast(Any, client),
+            cwd="D:/repo",
+        )
+        channel = FakeChannelAdapter("zen-channel")
+        correlations = InMemoryRequestCorrelationRepository()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[adapter],
+            bindings=InMemoryBindingRepository(),
+            projections=InMemoryProjectionRouteRepository(),
+            request_correlations=correlations,
+            request_presenter=MarkdownRequestPresenter(),
+            projection_policy=ProjectionPolicy.ALL_OBSERVERS,
+        )
+        conversation = ConversationRef("zen-channel", "conversation-1")
+        thread = ThreadRef("zen-gateway", "thread-1")
+        await gateway.start()
+        try:
+            observed = await gateway.execute_gateway(
+                ObserveThread(
+                    operation_id="observe-zen-thread",
+                    conversation_ref=conversation,
+                    actor="user-1",
+                    thread_ref=thread,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertEqual(observed.type.value, "thread.observe")
+
+            await client.emit_request(
+                _server_request(
+                    method="item/commandExecution/requestApproval",
+                    params={
+                        "command": "git status",
+                        "availableDecisions": ["accept", "decline"],
+                    },
+                )
+            )
+            request_ref = derive_appserver_request_ref(
+                adapter.summary.ref,
+                connection_epoch=3,
+                transport_request_id=7,
+            )
+            async with asyncio.timeout(1):
+                while not await correlations.list_request_correlations(request_ref=request_ref):
+                    await asyncio.sleep(0)
+            self.assertEqual(channel.sent[0].conversation_ref, conversation)
+
+            routed = await gateway.execute_gateway(
+                RespondToRequest(
+                    operation_id="respond-to-zen-request",
+                    conversation_ref=conversation,
+                    actor="user-1",
+                    request_ref=request_ref,
+                    response=ApprovalResponse("accept"),
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(routed, RequestResponseRouted)
+            self.assertEqual(client.replies, [(7, {"decision": "accept"}, 3)])
+        finally:
+            await gateway.stop()
 
     async def test_terminal_request_diagnostics_are_bounded(self) -> None:
         for request_id in range(300):

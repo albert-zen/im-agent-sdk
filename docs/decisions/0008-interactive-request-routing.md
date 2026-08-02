@@ -118,12 +118,13 @@ and transport tests. It covers command/file approvals, structured tool input,
 and permission-profile approval. The raw permission profile remains in the
 Codex adapter while a bounded human-readable summary is projected.
 
-Zen sharing the client transport is not evidence that Zen emits the Codex
-request methods or accepts their response shapes, so Zen does not advertise
-interactive requests. T3 likewise remains unsupported until a native response
-API is evidenced. The Issue #10 requirement for a second independent real
-Application adapter therefore remains open rather than being satisfied by
-shared client code.
+The IMZen integration supplies native Zen evidence that Zen emits the App
+Server command-approval method and accepts its decision payload. Zen therefore
+shares the typed App Server request runtime for that method while other request
+kinds remain explicitly unsupported. Zen remains a distinct Application
+adapter and authority. This does not promote Full Access, sandbox choice, or
+product approval UX into Core. T3 remains unsupported until its native
+response API is evidenced.
 
 ## Consequences
 

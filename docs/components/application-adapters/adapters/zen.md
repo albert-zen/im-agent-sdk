@@ -33,11 +33,14 @@ history. `event_buffer_max_pending` bounds each live subscriber and overflow
 enters that authoritative recovery path. No SDK transcript or synthetic
 sequence is created.
 
-The current Zen adapter reuses the App Server client transport, but repository
-evidence does not prove that Zen emits Codex request methods or accepts Codex
-response payloads. It therefore advertises interactive requests as
-unsupported. Shared transport code is not treated as a second independent
-native protocol proof.
+The IMZen integration provides native Zen evidence for command approval: Zen
+emits the App Server command-approval method and accepts its decision payload.
+The adapter therefore uses the shared typed App Server request runtime and
+advertises interactive requests as native. Other request methods remain
+unevidenced for Zen and are explicit protocol errors; approval policy and Full
+Access selection remain consumer/Zen policy rather than SDK policy. Zen still
+does not expose an authoritative pending-request snapshot, so reconnect makes
+transport-bound request handles stale instead of manufacturing recovery state.
 
 Zen receives the shared stable App Server diagnostic provider: connection
 state/epoch, reconnect count, worker state, bounded dispatch queues, and fixed
