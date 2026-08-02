@@ -65,6 +65,12 @@ typed inputs and never Gateway, repositories, a mutable context bag, or a
 generic stage discriminant. I1 is replay-safe before native dispatch; O2 is a
 best-effort process-local observation rather than a durable subscription.
 
+The Codex and T3 non-artifact A1 presenter protocols remain concrete
+Application-adapter configuration, not methods on `AgentApplicationAdapter`.
+Their native fact shapes differ, while both return the same bounded text-only
+presentation value. Zen and an adapter with no activity presenter remain valid
+without optional duck typing on the common Port.
+
 `ProjectionRouteRepository` owns explicit merge/advance and Turn-correlation
 operations because these are common Gateway projection state across
 Application and Channel implementations. It does not expose transcript or

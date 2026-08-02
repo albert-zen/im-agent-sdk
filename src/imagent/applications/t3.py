@@ -7,6 +7,7 @@ import logging
 import mimetypes
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
@@ -79,10 +80,25 @@ from ..contracts import (
     validate_application_operation_result,
 )
 from ..diagnostics import ApplicationDiagnosticFacts
-from ..events import EventBroadcaster
+from ..events import EventBroadcaster, EventStreamGap, EventStreamReset
+from .presentation import (
+    ApplicationPresentationCapacityError,
+    ApplicationPresentationLimits,
+    ApplicationPresentationRuntime,
+    T3ActivityFacts,
+    T3ActivityPresenter,
+)
 
 _ID_NAMESPACE = uuid.UUID("15440f13-a923-4a4c-8791-637914777e5e")
 logger = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class _T3PresentationState:
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    seen_activity_ids: set[str] = field(default_factory=set)
+    activity_cursor_id: str | None = None
+    pinned_by_poll: bool = False
 
 
 class T3Client(Protocol):
@@ -109,6 +125,8 @@ class T3ApplicationAdapter:
         poll_interval: float = 0.25,
         shared_filesystem_root: str | Path | None = None,
         event_buffer_max_pending: int = 1024,
+        activity_presenter: T3ActivityPresenter | None = None,
+        presentation_limits: ApplicationPresentationLimits = ApplicationPresentationLimits(),
     ) -> None:
         self._application_instance_id = application_instance_id
         self._client = client
@@ -116,10 +134,18 @@ class T3ApplicationAdapter:
         self._interaction_mode = interaction_mode
         self._poll_interval = poll_interval
         self._shared_filesystem_root = configure_shared_filesystem_root(shared_filesystem_root)
+        self._activity_presenter = activity_presenter
+        self._presentation_limits = presentation_limits
+        self._presentation_runtime = (
+            ApplicationPresentationRuntime(presentation_limits)
+            if activity_presenter is not None
+            else None
+        )
         self._turn_baselines: dict[tuple[str, str], frozenset[str]] = {}
         self._events = EventBroadcaster[str, AgentEvent](max_pending=event_buffer_max_pending)
         self._poll_tasks: dict[str, asyncio.Task[None]] = {}
         self._send_locks: dict[str, asyncio.Lock] = {}
+        self._presentation_states: dict[str, _T3PresentationState] = {}
         self._seen_messages: dict[str, set[str]] = {}
         self._terminal_turns: dict[str, set[str]] = {}
         self._initialized_threads: set[str] = set()
@@ -172,6 +198,11 @@ class T3ApplicationAdapter:
         return ApplicationDiagnosticFacts(
             application_instance_id=self._application_instance_id,
             kind=self._summary.kind,
+            presentation=(
+                self._presentation_runtime.diagnostic_facts()
+                if self._presentation_runtime is not None
+                else None
+            ),
         )
 
     async def start(self) -> None:
@@ -185,11 +216,16 @@ class T3ApplicationAdapter:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._poll_tasks.clear()
         self._send_locks.clear()
-        close = getattr(self._client, "aclose", None)
-        if callable(close):
-            result = close()
-            if inspect.isawaitable(result):
-                await result
+        self._presentation_states.clear()
+        try:
+            close = getattr(self._client, "aclose", None)
+            if callable(close):
+                result = close()
+                if inspect.isawaitable(result):
+                    await result
+        finally:
+            if self._presentation_runtime is not None:
+                await self._presentation_runtime.close()
 
     async def list_pending_requests(self) -> tuple[InteractiveRequest, ...]:
         raise NotImplementedError("T3 does not expose an interactive request response API")
@@ -350,7 +386,7 @@ class T3ApplicationAdapter:
             turn_id = str(latest_turn.get("turnId") or latest_turn.get("id") or "")
             if not turn_id:
                 raise RuntimeError("T3 latestTurn did not contain a turn id")
-            messages = self._t3_catchup_messages(
+            messages = await self._t3_catchup_messages(
                 thread_ref,
                 thread,
                 turn_id,
@@ -377,7 +413,7 @@ class T3ApplicationAdapter:
             self._require_own_thread(thread_ref)
             detail = await self._client.thread_detail(thread_ref.native_thread_id)
             thread = _object(detail.get("thread"), "thread")
-            turns = self._t3_history_entries(thread_ref, thread)
+            turns = await self._t3_history_entries(thread_ref, thread)
             end = max(0, len(turns) - ((operation.page - 1) * operation.limit))
             start = max(0, end - operation.limit)
             return ThreadHistoryRead(
@@ -432,7 +468,7 @@ class T3ApplicationAdapter:
             raise NotImplementedError(f"{operation.type.value} is unsupported by T3")
         raise NotImplementedError(f"{operation.type.value} is unsupported by T3")
 
-    def _t3_catchup_messages(
+    async def _t3_catchup_messages(
         self,
         thread_ref: ThreadRef,
         thread: Mapping[str, object],
@@ -459,7 +495,7 @@ class T3ApplicationAdapter:
         for activity in _object_list(thread.get("activities")):
             if str(activity.get("turnId") or "") != turn_id:
                 continue
-            projected = _t3_activity_message(thread_ref, activity)
+            projected = await self._t3_activity_message(thread_ref, activity)
             if projected is not None:
                 ordered.append(
                     (
@@ -472,7 +508,7 @@ class T3ApplicationAdapter:
         ordered.sort(key=lambda item: (item[0], item[1]))
         return tuple(item[2] for item in ordered)
 
-    def _t3_history_entries(
+    async def _t3_history_entries(
         self,
         thread_ref: ThreadRef,
         thread: Mapping[str, object],
@@ -515,7 +551,7 @@ class T3ApplicationAdapter:
                 ),
                 None,
             )
-            agent_messages = self._t3_catchup_messages(
+            agent_messages = await self._t3_catchup_messages(
                 thread_ref,
                 thread,
                 turn_id,
@@ -618,11 +654,12 @@ class T3ApplicationAdapter:
         if not turn_id:
             raise RuntimeError("T3 did not return the accepted turn id")
         self._turn_baselines[(thread_ref.native_thread_id, turn_id)] = baseline
-        self._publish_thread_state(
-            thread_ref,
-            thread,
-            only_turn_id=turn_id,
-        )
+        if self._activity_presenter is None:
+            await self._publish_thread_state(
+                thread_ref,
+                thread,
+                only_turn_id=turn_id,
+            )
         return AcceptedTurn(
             thread_ref=thread_ref,
             turn_id=turn_id,
@@ -655,72 +692,162 @@ class T3ApplicationAdapter:
 
     async def _poll_thread(self, thread_ref: ThreadRef) -> None:
         thread_id = thread_ref.native_thread_id
-        while self._events.subscriber_count(thread_id):
-            detail = await self._client.thread_detail(thread_ref.native_thread_id)
-            thread = _object(detail.get("thread"), "thread")
-            initialize = thread_id not in self._initialized_threads
-            self._publish_thread_state(
-                thread_ref,
-                thread,
-                initialize=initialize,
-            )
-            self._initialized_threads.add(thread_id)
-            await asyncio.sleep(self._poll_interval)
+        presentation_state = (
+            self._presentation_state(thread_id) if self._activity_presenter is not None else None
+        )
+        if presentation_state is not None:
+            presentation_state.pinned_by_poll = True
+        try:
+            while self._events.subscriber_count(thread_id):
+                detail = await self._client.thread_detail(thread_ref.native_thread_id)
+                thread = _object(detail.get("thread"), "thread")
+                initialize = thread_id not in self._initialized_threads
+                await self._publish_thread_state(
+                    thread_ref,
+                    thread,
+                    initialize=initialize,
+                    _presentation_state_override=presentation_state,
+                )
+                self._initialized_threads.add(thread_id)
+                await asyncio.sleep(self._poll_interval)
+        finally:
+            if presentation_state is not None:
+                presentation_state.pinned_by_poll = False
 
-    def _publish_thread_state(
+    async def _publish_thread_state(
         self,
         thread_ref: ThreadRef,
         thread: Mapping[str, object],
         *,
         only_turn_id: str | None = None,
         initialize: bool = False,
+        _presentation_state_override: _T3PresentationState | None = None,
+    ) -> None:
+        state = (
+            _presentation_state_override or self._presentation_state(thread_ref.native_thread_id)
+            if self._activity_presenter is not None
+            else _T3PresentationState()
+        )
+        async with state.lock:
+            await self._publish_thread_state_locked(
+                thread_ref,
+                thread,
+                presentation_state=state,
+                only_turn_id=only_turn_id,
+                initialize=initialize,
+            )
+
+    async def _publish_thread_state_locked(
+        self,
+        thread_ref: ThreadRef,
+        thread: Mapping[str, object],
+        *,
+        presentation_state: _T3PresentationState,
+        only_turn_id: str | None = None,
+        initialize: bool = False,
     ) -> None:
         thread_id = thread_ref.native_thread_id
         seen = self._seen_messages.setdefault(thread_id, set())
-        for message in _object_list(thread.get("messages")):
-            message_id = _message_id(message)
-            turn_id = str(message.get("turnId") or "")
-            if (
-                not message_id
-                or message_id in seen
-                or str(message.get("role") or "") != "assistant"
-                or (only_turn_id is not None and turn_id != only_turn_id)
-            ):
-                continue
-            baseline = self._turn_baselines.get((thread_id, turn_id))
-            if initialize and baseline is None:
+        messages = _object_list(thread.get("messages"))
+        if self._activity_presenter is None:
+            for message in messages:
+                message_id = _message_id(message)
+                turn_id = str(message.get("turnId") or "")
+                if not self._should_publish_t3_message(
+                    thread_id,
+                    message_id,
+                    turn_id,
+                    message,
+                    seen=seen,
+                    only_turn_id=only_turn_id,
+                    initialize=initialize,
+                ):
+                    continue
                 seen.add(message_id)
-                continue
-            if baseline is not None and message_id in baseline:
-                seen.add(message_id)
-                continue
-            seen.add(message_id)
-            self._events.publish(
-                thread_id,
-                self._event(
-                    AgentEventType.MESSAGE_COMPLETED,
-                    thread_ref,
-                    turn_id or None,
-                    {
-                        "message": AgentMessage(
-                            agent_item_id=message_id,
-                            thread_ref=thread_ref,
-                            role=MessageRole.ASSISTANT,
-                            content=(
-                                TextContent(
-                                    str(message.get("text") or ""),
-                                    TextFormat.MARKDOWN,
-                                ),
-                            ),
-                            created_at=_parse_datetime(message.get("createdAt")),
-                            metadata={
-                                "native_application": "t3",
-                                "streaming": bool(message.get("streaming")),
-                            },
-                        )
-                    },
-                ),
+                self._publish_t3_message(thread_ref, message, message_id, turn_id)
+
+        if self._activity_presenter is not None:
+            seen_activities = presentation_state.seen_activity_ids
+            all_activities = _object_list(thread.get("activities"))
+            activities = self._new_t3_activities(
+                all_activities,
+                presentation_state=presentation_state,
+                initialize=initialize,
             )
+            ordered: list[tuple[str, int, str, Mapping[str, object]]] = []
+            sequence = 0
+            for message in messages:
+                message_id = _message_id(message)
+                turn_id = str(message.get("turnId") or "")
+                if not self._should_publish_t3_message(
+                    thread_id,
+                    message_id,
+                    turn_id,
+                    message,
+                    seen=seen,
+                    only_turn_id=only_turn_id,
+                    initialize=initialize,
+                ):
+                    continue
+                ordered.append(
+                    (
+                        str(message.get("updatedAt") or message.get("createdAt") or ""),
+                        sequence,
+                        "message",
+                        message,
+                    )
+                )
+                sequence += 1
+            for activity in activities:
+                activity_id = str(activity.get("id") or "")
+                activity_turn_id = str(activity.get("turnId") or "")
+                if (
+                    not activity_id
+                    or activity_id in seen_activities
+                    or (only_turn_id is not None and activity_turn_id != only_turn_id)
+                ):
+                    continue
+                if initialize and self._turn_baselines.get((thread_id, activity_turn_id)) is None:
+                    seen_activities.add(activity_id)
+                    continue
+                ordered.append(
+                    (
+                        str(activity.get("createdAt") or ""),
+                        sequence,
+                        "activity",
+                        activity,
+                    )
+                )
+                sequence += 1
+            ordered.sort(key=lambda item: (item[0], item[1]))
+            for _, _, candidate_kind, candidate in ordered:
+                if candidate_kind == "message":
+                    message_id = _message_id(candidate)
+                    turn_id = str(candidate.get("turnId") or "")
+                    seen.add(message_id)
+                    self._publish_t3_message(thread_ref, candidate, message_id, turn_id)
+                    continue
+                activity_id = str(candidate.get("id") or "")
+                activity_turn_id = str(candidate.get("turnId") or "")
+                try:
+                    projected = await self._t3_activity_message(thread_ref, candidate)
+                except Exception:
+                    raise
+                seen_activities.add(activity_id)
+                if projected is not None:
+                    self._events.publish(
+                        thread_id,
+                        self._event(
+                            AgentEventType.MESSAGE_COMPLETED,
+                            thread_ref,
+                            activity_turn_id,
+                            {"message": projected},
+                        ),
+                    )
+            if all_activities:
+                final_activity_id = str(all_activities[-1].get("id") or "")
+                if final_activity_id:
+                    presentation_state.activity_cursor_id = final_activity_id
 
         latest_turn = _optional_object(thread.get("latestTurn"))
         turn_id = (
@@ -760,6 +887,156 @@ class T3ApplicationAdapter:
             ),
         )
 
+    def _presentation_state(self, thread_id: str) -> _T3PresentationState:
+        state = self._presentation_states.pop(thread_id, None)
+        if state is None:
+            if len(self._presentation_states) >= self._presentation_limits.max_seen_identities:
+                eviction_key = next(
+                    (
+                        key
+                        for key, candidate in self._presentation_states.items()
+                        if not candidate.lock.locked() and not candidate.pinned_by_poll
+                    ),
+                    None,
+                )
+                if eviction_key is None:
+                    raise ApplicationPresentationCapacityError(
+                        "T3 presentation Thread capacity is exhausted"
+                    )
+                self._presentation_states.pop(eviction_key)
+            state = _T3PresentationState()
+        self._presentation_states[thread_id] = state
+        return state
+
+    def _new_t3_activities(
+        self,
+        activities: tuple[Mapping[str, object], ...],
+        *,
+        presentation_state: _T3PresentationState,
+        initialize: bool,
+    ) -> tuple[Mapping[str, object], ...]:
+        if initialize:
+            presentation_state.seen_activity_ids.clear()
+            if activities:
+                final_id = str(activities[-1].get("id") or "")
+                presentation_state.activity_cursor_id = final_id or None
+            return ()
+        cursor_id = presentation_state.activity_cursor_id
+        if cursor_id is None:
+            candidates = activities
+        else:
+            cursor_index = next(
+                (
+                    index
+                    for index in range(len(activities) - 1, -1, -1)
+                    if str(activities[index].get("id") or "") == cursor_id
+                ),
+                None,
+            )
+            if cursor_index is None:
+                if not activities:
+                    return ()
+                raise EventStreamReset("application_event_poll_window_gap")
+            candidates = activities[cursor_index + 1 :]
+        if len(candidates) > self._presentation_limits.max_seen_identities:
+            raise EventStreamReset("application_event_poll_window_gap")
+        candidate_ids = {
+            activity_id for activity in candidates if (activity_id := str(activity.get("id") or ""))
+        }
+        presentation_state.seen_activity_ids.intersection_update(candidate_ids)
+        return candidates
+
+    def _should_publish_t3_message(
+        self,
+        thread_id: str,
+        message_id: str,
+        turn_id: str,
+        message: Mapping[str, object],
+        *,
+        seen: set[str],
+        only_turn_id: str | None,
+        initialize: bool,
+    ) -> bool:
+        if (
+            not message_id
+            or message_id in seen
+            or str(message.get("role") or "") != "assistant"
+            or (only_turn_id is not None and turn_id != only_turn_id)
+        ):
+            return False
+        baseline = self._turn_baselines.get((thread_id, turn_id))
+        if initialize and baseline is None:
+            seen.add(message_id)
+            return False
+        if baseline is not None and message_id in baseline:
+            seen.add(message_id)
+            return False
+        return True
+
+    def _publish_t3_message(
+        self,
+        thread_ref: ThreadRef,
+        message: Mapping[str, object],
+        message_id: str,
+        turn_id: str,
+    ) -> None:
+        self._events.publish(
+            thread_ref.native_thread_id,
+            self._event(
+                AgentEventType.MESSAGE_COMPLETED,
+                thread_ref,
+                turn_id or None,
+                {
+                    "message": AgentMessage(
+                        agent_item_id=message_id,
+                        thread_ref=thread_ref,
+                        role=MessageRole.ASSISTANT,
+                        content=(
+                            TextContent(
+                                str(message.get("text") or ""),
+                                TextFormat.MARKDOWN,
+                            ),
+                        ),
+                        created_at=_parse_datetime(message.get("createdAt")),
+                        metadata={
+                            "native_application": "t3",
+                            "streaming": bool(message.get("streaming")),
+                        },
+                    )
+                },
+            ),
+        )
+
+    async def _t3_activity_message(
+        self,
+        thread_ref: ThreadRef,
+        activity: Mapping[str, object],
+    ) -> AgentMessage | None:
+        if self._activity_presenter is None:
+            return _t3_activity_message(thread_ref, activity)
+        facts = _t3_activity_facts(thread_ref, activity)
+        if facts is None:
+            return None
+        runtime = self._presentation_runtime
+        if runtime is None:
+            raise RuntimeError("T3 activity presenter runtime is not configured")
+        presenter = self._activity_presenter
+        presentation = await runtime.invoke(lambda: presenter.present_activity(facts))
+        if presentation is None:
+            return None
+        return AgentMessage(
+            agent_item_id=f"imagent:t3-activity:{facts.activity_id}",
+            thread_ref=thread_ref,
+            role=MessageRole.ASSISTANT,
+            content=presentation.content,
+            created_at=facts.created_at,
+            metadata={
+                "kind": facts.kind,
+                "native_application": "t3",
+                "source": "activity",
+            },
+        )
+
     def _finish_poll_task(
         self,
         thread_id: str,
@@ -767,14 +1044,22 @@ class T3ApplicationAdapter:
     ) -> None:
         if self._poll_tasks.get(thread_id) is task:
             self._poll_tasks.pop(thread_id, None)
+        self._initialized_threads.discard(thread_id)
         if task.cancelled():
             return
         error = task.exception()
         if error is not None:
-            logger.exception(
-                "T3 thread polling failed",
-                exc_info=(type(error), error, error.__traceback__),
+            gap_code = (
+                error.gap_code
+                if isinstance(error, EventStreamGap)
+                else "application_event_poll_failed"
             )
+            self._events.fail(
+                thread_id,
+                lambda: EventStreamReset(gap_code),
+                discard_pending=False,
+            )
+            logger.error("T3 thread polling failed; subscription terminated for recovery")
 
     async def _find_project(
         self,
@@ -1013,6 +1298,49 @@ def _t3_activity_message(
             "source": "activity",
         },
     )
+
+
+def _t3_activity_facts(
+    thread_ref: ThreadRef,
+    activity: Mapping[str, object],
+) -> T3ActivityFacts | None:
+    native_kind = activity.get("kind")
+    kind = native_kind.strip() if isinstance(native_kind, str) else ""
+    if kind in {
+        "approval.requested",
+        "approval.resolved",
+        "user-input.requested",
+        "user-input.resolved",
+    }:
+        return None
+    native_activity_id = activity.get("id")
+    native_turn_id = activity.get("turnId")
+    activity_id = native_activity_id.strip() if isinstance(native_activity_id, str) else ""
+    turn_id = native_turn_id.strip() if isinstance(native_turn_id, str) else ""
+    created_at = _parse_optional_datetime(activity.get("createdAt"))
+    if not activity_id or not turn_id or not kind or created_at is None:
+        return None
+    payload = _optional_object(activity.get("payload")) or {}
+    summary = _bounded_activity_text(activity.get("summary"))
+    detail = _bounded_activity_text(
+        payload.get("detail") or payload.get("message") or payload.get("summary")
+    )
+    return T3ActivityFacts(
+        activity_id=activity_id,
+        thread_ref=thread_ref,
+        turn_id=turn_id,
+        kind=kind,
+        summary=summary,
+        detail=detail,
+        created_at=created_at,
+    )
+
+
+def _bounded_activity_text(value: object, *, limit: int = 8_000) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text[:limit] or None
 
 
 def _t3_turn_error(

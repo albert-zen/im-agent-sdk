@@ -26,6 +26,11 @@ The public facts are:
 - configured I2 inbound-failure presentation: the same fixed execution-count
   categories under its own typed facts, without exception, origin, rendered
   output, or delivery identity.
+- configured Application A1 presentation: per-adapter process-lifetime
+  invocation, success, omission, failure, timeout, cancellation, cancellation-
+  overrun, and capacity-rejection counts plus one fixed last-failure category;
+  facts/input/output, native item/event identity, and exception text are never
+  retained. An absent presenter exposes no fabricated facts.
 
 Every collection is bounded by configuration or a fixed vocabulary. Native
 resource IDs, route IDs, request IDs, message IDs, content, exception text,
@@ -58,7 +63,8 @@ exception text.
 does no native or repository I/O. Its `generated_at` is observation time,
 `schema_version` describes the fact shape, and `authoritative=False` is
 permanent semantic guidance. Repeated reads do not mutate counters.
-Schema version 4 adds optional I2 presenter execution facts; version 3 added
+Schema version 5 adds optional A1 presentation execution facts to Application
+facts. Schema version 4 added optional I2 presenter execution facts; version 3 added
 optional I1 transformer execution facts to the Gateway facts. Version 2 added
 the optional Channel collection while preserving the
 pre-Channel positional constructor order.

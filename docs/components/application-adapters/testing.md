@@ -40,6 +40,29 @@ Every adapter should prove:
 - an ADR 0015 A1 implementation receives bounded typed facts off the socket
   read path, preserves native item/Turn ordering, produces the same recoverable
   association in history, and leaves default adapters unchanged when absent;
+- Codex live activity presentation receives no raw payload/client, uses stable
+  native event identity when present, emits `message.created`, remains ordered
+  with surrounding notifications, deduplicates delivery by event identity,
+  and never advances a completion checkpoint;
+- T3 activity presentation uses a distinct typed fact shape, separate message
+  and activity identity domains, one ordered polling lane, and the same stable
+  association in live polling, catch-up, and history;
+- configured T3 input returns native acceptance before presenter work, live
+  message/activity candidates retain history ordering, and a polling presenter
+  failure produces an explicit recoverable gap rather than a stalled observer;
+- a missing T3 activity cursor or more unseen activities than the finite live
+  window produces a recovery gap before any later checkpoint can advance;
+- active T3 poll state cannot be evicted, capacity exhaustion is explicit, and
+  partial-attempt activity deduplication remains within the configured bound;
+- structured selected values and Codex diff path entries cannot cross the
+  typed facts;
+- A1 input/fact collections and text output are finite; timeout, cancellation,
+  cancellation overrun, capacity exhaustion, malformed output, reconnect/gap,
+  duplicate notification, terminal Turn, and shutdown remain explicit and
+  bounded without storing facts or rendered output;
+- absent presenters preserve exact Zen/T3/Codex event, history, polling, and
+  diagnostics behavior, and Zen does not gain Codex live mapping by sharing
+  the App Server transport;
 - honest replay, cursor, sequence, attachment, request, and unsupported
   capabilities.
 - request open/respond/resolve wire mapping from a native protocol fixture;

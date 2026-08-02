@@ -71,6 +71,10 @@ lifetime. The consumer validates/materializes into its configured namespace;
 O2 notification may assist clean-process lease release, while crash-safe
 cleanup remains a consumer ledger or startup sweep rather than SDK storage.
 
+The #48 non-artifact A1 presenters return text only and confer no attachment,
+path, URL, byte, spool, quota, or cleanup authority. Those concerns remain in
+the later #33 materialization slice.
+
 ## Change obligations
 
 Changes require attachment trust tests, concrete adapter media tests, and a

@@ -18,6 +18,9 @@ Required coverage:
 - configured I2 exposes only its fixed execution/cancellation/capacity facts;
   no exception text, origin/reply/delivery identity, or rendered output is
   retained, and an absent presenter exposes no fabricated I2 facts;
+- configured A1 exposes only fixed execution/omission/cancellation/capacity
+  facts on its owning Application adapter; native facts, IDs, rendered output,
+  and exception text are absent, and default adapters fabricate no A1 facts;
 - App Server ready/reconnect epoch and queue overflow transitions for both
   notification and server-request lanes;
 - queue depth never exceeds configured capacity in a returned snapshot;

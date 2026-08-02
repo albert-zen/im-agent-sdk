@@ -54,6 +54,11 @@ state/epoch, reconnect count, worker state, bounded dispatch queues, and fixed
 failure classifications. Native IDs, content, endpoints, paths, and exception
 text are excluded just as they are for Codex.
 
+Zen does not expose the Codex live-activity presenter merely because it shares
+the App Server transport. No independently evidenced Zen live activity shape
+is added in the non-artifact A1 slice, and default Zen events/history remain
+unchanged.
+
 ## Product boundary
 
 Zen-specific provider, model, runtime mode, workspace UI, tools, approval

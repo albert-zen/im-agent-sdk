@@ -46,6 +46,16 @@ class InboundFailurePresentationFailureCode(StrEnum):
     CAPACITY_EXHAUSTED = "capacity_exhausted"
 
 
+class ApplicationPresentationFailureCode(StrEnum):
+    """Fixed A1 failure categories without native or consumer-controlled detail."""
+
+    INVALID_OUTPUT = "invalid_output"
+    PRESENTER_FAILED = "presenter_failed"
+    TIMED_OUT = "timed_out"
+    CANCELLED = "cancelled"
+    CAPACITY_EXHAUSTED = "capacity_exhausted"
+
+
 class QueueDiagnosticName(StrEnum):
     """Fixed queue names keep consumer metric labels bounded."""
 
@@ -129,12 +139,62 @@ class ApplicationDiagnosticFacts:
     application_instance_id: str
     kind: str
     connection: ConnectionDiagnosticFacts | None = None
+    presentation: ApplicationPresentationDiagnosticFacts | None = None
 
     def __post_init__(self) -> None:
         if self.connection is not None and any(
             queue.name is QueueDiagnosticName.CHANNEL_INBOUND for queue in self.connection.queues
         ):
             raise ValueError("Channel inbound queue is not Application-scoped")
+        if self.presentation is not None and not isinstance(
+            self.presentation,
+            ApplicationPresentationDiagnosticFacts,
+        ):
+            raise TypeError("application presentation diagnostics must use the typed fact shape")
+
+
+@dataclass(frozen=True, slots=True)
+class ApplicationPresentationDiagnosticFacts:
+    """Redacted process-lifetime counters for configured A1 presentation."""
+
+    invocation_count: int = 0
+    success_count: int = 0
+    omission_count: int = 0
+    failure_count: int = 0
+    timeout_count: int = 0
+    cancellation_count: int = 0
+    cancellation_overrun_count: int = 0
+    capacity_rejection_count: int = 0
+    last_failure_code: ApplicationPresentationFailureCode | None = None
+
+    def __post_init__(self) -> None:
+        counts = (
+            self.invocation_count,
+            self.success_count,
+            self.omission_count,
+            self.failure_count,
+            self.timeout_count,
+            self.cancellation_count,
+            self.cancellation_overrun_count,
+            self.capacity_rejection_count,
+        )
+        if any(
+            not isinstance(count, int) or isinstance(count, bool) or count < 0 for count in counts
+        ):
+            raise TypeError("application presentation counts must be non-negative integers")
+        if self.success_count + self.omission_count + self.failure_count > self.invocation_count:
+            raise ValueError("application presentation outcomes cannot exceed invocations")
+        if self.timeout_count + self.cancellation_count > self.failure_count:
+            raise ValueError("application presentation failure counts are inconsistent")
+        if self.cancellation_overrun_count > self.timeout_count + self.cancellation_count:
+            raise ValueError("application presentation overruns exceed cancellations")
+        if self.capacity_rejection_count > self.failure_count:
+            raise ValueError("application presentation capacity rejections exceed failures")
+        if self.last_failure_code is not None and not isinstance(
+            self.last_failure_code,
+            ApplicationPresentationFailureCode,
+        ):
+            raise ValueError("application presentation failure code must use fixed vocabulary")
 
 
 @dataclass(frozen=True, slots=True)
@@ -273,7 +333,7 @@ class DiagnosticsSnapshot:
     projections: ProjectionDiagnosticFacts
     gateway: GatewayDiagnosticFacts
     generated_at: datetime
-    schema_version: int = 4
+    schema_version: int = 5
     authoritative: bool = False
     channels: tuple[ChannelDiagnosticFacts, ...] = ()
 
@@ -344,6 +404,8 @@ _KNOWN_RECOVERY_GAPS = frozenset(
     {
         "application_event_connection_reset",
         "application_event_fanout_overflow",
+        "application_event_poll_failed",
+        "application_event_poll_window_gap",
         "checkpoint_missing",
         "checkpoint_out_of_window",
         "projection_window_truncated",
