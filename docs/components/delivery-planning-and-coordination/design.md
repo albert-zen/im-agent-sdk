@@ -88,7 +88,10 @@ durable submission replay, completed projection recovery, and O1 suppression
 never entered a Coordinator attempt and therefore do not invoke O2.
 
 O2 receives an immutable bounded snapshot of the original destination message
-and exactly one typed receipt or bounded error. Notification uses a separate
+and exactly one typed receipt or bounded error. Its configured item and string
+budgets cover attachment identifiers/sources and receipt identifiers as well
+as message text; facts outside those budgets are omitted from the observer and
+reported only as a fixed diagnostic failure. Notification uses a separate
 finite task/lifetime runtime after the destination persistence attempt; the
 delivery caller, retry decision, Coordinator cleanup, and staged-resource
 cleanup never await observer completion. Capacity exhaustion, timeout,

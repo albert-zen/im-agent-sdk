@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 
 from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
+    AgentMessage,
+    AttachmentContent,
     ChannelCapabilities,
     ConversationDeliveryTarget,
     ConversationRef,
@@ -13,15 +15,20 @@ from imagent.contracts import (
     DeliveryPrincipal,
     DeliveryReceipt,
     DeliveryReceiptStatus,
+    LocalPath,
+    MessageRole,
     OutboundMessage,
     SupportLevel,
     TextContent,
+    ThreadProjectionRoute,
+    ThreadRef,
 )
 from imagent.delivery_coordination import DeliveryCoordinator, DeliveryCoordinatorConfig
 from imagent.delivery_outcomes import (
     DeliveryOutcome,
     DeliveryOutcomeContext,
     DeliveryOutcomeErrorCode,
+    DeliveryOutcomeObserverRuntime,
 )
 from imagent.diagnostics import DeliveryOutcomeObserverFailureCode
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
@@ -33,6 +40,14 @@ from imagent.proactive_delivery import (
     InMemoryDeliverySubmissionRepository,
     ScopedDeliveryAuthorizer,
 )
+from imagent.projections import (
+    InMemoryProjectionRouteRepository,
+    ProjectedAgentMessage,
+    deliver_projected_message,
+    derive_projection_delivery_id,
+    derive_projection_route_id,
+)
+from imagent.storage import InMemoryIdempotencyRepository
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 
@@ -390,6 +405,56 @@ class DeliveryOutcomeObserverTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(facts.last_failure_code, DeliveryOutcomeObserverFailureCode.TIMED_OUT)
         self.assertNotIn("observer-timeout", repr(facts))
 
+    async def test_attachment_and_receipt_string_facts_share_a_finite_budget(self) -> None:
+        observer = _Observer()
+        runtime = DeliveryOutcomeObserverRuntime(
+            observer,
+            timeout_seconds=1,
+            max_items=4,
+            max_text_characters=32,
+            max_concurrency=1,
+        )
+        runtime.start()
+        try:
+            runtime.notify(
+                OutboundMessage(
+                    delivery_id="d",
+                    conversation_ref=ConversationRef("c", "v"),
+                    content=(
+                        AttachmentContent(
+                            attachment_id="a",
+                            media_type="m",
+                            source=LocalPath("/" + "x" * 64),
+                        ),
+                    ),
+                    created_at=datetime(2026, 8, 3, tzinfo=UTC),
+                ),
+                receipt=DeliveryReceipt(status=DeliveryReceiptStatus.ACCEPTED_BY_PLATFORM),
+            )
+            runtime.notify(
+                OutboundMessage(
+                    delivery_id="d",
+                    conversation_ref=ConversationRef("c", "v"),
+                    content=(TextContent("x"),),
+                    created_at=datetime(2026, 8, 3, tzinfo=UTC),
+                ),
+                receipt=DeliveryReceipt(
+                    status=DeliveryReceiptStatus.ACCEPTED_BY_PLATFORM,
+                    native_message_id="n" * 64,
+                ),
+            )
+        finally:
+            await runtime.close()
+
+        self.assertEqual(observer.calls, [])
+        facts = runtime.diagnostic_facts()
+        self.assertEqual(facts.notification_count, 2)
+        self.assertEqual(facts.failure_count, 2)
+        self.assertEqual(
+            facts.last_failure_code,
+            DeliveryOutcomeObserverFailureCode.INVALID_FACTS,
+        )
+
     async def test_durable_replay_and_preflight_rejection_do_not_fabricate_attempts(self) -> None:
         observer = _Observer()
         submissions = InMemoryDeliverySubmissionRepository()
@@ -412,6 +477,70 @@ class DeliveryOutcomeObserverTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await gateway.stop()
 
+        self.assertEqual(len(observer.calls), 1)
+
+    async def test_completed_projection_recovery_converges_without_reobserving(self) -> None:
+        observer = _Observer()
+        projections = InMemoryProjectionRouteRepository()
+        idempotency = InMemoryIdempotencyRepository()
+        gateway = ImAgentGateway(
+            channels=[_ReceiptChannel()],
+            applications=[FakeAgentApplicationAdapter()],
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+                projections=projections,
+                idempotency=idempotency,
+            ),
+            extensions=GatewayExtensions(delivery_outcome_observer=observer),
+        )
+        thread = ThreadRef("fake-agent", "thread-recovery")
+        route = ThreadProjectionRoute(
+            route_id=derive_projection_route_id(thread, self.conversation),
+            thread_ref=thread,
+            conversation_ref=self.conversation,
+        )
+        route = await projections.put_projection_route(route)
+        projected = ProjectedAgentMessage(
+            message=AgentMessage(
+                agent_item_id="agent-item-recovery",
+                thread_ref=thread,
+                role=MessageRole.ASSISTANT,
+                content=(TextContent("recover"),),
+                created_at=datetime(2026, 8, 3, tzinfo=UTC),
+            ),
+            turn_id=None,
+            checkpoint=True,
+        )
+        outbound = OutboundMessage(
+            delivery_id=derive_projection_delivery_id(
+                route.conversation_ref,
+                route.thread_ref,
+                projected.message.agent_item_id,
+            ),
+            conversation_ref=route.conversation_ref,
+            content=(TextContent("recover"),),
+            created_at=projected.message.created_at,
+        )
+
+        await gateway.start()
+        try:
+            await gateway._deliver_outbound(
+                outbound,
+                OutboundPresentationContext(ProjectionPresentationOrigin.AUTHORITATIVE),
+            )
+            await _wait_until(lambda: len(observer.calls) == 1)
+            recovered = await deliver_projected_message(
+                projections,
+                route,
+                projected,
+                deliver_outbound=gateway._deliver_outbound,
+                authoritative=True,
+            )
+            await asyncio.sleep(0)
+        finally:
+            await gateway.stop()
+
+        self.assertEqual(recovered.checkpoint_agent_item_id, "agent-item-recovery")
         self.assertEqual(len(observer.calls), 1)
 
     async def test_absent_observer_preserves_delivery_and_diagnostics(self) -> None:

@@ -42,7 +42,9 @@ Coordinator tests prove:
 - O2 admission/lifetime/cancellation are finite, observer work begins only
   after Coordinator lane/capacity release, and failure cannot rewrite the
   receipt, persistence, retry, shutdown, or cleanup ordering; notification is
-  not durably replayed after restart;
+  not durably replayed after restart; attachment-source and receipt-identifier
+  strings share the finite facts budget, and completed projection recovery
+  converges its checkpoint without a second notification;
 - retry timing configuration rejects NaN and infinity.
 
 Projection integration tests must fill Coordinator capacity, then prove a

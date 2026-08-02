@@ -11,10 +11,13 @@ from typing import Protocol
 
 from .contracts import (
     AttachmentContent,
+    AttachmentHandle,
     DeliveryItemReceipt,
     DeliveryReceipt,
     DeliverySegmentReceipt,
+    LocalPath,
     OutboundMessage,
+    RemoteUrl,
     TextContent,
 )
 from .diagnostics import (
@@ -135,7 +138,15 @@ class DeliveryOutcomeObserverRuntime:
                 )
             )
             outcome = DeliveryOutcome(
-                receipt=_redacted_receipt(receipt) if receipt is not None else None,
+                receipt=(
+                    _bounded_receipt(
+                        receipt,
+                        max_items=self._max_items,
+                        max_text_characters=self._max_text_characters,
+                    )
+                    if receipt is not None
+                    else None
+                ),
                 error=error,
             )
         except BaseException:
@@ -247,10 +258,31 @@ def _immutable_message(
         raise TypeError("delivery outcome context requires OutboundMessage")
     if not isinstance(message.content, tuple) or len(message.content) > max_items:
         raise ValueError("delivery outcome context content is not bounded")
-    if sum(len(item.text) for item in message.content if isinstance(item, TextContent)) > (
-        max_text_characters
-    ):
-        raise ValueError("delivery outcome context text is not bounded")
+    strings = [
+        message.delivery_id,
+        message.conversation_ref.channel_instance_id,
+        message.conversation_ref.native_conversation_id,
+    ]
+    if message.reply_to is not None:
+        strings.append(message.reply_to)
+    for item in message.content:
+        if isinstance(item, TextContent):
+            strings.append(item.text)
+            continue
+        if not isinstance(item, AttachmentContent):
+            raise TypeError("delivery outcome context content must use common typed items")
+        strings.extend((item.attachment_id, item.media_type))
+        if item.filename is not None:
+            strings.append(item.filename)
+        if isinstance(item.source, LocalPath):
+            strings.append(item.source.path)
+        elif isinstance(item.source, RemoteUrl):
+            strings.append(item.source.url)
+        elif isinstance(item.source, AttachmentHandle):
+            strings.append(item.source.handle_id)
+        else:
+            raise TypeError("delivery outcome attachment source is invalid")
+    _require_bounded_strings(strings, max_characters=max_text_characters)
     content = tuple(
         replace(item, metadata=_bounded_metadata(item.metadata))
         if isinstance(item, AttachmentContent)
@@ -289,9 +321,44 @@ def _bounded_metadata(metadata: Mapping[str, object]) -> Mapping[str, object]:
     return MappingProxyType(copied)
 
 
-def _redacted_receipt(receipt: DeliveryReceipt) -> DeliveryReceipt:
+def _bounded_receipt(
+    receipt: DeliveryReceipt,
+    *,
+    max_items: int,
+    max_text_characters: int,
+) -> DeliveryReceipt:
     if not isinstance(receipt, DeliveryReceipt):
         raise TypeError("delivery outcome receipt must use the common contract")
+    if (
+        not isinstance(receipt.items, tuple)
+        or not isinstance(receipt.segments, tuple)
+        or len(receipt.items) > max_items
+        or len(receipt.segments) > max_items
+    ):
+        raise ValueError("delivery outcome receipt exceeds its item limit")
+    if not all(isinstance(item, DeliveryItemReceipt) for item in receipt.items):
+        raise TypeError("delivery outcome item receipt must use the common contract")
+    if not all(isinstance(segment, DeliverySegmentReceipt) for segment in receipt.segments):
+        raise TypeError("delivery outcome segment receipt must use the common contract")
+    if any(
+        not isinstance(segment.source_content_indexes, tuple)
+        or len(segment.source_content_indexes) > max_items
+        for segment in receipt.segments
+    ):
+        raise ValueError("delivery outcome segment receipt exceeds its source index limit")
+    strings: list[str] = []
+    if receipt.native_message_id is not None:
+        strings.append(receipt.native_message_id)
+    for item in receipt.items:
+        if item.attachment_id is not None:
+            strings.append(item.attachment_id)
+        if item.native_message_id is not None:
+            strings.append(item.native_message_id)
+    for segment in receipt.segments:
+        strings.append(segment.delivery_id)
+        if segment.native_message_id is not None:
+            strings.append(segment.native_message_id)
+    _require_bounded_strings(strings, max_characters=max_text_characters)
     return replace(
         receipt,
         detail=None,
@@ -304,6 +371,16 @@ def _redacted_receipt(receipt: DeliveryReceipt) -> DeliveryReceipt:
             for item in receipt.segments
         ),
     )
+
+
+def _require_bounded_strings(strings: list[str], *, max_characters: int) -> None:
+    total = 0
+    for value in strings:
+        if not isinstance(value, str):
+            raise TypeError("delivery outcome string facts must be typed")
+        total += len(value)
+        if total > max_characters:
+            raise ValueError("delivery outcome string facts exceed their configured limit")
 
 
 async def _cancel_and_join(task: asyncio.Task[None], *, timeout_seconds: float) -> bool:
