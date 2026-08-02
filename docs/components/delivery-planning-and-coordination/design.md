@@ -59,6 +59,25 @@ Gateway owns the composed Coordinator lifecycle. Stop cancels admitted work
 before Channel shutdown; a later clean Gateway start reopens the quiescent
 Coordinator rather than retaining stale lanes or capacity.
 
+For projection delivery only, the optional ADR 0015 O1 destination policy runs
+after the concrete route and stable outbound idempotency claim exist, but
+before this component plans the message. The policy receives no planner,
+Channel, repository, checkpoint, correlation, or retry authority. Gateway
+validates that any transformed result retains the fixed delivery, destination,
+reply, time, and existing attachment authority, and remains within configured
+item, text, and metadata bounds before calling the planner. Independent routes
+therefore make independent presentation decisions while still using the same
+planner and Coordinator as all other origins.
+
+An O1 suppression is not submitted to the Coordinator. Gateway completes the
+existing outbound claim first; only then may authoritative projection logic
+advance its checkpoint. Recovery from a completed claim bypasses O1 and
+converges that checkpoint. A pre-completion policy failure releases the owned
+claim because no Channel side effect has begun. Live-only presentation has the
+same stable event-scoped outbound idempotency but never advances a projection
+checkpoint. O1 tasks have finite concurrency and lifetime and do not run on an
+Application or Channel socket-read callback.
+
 An ADR 0015 O2 observer runs once only after one logical Coordinator attempt
 has produced its final aggregate receipt or bounded execution error; internal
 segment retries do not create observer calls. Observation is best-effort and

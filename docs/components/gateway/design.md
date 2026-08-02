@@ -47,8 +47,9 @@ grow together:
 - immutable `GatewayLimits` holds every bounded capacity, recovery page/item
   limit, retry delay, and correlation retention value;
 - immutable `GatewayExtensions` holds the optional Controller, Request
-  Presenter, I1 inbound-content transformer, and I2 inbound-failure presenter
-  and is the only group later Gateway-owned ADR 0015 seams extend.
+  Presenter, I1 inbound-content transformer, I2 inbound-failure presenter, and
+  O1 destination-presentation policy and is the only group later Gateway-owned
+  ADR 0015 seams extend.
 
 Channels, Applications, projection policy, delivery authorization, and the
 shared Delivery Coordinator remain explicit top-level composition
@@ -97,6 +98,26 @@ Channel startup validation remain on their owning concrete adapters.
 11. Projection resolves destinations at delivery time and may apply O1.
 12. Channel sends one coordinated logical `OutboundMessage`; O2 observes only
     the final typed outcome and cannot change it.
+
+O1 receives the fully routed immutable `OutboundMessage` and one bounded typed
+origin distinguishing authoritative, history-reproducible projection from
+live-only presentation. It runs only after Gateway acquires the stable
+destination-scoped outbound idempotency claim and before delivery planning.
+It may replace presentation content for that destination or suppress it, but
+cannot change the delivery ID, Conversation, reply target, creation time, or
+introduce attachment authority. Gateway revalidates its bounded content and
+metadata before planning. Request presentation, proactive delivery,
+Controller output, and Gateway error delivery do not invoke O1.
+
+Suppression completes the existing outbound claim before projection checkpoint
+compare-and-swap. A crash before completion may reevaluate the replay-safe
+policy; authoritative recovery after completion observes `already_completed`,
+bypasses O1, and converges the checkpoint. Live-only suppression completes its
+stable event-scoped claim but never advances a projection checkpoint. Policy
+failure, invalid output, timeout, capacity rejection, or cancellation known to
+precede Channel side effects releases only the matching owned claim and enters
+the existing projection recovery path. An absent policy is the exact identity
+behavior.
 
 ## Proactive delivery flow
 

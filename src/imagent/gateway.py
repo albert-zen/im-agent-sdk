@@ -102,6 +102,16 @@ from .inbound_failures import InboundFailurePhase as InboundFailurePhase
 from .inbound_failures import InboundFailurePresentationRuntime, handle_claimed_inbound
 from .inbound_failures import InboundFailurePresenter as InboundFailurePresenter
 from .keyed_locks import KeyedLockRegistry
+from .outbound_presentation import (
+    OutboundPresentationContext,
+    OutboundPresentationRuntime,
+)
+from .outbound_presentation import (
+    OutboundPresentationPolicy as OutboundPresentationPolicy,
+)
+from .outbound_presentation import (
+    ProjectionPresentationOrigin as ProjectionPresentationOrigin,
+)
 from .proactive_delivery import (
     InMemoryDeliverySubmissionRepository,
     ProactiveDeliveryService,
@@ -164,6 +174,17 @@ class ImAgentGateway:
                 max_concurrency=limits.inbound_failure_present_max_concurrency,
             )
             if extensions.inbound_failure_presenter is not None
+            else None
+        )
+        self._outbound_presentation_runtime = (
+            OutboundPresentationRuntime(
+                extensions.outbound_presentation,
+                timeout_seconds=limits.outbound_presentation_timeout_seconds,
+                max_items=limits.outbound_presentation_max_items,
+                max_text_characters=limits.outbound_presentation_max_text_characters,
+                max_concurrency=limits.outbound_presentation_max_concurrency,
+            )
+            if extensions.outbound_presentation is not None
             else None
         )
         self._locks: dict[object, asyncio.Lock] = {}
@@ -285,6 +306,8 @@ class ImAgentGateway:
                     )
             self._startup_admission.clear()
             await self._projection_runtime.stop()
+            if self._outbound_presentation_runtime is not None:
+                await self._outbound_presentation_runtime.close()
             await self._delivery_coordinator.close()
             for channel in reversed(started_channels):
                 await channel.stop()
@@ -300,6 +323,8 @@ class ImAgentGateway:
         self._accepting_inbound = False
         self._starting = False
         await self._projection_runtime.stop()
+        if self._outbound_presentation_runtime is not None:
+            await self._outbound_presentation_runtime.close()
         await self._delivery_coordinator.close()
         for channel in reversed(tuple(self._channels.values())):
             await channel.stop()
@@ -346,6 +371,11 @@ class ImAgentGateway:
                 inbound_failure_presenter=(
                     self._inbound_failure_presentation_runtime.diagnostic_facts()
                     if self._inbound_failure_presentation_runtime is not None
+                    else None
+                ),
+                outbound_presentation=(
+                    self._outbound_presentation_runtime.diagnostic_facts()
+                    if self._outbound_presentation_runtime is not None
                     else None
                 ),
             ),
@@ -941,6 +971,7 @@ class ImAgentGateway:
     async def _deliver_outbound(
         self,
         message: OutboundMessage,
+        presentation_context: OutboundPresentationContext | None = None,
         *,
         cancellable: bool = False,
     ) -> IdempotencyClaimStatus:
@@ -955,21 +986,35 @@ class ImAgentGateway:
                 else result
             )
         task = asyncio.create_task(
-            self._deliver_outbound_once(message, scope=scope),
+            self._deliver_outbound_once(
+                message,
+                scope=scope,
+                presentation_context=presentation_context,
+            ),
             name=f"imagent-outbound:{message.delivery_id}",
         )
         self._outbound_deliveries[key] = task
+        task.add_done_callback(partial(self._finish_outbound_delivery, key))
         try:
             return await task if cancellable else await asyncio.shield(task)
         finally:
-            if self._outbound_deliveries.get(key) is task:
-                self._outbound_deliveries.pop(key, None)
+            if task.done():
+                self._finish_outbound_delivery(key, task)
+
+    def _finish_outbound_delivery(
+        self,
+        key: tuple[str, str],
+        task: asyncio.Task[IdempotencyClaimStatus],
+    ) -> None:
+        if self._outbound_deliveries.get(key) is task:
+            self._outbound_deliveries.pop(key, None)
 
     async def _deliver_outbound_once(
         self,
         message: OutboundMessage,
         *,
         scope: str,
+        presentation_context: OutboundPresentationContext | None = None,
     ) -> IdempotencyClaimStatus:
         owner_token = uuid4().hex
         claim = await self._idempotency.claim(
@@ -979,6 +1024,36 @@ class ImAgentGateway:
         )
         if claim is not IdempotencyClaimStatus.ACQUIRED:
             return claim
+        if presentation_context is not None and self._outbound_presentation_runtime is not None:
+            try:
+                presented = await self._outbound_presentation_runtime.present(
+                    message,
+                    presentation_context,
+                )
+            except asyncio.CancelledError:
+                await self._idempotency.release(
+                    scope,
+                    message.delivery_id,
+                    owner_token=owner_token,
+                )
+                raise
+            except BaseException as error:
+                await self._idempotency.release(
+                    scope,
+                    message.delivery_id,
+                    owner_token=owner_token,
+                )
+                raise RetryableDeliveryError(
+                    "outbound presentation failed before Channel side effect"
+                ) from error
+            if presented is None:
+                await self._idempotency.complete(
+                    scope,
+                    message.delivery_id,
+                    owner_token=owner_token,
+                )
+                return IdempotencyClaimStatus.ACQUIRED
+            message = presented
         try:
             result = await self._delivery_service.deliver_internal(message)
         except (

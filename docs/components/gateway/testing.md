@@ -34,8 +34,14 @@
   exceeding its finite item or total-character bounds before Channel delivery;
 - cancellation before the native dispatch fence releases the claim, while
   cancellation after the fence preserves `side_effect_started` across restart;
-- destination presentation cannot change delivery identity/destination, and
-  durable suppression has explicit completion-checkpoint behavior;
+- destination presentation is projection-only, receives a bounded typed
+  authoritative/live-only origin, cannot change delivery, destination, reply,
+  time, or attachment authority, and transformed output is bounded and
+  revalidated before planning;
+- per-destination O1 decisions are independent; durable suppression completes
+  outbound idempotency before checkpoint CAS, completed recovery bypasses O1,
+  live-only suppression never checkpoints, and pre-side-effect failures
+  release only the matching owned claim;
 - a post-outcome observer runs once per logical attempt rather than per segment
   and cannot rewrite a receipt or cleanup ordering;
 - no extension callback runs on a Channel/Application socket read path or

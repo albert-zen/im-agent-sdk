@@ -21,6 +21,10 @@ Required coverage:
 - configured A1 exposes only fixed execution/omission/cancellation/capacity
   facts on its owning Application adapter; native facts, IDs, rendered output,
   and exception text are absent, and default adapters fabricate no A1 facts;
+- configured O1 exposes only fixed invocation/delivery/suppression/failure,
+  timeout, cancellation-overrun, and capacity facts; message, destination,
+  policy output, and exception text are absent, and an absent policy exposes no
+  fabricated O1 facts;
 - App Server ready/reconnect epoch and queue overflow transitions for both
   notification and server-request lanes;
 - queue depth never exceeds configured capacity in a returned snapshot;

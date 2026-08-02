@@ -44,6 +44,14 @@ Projection integration tests must fill Coordinator capacity, then prove a
 retryable projection is re-admitted through bounded recovery, reaches its
 checkpoint after capacity is released, and is never sticky-blocked as a
 permanent Channel failure.
+O1 integration additionally proves independent per-destination transformation
+and suppression, bounded/typed output revalidation before planning, unchanged
+behavior when absent, and no invocation for request, proactive, Controller, or
+Gateway-error delivery. Crash windows cover reevaluation before suppression
+claim completion and authoritative checkpoint convergence without reinvocation
+after completion. Exceptions, timeout, capacity rejection, and cancellation
+release only a claim known to precede Channel effects; live-only output never
+advances a checkpoint. Diagnostics retain only fixed categories and counters.
 Interactive request integration must separately prove that a consumed
 `REQUEST_OPENED` survives transient capacity pressure and creates its route
 correlation without relying on pending-request snapshots. It must also cover

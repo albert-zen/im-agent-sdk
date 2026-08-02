@@ -46,6 +46,7 @@ from imagent.contracts import (
 from imagent.controllers import ControllerActions
 from imagent.delivery_coordination import DeliveryCoordinator, DeliveryCoordinatorConfig
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.outbound_presentation import OutboundPresentationContext
 from imagent.projection_runtime import TurnAcceptanceBufferOverflow
 from imagent.projections import (
     InMemoryProjectionRouteRepository,
@@ -66,11 +67,16 @@ class CapturingOutboundGateway(ImAgentGateway):
     async def _deliver_outbound(
         self,
         message: OutboundMessage,
+        presentation_context: OutboundPresentationContext | None = None,
         *,
         cancellable: bool = False,
     ) -> IdempotencyClaimStatus:
         self.logical_outbound.append(message)
-        return await super()._deliver_outbound(message, cancellable=cancellable)
+        return await super()._deliver_outbound(
+            message,
+            presentation_context,
+            cancellable=cancellable,
+        )
 
 
 class OversizedMetadataProbe(Mapping[str, object]):
