@@ -121,6 +121,12 @@ delivery. Persistence still applies the same fenced owner-token transition;
 the presenter cannot mutate or release the record. Without I2, proven
 pre-dispatch failure retains the ordinary explicit-release behavior.
 
+I2 error presentation uses the ordinary outbound-idempotency namespace with a
+stable Gateway-derived delivery identity. Only that existing bridge delivery
+record is persisted; no exception, rendered content, failure transcript,
+durable presentation job, spool, or outbox is added. The presenter cannot
+select a claim transition or inspect persistence.
+
 Every acquired lease carries an opaque owner token. Reclaim replaces the
 token, and `refresh`, `mark_side_effect_started`, `complete`, and `release`
 compare it atomically. Refresh updates only the timestamp of the caller's

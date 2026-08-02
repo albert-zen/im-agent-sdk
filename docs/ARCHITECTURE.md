@@ -28,6 +28,11 @@ verified, Controller-unconsumed `InboundMessage`; the verified envelope and
 all routing, admission, continuation, dispatch, and correlation decisions stay
 inside Gateway.
 
+The optional I2 inbound-failure presenter is a separate Gateway-owned,
+consumer-implemented typed protocol. It receives only a fixed bounded failure
+phase plus Gateway-fixed Conversation, reply, and delivery identities; it
+never receives the exception, claim, repositories, or dispatch authority.
+
 IM is another access surface over the native Agent Application. It is not a
 separate Agent state tier.
 
@@ -97,6 +102,11 @@ I1 runs only after that lease is refreshed and the optional Controller has
 declined the input. Its result is process-local and is never persisted: a
 confirmed pre-dispatch release or restart may invoke it again for the same
 stable inbound identity, so consumer implementations must be replay-safe.
+With I2 configured, a known pre-acceptance failure is completed before stable
+error presentation. An unknown dispatch outcome stays `side_effect_started`
+and a post-acceptance failure stays terminal. Presenter or Channel failure
+cannot reopen any of those claims. Without I2, the prior pre-dispatch release-
+and-raise behavior is unchanged.
 
 ## Input selection and output routing
 

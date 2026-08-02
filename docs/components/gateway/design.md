@@ -47,8 +47,8 @@ grow together:
 - immutable `GatewayLimits` holds every bounded capacity, recovery page/item
   limit, retry delay, and correlation retention value;
 - immutable `GatewayExtensions` holds the optional Controller, Request
-  Presenter, and I1 inbound-content transformer and is the only group later
-  Gateway-owned ADR 0015 seams extend.
+  Presenter, I1 inbound-content transformer, and I2 inbound-failure presenter
+  and is the only group later Gateway-owned ADR 0015 seams extend.
 
 Channels, Applications, projection policy, delivery authorization, and the
 shared Delivery Coordinator remain explicit top-level composition
@@ -172,6 +172,39 @@ failure cannot expose a temporary live-processing window before rollback.
 
 Application and Channel failures remain typed or explicitly reported. Gateway
 does not convert unknown delivery into success.
+
+I2 receives `InboundFailurePhase` plus the original Conversation and reply
+identity and a Gateway-derived stable delivery ID. It receives no exception
+object, message content, free-form error text, claim handle, repository, or
+dispatch callback. It returns one typed `OutboundMessage`; Gateway rejects a
+changed Conversation, reply, or delivery identity before Channel side effects
+and sends valid output through the common Coordinator/outbound-idempotency
+path. Error wording, branding, retry guidance, and product UX remain consumer
+policy over the fixed phase vocabulary.
+
+Claim ordering is phase-specific. For `pre_acceptance`, configuring I2 makes
+the failure terminal: Gateway completes the fenced claim before invoking the
+presenter. Without I2 it retains the existing release-and-raise behavior. For
+`outcome_unknown`, the pre-dispatch hook has already made the claim sticky as
+`side_effect_started`; I2 does not complete or release it. For
+`post_acceptance`, Gateway completes the claim before presentation as it did
+before I2. Presenter validation, timeout, capacity, cancellation, or Channel
+delivery failure is propagated but never changes these transitions or grants
+permission for native input. Cancellation of the original pre-acceptance work
+remains cancellation: Gateway releases the matching fenced claim and does not
+invent user-visible failure delivery.
+
+I2 presenter rendering is async and bounded by
+`GatewayLimits.inbound_failure_present_timeout_seconds` and
+`GatewayLimits.inbound_failure_present_max_concurrency`. Active render tasks,
+including cancellation overruns, retain finite capacity and receive bounded
+shutdown cleanup. Fixed process-lifetime diagnostics count invocations,
+success, failure, timeout, cancellation, cancellation overrun, and capacity
+rejection without retaining exception text, identities, content, output, or
+paths. Stable outbound idempotency handles duplicate presentation attempts;
+the SDK adds no error transcript, durable presentation job, spool, or outbox.
+With no presenter, no I2 task or diagnostics are fabricated and all prior
+behavior is unchanged.
 
 I1 receives the original frozen `InboundMessage`, not a context bag or Gateway
 reference. Its return value becomes only `AgentInput.content`; Gateway still
