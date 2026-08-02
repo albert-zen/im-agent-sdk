@@ -3,8 +3,11 @@ from __future__ import annotations
 import asyncio
 import json
 import unittest
+from datetime import UTC, datetime
+from typing import Any, cast
 from unittest.mock import patch
 
+from imagent.applications import ZenApplicationAdapter
 from imagent.applications.appserver_client import (
     APP_SERVER_DISPATCH_POSITION_KEY,
     AppServerClient,
@@ -15,7 +18,11 @@ from imagent.applications.appserver_client.supervisor import (
     AppServerSupervisor,
     MissingAppServerDependencyError,
 )
-from imagent.contracts import ApplicationInputOutcomeUnknown
+from imagent.contracts import (
+    ApplicationInputOutcomeUnknown,
+    CreateThread,
+    ThreadCreated,
+)
 from imagent.diagnostics import (
     ConnectionDiagnosticState,
     DiagnosticFailureCode,
@@ -150,6 +157,71 @@ def _client(
 
 
 class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_zen_thread_profiles_reach_native_wire_with_camel_case_policy(
+        self,
+    ) -> None:
+        process = _ScriptedProcess(
+            {
+                "initialize": [{"result": {"ok": True}}],
+                "thread/start": [
+                    {
+                        "result": {
+                            "thread": {
+                                "id": "thread-1",
+                                "cwd": "D:/repo",
+                                "status": "idle",
+                            }
+                        }
+                    }
+                ],
+            }
+        )
+        adapter = ZenApplicationAdapter(
+            application_instance_id="zen-main",
+            client=cast(Any, _client(process)),
+            cwd="D:/repo",
+            thread_start_options={
+                "sandbox": "danger-full-access",
+                "approval_policy": "never",
+            },
+        )
+        try:
+            default_result = await adapter.execute(
+                CreateThread(
+                    operation_id="create-zen-never",
+                    application_ref=adapter.summary.ref,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(default_result, ThreadCreated)
+            await adapter.create_thread_with_options(
+                thread_start_options={
+                    "sandbox": "danger-full-access",
+                    "approval_policy": "on-request",
+                }
+            )
+
+            requests = [
+                request for request in process.sent if request.get("method") == "thread/start"
+            ]
+            self.assertEqual(
+                [request["params"] for request in requests],
+                [
+                    {
+                        "cwd": "D:/repo",
+                        "sandbox": "danger-full-access",
+                        "approvalPolicy": "never",
+                    },
+                    {
+                        "cwd": "D:/repo",
+                        "sandbox": "danger-full-access",
+                        "approvalPolicy": "on-request",
+                    },
+                ],
+            )
+        finally:
+            await adapter.stop()
+
     async def test_turn_start_cancelled_after_dispatch_has_unknown_outcome(self) -> None:
         process = _ScriptedProcess({"initialize": [{"result": {"ok": True}}]})
         client = _client(process)

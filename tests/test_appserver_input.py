@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from copy import deepcopy
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -11,10 +13,12 @@ from imagent.contracts import (
     AgentInput,
     ApplicationInputOutcomeUnknown,
     AttachmentContent,
+    CreateThread,
     InputContinuationPreference,
     InputDisposition,
     LocalPath,
     TextContent,
+    ThreadCreated,
     ThreadRef,
     TurnReplyCorrelationPolicy,
 )
@@ -32,6 +36,7 @@ class _InputClient:
         self.notification_handlers = []
         self.read_calls: list[tuple[str, bool]] = []
         self.started: list[dict[str, object]] = []
+        self.created_threads: list[dict[str, object]] = []
         self.steered: list[dict[str, object]] = []
 
     def add_notification_handler(self, handler) -> None:
@@ -53,7 +58,7 @@ class _InputClient:
         return {"data": []}
 
     async def start_thread(self, **params: object) -> dict[str, object]:
-        del params
+        self.created_threads.append(deepcopy(dict(params)))
         return {"thread": {"id": "thread-created"}}
 
     async def resume_thread(self, **params: object) -> dict[str, object]:
@@ -188,6 +193,117 @@ class _ActiveTurnWithoutIdentityClient(_InputClient):
 
 
 class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
+    async def test_thread_creation_without_profile_preserves_cwd_only(self) -> None:
+        client = _InputClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            cwd="/repo",
+        )
+
+        result = await adapter.execute(
+            CreateThread(
+                operation_id="create-default-thread",
+                application_ref=adapter.summary.ref,
+                created_at=datetime.now(UTC),
+            )
+        )
+
+        self.assertIsInstance(result, ThreadCreated)
+        self.assertEqual(client.created_threads, [{"cwd": "/repo"}])
+
+    async def test_zen_thread_creation_forwards_an_isolated_deployment_profile(self) -> None:
+        class MutatingClient(_InputClient):
+            async def start_thread(self, **params: object) -> dict[str, object]:
+                self.created_threads.append(deepcopy(dict(params)))
+                native_nested = params.get("nativeNested")
+                assert isinstance(native_nested, dict)
+                native_nested["mode"] = "mutated-by-client"
+                return {"thread": {"id": "thread-created"}}
+
+        client = MutatingClient()
+        nested = {"mode": "configured"}
+        profile: dict[str, object] = {
+            "sandbox": "danger-full-access",
+            "approval_policy": "on-request",
+            "nativeNested": nested,
+        }
+        adapter = ZenApplicationAdapter(
+            application_instance_id="zen-main",
+            client=client,
+            cwd="/repo",
+            thread_start_options=profile,
+        )
+        profile["approval_policy"] = "never"
+        nested["mode"] = "mutated-by-caller"
+
+        for index in range(2):
+            result = await adapter.execute(
+                CreateThread(
+                    operation_id=f"create-zen-thread-{index}",
+                    application_ref=adapter.summary.ref,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(result, ThreadCreated)
+
+        expected = {
+            "cwd": "/repo",
+            "sandbox": "danger-full-access",
+            "approval_policy": "on-request",
+            "nativeNested": {"mode": "configured"},
+        }
+        self.assertEqual(client.created_threads, [expected, expected])
+
+    async def test_zen_adapter_specific_create_can_select_a_conversation_profile(self) -> None:
+        client = _InputClient()
+        adapter = ZenApplicationAdapter(
+            application_instance_id="zen-main",
+            client=client,
+            cwd="/repo",
+            thread_start_options={"approval_policy": "never"},
+        )
+
+        thread = await adapter.create_thread_with_options(
+            thread_start_options={
+                "sandbox": "danger-full-access",
+                "approval_policy": "on-request",
+            }
+        )
+
+        self.assertEqual(thread.ref, ThreadRef("zen-main", "thread-created"))
+        self.assertEqual(
+            client.created_threads,
+            [
+                {
+                    "cwd": "/repo",
+                    "sandbox": "danger-full-access",
+                    "approval_policy": "on-request",
+                }
+            ],
+        )
+
+    def test_thread_creation_profile_cannot_override_adapter_cwd(self) -> None:
+        with self.assertRaisesRegex(ValueError, "adapter-owned fields: cwd"):
+            ZenApplicationAdapter(
+                application_instance_id="zen-main",
+                client=_InputClient(),
+                cwd="/repo",
+                thread_start_options={"cwd": "/other"},
+            )
+
+    def test_thread_creation_profile_rejects_normalized_alias_collisions(self) -> None:
+        with self.assertRaisesRegex(ValueError, "duplicate native fields"):
+            ZenApplicationAdapter(
+                application_instance_id="zen-main",
+                client=_InputClient(),
+                cwd="/repo",
+                thread_start_options={
+                    "approval_policy": "never",
+                    "approvalPolicy": "on-request",
+                },
+            )
+
     async def test_local_image_uses_verified_connection_epoch(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory, "image.png")
