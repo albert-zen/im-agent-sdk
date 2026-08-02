@@ -39,6 +39,13 @@ and unsupported group-file failures remain explicit. Media is staged inside
 the Channel-owned bounded spool before it crosses the explicit attachment
 source boundary.
 
+## Diagnostics
+
+The native adapter publishes only bounded local lifecycle/worker facts and its
+fixed-capacity `channel_inbound` queue depth plus process-lifetime overflow
+count. It never publishes the session ID, sequence, credentials, endpoint,
+Conversation/message identity, media path, or exception text.
+
 ## Change checks
 
 Changes to `native/qq.py` or `native/qq_media.py` require

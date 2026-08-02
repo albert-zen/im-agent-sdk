@@ -14,8 +14,10 @@ second data surface with unsafe cardinality and retention.
 
 Codex/Zen App Server has a meaningful connection epoch and two dispatch lanes.
 T3 uses independent HTTP request/response calls and has no equivalent
-long-lived connection epoch. This counterexample rules out making connection
-diagnostics a required Application port.
+long-lived connection epoch. Long-polling Channels have distinct lifecycle and
+worker evidence, while a request/response/webhook Channel may have none. These
+counterexamples rule out making connection diagnostics a required Application
+or Channel port.
 
 ## Decision
 
@@ -34,6 +36,14 @@ It is an optional adapter capability, not a required Core port. App Server
 reports connection state/epoch, reconnect count, dispatch worker state, queue
 capacity/depth/overflow, and a bounded last-failure code. T3 reports its
 Application identity and no synthetic connection facts.
+
+Channel adapters may implement the parallel structural `diagnostic_facts()`
+seam. Channel facts preserve configured `channel_instance_id` and adapter kind,
+never provider-supplied identity. QQ, Telegram, Feishu, and Weixin expose only
+their process-local lifecycle/worker facts; QQ and Feishu additionally expose
+the fixed `channel_inbound` queue. Provider failure, invalid shape, or identity
+mismatch collapses to configured identity-only facts. A Channel without
+meaningful long-lived state omits the provider rather than inventing health.
 
 Gateway aggregates projection facts by count and classification. Existing
 per-Thread worker health remains an internal troubleshooting API; the stable
@@ -56,3 +66,6 @@ own task and translate its bounded facts into their observability system.
   difference, not as an unhealthy connection.
 - New fact values require a compatibility review for secrecy and cardinality.
   Unknown recovery-gap values collapse to `other`.
+- Schema version 2 adds the optional per-Channel collection and the fixed
+  `channel_inbound` queue name; version 1 had only Application, projection, and
+  Gateway facts.

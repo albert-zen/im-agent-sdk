@@ -17,7 +17,7 @@ from .artifacts import (
     stable_artifact_identity,
 )
 from .base import BaseChannelAdapter
-from .diagnostics import emit_event, mark_channel_health
+from .diagnostics import emit_event
 from .media import (
     MAX_FILE_COUNT,
     MAX_IMAGE_COUNT,
@@ -206,8 +206,7 @@ class WeixinChannelAdapter(BaseChannelAdapter):
         self._auth_stale = False
         if self._runner_task is None or self._runner_task.done():
             self._runner_task = asyncio.create_task(self._run_forever())
-        mark_channel_health(
-            "weixin",
+        self.mark_health(
             enabled=True,
             connected=False,
             status="connecting",
@@ -261,7 +260,7 @@ class WeixinChannelAdapter(BaseChannelAdapter):
                 await transport.close()
             except Exception as exc:
                 errors.append(exc)
-        mark_channel_health("weixin", connected=False, status="stopped", experimental=True)
+        self.mark_health(connected=False, status="stopped", experimental=True)
         if errors:
             raise ExceptionGroup("Weixin shutdown failed", errors)
 
@@ -457,8 +456,7 @@ class WeixinChannelAdapter(BaseChannelAdapter):
         suggested_timeout = response.get("longpolling_timeout_ms")
         if isinstance(suggested_timeout, (int, float)) and suggested_timeout > 0:
             self.poll_timeout_ms = max(5_000, min(int(suggested_timeout), 120_000))
-        mark_channel_health(
-            "weixin",
+        self.mark_health(
             connected=True,
             status="connected",
             experimental=True,
@@ -476,8 +474,7 @@ class WeixinChannelAdapter(BaseChannelAdapter):
     async def _handle_poll_failure(self, exc: Exception, failures: int) -> None:
         delay = self._reconnect_delay(failures)
         logger.warning("Weixin polling failed; retrying in %.1fs: %s", delay, type(exc).__name__)
-        mark_channel_health(
-            "weixin",
+        self.mark_health(
             connected=False,
             status="reconnecting",
             error_type=type(exc).__name__,
@@ -500,8 +497,7 @@ class WeixinChannelAdapter(BaseChannelAdapter):
 
     def _mark_stale_token(self) -> None:
         self._auth_stale = True
-        mark_channel_health(
-            "weixin",
+        self.mark_health(
             connected=False,
             status="auth_required",
             error_code=STALE_TOKEN_CODE,

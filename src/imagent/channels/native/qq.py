@@ -26,7 +26,11 @@ from .artifacts import (
     stable_artifact_identity,
 )
 from .base import BaseChannelAdapter
-from .diagnostics import emit_event, mark_channel_health
+from .diagnostics import (
+    NativeConnectionDiagnosticSnapshot,
+    NativeQueueDiagnosticSnapshot,
+    emit_event,
+)
 from .endpoints import validate_http_endpoint
 from .media import materialize_inbound_media
 from .models import (
@@ -194,6 +198,19 @@ class QQChannelAdapter(BaseChannelAdapter):
         ] = asyncio.Queue(maxsize=INBOUND_QUEUE_LIMIT)
         self._queued_message_ids: set[tuple[str, str]] = set()
         self._inbound_worker_task: asyncio.Task[None] | None = None
+        self._diagnostic_inbound_overflow_count = 0
+
+    def diagnostic_connection_facts(self) -> NativeConnectionDiagnosticSnapshot:
+        return self._diagnostic_state.snapshot(
+            queues=(
+                NativeQueueDiagnosticSnapshot(
+                    name="channel_inbound",
+                    capacity=INBOUND_QUEUE_LIMIT,
+                    depth=self._inbound_queue.qsize(),
+                    overflow_count=self._diagnostic_inbound_overflow_count,
+                ),
+            )
+        )
 
     @classmethod
     def from_config(cls, *, config: dict[str, object], middleware):
@@ -238,8 +255,7 @@ class QQChannelAdapter(BaseChannelAdapter):
         self._ensure_inbound_worker()
         if self._runner_task is None or self._runner_task.done():
             self._runner_task = asyncio.create_task(self._run_forever())
-        mark_channel_health(
-            "qq",
+        self.mark_health(
             enabled=True,
             connected=False,
             status="connecting",
@@ -276,6 +292,7 @@ class QQChannelAdapter(BaseChannelAdapter):
         self._drain_inbound_queue()
         if self._owns_http_client:
             await self.http_client.aclose()
+        self.mark_health(connected=False, status="stopped")
 
     def parse_inbound_event(
         self, event_type: str, payload: dict[str, Any]
@@ -654,8 +671,7 @@ class QQChannelAdapter(BaseChannelAdapter):
                                 message="QQ gateway ready",
                                 data={"session_id": self._session_id},
                             )
-                            mark_channel_health(
-                                "qq",
+                            self.mark_health(
                                 connected=True,
                                 session_id=self._session_id,
                                 status="connected",
@@ -670,8 +686,7 @@ class QQChannelAdapter(BaseChannelAdapter):
                                 event="qq.gateway.resumed",
                                 message="QQ gateway resumed",
                             )
-                            mark_channel_health(
-                                "qq",
+                            self.mark_health(
                                 connected=True,
                                 session_id=self._session_id,
                                 status="connected",
@@ -731,6 +746,7 @@ class QQChannelAdapter(BaseChannelAdapter):
                 )
             )
         except asyncio.QueueFull:
+            self._diagnostic_inbound_overflow_count += 1
             emit_event(
                 component="channels.qq",
                 event="message.inbound.queue_overflow",
@@ -857,7 +873,7 @@ class QQChannelAdapter(BaseChannelAdapter):
             "status": status,
         }
         payload.update(changes)
-        mark_channel_health("qq", **payload)
+        self.mark_health(**payload)
 
     async def _heartbeat_loop(self, websocket, interval_seconds: float) -> None:
         while not self._stop_event.is_set():

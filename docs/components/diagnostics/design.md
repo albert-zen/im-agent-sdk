@@ -12,6 +12,8 @@ The public facts are:
 
 - per configured Application: stable instance/kind plus optional connection
   facts;
+- per configured Channel: stable instance/kind plus optional evidenced
+  lifecycle/worker and fixed-name queue facts;
 - per connection: lifecycle state, epoch, reconnect count, worker state, a
   bounded last-failure classification, and fixed-name queue facts;
 - projection aggregate: worker lifecycle/degradation, restart, delivery
@@ -37,12 +39,21 @@ The same rule applies to Channels: a future Channel provider must expose only
 facts evidenced by its native transport; this ADR does not silently promote a
 Codex transport model to Channel Core.
 
+QQ, Telegram, Feishu, and Weixin provide the Channel-side evidence. Only QQ
+and Feishu own an SDK process-local inbound queue, published under the fixed
+`channel_inbound` name; Telegram and Weixin fabricate no queue. Configured
+Channel identity/kind always wins over provider output. Missing, raising,
+invalid, or mismatched providers fail closed to identity-only facts without
+exception text.
+
 ## Snapshot semantics
 
 `ImAgentGateway.diagnostics_snapshot()` is synchronous, side-effect free, and
 does no native or repository I/O. Its `generated_at` is observation time,
 `schema_version` describes the fact shape, and `authoritative=False` is
 permanent semantic guidance. Repeated reads do not mutate counters.
+Schema version 2 adds the optional Channel collection while preserving the
+pre-Channel positional constructor order.
 
 Projection details are aggregated before publication. Known SDK event gaps
 retain a stable code; every other string maps to `other`. App Server overflow

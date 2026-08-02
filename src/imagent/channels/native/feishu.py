@@ -26,7 +26,11 @@ from .artifacts import (
     stable_artifact_identity,
 )
 from .base import BaseChannelAdapter
-from .diagnostics import emit_event, mark_channel_health
+from .diagnostics import (
+    NativeConnectionDiagnosticSnapshot,
+    NativeQueueDiagnosticSnapshot,
+    emit_event,
+)
 from .media import (
     MAX_FILE_BYTES,
     MAX_FILE_COUNT,
@@ -227,7 +231,24 @@ class FeishuChannelAdapter(BaseChannelAdapter):
         self._inbound_slots = BoundedSemaphore(INBOUND_QUEUE_LIMIT)
         self._overflow_lock = Lock()
         self._overflow_count = 0
+        self._diagnostic_inbound_overflow_count = 0
         self._last_overflow_report_at = 0.0
+
+    def diagnostic_connection_facts(self) -> NativeConnectionDiagnosticSnapshot:
+        queue = self._inbound_queue
+        depth = queue.qsize() if queue is not None else 0
+        with self._overflow_lock:
+            overflow_count = self._diagnostic_inbound_overflow_count
+        return self._diagnostic_state.snapshot(
+            queues=(
+                NativeQueueDiagnosticSnapshot(
+                    name="channel_inbound",
+                    capacity=INBOUND_QUEUE_LIMIT,
+                    depth=depth,
+                    overflow_count=overflow_count,
+                ),
+            )
+        )
 
     @classmethod
     def from_config(cls, *, config: dict[str, object], middleware):
@@ -287,8 +308,7 @@ class FeishuChannelAdapter(BaseChannelAdapter):
             await self._close_http_client()
             await self._detach_sdk()
             raise
-        mark_channel_health(
-            "feishu",
+        self.mark_health(
             enabled=True,
             connected=False,
             status="connecting",
@@ -345,7 +365,7 @@ class FeishuChannelAdapter(BaseChannelAdapter):
         self._tenant_access_token = ""
         self._tenant_access_token_expires_at = 0.0
         self._main_loop = None
-        mark_channel_health("feishu", connected=False, status="stopped")
+        self.mark_health(connected=False, status="stopped")
         if errors:
             raise ExceptionGroup("Feishu shutdown failed", errors)
 
@@ -611,8 +631,7 @@ class FeishuChannelAdapter(BaseChannelAdapter):
                     await sdk.connect_until_ready(timeout=self.startup_timeout_s)
                     failures = 0
                     snapshot = self._connection_snapshot(sdk)
-                    mark_channel_health(
-                        "feishu",
+                    self.mark_health(
                         connected=True,
                         status="connected",
                         connection_state=snapshot.get("state"),
@@ -634,8 +653,7 @@ class FeishuChannelAdapter(BaseChannelAdapter):
                         delay,
                         type(exc).__name__,
                     )
-                    mark_channel_health(
-                        "feishu",
+                    self.mark_health(
                         connected=False,
                         status="reconnecting",
                         error_type=type(exc).__name__,
@@ -767,6 +785,7 @@ class FeishuChannelAdapter(BaseChannelAdapter):
         if not self._inbound_slots.acquire(blocking=False):
             with self._overflow_lock:
                 self._overflow_count += 1
+                self._diagnostic_inbound_overflow_count += 1
             return
         loop.call_soon_threadsafe(
             self._enqueue_inbound,
@@ -791,6 +810,7 @@ class FeishuChannelAdapter(BaseChannelAdapter):
             self._inbound_slots.release()
             with self._overflow_lock:
                 self._overflow_count += 1
+                self._diagnostic_inbound_overflow_count += 1
 
     async def _run_inbound_worker(self) -> None:
         queue = self._inbound_queue
@@ -1219,8 +1239,7 @@ class FeishuChannelAdapter(BaseChannelAdapter):
             return
         loop.call_soon_threadsafe(
             partial(
-                mark_channel_health,
-                "feishu",
+                self.mark_health,
                 connected=connected,
                 status=status,
             )
@@ -1238,8 +1257,7 @@ class FeishuChannelAdapter(BaseChannelAdapter):
     def _record_sdk_error(self, error_type: str) -> None:
         snapshot = self._connection_snapshot(self._sdk) if self._sdk is not None else {}
         connected = bool(snapshot.get("ready"))
-        mark_channel_health(
-            "feishu",
+        self.mark_health(
             connected=connected,
             status="degraded" if connected else "error",
             error_type=error_type,

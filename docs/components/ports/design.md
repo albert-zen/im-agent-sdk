@@ -53,6 +53,12 @@ mandatory for `ChannelAdapter`, expose resolved credentials/configuration, or
 carry Gateway, diagnostics, and message-extension authority. Absence means the
 Channel has no SDK startup validator; it does not mean validation succeeded.
 
+ADR 0014 Channel diagnostics is another optional structural provider, defined
+by the diagnostics component rather than added to `ChannelAdapter`. Its sync
+read returns immutable bounded facts only. Capability absence remains valid;
+provider failure is handled by snapshot collection and never by Channel input
+or delivery paths.
+
 ADR 0015 extension protocols are stage-specific Ports only when their issue
 has a real consumer and default counterexample. They carry minimum immutable
 typed inputs and never Gateway, repositories, a mutable context bag, or a

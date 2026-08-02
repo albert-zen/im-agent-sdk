@@ -27,6 +27,10 @@ with `start()`, and repeatability around a completed lifecycle. A fake Channel
 without the optional protocol remains a valid `ChannelAdapter`; callers must
 not treat capability absence as successful validation.
 
+Channel diagnostics coverage likewise keeps `diagnostic_facts()` outside the
+required lifecycle Port and proves missing, invalid, raising, and mismatched
+providers cannot fail or inject identity into a snapshot.
+
 Application input coverage must distinguish safe pre-dispatch failure from a
 sent request with an unknown native outcome. The latter remains sticky across
 redelivery and restart. Every implementation must accept the default
