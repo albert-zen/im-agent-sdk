@@ -18,7 +18,7 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 
 from .... import __version__
-from ....channels.native.media import MediaDownloadError
+from ..ingress_media import MediaDownloadError
 from .weixin_state import WeixinCredentials
 
 DEFAULT_ILINK_BASE_URL = "https://ilinkai.weixin.qq.com"

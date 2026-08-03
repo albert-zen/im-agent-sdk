@@ -26,8 +26,7 @@ class IngressSecurityOwnershipTests(unittest.TestCase):
                     "from importlib.util import find_spec; "
                     "from imagent.interaction.channels.ingress_security import "
                     "secure_windows_path; "
-                    "assert find_spec("
-                    "'imagent.channels.native.windows_security') is None"
+                    "assert find_spec('imagent.channels.native') is None"
                 ),
             ],
             check=False,

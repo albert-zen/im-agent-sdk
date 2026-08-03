@@ -35,3 +35,9 @@ owned only by Interaction ingress, and has no historical native import path.
 Windows CI and the existing media materialization suite remain responsible for
 the unchanged current-user SID, protected DACL, file/directory flag, and
 failure behavior.
+
+Media ownership tests prove the image/file materializers and result/error
+values have one Interaction ingress owner and that the historical native media
+module/package are absent. Existing four-provider, native Channel, admission,
+restart, cancellation, quota, and vertical suites remain the behavioral proof
+for the mechanically moved transaction boundary.

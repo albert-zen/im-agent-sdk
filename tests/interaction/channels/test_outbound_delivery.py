@@ -31,7 +31,7 @@ class ChannelOutboundTextTests(unittest.TestCase):
                 (
                     "import importlib.util; "
                     "assert importlib.util.find_spec("
-                    "'imagent.channels.native.artifacts') is None"
+                    "'imagent.channels.native') is None"
                 ),
             ],
             check=False,

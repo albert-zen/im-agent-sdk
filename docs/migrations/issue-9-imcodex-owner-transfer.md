@@ -23,8 +23,8 @@ later IMCodex consumer migration. It is not a claim that Issue #9 is complete.
 
 This section is the repository's authoritative source-provenance record for
 the copied implementation. The transferred destination families are
-`src/imagent/interaction/channels/adapters/`, `src/imagent/channels/native/`,
-and `src/imagent/applications/appserver_client/`; the detailed tables below record
+`src/imagent/interaction/channels/` and
+`src/imagent/applications/appserver_client/`; the detailed tables below record
 the source paths, exclusions, modifications, and test proof. This provenance
 record is not a replacement for a repository license.
 
@@ -49,7 +49,8 @@ Local modifications must be reviewable:
   copying product commands or Agent state.
 
 Two large transferred modules intentionally retain their proven transaction
-boundaries in this owner-side move. `native/media.py` keeps image and generic
+boundaries in this owner-side move. `interaction/channels/ingress_media.py`
+keeps image and generic
 file staging together because both use the same cross-process lock, quota,
 secure-create, cleanup, and cancellation machinery.
 `appserver_client/client.py` keeps one connection-epoch JSON-RPC state machine;
@@ -66,8 +67,9 @@ input again. Gateway persists that distinction independently of IMCodex.
 ## Channel transport modules
 
 All four transferred provider transports now live in
-`src/imagent/interaction/channels/adapters/`; only shared transport helpers
-remain below `src/imagent/channels/native/` during focused ownership slices.
+`src/imagent/interaction/channels/adapters/`; shared ingress and delivery
+helpers live under their Interaction Channel owners without a historical
+native helper package.
 Their shared access policy now lives with the Interaction ingress owner at
 `src/imagent/interaction/channels/ingress.py`, and shared generic-file
 validation lives at `src/imagent/interaction/media.py`. Provider-native models
@@ -79,7 +81,7 @@ contracts.
 | `channels/access.py` | `interaction/channels/ingress.py` | transfer shared stable-ID access policy to Interaction ingress; consumers choose configured IDs |
 | `channels/base.py` | `interaction/channels/adapters/base.py` | transfer the single lifecycle/access base to its Interaction adapter owner; preserve behavior, replace product telemetry with logging, and retain no historical native-path shim |
 | `channels/artifacts.py` | `interaction/channels/outbound_delivery.py` | transfer shared attachment-send helpers for one native attempt; consumer retains bytes/root/quota/ledger/sweep ownership |
-| `channels/media.py` | `native/media.py` | transfer bounded staging/materialization; keep trust/materialization Channel-local |
+| `channels/media.py` | `interaction/channels/ingress_media.py` | transfer bounded staging/materialization to Interaction ingress; keep the shared transaction boundary and Channel-local trust |
 | `channels/text.py` | `interaction/channels/outbound_delivery.py` | transfer shared defensive native text splitting to Interaction outbound delivery |
 | `channels/qq_media.py` | `interaction/channels/adapters/qq_media.py` | transfer QQ media upload/download behavior |
 | `channels/qq.py` | `interaction/channels/adapters/qq.py` | transfer QQ transport; replace product config/path imports |

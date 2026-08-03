@@ -40,7 +40,7 @@ class NativeChannelBaseOwnershipTests(unittest.TestCase):
                     "from importlib.util import find_spec; "
                     "from imagent.interaction.channels.adapters.base import "
                     "BaseChannelAdapter, ChannelRouteContext; "
-                    "assert find_spec('imagent.channels.native.base') is None"
+                    "assert find_spec('imagent.channels.native') is None"
                 ),
             ],
             check=False,

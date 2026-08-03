@@ -56,7 +56,7 @@ class NativeChannelDiagnosticsOwnershipTests(unittest.TestCase):
                     "from importlib.util import find_spec; "
                     "from imagent.interaction.channels.adapters.diagnostics import "
                     "NativeChannelDiagnosticState; "
-                    "assert find_spec('imagent.channels.native.diagnostics') is None"
+                    "assert find_spec('imagent.channels.native') is None"
                 ),
             ],
             check=False,

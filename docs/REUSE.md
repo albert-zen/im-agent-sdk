@@ -60,9 +60,8 @@ Behaviors to preserve:
 
 The QQ, Telegram, Feishu, and Weixin provider transports plus shared HTTP
 endpoint validator now live under `src/imagent/interaction/channels/adapters/`.
-Shared transport helpers remain under `src/imagent/channels/native/` until
-their independent ownership splits. Shared access policy lives with
-the Interaction ingress owner, and shared generic-file validation lives with
+Shared access, inbound staging, and Windows path security live with the
+Interaction ingress owner, and shared generic-file validation lives with
 the Interaction media owner. Shared defensive text splitting lives with
 Interaction Channel outbound delivery. Exact source-to-destination decisions,
 exclusions, local modifications, and test proof are recorded in the

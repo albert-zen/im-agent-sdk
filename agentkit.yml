@@ -610,7 +610,7 @@ maintainability:
         - src/imagent/interaction/channels/adapters/feishu.py
         - src/imagent/interaction/channels/adapters/weixin.py
         - src/imagent/interaction/channels/adapters/weixin_ilink.py
-        - src/imagent/channels/native/media.py
+        - src/imagent/interaction/channels/ingress_media.py
       max_lines: 1400
       max_functions: 65
       max_classes: 18

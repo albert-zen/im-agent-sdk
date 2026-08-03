@@ -7,7 +7,8 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, cast
 
-from ....channels.native.media import (
+from ..ingress import ChannelAccessPolicy, InboundMessage
+from ..ingress_media import (
     MAX_FILE_COUNT,
     MAX_IMAGE_COUNT,
     FileMediaMaterializer,
@@ -15,7 +16,6 @@ from ....channels.native.media import (
     MediaDownloadError,
     materialize_inbound_media,
 )
-from ..ingress import ChannelAccessPolicy, InboundMessage
 from ..outbound_delivery import (
     ArtifactDeliveryReceipt,
     NativeDeliveryResult,
