@@ -298,7 +298,9 @@ def channel_from_config(
     if channel_id == "qq":
         from .native.qq import QQChannelAdapter as NativeAdapter
     elif channel_id == "telegram":
-        from .native.telegram import TelegramChannelAdapter as NativeAdapter
+        from ..interaction.channels.adapters.telegram import (
+            TelegramChannelAdapter as NativeAdapter,
+        )
     elif channel_id == "feishu":
         from .native.feishu import FeishuChannelAdapter as NativeAdapter
     elif channel_id == "weixin":

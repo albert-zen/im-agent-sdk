@@ -23,8 +23,8 @@ later IMCodex consumer migration. It is not a claim that Issue #9 is complete.
 
 This section is the repository's authoritative source-provenance record for
 the copied implementation. The transferred destination families are
-`src/imagent/channels/native/` and
-`src/imagent/applications/appserver_client/`; the detailed tables below record
+`src/imagent/interaction/channels/adapters/`, `src/imagent/channels/native/`,
+and `src/imagent/applications/appserver_client/`; the detailed tables below record
 the source paths, exclusions, modifications, and test proof. This provenance
 record is not a replacement for a repository license.
 
@@ -65,7 +65,10 @@ input again. Gateway persists that distinction independently of IMCodex.
 
 ## Channel transport modules
 
-Transferred provider transports live below `src/imagent/channels/native/`.
+Transferred provider transports are moving into
+`src/imagent/interaction/channels/adapters/`; Telegram is there now, while the
+remaining providers and shared helpers still live below
+`src/imagent/channels/native/` during focused mechanical slices.
 Their shared access policy now lives with the Interaction ingress owner at
 `src/imagent/interaction/channels/ingress.py`, and shared generic-file
 validation lives at `src/imagent/interaction/media.py`. Provider-native models
@@ -81,7 +84,7 @@ contracts.
 | `channels/text.py` | `interaction/channels/outbound_delivery.py` | transfer shared defensive native text splitting to Interaction outbound delivery |
 | `channels/qq_media.py` | `native/qq_media.py` | transfer QQ media upload/download behavior |
 | `channels/qq.py` | `native/qq.py` | transfer QQ transport; replace product config/path imports |
-| `channels/telegram.py` | `native/telegram.py` | transfer Telegram transport; replace product config/path imports |
+| `channels/telegram.py` | `interaction/channels/adapters/telegram.py` | transfer Telegram transport; replace product config/path imports |
 | `channels/feishu.py` | `native/feishu.py` | transfer Feishu transport; preserve optional native SDK loading |
 | `channels/weixin_ilink.py` | `native/weixin_ilink.py` | transfer iLink protocol/crypto transport |
 | `channels/weixin_state.py` | `native/weixin_state.py` | transfer Channel-owned credential/reconnect state |

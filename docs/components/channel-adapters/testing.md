@@ -49,7 +49,7 @@ Run the reusable Channel contract suite plus native adapter tests:
 PYTHONPATH=src:tests python -m unittest \
   tests.test_native_channels \
   tests.test_channel_qq \
-  tests.test_channel_telegram \
+  tests.interaction.channels.adapters.test_telegram \
   tests.test_channel_feishu \
   tests.test_channel_weixin \
   tests.test_adapter_contracts \
