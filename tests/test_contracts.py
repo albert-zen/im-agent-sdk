@@ -40,7 +40,6 @@ from imagent.contracts import (
     GetThreadHistory,
     GetTurnCatchup,
     ListThreads,
-    OperationErrorCode,
     Page,
     ProjectCapabilities,
     ProjectMode,
@@ -61,7 +60,6 @@ from imagent.contracts import (
     UserInputResponse,
     UserInputResponseShape,
     derive_client_message_id,
-    operation_error,
     validate_agent_event,
     validate_application_capabilities,
     validate_application_operation,
@@ -108,19 +106,6 @@ class CapabilityTests(unittest.TestCase):
         for mode in ProjectMode:
             with self.subTest(mode=mode):
                 validate_application_capabilities(capabilities(mode))
-
-    def test_operation_errors_use_stable_codes(self) -> None:
-        cases = (
-            (ValueError("bad input"), OperationErrorCode.INVALID_OPERATION),
-            (NotImplementedError("missing"), OperationErrorCode.UNSUPPORTED),
-            (KeyError("gone"), OperationErrorCode.NOT_FOUND),
-            (RuntimeError("boom"), OperationErrorCode.ADAPTER_FAILURE),
-        )
-        for error, expected in cases:
-            with self.subTest(error=error):
-                projected = operation_error(error)
-                self.assertEqual(projected.code, expected.value)
-                self.assertEqual(projected.metadata["native_exception"], type(error).__name__)
 
     def test_rejects_project_operations_in_flat_mode(self) -> None:
         invalid = capabilities(ProjectMode.FLAT)

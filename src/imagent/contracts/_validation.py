@@ -1,15 +1,7 @@
 from __future__ import annotations
 
+from ..interaction.operations import ContractViolation, require_identifier
 from .model import ThreadRef
-
-
-class ContractViolation(ValueError):
-    pass
-
-
-def require_identifier(value: str, name: str) -> None:
-    if not value or len(value) > 512:
-        raise ContractViolation(f"{name} must be a non-empty string of at most 512 characters")
 
 
 def validate_thread_ref(thread: ThreadRef) -> None:

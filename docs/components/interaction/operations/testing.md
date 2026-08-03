@@ -17,18 +17,26 @@ Tests for `interaction.operations` must prove:
   success fields;
 - common helpers remain stateless and do not create a claim, operation log,
   service locator, or generic mutable context.
+- direct `imagent.interaction.operations` exports and the deliberate
+  `imagent.contracts` facade are the same Python objects, while repository
+  runtime code imports the owning leaf directly;
+- Applications-owned request exceptions preserve their existing stable error
+  codes through a one-way dependency and cannot make Interaction import an
+  Application or request implementation.
 
-Current focused evidence is:
+Focused evidence is:
 
 ```sh
-PYTHONPATH=src python -m unittest tests.test_contracts -v
+PYTHONPATH=src python -m unittest \
+  tests.interaction.test_operations \
+  tests.test_contracts -v
 python scripts/validate_schemas.py
 ```
 
-During mechanical separation, the common cases move once to
-`tests/interaction/test_operations.py`. Application and Gateway variant tests
-move to their owning test trees rather than being copied into the Interaction
-suite.
+Common cases live in `tests/interaction/test_operations.py`. Application and
+Gateway variant tests move to their owning test trees rather than being copied
+into the Interaction suite. The public facade remains covered as a
+compatibility identity, not a second implementation.
 
 Any schema or public-contract change also requires operation/result union
 parity, affected adapter and Controller conformance, component-map validation,

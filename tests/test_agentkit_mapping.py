@@ -79,6 +79,7 @@ def _relative_files(root: Path, pattern: str = "*") -> set[str]:
 class AgentKitMappingTests(unittest.TestCase):
     def test_representative_runtime_paths_have_precise_owners(self) -> None:
         expected = {
+            "src/imagent/interaction/operations.py": {"contracts"},
             "src/imagent/contracts/operations.py": {"contracts"},
             "src/imagent/adapters.py": {"ports"},
             "src/imagent/attachments.py": {"attachments-and-media"},
@@ -121,6 +122,7 @@ class AgentKitMappingTests(unittest.TestCase):
 
     def test_representative_tests_route_to_their_component(self) -> None:
         expected = {
+            "tests/interaction/test_operations.py": {"contracts"},
             "tests/test_contracts.py": {"contracts"},
             "tests/test_attachments.py": {"attachments-and-media"},
             "tests/test_gateway_operations.py": {"gateway"},

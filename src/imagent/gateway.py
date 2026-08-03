@@ -26,8 +26,6 @@ from .contracts import (
     BindConversationToProject,
     BindConversationToThread,
     ClearConversationThread,
-    ContractError,
-    ContractViolation,
     ConversationBinding,
     ConversationBound,
     ConversationRef,
@@ -43,7 +41,6 @@ from .contracts import (
     InboundMessage,
     ListApplications,
     ObserveThread,
-    OperationErrorCode,
     OutboundMessage,
     ProactiveDeliveryResult,
     ProjectionPolicy,
@@ -65,7 +62,6 @@ from .contracts import (
     ThreadRead,
     ThreadRef,
     derive_client_message_id,
-    operation_error,
     validate_application_operation,
     validate_application_operation_result,
     validate_gateway_operation,
@@ -107,6 +103,12 @@ from .inbound_content import InboundContentTransformRuntime
 from .inbound_failures import InboundFailurePhase as InboundFailurePhase
 from .inbound_failures import InboundFailurePresentationRuntime, handle_claimed_inbound
 from .inbound_failures import InboundFailurePresenter as InboundFailurePresenter
+from .interaction.operations import (
+    ContractError,
+    ContractViolation,
+    OperationErrorCode,
+    operation_error,
+)
 from .keyed_locks import KeyedLockRegistry
 from .outbound_presentation import (
     OutboundPresentationContext,

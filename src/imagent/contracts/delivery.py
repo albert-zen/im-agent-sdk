@@ -8,7 +8,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TypeAlias
 
-from ._validation import ContractViolation, require_identifier, validate_thread_ref
+from ..interaction.operations import ContractViolation, require_identifier
+from ._validation import validate_thread_ref
 from .model import (
     AttachmentContent,
     AttachmentHandle,

@@ -58,6 +58,13 @@ adapter-failed, unauthorized-destination, and request-lifecycle outcomes.
 Native exception types may be projected into that public vocabulary, but an
 error result does not invent support or retry permission.
 
+Owner-specific exceptions may carry one stable `OperationErrorCode` through a
+private common mapped-error base. The base contains no Application or Gateway
+state and exists only so `operation_error` can preserve the code without a
+reverse import. Applications-owned request exceptions depend on that common
+base; `interaction.operations` never imports those exceptions or interprets
+request lifecycle truth.
+
 `operationId` is correlation identity, not a universal exactly-once claim.
 The owner of each concrete operation defines whether it is read-only,
 idempotent, fenced before side effects, or outcome-unknown. A consumer must
@@ -81,11 +88,11 @@ repository, or native client.
 
 ## Current and target structure
 
-Common operation values are currently spread across
-`src/imagent/contracts/__init__.py`, `_validation.py`, `errors.py`, `model.py`,
-`operations.py`, and `validators.py`. Several of those files and the operation
-schema also contain Gateway- and Application-owned variants. They are declared
-split candidates; the filename does not make their contents one component.
+The common operation values now have one implementation in
+`src/imagent/interaction/operations.py`. Mixed contract modules import the
+owning values, while concrete Gateway/Application variants and their
+validators remain declared split candidates. The language-neutral operation
+schema remains a deliberate versioned union across those owners.
 
 The mechanical target is:
 
@@ -94,9 +101,10 @@ src/imagent/interaction/operations.py
 tests/interaction/test_operations.py
 ```
 
-The later move must extract the common vocabulary once, relocate concrete
-variants to their owning layer, update formal facades, and leave no parallel
-implementation or indefinite internal compatibility path.
+The deliberate `imagent.contracts` public facade re-exports the exact target
+objects; internal runtime imports use the owning leaf. Concrete operation
+variants remain in their current files until their owning layer moves. No
+parallel implementation or indefinite internal compatibility path remains.
 
 ## Authority
 

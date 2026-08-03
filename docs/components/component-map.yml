@@ -134,17 +134,17 @@ components:
     outputs: [validated typed operation/result values]
     public_contracts: [OperationResultStatus, ContractError, ContractViolation, OperationErrorCode, operation_error, require_identifier]
     public_exports:
-      current: [imagent.contracts:OperationResultStatus, imagent.contracts:ContractError, imagent.contracts:ContractViolation, imagent.contracts:OperationErrorCode, imagent.contracts:operation_error, imagent.contracts:require_identifier]
-      target: [imagent.interaction.operations:OperationResultStatus, imagent.interaction.operations:ContractError, imagent.interaction.operations:ContractViolation, imagent.interaction.operations:OperationErrorCode, imagent.interaction.operations:operation_error, imagent.interaction.operations:require_identifier]
+      current: [imagent.contracts:OperationResultStatus, imagent.contracts:ContractError, imagent.contracts:ContractViolation, imagent.contracts:OperationErrorCode, imagent.contracts:operation_error, imagent.contracts:require_identifier, imagent.interaction.operations:OperationResultStatus, imagent.interaction.operations:ContractError, imagent.interaction.operations:ContractViolation, imagent.interaction.operations:OperationErrorCode, imagent.interaction.operations:operation_error, imagent.interaction.operations:require_identifier]
+      target: [imagent.contracts:OperationResultStatus, imagent.contracts:ContractError, imagent.contracts:ContractViolation, imagent.contracts:OperationErrorCode, imagent.contracts:operation_error, imagent.contracts:require_identifier, imagent.interaction.operations:OperationResultStatus, imagent.interaction.operations:ContractError, imagent.interaction.operations:ContractViolation, imagent.interaction.operations:OperationErrorCode, imagent.interaction.operations:operation_error, imagent.interaction.operations:require_identifier]
     dependencies: [interaction.messages]
     state_recovery: Stateless validation; operation_id is the durable correlation identity.
-    current_code: [schemas/v1/common.schema.json, schemas/v1/operations.schema.json, src/imagent/contracts/__init__.py, src/imagent/contracts/_validation.py, src/imagent/contracts/errors.py, src/imagent/contracts/model.py, src/imagent/contracts/operations.py, src/imagent/contracts/validators.py]
-    target_code: [schemas/v1/common.schema.json, schemas/v1/operations.schema.json, src/imagent/interaction/operations.py]
-    current_tests: [tests/test_contracts.py]
+    current_code: [schemas/v1/common.schema.json, schemas/v1/operations.schema.json, src/imagent/interaction/__init__.py, src/imagent/interaction/operations.py]
+    target_code: [schemas/v1/common.schema.json, schemas/v1/operations.schema.json, src/imagent/interaction/__init__.py, src/imagent/interaction/operations.py]
+    current_tests: [tests/interaction/test_operations.py]
     target_tests: [tests/interaction/test_operations.py]
     authoritative_docs: [docs/components/interaction/operations/design.md, docs/components/interaction/operations/testing.md, docs/components/contracts/protocol.md]
     adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0002-design-authority-and-control-boundaries.md]
-    gaps: [current operation module mixes Interaction, Gateway, and Applications variants]
+    gaps: [language-neutral operation schema remains a declared cross-owner union; deliberate imagent.contracts facade reexports the target leaf as one formal public surface]
 
   interaction.media:
     id: interaction.media
@@ -468,7 +468,7 @@ components:
       target: [imagent.gateway.routing:ObserveThread, imagent.gateway.routing:ThreadObserved]
     dependencies: [gateway.routing.bindings, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Routes persist independently; foreground authority requires current binding equality.
-    current_code: [schemas/v1/operations.schema.json, src/imagent/contracts/validators.py, src/imagent/projection_routes.py, src/imagent/projections.py, src/imagent/gateway.py]
+    current_code: [schemas/v1/operations.schema.json, src/imagent/contracts/operations.py, src/imagent/contracts/validators.py, src/imagent/projection_routes.py, src/imagent/projections.py, src/imagent/gateway.py]
     target_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/projection_routes.py]
     current_tests: [tests/test_projection_routing.py, tests/test_projection_hardening.py, tests/test_gateway_operations.py]
     target_tests: [tests/gateway/routing/test_projection_routes.py]
@@ -600,7 +600,7 @@ components:
       target: [imagent.gateway.projection:InteractiveRequestProjection, imagent.gateway.projection:RespondToRequest, imagent.gateway.projection:RequestResponseRouted]
     dependencies: [interaction.messages, applications.application-contract, applications.capabilities, applications.requests, interaction.controllers.request-presentation, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Correlations are minimal, bounded, persisted, monotonic, and reconciled only from native authoritative facts.
-    current_code: [src/imagent/contracts/request_validation.py, src/imagent/contracts/validators.py, src/imagent/gateway.py, src/imagent/request_correlations.py, src/imagent/request_projection_runtime.py, src/imagent/projection_routes.py]
+    current_code: [src/imagent/contracts/operations.py, src/imagent/contracts/request_validation.py, src/imagent/contracts/validators.py, src/imagent/gateway.py, src/imagent/request_correlations.py, src/imagent/request_projection_runtime.py, src/imagent/projection_routes.py]
     target_code: [src/imagent/gateway/projection/request_correlation.py]
     current_tests: [tests/test_appserver_requests.py, tests/test_projection_hardening.py, tests/test_storage.py]
     target_tests: [tests/gateway/projection/test_request_correlation.py]
@@ -952,7 +952,7 @@ components:
       target: [imagent.applications:AgentApplicationAdapter, imagent.applications:ApplicationSummary, imagent.applications:ApplicationInputDispatch, imagent.applications:AcceptedTurn, imagent.applications:InputContinuationPreference, imagent.applications:TurnReplyCorrelationPolicy, imagent.applications:ApplicationInputOutcomeUnknown, imagent.applications:AgentInput, imagent.applications:ApplicationRef, imagent.applications:InputDisposition, imagent.applications:Page, imagent.applications:ProjectMode, imagent.applications:ProjectRef, imagent.applications:ProjectSummary, imagent.applications:ReplyReferenceScope, imagent.applications:ThreadHistory, imagent.applications:ThreadRef, imagent.applications:ThreadSnapshot, imagent.applications:ThreadStatus, imagent.applications:ThreadSummary, imagent.applications:TurnCatchup, imagent.applications:TurnHistoryEntry, imagent.applications:TurnStatus, imagent.applications:validate_thread_ref]
     dependencies: [interaction.messages, interaction.operations, applications.capabilities, applications.events, applications.operations, applications.requests]
     state_recovery: Adapter reports only evidenced replay/order; dispatched unknown outcomes never become retry permission.
-    current_code: [schemas/v1/common.schema.json, schemas/v1/history.schema.json, schemas/v1/messages.schema.json, schemas/v1/resources.schema.json, src/imagent/adapters.py, src/imagent/contracts/errors.py, src/imagent/contracts/model.py, src/imagent/contracts/validators.py, src/imagent/applications/__init__.py, src/imagent/diagnostics.py]
+    current_code: [schemas/v1/common.schema.json, schemas/v1/history.schema.json, schemas/v1/messages.schema.json, schemas/v1/resources.schema.json, src/imagent/adapters.py, src/imagent/contracts/_validation.py, src/imagent/contracts/errors.py, src/imagent/contracts/model.py, src/imagent/contracts/validators.py, src/imagent/applications/__init__.py, src/imagent/diagnostics.py]
     target_code: [schemas/v1/common.schema.json, schemas/v1/history.schema.json, schemas/v1/messages.schema.json, schemas/v1/resources.schema.json, src/imagent/applications/contract.py]
     current_tests: [tests/test_adapter_contracts.py]
     target_tests: [tests/applications/test_contract.py]
@@ -1370,8 +1370,8 @@ components:
       target: [imagent:__version__, imagent:adapters, imagent:contracts, imagent:delivery_coordination, imagent:delivery_planning, imagent:diagnostics, imagent:events, imagent:projections, imagent:recovery]
     dependencies: [interaction.messages, interaction.channels.channel-contract, gateway.composition, gateway.delivery.planning, gateway.delivery.coordination, gateway.projection.observation, gateway.projection.recovery, gateway.diagnostics, applications.application-contract, applications.events]
     state_recovery: Stateless packaging; build must not import optional native dependencies in the base install.
-    current_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/py.typed]
-    target_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/py.typed]
+    current_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/contracts/__init__.py, src/imagent/py.typed]
+    target_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/contracts/__init__.py, src/imagent/py.typed]
     current_tests: [tests/test_package_independence.py]
     target_tests: [tests/engineering/test_release.py]
     authoritative_docs: [README.md, docs/components/repository-maintainability/design.md, docs/REUSE.md]
@@ -1393,8 +1393,8 @@ structural_status:
       owner: applications.application-contract
       rationale: Current public Applications facade; exports move with their owning leaves without retaining old implementations.
     - path: src/imagent/contracts/__init__.py
-      owner: interaction.operations
-      rationale: Temporary broad contract facade; later slices replace it with deliberate three-layer exports.
+      owner: engineering.release
+      rationale: Deliberate cross-layer public contract facade; every symbol delegates to its mapped owner and no implementation lives here.
     - path: src/imagent/controllers/__init__.py
       owner: interaction.controllers.controller-contract
       rationale: Current public Controller facade; registry/common/request exports move without retaining duplicate implementations.
@@ -1430,19 +1430,19 @@ structural_status:
       owners: [interaction.channels.channel-contract, gateway.delivery.proactive-authorization, gateway.persistence.repository-contracts, applications.application-contract]
       reason: Channel/admission, proactive authorization, repository, and Application Ports share one historical module.
     src/imagent/contracts/model.py:
-      owners: [interaction.messages, interaction.operations, interaction.media, interaction.channels.channel-contract, gateway.persistence.state-contracts, applications.application-contract, applications.capabilities, applications.events, applications.requests]
+      owners: [interaction.messages, interaction.media, interaction.channels.channel-contract, gateway.persistence.state-contracts, applications.application-contract, applications.capabilities, applications.events, applications.requests]
       reason: The language-neutral model is semantically correct but physically crosses all three target layers.
     src/imagent/contracts/delivery.py:
       owners: [interaction.media, interaction.channels.channel-contract, gateway.delivery.submissions, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.persistence.state-contracts]
       reason: Media/receipt validation, proactive intent/authorization/results, and submission identity share one contract module.
     src/imagent/contracts/errors.py:
-      owners: [interaction.operations, applications.application-contract, applications.requests]
-      reason: Common operation errors, dispatched-input ambiguity, and request lifecycle errors have distinct target owners.
+      owners: [applications.application-contract, applications.requests]
+      reason: Dispatched-input ambiguity and request lifecycle errors remain distinct Applications-owned values after common operation error projection moved to Interaction.
     src/imagent/contracts/operations.py:
-      owners: [interaction.operations, gateway.routing.bindings, gateway.routing.gateway-operations, applications.operations, applications.requests]
-      reason: Common operation base, Gateway variants, and Application variants require owner-specific modules.
+      owners: [gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.projection.request-correlation, applications.operations, applications.requests]
+      reason: Gateway binding, routing, observation, request-correlation, and Application operation variants remain physically combined after the common Interaction vocabulary moved to its owning leaf.
     src/imagent/contracts/validators.py:
-      owners: [interaction.operations, gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.dispatch, gateway.projection.request-correlation, applications.application-contract, applications.capabilities, applications.events, applications.operations]
+      owners: [gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.dispatch, gateway.projection.request-correlation, applications.application-contract, applications.capabilities, applications.events, applications.operations]
       reason: Cross-union validation follows the historical contract aggregation rather than the target owners of each validated type.
     src/imagent/contracts/request_validation.py:
       owners: [gateway.projection.request-correlation, gateway.persistence.state-contracts, applications.requests]

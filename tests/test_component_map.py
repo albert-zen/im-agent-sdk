@@ -23,7 +23,7 @@ class ComponentMapTests(unittest.TestCase):
         summary = validate_component_map(load_component_map())
 
         self.assertGreaterEqual(summary["components"], 50)
-        self.assertGreaterEqual(summary["test_paths"], 37)
+        self.assertGreaterEqual(summary["test_paths"], 38)
         self.assertEqual(summary["orphans"], 0)
         self.assertGreater(summary["split_candidates"], 0)
         self.assertGreaterEqual(summary["public_facade_exports"], 240)

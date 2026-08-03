@@ -563,14 +563,6 @@ class RequestRouteCorrelation:
     expires_at: datetime | None = None
 
 
-@dataclass(frozen=True, slots=True)
-class ContractError:
-    code: str
-    message: str
-    retryable: bool = False
-    metadata: Metadata = field(default_factory=dict)
-
-
 class AgentEventType(StrEnum):
     MESSAGE_CREATED = "message.created"
     MESSAGE_DELTA = "message.delta"

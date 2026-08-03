@@ -75,12 +75,12 @@ from ..contracts import (
     TurnInterrupted,
     TurnReplyCorrelationPolicy,
     TurnStatus,
-    operation_error,
     validate_application_operation,
     validate_application_operation_result,
 )
 from ..diagnostics import ApplicationDiagnosticFacts
 from ..events import EventBroadcaster, EventStreamGap, EventStreamReset
+from ..interaction.operations import operation_error
 from .presentation import (
     ApplicationPresentationCapacityError,
     ApplicationPresentationLimits,

@@ -85,12 +85,12 @@ from imagent.contracts import (
     UserInputQuestion,
     UserInputRequest,
     derive_request_response_shape,
-    operation_error,
     validate_application_operation,
     validate_application_operation_result,
     validate_request_response,
 )
 from imagent.events import CursorExpired, EventBroadcaster
+from imagent.interaction.operations import operation_error
 
 
 def make_capabilities(project_mode: ProjectMode) -> ApplicationCapabilities:
