@@ -11,14 +11,45 @@ from imagent.interaction.media import (
     AttachmentHandle,
     AttachmentSource,
     AttachmentSourceKind,
+    InvalidGenericFileError,
     LocalPath,
     RemoteUrl,
+    UnsupportedGenericFileError,
     configure_shared_filesystem_root,
+    detect_generic_file,
     resolve_local_attachment,
 )
 
 
 class InteractionMediaTests(unittest.TestCase):
+    def test_generic_utf8_text_uses_the_explicit_extension_media_type(self) -> None:
+        self.assertEqual(
+            detect_generic_file("notes.MD", b"# Notes\n"),
+            ("text/markdown", ".md"),
+        )
+
+    def test_generic_pdf_requires_structural_markers_in_actual_bytes(self) -> None:
+        content = (
+            b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n"
+            b"xref\n0 1\n0000000000 65535 f \ntrailer\n<<>>\n"
+            b"startxref\n0\n%%EOF"
+        )
+
+        self.assertEqual(
+            detect_generic_file("document.pdf", content),
+            ("application/pdf", ".pdf"),
+        )
+        with self.assertRaises(InvalidGenericFileError):
+            detect_generic_file("document.pdf", b"%PDF-1.7\nnot a complete pdf\n%%EOF")
+
+    def test_generic_file_rejects_unsupported_or_invalid_text_bytes(self) -> None:
+        with self.assertRaises(UnsupportedGenericFileError):
+            detect_generic_file("archive.zip", b"PK")
+        for content in (b"hello\x00world", b"\xff"):
+            with self.subTest(content=content):
+                with self.assertRaises(InvalidGenericFileError):
+                    detect_generic_file("notes.txt", content)
+
     def test_contract_facade_reexports_exact_media_objects(self) -> None:
         expected = {
             "AttachmentContent": AttachmentContent,

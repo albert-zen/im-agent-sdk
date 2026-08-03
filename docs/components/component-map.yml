@@ -146,10 +146,10 @@ components:
     id: interaction.media
     parent: interaction
     purpose: Define typed media sources and enforce source, size, media-type, and filesystem trust boundaries.
-    owns: [AttachmentContent, AttachmentSource, shared-filesystem root validation]
+    owns: [AttachmentContent, AttachmentSource, shared-filesystem root validation, generic file type and byte validation]
     does_not_own: [artifact bytes, durable spool, unrestricted URL fetching, product quota]
-    inputs: [typed attachment source, deployment trust root]
-    outputs: [validated typed attachment location]
+    inputs: [typed attachment source, deployment trust root, generic filename and actual transferred bytes]
+    outputs: [validated typed attachment location, generic content type and normalized suffix]
     public_contracts: [AttachmentContent, LocalPath, RemoteUrl, AttachmentHandle, AttachmentGrouping, AttachmentSource, AttachmentSourceKind, configure_shared_filesystem_root, resolve_local_attachment]
     public_exports:
       current: [imagent.contracts:AttachmentContent, imagent.contracts:LocalPath, imagent.contracts:RemoteUrl, imagent.contracts:AttachmentHandle, imagent.contracts:AttachmentGrouping, imagent.contracts:AttachmentSource, imagent.contracts:AttachmentSourceKind, imagent.interaction.media:AttachmentContent, imagent.interaction.media:LocalPath, imagent.interaction.media:RemoteUrl, imagent.interaction.media:AttachmentHandle, imagent.interaction.media:AttachmentGrouping, imagent.interaction.media:AttachmentSource, imagent.interaction.media:AttachmentSourceKind, imagent.interaction.media:configure_shared_filesystem_root, imagent.interaction.media:resolve_local_attachment]
@@ -158,7 +158,7 @@ components:
     state_recovery: Trust configuration is process-local; content lifetime and crash cleanup stay consumer-owned.
     current_code: [schemas/v1/capabilities.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, src/imagent/contracts/delivery.py, src/imagent/delivery_ingress.py, src/imagent/interaction/media.py]
     target_code: [schemas/v1/capabilities.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, src/imagent/interaction/media.py]
-    current_tests: [tests/interaction/test_media.py, tests/test_contracts.py]
+    current_tests: [tests/interaction/test_media.py, tests/test_contracts.py, tests/test_native_channels.py]
     target_tests: [tests/interaction/test_media.py]
     authoritative_docs: [docs/components/interaction/media/design.md, docs/components/interaction/media/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -288,7 +288,7 @@ components:
       target: []
     dependencies: [interaction.channels.channel-contract, interaction.messages, interaction.media]
     state_recovery: Native cursors and transient duplicate caches stay adapter-owned; durable claim stays Gateway-owned.
-    current_code: [src/imagent/interaction/channels/ingress.py, src/imagent/channels/runtime.py, src/imagent/channels/native/base.py, src/imagent/channels/native/diagnostics.py, src/imagent/channels/native/file_types.py, src/imagent/channels/native/media.py, src/imagent/channels/native/models.py, src/imagent/channels/native/windows_security.py]
+    current_code: [src/imagent/interaction/channels/ingress.py, src/imagent/channels/runtime.py, src/imagent/channels/native/base.py, src/imagent/channels/native/diagnostics.py, src/imagent/channels/native/media.py, src/imagent/channels/native/models.py, src/imagent/channels/native/windows_security.py]
     target_code: [src/imagent/interaction/channels/ingress.py]
     current_tests: [tests/interaction/channels/test_ingress.py, tests/test_native_channels.py, tests/test_channel_qq.py, tests/test_channel_telegram.py, tests/test_channel_feishu.py, tests/test_channel_weixin.py]
     target_tests: [tests/interaction/channels/test_ingress.py]

@@ -18,6 +18,8 @@ This leaf owns:
   `AttachmentGrouping`, `LocalPath`, `RemoteUrl`, and `AttachmentHandle`;
 - validation of typed source shape, declared size, media type, and accepting
   capability limits;
+- validation of the shared generic UTF-8 text and structurally checked PDF
+  subset from filename plus actual transferred bytes;
 - resolution of `LocalPath` only beneath an explicitly configured trusted
   shared root;
 - bounded inline staging mechanics used by the optional proactive ingress.
@@ -117,6 +119,14 @@ is an explicit remaining split: a later mechanical slice may extract its pure
 bounded staging mechanics without moving authorization, delivery, or cleanup
 lifetime into Interaction. No phase retains a second implementation or
 introduces an SDK durable spool.
+
+Shared generic-file detection also lives in this leaf. It accepts the same
+explicit extension allowlist as before, rejects NUL/non-UTF-8 text, and checks
+PDF header/object/xref/end markers from actual bytes rather than trusting the
+filename. Channel staging maps the leaf's typed validation errors to its
+existing provider-facing rejection codes; filename normalization, byte/count
+limits, downloading, spool quota/lifetime, and process isolation remain in the
+Channel ingress implementation.
 
 ## Authority
 
