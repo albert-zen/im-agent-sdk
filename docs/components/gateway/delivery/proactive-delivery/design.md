@@ -34,10 +34,13 @@ process-local repository remains co-located in this module as an explicit
 ## Ingress boundary
 
 The existing transport-neutral JSON handler and CLI remain in their current
-files for a later focused ingress/test convergence slice. Inline bytes are
-authorized before decode, staged only for one synchronous attempt, joined
-before cleanup, and never accepted as caller-supplied server paths. This move
-does not add a web server, spool, background worker, or retry scheduler.
+files for a later focused ingress/test convergence slice. The handler imports
+the bounded encoded-artifact staging mechanics from `interaction.media`, but
+continues to own JSON parsing, authorization-before-decode, the synchronous
+attempt lifetime, cancellation join, cleanup, delivery, and result mapping.
+Caller-supplied server paths remain unsupported. The staging helper cannot
+authorize, send, retain bytes beyond that attempt, or create a web server,
+spool, background worker, or retry scheduler.
 
 ## Public surface
 

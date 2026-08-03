@@ -95,7 +95,9 @@ components:
       - docs/decisions/0014-read-only-diagnostics-surface.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/interaction/media.py
+      - src/imagent/interaction/media_staging.py
       - tests/interaction/test_media.py
+      - tests/interaction/test_media_staging.py
     docs:
       - docs/components/interaction/media/design.md
       - docs/components/interaction/media/testing.md

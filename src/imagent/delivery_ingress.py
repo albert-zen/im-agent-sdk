@@ -1,13 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import base64
-import binascii
-import hashlib
-import os
 import shutil
-import tempfile
-import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -26,7 +20,13 @@ from .contracts import (
 )
 from .gateway.delivery.proactive import DeliveryRouteError
 from .gateway.delivery.proactive_authorization import DeliveryAuthorizationError
-from .interaction.media import AttachmentContent, LocalPath
+from .interaction.media import AttachmentContent
+from .interaction.media_staging import (
+    InlineArtifactStagingInput,
+    create_inline_staging_directory,
+    stage_inline_artifacts,
+    validated_inline_artifact_size,
+)
 from .interaction.messages import ConversationRef, TextContent, TextFormat
 from .interaction.operations import ContractViolation
 from .keyed_locks import KeyedLockRegistry
@@ -52,15 +52,6 @@ class ProactiveDeliveryEndpoint(Protocol):
 class DeliveryIngressResponse:
     status_code: int
     body: dict[str, object]
-
-
-@dataclass(frozen=True, slots=True)
-class _InlineArtifact:
-    attachment_id: str
-    filename: str
-    media_type: str
-    encoded_content: str
-    declared_size: int | None
 
 
 class ProactiveDeliveryJsonHandler:
@@ -144,8 +135,8 @@ class ProactiveDeliveryJsonHandler:
         if not content_payload:
             raise ValueError("content must contain at least one item")
 
-        parsed_content: list[TextContent | _InlineArtifact] = []
-        inline_artifacts: list[_InlineArtifact] = []
+        parsed_content: list[TextContent | InlineArtifactStagingInput] = []
+        inline_artifacts: list[InlineArtifactStagingInput] = []
         total_decoded_bytes = 0
         for index, raw_item in enumerate(content_payload):
             if not isinstance(raw_item, Mapping):
@@ -163,12 +154,11 @@ class ProactiveDeliveryJsonHandler:
                 raise ValueError(f"content[{index}].type is unsupported")
             artifact = _parse_inline_artifact(raw_item)
             remaining_bytes = self._max_inline_bytes - total_decoded_bytes
-            decoded_size = _decoded_base64_size(
-                artifact.encoded_content,
+            decoded_size = validated_inline_artifact_size(
+                artifact,
                 max_bytes=remaining_bytes,
+                declared_size_error=(f"content[{index}].sizeBytes does not match encoded content"),
             )
-            if artifact.declared_size is not None and artifact.declared_size != decoded_size:
-                raise ValueError(f"content[{index}].sizeBytes does not match encoded content")
             total_decoded_bytes += decoded_size
             if total_decoded_bytes > self._max_inline_bytes:
                 raise ValueError("inline artifact payload exceeds configured byte limit")
@@ -179,12 +169,12 @@ class ProactiveDeliveryJsonHandler:
         staged_by_id: dict[str, AttachmentContent] = {}
         if inline_artifacts:
             staging_directory = await asyncio.to_thread(
-                _create_staging_directory,
+                create_inline_staging_directory,
                 self._staging_root,
             )
             try:
                 staged = await asyncio.to_thread(
-                    _stage_artifacts,
+                    stage_inline_artifacts,
                     staging_directory,
                     inline_artifacts,
                 )
@@ -253,89 +243,17 @@ def _parse_target(
     )
 
 
-def _parse_inline_artifact(payload: Mapping[str, object]) -> _InlineArtifact:
+def _parse_inline_artifact(payload: Mapping[str, object]) -> InlineArtifactStagingInput:
     size = payload.get("sizeBytes")
     if size is not None and (not isinstance(size, int) or isinstance(size, bool) or size < 0):
         raise ValueError("inlineArtifact.sizeBytes must be a non-negative integer")
-    return _InlineArtifact(
+    return InlineArtifactStagingInput(
         attachment_id=_required_string(payload, "attachmentId"),
         filename=_required_string(payload, "filename"),
         media_type=_required_string(payload, "mediaType"),
         encoded_content=_required_string(payload, "contentBase64"),
         declared_size=size,
     )
-
-
-def _decoded_base64_size(encoded: str, *, max_bytes: int) -> int:
-    if max_bytes < 0 or len(encoded) > 4 * ((max_bytes + 2) // 3) + 4:
-        raise ValueError("inline artifact payload exceeds configured byte limit")
-    try:
-        decoded_size = len(base64.b64decode(encoded, validate=True))
-    except (binascii.Error, ValueError) as error:
-        raise ValueError("inlineArtifact.contentBase64 is invalid") from error
-    if decoded_size > max_bytes:
-        raise ValueError("inline artifact payload exceeds configured byte limit")
-    return decoded_size
-
-
-def _stage_artifacts(
-    directory: Path,
-    artifacts: Sequence[_InlineArtifact],
-) -> tuple[AttachmentContent, ...]:
-    resolved_root = directory.resolve(strict=True)
-    staged: list[AttachmentContent] = []
-    for artifact in artifacts:
-        try:
-            content = base64.b64decode(artifact.encoded_content, validate=True)
-        except (binascii.Error, ValueError) as error:
-            raise ValueError("inlineArtifact.contentBase64 is invalid") from error
-        digest = hashlib.sha256(content).hexdigest()
-        filename = f"{_safe_component(artifact.attachment_id)}-{digest}"
-        target = (resolved_root / filename).resolve()
-        target.relative_to(resolved_root)
-        temporary = resolved_root / f".{filename}.{uuid.uuid4().hex}.tmp"
-        try:
-            with temporary.open("xb") as stream:
-                stream.write(content)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, target)
-        finally:
-            temporary.unlink(missing_ok=True)
-        staged.append(
-            AttachmentContent(
-                attachment_id=artifact.attachment_id,
-                media_type=artifact.media_type,
-                source=LocalPath(str(target)),
-                filename=artifact.filename,
-                size_bytes=len(content),
-                metadata={"sha256": digest},
-            )
-        )
-    return tuple(staged)
-
-
-def _create_staging_directory(root: Path) -> Path:
-    root.mkdir(parents=True, exist_ok=True)
-    trusted_root = root.resolve(strict=True)
-    if not trusted_root.is_dir():
-        raise OSError("artifact staging root is not a directory")
-    candidate = Path(
-        tempfile.mkdtemp(
-            prefix=".imagent-delivery-",
-            dir=trusted_root,
-        )
-    )
-    resolved = candidate.resolve(strict=True)
-    resolved.relative_to(trusted_root)
-    if candidate.is_symlink() or (hasattr(candidate, "is_junction") and candidate.is_junction()):
-        shutil.rmtree(candidate, ignore_errors=True)
-        raise OSError("artifact staging directory cannot be a link")
-    return resolved
-
-
-def _safe_component(value: str) -> str:
-    return hashlib.sha256(value.encode()).hexdigest()
 
 
 def _required_mapping(

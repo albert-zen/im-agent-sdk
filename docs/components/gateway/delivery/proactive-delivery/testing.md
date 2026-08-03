@@ -9,8 +9,10 @@ redaction, SQLite restart, and O2 integration.
 Ownership tests additionally prove exact Gateway/contracts facade identity,
 absence of the historical implementation module, and clean package imports.
 The JSON/CLI ingress suite remains at its current path until the focused
-ingress move and continues to cover authorization-before-staging, bounded
-inline media, cancellation join, cleanup, and loopback CLI policy.
+ingress move and continues to cover authorization-before-staging,
+cancellation join, cleanup, route/result mapping, and loopback CLI policy.
+Pure decoded-byte, path-confinement, digest, and staged-content construction
+cases live in `tests/interaction/test_media_staging.py`.
 
 Run:
 
