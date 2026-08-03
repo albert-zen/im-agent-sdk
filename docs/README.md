@@ -32,7 +32,7 @@ separates SDK ownership work from the later IMCodex consumer migration.
 | `gateway.py` | [gateway design](components/gateway/design.md), [testing](components/gateway/testing.md) | gateway operation and vertical-slice tests |
 | `events.py`, `projection_routes.py`, `projection_runtime.py`, `projections.py`, `recovery.py` | [projection/recovery design](components/projections-and-recovery/design.md), [testing](components/projections-and-recovery/testing.md) | fan-out, projection routing, recovery tests |
 | `bindings.py`, `sqlite_rows.py`, `storage.py` | [persistence design](components/persistence/design.md), [testing](components/persistence/testing.md) | binding and storage tests |
-| `controllers/**` | [controllers design](components/controllers/design.md), [testing](components/controllers/testing.md) | Slash Controller tests |
+| `controllers/**` | [Controller subtree](components/interaction/controllers/README.md) and the affected leaf design/testing docs | Controller contract, registry, common-command, or request-presentation focused tests |
 | `channels/**` | [Channel adapter design](components/channel-adapters/design.md), [testing](components/channel-adapters/testing.md), applicable native page | Channel contract and native seam tests |
 | `applications/**` | [Application adapter design](components/application-adapters/design.md), [testing](components/application-adapters/testing.md), applicable native page | adapter contract, native client, event, recovery tests |
 | `diagnostics.py` and diagnostic providers | [diagnostics design](components/diagnostics/design.md), [testing](components/diagnostics/testing.md) | redaction, bounded-cardinality, reconnect/overflow, and aggregate health tests |

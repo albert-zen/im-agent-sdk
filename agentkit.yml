@@ -298,6 +298,15 @@ components:
       - src/imagent/controllers/**
       - tests/test_slash_controller.py
     docs:
+      - docs/components/interaction/controllers/README.md
+      - docs/components/interaction/controllers/controller-contract/design.md
+      - docs/components/interaction/controllers/controller-contract/testing.md
+      - docs/components/interaction/controllers/command-registry/design.md
+      - docs/components/interaction/controllers/command-registry/testing.md
+      - docs/components/interaction/controllers/common-commands/design.md
+      - docs/components/interaction/controllers/common-commands/testing.md
+      - docs/components/interaction/controllers/request-presentation/design.md
+      - docs/components/interaction/controllers/request-presentation/testing.md
       - docs/components/controllers/design.md
       - docs/components/controllers/testing.md
     required_docs:

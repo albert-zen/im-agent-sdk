@@ -1,85 +1,17 @@
-# Controllers component design
+# Controllers navigation
 
-## Purpose
+The authoritative Controller design is split across the approved Interaction
+leaves:
 
-Controllers are optional inbound UX. They translate Slash commands, buttons,
-cards, or product interactions into the same typed Application and Gateway
-operations used by non-text callers.
+- [Controller contract](../interaction/controllers/controller-contract/design.md);
+- [Command registry](../interaction/controllers/command-registry/design.md);
+- [Common commands](../interaction/controllers/common-commands/design.md);
+- [Request presentation](../interaction/controllers/request-presentation/design.md).
 
-## Ownership
+See the [Controller subtree navigation](../interaction/controllers/README.md)
+and machine-readable [component map](../component-map.yml) for current/target
+code, exports, dependencies, tests, decisions, and structural gaps.
 
-Controllers owns:
-
-- the `InboundController` and `ControllerActions` UX seam;
-- the SDK-provided common Slash grammar;
-- selection and command-flow presentation state;
-- default Markdown help, lists, history, catch-up, and error rendering.
-
-It does not own:
-
-- Message/Operation semantics;
-- Gateway binding or route mutation;
-- native Application resources or execution;
-- Channel-specific Markdown escaping, segmentation, or native cards;
-- product-only commands, model/provider selection, or permission policy.
-
-Controllers are not a generic message middleware surface. A Controller may
-consume product interaction grammar and invoke typed actions; it does not
-adapt an unconsumed message for one Application or own failure, projection,
-delivery-outcome, binding, idempotency, or input-continuation policy. Those
-typed extension positions are separately governed by ADR 0015.
-
-## Flow
-
-Gateway offers an inbound message to the configured Controller. The Controller
-returns `None` when it does not consume the message. If consumed, it calls only
-typed actions and returns one or more `OutboundMessage` requests.
-
-The default Slash Controller may explicitly compose operations. For example,
-selecting a Thread can bind input and observe output, while native activation
-remains a separate optional action. The composition never changes the meaning
-of the underlying operations.
-
-Current common commands cover help, Application/Project/Thread navigation,
-creation/deletion/status, catch-up, and history. Natural-language intent or
-native buttons can replace the parser without changing Core.
-
-The common Slash grammar is line-oriented: only the first non-empty input line
-is the command and its arguments. Trailing Channel-supplied or user-supplied
-context is not interpreted as control syntax. Channels therefore remain
-unaware of the optional Slash product behavior.
-
-The official Markdown Request Presenter renders typed approval/user-input
-requests without inventing policy. The optional Slash Controller maps an
-explicit Application instance plus native request ID and choice/answers to the
-typed Conversation response operation. Channel-native buttons or cards invoke
-that same operation through the Channel operation callback; Core does not
-define a universal card format.
-
-All native prompt fields are untrusted presentation input. Approval facts are
-rendered in an indented code block, while labels, descriptions, headers, and
-questions are escaped before Markdown interpolation. A `secret` question is
-not rendered as an `/answer` command: the plain presenter sends an explicit
-unsupported notice and returns `response_supported=False`, so projection
-creates no response correlation. A future Channel-native presenter may accept
-the same typed request only after it proves a secure-input capability.
-
-## Dependencies and state
-
-Controllers depend on Contracts, not Gateway implementation. Gateway supplies
-a locked `ControllerActions` implementation.
-
-Controller view caches are ephemeral UX state. They are not resource,
-transcript, or binding authority and may be discarded.
-
-## Failure
-
-Unsupported capability, missing binding, stale reference, invalid arguments,
-and native failures are rendered from typed outcomes. A Controller must not
-silently approximate destructive operations or turn arbitrary chat text into
-unreviewed Core semantics.
-
-## Change obligations
-
-Changes require Slash tests, typed operation validation, presenter snapshots or
-focused assertions, and Channel rendering checks when output shape changes.
+This historical broad path remains temporarily for repository navigation and
+AgentKit compatibility during the physical rollout. It is not a fifth
+Controller component and does not override the leaf contracts.
