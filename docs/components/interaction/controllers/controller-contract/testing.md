@@ -20,6 +20,8 @@ Required scenarios:
   and the handler never receives claim/fence authority;
 - the fence accepts only the complete current inbound/command identity, can be
   entered once, and has no release/complete/reopen operation;
+- an unfrozen lifecycle-capable Controller fails before Gateway input
+  acceptance, and shutdown closes its bounded work after Channel shutdown;
 - known pre-side-effect failure, unknown action outcome, and post-effect
   presentation failure do not collapse into the same retry decision;
 - no Controller work runs on Channel or Application socket-read callbacks;

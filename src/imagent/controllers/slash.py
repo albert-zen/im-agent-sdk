@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import shlex
+import time
+from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Generic, TypeVar
 
 from ..contracts import (
     ApplicationOperationFailed,
@@ -43,7 +48,17 @@ from ..contracts import (
     TurnCatchupRead,
     UserInputResponse,
 )
-from ..interaction.controllers import ControllerActions
+from ..interaction.controllers import (
+    CommandArgumentContract,
+    CommandDefinition,
+    CommandExecutionSafety,
+    CommandHandlerActions,
+    CommandInvocation,
+    CommandRegistry,
+    CommandRegistryLimits,
+    CommandResult,
+    ControllerActions,
+)
 from ..interaction.messages import ConversationRef, InboundMessage, OutboundMessage, TextContent
 from .markdown import MarkdownSlashPresenter
 
@@ -56,16 +71,31 @@ class SlashCommand:
 
 
 def parse_slash_command(message: InboundMessage) -> SlashCommand | None:
-    text = "\n".join(part.text for part in message.content if isinstance(part, TextContent)).strip()
-    command_line = text.partition("\n")[0].strip()
-    if not command_line.startswith("/"):
+    command_line = next(
+        (
+            line.strip()
+            for part in message.content
+            if isinstance(part, TextContent)
+            for line in part.text.splitlines()
+            if line.strip()
+        ),
+        "",
+    )
+    if not command_line or not command_line.startswith("/"):
         return None
+    limits = CommandRegistryLimits()
+    if len(command_line) > limits.max_input_line_length:
+        raise ValueError("Slash command exceeds the configured line limit.")
     try:
         tokens = shlex.split(command_line)
     except ValueError as error:
         raise ValueError(f"Invalid slash command: {error}") from error
     if not tokens:
         return None
+    if len(tokens) - 1 > limits.max_arguments:
+        raise ValueError("Slash command has too many arguments.")
+    if any(len(argument) > limits.max_argument_length for argument in tokens[1:]):
+        raise ValueError("Slash command argument exceeds the configured limit.")
     return SlashCommand(
         name=tokens[0][1:].casefold(),
         arguments=tuple(tokens[1:]),
@@ -75,7 +105,7 @@ def parse_slash_command(message: InboundMessage) -> SlashCommand | None:
 
 @dataclass(frozen=True, slots=True)
 class _ApplicationContext:
-    binding: ConversationBinding
+    binding: ConversationBinding | None
     application: ApplicationSummary
 
 
@@ -83,36 +113,56 @@ class _CommandError(RuntimeError):
     pass
 
 
-class SlashController:
-    """Official optional common Slash UX over the typed operation surfaces."""
+class _CommonCommandRuntime:
+    """Stateful common handlers registered into one explicit registry."""
 
-    def __init__(self, presenter: MarkdownSlashPresenter | None = None) -> None:
-        self._presenter = presenter or MarkdownSlashPresenter()
-        self._project_views: dict[ConversationRef, tuple[ProjectSummary, ...]] = {}
-        self._thread_views: dict[ConversationRef, tuple[ThreadSummary, ...]] = {}
-
-    async def handle(
+    def __init__(
         self,
-        message: InboundMessage,
-        actions: ControllerActions,
-    ) -> tuple[OutboundMessage, ...] | None:
-        try:
-            command = parse_slash_command(message)
-        except ValueError as error:
-            return (self._presenter.response(message, str(error), error=True),)
-        if command is None:
-            return None
+        presenter: MarkdownSlashPresenter,
+        limits: CommandRegistryLimits,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._presenter = presenter or MarkdownSlashPresenter()
+        self._project_views = _BoundedViewCache[tuple[ProjectSummary, ...]](
+            capacity=limits.view_cache_capacity,
+            ttl_seconds=limits.view_cache_ttl_seconds,
+            clock=clock,
+        )
+        self._thread_views = _BoundedViewCache[tuple[ThreadSummary, ...]](
+            capacity=limits.view_cache_capacity,
+            ttl_seconds=limits.view_cache_ttl_seconds,
+            clock=clock,
+        )
+
+    async def handle_command(
+        self,
+        invocation: CommandInvocation,
+        actions: CommandHandlerActions,
+    ) -> CommandResult:
+        message = InboundMessage(
+            message_id=invocation.message_id,
+            conversation_ref=invocation.conversation_ref,
+            sender=invocation.actor,
+            content=(),
+            created_at=invocation.created_at,
+        )
+        command = SlashCommand(
+            name=invocation.command_name,
+            arguments=invocation.arguments,
+            raw=f"/{invocation.command_name}",
+        )
         try:
             text = await self._dispatch(message, command, actions)
-            return (self._presenter.response(message, text),)
+            return CommandResult.text(text)
         except _CommandError as error:
-            return (self._presenter.response(message, str(error), error=True),)
+            return CommandResult.failure(str(error))
 
     async def _dispatch(
         self,
         message: InboundMessage,
         command: SlashCommand,
-        actions: ControllerActions,
+        actions: CommandHandlerActions,
     ) -> str:
         if command.name in {"help", "start"}:
             return self._presenter.help()
@@ -123,7 +173,11 @@ class SlashController:
         if command.name in {"respond", "answer"}:
             return await self._respond_to_request(message, command, actions)
 
-        context = await self._ensure_application_binding(message, actions)
+        context = await self._ensure_application_binding(
+            message,
+            actions,
+            allow_binding_mutation=command.name in {"use", "pick", "new", "delete"},
+        )
         if command.name == "projects":
             projects = await self._list_projects(
                 message,
@@ -131,7 +185,7 @@ class SlashController:
                 context,
                 query=" ".join(command.arguments) or None,
             )
-            self._project_views[message.conversation_ref] = projects
+            self._project_views.put(message.conversation_ref, projects)
             return self._presenter.projects(projects)
         if command.name in {"use", "project"}:
             return await self._select_project(message, command, actions, context)
@@ -142,7 +196,7 @@ class SlashController:
                 context,
                 query=" ".join(command.arguments) or None,
             )
-            self._thread_views[message.conversation_ref] = threads
+            self._thread_views.put(message.conversation_ref, threads)
             return self._presenter.threads(threads)
         if command.name in {"pick", "thread"}:
             return await self._select_thread(message, command, actions, context)
@@ -162,7 +216,7 @@ class SlashController:
         self,
         message: InboundMessage,
         command: SlashCommand,
-        actions: ControllerActions,
+        actions: CommandHandlerActions,
     ) -> str:
         if len(command.arguments) < 3:
             raise _CommandError(
@@ -210,7 +264,7 @@ class SlashController:
     async def _applications(
         self,
         message: InboundMessage,
-        actions: ControllerActions,
+        actions: CommandHandlerActions,
     ) -> tuple[ApplicationSummary, ...]:
         result = await actions.execute_gateway(
             ListApplications(
@@ -230,7 +284,7 @@ class SlashController:
         self,
         message: InboundMessage,
         command: SlashCommand,
-        actions: ControllerActions,
+        actions: CommandHandlerActions,
     ) -> str:
         applications = await self._applications(message, actions)
         if not command.arguments:
@@ -264,7 +318,9 @@ class SlashController:
     async def _ensure_application_binding(
         self,
         message: InboundMessage,
-        actions: ControllerActions,
+        actions: CommandHandlerActions,
+        *,
+        allow_binding_mutation: bool,
     ) -> _ApplicationContext:
         binding = await actions.get_binding(message.conversation_ref)
         applications = await self._applications(message, actions)
@@ -279,6 +335,8 @@ class SlashController:
         if len(applications) != 1:
             raise _CommandError("Choose an Agent application with `/apps` and `/app <number>`.")
         application = applications[0]
+        if not allow_binding_mutation:
+            return _ApplicationContext(binding=binding, application=application)
         result = await actions.execute_gateway(
             SelectApplication(
                 operation_id=_operation_id(message, "application.select"),
@@ -295,7 +353,7 @@ class SlashController:
     async def _list_projects(
         self,
         message: InboundMessage,
-        actions: ControllerActions,
+        actions: CommandHandlerActions,
         context: _ApplicationContext,
         *,
         query: str | None = None,
@@ -318,7 +376,7 @@ class SlashController:
         self,
         message: InboundMessage,
         command: SlashCommand,
-        actions: ControllerActions,
+        actions: CommandHandlerActions,
         context: _ApplicationContext,
     ) -> str:
         if not command.arguments:
@@ -326,7 +384,7 @@ class SlashController:
         projects = self._project_views.get(message.conversation_ref)
         if projects is None:
             projects = await self._list_projects(message, actions, context)
-            self._project_views[message.conversation_ref] = projects
+            self._project_views.put(message.conversation_ref, projects)
         project = _select(
             projects,
             " ".join(command.arguments),
@@ -335,13 +393,14 @@ class SlashController:
         )
         if project is None:
             raise _CommandError("Project not found.")
+        binding = _require_context_binding(context)
         result = await actions.execute_gateway(
             BindConversationToProject(
                 operation_id=_operation_id(message, "conversation.bind_project"),
                 conversation_ref=message.conversation_ref,
                 actor=message.sender,
                 project_ref=project.ref,
-                expected_revision=context.binding.revision,
+                expected_revision=binding.revision,
                 created_at=message.created_at,
             )
         )
@@ -352,7 +411,7 @@ class SlashController:
     async def _list_threads(
         self,
         message: InboundMessage,
-        actions: ControllerActions,
+        actions: CommandHandlerActions,
         context: _ApplicationContext,
         *,
         query: str | None = None,
@@ -361,7 +420,7 @@ class SlashController:
             ListThreads(
                 operation_id=_operation_id(message, "thread.list"),
                 application_ref=context.application.ref,
-                project_ref=context.binding.project_ref,
+                project_ref=context.binding.project_ref if context.binding is not None else None,
                 query=query,
                 created_at=message.created_at,
             )
@@ -376,7 +435,7 @@ class SlashController:
         self,
         message: InboundMessage,
         command: SlashCommand,
-        actions: ControllerActions,
+        actions: CommandHandlerActions,
         context: _ApplicationContext,
     ) -> str:
         if not command.arguments:
@@ -384,7 +443,7 @@ class SlashController:
         threads = self._thread_views.get(message.conversation_ref)
         if threads is None:
             threads = await self._list_threads(message, actions, context)
-            self._thread_views[message.conversation_ref] = threads
+            self._thread_views.put(message.conversation_ref, threads)
         thread = _select(
             threads,
             " ".join(command.arguments),
@@ -393,13 +452,14 @@ class SlashController:
         )
         if thread is None:
             raise _CommandError("Thread not found.")
+        binding = _require_context_binding(context)
         result = await actions.execute_gateway(
             BindConversationToThread(
                 operation_id=_operation_id(message, "conversation.bind_thread"),
                 conversation_ref=message.conversation_ref,
                 actor=message.sender,
                 thread_ref=thread.ref,
-                expected_revision=context.binding.revision,
+                expected_revision=binding.revision,
                 created_at=message.created_at,
             )
         )
@@ -425,19 +485,20 @@ class SlashController:
         self,
         message: InboundMessage,
         command: SlashCommand,
-        actions: ControllerActions,
+        actions: CommandHandlerActions,
         context: _ApplicationContext,
     ) -> str:
+        binding = _require_context_binding(context)
         if (
             context.application.capabilities.projects.mode is ProjectMode.MANAGED
-            and context.binding.project_ref is None
+            and binding.project_ref is None
         ):
             raise _CommandError("Choose a project first with `/projects` and `/use <number>`.")
         result = await actions.execute_application(
             CreateThread(
                 operation_id=_operation_id(message, "thread.create"),
                 application_ref=context.application.ref,
-                project_ref=context.binding.project_ref,
+                project_ref=binding.project_ref,
                 title=" ".join(command.arguments) or "IM task",
                 created_at=message.created_at,
             )
@@ -453,7 +514,7 @@ class SlashController:
                 conversation_ref=message.conversation_ref,
                 actor=message.sender,
                 thread_ref=thread.ref,
-                expected_revision=context.binding.revision,
+                expected_revision=binding.revision,
                 created_at=message.created_at,
             )
         )
@@ -479,10 +540,11 @@ class SlashController:
     async def _delete_thread(
         self,
         message: InboundMessage,
-        actions: ControllerActions,
+        actions: CommandHandlerActions,
         context: _ApplicationContext,
     ) -> str:
-        thread_ref = context.binding.thread_ref
+        binding = _require_context_binding(context)
+        thread_ref = binding.thread_ref
         if thread_ref is None:
             raise _CommandError("No thread is selected.")
         capability = context.application.capabilities.threads.deletion
@@ -506,7 +568,7 @@ class SlashController:
                 operation_id=_operation_id(message, "conversation.clear_thread"),
                 conversation_ref=message.conversation_ref,
                 actor=message.sender,
-                expected_revision=context.binding.revision,
+                expected_revision=binding.revision,
                 created_at=message.created_at,
             )
         )
@@ -519,10 +581,10 @@ class SlashController:
     async def _thread_status(
         self,
         message: InboundMessage,
-        actions: ControllerActions,
+        actions: CommandHandlerActions,
         context: _ApplicationContext,
     ) -> str:
-        thread_ref = context.binding.thread_ref
+        thread_ref = context.binding.thread_ref if context.binding is not None else None
         if thread_ref is None:
             raise _CommandError("No thread is selected.")
         result = await actions.execute_application(
@@ -543,10 +605,10 @@ class SlashController:
         self,
         message: InboundMessage,
         command: SlashCommand,
-        actions: ControllerActions,
+        actions: CommandHandlerActions,
         context: _ApplicationContext,
     ) -> str:
-        thread_ref = context.binding.thread_ref
+        thread_ref = context.binding.thread_ref if context.binding is not None else None
         if thread_ref is None:
             raise _CommandError("No thread is selected.")
         try:
@@ -572,10 +634,10 @@ class SlashController:
         self,
         message: InboundMessage,
         command: SlashCommand,
-        actions: ControllerActions,
+        actions: CommandHandlerActions,
         context: _ApplicationContext,
     ) -> str:
-        thread_ref = context.binding.thread_ref
+        thread_ref = context.binding.thread_ref if context.binding is not None else None
         if thread_ref is None:
             raise _CommandError("No thread is selected.")
         try:
@@ -603,6 +665,249 @@ class SlashController:
         self._thread_views.pop(message.conversation_ref, None)
 
 
+def register_common_commands(
+    registry: CommandRegistry,
+    *,
+    presenter: MarkdownSlashPresenter | None = None,
+    include: tuple[str, ...] | None = None,
+    clock: Callable[[], float] = time.monotonic,
+) -> None:
+    """Register the selected SDK common definitions into one local registry."""
+
+    runtime = _CommonCommandRuntime(
+        presenter or MarkdownSlashPresenter(),
+        registry.limits,
+        clock=clock,
+    )
+    definitions = _common_command_definitions(runtime, registry.limits)
+    selected = set(definitions) if include is None else set(include)
+    unknown = selected.difference(definitions)
+    if unknown:
+        raise ValueError(f"unknown common command selection: {sorted(unknown)!r}")
+    for name, definition in definitions.items():
+        if name in selected:
+            registry.register(definition)
+
+
+class SlashController:
+    """Default frozen registry containing every SDK common Slash command."""
+
+    def __init__(
+        self,
+        presenter: MarkdownSlashPresenter | None = None,
+        *,
+        limits: CommandRegistryLimits | None = None,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        registry = CommandRegistry(limits)
+        register_common_commands(
+            registry,
+            presenter=presenter,
+            clock=clock,
+        )
+        registry.freeze()
+        self._registry = registry
+
+    async def handle(
+        self,
+        message: InboundMessage,
+        actions: ControllerActions,
+    ) -> tuple[OutboundMessage, ...] | None:
+        return await self._registry.handle(message, actions)
+
+    def validate_startup(self) -> None:
+        self._registry.validate_startup()
+
+    async def close(self) -> None:
+        await self._registry.close()
+
+
+def _common_command_definitions(
+    runtime: _CommonCommandRuntime,
+    limits: CommandRegistryLimits,
+) -> dict[str, CommandDefinition]:
+    read_only = CommandExecutionSafety.READ_ONLY
+    effectful = CommandExecutionSafety.EFFECTFUL
+    maximum = limits.max_arguments
+
+    def definition(
+        name: str,
+        *,
+        aliases: tuple[str, ...] = (),
+        minimum: int = 0,
+        maximum_arguments: int = 0,
+        summary: str,
+        usage: str,
+        safety: CommandExecutionSafety,
+    ) -> CommandDefinition:
+        return CommandDefinition(
+            name=name,
+            handler=runtime.handle_command,
+            aliases=aliases,
+            arguments=CommandArgumentContract(minimum, maximum_arguments),
+            summary=summary,
+            usage=usage,
+            safety=safety,
+        )
+
+    return {
+        "help": definition(
+            "help",
+            aliases=("start",),
+            summary="Show common commands.",
+            usage="/help",
+            safety=read_only,
+        ),
+        "apps": definition(
+            "apps",
+            summary="List Agent applications.",
+            usage="/apps",
+            safety=read_only,
+        ),
+        "app": definition(
+            "app",
+            maximum_arguments=maximum,
+            summary="Select an Agent application.",
+            usage="/app <selector>",
+            safety=effectful,
+        ),
+        "projects": definition(
+            "projects",
+            maximum_arguments=maximum,
+            summary="List projects.",
+            usage="/projects [query]",
+            safety=read_only,
+        ),
+        "use": definition(
+            "use",
+            aliases=("project",),
+            minimum=1,
+            maximum_arguments=maximum,
+            summary="Select a project.",
+            usage="/use <selector>",
+            safety=effectful,
+        ),
+        "threads": definition(
+            "threads",
+            maximum_arguments=maximum,
+            summary="List Threads.",
+            usage="/threads [query]",
+            safety=read_only,
+        ),
+        "pick": definition(
+            "pick",
+            aliases=("thread",),
+            minimum=1,
+            maximum_arguments=maximum,
+            summary="Select a Thread.",
+            usage="/pick <selector>",
+            safety=effectful,
+        ),
+        "new": definition(
+            "new",
+            maximum_arguments=maximum,
+            summary="Create and select a Thread.",
+            usage="/new [title]",
+            safety=effectful,
+        ),
+        "delete": definition(
+            "delete",
+            aliases=("archive",),
+            summary="Delete or archive the selected Thread.",
+            usage="/delete",
+            safety=effectful,
+        ),
+        "status": definition(
+            "status",
+            summary="Read selected Thread status.",
+            usage="/status",
+            safety=read_only,
+        ),
+        "catchup": definition(
+            "catchup",
+            maximum_arguments=1,
+            summary="Read recent Turn activity.",
+            usage="/catchup [messages]",
+            safety=read_only,
+        ),
+        "history": definition(
+            "history",
+            maximum_arguments=3,
+            summary="Read bounded Thread history.",
+            usage="/history [turns] [--page N]",
+            safety=read_only,
+        ),
+        "respond": definition(
+            "respond",
+            minimum=3,
+            maximum_arguments=3,
+            summary="Respond to a delivered approval.",
+            usage="/respond <application> <request> <choice>",
+            safety=effectful,
+        ),
+        "answer": definition(
+            "answer",
+            minimum=3,
+            maximum_arguments=maximum,
+            summary="Respond to delivered structured input.",
+            usage="/answer <application> <request> <question>=<answer> ...",
+            safety=effectful,
+        ),
+    }
+
+
+TView = TypeVar("TView")
+
+
+class _BoundedViewCache(Generic[TView]):
+    def __init__(
+        self,
+        *,
+        capacity: int,
+        ttl_seconds: float,
+        clock: Callable[[], float],
+    ) -> None:
+        self._capacity = capacity
+        self._ttl_seconds = ttl_seconds
+        self._clock = clock
+        self._items: OrderedDict[ConversationRef, tuple[float, TView]] = OrderedDict()
+
+    def get(self, key: ConversationRef) -> TView | None:
+        self._expire()
+        item = self._items.get(key)
+        if item is None:
+            return None
+        expires_at, value = item
+        if expires_at <= self._clock():
+            self._items.pop(key, None)
+            return None
+        self._items.move_to_end(key)
+        return value
+
+    def put(self, key: ConversationRef, value: TView) -> None:
+        self._expire()
+        self._items[key] = (self._clock() + self._ttl_seconds, value)
+        self._items.move_to_end(key)
+        while len(self._items) > self._capacity:
+            self._items.popitem(last=False)
+
+    def pop(self, key: ConversationRef, default: object = None) -> TView | object:
+        item = self._items.pop(key, None)
+        return default if item is None else item[1]
+
+    def _expire(self) -> None:
+        now = self._clock()
+        expired = [key for key, (expires_at, _) in self._items.items() if expires_at <= now]
+        for key in expired:
+            self._items.pop(key, None)
+
+
+def _require_context_binding(context: _ApplicationContext) -> ConversationBinding:
+    if context.binding is None:
+        raise _CommandError("No Agent application is selected.")
+    return context.binding
+
+
 def _require_bound(result) -> ConversationBinding:
     if isinstance(result, GatewayOperationFailed):
         raise _CommandError(result.error.message)
@@ -619,7 +924,17 @@ def _require_observed(result) -> None:
 
 
 def _operation_id(message: InboundMessage, operation_type: str) -> str:
-    return f"imagent:operation:{message.message_id}:{operation_type}"
+    digest = hashlib.sha256()
+    for value in (
+        message.conversation_ref.channel_instance_id,
+        message.conversation_ref.native_conversation_id,
+        message.message_id,
+        operation_type,
+    ):
+        encoded = value.encode("utf-8")
+        digest.update(len(encoded).to_bytes(8, "big"))
+        digest.update(encoded)
+    return f"imagent:operation:{operation_type}:{digest.hexdigest()}"
 
 
 def _select(items, query: str, *, id_of, label_of):

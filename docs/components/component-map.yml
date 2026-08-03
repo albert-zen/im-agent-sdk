@@ -171,46 +171,46 @@ components:
   interaction.controllers.controller-contract:
     id: interaction.controllers.controller-contract
     parent: interaction.controllers
-    purpose: Define the optional typed Controller and ControllerActions boundary.
-    owns: [InboundController, ControllerActions, typed Controller result contract]
+    purpose: Define the optional typed Controller, lifecycle, and full-versus-handler ControllerActions boundary.
+    owns: [InboundController, ControllerActions, CommandHandlerActions, CommandInvocationFacts, ControllerLifecycle, typed Controller result contract]
     does_not_own: [command grammar, product services, Gateway implementation]
     inputs: [InboundMessage, typed ControllerActions, one-way effectful-command fence bound to the owned inbound claim]
     outputs: [unconsumed marker or bounded OutboundMessage tuple, durable side_effect_started transition before effectful handler invocation]
-    public_contracts: [InboundController, ControllerActions]
+    public_contracts: [InboundController, ControllerActions, CommandHandlerActions, CommandInvocationFacts, ControllerLifecycle]
     public_exports:
-      current: [imagent.interaction.controllers:InboundController, imagent.interaction.controllers:ControllerActions, imagent.controllers:InboundController, imagent.controllers:ControllerActions]
-      target: [imagent.interaction.controllers:InboundController, imagent.interaction.controllers:ControllerActions]
+      current: [imagent.interaction.controllers:InboundController, imagent.interaction.controllers:ControllerActions, imagent.interaction.controllers:CommandHandlerActions, imagent.interaction.controllers:CommandInvocationFacts, imagent.interaction.controllers:ControllerLifecycle, imagent.controllers:InboundController, imagent.controllers:ControllerActions, imagent.controllers:CommandHandlerActions, imagent.controllers:CommandInvocationFacts, imagent.controllers:ControllerLifecycle]
+      target: [imagent.interaction.controllers:InboundController, imagent.interaction.controllers:ControllerActions, imagent.interaction.controllers:CommandHandlerActions, imagent.interaction.controllers:CommandInvocationFacts, imagent.interaction.controllers:ControllerLifecycle]
     dependencies: [interaction.messages, interaction.operations, applications.operations, gateway.routing.gateway-operations, gateway.persistence.state-contracts]
     state_recovery: Controller invocation has no durable authority; action-specific replay fences remain explicit.
     current_code: [src/imagent/interaction/controllers/__init__.py, src/imagent/interaction/controllers/contract.py, src/imagent/controllers/__init__.py]
     target_code: [src/imagent/interaction/controllers/__init__.py, src/imagent/interaction/controllers/contract.py]
-    current_tests: [tests/interaction/controllers/test_contract.py, tests/test_slash_controller.py, tests/test_gateway_operations.py]
+    current_tests: [tests/interaction/controllers/test_contract.py, tests/interaction/controllers/test_registry.py, tests/test_slash_controller.py, tests/test_gateway_operations.py]
     target_tests: [tests/interaction/controllers/test_contract.py]
     authoritative_docs: [docs/components/interaction/controllers/controller-contract/design.md, docs/components/interaction/controllers/controller-contract/testing.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [current ControllerActions intentionally lacks the accepted registry-only one-way effect fence until the standalone behavior slice; old imagent.controllers exact-object facade remains only until the other Controller leaves move]
+    gaps: [old imagent.controllers exact-object facade remains only until the other Controller leaves move]
 
   interaction.controllers.command-registry:
     id: interaction.controllers.command-registry
     parent: interaction.controllers
     purpose: Compose explicit local bounded typed command definitions and freeze them at startup.
-    owns: [registry instance, duplicate/alias validation, freeze lifecycle, handler bounds]
+    owns: [registry instance, duplicate/alias validation, freeze lifecycle, handler bounds, stable invocation identity, bounded result presentation]
     does_not_own: [global registration, import-time mutation, product services, generic middleware]
-    inputs: [typed CommandDefinition values]
-    outputs: [typed invocation and handler result]
-    public_contracts: [CommandRegistry, CommandDefinition, CommandInvocation, CommandResult]
+    inputs: [typed CommandDefinition values, verified InboundMessage, full ControllerActions runtime view]
+    outputs: [typed invocation, handler result, fixed-identity bounded OutboundMessage]
+    public_contracts: [CommandRegistry, CommandRegistryLimits, CommandArgumentContract, CommandExecutionSafety, CommandDefinition, CommandInvocation, CommandHandler, CommandResult, CommandResultStatus, CommandRegistryDiagnostics, CommandRegistryFailureCode, CommandRegistryError, CommandRegistryFrozenError, CommandRegistryNotFrozenError, CommandHandlerTimeout, CommandResultError, derive_command_invocation_id]
     public_exports:
-      current: []
-      target: [imagent.interaction.controllers:CommandRegistry, imagent.interaction.controllers:CommandDefinition, imagent.interaction.controllers:CommandInvocation, imagent.interaction.controllers:CommandResult]
-    dependencies: [interaction.controllers.controller-contract, interaction.messages, interaction.operations]
+      current: [imagent.interaction.controllers:CommandRegistry, imagent.controllers:CommandRegistry, imagent.interaction.controllers:CommandRegistryLimits, imagent.interaction.controllers:CommandArgumentContract, imagent.interaction.controllers:CommandExecutionSafety, imagent.interaction.controllers:CommandDefinition, imagent.interaction.controllers:CommandInvocation, imagent.interaction.controllers:CommandHandler, imagent.interaction.controllers:CommandResult, imagent.interaction.controllers:CommandResultStatus, imagent.interaction.controllers:CommandRegistryDiagnostics, imagent.interaction.controllers:CommandRegistryFailureCode, imagent.interaction.controllers:CommandRegistryError, imagent.interaction.controllers:CommandRegistryFrozenError, imagent.interaction.controllers:CommandRegistryNotFrozenError, imagent.interaction.controllers:CommandHandlerTimeout, imagent.interaction.controllers:CommandResultError, imagent.interaction.controllers:derive_command_invocation_id, imagent.controllers:CommandRegistryLimits, imagent.controllers:CommandArgumentContract, imagent.controllers:CommandExecutionSafety, imagent.controllers:CommandDefinition, imagent.controllers:CommandInvocation, imagent.controllers:CommandHandler, imagent.controllers:CommandResult, imagent.controllers:CommandResultStatus, imagent.controllers:CommandRegistryDiagnostics, imagent.controllers:CommandRegistryFailureCode, imagent.controllers:CommandRegistryError, imagent.controllers:CommandRegistryFrozenError, imagent.controllers:CommandRegistryNotFrozenError, imagent.controllers:CommandHandlerTimeout, imagent.controllers:CommandResultError]
+      target: [imagent.interaction.controllers:CommandRegistry, imagent.interaction.controllers:CommandRegistryLimits, imagent.interaction.controllers:CommandArgumentContract, imagent.interaction.controllers:CommandExecutionSafety, imagent.interaction.controllers:CommandDefinition, imagent.interaction.controllers:CommandInvocation, imagent.interaction.controllers:CommandHandler, imagent.interaction.controllers:CommandResult, imagent.interaction.controllers:CommandResultStatus, imagent.interaction.controllers:CommandRegistryDiagnostics, imagent.interaction.controllers:CommandRegistryFailureCode, imagent.interaction.controllers:CommandRegistryError, imagent.interaction.controllers:CommandRegistryFrozenError, imagent.interaction.controllers:CommandRegistryNotFrozenError, imagent.interaction.controllers:CommandHandlerTimeout, imagent.interaction.controllers:CommandResultError, imagent.interaction.controllers:derive_command_invocation_id]
+    dependencies: [interaction.controllers.controller-contract, interaction.messages]
     state_recovery: Registry structure freezes per composition; handler effects require explicit pre-side-effect/unknown semantics.
-    current_code: []
+    current_code: [src/imagent/interaction/controllers/registry.py]
     target_code: [src/imagent/interaction/controllers/registry.py]
-    current_tests: []
+    current_tests: [tests/interaction/controllers/test_registry.py, tests/interaction/controllers/test_common_commands.py]
     target_tests: [tests/interaction/controllers/test_registry.py]
     authoritative_docs: [docs/components/interaction/controllers/command-registry/design.md, docs/components/interaction/controllers/command-registry/testing.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [implementation absent, independent public API/behavior issue required; current fixed dispatcher lacks the accepted registry-to-Gateway effect-fence handshake, operation IDs omit Channel/Conversation scope, and process-local view maps do not enforce the accepted registry and cache bounds]
+    gaps: [common command implementation remains on its historical internal path until the later mechanical move]
 
   interaction.controllers.common-commands:
     id: interaction.controllers.common-commands
@@ -220,19 +220,19 @@ components:
     does_not_own: [product commands, native Application policy, binding implementation]
     inputs: [command invocation, ControllerActions]
     outputs: [typed command result and outbound presentation]
-    public_contracts: [SlashController]
+    public_contracts: [SlashController, register_common_commands]
     public_exports:
-      current: [imagent.controllers:SlashController]
-      target: [imagent.interaction.controllers:SlashController]
+      current: [imagent.controllers:SlashController, imagent.controllers:register_common_commands]
+      target: [imagent.interaction.controllers:SlashController, imagent.interaction.controllers:register_common_commands]
     dependencies: [interaction.controllers.controller-contract, interaction.controllers.command-registry, interaction.messages, applications.application-contract, applications.capabilities, applications.operations, applications.requests, gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.projection.request-correlation, gateway.persistence.state-contracts]
     state_recovery: View caches are bounded and discardable; action authority stays in typed actions.
     current_code: [src/imagent/controllers/markdown.py, src/imagent/controllers/slash.py]
     target_code: [src/imagent/interaction/controllers/common.py]
-    current_tests: [tests/test_slash_controller.py]
+    current_tests: [tests/interaction/controllers/test_common_commands.py, tests/test_slash_controller.py, tests/test_gateway_vertical_slice.py]
     target_tests: [tests/interaction/controllers/test_common_commands.py]
     authoritative_docs: [docs/components/interaction/controllers/common-commands/design.md, docs/components/interaction/controllers/common-commands/testing.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0005-input-activation-and-projection.md]
-    gaps: [fixed dispatch, incompletely scoped current operation IDs, and unbounded current selection-view maps must migrate to the bounded registry in a separate behavior slice]
+    gaps: [single implementation remains on the historical imagent.controllers.slash internal path until the later mechanical move]
 
   interaction.controllers.request-presentation:
     id: interaction.controllers.request-presentation

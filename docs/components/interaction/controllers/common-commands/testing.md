@@ -33,6 +33,8 @@ Focused validation currently includes:
 
 ```sh
 PYTHONPATH=src python -m unittest \
+  tests.interaction.controllers.test_common_commands \
+  tests.interaction.controllers.test_registry \
   tests.test_slash_controller \
   tests.test_gateway_operations \
   tests.test_gateway_vertical_slice \
@@ -40,5 +42,5 @@ PYTHONPATH=src python -m unittest \
 ```
 
 Registry conversion adds `tests/interaction/controllers/test_common_commands.py`
-and preserves the fixed-dispatch suite as parity evidence until the old path
-is removed.
+and preserves the historical Slash behavior suite as parity evidence until
+the old physical path is removed.

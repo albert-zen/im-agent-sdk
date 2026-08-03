@@ -29,7 +29,8 @@ Required scenarios:
 - an effectful handler/product service is not invoked before durable fence
   success, and fence failure remains known pre-side-effect;
 - the registry passes the complete scoped invocation identity to the one-way
-  fence and gives handlers only the fence-free action view;
+  fence, Gateway rejects an internally inconsistent identity, and handlers get
+  only the fence-free action view;
 - known pre-side-effect failure can be distinguished from an unknown outcome;
 - the registry never retries a handler automatically;
 - cancellation before the effect fence is replay-safe, while cancellation
@@ -37,7 +38,8 @@ Required scenarios:
 - timed-out/overrun work retains capacity until joined and shutdown bounds and
   joins admitted tasks;
 - output validation rejects identity changes or unbounded results before
-  delivery;
+- delimiter-bearing scoped IDs cannot collide in registry-owned delivery
+  identity;
 - presentation/delivery failure after an effect cannot invoke the handler a
   second time;
 - omission of the registry/controller preserves existing ordinary input and
@@ -47,3 +49,13 @@ The implementation slice adds
 `tests/interaction/controllers/test_registry.py`, focused Gateway claim/replay
 tests, static type checks for handler/result protocols, and architecture lint
 coverage forbidding global registration and implementation-layer imports.
+
+Focused validation:
+
+```sh
+PYTHONPATH=src python -m unittest \
+  tests.interaction.controllers.test_registry \
+  tests.interaction.controllers.test_common_commands \
+  tests.test_slash_controller \
+  tests.test_gateway_vertical_slice -v
+```
