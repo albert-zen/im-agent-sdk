@@ -17,7 +17,6 @@ from typing import Protocol
 from .adapters import DeliverySubmissionConflict
 from .contracts import (
     AttachmentContent,
-    ContractViolation,
     ConversationDeliveryTarget,
     ConversationRef,
     DeliveryIntent,
@@ -30,6 +29,7 @@ from .contracts import (
     ThreadRef,
     ThreadRouteDeliveryTarget,
 )
+from .interaction.operations import ContractViolation
 from .keyed_locks import KeyedLockRegistry
 from .proactive_delivery import DeliveryAuthorizationError, DeliveryRouteError
 

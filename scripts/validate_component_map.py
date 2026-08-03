@@ -114,7 +114,7 @@ def _source_paths(patterns: list[str]) -> set[str]:
 def _test_paths() -> set[str]:
     return {
         path.relative_to(ROOT).as_posix()
-        for path in (ROOT / "tests").glob("test_*.py")
+        for path in (ROOT / "tests").rglob("test_*.py")
         if path.is_file()
     }
 

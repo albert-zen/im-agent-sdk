@@ -69,12 +69,12 @@ from ..contracts import (
     TurnInterrupted,
     TurnReplyCorrelationPolicy,
     TurnStatus,
-    operation_error,
     validate_application_operation,
     validate_application_operation_result,
 )
 from ..diagnostics import ApplicationDiagnosticFacts, ConnectionDiagnosticFacts
 from ..events import EventBroadcaster, EventStreamReset
+from ..interaction.operations import operation_error
 from .appserver_artifacts import (
     ApplicationArtifactMaterialization,
     ApplicationArtifactMaterializationCancelled,

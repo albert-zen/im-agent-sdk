@@ -1,6 +1,12 @@
-from ._validation import (
+from ..interaction.operations import (
+    ContractError,
     ContractViolation,
+    OperationErrorCode,
+    OperationResultStatus,
+    operation_error,
     require_identifier,
+)
+from ._validation import (
     validate_thread_ref,
 )
 from .delivery import (
@@ -33,11 +39,9 @@ from .errors import (
     ApplicationInputOutcomeUnknown as ApplicationInputOutcomeUnknown,
 )
 from .errors import (
-    OperationErrorCode,
     RequestDuplicateError,
     RequestResolvedError,
     RequestStaleError,
-    operation_error,
 )
 from .model import (
     AcceptedTurn,
@@ -58,7 +62,6 @@ from .model import (
     AttachmentSourceKind,
     ChannelCapabilities,
     Content,
-    ContractError,
     ConversationBinding,
     ConversationRef,
     DeliveryItemReceipt,
@@ -145,7 +148,6 @@ from .operations import (
     ListThreads,
     NativeThreadActivated,
     ObserveThread,
-    OperationResultStatus,
     ProjectRead,
     ProjectsListed,
     RequestResponded,

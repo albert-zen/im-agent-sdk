@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from ._validation import (
-    ContractViolation,
-    require_identifier,
-    validate_thread_ref,
-)
+from ..interaction.operations import ContractViolation, require_identifier
+from ._validation import validate_thread_ref
 from .model import (
     ApprovalRequest,
     ApprovalResponseShape,

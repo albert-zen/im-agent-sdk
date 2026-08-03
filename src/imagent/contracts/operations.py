@@ -6,11 +6,11 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TypeAlias
 
+from ..interaction.operations import ContractError, OperationResultStatus
 from .model import (
     ApplicationRef,
     ApplicationSummary,
     Content,
-    ContractError,
     ConversationBinding,
     ConversationRef,
     Page,
@@ -24,11 +24,6 @@ from .model import (
     ThreadSummary,
     TurnCatchup,
 )
-
-
-class OperationResultStatus(StrEnum):
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
 
 
 class ApplicationOperationType(StrEnum):

@@ -14,7 +14,6 @@ from .adapters import (
 )
 from .contracts import (
     AttachmentContent,
-    ContractViolation,
     ConversationDeliveryTarget,
     DeliveryIntent,
     DeliveryItemReceipt,
@@ -52,6 +51,7 @@ from .delivery_outcomes import (
     DeliveryOutcomeObserverRuntime,
 )
 from .delivery_planning import DeliveryPlanningError
+from .interaction.operations import ContractViolation
 
 ResolveThreadRoutes = Callable[
     [ThreadRef],
