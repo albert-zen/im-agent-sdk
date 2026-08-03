@@ -1,4 +1,5 @@
 from .contract import (
+    ChannelAdapter,
     ChannelCapabilities,
     ChannelStartupConfigurationValidator,
     DeliveryItemReceipt,
@@ -18,6 +19,7 @@ from .contract import (
 )
 
 __all__ = [
+    "ChannelAdapter",
     "ChannelCapabilities",
     "ChannelStartupConfigurationValidator",
     "DeliveryItemReceipt",

@@ -7,7 +7,6 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 from .adapters import (
-    ChannelAdapter,
     DeliveryAuthorizer,
     DeliverySubmissionConflict,
     DeliverySubmissionRepository,
@@ -48,6 +47,7 @@ from .delivery_outcomes import (
     DeliveryOutcomeObserverRuntime,
 )
 from .delivery_planning import DeliveryPlanningError
+from .interaction.channels import ChannelAdapter
 from .interaction.media import AttachmentContent, LocalPath
 from .interaction.messages import OutboundMessage
 from .interaction.operations import ContractViolation

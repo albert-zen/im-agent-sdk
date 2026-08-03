@@ -51,10 +51,12 @@ or Agent execution on a native socket-read task.
 
 ## Current and target placement
 
-Receipt values, capability/profile values, delivery support, reply scope, and
-their validation have one implementation owner in
+`ChannelAdapter`, receipt values, capability/profile values, delivery support,
+reply scope, and their validation have one implementation owner in
 `src/imagent/interaction/channels/contract.py`. `imagent.contracts` remains an
-exact formal re-export facade; it does not retain parallel implementations.
+exact formal re-export facade for the capability and receipt value contracts,
+while `imagent.adapters` remains the exact compatibility re-export for
+`ChannelAdapter`; neither facade retains a parallel implementation.
 The stable v1 `ChannelCapabilities` field and positional-constructor order and
 the wire string discriminants remain unchanged. The schema exposes a distinct
 `DeliverySupportLevel` definition for Channel/profile fields even though its
@@ -63,7 +65,8 @@ capability type and is not accepted as the typed Channel API.
 
 `MessageHandler`, `InboundAdmission`, `InboundAdmissionHandler`, and
 `ChannelStartupConfigurationValidator` share the same Interaction owner as the
-capability and receipt values. `ChannelAdapter` remains in the mixed Port
-module pending a later mechanical owner move, but its lifecycle signature no
-longer creates a Channel-to-Gateway dependency. Top-level compatibility
-exports exist only where the component map declares a formal facade.
+capability and receipt values. `imagent.adapters.ChannelAdapter` is an exact
+compatibility re-export of that owner, not a second Protocol definition.
+Internal Channel/Gateway code imports the Interaction owner directly where
+dependency-safe. Top-level compatibility exports exist only where the
+component map declares them.

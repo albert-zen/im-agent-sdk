@@ -20,6 +20,9 @@ Required evidence:
 - fakes and all native adapters satisfy the structural contract; and
 - Channel contract/runtime/fakes import no `GatewayOperation`, operation
   handler, Gateway implementation, or concrete adapter.
+- `imagent.interaction.channels.ChannelAdapter` owns the Protocol, while
+  `imagent.adapters.ChannelAdapter` preserves exact object identity without a
+  parallel definition.
 
 Focused evidence currently lives in `tests/test_adapter_contracts.py`,
 `tests/test_native_channels.py`, Channel-specific suites, Gateway admission
