@@ -342,7 +342,7 @@ components:
       - tests/interaction/channels/**
       - tests/test_native_channels.py
       - tests/test_channel_qq.py
-      - tests/test_channel_telegram.py
+      - tests/interaction/channels/adapters/test_telegram.py
       - tests/test_channel_feishu.py
       - tests/test_channel_weixin.py
     docs:
@@ -606,7 +606,7 @@ maintainability:
       paths:
         - src/imagent/channels/native/qq.py
         - src/imagent/channels/native/qq_quote.py
-        - src/imagent/channels/native/telegram.py
+        - src/imagent/interaction/channels/adapters/telegram.py
         - src/imagent/channels/native/feishu.py
         - src/imagent/channels/native/weixin.py
         - src/imagent/channels/native/weixin_ilink.py

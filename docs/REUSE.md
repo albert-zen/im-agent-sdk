@@ -58,9 +58,10 @@ Behaviors to preserve:
 - attachment staging and platform size limits;
 - reconnect tokens that belong to the Channel adapter.
 
-Provider transports remain under `src/imagent/channels/native/`; their shared
-HTTP endpoint validator now establishes
-`src/imagent/interaction/channels/adapters/`. Shared access policy lives with
+The Telegram provider transport and shared HTTP endpoint validator now live
+under `src/imagent/interaction/channels/adapters/`; the remaining provider
+transports stay under `src/imagent/channels/native/` during their focused
+moves. Shared access policy lives with
 the Interaction ingress owner, and shared generic-file validation lives with
 the Interaction media owner. Shared defensive text splitting lives with
 Interaction Channel outbound delivery. Exact source-to-destination decisions,

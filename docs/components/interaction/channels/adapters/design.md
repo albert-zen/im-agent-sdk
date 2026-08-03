@@ -33,10 +33,11 @@ QQ quote normalization remains QQ-specific bounded untrusted content and does
 not become a common message/resource contract. Weixin credential/cursor state
 remains native Channel state, not Gateway persistence.
 
-The target `src/imagent/interaction/channels/adapters/` package is established
-with the shared QQ/Telegram HTTP endpoint validator. That helper remains
-adapter-internal: it validates provider configuration without opening a
-transport and is not part of the Channel facade. Provider implementations and
-their remaining shared helpers still live under `src/imagent/channels/native`
-and runtime during migration; they move only in later focused mechanical
-slices.
+The target `src/imagent/interaction/channels/adapters/` package contains the
+Telegram provider module and the shared QQ/Telegram HTTP endpoint validator.
+The validator remains adapter-internal: it validates provider configuration
+without opening a transport and is not part of the Channel facade. Telegram
+temporarily imports the same shared base, media, artifact, and diagnostic
+helpers from `src/imagent/channels/native` while those independently reviewed
+boundaries remain in place. QQ, Feishu, Weixin, runtime composition, and the
+remaining shared helpers move only in later focused mechanical slices.
