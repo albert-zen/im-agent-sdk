@@ -343,7 +343,7 @@ components:
       - tests/test_native_channels.py
       - tests/test_channel_qq.py
       - tests/interaction/channels/adapters/test_telegram.py
-      - tests/test_channel_feishu.py
+      - tests/interaction/channels/adapters/test_feishu.py
       - tests/test_channel_weixin.py
     docs:
       - docs/components/interaction/README.md
@@ -607,7 +607,7 @@ maintainability:
         - src/imagent/channels/native/qq.py
         - src/imagent/channels/native/qq_quote.py
         - src/imagent/interaction/channels/adapters/telegram.py
-        - src/imagent/channels/native/feishu.py
+        - src/imagent/interaction/channels/adapters/feishu.py
         - src/imagent/channels/native/weixin.py
         - src/imagent/channels/native/weixin_ilink.py
         - src/imagent/channels/native/media.py

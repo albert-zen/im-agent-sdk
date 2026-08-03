@@ -16,14 +16,7 @@ from urllib.parse import quote, urlsplit
 
 import httpx
 
-from ...interaction.channels.ingress import ChannelAccessPolicy, InboundMessage
-from ...interaction.channels.outbound_delivery import (
-    NativeDeliveryResult,
-    OutboundArtifact,
-    OutboundMessage,
-    split_text,
-)
-from .artifacts import (
+from ....channels.native.artifacts import (
     ArtifactDeliveryReceipt,
     PermanentArtifactDeliveryError,
     deliver_artifact_batch,
@@ -31,13 +24,13 @@ from .artifacts import (
     read_managed_artifact,
     stable_artifact_identity,
 )
-from .base import BaseChannelAdapter
-from .diagnostics import (
+from ....channels.native.base import BaseChannelAdapter
+from ....channels.native.diagnostics import (
     NativeConnectionDiagnosticSnapshot,
     NativeQueueDiagnosticSnapshot,
     emit_event,
 )
-from .media import (
+from ....channels.native.media import (
     MAX_FILE_BYTES,
     MAX_FILE_COUNT,
     MAX_IMAGE_BYTES,
@@ -48,6 +41,13 @@ from .media import (
     ImageTooLargeError,
     MediaDownloadError,
     materialize_inbound_media,
+)
+from ..ingress import ChannelAccessPolicy, InboundMessage
+from ..outbound_delivery import (
+    NativeDeliveryResult,
+    OutboundArtifact,
+    OutboundMessage,
+    split_text,
 )
 
 logger = logging.getLogger(__name__)

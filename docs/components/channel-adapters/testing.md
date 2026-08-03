@@ -50,7 +50,7 @@ PYTHONPATH=src:tests python -m unittest \
   tests.test_native_channels \
   tests.test_channel_qq \
   tests.interaction.channels.adapters.test_telegram \
-  tests.test_channel_feishu \
+  tests.interaction.channels.adapters.test_feishu \
   tests.test_channel_weixin \
   tests.test_adapter_contracts \
   tests.test_gateway_vertical_slice -v

@@ -29,5 +29,6 @@ identity, resource keys, media paths, SDK snapshots, or exception text.
 
 ## Change checks
 
-Changes to `native/feishu.py` require `test_channel_feishu.py`, common native
-Channel tests, media/attachment tests, and the adapter contract suite.
+Changes to `interaction/channels/adapters/feishu.py` require
+`tests/interaction/channels/adapters/test_feishu.py`, common native Channel
+tests, media/attachment tests, and the adapter contract suite.

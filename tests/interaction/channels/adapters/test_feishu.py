@@ -4,7 +4,7 @@ import unittest
 import warnings
 from types import SimpleNamespace
 
-from imagent.channels.native.feishu import (
+from imagent.interaction.channels.adapters.feishu import (
     FEISHU_DOMAIN,
     LARK_DOMAIN,
     FeishuChannelAdapter,

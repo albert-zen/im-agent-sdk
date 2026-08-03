@@ -66,7 +66,7 @@ input again. Gateway persists that distinction independently of IMCodex.
 ## Channel transport modules
 
 Transferred provider transports are moving into
-`src/imagent/interaction/channels/adapters/`; Telegram is there now, while the
+`src/imagent/interaction/channels/adapters/`; Telegram and Feishu are there now, while the
 remaining providers and shared helpers still live below
 `src/imagent/channels/native/` during focused mechanical slices.
 Their shared access policy now lives with the Interaction ingress owner at
@@ -85,7 +85,7 @@ contracts.
 | `channels/qq_media.py` | `native/qq_media.py` | transfer QQ media upload/download behavior |
 | `channels/qq.py` | `native/qq.py` | transfer QQ transport; replace product config/path imports |
 | `channels/telegram.py` | `interaction/channels/adapters/telegram.py` | transfer Telegram transport; replace product config/path imports |
-| `channels/feishu.py` | `native/feishu.py` | transfer Feishu transport; preserve optional native SDK loading |
+| `channels/feishu.py` | `interaction/channels/adapters/feishu.py` | transfer Feishu transport; preserve optional native SDK loading |
 | `channels/weixin_ilink.py` | `native/weixin_ilink.py` | transfer iLink protocol/crypto transport |
 | `channels/weixin_state.py` | `native/weixin_state.py` | transfer Channel-owned credential/reconnect state |
 | `channels/weixin.py` | `native/weixin.py` | transfer Weixin transport; product login UX remains downstream |
