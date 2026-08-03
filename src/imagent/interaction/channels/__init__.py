@@ -1,5 +1,6 @@
 from .contract import (
     ChannelCapabilities,
+    ChannelStartupConfigurationValidator,
     DeliveryItemReceipt,
     DeliveryItemStatus,
     DeliveryProfile,
@@ -8,6 +9,9 @@ from .contract import (
     DeliverySegmentReceipt,
     DeliverySegmentStatus,
     DeliverySupportLevel,
+    InboundAdmission,
+    InboundAdmissionHandler,
+    MessageHandler,
     ReplyReferenceScope,
     validate_delivery_receipt,
     validate_delivery_receipt_for_content,
@@ -15,6 +19,7 @@ from .contract import (
 
 __all__ = [
     "ChannelCapabilities",
+    "ChannelStartupConfigurationValidator",
     "DeliveryItemReceipt",
     "DeliveryItemStatus",
     "DeliveryProfile",
@@ -23,6 +28,9 @@ __all__ = [
     "DeliverySegmentReceipt",
     "DeliverySegmentStatus",
     "DeliverySupportLevel",
+    "InboundAdmission",
+    "InboundAdmissionHandler",
+    "MessageHandler",
     "ReplyReferenceScope",
     "validate_delivery_receipt",
     "validate_delivery_receipt_for_content",

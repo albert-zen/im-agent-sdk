@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
-from ..adapters import InboundAdmissionHandler, MessageHandler, OperationHandler
+from ..adapters import OperationHandler
 from ..contracts import (
     ChannelCapabilities,
     DeliveryItemReceipt,
@@ -19,6 +19,7 @@ from ..contracts import (
     DeliveryReceiptStatus,
     DeliverySupportLevel,
 )
+from ..interaction.channels import InboundAdmissionHandler, MessageHandler
 from ..interaction.media import AttachmentContent, AttachmentSourceKind, LocalPath
 from ..interaction.messages import (
     ConversationRef,

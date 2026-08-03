@@ -2,13 +2,25 @@ from __future__ import annotations
 
 import unittest
 
-from imagent import contracts
+from imagent import adapters, contracts
 from imagent.interaction import channels
 from imagent.interaction.messages import TextContent
 from imagent.interaction.operations import ContractViolation
 
 
 class ChannelReceiptContractTests(unittest.TestCase):
+    def test_adapters_facade_reexports_exact_admission_contract_owners(self) -> None:
+        names = (
+            "ChannelStartupConfigurationValidator",
+            "InboundAdmission",
+            "InboundAdmissionHandler",
+            "MessageHandler",
+        )
+
+        for name in names:
+            with self.subTest(name=name):
+                self.assertIs(getattr(adapters, name), getattr(channels, name))
+
     def test_contracts_facade_reexports_exact_channel_contract_owners(self) -> None:
         names = (
             "ChannelCapabilities",

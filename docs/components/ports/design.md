@@ -2,20 +2,17 @@
 
 ## Purpose
 
-`src/imagent/adapters.py` defines the Python runtime seams that implementations
-plug into. These Protocols carry language-neutral contract values but are not
-the language-neutral protocol themselves.
+`src/imagent/adapters.py` is the remaining compatibility facade for Python
+runtime seams that have not yet reached their target component owner. New and
+mechanically extracted contracts live under the owning Interaction, Gateway,
+or Applications component; the facade may re-export an exact object while
+callers migrate, but it does not retain a second implementation.
 
 ## Ownership
 
-Ports owns:
+The remaining Ports surface owns:
 
-- the Python package's top-level typed public surface;
 - `ChannelAdapter` lifecycle, inbound callback, and send signatures;
-- the optional structural `ChannelStartupConfigurationValidator`, separate
-  from the common Channel lifecycle;
-- the opaque `InboundAdmission` lease and handler used before Channel media
-  preparation;
 - `AgentApplicationAdapter` lifecycle, typed operation, input, and Thread
   subscription signatures;
 - the common input continuation preference, typed pre-dispatch intent, and
@@ -27,7 +24,15 @@ Ports owns:
   `IdempotencyRepository` interfaces;
 - `DeliveryAuthorizer` and `DeliverySubmissionRepository` interfaces for
   scoped proactive delivery, immutable route snapshots, and typed outcomes;
-- callback aliases shared by Gateway and integrations.
+- callback aliases that have not yet moved to their owner-typed seam.
+
+Interaction's Channel contract owns `MessageHandler`, the optional structural
+`ChannelStartupConfigurationValidator`, and the opaque `InboundAdmission`
+lease and handler used before Channel media preparation. `adapters.py`
+re-exports those exact objects for compatibility. `ChannelAdapter` and the
+historical `OperationHandler[GatewayOperation]` remain here until the accepted
+owner-typed operation seam allows issue #93 to converge them without changing
+the lifecycle contract.
 
 It does not own:
 
@@ -38,15 +43,18 @@ It does not own:
 
 ## Dependency direction
 
-Ports imports only Contracts. Gateway, persistence implementations, recovery,
-test kits, and concrete integrations may depend on Ports. Contracts never
-depend on Ports.
+Each extracted seam imports only lower-layer contracts owned by its component.
+The remaining Ports surface imports Contracts and may import an owning leaf
+solely for an exact compatibility re-export. Gateway, persistence
+implementations, recovery, test kits, and concrete integrations depend on the
+owning component where dependency-safe; Contracts never depend on Ports.
 
 Adding a method requires a real caller and at least one implementation. A
 native-specific method stays on a concrete adapter until at least two
 integrations prove a common port.
 
-QQ, Telegram, Feishu, and Weixin prove the startup-validator structure. It
+QQ, Telegram, Feishu, and Weixin prove the Interaction-owned
+startup-validator structure. It
 contains only synchronous `validate_startup_configuration()` and is
 runtime-checkable for operator composition. It does not make validation
 mandatory for `ChannelAdapter`, expose resolved credentials/configuration, or
@@ -106,7 +114,8 @@ Implementations must never age the protected state back into permission to
 retry. A caller that supplies an owner token on acquisition must reuse it as a
 fencing token for every later state mutation.
 
-`InboundAdmissionHandler` carries only stable Conversation/message identity.
+The Interaction-owned `InboundAdmissionHandler` carries only stable
+Conversation/message identity.
 It returns a one-shot opaque lease or no lease for duplicate/in-flight work.
 Channel adapters release only preparation failures before handoff; after
 `InboundAdmission.deliver`, Gateway owns the terminal transition.

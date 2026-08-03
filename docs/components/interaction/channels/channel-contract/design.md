@@ -55,6 +55,9 @@ the wire string discriminants remain unchanged. The schema exposes a distinct
 three wire values match `SupportLevel`. `SupportLevel` remains the Application
 capability type and is not accepted as the typed Channel API.
 
-Lifecycle/admission protocol movement remains a separate mechanical slice.
-Top-level compatibility exports exist only where the component map declares a
-formal facade.
+`MessageHandler`, `InboundAdmission`, `InboundAdmissionHandler`, and
+`ChannelStartupConfigurationValidator` share the same Interaction owner as the
+capability and receipt values. `ChannelAdapter` and its historical operation
+callback remain in the mixed Port module until the owner-typed operation seam
+can move without contradicting ADR 0008/0011. Top-level compatibility exports
+exist only where the component map declares a formal facade.
