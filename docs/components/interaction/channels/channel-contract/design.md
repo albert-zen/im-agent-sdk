@@ -42,7 +42,15 @@ or Agent execution on a native socket-read task.
 
 ## Current and target placement
 
-Current contract objects are split across `adapters.py`, contract delivery and
-model files, and Channel runtime/base modules. The target single owner is
-`src/imagent/interaction/channels/contract.py`, with top-level compatibility
-exports only where the component map declares a formal facade.
+The component is converging through behavior-preserving slices because its
+current `ChannelCapabilities` public surface reuses the Application capability
+enum `SupportLevel`. Receipt values and their validation have no such layer
+dependency: their implementation owner is
+`src/imagent/interaction/channels/contract.py`, while `imagent.contracts`
+remains an exact formal re-export facade. Capability decoupling and the
+lifecycle/admission protocol move are separate API and mechanical slices; they
+must not be hidden inside receipt extraction.
+
+The completed target has one implementation owner in
+`src/imagent/interaction/channels/contract.py`. Top-level compatibility exports
+exist only where the component map declares a formal facade.

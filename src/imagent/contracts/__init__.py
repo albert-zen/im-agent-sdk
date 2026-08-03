@@ -1,3 +1,13 @@
+from ..interaction.channels import (
+    DeliveryItemReceipt,
+    DeliveryItemStatus,
+    DeliveryReceipt,
+    DeliveryReceiptStatus,
+    DeliverySegmentReceipt,
+    DeliverySegmentStatus,
+    validate_delivery_receipt,
+    validate_delivery_receipt_for_content,
+)
 from ..interaction.media import (
     AttachmentContent,
     AttachmentGrouping,
@@ -50,8 +60,6 @@ from .delivery import (
     derive_destination_delivery_id,
     validate_delivery_intent,
     validate_delivery_principal,
-    validate_delivery_receipt,
-    validate_delivery_receipt_for_content,
     validate_delivery_route_snapshot,
     validate_delivery_submission_record,
 )
@@ -77,13 +85,7 @@ from .model import (
     ApprovalResponseShape,
     ChannelCapabilities,
     ConversationBinding,
-    DeliveryItemReceipt,
-    DeliveryItemStatus,
     DeliveryProfile,
-    DeliveryReceipt,
-    DeliveryReceiptStatus,
-    DeliverySegmentReceipt,
-    DeliverySegmentStatus,
     EventSequenceScope,
     InputContinuationPreference,
     InputDisposition,
