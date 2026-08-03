@@ -106,7 +106,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "src/imagent/interaction/controllers/common_presentation.py": {"controllers"},
             "src/imagent/interaction/controllers/registry.py": {"controllers"},
             "src/imagent/interaction/controllers/request_presentation.py": {"controllers"},
-            "src/imagent/channels/runtime.py": {"channel-adapters"},
+            "src/imagent/interaction/channels/adapters/runtime.py": {"channel-adapters"},
             "src/imagent/interaction/channels/adapters/qq.py": {"channel-adapters"},
             "src/imagent/applications/appserver.py": {"application-adapters-appserver"},
             "src/imagent/applications/presentation.py": {"application-adapters-appserver"},

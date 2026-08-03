@@ -33,3 +33,7 @@ Facade tests prove the approved QQ names are exact object-identity re-exports,
 unknown names fail with `AttributeError`, and importing the adapters package or
 another provider does not eagerly import the QQ module. QQ cluster tests prove
 the target module owns those objects and the old module paths are absent.
+Runtime facade tests prove `NativeTransportChannelAdapter` and
+`channel_from_config` are target-owned, the formal `imagent.channels` facade
+preserves exact object identity, importing either facade does not load a native
+provider, and the historical `imagent.channels.runtime` path is absent.

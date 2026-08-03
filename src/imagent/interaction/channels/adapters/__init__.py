@@ -15,6 +15,7 @@ if TYPE_CHECKING:
         QQ_QUOTE_REFERENCE_LIMIT,
         QQ_QUOTE_TRANSCRIPT_LIMIT,
     )
+    from .runtime import NativeTransportChannelAdapter, channel_from_config
 
 __all__ = [
     "QQChannelAdapter",
@@ -24,20 +25,25 @@ __all__ = [
     "QQ_QUOTE_MESSAGE_TYPE",
     "QQ_QUOTE_REFERENCE_LIMIT",
     "QQ_QUOTE_TRANSCRIPT_LIMIT",
+    "NativeTransportChannelAdapter",
+    "channel_from_config",
 ]
 
-_QQ_PUBLIC_EXPORTS = frozenset(__all__)
+_PUBLIC_EXPORTS = frozenset(__all__)
+_RUNTIME_PUBLIC_EXPORTS = frozenset({"NativeTransportChannelAdapter", "channel_from_config"})
+_QQ_PUBLIC_EXPORTS = _PUBLIC_EXPORTS - _RUNTIME_PUBLIC_EXPORTS
 _QQ_QUOTE_PUBLIC_EXPORTS = _QQ_PUBLIC_EXPORTS - {"QQChannelAdapter"}
 
 
 def __getattr__(name: str) -> object:
-    if name not in _QQ_PUBLIC_EXPORTS:
+    if name not in _PUBLIC_EXPORTS:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    module_name = (
-        "imagent.interaction.channels.adapters.qq_quote"
-        if name in _QQ_QUOTE_PUBLIC_EXPORTS
-        else "imagent.interaction.channels.adapters.qq"
-    )
+    if name in _RUNTIME_PUBLIC_EXPORTS:
+        module_name = "imagent.interaction.channels.adapters.runtime"
+    elif name in _QQ_QUOTE_PUBLIC_EXPORTS:
+        module_name = "imagent.interaction.channels.adapters.qq_quote"
+    else:
+        module_name = "imagent.interaction.channels.adapters.qq"
     module = import_module(module_name)
     value = getattr(module, name)
     globals()[name] = value

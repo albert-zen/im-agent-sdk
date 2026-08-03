@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from typing import cast
 from unittest.mock import patch
 
-from imagent.channels.runtime import NativeTransportChannelAdapter
 from imagent.contracts import (
     AttachmentContent,
     AttachmentGrouping,
@@ -36,6 +35,7 @@ from imagent.delivery_planning import (
     DeliveryPlanner,
     DeliveryPlanningError,
 )
+from imagent.interaction.channels.adapters import NativeTransportChannelAdapter
 
 
 class _Channel:

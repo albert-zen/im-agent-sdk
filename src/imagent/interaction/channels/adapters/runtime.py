@@ -10,8 +10,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
-from ..adapters import OperationHandler
-from ..contracts import (
+from ....adapters import OperationHandler
+from ....channels.native.base import ChannelRouteContext
+from ....channels.native.diagnostics import (
+    NativeChannelDiagnosticSnapshot,
+    NativeConnectionDiagnosticSnapshot,
+)
+from ....contracts import (
     ChannelCapabilities,
     DeliveryItemReceipt,
     DeliveryItemStatus,
@@ -19,28 +24,23 @@ from ..contracts import (
     DeliveryReceiptStatus,
     DeliverySupportLevel,
 )
-from ..interaction.channels import InboundAdmissionHandler, MessageHandler
-from ..interaction.channels.outbound_delivery import (
-    NativeDeliveryResult,
-)
-from ..interaction.channels.outbound_delivery import (
-    OutboundArtifact as NativeOutboundArtifact,
-)
-from ..interaction.channels.outbound_delivery import (
-    OutboundMessage as NativeOutboundMessage,
-)
-from ..interaction.media import AttachmentContent, AttachmentSourceKind, LocalPath
-from ..interaction.messages import (
+from ...media import AttachmentContent, AttachmentSourceKind, LocalPath
+from ...messages import (
     ConversationRef,
     InboundMessage,
     OutboundMessage,
     TextContent,
     TextFormat,
 )
-from .native.base import ChannelRouteContext
-from .native.diagnostics import (
-    NativeChannelDiagnosticSnapshot,
-    NativeConnectionDiagnosticSnapshot,
+from .. import InboundAdmissionHandler, MessageHandler
+from ..outbound_delivery import (
+    NativeDeliveryResult,
+)
+from ..outbound_delivery import (
+    OutboundArtifact as NativeOutboundArtifact,
+)
+from ..outbound_delivery import (
+    OutboundMessage as NativeOutboundMessage,
 )
 
 
@@ -296,19 +296,13 @@ def channel_from_config(
     """Construct one SDK-owned native Channel transport from adapter values."""
 
     if channel_id == "qq":
-        from ..interaction.channels.adapters.qq import QQChannelAdapter as NativeAdapter
+        from .qq import QQChannelAdapter as NativeAdapter
     elif channel_id == "telegram":
-        from ..interaction.channels.adapters.telegram import (
-            TelegramChannelAdapter as NativeAdapter,
-        )
+        from .telegram import TelegramChannelAdapter as NativeAdapter
     elif channel_id == "feishu":
-        from ..interaction.channels.adapters.feishu import (
-            FeishuChannelAdapter as NativeAdapter,
-        )
+        from .feishu import FeishuChannelAdapter as NativeAdapter
     elif channel_id == "weixin":
-        from ..interaction.channels.adapters.weixin import (
-            WeixinChannelAdapter as NativeAdapter,
-        )
+        from .weixin import WeixinChannelAdapter as NativeAdapter
     else:
         raise ValueError(f"unsupported native channel: {channel_id}")
     resolved_config = dict(config)

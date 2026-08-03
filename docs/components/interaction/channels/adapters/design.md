@@ -23,9 +23,13 @@ authentication/signatures, API encoding/escaping, credentials, native
 upload/download/decryption/acknowledgement, URL rules, QR/token state, rate
 limit/response mapping, and diagnostic worker facts.
 
-`channel_from_config` is explicit composition, not global/import-time
-registration. Optional provider dependencies remain extras; importing
-Interaction contracts does not import native SDKs. Every worker/queue/cache and
+`runtime.py` owns the common native-transport wrapper and `channel_from_config`
+factory inside this leaf. The factory is explicit composition, not global or
+import-time registration. The formal `imagent.channels` package remains a
+stable facade over those target-owned objects; the historical
+`imagent.channels.runtime` implementation path is not a second API or owner.
+Optional provider dependencies remain extras; importing Interaction contracts
+or the adapter facade does not import native SDKs. Every worker/queue/cache and
 reconnect delay is finite, failures are explicit, and no consumer work runs on
 a provider socket-read callback.
 
@@ -40,8 +44,8 @@ The validator remains adapter-internal: it validates provider configuration
 without opening a transport and is not part of the Channel facade. All four
 providers temporarily import the same shared base, media, artifact, and
 diagnostic helpers from `src/imagent/channels/native` while those independently
-reviewed boundaries remain in place. Runtime composition and the remaining
-shared helpers move only in later focused mechanical slices.
+reviewed boundaries remain in place. The remaining shared helpers move only in
+later focused ownership slices.
 
 The adapters package exposes only the component-map-approved QQ adapter and
 bounded quote constants through a lazy public facade. Importing the package or
