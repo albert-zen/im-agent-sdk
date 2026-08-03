@@ -1,5 +1,6 @@
 """Optional typed Controller contracts for Interaction composition."""
 
+from .common import SlashController, register_common_commands
 from .contract import (
     CommandHandlerActions,
     CommandInvocationFacts,
@@ -57,5 +58,7 @@ __all__ = [
     "MarkdownRequestPresenter",
     "RequestPresentation",
     "RequestPresenter",
+    "SlashController",
     "derive_command_invocation_id",
+    "register_common_commands",
 ]

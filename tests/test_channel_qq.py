@@ -19,7 +19,7 @@ from imagent.channels.native.qq_quote import (
     render_qq_quote_context,
 )
 from imagent.contracts import ConversationRef, InboundMessage, TextContent
-from imagent.controllers.slash import parse_slash_command
+from imagent.interaction.controllers.common import parse_slash_command
 
 
 class QQChannelTests(unittest.IsolatedAsyncioTestCase):

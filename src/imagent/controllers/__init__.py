@@ -23,8 +23,9 @@ from ..interaction.controllers import (
     MarkdownRequestPresenter,
     RequestPresentation,
     RequestPresenter,
+    SlashController,
+    register_common_commands,
 )
-from .slash import SlashController, register_common_commands
 
 __all__ = [
     "CommandArgumentContract",

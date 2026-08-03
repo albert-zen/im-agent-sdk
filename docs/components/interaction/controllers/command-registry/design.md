@@ -167,11 +167,12 @@ the consumer; typed action and inbound idempotency state stay with their
 existing owners. Restart rebuilds the same registry through explicit
 composition and relies on stable inbound/action identity for convergence.
 
-## Implementation slice
+## Implementation
 
 The standalone registry slice replaces the fixed dispatcher, adds the
 registry-to-Gateway effect-fence handshake, scopes operation IDs by the full
 inbound identity, and bounds common selection views. It preserves
 `SlashController` as the default common-command convenience composition while
-making `CommandRegistry` the public consumer-composition surface. The later
-common-command mechanical move removes the remaining historical internal path.
+making `CommandRegistry` the public consumer-composition surface. The common
+command implementation now resides under Interaction; the historical internal
+modules have been removed.
