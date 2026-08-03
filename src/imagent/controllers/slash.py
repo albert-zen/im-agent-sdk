@@ -43,8 +43,8 @@ from ..contracts import (
     TurnCatchupRead,
     UserInputResponse,
 )
+from ..interaction.controllers import ControllerActions
 from ..interaction.messages import ConversationRef, InboundMessage, OutboundMessage, TextContent
-from .base import ControllerActions
 from .markdown import MarkdownSlashPresenter
 
 

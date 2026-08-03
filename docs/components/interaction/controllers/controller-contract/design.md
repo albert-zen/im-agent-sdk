@@ -108,8 +108,14 @@ bounded by its owning command implementation.
 
 ## Physical migration
 
-The current `src/imagent/controllers/base.py` mixes this contract with request
-presentation types. A focused mechanical slice will move the exact Controller
-objects to `src/imagent/interaction/controllers/contract.py` before registry
-behavior changes. It must preserve exact public object identity during the
-finite migration and leave only one implementation.
+`src/imagent/interaction/controllers/contract.py` owns the current exact
+`ControllerActions` and `InboundController` objects. The historical
+`imagent.controllers` package re-exports those same objects as a finite public
+migration facade while request presentation and common commands still occupy
+that package. Repository runtime code imports the owning Interaction leaf;
+there is no second contract implementation.
+
+The accepted registry-only one-way effect fence remains target behavior for
+the standalone registry API/behavior slice. This mechanical extraction does
+not add the fence, registry, operation-ID scope fix, cache bounds, or any
+runtime behavior.

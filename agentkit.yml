@@ -295,7 +295,9 @@ components:
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
+      - src/imagent/interaction/controllers/**
       - src/imagent/controllers/**
+      - tests/interaction/controllers/**
       - tests/test_slash_controller.py
     docs:
       - docs/components/interaction/controllers/README.md

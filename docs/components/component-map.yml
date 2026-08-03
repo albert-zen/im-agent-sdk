@@ -178,17 +178,17 @@ components:
     outputs: [unconsumed marker or bounded OutboundMessage tuple, durable side_effect_started transition before effectful handler invocation]
     public_contracts: [InboundController, ControllerActions]
     public_exports:
-      current: [imagent.controllers:InboundController, imagent.controllers:ControllerActions]
+      current: [imagent.interaction.controllers:InboundController, imagent.interaction.controllers:ControllerActions, imagent.controllers:InboundController, imagent.controllers:ControllerActions]
       target: [imagent.interaction.controllers:InboundController, imagent.interaction.controllers:ControllerActions]
     dependencies: [interaction.messages, interaction.operations, applications.operations, gateway.routing.gateway-operations, gateway.persistence.state-contracts]
     state_recovery: Controller invocation has no durable authority; action-specific replay fences remain explicit.
-    current_code: [src/imagent/controllers/__init__.py, src/imagent/controllers/base.py]
-    target_code: [src/imagent/interaction/controllers/contract.py]
-    current_tests: [tests/test_slash_controller.py, tests/test_gateway_operations.py]
+    current_code: [src/imagent/interaction/controllers/__init__.py, src/imagent/interaction/controllers/contract.py, src/imagent/controllers/__init__.py]
+    target_code: [src/imagent/interaction/controllers/__init__.py, src/imagent/interaction/controllers/contract.py]
+    current_tests: [tests/interaction/controllers/test_contract.py, tests/test_slash_controller.py, tests/test_gateway_operations.py]
     target_tests: [tests/interaction/controllers/test_contract.py]
     authoritative_docs: [docs/components/interaction/controllers/controller-contract/design.md, docs/components/interaction/controllers/controller-contract/testing.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [current base.py remains a declared split candidate with request presentation until the focused mechanical move; current ControllerActions lacks the accepted registry-only one-way effect fence]
+    gaps: [current ControllerActions intentionally lacks the accepted registry-only one-way effect fence until the standalone behavior slice; old imagent.controllers exact-object facade remains only until the other Controller leaves move]
 
   interaction.controllers.command-registry:
     id: interaction.controllers.command-registry
@@ -254,7 +254,7 @@ components:
     target_tests: [tests/interaction/controllers/test_request_presentation.py]
     authoritative_docs: [docs/components/interaction/controllers/request-presentation/design.md, docs/components/interaction/controllers/request-presentation/testing.md]
     adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [current base.py remains a declared split candidate with the Controller contract until the focused mechanical move]
+    gaps: [physical move to the request-presentation owner remains a separate mechanical slice]
 
   interaction.channels.channel-contract:
     id: interaction.channels.channel-contract
@@ -1447,9 +1447,6 @@ structural_status:
     src/imagent/contracts/request_validation.py:
       owners: [gateway.projection.request-correlation, gateway.persistence.state-contracts, applications.requests]
       reason: One module validates Application-owned request response shapes plus Gateway-owned route correlation and persisted state evidence.
-    src/imagent/controllers/base.py:
-      owners: [interaction.controllers.controller-contract, interaction.controllers.request-presentation]
-      reason: Controller and request-presentation protocols are independent typed positions.
     src/imagent/delivery_ingress.py:
       owners: [interaction.media, gateway.delivery.proactive-delivery]
       reason: Proactive ingress orchestration and bounded inline media staging/validation share one current module.
