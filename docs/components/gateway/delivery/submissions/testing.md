@@ -16,7 +16,7 @@ mechanical ownership move.
 Run:
 
 ```sh
-PYTHONPATH=src python -m unittest tests.gateway.delivery.test_submissions tests.test_proactive_delivery -v
+PYTHONPATH=src python -m unittest tests.gateway.delivery.test_submissions tests.gateway.delivery.test_proactive_delivery -v
 PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 

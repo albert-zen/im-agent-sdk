@@ -101,6 +101,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "src/imagent/gateway/delivery/proactive_authorization.py": {
                 "delivery-planning-and-coordination"
             },
+            "src/imagent/gateway/delivery/proactive.py": {"delivery-planning-and-coordination"},
             "src/imagent/gateway/delivery/submissions.py": {
                 "delivery-planning-and-coordination",
                 "persistence",
@@ -154,6 +155,9 @@ class AgentKitMappingTests(unittest.TestCase):
                 "delivery-planning-and-coordination"
             },
             "tests/gateway/delivery/test_proactive_authorization.py": {
+                "delivery-planning-and-coordination"
+            },
+            "tests/gateway/delivery/test_proactive_delivery.py": {
                 "delivery-planning-and-coordination"
             },
             "tests/gateway/delivery/test_submissions.py": {"delivery-planning-and-coordination"},

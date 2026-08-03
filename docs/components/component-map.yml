@@ -702,9 +702,9 @@ components:
       target: [imagent.gateway.delivery:DeliverySubmissionOrigin, imagent.gateway.delivery:derive_delivery_payload_fingerprint, imagent.gateway.delivery:derive_delivery_submission_id, imagent.gateway.delivery:derive_delivery_target_fingerprint, imagent.gateway.delivery:derive_destination_delivery_id]
     dependencies: [interaction.messages, interaction.channels.channel-contract, applications.application-contract, gateway.delivery.proactive-authorization, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: In-flight/unknown remain ambiguous; immutable snapshots prevent route drift on retry.
-    current_code: [schemas/v1/deliveries.schema.json, src/imagent/contracts/delivery.py, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/submissions.py, src/imagent/proactive_delivery.py]
+    current_code: [schemas/v1/deliveries.schema.json, src/imagent/contracts/delivery.py, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/submissions.py, src/imagent/gateway/delivery/proactive.py]
     target_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/submissions.py]
-    current_tests: [tests/gateway/delivery/test_submissions.py, tests/test_delivery_ingress.py, tests/test_proactive_delivery.py, tests/test_storage.py]
+    current_tests: [tests/gateway/delivery/test_submissions.py, tests/test_delivery_ingress.py, tests/gateway/delivery/test_proactive_delivery.py, tests/test_storage.py]
     target_tests: [tests/gateway/delivery/test_submissions.py]
     authoritative_docs: [docs/components/gateway/delivery/submissions/design.md, docs/components/gateway/delivery/submissions/testing.md]
     adrs: [docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
@@ -726,7 +726,7 @@ components:
     state_recovery: Reference credentials are process-local; consumers own credential storage and revocation recovery.
     current_code: [src/imagent/adapters.py, src/imagent/contracts/delivery.py, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/proactive_authorization.py]
     target_code: [src/imagent/gateway/delivery/proactive_authorization.py]
-    current_tests: [tests/gateway/delivery/test_proactive_authorization.py, tests/test_proactive_delivery.py]
+    current_tests: [tests/gateway/delivery/test_proactive_authorization.py, tests/gateway/delivery/test_proactive_delivery.py]
     target_tests: [tests/gateway/delivery/test_proactive_authorization.py]
     authoritative_docs: [docs/components/gateway/delivery/proactive-authorization/design.md, docs/components/gateway/delivery/proactive-authorization/testing.md]
     adrs: [docs/decisions/0009-proactive-delivery-routing.md]
@@ -742,17 +742,17 @@ components:
     outputs: [ProactiveDeliveryResult]
     public_contracts: [ProactiveDeliveryService, ProactiveDeliveryJsonHandler, DeliveryIntent, ConversationDeliveryTarget, DeliveryTarget, DeliveryTargetKind, DestinationDeliveryResult, ProactiveDeliveryResult, ThreadRouteDeliveryTarget, validate_delivery_intent]
     public_exports:
-      current: [imagent.proactive_delivery:ProactiveDeliveryService, imagent.delivery_ingress:ProactiveDeliveryJsonHandler, imagent.contracts:DeliveryIntent, imagent.contracts:ConversationDeliveryTarget, imagent.contracts:DeliveryTarget, imagent.contracts:DeliveryTargetKind, imagent.contracts:DestinationDeliveryResult, imagent.contracts:ProactiveDeliveryResult, imagent.contracts:ThreadRouteDeliveryTarget, imagent.contracts:validate_delivery_intent]
+      current: [imagent.gateway.delivery:ProactiveDeliveryService, imagent.delivery_ingress:ProactiveDeliveryJsonHandler, imagent.gateway.delivery:DeliveryIntent, imagent.gateway.delivery:ConversationDeliveryTarget, imagent.gateway.delivery:DeliveryTarget, imagent.gateway.delivery:DeliveryTargetKind, imagent.gateway.delivery:DestinationDeliveryResult, imagent.gateway.delivery:ProactiveDeliveryResult, imagent.gateway.delivery:ThreadRouteDeliveryTarget, imagent.gateway.delivery:validate_delivery_intent, imagent.contracts:DeliveryIntent, imagent.contracts:ConversationDeliveryTarget, imagent.contracts:DeliveryTarget, imagent.contracts:DeliveryTargetKind, imagent.contracts:DestinationDeliveryResult, imagent.contracts:ProactiveDeliveryResult, imagent.contracts:ThreadRouteDeliveryTarget, imagent.contracts:validate_delivery_intent]
       target: [imagent.gateway.delivery:ProactiveDeliveryService, imagent.gateway.delivery:ProactiveDeliveryJsonHandler, imagent.gateway.delivery:DeliveryIntent, imagent.gateway.delivery:ConversationDeliveryTarget, imagent.gateway.delivery:DeliveryTarget, imagent.gateway.delivery:DeliveryTargetKind, imagent.gateway.delivery:DestinationDeliveryResult, imagent.gateway.delivery:ProactiveDeliveryResult, imagent.gateway.delivery:ThreadRouteDeliveryTarget, imagent.gateway.delivery:validate_delivery_intent]
     dependencies: [interaction.messages, interaction.operations, interaction.media, interaction.channels.channel-contract, applications.application-contract, gateway.delivery.proactive-authorization, gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.outcome-observation, gateway.routing.projection-routes, gateway.persistence.repository-contracts]
     state_recovery: Persist identity/snapshots/outcomes only; staged inline bytes live through one synchronous attempt and are removed after join.
-    current_code: [schemas/v1/deliveries.schema.json, src/imagent/contracts/delivery.py, src/imagent/proactive_delivery.py, src/imagent/delivery_ingress.py, src/imagent/cli/__init__.py, src/imagent/cli/send.py, src/imagent/gateway/__init__.py]
+    current_code: [schemas/v1/deliveries.schema.json, src/imagent/contracts/delivery.py, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/proactive.py, src/imagent/delivery_ingress.py, src/imagent/cli/__init__.py, src/imagent/cli/send.py, src/imagent/gateway/__init__.py]
     target_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/proactive.py]
-    current_tests: [tests/test_proactive_delivery.py, tests/test_delivery_ingress.py]
+    current_tests: [tests/gateway/delivery/test_proactive_delivery.py, tests/test_delivery_ingress.py]
     target_tests: [tests/gateway/delivery/test_proactive_delivery.py]
-    authoritative_docs: [docs/components/gateway/design.md, docs/components/attachments-and-media/design.md]
+    authoritative_docs: [docs/components/gateway/delivery/proactive-delivery/design.md, docs/components/gateway/delivery/proactive-delivery/testing.md]
     adrs: [docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
-    gaps: [CLI packaging may remain a formal facade after runtime move]
+    gaps: [JSON/CLI ingress remains in historical files and the in-memory submission repository remains co-located pending focused splits]
 
   gateway.delivery.outcome-observation:
     id: gateway.delivery.outcome-observation
@@ -770,7 +770,7 @@ components:
     state_recovery: Non-durable and at-most-offered once per actual attempt; replay/suppression/preflight fabricate no notification.
     current_code: [src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/outcome_observation.py, src/imagent/gateway/__init__.py, src/imagent/diagnostics.py]
     target_code: [src/imagent/gateway/delivery/outcome_observation.py]
-    current_tests: [tests/gateway/delivery/test_outcome_observation.py, tests/test_proactive_delivery.py]
+    current_tests: [tests/gateway/delivery/test_outcome_observation.py, tests/gateway/delivery/test_proactive_delivery.py]
     target_tests: [tests/gateway/delivery/test_outcome_observation.py]
     authoritative_docs: [docs/components/gateway/delivery/outcome-observation/design.md, docs/components/gateway/delivery/outcome-observation/testing.md]
     adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -834,9 +834,9 @@ components:
       target: []
     dependencies: [interaction.messages, applications.application-contract, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Process-local state is intentionally non-durable and is rebuilt empty after restart.
-    current_code: [src/imagent/bindings.py, src/imagent/projections.py, src/imagent/request_correlations.py, src/imagent/proactive_delivery.py]
+    current_code: [src/imagent/bindings.py, src/imagent/projections.py, src/imagent/request_correlations.py, src/imagent/gateway/delivery/proactive.py]
     target_code: [src/imagent/gateway/persistence/memory.py]
-    current_tests: [tests/test_bindings.py, tests/test_projection_routing.py, tests/test_storage.py, tests/test_proactive_delivery.py]
+    current_tests: [tests/test_bindings.py, tests/test_projection_routing.py, tests/test_storage.py, tests/gateway/delivery/test_proactive_delivery.py]
     target_tests: [tests/gateway/persistence/test_memory.py]
     authoritative_docs: [docs/components/persistence/design.md, docs/components/persistence/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md]
@@ -1455,7 +1455,7 @@ structural_status:
       owners: [gateway.composition, gateway.lifecycle, gateway.admission, gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.content-transformation, gateway.input.dispatch, gateway.input.failure-presentation, gateway.projection.observation, gateway.projection.request-correlation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.diagnostics]
       reason: The current composition root also sequences admission, input, observation, request routing, presentation, delivery, and diagnostics leaf behavior.
     src/imagent/gateway/delivery/__init__.py:
-      owners: [gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.proactive-authorization, gateway.delivery.outcome-observation]
+      owners: [gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation]
       reason: The intentional Gateway delivery package facade re-exports exact public values from focused delivery leaves without implementing any leaf.
     src/imagent/diagnostics.py:
       owners: [interaction.channels.adapters, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.presentation, gateway.delivery.outcome-observation, gateway.diagnostics, applications.application-contract, applications.presentation.live-activity, applications.presentation.artifact-materialization, applications.adapters.appserver.diagnostics]
@@ -1478,7 +1478,7 @@ structural_status:
     src/imagent/gateway/delivery/submissions.py:
       owners: [gateway.delivery.submissions, gateway.persistence.sqlite, gateway.persistence.row-mapping]
       reason: Submission state transitions and their SQLite persistence/mapping are co-located.
-    src/imagent/proactive_delivery.py:
+    src/imagent/gateway/delivery/proactive.py:
       owners: [gateway.delivery.submissions, gateway.delivery.proactive-delivery, gateway.persistence.memory]
       reason: In-memory submission repository and proactive orchestration share one module after authorization extraction.
     src/imagent/bindings.py:

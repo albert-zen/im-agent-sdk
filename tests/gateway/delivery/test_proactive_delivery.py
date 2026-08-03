@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import tempfile
 import unittest
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+import imagent.contracts as contract_facade
+import imagent.gateway.delivery as delivery_facade
 from imagent.adapters import DeliverySubmissionConflict, IdempotencyClaimStatus
 from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
@@ -42,14 +45,39 @@ from imagent.gateway.delivery import (
     DeliveryPlanningError,
     ScopedDeliveryAuthorizer,
 )
-from imagent.gateway.delivery.proactive_authorization import DeliveryAuthorizationError
-from imagent.proactive_delivery import (
+from imagent.gateway.delivery import proactive as proactive_owner
+from imagent.gateway.delivery.proactive import (
     DeliveryRouteError,
     InMemoryDeliverySubmissionRepository,
 )
+from imagent.gateway.delivery.proactive_authorization import DeliveryAuthorizationError
 from imagent.projections import InMemoryProjectionRouteRepository
 from imagent.storage import SQLiteGatewayState
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
+
+
+class ProactiveDeliveryOwnershipTests(unittest.TestCase):
+    def test_facades_use_exact_owner_objects_and_old_module_is_absent(self) -> None:
+        names = (
+            "ConversationDeliveryTarget",
+            "DeliveryIntent",
+            "DeliveryTarget",
+            "DeliveryTargetKind",
+            "DestinationDeliveryResult",
+            "ProactiveDeliveryResult",
+            "ThreadRouteDeliveryTarget",
+            "validate_delivery_intent",
+        )
+        for name in names:
+            with self.subTest(name=name):
+                owner = getattr(proactive_owner, name)
+                self.assertIs(getattr(delivery_facade, name), owner)
+                self.assertIs(getattr(contract_facade, name), owner)
+        self.assertIs(
+            delivery_facade.ProactiveDeliveryService,
+            proactive_owner.ProactiveDeliveryService,
+        )
+        self.assertIsNone(importlib.util.find_spec("imagent.proactive_delivery"))
 
 
 class _OutcomeChannel(FakeChannelAdapter):

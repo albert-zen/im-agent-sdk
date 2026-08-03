@@ -32,7 +32,7 @@ from imagent.contracts import (
 from imagent.delivery_ingress import ProactiveDeliveryJsonHandler
 from imagent.gateway import GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import ScopedDeliveryAuthorizer
-from imagent.proactive_delivery import (
+from imagent.gateway.delivery.proactive import (
     InMemoryDeliverySubmissionRepository,
 )
 from imagent.projections import InMemoryProjectionRouteRepository

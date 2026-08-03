@@ -139,6 +139,8 @@ components:
       - docs/components/gateway/delivery/submissions/testing.md
       - docs/components/gateway/delivery/proactive-authorization/design.md
       - docs/components/gateway/delivery/proactive-authorization/testing.md
+      - docs/components/gateway/delivery/proactive-delivery/design.md
+      - docs/components/gateway/delivery/proactive-delivery/testing.md
       - docs/components/gateway/presentation/design.md
       - docs/components/gateway/presentation/testing.md
       - docs/components/delivery-planning-and-coordination/design.md
@@ -179,7 +181,6 @@ components:
       - src/imagent/gateway_composition.py
       - src/imagent/gateway_startup.py
       - src/imagent/delivery_ingress.py
-      - src/imagent/proactive_delivery.py
       - src/imagent/cli/**
       - tests/gateway/test_package_root.py
       - tests/test_gateway_operations.py
@@ -188,7 +189,6 @@ components:
       - tests/test_inbound_content_transformer.py
       - tests/test_inbound_failure_presenter.py
       - tests/test_delivery_ingress.py
-      - tests/test_proactive_delivery.py
     docs:
       - docs/components/gateway/README.md
       - docs/components/gateway/design.md

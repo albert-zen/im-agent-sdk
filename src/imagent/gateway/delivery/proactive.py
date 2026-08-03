@@ -5,12 +5,12 @@ from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from .adapters import (
+from ...adapters import (
     DeliveryAuthorizer,
     DeliverySubmissionConflict,
     DeliverySubmissionRepository,
 )
-from .contracts import (
+from ...contracts import (
     ConversationDeliveryTarget,
     DeliveryIntent,
     DeliveryItemReceipt,
@@ -40,17 +40,18 @@ from .contracts import (
     validate_delivery_receipt_for_content,
     validate_delivery_submission_record,
 )
-from .gateway.delivery import proactive_authorization as _proactive_authorization
-from .gateway.delivery.coordination import DeliveryCoordinator
-from .gateway.delivery.outcome_observation import (
+from ...contracts import DeliveryTargetKind as DeliveryTargetKind
+from ...interaction.channels import ChannelAdapter
+from ...interaction.media import AttachmentContent, LocalPath
+from ...interaction.messages import OutboundMessage
+from ...interaction.operations import ContractViolation
+from . import proactive_authorization as _proactive_authorization
+from .coordination import DeliveryCoordinator
+from .outcome_observation import (
     DeliveryOutcomeErrorCode,
     DeliveryOutcomeObserverRuntime,
 )
-from .gateway.delivery.planning import DeliveryPlanningError
-from .interaction.channels import ChannelAdapter
-from .interaction.media import AttachmentContent, LocalPath
-from .interaction.messages import OutboundMessage
-from .interaction.operations import ContractViolation
+from .planning import DeliveryPlanningError
 
 ResolveThreadRoutes = Callable[
     [ThreadRef],
