@@ -1,0 +1,295 @@
+from __future__ import annotations
+
+import copy
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from scripts.agentkit import _validate_component_map
+from scripts.validate_component_map import (
+    ComponentMapError,
+    _load_component_map_text,
+    load_component_map,
+    validate_component_map,
+)
+
+
+class ComponentMapTests(unittest.TestCase):
+    def test_complete_current_source_inventory_and_leaf_schema(self) -> None:
+        summary = validate_component_map(load_component_map())
+
+        self.assertGreaterEqual(summary["components"], 50)
+        self.assertGreaterEqual(summary["test_paths"], 37)
+        self.assertEqual(summary["orphans"], 0)
+        self.assertGreater(summary["split_candidates"], 0)
+        self.assertGreaterEqual(summary["public_facade_exports"], 240)
+
+    def test_dunder_all_exports_must_have_component_ownership(self) -> None:
+        component_map = copy.deepcopy(load_component_map())
+        component = component_map["components"]["applications.adapters.appserver.client"]
+        component["public_exports"]["current"].remove(
+            "imagent.applications.appserver_client:AppServerClient"
+        )
+
+        with self.assertRaisesRegex(ComponentMapError, "unmapped __all__ public exports"):
+            validate_component_map(component_map)
+
+    def test_duplicate_yaml_keys_fail_explicitly(self) -> None:
+        with self.assertRaisesRegex(ComponentMapError, "duplicate YAML key 'version'"):
+            _load_component_map_text("version: 1\nversion: 2\n")
+
+    def test_component_leaf_schema_and_direct_parent_are_enforced(self) -> None:
+        component_map = load_component_map()
+        mutations = (
+            ("parent", "gateway", "invalid layer/parent"),
+            ("purpose", [], "purpose must be non-empty text"),
+            ("owns", [], "owns must be non-empty"),
+        )
+
+        for field, value, expected_error in mutations:
+            with self.subTest(field=field):
+                mutated = copy.deepcopy(component_map)
+                mutated["components"]["gateway.routing.bindings"][field] = value
+                with self.assertRaisesRegex(ComponentMapError, expected_error):
+                    validate_component_map(mutated)
+
+    def test_component_dependency_graph_must_be_acyclic(self) -> None:
+        component_map = copy.deepcopy(load_component_map())
+        component_map["components"]["interaction.messages"]["dependencies"] = [
+            "interaction.operations"
+        ]
+
+        with self.assertRaisesRegex(ComponentMapError, "component dependency cycle"):
+            validate_component_map(component_map)
+
+    def test_port_and_composition_contract_edges_are_explicit(self) -> None:
+        component_map = load_component_map()
+        components = component_map["components"]
+
+        controller_action_edges = {
+            "applications.operations",
+            "gateway.routing.gateway-operations",
+            "gateway.persistence.state-contracts",
+        }
+        self.assertGreaterEqual(
+            set(components["interaction.controllers.controller-contract"]["dependencies"]),
+            controller_action_edges,
+        )
+        common_command_edges = {
+            "applications.application-contract",
+            "applications.capabilities",
+            "applications.operations",
+            "applications.requests",
+            "gateway.routing.bindings",
+            "gateway.routing.gateway-operations",
+            "gateway.routing.projection-routes",
+            "gateway.projection.request-correlation",
+            "gateway.persistence.state-contracts",
+        }
+        self.assertGreaterEqual(
+            set(components["interaction.controllers.common-commands"]["dependencies"]),
+            common_command_edges,
+        )
+        exceptions = {(item["from"], item["to"]) for item in component_map["dependency_exceptions"]}
+        for target in controller_action_edges:
+            self.assertIn(("interaction.controllers.controller-contract", target), exceptions)
+        for target in common_command_edges:
+            self.assertIn(("interaction.controllers.common-commands", target), exceptions)
+
+        self.assertGreaterEqual(
+            set(components["applications.application-contract"]["dependencies"]),
+            {
+                "applications.capabilities",
+                "applications.events",
+                "applications.operations",
+                "applications.requests",
+            },
+        )
+        self.assertNotIn(
+            "applications.application-contract",
+            components["applications.operations"]["dependencies"],
+        )
+        self.assertIn(
+            "interaction.channels.channel-contract",
+            components["interaction.channels.outbound-delivery"]["dependencies"],
+        )
+        self.assertNotIn(
+            "interaction.channels.outbound-delivery",
+            components["interaction.channels.channel-contract"]["dependencies"],
+        )
+        self.assertGreaterEqual(
+            set(components["gateway.composition"]["dependencies"]),
+            {
+                "interaction.controllers.controller-contract",
+                "interaction.controllers.request-presentation",
+                "gateway.admission",
+                "gateway.input.content-transformation",
+                "gateway.input.failure-presentation",
+                "gateway.projection.observation",
+                "gateway.presentation",
+                "gateway.delivery.coordination",
+                "gateway.delivery.proactive-authorization",
+                "gateway.delivery.proactive-delivery",
+                "gateway.delivery.outcome-observation",
+                "gateway.persistence.state-contracts",
+                "gateway.persistence.repository-contracts",
+                "gateway.persistence.memory",
+                "gateway.persistence.idempotency",
+            },
+        )
+        self.assertEqual(
+            components["gateway.delivery.proactive-authorization"]["public_contracts"],
+            [
+                "DeliveryAuthorizer",
+                "DeliveryPrincipal",
+                "ScopedDeliveryAuthorizer",
+                "validate_delivery_principal",
+            ],
+        )
+        self.assertGreaterEqual(
+            set(components["gateway.admission"]["dependencies"]),
+            {"interaction.channels.channel-contract", "interaction.messages"},
+        )
+        self.assertNotIn(
+            "interaction.channels.ingress",
+            components["gateway.admission"]["dependencies"],
+        )
+        self.assertGreaterEqual(
+            set(components["interaction.channels.channel-contract"]["public_contracts"]),
+            {"InboundAdmission", "InboundAdmissionHandler"},
+        )
+
+    def test_approved_runtime_layers_and_registry_gap_are_explicit(self) -> None:
+        component_map = load_component_map()
+
+        self.assertEqual(
+            set(component_map["layers"]),
+            {"interaction", "gateway", "applications", "engineering"},
+        )
+        registry = component_map["components"]["interaction.controllers.command-registry"]
+        self.assertEqual(registry["current_code"], [])
+        self.assertIn("implementation absent", registry["gaps"])
+
+    def test_schema_semantics_belong_to_runtime_leaves(self) -> None:
+        component_map = load_component_map()
+        components = component_map["components"]
+        schema_support = components["engineering.schema-conformance"]
+
+        self.assertEqual(
+            schema_support["current_code"],
+            ["schemas/v1/README.md", "scripts/validate_schemas.py"],
+        )
+        self.assertIn(
+            "schemas/v1/messages.schema.json",
+            components["interaction.messages"]["current_code"],
+        )
+        self.assertIn(
+            "schemas/v1/messages.schema.json",
+            components["interaction.messages"]["target_code"],
+        )
+        self.assertIn(
+            "schemas/v1/operations.schema.json",
+            components["gateway.routing.gateway-operations"]["current_code"],
+        )
+        self.assertIn(
+            "schemas/v1/resources.schema.json",
+            components["applications.application-contract"]["current_code"],
+        )
+        self.assertIn(
+            "schemas/v1/resources.schema.json",
+            components["applications.application-contract"]["target_code"],
+        )
+
+    def test_application_input_contracts_are_not_owned_by_gateway(self) -> None:
+        components = load_component_map()["components"]
+
+        self.assertEqual(
+            components["gateway.input.dispatch"]["public_contracts"],
+            ["derive_client_message_id"],
+        )
+        self.assertGreaterEqual(
+            set(components["applications.application-contract"]["public_contracts"]),
+            {
+                "ApplicationInputDispatch",
+                "AcceptedTurn",
+                "InputContinuationPreference",
+            },
+        )
+
+    def test_zen_adapter_declares_shared_artifact_materialization_seam(self) -> None:
+        zen = load_component_map()["components"]["applications.adapters.zen"]
+
+        self.assertIn(
+            "applications.presentation.artifact-materialization",
+            zen["dependencies"],
+        )
+        self.assertIn("tests/test_appserver_artifacts.py", zen["current_tests"])
+        self.assertIn(
+            "docs/decisions/0015-typed-extension-seams-and-composition.md",
+            zen["adrs"],
+        )
+
+    def test_agentkit_architecture_and_check_commands_consume_the_map(self) -> None:
+        with patch("scripts.agentkit.subprocess.call", return_value=0) as call:
+            for command in ("lint-architecture", "check"):
+                with self.subTest(command=command):
+                    status = _validate_component_map(
+                        uv="/tools/uv",
+                        repo=Path("/repository"),
+                        arguments=[command],
+                        environment={"PYTHONUTF8": "1"},
+                    )
+                    self.assertEqual(status, 0)
+
+        self.assertEqual(call.call_count, 2)
+        for invocation in call.call_args_list:
+            self.assertEqual(
+                invocation.args[0],
+                [
+                    "/tools/uv",
+                    "run",
+                    "--isolated",
+                    "--no-project",
+                    "--with",
+                    "PyYAML==6.0.3",
+                    "--with",
+                    "httpx>=0.28,<1",
+                    "python",
+                    "/repository/scripts/validate_component_map.py",
+                ],
+            )
+            self.assertEqual(
+                invocation.kwargs["env"]["PYTHONPATH"],
+                "/repository/src",
+            )
+
+    def test_component_map_gate_does_not_use_the_caller_python(self) -> None:
+        with (
+            patch("scripts.agentkit.sys.executable", "/usr/bin/python3"),
+            patch("scripts.agentkit.subprocess.call", return_value=0) as call,
+        ):
+            status = _validate_component_map(
+                uv="/tools/uv",
+                repo=Path("/repository"),
+                arguments=["check"],
+                environment={},
+            )
+
+        self.assertEqual(status, 0)
+        self.assertNotIn("/usr/bin/python3", call.call_args.args[0])
+
+    def test_unrelated_agentkit_commands_skip_the_component_map_gate(self) -> None:
+        with patch("scripts.agentkit.subprocess.call") as call:
+            status = _validate_component_map(
+                uv="/tools/uv",
+                repo=Path("/repository"),
+                arguments=["status"],
+                environment={},
+            )
+
+        self.assertEqual(status, 0)
+        call.assert_not_called()
+
+
+if __name__ == "__main__":
+    unittest.main()

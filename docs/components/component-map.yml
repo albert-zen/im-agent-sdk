@@ -1,0 +1,1473 @@
+version: 1
+status: logical-inventory-before-physical-migration
+authority:
+  architecture: docs/ARCHITECTURE.md
+  vision: docs/VISION.md
+  decisions: docs/decisions
+target_layout:
+  source: src/imagent/{interaction,gateway,applications}
+  docs: docs/components/{interaction,gateway,applications}
+  tests: tests/{interaction,gateway,applications}
+inventory:
+  current_source_patterns:
+    - src/imagent/**/*.py
+    - src/imagent/py.typed
+    - schemas/v1/*
+    - scripts/*
+    - agentkit.yml
+    - plugins/agentkit/**/*
+    - .agents/plugins/*
+    - pyproject.toml
+    - .github/workflows/*.yml
+layers:
+  interaction:
+    purpose: Typed IM interaction contracts, Controller UX, and Channel boundaries.
+    may_depend_on: []
+  applications:
+    purpose: Native Agent contracts, truth normalization, and concrete adapters.
+    may_depend_on: [interaction]
+  gateway:
+    purpose: Composition and orchestration over Interaction and Applications.
+    may_depend_on: [interaction, applications]
+  engineering:
+    purpose: Non-runtime conformance, repository, AgentKit, and release support.
+    may_depend_on: [interaction, applications, gateway]
+target_documentation:
+  runtime_leaf_rule: docs/components/{component-id-with-dots-as-slashes}/{design.md,testing.md}
+  engineering_leaf_rule: docs/engineering/{component-leaf}/{design.md,testing.md}
+  required_leaf_files: [design.md, testing.md]
+dependency_exceptions:
+  - from: interaction.controllers.controller-contract
+    to: applications.operations
+    reason: ControllerActions exposes the typed Application operation/result Port without importing an Application implementation.
+  - from: interaction.controllers.controller-contract
+    to: gateway.routing.gateway-operations
+    reason: ControllerActions exposes the typed Gateway operation/result Port without importing Gateway orchestration.
+  - from: interaction.controllers.controller-contract
+    to: gateway.persistence.state-contracts
+    reason: ControllerActions returns the passive ConversationBinding value for product-neutral Controller decisions.
+  - from: interaction.controllers.common-commands
+    to: applications.application-contract
+    reason: SDK common command presentation consumes public Application resource and summary values returned by typed actions.
+  - from: interaction.controllers.common-commands
+    to: applications.capabilities
+    reason: SDK common command presentation consumes the public Thread deletion capability value returned by typed actions.
+  - from: interaction.controllers.common-commands
+    to: applications.operations
+    reason: SDK common commands construct public typed Application operations through ControllerActions.
+  - from: interaction.controllers.common-commands
+    to: applications.requests
+    reason: SDK common commands construct public typed request responses and consume RequestRef values through ControllerActions.
+  - from: interaction.controllers.common-commands
+    to: gateway.routing.bindings
+    reason: SDK common commands construct public typed Conversation binding operations through ControllerActions.
+  - from: interaction.controllers.common-commands
+    to: gateway.routing.gateway-operations
+    reason: SDK common commands construct public typed Gateway operations through ControllerActions.
+  - from: interaction.controllers.common-commands
+    to: gateway.routing.projection-routes
+    reason: SDK common commands construct the public typed Thread observation operation through ControllerActions.
+  - from: interaction.controllers.common-commands
+    to: gateway.projection.request-correlation
+    reason: SDK common commands construct the public typed request-routing operation through ControllerActions.
+  - from: interaction.controllers.common-commands
+    to: gateway.persistence.state-contracts
+    reason: SDK common command presentation consumes the passive ConversationBinding returned by ControllerActions.
+  - from: interaction.controllers.request-presentation
+    to: applications.requests
+    reason: A typed Controller request presenter consumes the public Application request contract; no Channel or Application implementation dependency is allowed.
+
+components:
+  interaction.messages:
+    id: interaction.messages
+    parent: interaction
+    purpose: Define content-bearing inbound, outbound, and canonical Agent message envelopes.
+    owns: [message envelopes, text content, content ordering, stable message identity]
+    does_not_own: [control intent, native delivery, transcript authority]
+    inputs: [native-normalized content facts]
+    outputs: [InboundMessage, OutboundMessage, AgentMessage, TextContent]
+    public_contracts: [InboundMessage, OutboundMessage, AgentMessage, Content, TextContent, ConversationRef, MessageRole, Metadata, TextFormat, TextLengthUnit]
+    public_exports:
+      current: [imagent.contracts:InboundMessage, imagent.contracts:OutboundMessage, imagent.contracts:AgentMessage, imagent.contracts:Content, imagent.contracts:TextContent, imagent.contracts:ConversationRef, imagent.contracts:MessageRole, imagent.contracts:Metadata, imagent.contracts:TextFormat, imagent.contracts:TextLengthUnit]
+      target: [imagent.interaction.messages:InboundMessage, imagent.interaction.messages:OutboundMessage, imagent.interaction.messages:AgentMessage, imagent.interaction.messages:Content, imagent.interaction.messages:TextContent, imagent.interaction.messages:ConversationRef, imagent.interaction.messages:MessageRole, imagent.interaction.messages:Metadata, imagent.interaction.messages:TextFormat, imagent.interaction.messages:TextLengthUnit]
+    dependencies: []
+    state_recovery: Stateless values; stable IDs, never text or timestamps, drive replay identity.
+    current_code: [schemas/v1/common.schema.json, schemas/v1/messages.schema.json, src/imagent/contracts/model.py]
+    target_code: [schemas/v1/common.schema.json, schemas/v1/messages.schema.json, src/imagent/interaction/messages.py]
+    current_tests: [tests/test_contracts.py]
+    target_tests: [tests/interaction/test_messages.py]
+    authoritative_docs: [docs/components/contracts/design.md, docs/components/contracts/protocol.md]
+    adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0002-design-authority-and-control-boundaries.md]
+    gaps: [target leaf design/testing docs not yet split from contracts]
+
+  interaction.operations:
+    id: interaction.operations
+    parent: interaction
+    purpose: Preserve the Message/Operation separation and common typed operation result/error vocabulary.
+    owns: [control-intent base contracts, operation result discriminants, stable operation errors]
+    does_not_own: [product commands, native mutation implementation, Gateway orchestration]
+    inputs: [typed operation values]
+    outputs: [validated typed operation/result values]
+    public_contracts: [OperationResultStatus, ContractError, ContractViolation, OperationErrorCode, operation_error, require_identifier]
+    public_exports:
+      current: [imagent.contracts:OperationResultStatus, imagent.contracts:ContractError, imagent.contracts:ContractViolation, imagent.contracts:OperationErrorCode, imagent.contracts:operation_error, imagent.contracts:require_identifier]
+      target: [imagent.interaction.operations:OperationResultStatus, imagent.interaction.operations:ContractError, imagent.interaction.operations:ContractViolation, imagent.interaction.operations:OperationErrorCode, imagent.interaction.operations:operation_error, imagent.interaction.operations:require_identifier]
+    dependencies: [interaction.messages]
+    state_recovery: Stateless validation; operation_id is the durable correlation identity.
+    current_code: [schemas/v1/common.schema.json, schemas/v1/operations.schema.json, src/imagent/contracts/__init__.py, src/imagent/contracts/_validation.py, src/imagent/contracts/errors.py, src/imagent/contracts/model.py, src/imagent/contracts/operations.py, src/imagent/contracts/validators.py]
+    target_code: [schemas/v1/common.schema.json, schemas/v1/operations.schema.json, src/imagent/interaction/operations.py]
+    current_tests: [tests/test_contracts.py]
+    target_tests: [tests/interaction/test_operations.py]
+    authoritative_docs: [docs/components/contracts/design.md, docs/components/contracts/protocol.md]
+    adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0002-design-authority-and-control-boundaries.md]
+    gaps: [current operation module mixes Interaction, Gateway, and Applications variants]
+
+  interaction.media:
+    id: interaction.media
+    parent: interaction
+    purpose: Define typed media sources and enforce source, size, media-type, and filesystem trust boundaries.
+    owns: [AttachmentContent, AttachmentSource, shared-filesystem root validation]
+    does_not_own: [artifact bytes, durable spool, unrestricted URL fetching, product quota]
+    inputs: [typed attachment source, deployment trust root]
+    outputs: [validated typed attachment location]
+    public_contracts: [AttachmentContent, LocalPath, RemoteUrl, AttachmentHandle, AttachmentGrouping, AttachmentSource, AttachmentSourceKind]
+    public_exports:
+      current: [imagent.contracts:AttachmentContent, imagent.contracts:LocalPath, imagent.contracts:RemoteUrl, imagent.contracts:AttachmentHandle, imagent.contracts:AttachmentGrouping, imagent.contracts:AttachmentSource, imagent.contracts:AttachmentSourceKind]
+      target: [imagent.interaction.media:AttachmentContent, imagent.interaction.media:LocalPath, imagent.interaction.media:RemoteUrl, imagent.interaction.media:AttachmentHandle, imagent.interaction.media:AttachmentGrouping, imagent.interaction.media:AttachmentSource, imagent.interaction.media:AttachmentSourceKind]
+    dependencies: [interaction.messages]
+    state_recovery: Trust configuration is process-local; content lifetime and crash cleanup stay consumer-owned.
+    current_code: [schemas/v1/capabilities.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, src/imagent/attachments.py, src/imagent/contracts/delivery.py, src/imagent/contracts/model.py, src/imagent/delivery_ingress.py]
+    target_code: [schemas/v1/capabilities.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, src/imagent/interaction/media.py]
+    current_tests: [tests/test_attachments.py, tests/test_contracts.py]
+    target_tests: [tests/interaction/test_media.py]
+    authoritative_docs: [docs/components/attachments-and-media/design.md, docs/components/attachments-and-media/testing.md]
+    adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [target leaf design/testing docs not yet created]
+
+  interaction.controllers.controller-contract:
+    id: interaction.controllers.controller-contract
+    parent: interaction.controllers
+    purpose: Define the optional typed Controller and ControllerActions boundary.
+    owns: [InboundController, ControllerActions, typed Controller result contract]
+    does_not_own: [command grammar, product services, Gateway implementation]
+    inputs: [InboundMessage, typed ControllerActions]
+    outputs: [unconsumed marker or bounded OutboundMessage tuple]
+    public_contracts: [InboundController, ControllerActions]
+    public_exports:
+      current: [imagent.controllers:InboundController, imagent.controllers:ControllerActions]
+      target: [imagent.interaction.controllers:InboundController, imagent.interaction.controllers:ControllerActions]
+    dependencies: [interaction.messages, interaction.operations, applications.operations, gateway.routing.gateway-operations, gateway.persistence.state-contracts]
+    state_recovery: Controller invocation has no durable authority; action-specific replay fences remain explicit.
+    current_code: [src/imagent/controllers/__init__.py, src/imagent/controllers/base.py]
+    target_code: [src/imagent/interaction/controllers/contract.py]
+    current_tests: [tests/test_slash_controller.py, tests/test_gateway_operations.py]
+    target_tests: [tests/interaction/controllers/test_contract.py]
+    authoritative_docs: [docs/components/controllers/design.md, docs/components/controllers/testing.md]
+    adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [Controller replay/cancellation outcomes need a focused contract document]
+
+  interaction.controllers.command-registry:
+    id: interaction.controllers.command-registry
+    parent: interaction.controllers
+    purpose: Compose explicit local bounded typed command definitions and freeze them at startup.
+    owns: [registry instance, duplicate/alias validation, freeze lifecycle, handler bounds]
+    does_not_own: [global registration, import-time mutation, product services, generic middleware]
+    inputs: [typed CommandDefinition values]
+    outputs: [typed invocation and handler result]
+    public_contracts: [CommandRegistry, CommandDefinition, CommandInvocation, CommandResult]
+    public_exports:
+      current: []
+      target: [imagent.interaction.controllers:CommandRegistry, imagent.interaction.controllers:CommandDefinition, imagent.interaction.controllers:CommandInvocation, imagent.interaction.controllers:CommandResult]
+    dependencies: [interaction.controllers.controller-contract, interaction.messages, interaction.operations]
+    state_recovery: Registry structure freezes per composition; handler effects require explicit pre-side-effect/unknown semantics.
+    current_code: []
+    target_code: [src/imagent/interaction/controllers/registry.py]
+    current_tests: []
+    target_tests: [tests/interaction/controllers/test_registry.py]
+    authoritative_docs: [docs/components/controllers/design.md]
+    adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [implementation absent, independent public API/behavior issue required]
+
+  interaction.controllers.common-commands:
+    id: interaction.controllers.common-commands
+    parent: interaction.controllers
+    purpose: Provide SDK common command definitions over typed ControllerActions.
+    owns: [common command grammar, bounded argument parsing, common result presentation]
+    does_not_own: [product commands, native Application policy, binding implementation]
+    inputs: [command invocation, ControllerActions]
+    outputs: [typed command result and outbound presentation]
+    public_contracts: [SlashController]
+    public_exports:
+      current: [imagent.controllers:SlashController]
+      target: [imagent.interaction.controllers:SlashController]
+    dependencies: [interaction.controllers.controller-contract, interaction.controllers.command-registry, interaction.messages, applications.application-contract, applications.capabilities, applications.operations, applications.requests, gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.projection.request-correlation, gateway.persistence.state-contracts]
+    state_recovery: View caches are bounded and discardable; action authority stays in typed actions.
+    current_code: [src/imagent/controllers/markdown.py, src/imagent/controllers/slash.py]
+    target_code: [src/imagent/interaction/controllers/common.py]
+    current_tests: [tests/test_slash_controller.py]
+    target_tests: [tests/interaction/controllers/test_common_commands.py]
+    authoritative_docs: [docs/components/controllers/design.md, docs/components/controllers/testing.md]
+    adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0005-input-activation-and-projection.md]
+    gaps: [fixed dispatch must migrate to registry in a separate slice]
+
+  interaction.controllers.request-presentation:
+    id: interaction.controllers.request-presentation
+    parent: interaction.controllers
+    purpose: Present typed interactive requests without inventing approval policy or insecure input capability.
+    owns: [RequestPresenter, RequestPresentation, Markdown request rendering]
+    does_not_own: [native request truth, response authorization, Channel card protocol]
+    inputs: [ApprovalRequest or UserInputRequest]
+    outputs: [bounded RequestPresentation]
+    public_contracts: [RequestPresenter, RequestPresentation, MarkdownRequestPresenter]
+    public_exports:
+      current: [imagent.controllers:RequestPresenter, imagent.controllers:RequestPresentation, imagent.controllers:MarkdownRequestPresenter]
+      target: [imagent.interaction.controllers:RequestPresenter, imagent.interaction.controllers:RequestPresentation, imagent.interaction.controllers:MarkdownRequestPresenter]
+    dependencies: [interaction.messages, applications.requests]
+    state_recovery: Stateless rendering; Gateway creates response correlation only after successful delivery.
+    current_code: [src/imagent/controllers/base.py, src/imagent/controllers/requests.py]
+    target_code: [src/imagent/interaction/controllers/request_presentation.py]
+    current_tests: [tests/test_slash_controller.py, tests/test_appserver_requests.py]
+    target_tests: [tests/interaction/controllers/test_request_presentation.py]
+    authoritative_docs: [docs/components/controllers/design.md, docs/components/controllers/testing.md]
+    adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [target leaf design/testing docs not yet created]
+
+  interaction.channels.channel-contract:
+    id: interaction.channels.channel-contract
+    parent: interaction.channels
+    purpose: Define Channel lifecycle, capabilities, startup validation, admission callback, send, and receipt contracts.
+    owns: [ChannelAdapter, ChannelCapabilities, ChannelStartupConfigurationValidator]
+    does_not_own: [Gateway admission state, native platform implementation, Agent resources]
+    inputs: [Inbound callback, operation callback, admission handler]
+    outputs: [DeliveryReceipt, lifecycle completion]
+    public_contracts: [ChannelAdapter, ChannelCapabilities, ChannelStartupConfigurationValidator, InboundAdmission, InboundAdmissionHandler, DeliveryReceipt, DeliveryItemReceipt, DeliverySegmentReceipt, DeliveryItemStatus, DeliveryProfile, DeliveryReceiptStatus, DeliverySegmentStatus, validate_delivery_receipt, validate_delivery_receipt_for_content]
+    public_exports:
+      current: [imagent.adapters:ChannelAdapter, imagent.contracts:ChannelCapabilities, imagent.adapters:ChannelStartupConfigurationValidator, imagent.adapters:InboundAdmission, imagent.adapters:InboundAdmissionHandler, imagent.contracts:DeliveryReceipt, imagent.contracts:DeliveryItemReceipt, imagent.contracts:DeliverySegmentReceipt, imagent.contracts:DeliveryItemStatus, imagent.contracts:DeliveryProfile, imagent.contracts:DeliveryReceiptStatus, imagent.contracts:DeliverySegmentStatus, imagent.contracts:validate_delivery_receipt, imagent.contracts:validate_delivery_receipt_for_content]
+      target: [imagent.interaction.channels:ChannelAdapter, imagent.interaction.channels:ChannelCapabilities, imagent.interaction.channels:ChannelStartupConfigurationValidator, imagent.interaction.channels:InboundAdmission, imagent.interaction.channels:InboundAdmissionHandler, imagent.interaction.channels:DeliveryReceipt, imagent.interaction.channels:DeliveryItemReceipt, imagent.interaction.channels:DeliverySegmentReceipt, imagent.interaction.channels:DeliveryItemStatus, imagent.interaction.channels:DeliveryProfile, imagent.interaction.channels:DeliveryReceiptStatus, imagent.interaction.channels:DeliverySegmentStatus, imagent.interaction.channels:validate_delivery_receipt, imagent.interaction.channels:validate_delivery_receipt_for_content]
+    dependencies: [interaction.messages, interaction.operations, interaction.media]
+    state_recovery: Contract is stateless; native reconnect tokens remain adapter-owned.
+    current_code: [schemas/v1/capabilities.schema.json, schemas/v1/deliveries.schema.json, src/imagent/adapters.py, src/imagent/contracts/delivery.py, src/imagent/contracts/model.py, src/imagent/channels/__init__.py, src/imagent/channels/runtime.py, src/imagent/channels/native/base.py]
+    target_code: [schemas/v1/capabilities.schema.json, schemas/v1/deliveries.schema.json, src/imagent/interaction/channels/contract.py]
+    current_tests: [tests/test_adapter_contracts.py, tests/test_native_channels.py]
+    target_tests: [tests/interaction/channels/test_contract.py]
+    authoritative_docs: [docs/components/ports/design.md, docs/components/channel-adapters/design.md]
+    adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
+    gaps: [adapters.py and channels/runtime.py are split candidates, current OperationHandler names GatewayOperation and must converge to the Interaction operation boundary without a target Channel-to-Gateway dependency]
+
+  interaction.channels.ingress:
+    id: interaction.channels.ingress
+    parent: interaction.channels
+    purpose: Authenticate, authorize, deduplicate, normalize, and safely stage native IM input before handoff.
+    owns: [access evaluation, native identity normalization, pre-media admission use, media staging]
+    does_not_own: [durable claim transitions after handoff, binding, input dispatch]
+    inputs: [authenticated native event, admission lease]
+    outputs: [verified InboundMessage]
+    public_contracts: []
+    public_exports:
+      current: []
+      target: []
+    dependencies: [interaction.channels.channel-contract, interaction.messages, interaction.media]
+    state_recovery: Native cursors and transient duplicate caches stay adapter-owned; durable claim stays Gateway-owned.
+    current_code: [src/imagent/channels/runtime.py, src/imagent/channels/native/access.py, src/imagent/channels/native/base.py, src/imagent/channels/native/file_types.py, src/imagent/channels/native/media.py, src/imagent/channels/native/windows_security.py]
+    target_code: [src/imagent/interaction/channels/ingress.py]
+    current_tests: [tests/test_native_channels.py, tests/test_channel_qq.py, tests/test_channel_telegram.py, tests/test_channel_feishu.py, tests/test_channel_weixin.py]
+    target_tests: [tests/interaction/channels/test_ingress.py]
+    authoritative_docs: [docs/components/channel-adapters/design.md, docs/components/attachments-and-media/design.md]
+    adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
+    gaps: [shared ingress mechanics are interleaved with platform adapters]
+
+  interaction.channels.outbound-delivery:
+    id: interaction.channels.outbound-delivery
+    parent: interaction.channels
+    purpose: Translate planned logical output into native sends and truthful typed receipts.
+    owns: [native artifact preparation helpers, receipt mapping, native text splitting fallback]
+    does_not_own: [Gateway planning/retry policy, transcript, durable outbox]
+    inputs: [OutboundMessage segment, Channel capability profile]
+    outputs: [DeliveryReceipt and per-item evidence]
+    public_contracts: []
+    public_exports:
+      current: []
+      target: []
+    dependencies: [interaction.channels.channel-contract, interaction.messages, interaction.media]
+    state_recovery: Native acceptance identity is evidence; unknown outcomes never authorize hidden replay.
+    current_code: [src/imagent/channels/runtime.py, src/imagent/channels/native/artifacts.py, src/imagent/channels/native/base.py, src/imagent/channels/native/models.py, src/imagent/channels/native/text.py]
+    target_code: [src/imagent/interaction/channels/outbound_delivery.py]
+    current_tests: [tests/test_native_channels.py, tests/test_channel_qq.py, tests/test_channel_telegram.py, tests/test_channel_feishu.py, tests/test_channel_weixin.py]
+    target_tests: [tests/interaction/channels/test_outbound_delivery.py]
+    authoritative_docs: [docs/components/channel-adapters/design.md, docs/components/channel-adapters/testing.md]
+    adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
+    gaps: [runtime.py mixes contract ingress delivery and composition]
+
+  interaction.channels.adapters:
+    id: interaction.channels.adapters
+    parent: interaction.channels
+    purpose: Implement concrete QQ, Telegram, Feishu/Lark, and Weixin transport behavior.
+    owns: [native credentials, connections, platform mapping, reconnect state, platform limits]
+    does_not_own: [Gateway binding, Application execution, common product commands]
+    inputs: [native platform events and API responses]
+    outputs: [normalized channel messages and receipts]
+    public_contracts: [NativeTransportChannelAdapter, channel_from_config, QQChannelAdapter, QQ_QUOTE_ATTACHMENT_LIMIT, QQ_QUOTE_CONTENT_LIMIT, QQ_QUOTE_FILENAME_LIMIT, QQ_QUOTE_MESSAGE_TYPE, QQ_QUOTE_REFERENCE_LIMIT, QQ_QUOTE_TRANSCRIPT_LIMIT]
+    public_exports:
+      current: [imagent.channels:NativeTransportChannelAdapter, imagent.channels:channel_from_config, imagent.channels.native.qq:QQChannelAdapter, imagent.channels.native.qq:QQ_QUOTE_ATTACHMENT_LIMIT, imagent.channels.native.qq:QQ_QUOTE_CONTENT_LIMIT, imagent.channels.native.qq:QQ_QUOTE_FILENAME_LIMIT, imagent.channels.native.qq:QQ_QUOTE_MESSAGE_TYPE, imagent.channels.native.qq:QQ_QUOTE_REFERENCE_LIMIT, imagent.channels.native.qq:QQ_QUOTE_TRANSCRIPT_LIMIT]
+      target: [imagent.interaction.channels.adapters:NativeTransportChannelAdapter, imagent.interaction.channels.adapters:channel_from_config, imagent.interaction.channels.adapters:QQChannelAdapter, imagent.interaction.channels.adapters:QQ_QUOTE_ATTACHMENT_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_CONTENT_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_FILENAME_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_MESSAGE_TYPE, imagent.interaction.channels.adapters:QQ_QUOTE_REFERENCE_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_TRANSCRIPT_LIMIT]
+    dependencies: [interaction.channels.channel-contract, interaction.channels.ingress, interaction.channels.outbound-delivery]
+    state_recovery: Each adapter owns bounded native reconnect/cursor and process-local transport diagnostics.
+    current_code: [src/imagent/diagnostics.py, src/imagent/channels/native/__init__.py, src/imagent/channels/native/base.py, src/imagent/channels/native/diagnostics.py, src/imagent/channels/native/endpoints.py, src/imagent/channels/native/feishu.py, src/imagent/channels/native/models.py, src/imagent/channels/native/qq.py, src/imagent/channels/native/qq_media.py, src/imagent/channels/native/qq_quote.py, src/imagent/channels/native/telegram.py, src/imagent/channels/native/weixin.py, src/imagent/channels/native/weixin_ilink.py, src/imagent/channels/native/weixin_state.py, src/imagent/channels/runtime.py]
+    target_code: [src/imagent/interaction/channels/adapters/**]
+    current_tests: [tests/test_native_channels.py, tests/test_channel_qq.py, tests/test_channel_telegram.py, tests/test_channel_feishu.py, tests/test_channel_weixin.py]
+    target_tests: [tests/interaction/channels/adapters/**]
+    authoritative_docs: [docs/components/channel-adapters/design.md, docs/components/channel-adapters/testing.md, docs/components/channel-adapters/adapters/qq.md, docs/components/channel-adapters/adapters/telegram.md, docs/components/channel-adapters/adapters/feishu.md, docs/components/channel-adapters/adapters/weixin.md]
+    adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0010-capability-driven-delivery-coordination.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0014-read-only-diagnostics-surface.md]
+    gaps: [target adapter parent navigation and leaf testing mirrors not yet created]
+
+  gateway.composition:
+    id: gateway.composition
+    parent: gateway
+    purpose: Assemble one immutable Gateway graph from explicit Applications, Channels, repositories, limits, and extensions.
+    owns: [GatewayRepositories, GatewayLimits, GatewayExtensions, explicit dependency wiring]
+    does_not_own: [service lookup, product policy, native adapter internals]
+    inputs: [configured typed dependencies]
+    outputs: [ImAgentGateway composition]
+    public_contracts: [GatewayRepositories, GatewayLimits, GatewayExtensions]
+    public_exports:
+      current: [imagent.gateway_composition:GatewayRepositories, imagent.gateway_composition:GatewayLimits, imagent.gateway_composition:GatewayExtensions]
+      target: [imagent.gateway.composition:GatewayRepositories, imagent.gateway.composition:GatewayLimits, imagent.gateway.composition:GatewayExtensions]
+    dependencies: [interaction.controllers.controller-contract, interaction.controllers.request-presentation, interaction.channels.channel-contract, applications.application-contract, gateway.admission, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.projection.observation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.memory, gateway.persistence.idempotency]
+    state_recovery: Frozen construction values only; no runtime state or locator lookup.
+    current_code: [src/imagent/gateway_composition.py, src/imagent/gateway.py]
+    target_code: [src/imagent/gateway/composition.py]
+    current_tests: [tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py]
+    target_tests: [tests/gateway/test_composition.py]
+    authoritative_docs: [docs/components/gateway/design.md, docs/components/gateway/testing.md]
+    adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [gateway.py still combines composition and runtime orchestration]
+
+  gateway.lifecycle:
+    id: gateway.lifecycle
+    parent: gateway
+    purpose: Start and stop the assembled graph with bounded FIFO startup admission and complete cleanup.
+    owns: [startup ordering, rollback, shutdown ordering, startup admission gate]
+    does_not_own: [native transport supervision internals, durable work queue]
+    inputs: [composed Applications and Channels]
+    outputs: [running/stopped Gateway state]
+    public_contracts: [ImAgentGateway]
+    public_exports:
+      current: [imagent.gateway:ImAgentGateway]
+      target: [imagent.gateway:ImAgentGateway]
+    dependencies: [gateway.composition, gateway.admission, gateway.projection.observation]
+    state_recovery: Bounded process-local FIFO; rollback closes admission before awaiting cleanup.
+    current_code: [src/imagent/gateway.py, src/imagent/gateway_startup.py]
+    target_code: [src/imagent/gateway/lifecycle.py]
+    current_tests: [tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py, tests/test_diagnostics.py]
+    target_tests: [tests/gateway/test_lifecycle.py]
+    authoritative_docs: [docs/components/gateway/design.md, docs/components/gateway/testing.md]
+    adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0013-bounded-application-event-admission.md]
+    gaps: [lifecycle logic is split between gateway.py and gateway_startup.py]
+
+  gateway.admission:
+    id: gateway.admission
+    parent: gateway
+    purpose: Acquire and fence durable inbound identity before Channel media work and transfer claim ownership at handoff.
+    owns: [inbound idempotency identity, admission lease lifecycle, handoff fencing]
+    does_not_own: [Channel access policy, media bytes, native input dispatch]
+    inputs: [ConversationRef, stable channel message ID]
+    outputs: [one-shot InboundAdmission lease or duplicate rejection]
+    public_contracts: [InboundAdmissionService, ClaimedInbound]
+    public_exports:
+      current: [imagent.inbound_admission:InboundAdmissionService, imagent.inbound_admission:ClaimedInbound]
+      target: [imagent.gateway.admission:InboundAdmissionService, imagent.gateway.admission:ClaimedInbound]
+    dependencies: [interaction.channels.channel-contract, interaction.messages, gateway.persistence.idempotency]
+    state_recovery: Fenced in_flight leases reclaim safely; side_effect_started never expires into retry authority.
+    current_code: [src/imagent/inbound_admission.py, src/imagent/gateway.py]
+    target_code: [src/imagent/gateway/admission.py]
+    current_tests: [tests/test_inbound_admission.py, tests/test_native_channels.py]
+    target_tests: [tests/gateway/test_admission.py]
+    authoritative_docs: [docs/components/gateway/design.md, docs/components/persistence/design.md]
+    adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
+    gaps: [target leaf design/testing docs not yet created]
+
+  gateway.routing.bindings:
+    id: gateway.routing.bindings
+    parent: gateway.routing
+    purpose: Maintain one authoritative current Application/Project/Thread selection per Conversation.
+    owns: [binding semantics, optimistic revision postconditions, foreground selection authority]
+    does_not_own: [Application Thread truth, projection checkpoint, product JSON mirror]
+    inputs: [typed binding operation, current revision]
+    outputs: [ConversationBinding]
+    public_contracts: [BindConversationToProject, BindConversationToThread, ClearConversationThread, ConversationBound]
+    public_exports:
+      current: [imagent.contracts:BindConversationToProject, imagent.contracts:BindConversationToThread, imagent.contracts:ClearConversationThread, imagent.contracts:ConversationBound]
+      target: [imagent.gateway.routing:BindConversationToProject, imagent.gateway.routing:BindConversationToThread, imagent.gateway.routing:ClearConversationThread, imagent.gateway.routing:ConversationBound]
+    dependencies: [interaction.operations, applications.application-contract, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
+    state_recovery: Persisted optimistic revision is authoritative; same-target crash retry converges without overwriting a later binding.
+    current_code: [schemas/v1/operations.schema.json, src/imagent/contracts/operations.py, src/imagent/contracts/validators.py, src/imagent/gateway.py]
+    target_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/bindings.py]
+    current_tests: [tests/test_bindings.py, tests/test_gateway_operations.py, tests/test_projection_routing.py]
+    target_tests: [tests/gateway/routing/test_bindings.py]
+    authoritative_docs: [docs/components/gateway/design.md, docs/components/persistence/design.md, docs/components/projections-and-recovery/design.md]
+    adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md]
+    gaps: [binding contract and orchestration are spread across contracts and gateway.py]
+
+  gateway.routing.gateway-operations:
+    id: gateway.routing.gateway-operations
+    parent: gateway.routing
+    purpose: Validate and execute Gateway-owned selection, observation, listing, and request-routing operations.
+    owns: [GatewayOperation variants, typed dispatch, per-Conversation serialization]
+    does_not_own: [ApplicationOperation semantics, product command grammar]
+    inputs: [GatewayOperation]
+    outputs: [GatewayOperationResult]
+    public_contracts: [GatewayOperation, GatewayOperationResult, GatewayOperationFailed, GatewayOperationType, ListApplications, SelectApplication, ApplicationsListed, validate_gateway_operation, validate_gateway_operation_result]
+    public_exports:
+      current: [imagent.contracts:GatewayOperation, imagent.contracts:GatewayOperationResult, imagent.contracts:GatewayOperationFailed, imagent.contracts:GatewayOperationType, imagent.contracts:ListApplications, imagent.contracts:SelectApplication, imagent.contracts:ApplicationsListed, imagent.contracts:validate_gateway_operation, imagent.contracts:validate_gateway_operation_result]
+      target: [imagent.gateway.routing:GatewayOperation, imagent.gateway.routing:GatewayOperationResult, imagent.gateway.routing:GatewayOperationFailed, imagent.gateway.routing:GatewayOperationType, imagent.gateway.routing:ListApplications, imagent.gateway.routing:SelectApplication, imagent.gateway.routing:ApplicationsListed, imagent.gateway.routing:validate_gateway_operation, imagent.gateway.routing:validate_gateway_operation_result]
+    dependencies: [interaction.operations, gateway.routing.bindings, gateway.routing.projection-routes]
+    state_recovery: Stable operation IDs and revision guards make mutations explicit; unknown outcomes fail closed.
+    current_code: [schemas/v1/operations.schema.json, src/imagent/contracts/operations.py, src/imagent/contracts/validators.py, src/imagent/gateway.py]
+    target_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/operations.py]
+    current_tests: [tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py]
+    target_tests: [tests/gateway/routing/test_operations.py]
+    authoritative_docs: [docs/components/contracts/protocol.md, docs/components/gateway/design.md]
+    adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0008-interactive-request-routing.md]
+    gaps: [current operation union mixes Application and Gateway ownership]
+
+  gateway.routing.projection-routes:
+    id: gateway.routing.projection-routes
+    parent: gateway.routing
+    purpose: Resolve foreground, remembered-recipient, and all-observer output destinations without conflating input binding.
+    owns: [projection policy, route activation rules, stable route identity]
+    does_not_own: [Channel delivery, Application subscription, transcript]
+    inputs: [ThreadRef, ConversationRef, ProjectionPolicy]
+    outputs: [active ThreadProjectionRoute set]
+    public_contracts: [ObserveThread, ThreadObserved]
+    public_exports:
+      current: [imagent.contracts:ObserveThread, imagent.contracts:ThreadObserved]
+      target: [imagent.gateway.routing:ObserveThread, imagent.gateway.routing:ThreadObserved]
+    dependencies: [gateway.routing.bindings, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
+    state_recovery: Routes persist independently; foreground authority requires current binding equality.
+    current_code: [schemas/v1/operations.schema.json, src/imagent/contracts/validators.py, src/imagent/projection_routes.py, src/imagent/projections.py, src/imagent/gateway.py]
+    target_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/projection_routes.py]
+    current_tests: [tests/test_projection_routing.py, tests/test_projection_hardening.py, tests/test_gateway_operations.py]
+    target_tests: [tests/gateway/routing/test_projection_routes.py]
+    authoritative_docs: [docs/components/projections-and-recovery/design.md, docs/components/gateway/design.md]
+    adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md]
+    gaps: [route coordination currently also owns delivery and request projection]
+
+  gateway.input.content-transformation:
+    id: gateway.input.content-transformation
+    parent: gateway.input
+    purpose: Apply the replay-safe I1 typed content-only transformation after Controller decline and before dispatch.
+    owns: [InboundContentTransformer protocol, bounded runtime, fixed diagnostics]
+    does_not_own: [envelope identity, binding, continuation, correlation, persistent transformed content]
+    inputs: [frozen InboundMessage]
+    outputs: [bounded non-empty content tuple]
+    public_contracts: [InboundContentTransformer]
+    public_exports:
+      current: [imagent.inbound_content:InboundContentTransformer]
+      target: [imagent.gateway.input:InboundContentTransformer]
+    dependencies: [interaction.messages, gateway.admission, gateway.diagnostics]
+    state_recovery: Pre-dispatch result is not persisted and may be reinvoked after safe reclaim/restart.
+    current_code: [src/imagent/inbound_content.py, src/imagent/gateway.py]
+    target_code: [src/imagent/gateway/input/content_transformation.py]
+    current_tests: [tests/test_inbound_content_transformer.py]
+    target_tests: [tests/gateway/input/test_content_transformation.py]
+    authoritative_docs: [docs/components/gateway/design.md, docs/components/gateway/testing.md]
+    adrs: [docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [target leaf design/testing docs not yet created]
+
+  gateway.input.dispatch:
+    id: gateway.input.dispatch
+    parent: gateway.input
+    purpose: Serialize Conversation input, authorize the native pre-dispatch fence, and record truthful accepted-Turn correlation.
+    owns: [prefer_active_turn default, dispatch hook authorization, acceptance buffering]
+    does_not_own: [native steer implementation, active Turn truth, Channel input work]
+    inputs: [verified content, current binding, Application adapter]
+    outputs: [AcceptedTurn or classified dispatch failure]
+    public_contracts: [derive_client_message_id]
+    public_exports:
+      current: [imagent.contracts:derive_client_message_id]
+      target: [imagent.gateway.input:derive_client_message_id]
+    dependencies: [applications.application-contract, applications.operations, gateway.admission, gateway.projection.request-correlation]
+    state_recovery: Pre-dispatch failures release; outcome_unknown stays side_effect_started; accepted results are terminal for inbound idempotency.
+    current_code: [src/imagent/contracts/validators.py, src/imagent/gateway.py, src/imagent/projection_runtime.py]
+    target_code: [src/imagent/gateway/input/dispatch.py]
+    current_tests: [tests/test_gateway_vertical_slice.py, tests/test_projection_hardening.py, tests/test_recovery.py]
+    target_tests: [tests/gateway/input/test_dispatch.py]
+    authoritative_docs: [docs/components/gateway/design.md, docs/components/projections-and-recovery/design.md]
+    adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
+    gaps: [dispatch and projection worker lifecycle share projection_runtime.py]
+
+  gateway.input.failure-presentation:
+    id: gateway.input.failure-presentation
+    parent: gateway.input
+    purpose: Classify I2 inbound failure phase and optionally present one terminal stable error delivery.
+    owns: [InboundFailurePhase, presenter runtime, phase-specific claim ordering]
+    does_not_own: [exception disclosure, native retry authorization, product wording]
+    inputs: [bounded failure phase and fixed destination identity]
+    outputs: [validated text-only OutboundMessage]
+    public_contracts: [InboundFailurePresenter, InboundFailurePhase]
+    public_exports:
+      current: [imagent.inbound_failures:InboundFailurePresenter, imagent.inbound_failures:InboundFailurePhase]
+      target: [imagent.gateway.input:InboundFailurePresenter, imagent.gateway.input:InboundFailurePhase]
+    dependencies: [interaction.messages, gateway.admission, gateway.delivery.coordination, gateway.diagnostics]
+    state_recovery: Configured pre_acceptance completes before presentation; unknown and post_acceptance never reopen input.
+    current_code: [src/imagent/inbound_failures.py, src/imagent/gateway.py]
+    target_code: [src/imagent/gateway/input/failure_presentation.py]
+    current_tests: [tests/test_inbound_failure_presenter.py, tests/test_storage.py]
+    target_tests: [tests/gateway/input/test_failure_presentation.py]
+    authoritative_docs: [docs/components/gateway/design.md, docs/components/persistence/design.md]
+    adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [target leaf design/testing docs not yet created]
+
+  gateway.projection.observation:
+    id: gateway.projection.observation
+    parent: gateway.projection
+    purpose: Maintain exactly one Application observation worker per Thread and isolate bounded subscriber failures.
+    owns: [Thread worker lifecycle, live fan-out consumption, bootstrap barrier]
+    does_not_own: [native subscription producer, transcript, second event journal]
+    inputs: [Application Thread subscription]
+    outputs: [ordered normalized events for active routes]
+    public_contracts: [ThreadProjectionRuntime, ProjectionWorkerHealth]
+    public_exports:
+      current: [imagent.projection_runtime:ThreadProjectionRuntime, imagent.projections:ProjectionWorkerHealth]
+      target: [imagent.gateway.projection:ThreadProjectionRuntime, imagent.gateway.projection:ProjectionWorkerHealth]
+    dependencies: [applications.events, gateway.routing.projection-routes, gateway.projection.recovery]
+    state_recovery: Bounded queue gaps terminate only one observation; worker resubscribes and reconciles authoritatively.
+    current_code: [src/imagent/gateway.py, src/imagent/projection_runtime.py, src/imagent/projections.py]
+    target_code: [src/imagent/gateway/projection/observation.py]
+    current_tests: [tests/test_event_fanout.py, tests/test_projection_hardening.py, tests/test_projection_routing.py]
+    target_tests: [tests/gateway/projection/test_observation.py]
+    authoritative_docs: [docs/components/projections-and-recovery/design.md, docs/components/projections-and-recovery/testing.md]
+    adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0013-bounded-application-event-admission.md]
+    gaps: [projection_runtime.py also owns input acceptance and recovery supervision]
+
+  gateway.projection.checkpoints:
+    id: gateway.projection.checkpoints
+    parent: gateway.projection
+    purpose: Advance per-route opaque completion boundaries only after a durable destination decision.
+    owns: [checkpoint merge/CAS semantics, stable projection delivery identity]
+    does_not_own: [Agent sequence ordering, transcript, live-only completion]
+    inputs: [route, authoritative Agent item, delivery/idempotency outcome]
+    outputs: [advanced or conflicting checkpoint]
+    public_contracts: [derive_projection_delivery_id]
+    public_exports:
+      current: [imagent.projections:derive_projection_delivery_id]
+      target: [imagent.gateway.projection:derive_projection_delivery_id]
+    dependencies: [gateway.persistence.repository-contracts, gateway.delivery.coordination]
+    state_recovery: Completed idempotency converges lagging CAS during authoritative recovery; in_flight never advances.
+    current_code: [src/imagent/projections.py, src/imagent/projection_routes.py]
+    target_code: [src/imagent/gateway/projection/checkpoints.py]
+    current_tests: [tests/test_projection_hardening.py, tests/test_projection_routing.py, tests/test_storage.py]
+    target_tests: [tests/gateway/projection/test_checkpoints.py]
+    authoritative_docs: [docs/components/projections-and-recovery/design.md, docs/components/persistence/design.md]
+    adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [checkpoint logic is mixed with route repository and delivery orchestration]
+
+  gateway.projection.request-correlation:
+    id: gateway.projection.request-correlation
+    parent: gateway.projection
+    purpose: Correlate delivered interactive requests and accepted Turns to exact authorized IM destinations.
+    owns: [Turn reply correlation, Request route correlation, response destination validation]
+    does_not_own: [native request truth, prompt transcript, approval policy]
+    inputs: [AcceptedTurn, delivered request result, RequestRef]
+    outputs: [minimal typed correlation and routed response]
+    public_contracts: [InteractiveRequestProjection, RespondToRequest, RequestResponseRouted]
+    public_exports:
+      current: [imagent.request_projection_runtime:InteractiveRequestProjection, imagent.contracts:RespondToRequest, imagent.contracts:RequestResponseRouted]
+      target: [imagent.gateway.projection:InteractiveRequestProjection, imagent.gateway.projection:RespondToRequest, imagent.gateway.projection:RequestResponseRouted]
+    dependencies: [applications.requests, interaction.controllers.request-presentation, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
+    state_recovery: Correlations are minimal, bounded, persisted, monotonic, and reconciled only from native authoritative facts.
+    current_code: [src/imagent/contracts/request_validation.py, src/imagent/contracts/validators.py, src/imagent/gateway.py, src/imagent/request_correlations.py, src/imagent/request_projection_runtime.py, src/imagent/projection_routes.py]
+    target_code: [src/imagent/gateway/projection/request_correlation.py]
+    current_tests: [tests/test_appserver_requests.py, tests/test_projection_hardening.py, tests/test_storage.py]
+    target_tests: [tests/gateway/projection/test_request_correlation.py]
+    authoritative_docs: [docs/components/projections-and-recovery/design.md, docs/components/persistence/design.md, docs/components/controllers/design.md]
+    adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
+    gaps: [request_correlations.py mixes repository implementation and projection policy]
+
+  gateway.projection.recovery:
+    id: gateway.projection.recovery
+    parent: gateway.projection
+    purpose: Reconcile live observation gaps from bounded authoritative Application history/catch-up.
+    owns: [recovery modes, bounded page/item scans, gap classification, resubscription policy inputs]
+    does_not_own: [Agent history, synthetic cursor, unbounded archive scan]
+    inputs: [Application subscription/history and per-route checkpoint]
+    outputs: [bounded AuthoritativeProjectionSlice or explicit degraded gap]
+    public_contracts: [ThreadRecovery, RecoveryMode, ProjectionRecoveryUnavailable]
+    public_exports:
+      current: [imagent.recovery:ThreadRecovery, imagent.recovery:RecoveryMode, imagent.recovery:ProjectionRecoveryUnavailable]
+      target: [imagent.gateway.projection:ThreadRecovery, imagent.gateway.projection:RecoveryMode, imagent.gateway.projection:ProjectionRecoveryUnavailable]
+    dependencies: [applications.application-contract, applications.events, gateway.projection.checkpoints]
+    state_recovery: Subscribe-before-history when replay is absent; missing checkpoints and bounded-scan exhaustion stay explicit.
+    current_code: [src/imagent/recovery.py, src/imagent/projection_runtime.py, src/imagent/projection_routes.py, src/imagent/request_projection_runtime.py]
+    target_code: [src/imagent/gateway/projection/recovery.py]
+    current_tests: [tests/test_recovery.py, tests/test_projection_hardening.py, tests/test_projection_routing.py]
+    target_tests: [tests/gateway/projection/test_recovery.py]
+    authoritative_docs: [docs/components/projections-and-recovery/design.md, docs/components/projections-and-recovery/testing.md]
+    adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0013-bounded-application-event-admission.md]
+    gaps: [recovery supervision is distributed across three current modules]
+
+  gateway.presentation:
+    id: gateway.presentation
+    parent: gateway
+    purpose: Apply O1 destination-specific bounded projection presentation after claim and before planning.
+    owns: [OutboundPresentationPolicy, presentation origin, suppression validation/runtime]
+    does_not_own: [Application-native normalization, request/product presentation, destination identity]
+    inputs: [routed immutable OutboundMessage and typed origin]
+    outputs: [validated replacement content or suppression]
+    public_contracts: [OutboundPresentationPolicy, OutboundPresentationContext, ProjectionPresentationOrigin]
+    public_exports:
+      current: [imagent.outbound_presentation:OutboundPresentationPolicy, imagent.outbound_presentation:OutboundPresentationContext, imagent.outbound_presentation:ProjectionPresentationOrigin]
+      target: [imagent.gateway.presentation:OutboundPresentationPolicy, imagent.gateway.presentation:OutboundPresentationContext, imagent.gateway.presentation:ProjectionPresentationOrigin]
+    dependencies: [interaction.messages, gateway.projection.checkpoints, gateway.persistence.idempotency]
+    state_recovery: Replay-safe suppression completes outbound idempotency before checkpoint CAS; live-only never checkpoints.
+    current_code: [src/imagent/outbound_presentation.py, src/imagent/projections.py, src/imagent/gateway.py]
+    target_code: [src/imagent/gateway/presentation.py]
+    current_tests: [tests/test_outbound_presentation.py, tests/test_projection_hardening.py]
+    target_tests: [tests/gateway/test_presentation.py]
+    authoritative_docs: [docs/components/delivery-planning-and-coordination/design.md, docs/components/gateway/design.md]
+    adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [projection delivery helper and O1 runtime are currently split across modules]
+
+  gateway.delivery.planning:
+    id: gateway.delivery.planning
+    parent: gateway.delivery
+    purpose: Produce deterministic bounded Channel-compatible segments from one logical outbound message.
+    owns: [DeliveryPlanner, DeliveryPlan, segment identity, capability preflight]
+    does_not_own: [native encoding/API calls, retry appetite, persistent jobs]
+    inputs: [OutboundMessage, DeliveryProfile]
+    outputs: [bounded immutable DeliveryPlan]
+    public_contracts: [DeliveryPlanner, DeliveryPlan, PlannedDeliverySegment]
+    public_exports:
+      current: [imagent.delivery_planning:DeliveryPlanner, imagent.delivery_planning:DeliveryPlan, imagent.delivery_planning:PlannedDeliverySegment]
+      target: [imagent.gateway.delivery:DeliveryPlanner, imagent.gateway.delivery:DeliveryPlan, imagent.gateway.delivery:PlannedDeliverySegment]
+    dependencies: [interaction.messages, interaction.channels.channel-contract]
+    state_recovery: Pure deterministic planning; segment IDs derive from stable delivery identity and index.
+    current_code: [src/imagent/delivery_planning.py]
+    target_code: [src/imagent/gateway/delivery/planning.py]
+    current_tests: [tests/test_delivery_planning.py]
+    target_tests: [tests/gateway/delivery/test_planning.py]
+    authoritative_docs: [docs/components/delivery-planning-and-coordination/design.md, docs/components/delivery-planning-and-coordination/testing.md]
+    adrs: [docs/decisions/0010-capability-driven-delivery-coordination.md]
+    gaps: [target leaf design/testing docs not yet created]
+
+  gateway.delivery.coordination:
+    id: gateway.delivery.coordination
+    parent: gateway.delivery
+    purpose: Execute logical deliveries with finite global/per-destination capacity and FIFO destination ordering.
+    owns: [DeliveryCoordinator, keyed lanes, receipt aggregation, conservative retry execution]
+    does_not_own: [native send implementation, durable scheduler, product retry policy]
+    inputs: [DeliveryPlan, Channel send callback]
+    outputs: [logical DeliveryReceipt]
+    public_contracts: [DeliveryCoordinator, DeliveryCoordinatorConfig, DeliveryHandle]
+    public_exports:
+      current: [imagent.delivery_coordination:DeliveryCoordinator, imagent.delivery_coordination:DeliveryCoordinatorConfig, imagent.delivery_coordination:DeliveryHandle]
+      target: [imagent.gateway.delivery:DeliveryCoordinator, imagent.gateway.delivery:DeliveryCoordinatorConfig, imagent.gateway.delivery:DeliveryHandle]
+    dependencies: [gateway.delivery.planning, interaction.channels.outbound-delivery]
+    state_recovery: Process-local lanes are cancelled/joined at stop; unknown outcomes never auto-retry.
+    current_code: [src/imagent/delivery_coordination.py, src/imagent/keyed_locks.py, src/imagent/gateway.py]
+    target_code: [src/imagent/gateway/delivery/coordination.py]
+    current_tests: [tests/test_delivery_planning.py, tests/test_delivery_outcomes.py, tests/test_gateway_vertical_slice.py]
+    target_tests: [tests/gateway/delivery/test_coordination.py]
+    authoritative_docs: [docs/components/delivery-planning-and-coordination/design.md, docs/components/delivery-planning-and-coordination/testing.md]
+    adrs: [docs/decisions/0010-capability-driven-delivery-coordination.md]
+    gaps: [target leaf design/testing docs not yet created]
+
+  gateway.delivery.submissions:
+    id: gateway.delivery.submissions
+    parent: gateway.delivery
+    purpose: Reserve immutable proactive-delivery identity/destination snapshots and persist typed destination outcomes.
+    owns: [submission reservation semantics, destination outcome transition, payload/target fingerprints]
+    does_not_own: [content persistence, retry scheduler, Channel side effects]
+    inputs: [DeliveryIntent, DeliveryPrincipal, resolved route snapshots]
+    outputs: [DeliverySubmissionRecord]
+    public_contracts: [DeliverySubmissionOrigin, derive_delivery_payload_fingerprint, derive_delivery_submission_id, derive_delivery_target_fingerprint, derive_destination_delivery_id]
+    public_exports:
+      current: [imagent.contracts:DeliverySubmissionOrigin, imagent.contracts:derive_delivery_payload_fingerprint, imagent.contracts:derive_delivery_submission_id, imagent.contracts:derive_delivery_target_fingerprint, imagent.contracts:derive_destination_delivery_id]
+      target: [imagent.gateway.delivery:DeliverySubmissionOrigin, imagent.gateway.delivery:derive_delivery_payload_fingerprint, imagent.gateway.delivery:derive_delivery_submission_id, imagent.gateway.delivery:derive_delivery_target_fingerprint, imagent.gateway.delivery:derive_destination_delivery_id]
+    dependencies: [gateway.delivery.proactive-authorization, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, interaction.messages]
+    state_recovery: In-flight/unknown remain ambiguous; immutable snapshots prevent route drift on retry.
+    current_code: [schemas/v1/deliveries.schema.json, src/imagent/contracts/delivery.py, src/imagent/delivery_submissions.py, src/imagent/proactive_delivery.py]
+    target_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/submissions.py]
+    current_tests: [tests/test_delivery_ingress.py, tests/test_proactive_delivery.py, tests/test_storage.py]
+    target_tests: [tests/gateway/delivery/test_submissions.py]
+    authoritative_docs: [docs/components/gateway/design.md, docs/components/persistence/design.md]
+    adrs: [docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
+    gaps: [contract state machine, service, and SQLite rows are currently separated by historical files]
+
+  gateway.delivery.proactive-authorization:
+    id: gateway.delivery.proactive-authorization
+    parent: gateway.delivery
+    purpose: Define and enforce the explicit capability boundary for proactive delivery destinations.
+    owns: [DeliveryAuthorizer, DeliveryPrincipal, ScopedDeliveryAuthorizer, credential-to-scope authentication]
+    does_not_own: [credential persistence, IM admission, Agent sandbox policy, delivery execution]
+    inputs: [opaque credential, stable Thread and Conversation scopes]
+    outputs: [validated DeliveryPrincipal]
+    public_contracts: [DeliveryAuthorizer, DeliveryPrincipal, ScopedDeliveryAuthorizer, validate_delivery_principal]
+    public_exports:
+      current: [imagent.adapters:DeliveryAuthorizer, imagent.contracts:DeliveryPrincipal, imagent.proactive_delivery:ScopedDeliveryAuthorizer, imagent.contracts:validate_delivery_principal]
+      target: [imagent.gateway.delivery:DeliveryAuthorizer, imagent.gateway.delivery:DeliveryPrincipal, imagent.gateway.delivery:ScopedDeliveryAuthorizer, imagent.gateway.delivery:validate_delivery_principal]
+    dependencies: [applications.application-contract]
+    state_recovery: Reference credentials are process-local; consumers own credential storage and revocation recovery.
+    current_code: [src/imagent/adapters.py, src/imagent/contracts/delivery.py, src/imagent/proactive_delivery.py]
+    target_code: [src/imagent/gateway/delivery/proactive_authorization.py]
+    current_tests: [tests/test_proactive_delivery.py]
+    target_tests: [tests/gateway/delivery/test_proactive_authorization.py]
+    authoritative_docs: [docs/components/gateway/design.md, docs/components/ports/design.md]
+    adrs: [docs/decisions/0009-proactive-delivery-routing.md]
+    gaps: [authorization Protocol, value, and reference implementation currently span three historical modules]
+
+  gateway.delivery.proactive-delivery:
+    id: gateway.delivery.proactive-delivery
+    parent: gateway.delivery
+    purpose: Authorize and route proactive content through the same planning/coordination path as projection output.
+    owns: [DeliveryIntent handling, scoped authorizer use, route resolution, safe JSON/CLI ingress]
+    does_not_own: [web server, credential store, durable content body, automatic recovery scheduler]
+    inputs: [opaque credential, stable DeliveryIntent]
+    outputs: [ProactiveDeliveryResult]
+    public_contracts: [ProactiveDeliveryService, ProactiveDeliveryJsonHandler, DeliveryIntent, ConversationDeliveryTarget, DeliveryTarget, DeliveryTargetKind, DestinationDeliveryResult, ProactiveDeliveryResult, ThreadRouteDeliveryTarget, validate_delivery_intent]
+    public_exports:
+      current: [imagent.proactive_delivery:ProactiveDeliveryService, imagent.delivery_ingress:ProactiveDeliveryJsonHandler, imagent.contracts:DeliveryIntent, imagent.contracts:ConversationDeliveryTarget, imagent.contracts:DeliveryTarget, imagent.contracts:DeliveryTargetKind, imagent.contracts:DestinationDeliveryResult, imagent.contracts:ProactiveDeliveryResult, imagent.contracts:ThreadRouteDeliveryTarget, imagent.contracts:validate_delivery_intent]
+      target: [imagent.gateway.delivery:ProactiveDeliveryService, imagent.gateway.delivery:ProactiveDeliveryJsonHandler, imagent.gateway.delivery:DeliveryIntent, imagent.gateway.delivery:ConversationDeliveryTarget, imagent.gateway.delivery:DeliveryTarget, imagent.gateway.delivery:DeliveryTargetKind, imagent.gateway.delivery:DestinationDeliveryResult, imagent.gateway.delivery:ProactiveDeliveryResult, imagent.gateway.delivery:ThreadRouteDeliveryTarget, imagent.gateway.delivery:validate_delivery_intent]
+    dependencies: [gateway.delivery.proactive-authorization, gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.routing.projection-routes]
+    state_recovery: Persist identity/snapshots/outcomes only; staged inline bytes live through one synchronous attempt and are removed after join.
+    current_code: [schemas/v1/deliveries.schema.json, src/imagent/contracts/delivery.py, src/imagent/proactive_delivery.py, src/imagent/delivery_ingress.py, src/imagent/cli/__init__.py, src/imagent/cli/send.py, src/imagent/gateway.py]
+    target_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/proactive.py]
+    current_tests: [tests/test_proactive_delivery.py, tests/test_delivery_ingress.py]
+    target_tests: [tests/gateway/delivery/test_proactive_delivery.py]
+    authoritative_docs: [docs/components/gateway/design.md, docs/components/attachments-and-media/design.md]
+    adrs: [docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
+    gaps: [CLI packaging may remain a formal facade after runtime move]
+
+  gateway.delivery.outcome-observation:
+    id: gateway.delivery.outcome-observation
+    parent: gateway.delivery
+    purpose: Offer one bounded best-effort O2 notification after each logical Coordinator attempt.
+    owns: [DeliveryOutcomeObserver, typed outcome snapshot, detached bounded runtime]
+    does_not_own: [receipt mutation, retry, persistence, cleanup authority, durable replay]
+    inputs: [original destination message and final receipt/error category]
+    outputs: [best-effort process-local observation]
+    public_contracts: [DeliveryOutcomeObserver, DeliveryOutcome, DeliveryOutcomeContext]
+    public_exports:
+      current: [imagent.delivery_outcomes:DeliveryOutcomeObserver, imagent.delivery_outcomes:DeliveryOutcome, imagent.delivery_outcomes:DeliveryOutcomeContext]
+      target: [imagent.gateway.delivery:DeliveryOutcomeObserver, imagent.gateway.delivery:DeliveryOutcome, imagent.gateway.delivery:DeliveryOutcomeContext]
+    dependencies: [interaction.messages, gateway.delivery.coordination, gateway.diagnostics]
+    state_recovery: Non-durable and at-most-offered once per actual attempt; replay/suppression/preflight fabricate no notification.
+    current_code: [src/imagent/delivery_outcomes.py, src/imagent/gateway.py]
+    target_code: [src/imagent/gateway/delivery/outcome_observation.py]
+    current_tests: [tests/test_delivery_outcomes.py, tests/test_proactive_delivery.py]
+    target_tests: [tests/gateway/delivery/test_outcome_observation.py]
+    authoritative_docs: [docs/components/delivery-planning-and-coordination/design.md, docs/components/gateway/design.md]
+    adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [target leaf design/testing docs not yet created]
+
+  gateway.persistence.state-contracts:
+    id: gateway.persistence.state-contracts
+    parent: gateway.persistence
+    purpose: Define passive strongly typed values for minimal persisted Gateway bridge state.
+    owns: [binding records, projection route/policy records, reply/request correlation records, delivery submission records]
+    does_not_own: [repository I/O, routing orchestration, delivery execution, Agent truth]
+    inputs: [stable Interaction and Application resource identities]
+    outputs: [immutable validated bridge-state values]
+    public_contracts: [ConversationBinding, ProjectionPolicy, ThreadProjectionRoute, TurnReplyCorrelation, RequestRouteState, RequestRouteCorrelation, DeliverySubmissionState, DeliveryRouteSnapshot, DestinationDeliveryRecord, DeliverySubmissionRecord, DeliveryReservation, validate_binding, validate_delivery_route_snapshot, validate_delivery_submission_record, validate_projection_route, validate_request_route_correlation, validate_turn_reply_correlation]
+    public_exports:
+      current: [imagent.contracts:ConversationBinding, imagent.contracts:ProjectionPolicy, imagent.contracts:ThreadProjectionRoute, imagent.contracts:TurnReplyCorrelation, imagent.contracts:RequestRouteState, imagent.contracts:RequestRouteCorrelation, imagent.contracts:DeliverySubmissionState, imagent.contracts:DeliveryRouteSnapshot, imagent.contracts:DestinationDeliveryRecord, imagent.contracts:DeliverySubmissionRecord, imagent.contracts:DeliveryReservation, imagent.contracts:validate_binding, imagent.contracts:validate_delivery_route_snapshot, imagent.contracts:validate_delivery_submission_record, imagent.contracts:validate_projection_route, imagent.contracts:validate_request_route_correlation, imagent.contracts:validate_turn_reply_correlation]
+      target: [imagent.gateway.persistence:ConversationBinding, imagent.gateway.persistence:ProjectionPolicy, imagent.gateway.persistence:ThreadProjectionRoute, imagent.gateway.persistence:TurnReplyCorrelation, imagent.gateway.persistence:RequestRouteState, imagent.gateway.persistence:RequestRouteCorrelation, imagent.gateway.persistence:DeliverySubmissionState, imagent.gateway.persistence:DeliveryRouteSnapshot, imagent.gateway.persistence:DestinationDeliveryRecord, imagent.gateway.persistence:DeliverySubmissionRecord, imagent.gateway.persistence:DeliveryReservation, imagent.gateway.persistence:validate_binding, imagent.gateway.persistence:validate_delivery_route_snapshot, imagent.gateway.persistence:validate_delivery_submission_record, imagent.gateway.persistence:validate_projection_route, imagent.gateway.persistence:validate_request_route_correlation, imagent.gateway.persistence:validate_turn_reply_correlation]
+    dependencies: [interaction.messages, applications.application-contract, applications.requests]
+    state_recovery: Values carry stable identities/revisions/state only; repository implementations own atomic recovery mutations.
+    current_code: [schemas/v1/bindings.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, schemas/v1/projections.schema.json, src/imagent/contracts/delivery.py, src/imagent/contracts/model.py]
+    target_code: [schemas/v1/bindings.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, schemas/v1/projections.schema.json, src/imagent/gateway/persistence/state_contracts.py]
+    current_tests: [tests/test_contracts.py, tests/test_bindings.py, tests/test_projection_routing.py, tests/test_storage.py]
+    target_tests: [tests/gateway/persistence/test_state_contracts.py]
+    authoritative_docs: [docs/components/contracts/protocol.md, docs/components/persistence/design.md, docs/components/projections-and-recovery/design.md]
+    adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
+    gaps: [passive bridge-state values currently share broad contracts/model.py and contracts/delivery.py modules]
+
+  gateway.persistence.repository-contracts:
+    id: gateway.persistence.repository-contracts
+    parent: gateway.persistence
+    purpose: Define typed repositories for bindings, routes, correlations, idempotency, and submissions.
+    owns: [repository Protocols, conflict types, atomic mutation contracts]
+    does_not_own: [SQLite schema, Gateway policy, transcript/content storage]
+    inputs: [typed bridge-state values and expected revisions/owners]
+    outputs: [atomic typed repository outcomes]
+    public_contracts: [BindingRepository, ProjectionRouteRepository, IdempotencyRepository, RequestCorrelationRepository, DeliverySubmissionRepository, IdempotencyClaimStatus, ProjectionCheckpointConflict, ProjectionRouteConflict, RequestCorrelationConflict, TurnReplyCorrelationConflict, DeliverySubmissionConflict]
+    public_exports:
+      current: [imagent.adapters:BindingRepository, imagent.adapters:ProjectionRouteRepository, imagent.adapters:IdempotencyRepository, imagent.adapters:RequestCorrelationRepository, imagent.adapters:DeliverySubmissionRepository, imagent.adapters:IdempotencyClaimStatus, imagent.adapters:ProjectionCheckpointConflict, imagent.adapters:ProjectionRouteConflict, imagent.adapters:RequestCorrelationConflict, imagent.adapters:TurnReplyCorrelationConflict, imagent.adapters:DeliverySubmissionConflict]
+      target: [imagent.gateway.persistence:BindingRepository, imagent.gateway.persistence:ProjectionRouteRepository, imagent.gateway.persistence:IdempotencyRepository, imagent.gateway.persistence:RequestCorrelationRepository, imagent.gateway.persistence:DeliverySubmissionRepository, imagent.gateway.persistence:IdempotencyClaimStatus, imagent.gateway.persistence:ProjectionCheckpointConflict, imagent.gateway.persistence:ProjectionRouteConflict, imagent.gateway.persistence:RequestCorrelationConflict, imagent.gateway.persistence:TurnReplyCorrelationConflict, imagent.gateway.persistence:DeliverySubmissionConflict]
+    dependencies: [interaction.messages, applications.requests, gateway.persistence.state-contracts]
+    state_recovery: Contracts require fencing, create-only correlations, checkpoint CAS, and immutable submission identity.
+    current_code: [src/imagent/adapters.py]
+    target_code: [src/imagent/gateway/persistence/repository_contracts.py]
+    current_tests: [tests/test_bindings.py, tests/test_storage.py, tests/test_adapter_contracts.py]
+    target_tests: [tests/gateway/persistence/test_repository_contracts.py]
+    authoritative_docs: [docs/components/ports/design.md, docs/components/persistence/design.md]
+    adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
+    gaps: [adapters.py is the largest cross-layer Port split candidate]
+
+  gateway.persistence.memory:
+    id: gateway.persistence.memory
+    parent: gateway.persistence
+    purpose: Provide process-local reference implementations of the binding, route, correlation, and submission repositories.
+    owns: [in-memory binding repository, in-memory projection route repository, in-memory request correlation repository, in-memory delivery submission repository]
+    does_not_own: [repository Protocols, durable recovery, SQLite transactions, idempotency claim implementation]
+    inputs: [typed repository mutations]
+    outputs: [process-local typed repository outcomes]
+    public_contracts: []
+    public_exports:
+      current: []
+      target: []
+    dependencies: [gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
+    state_recovery: Process-local state is intentionally non-durable and is rebuilt empty after restart.
+    current_code: [src/imagent/bindings.py, src/imagent/projections.py, src/imagent/request_correlations.py, src/imagent/proactive_delivery.py]
+    target_code: [src/imagent/gateway/persistence/memory.py]
+    current_tests: [tests/test_bindings.py, tests/test_projection_routing.py, tests/test_storage.py, tests/test_proactive_delivery.py]
+    target_tests: [tests/gateway/persistence/test_memory.py]
+    authoritative_docs: [docs/components/persistence/design.md, docs/components/persistence/testing.md]
+    adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md]
+    gaps: [four in-memory implementations are colocated with their current semantic/runtime modules]
+
+  gateway.persistence.idempotency:
+    id: gateway.persistence.idempotency
+    parent: gateway.persistence
+    purpose: Implement fenced inbound/outbound claim acquisition, reclaim, protection, completion, and release.
+    owns: [in-memory idempotency implementation, owner-token fencing, side_effect_started state]
+    does_not_own: [native idempotency guarantee, content, retry scheduler]
+    inputs: [stable scoped idempotency key and owner token]
+    outputs: [acquired/completed/in-flight claim status]
+    public_contracts: [InMemoryIdempotencyRepository]
+    public_exports:
+      current: [imagent.storage:InMemoryIdempotencyRepository]
+      target: [imagent.gateway.persistence:InMemoryIdempotencyRepository]
+    dependencies: [gateway.persistence.repository-contracts]
+    state_recovery: Reclaim only stale in_flight; protected state never expires into permission to repeat side effects.
+    current_code: [src/imagent/storage.py]
+    target_code: [src/imagent/gateway/persistence/idempotency.py]
+    current_tests: [tests/test_storage.py, tests/test_inbound_admission.py]
+    target_tests: [tests/gateway/persistence/test_idempotency.py]
+    authoritative_docs: [docs/components/persistence/design.md, docs/components/persistence/testing.md]
+    adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
+    gaps: [storage.py combines in-memory idempotency and SQLite transaction owner]
+
+  gateway.persistence.sqlite:
+    id: gateway.persistence.sqlite
+    parent: gateway.persistence
+    purpose: Persist all minimal Gateway bridge-state protocols on one SQLite transaction boundary.
+    owns: [SQLiteGatewayState, schema migration, shared connection/transaction ownership]
+    does_not_own: [Agent transcript, product JSON state, durable content jobs]
+    inputs: [typed repository mutations]
+    outputs: [durable bridge state]
+    public_contracts: [SQLiteGatewayState]
+    public_exports:
+      current: [imagent.storage:SQLiteGatewayState]
+      target: [imagent.gateway.persistence.sqlite:SQLiteGatewayState]
+    dependencies: [gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.row-mapping, gateway.persistence.idempotency]
+    state_recovery: Additive schema migrations preserve bindings/routes/claims/correlations/submission evidence without content.
+    current_code: [src/imagent/storage.py, src/imagent/delivery_submissions.py, src/imagent/request_correlations.py]
+    target_code: [src/imagent/gateway/persistence/sqlite.py]
+    current_tests: [tests/test_storage.py, tests/test_bindings.py]
+    target_tests: [tests/gateway/persistence/test_sqlite.py]
+    authoritative_docs: [docs/components/persistence/design.md, docs/components/persistence/testing.md]
+    adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md]
+    gaps: [three mixin files share one intentional transaction owner but also contain separable row mapping]
+
+  gateway.persistence.row-mapping:
+    id: gateway.persistence.row-mapping
+    parent: gateway.persistence
+    purpose: Convert SQLite rows to typed bridge-state values without owning transactions or policy.
+    owns: [pure row decoding/encoding helpers]
+    does_not_own: [connection lifecycle, mutation ordering, migration policy]
+    inputs: [SQLite row values]
+    outputs: [typed bridge-state values]
+    public_contracts: []
+    public_exports:
+      current: []
+      target: []
+    dependencies: [gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
+    state_recovery: Stateless pure mapping; invalid persisted shape fails explicitly.
+    current_code: [src/imagent/sqlite_rows.py, src/imagent/delivery_submissions.py, src/imagent/request_correlations.py, src/imagent/storage.py]
+    target_code: [src/imagent/gateway/persistence/row_mapping.py]
+    current_tests: [tests/test_storage.py]
+    target_tests: [tests/gateway/persistence/test_row_mapping.py]
+    authoritative_docs: [docs/components/persistence/design.md, docs/components/repository-maintainability/design.md]
+    adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md]
+    gaps: [delivery/request row helpers remain mixed into SQLite mixins]
+
+  gateway.diagnostics:
+    id: gateway.diagnostics
+    parent: gateway
+    purpose: Aggregate immutable redacted bounded process-local infrastructure health.
+    owns: [diagnostic fact vocabulary, Gateway snapshot aggregation, fixed failure codes]
+    does_not_own: [Agent health truth, exporters/endpoints, native I/O, free-form errors]
+    inputs: [local adapter/runtime diagnostic providers]
+    outputs: [DiagnosticsSnapshot]
+    public_contracts: [DiagnosticsSnapshot, DiagnosticsProvider, ChannelDiagnosticsProvider]
+    public_exports:
+      current: [imagent.diagnostics:DiagnosticsSnapshot, imagent.diagnostics:DiagnosticsProvider, imagent.diagnostics:ChannelDiagnosticsProvider]
+      target: [imagent.gateway.diagnostics:DiagnosticsSnapshot, imagent.gateway.diagnostics:DiagnosticsProvider, imagent.gateway.diagnostics:ChannelDiagnosticsProvider]
+    dependencies: [interaction.channels.channel-contract, applications.application-contract]
+    state_recovery: Process-lifetime counters only; snapshot is synchronous, side-effect-free, bounded, and non-authoritative.
+    current_code: [src/imagent/diagnostics.py, src/imagent/gateway.py]
+    target_code: [src/imagent/gateway/diagnostics.py]
+    current_tests: [tests/test_diagnostics.py]
+    target_tests: [tests/gateway/test_diagnostics.py]
+    authoritative_docs: [docs/components/diagnostics/design.md, docs/components/diagnostics/testing.md]
+    adrs: [docs/decisions/0014-read-only-diagnostics-surface.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [public facts and Gateway aggregation share one current module]
+
+  applications.application-contract:
+    id: applications.application-contract
+    parent: applications
+    purpose: Define the common native Application lifecycle/resource/input/history/subscription boundary.
+    owns: [AgentApplicationAdapter, ApplicationSummary, native dispatch outcome classification]
+    does_not_own: [Gateway routing, product commands, native implementation details]
+    inputs: [typed Application operations and AgentInput]
+    outputs: [typed native results, accepted dispatch, Thread event subscription]
+    public_contracts: [AgentApplicationAdapter, ApplicationSummary, ApplicationInputDispatch, AcceptedTurn, InputContinuationPreference, TurnReplyCorrelationPolicy, ApplicationInputOutcomeUnknown, AgentInput, ApplicationRef, InputDisposition, Page, ProjectMode, ProjectRef, ProjectSummary, ReplyReferenceScope, ThreadHistory, ThreadRef, ThreadSnapshot, ThreadStatus, ThreadSummary, TurnCatchup, TurnHistoryEntry, TurnStatus, validate_thread_ref]
+    public_exports:
+      current: [imagent.adapters:AgentApplicationAdapter, imagent.contracts:ApplicationSummary, imagent.contracts:ApplicationInputDispatch, imagent.contracts:AcceptedTurn, imagent.contracts:InputContinuationPreference, imagent.contracts:TurnReplyCorrelationPolicy, imagent.contracts:ApplicationInputOutcomeUnknown, imagent.contracts:AgentInput, imagent.contracts:ApplicationRef, imagent.contracts:InputDisposition, imagent.contracts:Page, imagent.contracts:ProjectMode, imagent.contracts:ProjectRef, imagent.contracts:ProjectSummary, imagent.contracts:ReplyReferenceScope, imagent.contracts:ThreadHistory, imagent.contracts:ThreadRef, imagent.contracts:ThreadSnapshot, imagent.contracts:ThreadStatus, imagent.contracts:ThreadSummary, imagent.contracts:TurnCatchup, imagent.contracts:TurnHistoryEntry, imagent.contracts:TurnStatus, imagent.contracts:validate_thread_ref]
+      target: [imagent.applications:AgentApplicationAdapter, imagent.applications:ApplicationSummary, imagent.applications:ApplicationInputDispatch, imagent.applications:AcceptedTurn, imagent.applications:InputContinuationPreference, imagent.applications:TurnReplyCorrelationPolicy, imagent.applications:ApplicationInputOutcomeUnknown, imagent.applications:AgentInput, imagent.applications:ApplicationRef, imagent.applications:InputDisposition, imagent.applications:Page, imagent.applications:ProjectMode, imagent.applications:ProjectRef, imagent.applications:ProjectSummary, imagent.applications:ReplyReferenceScope, imagent.applications:ThreadHistory, imagent.applications:ThreadRef, imagent.applications:ThreadSnapshot, imagent.applications:ThreadStatus, imagent.applications:ThreadSummary, imagent.applications:TurnCatchup, imagent.applications:TurnHistoryEntry, imagent.applications:TurnStatus, imagent.applications:validate_thread_ref]
+    dependencies: [interaction.messages, interaction.operations, applications.capabilities, applications.events, applications.operations, applications.requests]
+    state_recovery: Adapter reports only evidenced replay/order; dispatched unknown outcomes never become retry permission.
+    current_code: [schemas/v1/common.schema.json, schemas/v1/history.schema.json, schemas/v1/messages.schema.json, schemas/v1/resources.schema.json, src/imagent/adapters.py, src/imagent/contracts/errors.py, src/imagent/contracts/model.py, src/imagent/contracts/validators.py, src/imagent/applications/__init__.py]
+    target_code: [schemas/v1/common.schema.json, schemas/v1/history.schema.json, schemas/v1/messages.schema.json, schemas/v1/resources.schema.json, src/imagent/applications/contract.py]
+    current_tests: [tests/test_adapter_contracts.py]
+    target_tests: [tests/applications/test_contract.py]
+    authoritative_docs: [docs/components/ports/design.md, docs/components/application-adapters/design.md]
+    adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
+    gaps: [common Application Port currently shares adapters.py with Channel and repository Ports]
+
+  applications.capabilities:
+    id: applications.capabilities
+    parent: applications
+    purpose: Declare only evidenced native resource, attachment, replay, ordering, request, and runtime support.
+    owns: [ApplicationCapabilities and nested capability facts]
+    does_not_own: [fallback policy, product configuration, synthetic support]
+    inputs: [native integration evidence]
+    outputs: [immutable ApplicationCapabilities]
+    public_contracts: [ApplicationCapabilities, ProjectCapabilities, ThreadCapabilities, RuntimeCapabilities, SupportLevel, ThreadDeletionCapability, validate_application_capabilities]
+    public_exports:
+      current: [imagent.contracts:ApplicationCapabilities, imagent.contracts:ProjectCapabilities, imagent.contracts:ThreadCapabilities, imagent.contracts:RuntimeCapabilities, imagent.contracts:SupportLevel, imagent.contracts:ThreadDeletionCapability, imagent.contracts:validate_application_capabilities]
+      target: [imagent.applications.capabilities:ApplicationCapabilities, imagent.applications.capabilities:ProjectCapabilities, imagent.applications.capabilities:ThreadCapabilities, imagent.applications.capabilities:RuntimeCapabilities, imagent.applications.capabilities:SupportLevel, imagent.applications.capabilities:ThreadDeletionCapability, imagent.applications.capabilities:validate_application_capabilities]
+    dependencies: [interaction.media]
+    state_recovery: Capability declaration is configured/static and must remain honest across restart.
+    current_code: [schemas/v1/capabilities.schema.json, src/imagent/contracts/model.py, src/imagent/contracts/validators.py]
+    target_code: [schemas/v1/capabilities.schema.json, src/imagent/applications/capabilities.py]
+    current_tests: [tests/test_contracts.py, tests/test_adapter_contracts.py]
+    target_tests: [tests/applications/test_capabilities.py]
+    authoritative_docs: [docs/components/contracts/protocol.md, docs/components/application-adapters/design.md]
+    adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0003-attachment-sources-and-trust.md]
+    gaps: [capabilities are embedded in the cross-owner contract model]
+
+  applications.events:
+    id: applications.events
+    parent: applications
+    purpose: Define canonical Agent events and bounded independent fan-out mechanics.
+    owns: [AgentEvent, event type/ordering fields, EventBroadcaster, explicit gap signals]
+    does_not_own: [native event journal, Gateway worker, transcript]
+    inputs: [normalized native events]
+    outputs: [independent bounded Thread event subscriptions]
+    public_contracts: [AgentEvent, AgentEventType, EventBroadcaster, EventStreamGap, EventSequenceScope, validate_agent_event]
+    public_exports:
+      current: [imagent.contracts:AgentEvent, imagent.contracts:AgentEventType, imagent.events:EventBroadcaster, imagent.events:EventStreamGap, imagent.contracts:EventSequenceScope, imagent.contracts:validate_agent_event]
+      target: [imagent.applications.events:AgentEvent, imagent.applications.events:AgentEventType, imagent.applications.events:EventBroadcaster, imagent.applications.events:EventStreamGap, imagent.applications.events:EventSequenceScope, imagent.applications.events:validate_agent_event]
+    dependencies: [interaction.messages]
+    state_recovery: Queues are bounded/non-durable; gaps terminate the affected subscription and require authoritative recovery.
+    current_code: [schemas/v1/events.schema.json, src/imagent/contracts/model.py, src/imagent/contracts/validators.py, src/imagent/events.py]
+    target_code: [schemas/v1/events.schema.json, src/imagent/applications/events.py]
+    current_tests: [tests/test_event_fanout.py, tests/test_contracts.py]
+    target_tests: [tests/applications/test_events.py]
+    authoritative_docs: [docs/components/contracts/protocol.md, docs/components/projections-and-recovery/design.md]
+    adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0013-bounded-application-event-admission.md]
+    gaps: [event values remain in cross-owner contracts/model.py]
+
+  applications.operations:
+    id: applications.operations
+    parent: applications
+    purpose: Express common native Project/Thread/Turn/request control intent and typed results.
+    owns: [ApplicationOperation variants, ApplicationOperationResult variants]
+    does_not_own: [product-only native commands, Gateway binding, native wire mapping]
+    inputs: [typed common Application operation]
+    outputs: [typed success or explicit ApplicationOperationFailed]
+    public_contracts: [ApplicationOperation, ApplicationOperationResult, ActivateNativeThread, ApplicationOperationFailed, ApplicationOperationType, CreateThread, DeleteThread, GetProject, GetThread, GetThreadHistory, GetThreadStatus, GetTurnCatchup, InterruptTurn, ListProjects, ListThreads, NativeThreadActivated, ProjectRead, ProjectsListed, RespondRequest, RequestResponded, ThreadCreated, ThreadDeleted, ThreadDeletionMode, ThreadHistoryRead, ThreadRead, ThreadsListed, ThreadStatusRead, TurnCatchupRead, TurnInterrupted, validate_application_operation, validate_application_operation_result]
+    public_exports:
+      current: [imagent.contracts:ApplicationOperation, imagent.contracts:ApplicationOperationResult, imagent.contracts:ActivateNativeThread, imagent.contracts:ApplicationOperationFailed, imagent.contracts:ApplicationOperationType, imagent.contracts:CreateThread, imagent.contracts:DeleteThread, imagent.contracts:GetProject, imagent.contracts:GetThread, imagent.contracts:GetThreadHistory, imagent.contracts:GetThreadStatus, imagent.contracts:GetTurnCatchup, imagent.contracts:InterruptTurn, imagent.contracts:ListProjects, imagent.contracts:ListThreads, imagent.contracts:NativeThreadActivated, imagent.contracts:ProjectRead, imagent.contracts:ProjectsListed, imagent.contracts:RespondRequest, imagent.contracts:RequestResponded, imagent.contracts:ThreadCreated, imagent.contracts:ThreadDeleted, imagent.contracts:ThreadDeletionMode, imagent.contracts:ThreadHistoryRead, imagent.contracts:ThreadRead, imagent.contracts:ThreadsListed, imagent.contracts:ThreadStatusRead, imagent.contracts:TurnCatchupRead, imagent.contracts:TurnInterrupted, imagent.contracts:validate_application_operation, imagent.contracts:validate_application_operation_result]
+      target: [imagent.applications.operations:ApplicationOperation, imagent.applications.operations:ApplicationOperationResult, imagent.applications.operations:ActivateNativeThread, imagent.applications.operations:ApplicationOperationFailed, imagent.applications.operations:ApplicationOperationType, imagent.applications.operations:CreateThread, imagent.applications.operations:DeleteThread, imagent.applications.operations:GetProject, imagent.applications.operations:GetThread, imagent.applications.operations:GetThreadHistory, imagent.applications.operations:GetThreadStatus, imagent.applications.operations:GetTurnCatchup, imagent.applications.operations:InterruptTurn, imagent.applications.operations:ListProjects, imagent.applications.operations:ListThreads, imagent.applications.operations:NativeThreadActivated, imagent.applications.operations:ProjectRead, imagent.applications.operations:ProjectsListed, imagent.applications.operations:RespondRequest, imagent.applications.operations:RequestResponded, imagent.applications.operations:ThreadCreated, imagent.applications.operations:ThreadDeleted, imagent.applications.operations:ThreadDeletionMode, imagent.applications.operations:ThreadHistoryRead, imagent.applications.operations:ThreadRead, imagent.applications.operations:ThreadsListed, imagent.applications.operations:ThreadStatusRead, imagent.applications.operations:TurnCatchupRead, imagent.applications.operations:TurnInterrupted, imagent.applications.operations:validate_application_operation, imagent.applications.operations:validate_application_operation_result]
+    dependencies: [interaction.operations]
+    state_recovery: Operation ID is stable; adapters preserve ambiguous mutation outcomes and never silently retry.
+    current_code: [schemas/v1/operations.schema.json, src/imagent/contracts/operations.py, src/imagent/contracts/validators.py]
+    target_code: [schemas/v1/operations.schema.json, src/imagent/applications/operations.py]
+    current_tests: [tests/test_contracts.py, tests/test_adapter_contracts.py, tests/test_appserver_input.py]
+    target_tests: [tests/applications/test_operations.py]
+    authoritative_docs: [docs/components/contracts/protocol.md, docs/components/application-adapters/design.md]
+    adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
+    gaps: [current operation union mixes Gateway operations; product-only commands remain intentionally absent]
+
+  applications.requests:
+    id: applications.requests
+    parent: applications
+    purpose: Normalize native interactive request/response/resolution semantics and validate typed response shapes.
+    owns: [ApprovalRequest, UserInputRequest, RequestRef, response validation]
+    does_not_own: [presentation policy, destination authorization, approval decision policy]
+    inputs: [native-evidenced request facts and typed responses]
+    outputs: [canonical request/resolution values]
+    public_contracts: [ApprovalRequest, UserInputRequest, RequestResolution, RequestResponse, ApprovalResponse, ApprovalResponseShape, InteractiveRequest, InteractiveRequestKind, RequestChoice, RequestDuplicateError, RequestRef, RequestResolutionStatus, RequestResolvedError, RequestResponseShape, RequestStaleError, UserInputQuestion, UserInputQuestionShape, UserInputResponse, UserInputResponseShape, derive_request_response_shape, validate_interactive_request, validate_request_ref, validate_request_resolution, validate_request_response, validate_request_response_shape]
+    public_exports:
+      current: [imagent.contracts:ApprovalRequest, imagent.contracts:UserInputRequest, imagent.contracts:RequestResolution, imagent.contracts:RequestResponse, imagent.contracts:ApprovalResponse, imagent.contracts:ApprovalResponseShape, imagent.contracts:InteractiveRequest, imagent.contracts:InteractiveRequestKind, imagent.contracts:RequestChoice, imagent.contracts:RequestDuplicateError, imagent.contracts:RequestRef, imagent.contracts:RequestResolutionStatus, imagent.contracts:RequestResolvedError, imagent.contracts:RequestResponseShape, imagent.contracts:RequestStaleError, imagent.contracts:UserInputQuestion, imagent.contracts:UserInputQuestionShape, imagent.contracts:UserInputResponse, imagent.contracts:UserInputResponseShape, imagent.contracts:derive_request_response_shape, imagent.contracts:validate_interactive_request, imagent.contracts:validate_request_ref, imagent.contracts:validate_request_resolution, imagent.contracts:validate_request_response, imagent.contracts:validate_request_response_shape]
+      target: [imagent.applications.requests:ApprovalRequest, imagent.applications.requests:UserInputRequest, imagent.applications.requests:RequestResolution, imagent.applications.requests:RequestResponse, imagent.applications.requests:ApprovalResponse, imagent.applications.requests:ApprovalResponseShape, imagent.applications.requests:InteractiveRequest, imagent.applications.requests:InteractiveRequestKind, imagent.applications.requests:RequestChoice, imagent.applications.requests:RequestDuplicateError, imagent.applications.requests:RequestRef, imagent.applications.requests:RequestResolutionStatus, imagent.applications.requests:RequestResolvedError, imagent.applications.requests:RequestResponseShape, imagent.applications.requests:RequestStaleError, imagent.applications.requests:UserInputQuestion, imagent.applications.requests:UserInputQuestionShape, imagent.applications.requests:UserInputResponse, imagent.applications.requests:UserInputResponseShape, imagent.applications.requests:derive_request_response_shape, imagent.applications.requests:validate_interactive_request, imagent.applications.requests:validate_request_ref, imagent.applications.requests:validate_request_resolution, imagent.applications.requests:validate_request_response, imagent.applications.requests:validate_request_response_shape]
+    dependencies: [interaction.operations, applications.events]
+    state_recovery: Native Application is first-writer; stale is emitted only when response authority is provably unusable.
+    current_code: [schemas/v1/events.schema.json, schemas/v1/operations.schema.json, schemas/v1/resources.schema.json, src/imagent/contracts/errors.py, src/imagent/contracts/model.py, src/imagent/contracts/request_validation.py, src/imagent/contracts/operations.py]
+    target_code: [schemas/v1/events.schema.json, schemas/v1/operations.schema.json, schemas/v1/resources.schema.json, src/imagent/applications/requests.py]
+    current_tests: [tests/test_contracts.py, tests/test_appserver_requests.py]
+    target_tests: [tests/applications/test_requests.py]
+    authoritative_docs: [docs/components/contracts/protocol.md, docs/components/application-adapters/design.md]
+    adrs: [docs/decisions/0008-interactive-request-routing.md]
+    gaps: [request values/validation/results are spread across three contract files]
+
+  applications.presentation.live-activity:
+    id: applications.presentation.live-activity
+    parent: applications.presentation
+    purpose: Expose adapter-specific bounded typed non-artifact presentation facts without raw native events.
+    owns: [CodexLiveActivityPresenter, T3ActivityPresenter, bounded text runtime]
+    does_not_own: [destination policy, attachments, raw payload/client, generic Application hook]
+    inputs: [CodexLiveActivityFacts or T3ActivityFacts]
+    outputs: [ApplicationTextPresentation or omission]
+    public_contracts: [CodexLiveActivityPresenter, T3ActivityPresenter, ApplicationTextPresentation, ApplicationPresentationCapacityError, ApplicationPresentationCancelled, ApplicationPresentationError, ApplicationPresentationFailed, ApplicationPresentationLimits, ApplicationPresentationTimeout, CodexLiveActivityFacts, CodexLiveActivityKind, CodexLiveActivityMethod, CodexPlanStep, T3ActivityFacts]
+    public_exports:
+      current: [imagent.applications:CodexLiveActivityPresenter, imagent.applications:T3ActivityPresenter, imagent.applications:ApplicationTextPresentation, imagent.applications:ApplicationPresentationCapacityError, imagent.applications:ApplicationPresentationCancelled, imagent.applications:ApplicationPresentationError, imagent.applications:ApplicationPresentationFailed, imagent.applications:ApplicationPresentationLimits, imagent.applications:ApplicationPresentationTimeout, imagent.applications:CodexLiveActivityFacts, imagent.applications:CodexLiveActivityKind, imagent.applications:CodexLiveActivityMethod, imagent.applications:CodexPlanStep, imagent.applications:T3ActivityFacts]
+      target: [imagent.applications.presentation:CodexLiveActivityPresenter, imagent.applications.presentation:T3ActivityPresenter, imagent.applications.presentation:ApplicationTextPresentation, imagent.applications.presentation:ApplicationPresentationCapacityError, imagent.applications.presentation:ApplicationPresentationCancelled, imagent.applications.presentation:ApplicationPresentationError, imagent.applications.presentation:ApplicationPresentationFailed, imagent.applications.presentation:ApplicationPresentationLimits, imagent.applications.presentation:ApplicationPresentationTimeout, imagent.applications.presentation:CodexLiveActivityFacts, imagent.applications.presentation:CodexLiveActivityKind, imagent.applications.presentation:CodexLiveActivityMethod, imagent.applications.presentation:CodexPlanStep, imagent.applications.presentation:T3ActivityFacts]
+    dependencies: [applications.events, interaction.messages]
+    state_recovery: Codex output is live-only; T3 output is recoverable only because history reproduces the same stable association.
+    current_code: [src/imagent/applications/presentation.py]
+    target_code: [src/imagent/applications/presentation/live_activity.py]
+    current_tests: [tests/test_application_presentation.py, tests/test_appserver_mapping.py, tests/test_t3_client.py]
+    target_tests: [tests/applications/presentation/test_live_activity.py]
+    authoritative_docs: [docs/components/application-adapters/design.md, docs/components/application-adapters/testing.md]
+    adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [Codex and T3 fact shapes share runtime but must remain distinct typed positions]
+
+  applications.presentation.artifact-materialization:
+    id: applications.presentation.artifact-materialization
+    parent: applications.presentation
+    purpose: Offer bounded typed App Server artifact candidates to a replay-safe consumer materializer.
+    owns: [candidate/fact types, materializer protocol/runtime, output validation]
+    does_not_own: [bytes, path trust, quota, ledger, sweep, durable spool]
+    inputs: [AppServerCompletedItemFacts or terminal facts]
+    outputs: [bounded ApplicationArtifactMaterialization or omission]
+    public_contracts: [AppServerArtifactMaterializer, ApplicationArtifactMaterialization, AppServerArtifactCandidate, AppServerArtifactMaterializationLimits, AppServerArtifactSourceKind, AppServerCompletedItemFacts, AppServerCompletedItemKind, AppServerCompletedItemPhase, AppServerTurnTerminalFacts, AppServerTurnTerminalStatus, ApplicationArtifactMaterializationCancelled, ApplicationArtifactMaterializationCapacityError, ApplicationArtifactMaterializationError, ApplicationArtifactMaterializationFailed, ApplicationArtifactMaterializationTimeout]
+    public_exports:
+      current: [imagent.applications:AppServerArtifactMaterializer, imagent.applications:ApplicationArtifactMaterialization, imagent.applications:AppServerArtifactCandidate, imagent.applications:AppServerArtifactMaterializationLimits, imagent.applications:AppServerArtifactSourceKind, imagent.applications:AppServerCompletedItemFacts, imagent.applications:AppServerCompletedItemKind, imagent.applications:AppServerCompletedItemPhase, imagent.applications:AppServerTurnTerminalFacts, imagent.applications:AppServerTurnTerminalStatus, imagent.applications:ApplicationArtifactMaterializationCancelled, imagent.applications:ApplicationArtifactMaterializationCapacityError, imagent.applications:ApplicationArtifactMaterializationError, imagent.applications:ApplicationArtifactMaterializationFailed, imagent.applications:ApplicationArtifactMaterializationTimeout]
+      target: [imagent.applications.presentation:AppServerArtifactMaterializer, imagent.applications.presentation:ApplicationArtifactMaterialization, imagent.applications.presentation:AppServerArtifactCandidate, imagent.applications.presentation:AppServerArtifactMaterializationLimits, imagent.applications.presentation:AppServerArtifactSourceKind, imagent.applications.presentation:AppServerCompletedItemFacts, imagent.applications.presentation:AppServerCompletedItemKind, imagent.applications.presentation:AppServerCompletedItemPhase, imagent.applications.presentation:AppServerTurnTerminalFacts, imagent.applications.presentation:AppServerTurnTerminalStatus, imagent.applications.presentation:ApplicationArtifactMaterializationCancelled, imagent.applications.presentation:ApplicationArtifactMaterializationCapacityError, imagent.applications.presentation:ApplicationArtifactMaterializationError, imagent.applications.presentation:ApplicationArtifactMaterializationFailed, imagent.applications.presentation:ApplicationArtifactMaterializationTimeout]
+    dependencies: [applications.events, interaction.media]
+    state_recovery: Live duplicate window is finite; authoritative history may reinvoke and consumer association must be replay-safe.
+    current_code: [src/imagent/applications/appserver_artifacts.py]
+    target_code: [src/imagent/applications/presentation/artifact_materialization.py]
+    current_tests: [tests/test_appserver_artifacts.py]
+    target_tests: [tests/applications/presentation/test_artifact_materialization.py]
+    authoritative_docs: [docs/components/application-adapters/design.md, docs/components/attachments-and-media/design.md]
+    adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [target leaf design/testing docs not yet created]
+
+  applications.adapters.appserver.client:
+    id: applications.adapters.appserver.client
+    parent: applications.adapters.appserver
+    purpose: Own reusable App Server JSON-RPC calls, bounded dispatch lanes, targets, retry, and supervision.
+    owns: [AppServerClient, target parsing, supervisor, response admission fence]
+    does_not_own: [Application resource mapping, product launcher/config, Gateway recovery]
+    inputs: [typed JSON-RPC method/params and configured target]
+    outputs: [typed response plus immutable dispatch position]
+    public_contracts: [AppServerClient, AppServerDispatchPosition, AppServerError, AppServerResponse, AppServerSupervisor, APP_SERVER_DISPATCH_POSITION_KEY, codex_app_server_client]
+    public_exports:
+      current: [imagent.applications.appserver_client.client:AppServerClient, imagent.applications.appserver_client:AppServerClient, imagent.applications.appserver_client.handoff:AppServerDispatchPosition, imagent.applications.appserver_client:AppServerDispatchPosition, imagent.applications.appserver_client:AppServerError, imagent.applications.appserver_client.handoff:AppServerResponse, imagent.applications.appserver_client:AppServerResponse, imagent.applications.appserver_client:AppServerSupervisor, imagent.applications.appserver_client:APP_SERVER_DISPATCH_POSITION_KEY, imagent.applications.appserver_client:codex_app_server_client, imagent.applications:codex_app_server_client]
+      target: [imagent.applications.adapters.appserver.client:AppServerClient, imagent.applications.adapters.appserver.client:AppServerDispatchPosition, imagent.applications.adapters.appserver.client:AppServerError, imagent.applications.adapters.appserver.client:AppServerResponse, imagent.applications.adapters.appserver.client:AppServerSupervisor, imagent.applications.adapters.appserver.client:APP_SERVER_DISPATCH_POSITION_KEY, imagent.applications.adapters.appserver.client:codex_app_server_client]
+    dependencies: [applications.adapters.appserver.transport, applications.adapters.appserver.diagnostics]
+    state_recovery: Connection epoch and bounded queues are process-local; reset invalidates transport-bound request handles.
+    current_code: [src/imagent/applications/appserver_client/__init__.py, src/imagent/applications/appserver_client/client.py, src/imagent/applications/appserver_client/handoff.py, src/imagent/applications/appserver_client/retry.py, src/imagent/applications/appserver_client/supervisor.py, src/imagent/applications/appserver_client/target.py]
+    target_code: [src/imagent/applications/adapters/appserver/client/**]
+    current_tests: [tests/test_appserver_client.py, tests/test_appserver_transport.py]
+    target_tests: [tests/applications/adapters/appserver/test_client.py]
+    authoritative_docs: [docs/components/application-adapters/design.md, docs/components/application-adapters/adapters/codex.md]
+    adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0013-bounded-application-event-admission.md]
+    gaps: [client.py remains a large cohesive dispatch implementation requiring focused split review]
+
+  applications.adapters.appserver.transport:
+    id: applications.adapters.appserver.transport
+    parent: applications.adapters.appserver
+    purpose: Frame JSON over stdio/WebSocket and translate connection closure without policy.
+    owns: [AppServerTransport, StdioAppServerTransport, WebSocketAppServerTransport]
+    does_not_own: [JSON-RPC dispatch, resource mapping, reconnect policy]
+    inputs: [JSON values and configured I/O endpoint]
+    outputs: [JSON values or typed transport closure]
+    public_contracts: [AppServerTransport]
+    public_exports:
+      current: [imagent.applications.appserver_client.transports:AppServerTransport]
+      target: [imagent.applications.adapters.appserver.transport:AppServerTransport]
+    dependencies: []
+    state_recovery: Transport lifecycle is per connection; no replay or cursor semantics are claimed.
+    current_code: [src/imagent/applications/appserver_client/transports.py]
+    target_code: [src/imagent/applications/adapters/appserver/transport.py]
+    current_tests: [tests/test_appserver_transport.py]
+    target_tests: [tests/applications/adapters/appserver/test_transport.py]
+    authoritative_docs: [docs/components/application-adapters/design.md, docs/components/repository-maintainability/design.md]
+    adrs: [docs/decisions/0004-event-fanout-and-recovery.md]
+    gaps: [target leaf design/testing docs not yet created]
+
+  applications.adapters.appserver.mapping:
+    id: applications.adapters.appserver.mapping
+    parent: applications.adapters.appserver
+    purpose: Normalize App Server resource/item/status/protocol shapes into bounded typed facts.
+    owns: [stateless response mapping, protocol classification, normalized native item helpers]
+    does_not_own: [transport lifecycle, Gateway projection, product presentation]
+    inputs: [untrusted native JSON values]
+    outputs: [validated normalized Application facts]
+    public_contracts: []
+    public_exports:
+      current: []
+      target: []
+    dependencies: [applications.events, applications.capabilities, interaction.messages]
+    state_recovery: Pure mapping; missing required stable identity fails closed.
+    current_code: [src/imagent/applications/appserver_mapping.py, src/imagent/applications/appserver_client/protocol_map.py]
+    target_code: [src/imagent/applications/adapters/appserver/mapping.py]
+    current_tests: [tests/test_appserver_mapping.py, tests/test_appserver_input.py]
+    target_tests: [tests/applications/adapters/appserver/test_mapping.py]
+    authoritative_docs: [docs/components/application-adapters/design.md, docs/components/application-adapters/testing.md]
+    adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [protocol classification and resource mapping are separate current files]
+
+  applications.adapters.appserver.requests:
+    id: applications.adapters.appserver.requests
+    parent: applications.adapters.appserver
+    purpose: Map evidenced Codex/Zen server requests and responses with bounded pending-handle lifecycle.
+    owns: [AppServer request mapping, pending request runtime, native response payload fidelity]
+    does_not_own: [approval policy, IM route authorization, invented Zen request kinds]
+    inputs: [bounded native server request and typed response]
+    outputs: [canonical interactive request/resolution and native response]
+    public_contracts: [PendingAppServerRequest, AppServerRequestRuntime]
+    public_exports:
+      current: [imagent.applications.appserver_requests:PendingAppServerRequest, imagent.applications.appserver_request_runtime:AppServerRequestRuntime]
+      target: [imagent.applications.adapters.appserver.requests:PendingAppServerRequest, imagent.applications.adapters.appserver.requests:AppServerRequestRuntime]
+    dependencies: [applications.requests, applications.adapters.appserver.client]
+    state_recovery: Transport reset stales handles when no authoritative pending snapshot exists; terminal cache is bounded.
+    current_code: [src/imagent/applications/appserver_requests.py, src/imagent/applications/appserver_request_runtime.py]
+    target_code: [src/imagent/applications/adapters/appserver/requests.py]
+    current_tests: [tests/test_appserver_requests.py]
+    target_tests: [tests/applications/adapters/appserver/test_requests.py]
+    authoritative_docs: [docs/components/application-adapters/design.md, docs/components/application-adapters/adapters/codex.md, docs/components/application-adapters/adapters/zen.md]
+    adrs: [docs/decisions/0008-interactive-request-routing.md]
+    gaps: [target leaf design/testing docs not yet created]
+
+  applications.adapters.appserver.diagnostics:
+    id: applications.adapters.appserver.diagnostics
+    parent: applications.adapters.appserver
+    purpose: Record redacted bounded App Server connection/queue facts and safe diagnostic summaries.
+    owns: [AppServerDiagnosticState, redaction/summarization, fixed health emission]
+    does_not_own: [endpoint export, exception text, native IDs, Gateway health policy]
+    inputs: [local transport/runtime transitions]
+    outputs: [ApplicationDiagnosticFacts-compatible bounded facts]
+    public_contracts: [AppServerDiagnosticState]
+    public_exports:
+      current: [imagent.applications.appserver_client.diagnostic_facts:AppServerDiagnosticState]
+      target: [imagent.applications.adapters.appserver.diagnostics:AppServerDiagnosticState]
+    dependencies: [applications.application-contract]
+    state_recovery: Process-lifetime counters and current connection epoch only; reads perform no I/O.
+    current_code: [src/imagent/diagnostics.py, src/imagent/applications/appserver_client/diagnostic_facts.py, src/imagent/applications/appserver_client/diagnostics.py, src/imagent/applications/appserver_client/runtime_diagnostics.py]
+    target_code: [src/imagent/applications/adapters/appserver/diagnostics.py]
+    current_tests: [tests/test_appserver_client.py, tests/test_diagnostics.py]
+    target_tests: [tests/applications/adapters/appserver/test_diagnostics.py]
+    authoritative_docs: [docs/components/diagnostics/design.md, docs/components/application-adapters/design.md]
+    adrs: [docs/decisions/0014-read-only-diagnostics-surface.md]
+    gaps: [diagnostic facts currently import the historical aggregate diagnostics module and must move without making the adapter depend on Gateway]
+
+  applications.adapters.codex:
+    id: applications.adapters.codex
+    parent: applications.adapters
+    purpose: Map Codex native resources/input/events/history/requests and optional typed presentations.
+    owns: [CodexApplicationAdapter, native steer mapping, Codex-specific live facts]
+    does_not_own: [product CWD/profile UX, Credits product command, Gateway binding]
+    inputs: [Codex App Server client and configured native options]
+    outputs: [common Application contract behavior]
+    public_contracts: [CodexApplicationAdapter]
+    public_exports:
+      current: [imagent.applications:CodexApplicationAdapter]
+      target: [imagent.applications.adapters.codex:CodexApplicationAdapter]
+    dependencies: [applications.application-contract, applications.adapters.appserver.client, applications.adapters.appserver.mapping, applications.adapters.appserver.requests, applications.presentation.live-activity, applications.presentation.artifact-materialization]
+    state_recovery: Native history is authoritative; steer candidate read never authorizes fallback start; ambiguous dispatch is unknown.
+    current_code: [src/imagent/applications/appserver.py]
+    target_code: [src/imagent/applications/adapters/codex.py]
+    current_tests: [tests/test_appserver_client.py, tests/test_appserver_input.py, tests/test_appserver_mapping.py, tests/test_appserver_requests.py, tests/test_appserver_artifacts.py, tests/test_application_presentation.py]
+    target_tests: [tests/applications/adapters/test_codex.py]
+    authoritative_docs: [docs/components/application-adapters/adapters/codex.md, docs/components/application-adapters/design.md]
+    adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [appserver.py combines common App Server base plus Codex and Zen adapters]
+
+  applications.adapters.zen:
+    id: applications.adapters.zen
+    parent: applications.adapters
+    purpose: Map Zen App Server resources/input/events/history and evidenced command approval.
+    owns: [ZenApplicationAdapter, Zen-evidenced request method set]
+    does_not_own: [Codex steer semantics, Zen product policy, Gateway binding]
+    inputs: [Zen App Server client and native options]
+    outputs: [common Application contract behavior]
+    public_contracts: [ZenApplicationAdapter]
+    public_exports:
+      current: [imagent.applications:ZenApplicationAdapter]
+      target: [imagent.applications.adapters.zen:ZenApplicationAdapter]
+    dependencies: [applications.application-contract, applications.adapters.appserver.client, applications.adapters.appserver.mapping, applications.adapters.appserver.requests, applications.presentation.artifact-materialization]
+    state_recovery: Starts new native Turns for prefer_active_turn until Zen proves steer; authoritative history handles gaps.
+    current_code: [src/imagent/applications/appserver.py]
+    target_code: [src/imagent/applications/adapters/zen.py]
+    current_tests: [tests/test_appserver_client.py, tests/test_appserver_input.py, tests/test_appserver_requests.py, tests/test_appserver_artifacts.py, tests/test_gateway_vertical_slice.py]
+    target_tests: [tests/applications/adapters/test_zen.py]
+    authoritative_docs: [docs/components/application-adapters/adapters/zen.md, docs/components/application-adapters/design.md]
+    adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [Zen and Codex share one current adapter module and require a mechanical split]
+
+  applications.adapters.t3:
+    id: applications.adapters.t3
+    parent: applications.adapters
+    purpose: Map T3 Projects/Threads/input/polling/events/history and optional recoverable activity presentation.
+    owns: [T3ApplicationAdapter, HttpT3Client, native polling/cursor normalization]
+    does_not_own: [synthetic App Server connection, unsupported interactive response, product model/provider policy]
+    inputs: [T3 HTTP client and native resources]
+    outputs: [common Application contract behavior]
+    public_contracts: [T3ApplicationAdapter, HttpT3Client, T3ClientError]
+    public_exports:
+      current: [imagent.applications:T3ApplicationAdapter, imagent.applications:HttpT3Client, imagent.applications:T3ClientError]
+      target: [imagent.applications.adapters.t3:T3ApplicationAdapter, imagent.applications.adapters.t3:HttpT3Client, imagent.applications.adapters.t3:T3ClientError]
+    dependencies: [applications.application-contract, applications.events, applications.presentation.live-activity, interaction.media]
+    state_recovery: Stable native IDs/history recover activity; finite live cursor gaps fail explicitly; dispatch receipts deduplicate ambiguity.
+    current_code: [src/imagent/applications/t3.py, src/imagent/applications/t3_client.py]
+    target_code: [src/imagent/applications/adapters/t3.py]
+    current_tests: [tests/test_t3_client.py, tests/test_adapter_contracts.py, tests/test_gateway_vertical_slice.py]
+    target_tests: [tests/applications/adapters/test_t3.py]
+    authoritative_docs: [docs/components/application-adapters/adapters/t3.md, docs/components/application-adapters/design.md]
+    adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [t3.py mixes adapter orchestration, native mapping, polling state, and attachment encoding]
+
+  engineering.testing-and-conformance:
+    id: engineering.testing-and-conformance
+    parent: engineering
+    purpose: Provide reusable fakes and truthfulness checks for public Channel and Application contracts.
+    owns: [contract verification kit, bounded representative fakes]
+    does_not_own: [production runtime, native API behavior, product test policy]
+    inputs: [configured adapter under test]
+    outputs: [typed ContractReport and assertions]
+    public_contracts: [verify_channel_adapter, verify_application_adapter, FakeChannelAdapter, FakeAgentApplicationAdapter, ContractCheck, ContractReport, make_capabilities, sample_conversation]
+    public_exports:
+      current: [imagent.testing:verify_channel_adapter, imagent.testing:verify_application_adapter, imagent.testing:FakeChannelAdapter, imagent.testing:FakeAgentApplicationAdapter, imagent.testing:ContractCheck, imagent.testing:ContractReport, imagent.testing:make_capabilities, imagent.testing:sample_conversation]
+      target: [imagent.testing:verify_channel_adapter, imagent.testing:verify_application_adapter, imagent.testing:FakeChannelAdapter, imagent.testing:FakeAgentApplicationAdapter, imagent.testing:ContractCheck, imagent.testing:ContractReport, imagent.testing:make_capabilities, imagent.testing:sample_conversation]
+    dependencies: [interaction.channels.channel-contract, applications.application-contract, applications.events]
+    state_recovery: Fakes hold bounded process-local contract state only and never exceed real adapter semantics.
+    current_code: [src/imagent/testing/__init__.py, src/imagent/testing/contracts.py, src/imagent/testing/fakes.py]
+    target_code: [src/imagent/testing/__init__.py, src/imagent/interaction/testing/**]
+    current_tests: [tests/test_adapter_contracts.py]
+    target_tests: [tests/conformance/test_adapter_contracts.py]
+    authoritative_docs: [docs/components/testing-and-conformance/design.md, docs/components/testing-and-conformance/testing.md]
+    adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [retain imagent.testing only as a formal public facade while moving its implementation into the mirrored tree]
+
+  engineering.schema-conformance:
+    id: engineering.schema-conformance
+    parent: engineering
+    purpose: Validate and navigate the language-neutral JSON Schema authority owned by the applicable runtime leaves.
+    owns: [schema cross-reference validation, schema navigation]
+    does_not_own: [schema semantics, runtime contract semantics, compatibility policy, generated native models]
+    inputs: [versioned schemas owned by Interaction, Gateway, and Applications]
+    outputs: [deterministic validation result]
+    public_contracts: []
+    public_exports:
+      current: []
+      target: []
+    dependencies: [interaction.messages, interaction.operations, gateway.routing.gateway-operations, gateway.routing.projection-routes, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests]
+    state_recovery: Stateless validation; schema IDs and references are stable versioned contract identities.
+    current_code: [schemas/v1/README.md, scripts/validate_schemas.py]
+    target_code: [schemas/v1/README.md, scripts/validate_schemas.py]
+    current_tests: [tests/test_contracts.py]
+    target_tests: [tests/engineering/test_schema_conformance.py]
+    authoritative_docs: [schemas/v1/README.md, docs/components/contracts/protocol.md, docs/components/repository-maintainability/testing.md]
+    adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0002-design-authority-and-control-boundaries.md]
+    gaps: [schema validation is a standalone required check but has no focused unit-test module yet]
+
+  engineering.repository-maintainability:
+    id: engineering.repository-maintainability
+    parent: engineering
+    purpose: Keep ownership, documentation, CI, mapping, provenance, and maintainability checks aligned.
+    owns: [component inventory validation, architecture navigation, CI and repository guidance]
+    does_not_own: [runtime semantics, accepted product policy]
+    inputs: [tracked repository inventory]
+    outputs: [deterministic validation and navigation evidence]
+    public_contracts: []
+    public_exports:
+      current: []
+      target: []
+    dependencies: []
+    state_recovery: Stateless repository checks; generated AgentKit task state is ignored.
+    current_code: [.github/workflows/ci.yml, scripts/check_doc_links.py, scripts/validate_component_map.py]
+    target_code: [.github/workflows/ci.yml, scripts/check_doc_links.py, scripts/validate_component_map.py]
+    current_tests: [tests/test_agentkit_mapping.py, tests/test_component_map.py, tests/test_package_independence.py]
+    target_tests: [tests/engineering/test_repository_maintainability.py]
+    authoritative_docs: [docs/components/repository-maintainability/design.md, docs/components/repository-maintainability/testing.md, docs/architecture/dependency-rules.md]
+    adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md]
+    gaps: [engineering docs have not yet moved under docs/engineering/repository-maintainability]
+
+  engineering.agentkit:
+    id: engineering.agentkit
+    parent: engineering
+    purpose: Route changes to durable intent, validate declared impact, and record the review lifecycle.
+    owns: [agentkit.yml, pinned launchers/plugin, component routing tests]
+    does_not_own: [architecture decisions, product semantics]
+    inputs: [component map and repository diff]
+    outputs: [orientation, impact, lint, check, review guidance]
+    public_contracts: []
+    public_exports:
+      current: []
+      target: []
+    dependencies: [engineering.repository-maintainability]
+    state_recovery: Durable config is tracked; .agentkit runtime receipts/logs remain ignored.
+    current_code: [.agents/plugins/marketplace.json, agentkit.yml, plugins/agentkit/.codex-plugin/plugin.json, plugins/agentkit/hooks.json, plugins/agentkit/skills/agentkit/SKILL.md, scripts/agentkit, scripts/agentkit.cmd, scripts/agentkit.py]
+    target_code: [.agents/plugins/marketplace.json, agentkit.yml, plugins/agentkit/.codex-plugin/plugin.json, plugins/agentkit/hooks.json, plugins/agentkit/skills/agentkit/SKILL.md, scripts/agentkit, scripts/agentkit.cmd, scripts/agentkit.py]
+    current_tests: [tests/test_agentkit_mapping.py]
+    target_tests: [tests/engineering/test_agentkit.py]
+    authoritative_docs: [docs/components/repository-maintainability/design.md, plugins/agentkit/skills/agentkit/SKILL.md]
+    adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md]
+    gaps: [AgentKit v1 retains its current-path import graph, while the repository launcher composes it with component-map validation until target paths replace that graph]
+
+  engineering.release:
+    id: engineering.release
+    parent: engineering
+    purpose: Own package facade/version/typing marker, build metadata, clean-install smoke, and release documentation.
+    owns: [package facade, py.typed marker, optional extras, clean-wheel verification]
+    does_not_own: [runtime component behavior, compatibility implementations]
+    inputs: [three-layer public exports and package metadata]
+    outputs: [installable typed wheel]
+    public_contracts: [__version__, adapters, contracts, delivery_coordination, delivery_planning, diagnostics, events, projections, recovery]
+    public_exports:
+      current: [imagent:__version__, imagent:adapters, imagent:contracts, imagent:delivery_coordination, imagent:delivery_planning, imagent:diagnostics, imagent:events, imagent:projections, imagent:recovery]
+      target: [imagent:__version__, imagent:adapters, imagent:contracts, imagent:delivery_coordination, imagent:delivery_planning, imagent:diagnostics, imagent:events, imagent:projections, imagent:recovery]
+    dependencies: [interaction.messages, interaction.channels.channel-contract, gateway.composition, gateway.delivery.planning, gateway.delivery.coordination, gateway.projection.observation, gateway.projection.recovery, gateway.diagnostics, applications.application-contract, applications.events]
+    state_recovery: Stateless packaging; build must not import optional native dependencies in the base install.
+    current_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/py.typed]
+    target_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/py.typed]
+    current_tests: [tests/test_package_independence.py]
+    target_tests: [tests/engineering/test_release.py]
+    authoritative_docs: [README.md, docs/components/repository-maintainability/design.md, docs/REUSE.md]
+    adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md]
+    gaps: [formal top-level facade must be updated only after internal moves; no duplicate implementation may remain]
+
+structural_status:
+  orphan_paths: []
+  temporary_external_docs:
+    - path: docs/migrations/issue-9-imcodex-owner-transfer.md
+      disposition: Remove after downstream ownership evidence is recorded in GitHub issues/PRs.
+    - path: docs/migrations/imcodex-followup-blockers.md
+      disposition: Remove after the component rollout and final IMCodex migration replace this temporary status evidence.
+  formal_facades:
+    - path: src/imagent/__init__.py
+      owner: engineering.release
+      rationale: Stable package/version facade; it must delegate to one implementation per public symbol.
+    - path: src/imagent/applications/__init__.py
+      owner: applications.application-contract
+      rationale: Current public Applications facade; exports move with their owning leaves without retaining old implementations.
+    - path: src/imagent/contracts/__init__.py
+      owner: interaction.operations
+      rationale: Temporary broad contract facade; later slices replace it with deliberate three-layer exports.
+    - path: src/imagent/controllers/__init__.py
+      owner: interaction.controllers.controller-contract
+      rationale: Current public Controller facade; registry/common/request exports move without retaining duplicate implementations.
+    - path: src/imagent/channels/__init__.py
+      owner: interaction.channels.channel-contract
+      rationale: Current public Channel facade; it delegates to the adapters leaf and retains no transport implementation.
+    - path: src/imagent/testing/__init__.py
+      owner: engineering.testing-and-conformance
+      rationale: Stable public conformance facade; implementation moves once and is not duplicated.
+  split_candidates:
+    schemas/v1/common.schema.json:
+      owners: [interaction.messages, interaction.operations, applications.application-contract]
+      reason: Shared stable values and errors underpin message, operation, and Application resource contracts.
+    schemas/v1/messages.schema.json:
+      owners: [interaction.messages, interaction.media, gateway.persistence.state-contracts, applications.application-contract]
+      reason: One language-neutral schema currently covers content, attachments, persisted reply correlation policy, and Application input Port values.
+    schemas/v1/operations.schema.json:
+      owners: [interaction.operations, gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, applications.operations, applications.requests]
+      reason: The schema union intentionally publishes common, Gateway, and Application operation variants in one versioned document.
+    schemas/v1/capabilities.schema.json:
+      owners: [interaction.media, interaction.channels.channel-contract, applications.capabilities]
+      reason: Attachment grouping, Channel delivery profiles, and Application capabilities share one current schema document.
+    schemas/v1/deliveries.schema.json:
+      owners: [interaction.media, interaction.channels.channel-contract, gateway.delivery.submissions, gateway.delivery.proactive-delivery, gateway.persistence.state-contracts]
+      reason: Inline artifacts, Channel receipts, submission state, and proactive delivery intent/results share one schema document.
+    schemas/v1/resources.schema.json:
+      owners: [applications.application-contract, applications.requests]
+      reason: Application resource references and RequestRef share one current schema document.
+    schemas/v1/events.schema.json:
+      owners: [applications.events, applications.requests]
+      reason: Canonical events and interactive request/response/resolution values share one current schema document.
+    src/imagent/adapters.py:
+      owners: [interaction.channels.channel-contract, gateway.delivery.proactive-authorization, gateway.persistence.repository-contracts, applications.application-contract]
+      reason: Channel/admission, proactive authorization, repository, and Application Ports share one historical module.
+    src/imagent/contracts/model.py:
+      owners: [interaction.messages, interaction.operations, interaction.media, interaction.channels.channel-contract, gateway.persistence.state-contracts, applications.application-contract, applications.capabilities, applications.events, applications.requests]
+      reason: The language-neutral model is semantically correct but physically crosses all three target layers.
+    src/imagent/contracts/delivery.py:
+      owners: [interaction.media, interaction.channels.channel-contract, gateway.delivery.submissions, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.persistence.state-contracts]
+      reason: Media/receipt validation, proactive intent/authorization/results, and submission identity share one contract module.
+    src/imagent/contracts/errors.py:
+      owners: [interaction.operations, applications.application-contract, applications.requests]
+      reason: Common operation errors, dispatched-input ambiguity, and request lifecycle errors have distinct target owners.
+    src/imagent/contracts/operations.py:
+      owners: [interaction.operations, gateway.routing.bindings, gateway.routing.gateway-operations, applications.operations, applications.requests]
+      reason: Common operation base, Gateway variants, and Application variants require owner-specific modules.
+    src/imagent/contracts/validators.py:
+      owners: [interaction.operations, gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.dispatch, gateway.projection.request-correlation, applications.application-contract, applications.capabilities, applications.events, applications.operations]
+      reason: Cross-union validation follows the historical contract aggregation rather than the target owners of each validated type.
+    src/imagent/contracts/request_validation.py:
+      owners: [gateway.projection.request-correlation, applications.requests]
+      reason: One module validates both Application-owned request response shapes and Gateway-owned route correlation evidence.
+    src/imagent/controllers/base.py:
+      owners: [interaction.controllers.controller-contract, interaction.controllers.request-presentation]
+      reason: Controller and request-presentation protocols are independent typed positions.
+    src/imagent/delivery_ingress.py:
+      owners: [interaction.media, gateway.delivery.proactive-delivery]
+      reason: Proactive ingress orchestration and bounded inline media staging/validation share one current module.
+    src/imagent/channels/runtime.py:
+      owners: [interaction.channels.channel-contract, interaction.channels.ingress, interaction.channels.outbound-delivery, interaction.channels.adapters]
+      reason: One wrapper currently combines public contract adaptation, ingress, delivery mapping, and native factory composition.
+    src/imagent/channels/native/base.py:
+      owners: [interaction.channels.channel-contract, interaction.channels.ingress, interaction.channels.outbound-delivery, interaction.channels.adapters]
+      reason: BaseChannelAdapter combines lifecycle/startup validation, ingress access, outbound send validation, and native diagnostic state.
+    src/imagent/channels/native/models.py:
+      owners: [interaction.channels.outbound-delivery, interaction.channels.adapters]
+      reason: Native adapter DTOs and common outbound artifact evidence are co-located.
+    src/imagent/gateway.py:
+      owners: [gateway.composition, gateway.lifecycle, gateway.admission, gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.content-transformation, gateway.input.dispatch, gateway.input.failure-presentation, gateway.projection.observation, gateway.projection.request-correlation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.diagnostics]
+      reason: The current composition root also sequences admission, input, observation, request routing, presentation, delivery, and diagnostics leaf behavior.
+    src/imagent/diagnostics.py:
+      owners: [interaction.channels.adapters, gateway.diagnostics, applications.adapters.appserver.diagnostics]
+      reason: Channel/Application provider facts and Gateway aggregate diagnostics share one historical public vocabulary module.
+    src/imagent/projection_runtime.py:
+      owners: [gateway.input.dispatch, gateway.projection.observation, gateway.projection.recovery]
+      reason: Acceptance ordering, one-worker observation, and recovery supervision share one current state machine.
+    src/imagent/request_projection_runtime.py:
+      owners: [gateway.projection.request-correlation, gateway.projection.recovery]
+      reason: Request delivery/correlation and authoritative pending-request gap/restart reconciliation share one runtime.
+    src/imagent/projection_routes.py:
+      owners: [gateway.routing.projection-routes, gateway.projection.checkpoints, gateway.projection.request-correlation, gateway.projection.recovery]
+      reason: Per-route ordering currently coordinates several independently documented decisions.
+    src/imagent/projections.py:
+      owners: [gateway.routing.projection-routes, gateway.projection.observation, gateway.projection.checkpoints, gateway.presentation, gateway.persistence.memory]
+      reason: Projection values, in-memory repository, delivery helper, and health types are co-located.
+    src/imagent/request_correlations.py:
+      owners: [gateway.projection.request-correlation, gateway.persistence.memory, gateway.persistence.sqlite, gateway.persistence.row-mapping]
+      reason: Correlation semantics, in-memory implementation, SQLite mixin, and row mapping share one module.
+    src/imagent/delivery_submissions.py:
+      owners: [gateway.delivery.submissions, gateway.persistence.sqlite, gateway.persistence.row-mapping]
+      reason: Submission state transitions and their SQLite persistence/mapping are co-located.
+    src/imagent/proactive_delivery.py:
+      owners: [gateway.delivery.submissions, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.persistence.memory]
+      reason: In-memory submission repository, scoped authorization, and proactive orchestration share one module.
+    src/imagent/storage.py:
+      owners: [gateway.persistence.idempotency, gateway.persistence.sqlite, gateway.persistence.row-mapping]
+      reason: In-memory idempotency, the intentional all-repository SQLite transaction owner, and projection row mapping share one module.
+    src/imagent/applications/appserver.py:
+      owners: [applications.adapters.codex, applications.adapters.zen]
+      reason: Shared App Server base plus concrete Codex and Zen mappings require focused extraction without duplicating transport state.

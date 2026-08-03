@@ -465,16 +465,21 @@ components:
       - scripts/agentkit.cmd
       - scripts/agentkit.py
       - scripts/check_doc_links.py
+      - scripts/validate_component_map.py
       - scripts/smoke_clean_install.py
       - tests/test_agentkit_mapping.py
+      - tests/test_component_map.py
       - tests/test_package_independence.py
       - docs/README.md
+      - docs/ARCHITECTURE.md
       - docs/REUSE.md
       - docs/ROADMAP.md
       - docs/migrations/**
       - docs/decisions/**
       - docs/architecture/**
       - docs/components/repository-maintainability/**
+      - docs/components/README.md
+      - docs/components/component-map.yml
     docs:
       - docs/components/repository-maintainability/design.md
       - docs/components/repository-maintainability/testing.md

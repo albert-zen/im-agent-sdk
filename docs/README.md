@@ -8,7 +8,9 @@ Start with:
    direction, and system flows.
 3. [Accepted decisions](decisions/README.md) for cross-component choices that have
    completed design review.
-4. The affected component's design and testing documents below.
+4. The approved [three-layer component tree](components/README.md) and its
+   machine-readable [component map](components/component-map.yml).
+5. The affected component's design and testing documents below.
 
 `REUSE.md` owns source provenance and extraction rules. `ROADMAP.md` contains
 future or unresolved work and is not authority for current runtime behavior.
@@ -33,6 +35,7 @@ separates SDK ownership work from the later IMCodex consumer migration.
 | `applications/**` | [Application adapter design](components/application-adapters/design.md), [testing](components/application-adapters/testing.md), applicable native page | adapter contract, native client, event, recovery tests |
 | `diagnostics.py` and diagnostic providers | [diagnostics design](components/diagnostics/design.md), [testing](components/diagnostics/testing.md) | redaction, bounded-cardinality, reconnect/overflow, and aggregate health tests |
 | `testing/**` | [conformance design](components/testing-and-conformance/design.md), [testing](components/testing-and-conformance/testing.md) | adapter contract kit tests |
+| `schemas/v1/**`, `scripts/validate_schemas.py` | [contracts protocol](components/contracts/protocol.md), [repository testing](components/repository-maintainability/testing.md) | schema validator and contract tests |
 | AgentKit, CI, root guidance, docs navigation | [repository maintainability design](components/repository-maintainability/design.md), [testing](components/repository-maintainability/testing.md) | AgentKit doctor/check and mapping tests |
 
 Use `python scripts/agentkit.py orient --path <path>` for the executable
