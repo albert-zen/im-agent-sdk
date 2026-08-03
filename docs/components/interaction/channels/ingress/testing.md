@@ -25,3 +25,7 @@ unknown modes. The four Channel suites prove provider configuration uses the
 same owner and access still precedes admission/media work. Admission,
 media/restart, queue, and shutdown evidence remains in the native and vertical
 suites until those mechanics move in later focused slices.
+
+Focused tests also lock the leaf-internal inbound attachment tuple/defaults;
+provider and vertical suites continue proving normalization into the public
+Interaction message without treating the mutable native DTO as a contract.

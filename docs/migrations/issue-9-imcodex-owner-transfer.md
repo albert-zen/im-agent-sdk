@@ -86,7 +86,7 @@ contracts.
 | `channels/weixin_ilink.py` | `native/weixin_ilink.py` | transfer iLink protocol/crypto transport |
 | `channels/weixin_state.py` | `native/weixin_state.py` | transfer Channel-owned credential/reconnect state |
 | `channels/weixin.py` | `native/weixin.py` | transfer Weixin transport; product login UX remains downstream |
-| top-level `models.py` | `native/models.py` | transfer only native transport DTOs used by the modules above |
+| top-level `models.py` | `interaction/channels/ingress.py` and `interaction/channels/outbound_delivery.py` | split provider-private inbound and outbound/native-delivery DTOs by Interaction owner |
 | top-level `file_types.py` | `interaction/media.py` | transfer shared generic-file type/byte validation to Interaction media |
 | top-level `windows_security.py` | `native/windows_security.py` | transfer secure staging helper |
 | top-level `config.py` | no wholesale transfer | extract only neutral endpoint validation into `native/endpoints.py`; product config loading remains IMCodex |

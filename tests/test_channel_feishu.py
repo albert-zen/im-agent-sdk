@@ -9,8 +9,8 @@ from imagent.channels.native.feishu import (
     LARK_DOMAIN,
     FeishuChannelAdapter,
 )
-from imagent.channels.native.models import OutboundMessage
 from imagent.interaction.channels.ingress import ChannelAccessPolicy
+from imagent.interaction.channels.outbound_delivery import OutboundMessage
 
 
 def _message(

@@ -55,3 +55,8 @@ the Interaction path directly. Other shared ingress mechanics remain
 interleaved in Channel runtime/native helpers for later mechanical slices.
 Platform-specific authentication, retrieval/decryption, and acknowledgement
 remain under adapters.
+
+The mutable provider-normalization `InboundMessage` and immutable
+`InboundAttachment` DTOs are also leaf-internal ingress values. They exist
+before construction of the public typed Interaction message, are not exported
+as a second common Message model, and carry no Gateway/Application authority.

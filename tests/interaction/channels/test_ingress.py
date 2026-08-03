@@ -2,10 +2,33 @@ from __future__ import annotations
 
 import unittest
 
-from imagent.interaction.channels.ingress import ChannelAccessPolicy, parse_id_set
+from imagent.interaction.channels.ingress import (
+    ChannelAccessPolicy,
+    InboundAttachment,
+    InboundMessage,
+    parse_id_set,
+)
 
 
 class ChannelAccessPolicyTests(unittest.TestCase):
+    def test_inbound_attachments_are_an_immutable_tuple(self) -> None:
+        attachment = InboundAttachment(
+            kind="image",
+            content_type="image/png",
+            local_path="/staged/image.png",
+            size_bytes=3,
+        )
+        message = InboundMessage(
+            channel_id="qq",
+            conversation_id="chat-1",
+            user_id="user-1",
+            message_id="message-1",
+            text="",
+            attachments=(attachment,),
+        )
+
+        self.assertEqual(message.attachments, (attachment,))
+
     def test_configuration_parses_id_dimensions_and_match_mode(self) -> None:
         policy = ChannelAccessPolicy.from_config(
             {

@@ -23,3 +23,7 @@ Unicode code-point preservation. The four Channel suites prove the same owner
 is used without changing platform limits or encoding. Receipt, artifact,
 delivery planning/coordination/outcome, and vertical evidence remains with its
 current owner until later focused slices.
+
+Focused tests additionally lock native result defaults, mutable artifact-list
+behavior, and mapping-to-`OutboundArtifact` coercion without promoting these
+leaf-internal DTOs to public contracts.

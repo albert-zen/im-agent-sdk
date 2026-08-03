@@ -7,8 +7,13 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, cast
 
-from ...interaction.channels.ingress import ChannelAccessPolicy
-from ...interaction.channels.outbound_delivery import split_text
+from ...interaction.channels.ingress import ChannelAccessPolicy, InboundMessage
+from ...interaction.channels.outbound_delivery import (
+    NativeDeliveryResult,
+    OutboundArtifact,
+    OutboundMessage,
+    split_text,
+)
 from .artifacts import (
     ArtifactDeliveryReceipt,
     PermanentArtifactDeliveryError,
@@ -26,12 +31,6 @@ from .media import (
     ImageMediaMaterializer,
     MediaDownloadError,
     materialize_inbound_media,
-)
-from .models import (
-    InboundMessage,
-    NativeDeliveryResult,
-    OutboundArtifact,
-    OutboundMessage,
 )
 from .weixin_ilink import (
     ILinkError,

@@ -278,7 +278,7 @@ components:
     id: interaction.channels.ingress
     parent: interaction.channels
     purpose: Apply shared authorization, ordering, normalization, and safe staging to an authenticated native IM event before handoff.
-    owns: [ChannelAccessPolicy, access evaluation, native identity normalization, pre-media admission use, media staging]
+    owns: [ChannelAccessPolicy, native InboundAttachment and InboundMessage DTOs, access evaluation, native identity normalization, pre-media admission use, media staging]
     does_not_own: [durable claim transitions after handoff, binding, input dispatch]
     inputs: [authenticated native event, admission lease]
     outputs: [verified InboundMessage]
@@ -288,7 +288,7 @@ components:
       target: []
     dependencies: [interaction.channels.channel-contract, interaction.messages, interaction.media]
     state_recovery: Native cursors and transient duplicate caches stay adapter-owned; durable claim stays Gateway-owned.
-    current_code: [src/imagent/interaction/channels/ingress.py, src/imagent/channels/runtime.py, src/imagent/channels/native/base.py, src/imagent/channels/native/diagnostics.py, src/imagent/channels/native/media.py, src/imagent/channels/native/models.py, src/imagent/channels/native/windows_security.py]
+    current_code: [src/imagent/interaction/channels/ingress.py, src/imagent/channels/runtime.py, src/imagent/channels/native/base.py, src/imagent/channels/native/diagnostics.py, src/imagent/channels/native/media.py, src/imagent/channels/native/windows_security.py]
     target_code: [src/imagent/interaction/channels/ingress.py]
     current_tests: [tests/interaction/channels/test_ingress.py, tests/test_native_channels.py, tests/test_channel_qq.py, tests/test_channel_telegram.py, tests/test_channel_feishu.py, tests/test_channel_weixin.py]
     target_tests: [tests/interaction/channels/test_ingress.py]
@@ -300,7 +300,7 @@ components:
     id: interaction.channels.outbound-delivery
     parent: interaction.channels
     purpose: Apply cross-Channel validation and correlation to planned logical output and normalize native evidence into truthful typed receipts.
-    owns: [split_text, shared delivery validation, stable correlation propagation, receipt normalization, shared text splitting fallback]
+    owns: [split_text, native OutboundArtifact OutboundMessage and NativeDeliveryResult DTOs, shared delivery validation, stable correlation propagation, receipt normalization, shared text splitting fallback]
     does_not_own: [provider encoding or upload, native API calls, native response mapping, Gateway planning/retry policy, transcript, durable outbox]
     inputs: [OutboundMessage segment, Channel capability profile]
     outputs: [DeliveryReceipt and per-item evidence]
@@ -310,7 +310,7 @@ components:
       target: []
     dependencies: [interaction.channels.channel-contract, interaction.messages, interaction.media]
     state_recovery: Native acceptance identity is evidence; unknown outcomes never authorize hidden replay.
-    current_code: [src/imagent/interaction/channels/outbound_delivery.py, src/imagent/channels/runtime.py, src/imagent/channels/native/artifacts.py, src/imagent/channels/native/base.py, src/imagent/channels/native/models.py]
+    current_code: [src/imagent/interaction/channels/outbound_delivery.py, src/imagent/channels/runtime.py, src/imagent/channels/native/artifacts.py, src/imagent/channels/native/base.py]
     target_code: [src/imagent/interaction/channels/outbound_delivery.py]
     current_tests: [tests/interaction/channels/test_outbound_delivery.py, tests/test_native_channels.py, tests/test_channel_qq.py, tests/test_channel_telegram.py, tests/test_channel_feishu.py, tests/test_channel_weixin.py]
     target_tests: [tests/interaction/channels/test_outbound_delivery.py]
@@ -332,7 +332,7 @@ components:
       target: [imagent.interaction.channels.adapters:NativeTransportChannelAdapter, imagent.interaction.channels.adapters:channel_from_config, imagent.interaction.channels.adapters:QQChannelAdapter, imagent.interaction.channels.adapters:QQ_QUOTE_ATTACHMENT_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_CONTENT_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_FILENAME_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_MESSAGE_TYPE, imagent.interaction.channels.adapters:QQ_QUOTE_REFERENCE_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_TRANSCRIPT_LIMIT]
     dependencies: [interaction.channels.channel-contract, interaction.channels.ingress, interaction.channels.outbound-delivery]
     state_recovery: Each adapter owns bounded native reconnect/cursor and process-local transport diagnostics.
-    current_code: [src/imagent/diagnostics.py, src/imagent/channels/native/__init__.py, src/imagent/channels/native/base.py, src/imagent/channels/native/diagnostics.py, src/imagent/channels/native/endpoints.py, src/imagent/channels/native/feishu.py, src/imagent/channels/native/models.py, src/imagent/channels/native/qq.py, src/imagent/channels/native/qq_media.py, src/imagent/channels/native/qq_quote.py, src/imagent/channels/native/telegram.py, src/imagent/channels/native/weixin.py, src/imagent/channels/native/weixin_ilink.py, src/imagent/channels/native/weixin_state.py, src/imagent/channels/runtime.py]
+    current_code: [src/imagent/diagnostics.py, src/imagent/channels/native/__init__.py, src/imagent/channels/native/base.py, src/imagent/channels/native/diagnostics.py, src/imagent/channels/native/endpoints.py, src/imagent/channels/native/feishu.py, src/imagent/channels/native/qq.py, src/imagent/channels/native/qq_media.py, src/imagent/channels/native/qq_quote.py, src/imagent/channels/native/telegram.py, src/imagent/channels/native/weixin.py, src/imagent/channels/native/weixin_ilink.py, src/imagent/channels/native/weixin_state.py, src/imagent/channels/runtime.py]
     target_code: [src/imagent/interaction/channels/adapters/**]
     current_tests: [tests/test_native_channels.py, tests/test_channel_qq.py, tests/test_channel_telegram.py, tests/test_channel_feishu.py, tests/test_channel_weixin.py]
     target_tests: [tests/interaction/channels/adapters/**]
@@ -1458,9 +1458,6 @@ structural_status:
     src/imagent/channels/native/diagnostics.py:
       owners: [interaction.channels.ingress, interaction.channels.adapters]
       reason: Ingress media validation emits bounded adapter-owned diagnostic events through the same native diagnostic helper used by transport implementations.
-    src/imagent/channels/native/models.py:
-      owners: [interaction.channels.ingress, interaction.channels.outbound-delivery, interaction.channels.adapters]
-      reason: Native ingress envelopes, adapter DTOs, and common outbound artifact evidence are co-located.
     src/imagent/gateway.py:
       owners: [gateway.composition, gateway.lifecycle, gateway.admission, gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.content-transformation, gateway.input.dispatch, gateway.input.failure-presentation, gateway.projection.observation, gateway.projection.request-correlation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.diagnostics]
       reason: The current composition root also sequences admission, input, observation, request routing, presentation, delivery, and diagnostics leaf behavior.

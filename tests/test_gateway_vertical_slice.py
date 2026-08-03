@@ -16,7 +16,6 @@ from imagent.applications import (
 )
 from imagent.bindings import InMemoryBindingRepository
 from imagent.channels import NativeTransportChannelAdapter
-from imagent.channels.native.models import NativeDeliveryResult
 from imagent.channels.native.qq import QQChannelAdapter
 from imagent.contracts import (
     ActivateNativeThread,
@@ -37,6 +36,7 @@ from imagent.contracts import (
 from imagent.controllers import SlashController
 from imagent.events import EventStreamOverflow
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
+from imagent.interaction.channels.outbound_delivery import NativeDeliveryResult
 from imagent.storage import SQLiteGatewayState
 
 

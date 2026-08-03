@@ -1,11 +1,45 @@
 from __future__ import annotations
 
 import unittest
+from typing import Any, cast
 
-from imagent.interaction.channels.outbound_delivery import split_text
+from imagent.interaction.channels.outbound_delivery import (
+    NativeDeliveryResult,
+    OutboundArtifact,
+    OutboundMessage,
+    split_text,
+)
 
 
 class ChannelOutboundTextTests(unittest.TestCase):
+    def test_native_delivery_result_defaults_to_no_platform_identity(self) -> None:
+        self.assertEqual(NativeDeliveryResult().native_message_ids, ())
+
+    def test_outbound_artifact_mappings_are_coerced_to_mutable_model_list(self) -> None:
+        message = OutboundMessage(
+            channel_id="qq",
+            conversation_id="chat-1",
+            message_type="agent",
+            text="result",
+            artifacts=cast(
+                Any,
+                [
+                    {
+                        "kind": "file",
+                        "local_path": "/staged/result.txt",
+                        "content_type": "text/plain",
+                        "filename": "result.txt",
+                        "size_bytes": 6,
+                    }
+                ],
+            ),
+        )
+
+        self.assertEqual(len(message.artifacts), 1)
+        self.assertIsInstance(message.artifacts[0], OutboundArtifact)
+        message.artifacts.clear()
+        self.assertEqual(message.artifacts, [])
+
     def test_limit_must_be_positive(self) -> None:
         for limit in (0, -1):
             with self.subTest(limit=limit):
