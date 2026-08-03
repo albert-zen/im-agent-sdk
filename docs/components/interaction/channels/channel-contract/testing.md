@@ -22,8 +22,9 @@ Required evidence:
 
 Focused evidence currently lives in `tests/test_adapter_contracts.py`,
 `tests/test_native_channels.py`, Channel-specific suites, Gateway admission
-tests, schema validation, and Pyright. Receipt identity and validation evidence
-lives in `tests/interaction/channels/test_contract.py`; native Channel suites
-and planner tests provide capability/profile parity. Lifecycle and admission
-evidence remains in the historical suites until its own focused mechanical
-slice.
+tests, schema validation, and Pyright. Exact ownership identity for admission,
+startup validation, capability, and receipt contracts lives in
+`tests/interaction/channels/test_contract.py`; native Channel suites and
+planner tests provide behavioral parity. The remaining `ChannelAdapter`
+lifecycle Port stays in the historical suite until its owner-typed operation
+dependency is resolved.

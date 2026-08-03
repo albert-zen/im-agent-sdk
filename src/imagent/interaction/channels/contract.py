@@ -1,12 +1,37 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Protocol, runtime_checkable
 
 from ..media import AttachmentContent, AttachmentGrouping, AttachmentSourceKind
-from ..messages import Content, TextLengthUnit
+from ..messages import Content, ConversationRef, InboundMessage, TextLengthUnit
 from ..operations import ContractViolation, require_identifier
+
+MessageHandler = Callable[[InboundMessage], Awaitable[None]]
+
+
+class InboundAdmission(Protocol):
+    """One-shot fenced admission acquired before Channel media preparation."""
+
+    async def deliver(self, message: InboundMessage) -> None: ...
+
+    async def release(self) -> None: ...
+
+
+InboundAdmissionHandler = Callable[
+    [ConversationRef, str],
+    Awaitable[InboundAdmission | None],
+]
+
+
+@runtime_checkable
+class ChannelStartupConfigurationValidator(Protocol):
+    """Optional side-effect-free validation for resolved Channel settings."""
+
+    def validate_startup_configuration(self) -> None: ...
 
 
 class DeliverySupportLevel(StrEnum):

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime
 from enum import StrEnum
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 from .contracts import (
     AcceptedTurn,
@@ -31,25 +31,22 @@ from .contracts import (
     ThreadRef,
     TurnReplyCorrelation,
 )
-from .interaction.messages import ConversationRef, InboundMessage, OutboundMessage
+from .interaction.channels import (
+    ChannelStartupConfigurationValidator as ChannelStartupConfigurationValidator,
+)
+from .interaction.channels import (
+    InboundAdmission as InboundAdmission,
+)
+from .interaction.channels import (
+    InboundAdmissionHandler as InboundAdmissionHandler,
+)
+from .interaction.channels import (
+    MessageHandler as MessageHandler,
+)
+from .interaction.messages import ConversationRef, OutboundMessage
 
-MessageHandler = Callable[[InboundMessage], Awaitable[None]]
 OperationHandler = Callable[[GatewayOperation], Awaitable[None]]
 ApplicationInputDispatchHandler = Callable[[ApplicationInputDispatch], Awaitable[None]]
-
-
-class InboundAdmission(Protocol):
-    """One-shot fenced admission acquired before Channel media preparation."""
-
-    async def deliver(self, message: InboundMessage) -> None: ...
-
-    async def release(self) -> None: ...
-
-
-InboundAdmissionHandler = Callable[
-    [ConversationRef, str],
-    Awaitable[InboundAdmission | None],
-]
 
 
 class IdempotencyClaimStatus(StrEnum):
@@ -95,13 +92,6 @@ class ChannelAdapter(Protocol):
     async def stop(self) -> None: ...
 
     async def send(self, message: OutboundMessage) -> DeliveryReceipt: ...
-
-
-@runtime_checkable
-class ChannelStartupConfigurationValidator(Protocol):
-    """Optional side-effect-free validation for resolved Channel settings."""
-
-    def validate_startup_configuration(self) -> None: ...
 
 
 class AgentApplicationAdapter(Protocol):

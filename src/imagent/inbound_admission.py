@@ -9,10 +9,12 @@ from .adapters import (
     ChannelAdapter,
     IdempotencyClaimStatus,
     IdempotencyRepository,
+    OperationHandler,
+)
+from .interaction.channels import (
     InboundAdmission,
     InboundAdmissionHandler,
     MessageHandler,
-    OperationHandler,
 )
 from .interaction.messages import ConversationRef, InboundMessage
 

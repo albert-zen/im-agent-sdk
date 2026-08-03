@@ -13,7 +13,6 @@ from .adapters import (
     DeliveryAuthorizer,
     DeliverySubmissionConflict,
     IdempotencyClaimStatus,
-    InboundAdmission,
     RequestCorrelationConflict,
 )
 from .bindings import BindingConflict
@@ -97,6 +96,7 @@ from .inbound_content import InboundContentTransformRuntime
 from .inbound_failures import InboundFailurePhase as InboundFailurePhase
 from .inbound_failures import InboundFailurePresentationRuntime, handle_claimed_inbound
 from .inbound_failures import InboundFailurePresenter as InboundFailurePresenter
+from .interaction.channels import InboundAdmission
 from .interaction.controllers import ControllerActions, ControllerLifecycle
 from .interaction.controllers.contract import (
     CommandInvocationFacts,

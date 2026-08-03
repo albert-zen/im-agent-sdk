@@ -9,7 +9,6 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import patch
 
-from imagent.adapters import ChannelStartupConfigurationValidator, InboundAdmission
 from imagent.channels import NativeTransportChannelAdapter, channel_from_config
 from imagent.channels.native.access import ChannelAccessPolicy
 from imagent.channels.native.artifacts import (
@@ -44,6 +43,10 @@ from imagent.contracts import (
     TextContent,
 )
 from imagent.diagnostics import ConnectionDiagnosticState, QueueDiagnosticName
+from imagent.interaction.channels import (
+    ChannelStartupConfigurationValidator,
+    InboundAdmission,
+)
 from imagent.testing import verify_channel_adapter
 
 
