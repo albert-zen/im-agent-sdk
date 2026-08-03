@@ -122,13 +122,16 @@ components:
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/keyed_locks.py
       - src/imagent/delivery_coordination.py
-      - src/imagent/delivery_planning.py
+      - src/imagent/gateway/delivery/**
       - src/imagent/delivery_outcomes.py
       - src/imagent/outbound_presentation.py
-      - tests/test_delivery_planning.py
+      - tests/gateway/delivery/**
       - tests/test_delivery_outcomes.py
       - tests/test_outbound_presentation.py
     docs:
+      - docs/components/gateway/delivery/README.md
+      - docs/components/gateway/delivery/planning/design.md
+      - docs/components/gateway/delivery/planning/testing.md
       - docs/components/delivery-planning-and-coordination/design.md
       - docs/components/delivery-planning-and-coordination/testing.md
     required_docs:
@@ -169,7 +172,7 @@ components:
       - src/imagent/delivery_ingress.py
       - src/imagent/proactive_delivery.py
       - src/imagent/cli/**
-      - tests/gateway/**
+      - tests/gateway/test_package_root.py
       - tests/test_gateway_operations.py
       - tests/test_gateway_vertical_slice.py
       - tests/test_inbound_admission.py
@@ -178,6 +181,7 @@ components:
       - tests/test_delivery_ingress.py
       - tests/test_proactive_delivery.py
     docs:
+      - docs/components/gateway/README.md
       - docs/components/gateway/design.md
       - docs/components/gateway/testing.md
       - docs/migrations/imcodex-followup-blockers.md

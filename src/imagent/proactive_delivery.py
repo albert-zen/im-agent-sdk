@@ -46,7 +46,7 @@ from .delivery_outcomes import (
     DeliveryOutcomeErrorCode,
     DeliveryOutcomeObserverRuntime,
 )
-from .delivery_planning import DeliveryPlanningError
+from .gateway.delivery.planning import DeliveryPlanningError
 from .interaction.channels import ChannelAdapter
 from .interaction.media import AttachmentContent, LocalPath
 from .interaction.messages import OutboundMessage

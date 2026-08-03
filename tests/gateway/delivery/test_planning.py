@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 import unittest
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import cast
 from unittest.mock import patch
 
+import imagent
 from imagent.contracts import (
     AttachmentContent,
     AttachmentGrouping,
@@ -31,11 +33,20 @@ from imagent.delivery_coordination import (
     DeliveryCoordinator,
     DeliveryCoordinatorConfig,
 )
-from imagent.delivery_planning import (
+from imagent.gateway.delivery import (
     DeliveryPlanner,
     DeliveryPlanningError,
 )
+from imagent.gateway.delivery import planning as planning_owner
 from imagent.interaction.channels.adapters import NativeTransportChannelAdapter
+
+
+class DeliveryPlanningFacadeTests(unittest.TestCase):
+    def test_root_attribute_and_gateway_facade_use_exact_owner_objects(self) -> None:
+        self.assertIs(imagent.delivery_planning, planning_owner)
+        self.assertIs(DeliveryPlanner, planning_owner.DeliveryPlanner)
+        self.assertIs(DeliveryPlanningError, planning_owner.DeliveryPlanningError)
+        self.assertNotIn("imagent.delivery_planning", sys.modules)
 
 
 class _Channel:

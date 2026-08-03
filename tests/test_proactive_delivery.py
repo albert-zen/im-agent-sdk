@@ -36,8 +36,8 @@ from imagent.contracts import (
     derive_delivery_submission_id,
 )
 from imagent.delivery_coordination import DeliveryCoordinator, DeliveryCoordinatorConfig
-from imagent.delivery_planning import DeliveryPlanningError
 from imagent.gateway import GatewayRepositories, ImAgentGateway
+from imagent.gateway.delivery import DeliveryPlanningError
 from imagent.proactive_delivery import (
     DeliveryAuthorizationError,
     DeliveryRouteError,

@@ -5,13 +5,13 @@ import json
 import re
 from dataclasses import dataclass
 
-from .contracts import (
+from ...contracts import (
     DeliveryProfile,
     DeliverySupportLevel,
     ReplyReferenceScope,
 )
-from .interaction.media import AttachmentContent, AttachmentGrouping, LocalPath
-from .interaction.messages import (
+from ...interaction.media import AttachmentContent, AttachmentGrouping, LocalPath
+from ...interaction.messages import (
     Content,
     ConversationRef,
     OutboundMessage,

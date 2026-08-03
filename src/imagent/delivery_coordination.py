@@ -13,7 +13,7 @@ from .contracts import (
     DeliverySegmentStatus,
     validate_delivery_receipt_for_content,
 )
-from .delivery_planning import (
+from .gateway.delivery.planning import (
     DeliveryPlan,
     DeliveryPlanner,
     DeliveryPlanningError,
