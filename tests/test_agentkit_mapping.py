@@ -94,7 +94,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "src/imagent/gateway/delivery/outcome_observation.py": {
                 "delivery-planning-and-coordination"
             },
-            "src/imagent/outbound_presentation.py": {"delivery-planning-and-coordination"},
+            "src/imagent/gateway/presentation.py": {"delivery-planning-and-coordination"},
             "src/imagent/events.py": {"projections-and-recovery"},
             "src/imagent/projection_routes.py": {"projections-and-recovery"},
             "src/imagent/projection_runtime.py": {"projections-and-recovery"},
@@ -142,7 +142,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/gateway/delivery/test_outcome_observation.py": {
                 "delivery-planning-and-coordination"
             },
-            "tests/test_outbound_presentation.py": {"delivery-planning-and-coordination"},
+            "tests/gateway/test_presentation.py": {"delivery-planning-and-coordination"},
             "tests/test_event_fanout.py": {"projections-and-recovery"},
             "tests/test_storage.py": {"persistence"},
             "tests/interaction/controllers/test_contract.py": {"controllers"},
@@ -216,6 +216,7 @@ class AgentKitMappingTests(unittest.TestCase):
                 "application-adapters-t3",
                 "channel-adapters",
                 "contracts",
+                "delivery-planning-and-coordination",
                 "gateway",
                 "persistence",
                 "ports",

@@ -9,12 +9,12 @@ from itertools import islice
 from types import MappingProxyType
 from typing import Protocol
 
-from .diagnostics import (
+from ..diagnostics import (
     OutboundPresentationDiagnosticFacts,
     OutboundPresentationFailureCode,
 )
-from .interaction.media import AttachmentContent
-from .interaction.messages import OutboundMessage, TextContent
+from ..interaction.media import AttachmentContent
+from ..interaction.messages import OutboundMessage, TextContent
 
 
 class ProjectionPresentationOrigin(StrEnum):

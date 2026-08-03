@@ -39,7 +39,7 @@ from imagent.gateway.delivery import outcome_observation as outcome_observation_
 from imagent.gateway.delivery.outcome_observation import (
     DeliveryOutcomeObserverRuntime,
 )
-from imagent.outbound_presentation import (
+from imagent.gateway.presentation import (
     OutboundPresentationContext,
     ProjectionPresentationOrigin,
 )

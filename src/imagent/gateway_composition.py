@@ -10,10 +10,10 @@ from .adapters import (
     RequestCorrelationRepository,
 )
 from .gateway.delivery.outcome_observation import DeliveryOutcomeObserver
+from .gateway.presentation import OutboundPresentationPolicy
 from .inbound_content import InboundContentTransformer
 from .inbound_failures import InboundFailurePresenter
 from .interaction.controllers import InboundController, RequestPresenter
-from .outbound_presentation import OutboundPresentationPolicy
 
 
 @dataclass(frozen=True, slots=True)

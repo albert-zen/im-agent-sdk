@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from itertools import islice
 from types import MappingProxyType
+from typing import TYPE_CHECKING
 
 from .adapters import (
     IdempotencyClaimStatus,
@@ -27,13 +28,12 @@ from .contracts import (
     validate_turn_reply_correlation,
 )
 from .interaction.messages import ConversationRef, OutboundMessage, TextContent, TextFormat
-from .outbound_presentation import (
-    OutboundPresentationContext,
-    ProjectionPresentationOrigin,
-)
+
+if TYPE_CHECKING:
+    from .gateway.presentation import OutboundPresentationContext
 
 DeliverOutbound = Callable[
-    [OutboundMessage, OutboundPresentationContext],
+    [OutboundMessage, "OutboundPresentationContext"],
     Awaitable[IdempotencyClaimStatus],
 ]
 DeliverRequestOutbound = Callable[[OutboundMessage], Awaitable[IdempotencyClaimStatus]]
@@ -467,6 +467,11 @@ async def deliver_projected_message(
     authoritative: bool,
 ) -> ThreadProjectionRoute:
     """Make one ordered route decision without adding retry/backpressure."""
+    from .gateway.presentation import (
+        OutboundPresentationContext,
+        ProjectionPresentationOrigin,
+    )
+
     agent_message = projected.message
     if projected.checkpoint:
         delivery_id = derive_projection_delivery_id(

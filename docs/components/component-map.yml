@@ -632,17 +632,17 @@ components:
     outputs: [validated replacement content or suppression]
     public_contracts: [OutboundPresentationPolicy, OutboundPresentationContext, ProjectionPresentationOrigin]
     public_exports:
-      current: [imagent.outbound_presentation:OutboundPresentationPolicy, imagent.outbound_presentation:OutboundPresentationContext, imagent.outbound_presentation:ProjectionPresentationOrigin]
+      current: [imagent.gateway.presentation:OutboundPresentationPolicy, imagent.gateway.presentation:OutboundPresentationContext, imagent.gateway.presentation:ProjectionPresentationOrigin]
       target: [imagent.gateway.presentation:OutboundPresentationPolicy, imagent.gateway.presentation:OutboundPresentationContext, imagent.gateway.presentation:ProjectionPresentationOrigin]
     dependencies: [interaction.messages, interaction.media, applications.application-contract, gateway.projection.checkpoints, gateway.persistence.idempotency]
     state_recovery: Replay-safe suppression completes outbound idempotency before checkpoint CAS; live-only never checkpoints.
-    current_code: [src/imagent/outbound_presentation.py, src/imagent/projections.py, src/imagent/gateway/__init__.py, src/imagent/diagnostics.py]
+    current_code: [src/imagent/gateway/presentation.py, src/imagent/projections.py, src/imagent/gateway/__init__.py, src/imagent/diagnostics.py]
     target_code: [src/imagent/gateway/presentation.py]
-    current_tests: [tests/test_outbound_presentation.py, tests/test_projection_hardening.py]
+    current_tests: [tests/gateway/test_presentation.py, tests/test_projection_hardening.py]
     target_tests: [tests/gateway/test_presentation.py]
-    authoritative_docs: [docs/components/delivery-planning-and-coordination/design.md, docs/components/gateway/design.md]
-    adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [projection delivery helper and O1 runtime are currently split across modules]
+    authoritative_docs: [docs/components/gateway/presentation/design.md, docs/components/gateway/presentation/testing.md]
+    adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [projection delivery sequencing remains in projections.py and shared O1 diagnostic facts remain in diagnostics.py until their focused splits]
 
   gateway.delivery.planning:
     id: gateway.delivery.planning
