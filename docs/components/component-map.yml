@@ -682,7 +682,7 @@ components:
     state_recovery: Process-local lanes are cancelled/joined at stop; unknown outcomes never auto-retry.
     current_code: [src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/coordination.py, src/imagent/keyed_locks.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/delivery/coordination.py]
-    current_tests: [tests/gateway/delivery/test_coordination.py, tests/test_delivery_outcomes.py, tests/test_gateway_vertical_slice.py]
+    current_tests: [tests/gateway/delivery/test_coordination.py, tests/gateway/delivery/test_outcome_observation.py, tests/test_gateway_vertical_slice.py]
     target_tests: [tests/gateway/delivery/test_coordination.py]
     authoritative_docs: [docs/components/gateway/delivery/coordination/design.md, docs/components/gateway/delivery/coordination/testing.md]
     adrs: [docs/decisions/0010-capability-driven-delivery-coordination.md]
@@ -762,19 +762,19 @@ components:
     does_not_own: [receipt mutation, retry, persistence, cleanup authority, durable replay]
     inputs: [original destination message and final receipt/error category]
     outputs: [best-effort process-local observation]
-    public_contracts: [DeliveryOutcomeObserver, DeliveryOutcome, DeliveryOutcomeContext]
+    public_contracts: [DeliveryOutcomeObserver, DeliveryOutcome, DeliveryOutcomeContext, DeliveryOutcomeErrorCode]
     public_exports:
-      current: [imagent.delivery_outcomes:DeliveryOutcomeObserver, imagent.delivery_outcomes:DeliveryOutcome, imagent.delivery_outcomes:DeliveryOutcomeContext]
-      target: [imagent.gateway.delivery:DeliveryOutcomeObserver, imagent.gateway.delivery:DeliveryOutcome, imagent.gateway.delivery:DeliveryOutcomeContext]
+      current: [imagent.gateway.delivery:DeliveryOutcomeObserver, imagent.gateway.delivery:DeliveryOutcome, imagent.gateway.delivery:DeliveryOutcomeContext, imagent.gateway.delivery:DeliveryOutcomeErrorCode]
+      target: [imagent.gateway.delivery:DeliveryOutcomeObserver, imagent.gateway.delivery:DeliveryOutcome, imagent.gateway.delivery:DeliveryOutcomeContext, imagent.gateway.delivery:DeliveryOutcomeErrorCode]
     dependencies: [interaction.messages, interaction.media, interaction.channels.channel-contract, gateway.delivery.coordination, gateway.diagnostics]
     state_recovery: Non-durable and at-most-offered once per actual attempt; replay/suppression/preflight fabricate no notification.
-    current_code: [src/imagent/delivery_outcomes.py, src/imagent/gateway/__init__.py, src/imagent/diagnostics.py]
+    current_code: [src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/outcome_observation.py, src/imagent/gateway/__init__.py, src/imagent/diagnostics.py]
     target_code: [src/imagent/gateway/delivery/outcome_observation.py]
-    current_tests: [tests/test_delivery_outcomes.py, tests/test_proactive_delivery.py]
+    current_tests: [tests/gateway/delivery/test_outcome_observation.py, tests/test_proactive_delivery.py]
     target_tests: [tests/gateway/delivery/test_outcome_observation.py]
-    authoritative_docs: [docs/components/delivery-planning-and-coordination/design.md, docs/components/gateway/design.md]
+    authoritative_docs: [docs/components/gateway/delivery/outcome-observation/design.md, docs/components/gateway/delivery/outcome-observation/testing.md]
     adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [target leaf design/testing docs not yet created]
+    gaps: [shared O2 diagnostic enum/facts remain in diagnostics.py until the diagnostics ownership slice]
 
   gateway.persistence.state-contracts:
     id: gateway.persistence.state-contracts
@@ -1455,8 +1455,8 @@ structural_status:
       owners: [gateway.composition, gateway.lifecycle, gateway.admission, gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.content-transformation, gateway.input.dispatch, gateway.input.failure-presentation, gateway.projection.observation, gateway.projection.request-correlation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.diagnostics]
       reason: The current composition root also sequences admission, input, observation, request routing, presentation, delivery, and diagnostics leaf behavior.
     src/imagent/gateway/delivery/__init__.py:
-      owners: [gateway.delivery.planning, gateway.delivery.coordination]
-      reason: The intentional Gateway delivery package facade re-exports exact public values from the focused planning and coordination owners without implementing either leaf.
+      owners: [gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.outcome-observation]
+      reason: The intentional Gateway delivery package facade re-exports exact public values from focused delivery leaves without implementing any leaf.
     src/imagent/diagnostics.py:
       owners: [interaction.channels.adapters, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.presentation, gateway.delivery.outcome-observation, gateway.diagnostics, applications.application-contract, applications.presentation.live-activity, applications.presentation.artifact-materialization, applications.adapters.appserver.diagnostics]
       reason: Channel, fixed I1/I2/O1/O2/A1, Application provider, and Gateway aggregate diagnostic facts share one historical public vocabulary module.

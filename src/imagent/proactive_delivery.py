@@ -41,11 +41,11 @@ from .contracts import (
     validate_delivery_receipt_for_content,
     validate_delivery_submission_record,
 )
-from .delivery_outcomes import (
+from .gateway.delivery.coordination import DeliveryCoordinator
+from .gateway.delivery.outcome_observation import (
     DeliveryOutcomeErrorCode,
     DeliveryOutcomeObserverRuntime,
 )
-from .gateway.delivery.coordination import DeliveryCoordinator
 from .gateway.delivery.planning import DeliveryPlanningError
 from .interaction.channels import ChannelAdapter
 from .interaction.media import AttachmentContent, LocalPath

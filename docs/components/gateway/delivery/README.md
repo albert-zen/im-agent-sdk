@@ -11,8 +11,11 @@ records only bridge identity/evidence needed for safe convergence.
 - [coordination design](coordination/design.md) and
   [testing](coordination/testing.md) — bounded destination-ordered execution
   and conservative receipt aggregation.
+- [outcome observation design](outcome-observation/design.md) and
+  [testing](outcome-observation/testing.md) — bounded best-effort O2
+  notification after one logical delivery attempt.
 
-Submissions, proactive delivery/authorization, and outcome observation remain
-mapped to their current authoritative documents until their own focused
-moves. Delivery planning/coordination owns no native encoding, durable job,
-content storage, route policy, or checkpoint authority.
+Submissions and proactive delivery/authorization remain mapped to their
+current authoritative documents until their own focused moves. Delivery owns
+no native encoding, durable job, content storage, route policy, or checkpoint
+authority.
