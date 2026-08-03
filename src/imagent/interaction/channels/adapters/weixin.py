@@ -7,14 +7,6 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, cast
 
-from ....channels.native.artifacts import (
-    ArtifactDeliveryReceipt,
-    PermanentArtifactDeliveryError,
-    deliver_artifact_batch,
-    delivered_artifact_message_ids,
-    read_managed_artifact,
-    stable_artifact_identity,
-)
 from ....channels.native.base import BaseChannelAdapter
 from ....channels.native.media import (
     MAX_FILE_COUNT,
@@ -26,10 +18,16 @@ from ....channels.native.media import (
 )
 from ..ingress import ChannelAccessPolicy, InboundMessage
 from ..outbound_delivery import (
+    ArtifactDeliveryReceipt,
     NativeDeliveryResult,
     OutboundArtifact,
     OutboundMessage,
+    PermanentArtifactDeliveryError,
+    deliver_artifact_batch,
+    delivered_artifact_message_ids,
+    read_managed_artifact,
     split_text,
+    stable_artifact_identity,
 )
 from .diagnostics import emit_event
 from .weixin_ilink import (
@@ -405,7 +403,7 @@ class WeixinChannelAdapter(BaseChannelAdapter):
         return NativeDeliveryResult(delivered_artifact_message_ids(message))
 
     def validate_outbound_message(self, message: OutboundMessage) -> None:
-        """Reject malformed routes before they enter the durable retry outbox."""
+        """Reject malformed routes before the current native delivery attempt."""
 
         self._parse_conversation_id(message.conversation_id)
 

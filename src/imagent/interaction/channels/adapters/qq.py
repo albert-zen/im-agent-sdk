@@ -15,23 +15,21 @@ from typing import Any
 import httpx
 import websockets
 
-from ....channels.native.artifacts import (
+from ....channels.native.base import BaseChannelAdapter
+from ....channels.native.media import materialize_inbound_media
+from ..ingress import ChannelAccessPolicy, InboundMessage
+from ..outbound_delivery import (
     ArtifactDeliveryReceipt,
+    NativeDeliveryResult,
+    OutboundArtifact,
+    OutboundMessage,
     PermanentArtifactDeliveryError,
     append_artifact_failures,
     deliver_artifact_batch,
     delivered_artifact_message_ids,
     record_artifact_failure,
-    stable_artifact_identity,
-)
-from ....channels.native.base import BaseChannelAdapter
-from ....channels.native.media import materialize_inbound_media
-from ..ingress import ChannelAccessPolicy, InboundMessage
-from ..outbound_delivery import (
-    NativeDeliveryResult,
-    OutboundArtifact,
-    OutboundMessage,
     split_text,
+    stable_artifact_identity,
 )
 from .diagnostics import (
     NativeConnectionDiagnosticSnapshot,
@@ -425,7 +423,7 @@ class QQChannelAdapter(BaseChannelAdapter):
         return NativeDeliveryResult(delivered_artifact_message_ids(message))
 
     def validate_outbound_message(self, message: OutboundMessage) -> None:
-        """Reject malformed routes before they enter the durable retry outbox."""
+        """Reject malformed routes before the current native delivery attempt."""
 
         self._conversation_path(message.conversation_id)
 
@@ -444,7 +442,7 @@ class QQChannelAdapter(BaseChannelAdapter):
             source.relative_to(self.outbound_media_dir)
         except (OSError, ValueError) as exc:
             raise QQPermanentArtifactError(
-                "artifact is outside the managed spool or no longer exists"
+                "artifact is outside the trusted root or no longer exists"
             ) from exc
         if not source.is_file() or source.stat().st_size != artifact.size_bytes:
             raise QQPermanentArtifactError("artifact changed after it was staged")
@@ -556,7 +554,7 @@ class QQChannelAdapter(BaseChannelAdapter):
             source = Path(artifact.local_path).resolve(strict=True)
             source.relative_to(self.outbound_media_dir)
         except (OSError, ValueError):
-            return "artifact is outside the managed spool or no longer exists"
+            return "artifact is outside the trusted root or no longer exists"
         if not source.is_file() or source.stat().st_size != artifact.size_bytes:
             return "artifact changed after it was staged"
         return None

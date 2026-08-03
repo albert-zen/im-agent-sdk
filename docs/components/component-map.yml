@@ -300,8 +300,8 @@ components:
     id: interaction.channels.outbound-delivery
     parent: interaction.channels
     purpose: Apply cross-Channel validation and correlation to planned logical output and normalize native evidence into truthful typed receipts.
-    owns: [split_text, native OutboundArtifact OutboundMessage and NativeDeliveryResult DTOs, shared delivery validation, stable correlation propagation, receipt normalization, shared text splitting fallback]
-    does_not_own: [provider encoding or upload, native API calls, native response mapping, Gateway planning/retry policy, transcript, durable outbox]
+    owns: [split_text, native OutboundArtifact OutboundMessage and NativeDeliveryResult DTOs, ordered artifact batch execution for one native attempt, stable artifact identity and per-item receipt helpers, caller-managed trusted-root artifact verification, shared delivery validation, stable correlation propagation, receipt normalization, shared text splitting fallback]
+    does_not_own: [provider encoding or upload, native API calls, native response mapping, Gateway planning/retry policy, transcript, durable outbox or spool, artifact bytes or root lifetime, product quota, ledger, startup sweep, crash cleanup]
     inputs: [OutboundMessage segment, Channel capability profile]
     outputs: [DeliveryReceipt and per-item evidence]
     public_contracts: []
@@ -310,13 +310,13 @@ components:
       target: []
     dependencies: [interaction.channels.channel-contract, interaction.messages, interaction.media]
     state_recovery: Native acceptance identity is evidence; unknown outcomes never authorize hidden replay.
-    current_code: [src/imagent/interaction/channels/outbound_delivery.py, src/imagent/interaction/channels/adapters/runtime.py, src/imagent/channels/native/artifacts.py, src/imagent/channels/native/base.py]
+    current_code: [src/imagent/interaction/channels/outbound_delivery.py, src/imagent/interaction/channels/adapters/runtime.py, src/imagent/channels/native/base.py]
     target_code: [src/imagent/interaction/channels/outbound_delivery.py]
     current_tests: [tests/interaction/channels/test_outbound_delivery.py, tests/test_native_channels.py, tests/interaction/channels/adapters/test_qq.py, tests/interaction/channels/adapters/test_telegram.py, tests/interaction/channels/adapters/test_feishu.py, tests/interaction/channels/adapters/test_weixin.py]
     target_tests: [tests/interaction/channels/test_outbound_delivery.py]
     authoritative_docs: [docs/components/interaction/channels/outbound-delivery/design.md, docs/components/interaction/channels/outbound-delivery/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
-    gaps: [receipt and artifact helpers remain interleaved with runtime and provider adapters]
+    gaps: [receipt normalization remains interleaved with runtime and provider adapters]
 
   interaction.channels.adapters:
     id: interaction.channels.adapters

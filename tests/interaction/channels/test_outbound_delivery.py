@@ -1,17 +1,46 @@
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import subprocess
+import sys
+import tempfile
 import unittest
+from pathlib import Path
 from typing import Any, cast
 
 from imagent.interaction.channels.outbound_delivery import (
+    ArtifactDeliveryReceipt,
     NativeDeliveryResult,
     OutboundArtifact,
     OutboundMessage,
+    PermanentArtifactDeliveryError,
+    deliver_artifact_batch,
+    read_managed_artifact,
     split_text,
+    stable_artifact_identity,
 )
 
 
 class ChannelOutboundTextTests(unittest.TestCase):
+    def test_historical_native_artifact_module_is_absent(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import importlib.util; "
+                    "assert importlib.util.find_spec("
+                    "'imagent.channels.native.artifacts') is None"
+                ),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
     def test_native_delivery_result_defaults_to_no_platform_identity(self) -> None:
         self.assertEqual(NativeDeliveryResult().native_message_ids, ())
 
@@ -69,6 +98,164 @@ class ChannelOutboundTextTests(unittest.TestCase):
 
     def test_unicode_code_points_are_not_split_into_encoded_units(self) -> None:
         self.assertEqual(split_text("你好世界🙂完成", limit=3), ["你好世", "界🙂完", "成"])
+
+    def test_artifact_identity_prefers_stable_attachment_id_over_path(self) -> None:
+        message = OutboundMessage(
+            channel_id="qq",
+            conversation_id="chat-1",
+            message_type="agent",
+            text="",
+            metadata={"delivery_id": "delivery-1"},
+        )
+        first = _artifact(
+            attachment_id="attachment-1",
+            local_path="/first/staging/result.bin",
+        )
+        moved = _artifact(
+            attachment_id="attachment-1",
+            local_path="/second/staging/result.bin",
+        )
+
+        self.assertEqual(
+            stable_artifact_identity(message, first),
+            stable_artifact_identity(message, moved),
+        )
+
+
+class ChannelArtifactDeliveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_permanent_failure_is_recorded_and_does_not_block_suffix(self) -> None:
+        first = _artifact(attachment_id="first", filename="first.bin")
+        second = _artifact(attachment_id="second", filename="second.bin")
+        message = _message(first, second)
+        attempts: list[str] = []
+
+        async def send_one(artifact: OutboundArtifact) -> ArtifactDeliveryReceipt:
+            attempts.append(artifact.attachment_id)
+            if artifact is first:
+                raise PermanentArtifactDeliveryError("unsupported")
+            return ArtifactDeliveryReceipt(platform_message_id="native-2")
+
+        await deliver_artifact_batch(message, send_one)
+
+        self.assertEqual(attempts, ["first", "second"])
+        self.assertEqual(message.artifacts, [])
+        self.assertEqual(
+            [receipt["status"] for receipt in message.metadata["artifact_receipts"]],
+            ["failed", "delivered"],
+        )
+        self.assertIn("first.bin: unsupported", message.text)
+
+    async def test_unclassified_failure_retains_failed_and_unattempted_suffix(self) -> None:
+        first = _artifact(attachment_id="first")
+        second = _artifact(attachment_id="second")
+        third = _artifact(attachment_id="third")
+        message = _message(first, second, third)
+
+        async def send_one(artifact: OutboundArtifact) -> ArtifactDeliveryReceipt:
+            if artifact is second:
+                raise RuntimeError("outcome unknown")
+            return ArtifactDeliveryReceipt(platform_message_id="native-1")
+
+        with self.assertRaisesRegex(RuntimeError, "outcome unknown"):
+            await deliver_artifact_batch(message, send_one)
+
+        self.assertEqual(message.artifacts, [second, third])
+        self.assertEqual(
+            [receipt["attachment_id"] for receipt in message.metadata["artifact_receipts"]],
+            ["first"],
+        )
+
+    async def test_cancellation_retains_failed_and_unattempted_suffix(self) -> None:
+        first = _artifact(attachment_id="first")
+        second = _artifact(attachment_id="second")
+        message = _message(first, second)
+
+        async def send_one(artifact: OutboundArtifact) -> ArtifactDeliveryReceipt:
+            if artifact is first:
+                raise asyncio.CancelledError
+            raise AssertionError("unattempted artifact was submitted")
+
+        with self.assertRaises(asyncio.CancelledError):
+            await deliver_artifact_batch(message, send_one)
+
+        self.assertEqual(message.artifacts, [first, second])
+
+    async def test_trusted_root_read_verifies_containment_size_and_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "trusted"
+            root.mkdir()
+            source = root / "result.bin"
+            source.write_bytes(b"safe")
+            digest = hashlib.sha256(b"safe").hexdigest()
+            artifact = _artifact(
+                local_path=str(source),
+                size_bytes=4,
+                sha256=digest,
+            )
+
+            resolved, content = await read_managed_artifact(artifact, root=root)
+            self.assertEqual(resolved, source.resolve())
+            self.assertEqual(content, b"safe")
+
+            outside = Path(directory) / "outside.bin"
+            outside.write_bytes(b"safe")
+            with self.assertRaisesRegex(PermanentArtifactDeliveryError, "trusted root"):
+                await read_managed_artifact(
+                    _artifact(local_path=str(outside), size_bytes=4, sha256=digest),
+                    root=root,
+                )
+            with self.assertRaisesRegex(PermanentArtifactDeliveryError, "no longer exists"):
+                await read_managed_artifact(
+                    _artifact(local_path=str(root / "missing.bin")),
+                    root=root,
+                )
+            directory_source = root / "directory.bin"
+            directory_source.mkdir()
+            with self.assertRaisesRegex(PermanentArtifactDeliveryError, "regular file"):
+                await read_managed_artifact(
+                    _artifact(local_path=str(directory_source)),
+                    root=root,
+                )
+            with self.assertRaisesRegex(PermanentArtifactDeliveryError, "changed"):
+                await read_managed_artifact(
+                    _artifact(local_path=str(source), size_bytes=5, sha256=digest),
+                    root=root,
+                )
+            with self.assertRaisesRegex(PermanentArtifactDeliveryError, "changed"):
+                await read_managed_artifact(
+                    _artifact(local_path=str(source), size_bytes=4, sha256="0" * 64),
+                    root=root,
+                )
+
+
+def _artifact(
+    *,
+    attachment_id: str = "attachment-1",
+    local_path: str = "/trusted/result.bin",
+    filename: str = "result.bin",
+    size_bytes: int = 4,
+    sha256: str = "digest",
+) -> OutboundArtifact:
+    return OutboundArtifact(
+        kind="file",
+        local_path=local_path,
+        content_type="application/octet-stream",
+        filename=filename,
+        size_bytes=size_bytes,
+        sha256=sha256,
+        attachment_id=attachment_id,
+    )
+
+
+def _message(*artifacts: OutboundArtifact) -> OutboundMessage:
+    return OutboundMessage(
+        channel_id="qq",
+        conversation_id="chat-1",
+        message_type="agent",
+        text="result",
+        metadata={"delivery_id": "delivery-1"},
+        artifacts=list(artifacts),
+    )
 
 
 if __name__ == "__main__":

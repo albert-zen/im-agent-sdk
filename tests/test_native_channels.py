@@ -10,12 +10,6 @@ from typing import Any, cast
 from unittest.mock import patch
 
 from imagent.channels import NativeTransportChannelAdapter, channel_from_config
-from imagent.channels.native.artifacts import (
-    delivered_artifact_message_ids,
-    record_artifact_delivery,
-    record_artifact_failure,
-    stable_artifact_identity,
-)
 from imagent.channels.native.base import BaseChannelAdapter
 from imagent.contracts import (
     AttachmentContent,
@@ -44,7 +38,11 @@ from imagent.interaction.channels.ingress import ChannelAccessPolicy, InboundMes
 from imagent.interaction.channels.outbound_delivery import (
     NativeDeliveryResult,
     OutboundArtifact,
+    delivered_artifact_message_ids,
+    record_artifact_delivery,
+    record_artifact_failure,
     split_text,
+    stable_artifact_identity,
 )
 from imagent.interaction.channels.outbound_delivery import (
     OutboundMessage as NativeOutboundMessage,

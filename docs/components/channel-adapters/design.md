@@ -65,6 +65,13 @@ SDK `attachment_id`. Successful and permanently failed uploads become typed
 without parsing adapter Metadata. Stable artifact idempotency derives from the
 root delivery ID plus attachment ID, not a temporary local path.
 
+Those shared batch, receipt, identity, and caller-managed trusted-root read
+helpers belong to Interaction outbound delivery. Adapters supply only the
+provider-specific `send_one` operation. A retained in-memory artifact suffix
+after cancellation or an unclassified exception describes the current native
+attempt; it is not an SDK durable outbox or permission to replay an ambiguous
+effect.
+
 The current native transports accept outbound attachments only after a
 consumer or delivery component has materialized them as an explicit
 `LocalPath` in a filesystem namespace trusted by that Channel instance.
@@ -72,7 +79,8 @@ consumer or delivery component has materialized them as an explicit
 dropped. The optional proactive ingress materializes inline bytes into this
 trusted `LocalPath` boundary. Common segmentation/grouping and ordered bounded
 execution are defined by ADR 0010; native throttling and response mapping stay
-here.
+here. Bytes, root lifetime, product quota, ledger, startup sweep, and crash-safe
+cleanup remain caller/consumer-owned.
 
 Completed Agent messages are the default IM unit. Token-by-token native
 messages are not a common requirement.

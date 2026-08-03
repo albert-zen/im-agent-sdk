@@ -15,13 +15,6 @@ from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 import httpx
 
-from ....channels.native.artifacts import (
-    ArtifactDeliveryReceipt,
-    PermanentArtifactDeliveryError,
-    deliver_artifact_batch,
-    delivered_artifact_message_ids,
-    read_managed_artifact,
-)
 from ....channels.native.base import BaseChannelAdapter
 from ....channels.native.media import (
     MAX_FILE_COUNT,
@@ -33,9 +26,14 @@ from ....channels.native.media import (
 )
 from ..ingress import ChannelAccessPolicy, InboundMessage
 from ..outbound_delivery import (
+    ArtifactDeliveryReceipt,
     NativeDeliveryResult,
     OutboundArtifact,
     OutboundMessage,
+    PermanentArtifactDeliveryError,
+    deliver_artifact_batch,
+    delivered_artifact_message_ids,
+    read_managed_artifact,
     split_text,
 )
 from .diagnostics import emit_event
@@ -498,7 +496,7 @@ class TelegramChannelAdapter(BaseChannelAdapter):
         return NativeDeliveryResult(tuple(message_ids))
 
     def validate_outbound_message(self, message: OutboundMessage) -> None:
-        """Reject malformed routes before they enter the durable retry outbox."""
+        """Reject malformed routes before the current native delivery attempt."""
 
         self._parse_conversation_id(message.conversation_id)
 
