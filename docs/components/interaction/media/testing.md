@@ -41,6 +41,13 @@ local shared-root trust, and generic-file byte/type validation cases. Proactive 
 Channel I/O, and Application materialization cases remain with their owning
 components; they are not moved merely because they consume typed media.
 
+`tests/interaction/test_media_staging.py` owns the pure inline-staging cases:
+decoded-byte bounds, declared-size equality, invalid base64, private-directory
+confinement, SDK-controlled filenames, stable digest metadata, and source
+order. Gateway ingress tests continue to own authorization-before-decode,
+synchronous send/cancellation join, cleanup, route/result mapping, and CLI
+loopback policy.
+
 Native Channel and Application suites remain responsible for their provider
 media I/O and materialization behavior. During the mechanical move, shared
 source/trust cases move once to `tests/interaction/test_media.py`; owner-

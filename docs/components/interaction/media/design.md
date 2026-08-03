@@ -108,17 +108,22 @@ The mechanical target is:
 
 ```text
 src/imagent/interaction/media.py
+src/imagent/interaction/media_staging.py
 tests/interaction/test_media.py
+tests/interaction/test_media_staging.py
 ```
 
 The deliberate `imagent.contracts` public facade re-exports the exact media
 objects from this leaf. Repository runtime imports use the owning leaf, and
 the obsolete `imagent.attachments` internal module is not retained. Inline
-artifact staging remains physically in Gateway proactive ingress for now and
-is an explicit remaining split: a later mechanical slice may extract its pure
-bounded staging mechanics without moving authorization, delivery, or cleanup
-lifetime into Interaction. No phase retains a second implementation or
-introduces an SDK durable spool.
+artifact staging now has its pure bounded filesystem mechanics in
+`interaction.media`: a typed encoded-artifact value, decoded-byte validation,
+private-directory creation, digest/path-safe writes, and staged
+`AttachmentContent` construction. Gateway proactive ingress still owns JSON
+parsing, authorization order, delivery, cancellation join, synchronous
+cleanup lifetime, and result mapping. The Interaction helper cannot authorize,
+submit, retain, or delete a staged attempt. No phase retains a second
+implementation or introduces an SDK durable spool.
 
 Shared generic-file detection also lives in this leaf. It accepts the same
 explicit extension allowlist as before, rejects NUL/non-UTF-8 text, and checks
