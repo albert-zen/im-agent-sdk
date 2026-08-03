@@ -87,14 +87,15 @@ composition root and may call both lower-facing contract surfaces; neither
 lower layer calls Gateway implementation. Test helpers depend on public
 contracts, never the reverse.
 
-The precise current import graph and allowed edges are documented in
+The precise current import-resolution rules and allowed component edges are documented in
 [dependency rules](architecture/dependency-rules.md) and enforced by
 `python scripts/agentkit.py lint-architecture`.
 
 The component map is the ownership authority for both navigation and the
-target import graph. During the mechanical rollout, lint may temporarily use
-the current paths recorded by that map; any exception must be explicit rather
-than inferred from a broad source catch-all.
+target import graph. During the mechanical rollout, lint resolves current
+imports through the owners and public exports recorded by that map. Split
+candidates provide candidate owner pairings, never an automatic exemption;
+any cross-layer exception remains exact and explicit.
 
 ## Authority and persistence
 

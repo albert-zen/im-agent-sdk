@@ -11,7 +11,8 @@ component.
 It owns:
 
 - root `AGENTS.md` as a short map;
-- `agentkit.yml` component/layer/impact configuration;
+- `agentkit.yml` component-routing and impact configuration;
+- the machine-readable component ownership/dependency/import-lint map;
 - the pinned repo-local AgentKit launcher and plugin;
 - documentation navigation and dependency-rule docs;
 - CI verification, provenance policy, and future roadmap placement;
@@ -43,7 +44,16 @@ global executable and keeps clean checkouts reproducible. It selects UTF-8
 mode for the AgentKit child process so Windows check output is not decoded
 through a locale-specific code page.
 
-Current AgentKit v1 has two honest limitations:
+`agentkit.yml` does not carry a second import-layer graph. Before delegating
+`check` or `lint-architecture` to AgentKit, the repository launcher validates
+actual `src/imagent` imports against `docs/components/component-map.yml`.
+Exact public-symbol ownership takes precedence over a split module's owner
+set; split candidates require an explicit owner/dependency pairing; declared
+formal facades may only re-export mapped symbols; exact current-path
+exceptions must match a live import. Unknown modules, forbidden edges, cycles,
+ownership drift, and unused exceptions fail the gate.
+
+Current AgentKit v1 has three honest limitations:
 
 - component path matching uses one `code` field for source and tests;
 - global design/workflow docs are first-class, but arbitrary global intent
@@ -100,4 +110,5 @@ budgets so they cannot silently regrow to the client or adapter ceiling.
 
 A budget change must include before-and-after metrics, the responsibility or
 invariant that justifies the result, zero maintainability warnings, mapping and
-layer checks, focused behavior tests, and the full repository verification.
+component-import checks, focused behavior tests, and the full repository
+verification.
