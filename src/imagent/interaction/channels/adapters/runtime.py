@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
-from ....channels.native.base import ChannelRouteContext
 from ....contracts import (
     ChannelCapabilities,
     DeliveryItemReceipt,
@@ -37,6 +36,7 @@ from ..outbound_delivery import (
 from ..outbound_delivery import (
     OutboundMessage as NativeOutboundMessage,
 )
+from .base import ChannelRouteContext
 from .diagnostics import NativeChannelDiagnosticSnapshot, NativeConnectionDiagnosticSnapshot
 
 

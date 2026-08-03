@@ -10,7 +10,6 @@ from typing import Any, cast
 from unittest.mock import patch
 
 from imagent.channels import NativeTransportChannelAdapter, channel_from_config
-from imagent.channels.native.base import BaseChannelAdapter
 from imagent.contracts import (
     AttachmentContent,
     ConversationRef,
@@ -26,6 +25,7 @@ from imagent.interaction.channels import (
     ChannelStartupConfigurationValidator,
     InboundAdmission,
 )
+from imagent.interaction.channels.adapters.base import BaseChannelAdapter
 from imagent.interaction.channels.adapters.diagnostics import (
     NativeChannelDiagnosticState,
     NativeConnectionDiagnosticSnapshot,
@@ -1051,7 +1051,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
             prepared = True
             return message
 
-        with self.assertLogs("imagent.channels.native.base", level="WARNING"):
+        with self.assertLogs("imagent.interaction.channels.adapters.base", level="WARNING"):
             await adapter.dispatch_inbound(
                 InboundMessage(
                     channel_id="test",

@@ -16,7 +16,6 @@ from urllib.parse import quote, urlsplit
 
 import httpx
 
-from ....channels.native.base import BaseChannelAdapter
 from ....channels.native.media import (
     MAX_FILE_BYTES,
     MAX_FILE_COUNT,
@@ -42,6 +41,7 @@ from ..outbound_delivery import (
     split_text,
     stable_artifact_identity,
 )
+from .base import BaseChannelAdapter
 from .diagnostics import (
     NativeConnectionDiagnosticSnapshot,
     NativeQueueDiagnosticSnapshot,

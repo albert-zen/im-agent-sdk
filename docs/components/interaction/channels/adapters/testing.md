@@ -42,3 +42,10 @@ state objects, transition/epoch/reconnect behavior remains bounded and
 side-effect-free, and the historical native diagnostics path is absent in a
 clean process. Existing four-provider and Gateway diagnostics tests remain the
 behavioral conformance suite.
+
+Base ownership tests prove `BaseChannelAdapter` and `ChannelRouteContext` are
+defined only by the Interaction adapters leaf, every provider and the runtime
+wrapper use those exact owner objects, and the historical
+`imagent.channels.native.base` module is absent in a clean process. Existing
+native Channel, access-policy, diagnostics, ingress, outbound, and Gateway
+vertical tests remain the behavior-preservation suite for the mechanical move.
