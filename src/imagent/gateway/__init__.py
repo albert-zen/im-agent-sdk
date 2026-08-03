@@ -70,7 +70,6 @@ from ..delivery_outcomes import (
 from ..delivery_outcomes import (
     DeliveryOutcomeObserverRuntime,
 )
-from ..delivery_planning import DeliveryPlanningError
 from ..diagnostics import (
     DiagnosticsSnapshot,
     GatewayDiagnosticFacts,
@@ -139,6 +138,7 @@ from ..projections import (
 )
 from ..request_correlations import InMemoryRequestCorrelationRepository
 from ..storage import InMemoryIdempotencyRepository
+from .delivery.planning import DeliveryPlanningError
 
 logger = logging.getLogger(__name__)
 
