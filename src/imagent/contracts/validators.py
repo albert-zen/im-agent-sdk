@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 
+from ..interaction.messages import ConversationRef
 from ..interaction.operations import ContractViolation, require_identifier
 from ._validation import validate_thread_ref
 from .model import (
@@ -10,7 +11,6 @@ from .model import (
     AgentEventType,
     ApplicationCapabilities,
     ConversationBinding,
-    ConversationRef,
     EventSequenceScope,
     ProjectMode,
     SupportLevel,

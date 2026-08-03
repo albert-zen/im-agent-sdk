@@ -28,7 +28,6 @@ from .contracts import (
     ClearConversationThread,
     ConversationBinding,
     ConversationBound,
-    ConversationRef,
     CreateThread,
     DeliveryIntent,
     DeliverySubmissionState,
@@ -38,10 +37,8 @@ from .contracts import (
     GatewayOperationResult,
     GetProject,
     GetThread,
-    InboundMessage,
     ListApplications,
     ObserveThread,
-    OutboundMessage,
     ProactiveDeliveryResult,
     ProjectionPolicy,
     ProjectMode,
@@ -55,8 +52,6 @@ from .contracts import (
     RespondRequest,
     RespondToRequest,
     SelectApplication,
-    TextContent,
-    TextFormat,
     ThreadCreated,
     ThreadObserved,
     ThreadRead,
@@ -103,6 +98,13 @@ from .inbound_content import InboundContentTransformRuntime
 from .inbound_failures import InboundFailurePhase as InboundFailurePhase
 from .inbound_failures import InboundFailurePresentationRuntime, handle_claimed_inbound
 from .inbound_failures import InboundFailurePresenter as InboundFailurePresenter
+from .interaction.messages import (
+    ConversationRef,
+    InboundMessage,
+    OutboundMessage,
+    TextContent,
+    TextFormat,
+)
 from .interaction.operations import (
     ContractError,
     ContractViolation,

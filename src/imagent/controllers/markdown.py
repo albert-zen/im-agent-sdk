@@ -5,16 +5,13 @@ from datetime import UTC, datetime
 from ..contracts import (
     AgentMessage,
     ApplicationSummary,
-    InboundMessage,
-    OutboundMessage,
     ProjectSummary,
-    TextContent,
-    TextFormat,
     ThreadHistory,
     ThreadSummary,
     TurnCatchup,
     TurnStatus,
 )
+from ..interaction.messages import InboundMessage, OutboundMessage, TextContent, TextFormat
 
 _HISTORY_TEXT_LIMIT = 1_200
 _CATCHUP_TEXT_LIMIT = 800

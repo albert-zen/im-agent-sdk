@@ -7,12 +7,12 @@ from .adapters import ProjectionCheckpointConflict, ProjectionRouteConflict
 from .contracts import (
     ApplicationRef,
     ConversationBinding,
-    ConversationRef,
     ProjectRef,
     ThreadProjectionRoute,
     ThreadRef,
     TurnReplyCorrelation,
 )
+from .interaction.messages import ConversationRef
 
 
 def binding_from_row(row: sqlite3.Row) -> ConversationBinding:

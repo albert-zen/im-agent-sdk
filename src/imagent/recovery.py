@@ -12,7 +12,6 @@ from .contracts import (
     ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,
-    ConversationRef,
     GetThreadHistory,
     GetTurnCatchup,
     SupportLevel,
@@ -24,6 +23,7 @@ from .contracts import (
     TurnCatchupRead,
 )
 from .events import CursorExpired
+from .interaction.messages import ConversationRef
 from .projections import (
     AuthoritativeProjectionSlice,
     ProjectedAgentMessage,

@@ -13,14 +13,13 @@ from .contracts import (
     DeliveryItemReceipt,
     DeliveryReceipt,
     DeliverySegmentReceipt,
-    OutboundMessage,
-    TextContent,
 )
 from .diagnostics import (
     DeliveryOutcomeObserverDiagnosticFacts,
     DeliveryOutcomeObserverFailureCode,
 )
 from .interaction.media import AttachmentContent, AttachmentHandle, LocalPath, RemoteUrl
+from .interaction.messages import OutboundMessage, TextContent
 
 
 class DeliveryOutcomeErrorCode(StrEnum):

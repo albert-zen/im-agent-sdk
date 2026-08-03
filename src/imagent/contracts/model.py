@@ -1,18 +1,22 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import Generic, TypeAlias, TypeVar
 
 from ..interaction.media import (
-    AttachmentContent,
     AttachmentGrouping,
     AttachmentSourceKind,
 )
+from ..interaction.messages import (
+    Content,
+    ConversationRef,
+    MessageRole,
+    Metadata,
+    TextLengthUnit,
+)
 
-Metadata: TypeAlias = Mapping[str, object]
 T = TypeVar("T")
 
 
@@ -38,12 +42,6 @@ class ThreadRef:
     application_instance_id: str
     native_thread_id: str
     project_ref: ProjectRef | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class ConversationRef:
-    channel_instance_id: str
-    native_conversation_id: str
 
 
 class SupportLevel(StrEnum):
@@ -129,12 +127,6 @@ class ThreadDeletionCapability(StrEnum):
     UNSUPPORTED = "unsupported"
     ARCHIVE = "archive"
     PERMANENT = "permanent"
-
-
-class TextLengthUnit(StrEnum):
-    CODE_POINTS = "code_points"
-    UTF16_CODE_UNITS = "utf16_code_units"
-    UTF8_BYTES = "utf8_bytes"
 
 
 class ReplyReferenceScope(StrEnum):
@@ -277,48 +269,6 @@ class ThreadSummary:
     status: ThreadStatus
     title: str | None = None
     updated_at: datetime | None = None
-    metadata: Metadata = field(default_factory=dict)
-
-
-class TextFormat(StrEnum):
-    PLAIN = "plain"
-    MARKDOWN = "markdown"
-
-
-@dataclass(frozen=True, slots=True)
-class TextContent:
-    text: str
-    format: TextFormat = TextFormat.PLAIN
-
-
-Content: TypeAlias = TextContent | AttachmentContent
-
-
-class MessageRole(StrEnum):
-    USER = "user"
-    ASSISTANT = "assistant"
-    SYSTEM = "system"
-    TOOL = "tool"
-
-
-@dataclass(frozen=True, slots=True)
-class InboundMessage:
-    message_id: str
-    conversation_ref: ConversationRef
-    sender: str
-    content: tuple[Content, ...]
-    created_at: datetime
-    reply_to: str | None = None
-    metadata: Metadata = field(default_factory=dict)
-
-
-@dataclass(frozen=True, slots=True)
-class OutboundMessage:
-    delivery_id: str
-    conversation_ref: ConversationRef
-    content: tuple[Content, ...]
-    created_at: datetime
-    reply_to: str | None = None
     metadata: Metadata = field(default_factory=dict)
 
 

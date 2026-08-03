@@ -11,7 +11,6 @@ from typing import Protocol
 from .adapters import RequestCorrelationConflict
 from .contracts import (
     ApplicationRef,
-    ConversationRef,
     ProjectRef,
     RequestRef,
     RequestRouteCorrelation,
@@ -19,6 +18,7 @@ from .contracts import (
     ThreadRef,
     validate_request_route_correlation,
 )
+from .interaction.messages import ConversationRef
 
 
 class InMemoryRequestCorrelationRepository:

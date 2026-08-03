@@ -21,12 +21,14 @@ components:
       # Source and schemas.
       - src/imagent/contracts/**
       - src/imagent/interaction/__init__.py
+      - src/imagent/interaction/messages.py
       - src/imagent/interaction/operations.py
       - schemas/v1/**
       - scripts/validate_schemas.py
       # Tests.
       - tests/test_contracts.py
       - tests/interaction/__init__.py
+      - tests/interaction/test_messages.py
       - tests/interaction/test_operations.py
     docs:
       - docs/components/interaction/README.md

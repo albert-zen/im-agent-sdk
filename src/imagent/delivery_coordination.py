@@ -6,14 +6,12 @@ from dataclasses import dataclass
 
 from .adapters import ChannelAdapter
 from .contracts import (
-    ConversationRef,
     DeliveryItemReceipt,
     DeliveryItemStatus,
     DeliveryReceipt,
     DeliveryReceiptStatus,
     DeliverySegmentReceipt,
     DeliverySegmentStatus,
-    OutboundMessage,
     validate_delivery_receipt_for_content,
 )
 from .delivery_planning import (
@@ -23,6 +21,7 @@ from .delivery_planning import (
     PlannedDeliverySegment,
 )
 from .interaction.media import AttachmentContent
+from .interaction.messages import ConversationRef, OutboundMessage
 from .keyed_locks import KeyedLockRegistry
 
 

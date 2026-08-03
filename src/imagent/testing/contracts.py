@@ -21,18 +21,15 @@ from imagent.contracts import (
     GetThreadHistory,
     GetThreadStatus,
     GetTurnCatchup,
-    InboundMessage,
     InputContinuationPreference,
     InputDisposition,
     ListProjects,
     ListThreads,
     NativeThreadActivated,
-    OutboundMessage,
     ProjectMode,
     ProjectRead,
     ProjectsListed,
     SupportLevel,
-    TextContent,
     ThreadCreated,
     ThreadDeleted,
     ThreadDeletionCapability,
@@ -49,6 +46,7 @@ from imagent.contracts import (
     validate_application_operation_result,
     validate_thread_ref,
 )
+from imagent.interaction.messages import InboundMessage, OutboundMessage, TextContent
 
 
 @dataclass(frozen=True, slots=True)
@@ -411,7 +409,7 @@ async def _collect_turn_events(
 
 
 def sample_conversation():
-    from imagent.contracts import ConversationRef
+    from imagent.interaction.messages import ConversationRef
 
     return ConversationRef(
         channel_instance_id="contract-channel",

@@ -17,17 +17,15 @@ from typing import Protocol
 from .adapters import DeliverySubmissionConflict
 from .contracts import (
     ConversationDeliveryTarget,
-    ConversationRef,
     DeliveryIntent,
     DeliveryTarget,
     ProactiveDeliveryResult,
     ProjectRef,
-    TextContent,
-    TextFormat,
     ThreadRef,
     ThreadRouteDeliveryTarget,
 )
 from .interaction.media import AttachmentContent, LocalPath
+from .interaction.messages import ConversationRef, TextContent, TextFormat
 from .interaction.operations import ContractViolation
 from .keyed_locks import KeyedLockRegistry
 from .proactive_delivery import DeliveryAuthorizationError, DeliveryRouteError

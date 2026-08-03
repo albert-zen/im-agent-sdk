@@ -7,13 +7,11 @@ from ..contracts import (
     ApplicationOperation,
     ApplicationOperationResult,
     ConversationBinding,
-    ConversationRef,
     GatewayOperation,
     GatewayOperationResult,
-    InboundMessage,
     InteractiveRequest,
-    OutboundMessage,
 )
+from ..interaction.messages import ConversationRef, InboundMessage, OutboundMessage
 
 
 class ControllerActions(Protocol):

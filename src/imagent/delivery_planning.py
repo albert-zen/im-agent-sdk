@@ -6,17 +6,19 @@ import re
 from dataclasses import dataclass
 
 from .contracts import (
-    Content,
-    ConversationRef,
     DeliveryProfile,
-    OutboundMessage,
     ReplyReferenceScope,
     SupportLevel,
+)
+from .interaction.media import AttachmentContent, AttachmentGrouping, LocalPath
+from .interaction.messages import (
+    Content,
+    ConversationRef,
+    OutboundMessage,
     TextContent,
     TextFormat,
     TextLengthUnit,
 )
-from .interaction.media import AttachmentContent, AttachmentGrouping, LocalPath
 
 
 class DeliveryPlanningError(ValueError):

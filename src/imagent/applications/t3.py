@@ -40,7 +40,6 @@ from ..contracts import (
     InterruptTurn,
     ListProjects,
     ListThreads,
-    MessageRole,
     Page,
     ProjectCapabilities,
     ProjectMode,
@@ -51,8 +50,6 @@ from ..contracts import (
     RespondRequest,
     RuntimeCapabilities,
     SupportLevel,
-    TextContent,
-    TextFormat,
     ThreadCapabilities,
     ThreadCreated,
     ThreadDeleted,
@@ -83,6 +80,7 @@ from ..interaction.media import (
     configure_shared_filesystem_root,
     resolve_local_attachment,
 )
+from ..interaction.messages import MessageRole, TextContent, TextFormat
 from ..interaction.operations import operation_error
 from .presentation import (
     ApplicationPresentationCapacityError,

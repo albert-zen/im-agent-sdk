@@ -20,16 +20,13 @@ from .adapters import (
 )
 from .contracts import (
     AgentMessage,
-    ConversationRef,
-    OutboundMessage,
-    TextContent,
-    TextFormat,
     ThreadProjectionRoute,
     ThreadRef,
     TurnReplyCorrelation,
     validate_projection_route,
     validate_turn_reply_correlation,
 )
+from .interaction.messages import ConversationRef, OutboundMessage, TextContent, TextFormat
 from .outbound_presentation import (
     OutboundPresentationContext,
     ProjectionPresentationOrigin,

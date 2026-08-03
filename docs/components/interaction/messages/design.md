@@ -84,10 +84,10 @@ than deduplicate by content or time.
 
 ## Current and target structure
 
-Current message values are physically mixed with Application, Gateway,
-capability, and request values in `src/imagent/contracts/model.py`; the
-language-neutral message schema also contains Application input values. These
-paths are declared split candidates, not multi-owner components.
+The dependency-safe mechanical phase moves `ConversationRef`, text/content
+values, `InboundMessage`, and `OutboundMessage` to the owning leaf first. The
+language-neutral message schema remains a cross-owner document and no schema
+shape changes.
 
 The mechanical target is:
 
@@ -96,10 +96,17 @@ src/imagent/interaction/messages.py
 tests/interaction/test_messages.py
 ```
 
-The later move must preserve the deliberate public facade, schema meaning, and
-exact symbol ownership recorded in the component map. It must not retain a
-second implementation or use an import cycle to make Interaction depend on an
-Application or Gateway implementation.
+`AgentMessage` remains one implementation in the declared mixed
+`src/imagent/contracts/model.py` during this phase because its strongly typed
+`ThreadRef` is Applications-owned. Moving it early would create a target
+Interaction/Applications dependency cycle, weaken that field, or duplicate a
+resource contract. The Applications contract slice must separate the resource
+reference boundary before the final Agent envelope move; this is an explicit
+structural gap, not a compatibility implementation.
+
+The deliberate `imagent.contracts` public facade re-exports exact owner
+objects throughout. Repository runtime imports use the extracted foundation,
+and no phase changes schema meaning or retains a second implementation.
 
 ## Authority
 
