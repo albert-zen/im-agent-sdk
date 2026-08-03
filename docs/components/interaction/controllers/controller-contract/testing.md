@@ -36,6 +36,8 @@ PYTHONPATH=src python -m unittest \
   tests.test_projection_hardening -v
 ```
 
-After the physical move, contract-focused cases move to
-`tests/interaction/controllers/test_contract.py` and architecture lint must
-prove that the owning leaf imports no Gateway or Application implementation.
+Exact facade identity and owner placement are tested in
+`tests/interaction/controllers/test_contract.py`. Architecture lint must prove
+that the owning leaf imports no Gateway or Application implementation. The
+existing Gateway/Slash suites remain behavior parity evidence until their
+focused owners move.

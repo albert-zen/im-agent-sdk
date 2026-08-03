@@ -9,10 +9,11 @@ from .adapters import (
     ProjectionRouteRepository,
     RequestCorrelationRepository,
 )
-from .controllers import InboundController, RequestPresenter
+from .controllers import RequestPresenter
 from .delivery_outcomes import DeliveryOutcomeObserver
 from .inbound_content import InboundContentTransformer
 from .inbound_failures import InboundFailurePresenter
+from .interaction.controllers import InboundController
 from .outbound_presentation import OutboundPresentationPolicy
 
 

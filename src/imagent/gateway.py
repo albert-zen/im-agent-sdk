@@ -63,7 +63,6 @@ from .contracts import (
     validate_gateway_operation_result,
     validate_request_response,
 )
-from .controllers import ControllerActions
 from .delivery_coordination import DeliveryCoordinator
 from .delivery_outcomes import (
     DeliveryOutcomeObserver as DeliveryOutcomeObserver,
@@ -98,6 +97,7 @@ from .inbound_content import InboundContentTransformRuntime
 from .inbound_failures import InboundFailurePhase as InboundFailurePhase
 from .inbound_failures import InboundFailurePresentationRuntime, handle_claimed_inbound
 from .inbound_failures import InboundFailurePresenter as InboundFailurePresenter
+from .interaction.controllers import ControllerActions
 from .interaction.messages import (
     ConversationRef,
     InboundMessage,
