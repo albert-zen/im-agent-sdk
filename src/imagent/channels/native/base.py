@@ -8,16 +8,16 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from threading import Lock
 
-from ...interaction.channels.ingress import ChannelAccessPolicy, InboundMessage
-from ...interaction.channels.outbound_delivery import (
-    NativeDeliveryResult,
-    OutboundMessage,
-)
-from .diagnostics import (
+from ...interaction.channels.adapters.diagnostics import (
     NativeChannelDiagnosticState,
     NativeConnectionDiagnosticSnapshot,
     emit_event,
     mark_channel_health,
+)
+from ...interaction.channels.ingress import ChannelAccessPolicy, InboundMessage
+from ...interaction.channels.outbound_delivery import (
+    NativeDeliveryResult,
+    OutboundMessage,
 )
 
 logger = logging.getLogger(__name__)

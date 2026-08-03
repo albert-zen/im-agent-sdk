@@ -16,7 +16,6 @@ from ....channels.native.artifacts import (
     stable_artifact_identity,
 )
 from ....channels.native.base import BaseChannelAdapter
-from ....channels.native.diagnostics import emit_event
 from ....channels.native.media import (
     MAX_FILE_COUNT,
     MAX_IMAGE_COUNT,
@@ -32,6 +31,7 @@ from ..outbound_delivery import (
     OutboundMessage,
     split_text,
 )
+from .diagnostics import emit_event
 from .weixin_ilink import (
     ILinkError,
     WeixinFileReference,

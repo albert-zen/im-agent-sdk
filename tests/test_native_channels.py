@@ -17,10 +17,6 @@ from imagent.channels.native.artifacts import (
     stable_artifact_identity,
 )
 from imagent.channels.native.base import BaseChannelAdapter
-from imagent.channels.native.diagnostics import (
-    NativeChannelDiagnosticState,
-    NativeConnectionDiagnosticSnapshot,
-)
 from imagent.contracts import (
     AttachmentContent,
     ConversationRef,
@@ -35,6 +31,10 @@ from imagent.diagnostics import ConnectionDiagnosticState, QueueDiagnosticName
 from imagent.interaction.channels import (
     ChannelStartupConfigurationValidator,
     InboundAdmission,
+)
+from imagent.interaction.channels.adapters.diagnostics import (
+    NativeChannelDiagnosticState,
+    NativeConnectionDiagnosticSnapshot,
 )
 from imagent.interaction.channels.adapters.weixin_state import (
     WeixinCredentials,

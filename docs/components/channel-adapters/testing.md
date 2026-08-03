@@ -35,6 +35,8 @@ type and call-shape error rather than a falsely advertised capability.
 ADR 0014 diagnostics tests cover lifecycle transitions for all four native
 Channels, bounded QQ/Feishu inbound queue facts, configured identity pinning,
 provider failure/invalid-shape fallback, and repeated side-effect-free reads.
+Target ownership tests additionally cover the immutable fact shapes, bounded
+state transitions, and removal of the historical native diagnostics module.
 
 Ownership tests also require the Interaction runtime objects and formal
 `imagent.channels` facade to be object-identical, keep provider imports lazy,

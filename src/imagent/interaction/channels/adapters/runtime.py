@@ -12,10 +12,6 @@ from typing import Protocol
 
 from ....adapters import OperationHandler
 from ....channels.native.base import ChannelRouteContext
-from ....channels.native.diagnostics import (
-    NativeChannelDiagnosticSnapshot,
-    NativeConnectionDiagnosticSnapshot,
-)
 from ....contracts import (
     ChannelCapabilities,
     DeliveryItemReceipt,
@@ -42,6 +38,7 @@ from ..outbound_delivery import (
 from ..outbound_delivery import (
     OutboundMessage as NativeOutboundMessage,
 )
+from .diagnostics import NativeChannelDiagnosticSnapshot, NativeConnectionDiagnosticSnapshot
 
 
 class NativeChannel(Protocol):

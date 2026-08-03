@@ -125,6 +125,11 @@ native I/O. QQ and Feishu report their bounded inbound queue, while Telegram
 and Weixin report none. This is not startup validation or an ADR 0015 message
 extension.
 
+The native Channel fact/state implementation lives with the Interaction
+adapter owner. It is distinct from the public Gateway aggregate diagnostic
+vocabulary and from media staging debug logs; no compatibility implementation
+remains under the historical native package.
+
 Native behavior and limitations are documented separately:
 
 - [QQ](adapters/qq.md)

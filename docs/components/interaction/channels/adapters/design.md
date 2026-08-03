@@ -33,6 +33,13 @@ or the adapter facade does not import native SDKs. Every worker/queue/cache and
 reconnect delay is finite, failures are explicit, and no consumer work runs on
 a provider socket-read callback.
 
+`diagnostics.py` owns the immutable native queue/connection/Channel facts, the
+bounded process-local transport state, and adapter event/health debug emission.
+It performs no I/O, callbacks, persistence, export, or operator policy. Media
+staging keeps its own non-authoritative debug emission rather than importing a
+concrete-adapter owner from the ingress leaf. The historical native diagnostics
+module is removed without a compatibility path.
+
 QQ quote normalization remains QQ-specific bounded untrusted content and does
 not become a common message/resource contract. Weixin credential/cursor state
 remains native Channel state, not Gateway persistence.
@@ -42,10 +49,10 @@ QQ, Telegram, Feishu/Lark, and Weixin provider modules plus the shared
 QQ/Telegram HTTP endpoint validator.
 The validator remains adapter-internal: it validates provider configuration
 without opening a transport and is not part of the Channel facade. All four
-providers temporarily import the same shared base, media, artifact, and
-diagnostic helpers from `src/imagent/channels/native` while those independently
-reviewed boundaries remain in place. The remaining shared helpers move only in
-later focused ownership slices.
+providers temporarily import the same shared base, media, and artifact helpers
+from `src/imagent/channels/native` while those independently reviewed
+boundaries remain in place. The remaining shared helpers move only in later
+focused ownership slices.
 
 The adapters package exposes only the component-map-approved QQ adapter and
 bounded quote constants through a lazy public facade. Importing the package or

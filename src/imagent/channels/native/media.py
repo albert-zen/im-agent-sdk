@@ -21,10 +21,16 @@ from ...interaction.media import (
     UnsupportedGenericFileError,
     detect_generic_file,
 )
-from .diagnostics import emit_event
 from .windows_security import secure_windows_path
 
 logger = logging.getLogger(__name__)
+
+
+def emit_event(**event: Any) -> None:
+    """Keep media staging observable without coupling ingress to adapters."""
+
+    logger.debug("native channel event: %s", event)
+
 
 MAX_IMAGE_COUNT = 4
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
