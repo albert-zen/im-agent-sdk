@@ -341,7 +341,7 @@ components:
       - src/imagent/channels/**
       - tests/interaction/channels/**
       - tests/test_native_channels.py
-      - tests/test_channel_qq.py
+      - tests/interaction/channels/adapters/test_qq.py
       - tests/interaction/channels/adapters/test_telegram.py
       - tests/interaction/channels/adapters/test_feishu.py
       - tests/interaction/channels/adapters/test_weixin.py
@@ -604,8 +604,8 @@ maintainability:
       guidance: Keep repository protocols on one SQLite connection and transaction boundary; extract pure row mapping or an independently owned state boundary before adding more persistence behavior.
     - name: native-channel-transports
       paths:
-        - src/imagent/channels/native/qq.py
-        - src/imagent/channels/native/qq_quote.py
+        - src/imagent/interaction/channels/adapters/qq.py
+        - src/imagent/interaction/channels/adapters/qq_quote.py
         - src/imagent/interaction/channels/adapters/telegram.py
         - src/imagent/interaction/channels/adapters/feishu.py
         - src/imagent/interaction/channels/adapters/weixin.py

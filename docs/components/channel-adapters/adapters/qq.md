@@ -31,14 +31,13 @@ path supplies the provider snapshot. A caller may mimic the label as ordinary
 untrusted text, but cannot gain authority or forge a trusted snapshot because
 none exists and Metadata is ignored for this feature.
 
-## Public facade transition
+## Public facade
 
 The approved QQ adapter and bounded quote constants are available from
 `imagent.interaction.channels.adapters` through a lazy identity-preserving
-facade. This is the target public path. The historical native module remains
-only until the immediately following mechanical cluster move; it is not a
-permanent compatibility surface. Importing the Interaction adapter package
-must not eagerly load QQ or any optional provider dependency.
+facade. This is the sole public QQ path; the historical native module is
+deleted without a compatibility surface. Importing the Interaction adapter
+package must not eagerly load QQ or any optional provider dependency.
 
 ## Failure and validation
 
@@ -57,9 +56,9 @@ Conversation/message identity, media path, or exception text.
 
 ## Change checks
 
-Changes to `native/qq.py`, `native/qq_media.py`, or the shared Interaction
-adapter endpoint validator require
-`test_channel_qq.py`, the common native Channel tests, attachment tests, and
+Changes to `interaction/channels/adapters/qq.py`, `qq_media.py`, `qq_quote.py`,
+or the shared endpoint validator require
+`tests/interaction/channels/adapters/test_qq.py`, the common native Channel tests, attachment tests, and
 the adapter contract suite. Quote changes additionally require direct/group,
 missing, malformed, oversized, nested-payload, anti-forgery, and Gateway
 vertical-slice coverage.

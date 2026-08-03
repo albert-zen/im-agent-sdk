@@ -58,10 +58,10 @@ Behaviors to preserve:
 - attachment staging and platform size limits;
 - reconnect tokens that belong to the Channel adapter.
 
-The Telegram, Feishu, and Weixin provider transports plus shared HTTP endpoint
-validator now live under `src/imagent/interaction/channels/adapters/`; the remaining provider
-transports stay under `src/imagent/channels/native/` during their focused
-moves. Shared access policy lives with
+The QQ, Telegram, Feishu, and Weixin provider transports plus shared HTTP
+endpoint validator now live under `src/imagent/interaction/channels/adapters/`.
+Shared transport helpers remain under `src/imagent/channels/native/` until
+their independent ownership splits. Shared access policy lives with
 the Interaction ingress owner, and shared generic-file validation lives with
 the Interaction media owner. Shared defensive text splitting lives with
 Interaction Channel outbound delivery. Exact source-to-destination decisions,

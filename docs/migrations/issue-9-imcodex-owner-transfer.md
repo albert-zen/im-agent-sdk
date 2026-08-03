@@ -65,10 +65,9 @@ input again. Gateway persists that distinction independently of IMCodex.
 
 ## Channel transport modules
 
-Transferred provider transports are moving into
-`src/imagent/interaction/channels/adapters/`; Telegram, Feishu, and Weixin are there now, while the
-remaining providers and shared helpers still live below
-`src/imagent/channels/native/` during focused mechanical slices.
+All four transferred provider transports now live in
+`src/imagent/interaction/channels/adapters/`; only shared transport helpers
+remain below `src/imagent/channels/native/` during focused ownership slices.
 Their shared access policy now lives with the Interaction ingress owner at
 `src/imagent/interaction/channels/ingress.py`, and shared generic-file
 validation lives at `src/imagent/interaction/media.py`. Provider-native models
@@ -82,8 +81,8 @@ contracts.
 | `channels/artifacts.py` | `native/artifacts.py` | transfer native attachment-send helpers used by platform transports |
 | `channels/media.py` | `native/media.py` | transfer bounded staging/materialization; keep trust/materialization Channel-local |
 | `channels/text.py` | `interaction/channels/outbound_delivery.py` | transfer shared defensive native text splitting to Interaction outbound delivery |
-| `channels/qq_media.py` | `native/qq_media.py` | transfer QQ media upload/download behavior |
-| `channels/qq.py` | `native/qq.py` | transfer QQ transport; replace product config/path imports |
+| `channels/qq_media.py` | `interaction/channels/adapters/qq_media.py` | transfer QQ media upload/download behavior |
+| `channels/qq.py` | `interaction/channels/adapters/qq.py` | transfer QQ transport; replace product config/path imports |
 | `channels/telegram.py` | `interaction/channels/adapters/telegram.py` | transfer Telegram transport; replace product config/path imports |
 | `channels/feishu.py` | `interaction/channels/adapters/feishu.py` | transfer Feishu transport; preserve optional native SDK loading |
 | `channels/weixin_ilink.py` | `interaction/channels/adapters/weixin_ilink.py` | transfer iLink protocol/crypto transport |

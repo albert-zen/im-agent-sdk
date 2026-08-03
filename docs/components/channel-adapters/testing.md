@@ -48,7 +48,7 @@ Run the reusable Channel contract suite plus native adapter tests:
 ```sh
 PYTHONPATH=src:tests python -m unittest \
   tests.test_native_channels \
-  tests.test_channel_qq \
+  tests.interaction.channels.adapters.test_qq \
   tests.interaction.channels.adapters.test_telegram \
   tests.interaction.channels.adapters.test_feishu \
   tests.interaction.channels.adapters.test_weixin \

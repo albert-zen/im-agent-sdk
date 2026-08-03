@@ -20,10 +20,8 @@ Every built-in adapter must prove:
 
 Run the reusable contract kit, `test_native_channels.py`, all four platform
 suites, Gateway vertical tests, package-independence, wheel build, and clean
-install smoke. Telegram, Feishu, and Weixin focused tests plus endpoint-
-validator tests now mirror their source under
-`tests/interaction/channels/adapters/`; QQ tests move only with its provider
-cluster.
+install smoke. All four provider focused tests plus endpoint-validator tests
+now mirror their source under `tests/interaction/channels/adapters/`.
 
 The shared endpoint-validator test owns the exact accepted schemes and rejects
 whitespace, missing hosts, invalid ports, userinfo, query strings, and
@@ -33,6 +31,5 @@ resources.
 
 Facade tests prove the approved QQ names are exact object-identity re-exports,
 unknown names fail with `AttributeError`, and importing the adapters package or
-another provider does not eagerly import the QQ module. The follow-up QQ move
-must replace the lazy transition with direct target ownership and prove that
-the old module path is absent.
+another provider does not eagerly import the QQ module. QQ cluster tests prove
+the target module owns those objects and the old module paths are absent.

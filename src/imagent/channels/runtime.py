@@ -296,7 +296,7 @@ def channel_from_config(
     """Construct one SDK-owned native Channel transport from adapter values."""
 
     if channel_id == "qq":
-        from .native.qq import QQChannelAdapter as NativeAdapter
+        from ..interaction.channels.adapters.qq import QQChannelAdapter as NativeAdapter
     elif channel_id == "telegram":
         from ..interaction.channels.adapters.telegram import (
             TelegramChannelAdapter as NativeAdapter,
