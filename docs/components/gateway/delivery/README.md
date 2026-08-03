@@ -8,8 +8,11 @@ records only bridge identity/evidence needed for safe convergence.
 
 - [planning design](planning/design.md) and
   [testing](planning/testing.md) — pure deterministic capability planning.
+- [coordination design](coordination/design.md) and
+  [testing](coordination/testing.md) — bounded destination-ordered execution
+  and conservative receipt aggregation.
 
-Coordination, submissions, proactive delivery/authorization, and outcome
-observation remain mapped to their current authoritative documents until their
-own focused moves. Planning owns no native send, retry appetite, durable job,
-or content storage.
+Submissions, proactive delivery/authorization, and outcome observation remain
+mapped to their current authoritative documents until their own focused
+moves. Delivery planning/coordination owns no native encoding, durable job,
+content storage, route policy, or checkpoint authority.

@@ -1,7 +1,5 @@
 """Reference contracts and test kit for IM Agent SDK."""
 
-# ruff: noqa: I001 -- load the Gateway-owned planner before its legacy coordinator consumer.
-
 __version__ = "0.1.0a1"
 
 from . import (
@@ -12,8 +10,8 @@ from . import (
     projections,
     recovery,
 )
+from .gateway.delivery import coordination as delivery_coordination
 from .gateway.delivery import planning as delivery_planning
-from . import delivery_coordination
 
 __all__ = [
     "adapters",

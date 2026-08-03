@@ -676,17 +676,17 @@ components:
     outputs: [logical DeliveryReceipt]
     public_contracts: [DeliveryCoordinator, DeliveryCoordinatorConfig, DeliveryHandle]
     public_exports:
-      current: [imagent.delivery_coordination:DeliveryCoordinator, imagent.delivery_coordination:DeliveryCoordinatorConfig, imagent.delivery_coordination:DeliveryHandle]
+      current: [imagent.gateway.delivery:DeliveryCoordinator, imagent.gateway.delivery:DeliveryCoordinatorConfig, imagent.gateway.delivery:DeliveryHandle]
       target: [imagent.gateway.delivery:DeliveryCoordinator, imagent.gateway.delivery:DeliveryCoordinatorConfig, imagent.gateway.delivery:DeliveryHandle]
     dependencies: [interaction.messages, interaction.media, interaction.channels.channel-contract, interaction.channels.outbound-delivery, gateway.delivery.planning]
     state_recovery: Process-local lanes are cancelled/joined at stop; unknown outcomes never auto-retry.
-    current_code: [src/imagent/delivery_coordination.py, src/imagent/keyed_locks.py, src/imagent/gateway/__init__.py]
+    current_code: [src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/coordination.py, src/imagent/keyed_locks.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/delivery/coordination.py]
-    current_tests: [tests/gateway/delivery/test_planning.py, tests/test_delivery_outcomes.py, tests/test_gateway_vertical_slice.py]
+    current_tests: [tests/gateway/delivery/test_coordination.py, tests/test_delivery_outcomes.py, tests/test_gateway_vertical_slice.py]
     target_tests: [tests/gateway/delivery/test_coordination.py]
-    authoritative_docs: [docs/components/delivery-planning-and-coordination/design.md, docs/components/delivery-planning-and-coordination/testing.md]
+    authoritative_docs: [docs/components/gateway/delivery/coordination/design.md, docs/components/gateway/delivery/coordination/testing.md]
     adrs: [docs/decisions/0010-capability-driven-delivery-coordination.md]
-    gaps: [target leaf design/testing docs not yet created; current mirrored planning test still contains coordination cases until the focused coordination split]
+    gaps: [KeyedLockRegistry remains a shared utility used by coordination, Gateway request serialization, and proactive delivery ingress until a focused ownership split]
 
   gateway.delivery.submissions:
     id: gateway.delivery.submissions
@@ -1454,6 +1454,9 @@ structural_status:
     src/imagent/gateway/__init__.py:
       owners: [gateway.composition, gateway.lifecycle, gateway.admission, gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.content-transformation, gateway.input.dispatch, gateway.input.failure-presentation, gateway.projection.observation, gateway.projection.request-correlation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.diagnostics]
       reason: The current composition root also sequences admission, input, observation, request routing, presentation, delivery, and diagnostics leaf behavior.
+    src/imagent/gateway/delivery/__init__.py:
+      owners: [gateway.delivery.planning, gateway.delivery.coordination]
+      reason: The intentional Gateway delivery package facade re-exports exact public values from the focused planning and coordination owners without implementing either leaf.
     src/imagent/diagnostics.py:
       owners: [interaction.channels.adapters, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.presentation, gateway.delivery.outcome-observation, gateway.diagnostics, applications.application-contract, applications.presentation.live-activity, applications.presentation.artifact-materialization, applications.adapters.appserver.diagnostics]
       reason: Channel, fixed I1/I2/O1/O2/A1, Application provider, and Gateway aggregate diagnostic facts share one historical public vocabulary module.

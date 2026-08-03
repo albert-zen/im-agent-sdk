@@ -121,7 +121,6 @@ components:
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/keyed_locks.py
-      - src/imagent/delivery_coordination.py
       - src/imagent/gateway/delivery/**
       - src/imagent/delivery_outcomes.py
       - src/imagent/outbound_presentation.py
@@ -132,6 +131,8 @@ components:
       - docs/components/gateway/delivery/README.md
       - docs/components/gateway/delivery/planning/design.md
       - docs/components/gateway/delivery/planning/testing.md
+      - docs/components/gateway/delivery/coordination/design.md
+      - docs/components/gateway/delivery/coordination/testing.md
       - docs/components/delivery-planning-and-coordination/design.md
       - docs/components/delivery-planning-and-coordination/testing.md
     required_docs:

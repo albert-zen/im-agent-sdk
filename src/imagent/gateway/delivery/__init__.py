@@ -1,5 +1,6 @@
 """Gateway delivery contracts and implementations."""
 
+from .coordination import DeliveryCoordinator, DeliveryCoordinatorConfig, DeliveryHandle
 from .planning import (
     DeliveryPlan,
     DeliveryPlanner,
@@ -8,6 +9,9 @@ from .planning import (
 )
 
 __all__ = [
+    "DeliveryCoordinator",
+    "DeliveryCoordinatorConfig",
+    "DeliveryHandle",
     "DeliveryPlan",
     "DeliveryPlanner",
     "DeliveryPlanningError",
