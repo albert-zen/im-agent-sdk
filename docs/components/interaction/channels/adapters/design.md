@@ -34,10 +34,11 @@ not become a common message/resource contract. Weixin credential/cursor state
 remains native Channel state, not Gateway persistence.
 
 The target `src/imagent/interaction/channels/adapters/` package contains the
-Telegram provider module and the shared QQ/Telegram HTTP endpoint validator.
+Telegram and Feishu/Lark provider modules plus the shared QQ/Telegram HTTP
+endpoint validator.
 The validator remains adapter-internal: it validates provider configuration
 without opening a transport and is not part of the Channel facade. Telegram
-temporarily imports the same shared base, media, artifact, and diagnostic
-helpers from `src/imagent/channels/native` while those independently reviewed
-boundaries remain in place. QQ, Feishu, Weixin, runtime composition, and the
+and Feishu temporarily import the same shared base, media, artifact, and
+diagnostic helpers from `src/imagent/channels/native` while those independently
+reviewed boundaries remain in place. QQ, Weixin, runtime composition, and the
 remaining shared helpers move only in later focused mechanical slices.

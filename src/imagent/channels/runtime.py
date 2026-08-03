@@ -302,7 +302,9 @@ def channel_from_config(
             TelegramChannelAdapter as NativeAdapter,
         )
     elif channel_id == "feishu":
-        from .native.feishu import FeishuChannelAdapter as NativeAdapter
+        from ..interaction.channels.adapters.feishu import (
+            FeishuChannelAdapter as NativeAdapter,
+        )
     elif channel_id == "weixin":
         from .native.weixin import WeixinChannelAdapter as NativeAdapter
     else:
