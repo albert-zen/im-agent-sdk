@@ -78,7 +78,7 @@ contracts.
 | `channels/base.py` | `native/base.py` | transfer lifecycle/access base; replace product telemetry with logging |
 | `channels/artifacts.py` | `native/artifacts.py` | transfer native attachment-send helpers used by platform transports |
 | `channels/media.py` | `native/media.py` | transfer bounded staging/materialization; keep trust/materialization Channel-local |
-| `channels/text.py` | `native/text.py` | transfer native text segmentation helper |
+| `channels/text.py` | `interaction/channels/outbound_delivery.py` | transfer shared defensive native text splitting to Interaction outbound delivery |
 | `channels/qq_media.py` | `native/qq_media.py` | transfer QQ media upload/download behavior |
 | `channels/qq.py` | `native/qq.py` | transfer QQ transport; replace product config/path imports |
 | `channels/telegram.py` | `native/telegram.py` | transfer Telegram transport; replace product config/path imports |

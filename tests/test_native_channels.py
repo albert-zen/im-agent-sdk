@@ -29,7 +29,6 @@ from imagent.channels.native.models import (
 from imagent.channels.native.models import (
     OutboundMessage as NativeOutboundMessage,
 )
-from imagent.channels.native.text import split_text
 from imagent.channels.native.weixin_state import WeixinCredentials, WeixinStateStore
 from imagent.contracts import (
     AttachmentContent,
@@ -47,6 +46,7 @@ from imagent.interaction.channels import (
     InboundAdmission,
 )
 from imagent.interaction.channels.ingress import ChannelAccessPolicy
+from imagent.interaction.channels.outbound_delivery import split_text
 from imagent.testing import verify_channel_adapter
 
 

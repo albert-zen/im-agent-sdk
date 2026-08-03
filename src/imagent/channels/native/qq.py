@@ -16,6 +16,7 @@ import httpx
 import websockets
 
 from ...interaction.channels.ingress import ChannelAccessPolicy
+from ...interaction.channels.outbound_delivery import split_text
 from .artifacts import (
     ArtifactDeliveryReceipt,
     PermanentArtifactDeliveryError,
@@ -57,7 +58,6 @@ from .qq_quote import (
     parse_qq_quote,
     render_qq_quote_context,
 )
-from .text import split_text
 
 logger = logging.getLogger(__name__)
 

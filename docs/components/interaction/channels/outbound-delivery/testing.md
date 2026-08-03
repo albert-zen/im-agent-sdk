@@ -16,7 +16,10 @@ Required scenarios:
 - QQ, Telegram, Feishu, and Weixin native response mappings pass the same
   contract while retaining platform-specific encoding.
 
-Current evidence is spread across `tests/test_native_channels.py`, the four
-Channel suites, delivery planning/coordination/outcome tests, and vertical
-slices. Target placement is
-`tests/interaction/channels/test_outbound_delivery.py`.
+Focused defensive text evidence lives in
+`tests/interaction/channels/test_outbound_delivery.py`: invalid limits,
+empty/trimmed input, paragraph/newline/space soft breaks, hard breaks, and
+Unicode code-point preservation. The four Channel suites prove the same owner
+is used without changing platform limits or encoding. Receipt, artifact,
+delivery planning/coordination/outcome, and vertical evidence remains with its
+current owner until later focused slices.
