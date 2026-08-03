@@ -13,6 +13,12 @@ from .planning import (
     DeliveryPlanningError,
     PlannedDeliverySegment,
 )
+from .proactive_authorization import (
+    DeliveryAuthorizer,
+    DeliveryPrincipal,
+    ScopedDeliveryAuthorizer,
+    validate_delivery_principal,
+)
 from .submissions import (
     DeliverySubmissionOrigin,
     derive_delivery_payload_fingerprint,
@@ -24,6 +30,7 @@ from .submissions import (
 __all__ = [
     "DeliveryCoordinator",
     "DeliveryCoordinatorConfig",
+    "DeliveryAuthorizer",
     "DeliveryHandle",
     "DeliveryOutcome",
     "DeliveryOutcomeContext",
@@ -32,10 +39,13 @@ __all__ = [
     "DeliveryPlan",
     "DeliveryPlanner",
     "DeliveryPlanningError",
+    "DeliveryPrincipal",
     "DeliverySubmissionOrigin",
     "PlannedDeliverySegment",
+    "ScopedDeliveryAuthorizer",
     "derive_delivery_payload_fingerprint",
     "derive_delivery_submission_id",
     "derive_delivery_target_fingerprint",
     "derive_destination_delivery_id",
+    "validate_delivery_principal",
 ]

@@ -17,7 +17,10 @@ records only bridge identity/evidence needed for safe convergence.
 - [submissions design](submissions/design.md) and
   [testing](submissions/testing.md) — immutable proactive-delivery identity,
   destination snapshots, and durable typed outcomes.
+- [proactive authorization design](proactive-authorization/design.md) and
+  [testing](proactive-authorization/testing.md) — opaque credential to typed
+  stable delivery scope.
 
-Proactive delivery/authorization remains mapped to its current authoritative
+Proactive delivery orchestration remains mapped to its current authoritative
 documents until its own focused move. Delivery owns no native encoding,
 durable job, content storage, route policy, or checkpoint authority.
