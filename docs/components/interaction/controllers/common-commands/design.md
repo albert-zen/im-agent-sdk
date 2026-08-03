@@ -23,6 +23,10 @@ for product-specific `/new` UX, a consumer omits the common `/new` definition
 and registers its own handler while still using public `ControllerActions` for
 shared create/bind/observe semantics.
 
+`register_common_commands(registry, ...)` performs that explicit composition.
+`SlashController` calls the same function on a private registry and freezes it
+for the default all-common-command experience; it is not a second dispatcher.
+
 Current common behavior covers help, Application/Project/Thread listing and
 selection, create/delete/status, catch-up/history, and typed approval/input
 responses. Buttons and other Channel-native interactions call the same typed
@@ -62,6 +66,11 @@ history/catch-up items, output text, handler concurrency, and handler lifetime
 obey the registry/operation bounds. A cache miss after eviction causes an
 explicit refresh or stable-ID requirement, never a guessed selection.
 
+When no Application is selected and exactly one is registered, read-only
+commands use that Application only as an ephemeral query context; they do not
+write a binding. An effectful selection/create flow may establish the binding
+through the normal typed Gateway action after crossing the fence.
+
 ## Failure and recovery
 
 Common handlers do not automatically retry. They preserve the registry's
@@ -71,14 +80,11 @@ mutation. Restart discards views and reconstructs behavior through bindings
 and authoritative Application reads; there is no command transcript or
 durable Controller spool.
 
-## Implementation status
+## Implementation slice
 
-The current `SlashController` fixed dispatcher is the behavior baseline. Its
-operation IDs use only `message_id` plus operation kind even though native
-message identity is scoped by Channel/Conversation, and its two process-local
-view dictionaries have no explicit size/lifetime bound. Both are declared
-gaps. The standalone registry conversion must namespace IDs by the complete
-stable inbound identity, add finite bounds, and preserve common-command parity.
-The later mechanical move will place the single implementation under
-`imagent.interaction.controllers` and remove the old internal path in a finite
-cleanup slice.
+The registry conversion replaces fixed dispatch with explicit common
+definitions, namespaces operation IDs by the complete stable inbound identity,
+and adds finite capacity/lifetime bounds to both selection views while
+preserving command presentation and typed-action behavior. The later
+mechanical move places the single common implementation under
+`imagent.interaction.controllers` and removes the old internal path.

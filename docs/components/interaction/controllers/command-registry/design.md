@@ -39,6 +39,28 @@ definition; it cannot silently replace or shadow an existing name.
 
 ## Typed values and dependencies
 
+A registry composition uses these public values:
+
+- `CommandRegistryLimits` fixes every registry, parser, result, task, and
+  common-view bound;
+- `CommandArgumentContract` fixes per-command minimum and maximum argument
+  counts;
+- `CommandExecutionSafety` is the closed `read_only` / `effectful` class;
+- `CommandDefinition` binds canonical name, aliases, help metadata, argument
+  contract, safety, handler, and handler lifetime;
+- `CommandInvocation` carries the complete stable scoped inbound identity,
+  canonical command, bounded arguments, actor, and creation time;
+- `CommandInvocationFacts` is the read-only structural view accepted only by
+  the runtime effect-fence method, avoiding a contract-to-registry dependency;
+- `CommandHandlerActions` is the fence-free typed Application/Gateway action
+  view available to handlers;
+- `CommandResult` carries only bounded `TextContent` plus a closed completed or
+  known-failure status; media delivery remains on the normal validated
+  Interaction/Gateway path and registry-owned output identity is not handler
+  input;
+- `CommandRegistryDiagnostics` exposes fixed counters and a fixed last-failure
+  category without content, identity, or exception text.
+
 A `CommandDefinition` fixes one canonical name, finite aliases, argument
 contract, help/presentation metadata, handler, immutable execution bounds, and
 a closed execution-safety classification. Replay-safe/read-only definitions
@@ -55,8 +77,12 @@ an effectful definition it calls the one-way fence method with that
 the handler with a separate action view that omits the fence. Read-only
 definitions receive only the narrow handler view and do not enter the fence.
 
-A handler returns a closed typed `CommandResult`; it does not manufacture
-unbounded messages or signal control flow through arbitrary exceptions.
+A handler returns a closed typed `CommandResult`; it does not manufacture an
+`OutboundMessage`, choose Conversation/delivery/reply identity, return
+unbounded content, or signal normal control flow through arbitrary exceptions.
+The registry creates at most one scoped-hash, fixed-identity response message;
+an empty completed result is intentionally silent. Delimiter-bearing Channel,
+Conversation, and message IDs cannot alias one another.
 Product handlers receive strongly typed product services through constructor
 injection. Public binding/Application behavior uses `ControllerActions`.
 Product-specific services such as a Codex credits reader remain typed concrete
@@ -77,10 +103,11 @@ validation at startup. They cover at least:
 - process-local view-cache capacity and lifetime used by common commands.
 
 Capacity exhaustion and timeout are explicit typed failures with bounded,
-redacted diagnostics. Cancelled or timed-out work retains its capacity slot
-until it has actually joined; an overrun cannot be hidden by admitting another
-handler. Registry work runs on a bounded task/lane, never a Channel or
-Application socket reader.
+redacted diagnostics. A slot is reserved atomically before an effectful
+invocation waits for its durable fence. Cancelled or timed-out work retains its
+capacity slot until it has actually joined; an overrun cannot be hidden by
+admitting another handler. Registry work runs on a bounded task/lane, never a
+Channel or Application socket reader.
 
 ## Parsing and dispatch
 
@@ -94,6 +121,13 @@ messages return the Controller's unconsumed marker.
 Exactly one definition matches one invocation. The registry never fan-outs a
 command to multiple handlers and never falls through to another alias after a
 handler starts.
+
+`CommandRegistry.register()` and the instance-bound `CommandRegistry.command()`
+decorator are the only registration paths. `freeze()` is irreversible.
+`validate_startup()` rejects an unfrozen registry before Gateway accepts input;
+`close()` cancels and boundedly joins admitted handler tasks. The registry
+itself implements `InboundController`. The default `SlashController` is only a
+convenience wrapper around one explicitly populated, frozen registry.
 
 ## Failure, replay, and cancellation
 
@@ -133,12 +167,11 @@ the consumer; typed action and inbound idempotency state stay with their
 existing owners. Restart rebuilds the same registry through explicit
 composition and relies on stable inbound/action identity for convergence.
 
-## Implementation status
+## Implementation slice
 
-This contract is accepted target behavior but is not implemented yet. The
-current `SlashController` uses a fixed dispatcher, exposes no registry-to-
-Gateway effect-fence handshake, derives operation IDs from an incompletely
-scoped native message ID, and keeps process-local view maps without explicit
-capacity/lifetime bounds. The standalone registry issue/PR must implement
-these rules and prove default common-command parity; no mechanical directory
-move may smuggle that behavior change into its diff.
+The standalone registry slice replaces the fixed dispatcher, adds the
+registry-to-Gateway effect-fence handshake, scopes operation IDs by the full
+inbound identity, and bounds common selection views. It preserves
+`SlashController` as the default common-command convenience composition while
+making `CommandRegistry` the public consumer-composition surface. The later
+common-command mechanical move removes the remaining historical internal path.

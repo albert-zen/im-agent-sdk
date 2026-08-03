@@ -97,7 +97,11 @@ from .inbound_content import InboundContentTransformRuntime
 from .inbound_failures import InboundFailurePhase as InboundFailurePhase
 from .inbound_failures import InboundFailurePresentationRuntime, handle_claimed_inbound
 from .inbound_failures import InboundFailurePresenter as InboundFailurePresenter
-from .interaction.controllers import ControllerActions
+from .interaction.controllers import ControllerActions, ControllerLifecycle
+from .interaction.controllers.contract import (
+    CommandInvocationFacts,
+    _derive_command_invocation_id,
+)
 from .interaction.messages import (
     ConversationRef,
     InboundMessage,
@@ -262,6 +266,8 @@ class ImAgentGateway:
         )
 
     async def start(self) -> None:
+        if isinstance(self._controller, ControllerLifecycle):
+            self._controller.validate_startup()
         self._delivery_coordinator.start()
         if self._delivery_outcome_observer_runtime is not None:
             self._delivery_outcome_observer_runtime.start()
@@ -336,6 +342,8 @@ class ImAgentGateway:
             await self._delivery_coordinator.close()
             for channel in reversed(started_channels):
                 await channel.stop()
+            if isinstance(self._controller, ControllerLifecycle):
+                await self._controller.close()
             if self._inbound_content_transform_runtime is not None:
                 await self._inbound_content_transform_runtime.close()
             if self._inbound_failure_presentation_runtime is not None:
@@ -355,6 +363,8 @@ class ImAgentGateway:
         await self._delivery_coordinator.close()
         for channel in reversed(tuple(self._channels.values())):
             await channel.stop()
+        if isinstance(self._controller, ControllerLifecycle):
+            await self._controller.close()
         if self._inbound_content_transform_runtime is not None:
             await self._inbound_content_transform_runtime.close()
         if self._inbound_failure_presentation_runtime is not None:
@@ -933,7 +943,11 @@ class ImAgentGateway:
             if self._controller is not None:
                 outputs = await self._controller.handle(
                     message,
-                    _LockedControllerActions(self),
+                    _LockedControllerActions(
+                        self,
+                        message=message,
+                        enter_effect_fence=before_application_send,
+                    ),
                 )
                 if outputs is not None:
                     for output in outputs:
@@ -1255,8 +1269,17 @@ class ImAgentGateway:
 
 
 class _LockedControllerActions(ControllerActions):
-    def __init__(self, gateway: ImAgentGateway) -> None:
+    def __init__(
+        self,
+        gateway: ImAgentGateway,
+        *,
+        message: InboundMessage,
+        enter_effect_fence: Callable[[], Awaitable[None]],
+    ) -> None:
         self._gateway = gateway
+        self._message = message
+        self._enter_effect_fence = enter_effect_fence
+        self._effect_fence_entered = False
 
     async def execute_application(
         self,
@@ -1275,6 +1298,30 @@ class _LockedControllerActions(ControllerActions):
         conversation_ref: ConversationRef,
     ) -> ConversationBinding | None:
         return await self._gateway.get_binding(conversation_ref)
+
+    async def enter_effectful_command(
+        self,
+        invocation: CommandInvocationFacts,
+    ) -> None:
+        if self._effect_fence_entered:
+            raise RuntimeError("effectful command fence may be entered only once")
+        message = self._message
+        if (
+            invocation.conversation_ref != message.conversation_ref
+            or invocation.message_id != message.message_id
+            or invocation.actor != message.sender
+            or invocation.created_at != message.created_at
+            or invocation.invocation_id
+            != _derive_command_invocation_id(
+                invocation.conversation_ref,
+                invocation.message_id,
+                invocation.command_name,
+                invocation.arguments,
+            )
+        ):
+            raise ValueError("effectful command invocation does not match owned inbound identity")
+        self._effect_fence_entered = True
+        await self._enter_effect_fence()
 
 
 class _GatewayActionError(RuntimeError):

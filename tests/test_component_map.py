@@ -266,7 +266,7 @@ class ComponentMapTests(unittest.TestCase):
             {"InboundAdmission", "InboundAdmissionHandler"},
         )
 
-    def test_approved_runtime_layers_and_registry_gap_are_explicit(self) -> None:
+    def test_approved_runtime_layers_and_registry_owner_are_explicit(self) -> None:
         component_map = load_component_map()
 
         self.assertEqual(
@@ -279,8 +279,11 @@ class ComponentMapTests(unittest.TestCase):
             },
         )
         registry = component_map["components"]["interaction.controllers.command-registry"]
-        self.assertEqual(registry["current_code"], [])
-        self.assertIn("implementation absent", registry["gaps"])
+        self.assertEqual(
+            registry["current_code"],
+            ["src/imagent/interaction/controllers/registry.py"],
+        )
+        self.assertNotIn("implementation absent", registry["gaps"])
 
     def test_schema_semantics_belong_to_runtime_leaves(self) -> None:
         component_map = load_component_map()
