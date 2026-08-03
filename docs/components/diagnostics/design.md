@@ -73,6 +73,11 @@ Channel identity/kind always wins over provider output. Missing, raising,
 invalid, or mismatched providers fail closed to identity-only facts without
 exception text.
 
+The internal native Channel queue/connection/state implementation belongs to
+`interaction.channels.adapters`; Gateway aggregation consumes only the bounded
+fact shape. Generic media staging logs are not diagnostic state and do not
+depend on that concrete-adapter module.
+
 ## Snapshot semantics
 
 `ImAgentGateway.diagnostics_snapshot()` is synchronous, side-effect free, and

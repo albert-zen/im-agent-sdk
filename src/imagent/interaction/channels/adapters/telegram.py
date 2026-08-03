@@ -23,7 +23,6 @@ from ....channels.native.artifacts import (
     read_managed_artifact,
 )
 from ....channels.native.base import BaseChannelAdapter
-from ....channels.native.diagnostics import emit_event
 from ....channels.native.media import (
     MAX_FILE_COUNT,
     MAX_IMAGE_COUNT,
@@ -39,6 +38,7 @@ from ..outbound_delivery import (
     OutboundMessage,
     split_text,
 )
+from .diagnostics import emit_event
 from .endpoints import validate_http_endpoint
 
 logger = logging.getLogger(__name__)

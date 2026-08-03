@@ -45,5 +45,9 @@ Required coverage:
   invalid shape, or mismatch configured identity still appear safely;
 - repeated reads do not mutate state and no exporter or callback is required.
 
+The native Channel implementation owner also has a clean-process structural
+test proving the historical `imagent.channels.native.diagnostics` module no
+longer exists; this does not create a second public diagnostics facade.
+
 Run the full suite after changing the public facts because Gateway,
 projection, Codex/Zen, and T3 composition are all involved.

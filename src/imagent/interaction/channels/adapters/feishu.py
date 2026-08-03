@@ -25,11 +25,6 @@ from ....channels.native.artifacts import (
     stable_artifact_identity,
 )
 from ....channels.native.base import BaseChannelAdapter
-from ....channels.native.diagnostics import (
-    NativeConnectionDiagnosticSnapshot,
-    NativeQueueDiagnosticSnapshot,
-    emit_event,
-)
 from ....channels.native.media import (
     MAX_FILE_BYTES,
     MAX_FILE_COUNT,
@@ -48,6 +43,11 @@ from ..outbound_delivery import (
     OutboundArtifact,
     OutboundMessage,
     split_text,
+)
+from .diagnostics import (
+    NativeConnectionDiagnosticSnapshot,
+    NativeQueueDiagnosticSnapshot,
+    emit_event,
 )
 
 logger = logging.getLogger(__name__)
