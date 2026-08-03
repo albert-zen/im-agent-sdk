@@ -7,8 +7,8 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Protocol
 
-from .adapters import DeliverySubmissionConflict
-from .contracts import (
+from ...adapters import DeliverySubmissionConflict
+from ...contracts import (
     DeliveryItemReceipt,
     DeliveryItemStatus,
     DeliveryReceipt,
@@ -25,7 +25,19 @@ from .contracts import (
     ThreadRef,
     validate_delivery_submission_record,
 )
-from .interaction.messages import ConversationRef
+from ...contracts import (
+    derive_delivery_payload_fingerprint as derive_delivery_payload_fingerprint,
+)
+from ...contracts import (
+    derive_delivery_submission_id as derive_delivery_submission_id,
+)
+from ...contracts import (
+    derive_delivery_target_fingerprint as derive_delivery_target_fingerprint,
+)
+from ...contracts import (
+    derive_destination_delivery_id as derive_destination_delivery_id,
+)
+from ...interaction.messages import ConversationRef
 
 
 class _SQLiteOwner(Protocol):

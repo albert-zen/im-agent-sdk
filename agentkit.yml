@@ -119,6 +119,7 @@ components:
       - docs/decisions/README.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
+      - docs/decisions/0009-proactive-delivery-routing.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/keyed_locks.py
@@ -134,6 +135,8 @@ components:
       - docs/components/gateway/delivery/coordination/testing.md
       - docs/components/gateway/delivery/outcome-observation/design.md
       - docs/components/gateway/delivery/outcome-observation/testing.md
+      - docs/components/gateway/delivery/submissions/design.md
+      - docs/components/gateway/delivery/submissions/testing.md
       - docs/components/gateway/presentation/design.md
       - docs/components/gateway/presentation/testing.md
       - docs/components/delivery-planning-and-coordination/design.md
@@ -276,7 +279,7 @@ components:
       - docs/decisions/0011-durable-inbound-admission-before-media.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/bindings.py
-      - src/imagent/delivery_submissions.py
+      - src/imagent/gateway/delivery/submissions.py
       - src/imagent/request_correlations.py
       - src/imagent/sqlite_rows.py
       - src/imagent/storage.py
