@@ -30,11 +30,12 @@ use the same registry instance, which freezes before runtime input is accepted.
 ## Rollout state
 
 The Controller contract objects now live under
-`src/imagent/interaction/controllers` and the historical
+`src/imagent/interaction/controllers`, together with the request-presentation
+contract and portable Markdown implementation. The historical
 `imagent.controllers` package re-exports those exact objects. Common commands
-and request presentation remain under `src/imagent/controllers` until their
-focused slices move them, so the old facade is a finite mixed migration surface
-rather than a second implementation. The historical
+remain under `src/imagent/controllers` until their focused behavior slice, so
+the old facade is a finite mixed migration surface rather than a second
+implementation. The historical
 [Controllers overview](../../controllers/design.md) remains navigation
 evidence, not a substitute for these leaf contracts. The machine-readable
 [component map](../../component-map.yml) records each current path, target

@@ -21,7 +21,7 @@ from .contracts import (
     ThreadRef,
     derive_request_response_shape,
 )
-from .controllers import RequestPresenter
+from .interaction.controllers import RequestPresenter
 from .projections import (
     DeliverOutbound,
     DeliverRequestOutbound,

@@ -1,6 +1,10 @@
-from ..interaction.controllers import ControllerActions, InboundController
-from .base import RequestPresentation, RequestPresenter
-from .requests import MarkdownRequestPresenter
+from ..interaction.controllers import (
+    ControllerActions,
+    InboundController,
+    MarkdownRequestPresenter,
+    RequestPresentation,
+    RequestPresenter,
+)
 from .slash import SlashController
 
 __all__ = [

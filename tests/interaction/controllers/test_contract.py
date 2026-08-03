@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import unittest
+from importlib.util import find_spec
 
 from imagent import controllers as controllers_facade
-from imagent.controllers import base as legacy_base
 from imagent.interaction.controllers import ControllerActions, InboundController
 
 
@@ -12,9 +12,8 @@ class ControllerContractOwnershipTests(unittest.TestCase):
         self.assertIs(controllers_facade.ControllerActions, ControllerActions)
         self.assertIs(controllers_facade.InboundController, InboundController)
 
-    def test_legacy_base_does_not_retain_a_contract_implementation(self) -> None:
-        self.assertFalse(hasattr(legacy_base, "ControllerActions"))
-        self.assertFalse(hasattr(legacy_base, "InboundController"))
+    def test_legacy_base_is_removed_after_its_leaves_move(self) -> None:
+        self.assertIsNone(find_spec("imagent.controllers.base"))
         self.assertEqual(
             set(controllers_facade.__all__),
             {

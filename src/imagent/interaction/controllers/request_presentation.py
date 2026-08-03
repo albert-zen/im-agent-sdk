@@ -3,16 +3,36 @@ from __future__ import annotations
 import html
 import re
 import shlex
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Protocol
 
-from ..contracts import (
+from ...contracts import (
     ApprovalRequest,
     InteractiveRequest,
     UserInputQuestion,
     UserInputRequest,
 )
-from ..interaction.messages import ConversationRef, OutboundMessage, TextContent, TextFormat
-from .base import RequestPresentation
+from ..messages import ConversationRef, OutboundMessage, TextContent, TextFormat
+
+
+@dataclass(frozen=True, slots=True)
+class RequestPresentation:
+    message: OutboundMessage
+    response_supported: bool
+
+
+class RequestPresenter(Protocol):
+    def present_request(
+        self,
+        request: InteractiveRequest,
+        *,
+        conversation_ref: ConversationRef,
+        delivery_id: str,
+        reply_to_message_id: str | None,
+    ) -> RequestPresentation:
+        """Render one typed request for one already-selected destination."""
+        ...
 
 
 class MarkdownRequestPresenter:

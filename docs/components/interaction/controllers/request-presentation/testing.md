@@ -27,11 +27,14 @@ Focused validation currently includes:
 
 ```sh
 PYTHONPATH=src python -m unittest \
-  tests.test_slash_controller.MarkdownRequestPresenterTests \
+  tests.interaction.controllers.test_request_presentation \
   tests.test_appserver_requests \
   tests.test_gateway_operations -v
 ```
 
-After the physical move, focused rendering/security cases move to
-`tests/interaction/controllers/test_request_presentation.py` while request
-routing and reconnect cases remain with their Gateway/Application owners.
+The physical extraction places focused rendering/security and exact-owner
+identity coverage in
+`tests/interaction/controllers/test_request_presentation.py`. Request routing,
+delivery authorization, and reconnect cases remain with their
+Gateway/Application owners. Both the owning Interaction import and the finite
+`imagent.controllers` facade must resolve to the same public objects.
