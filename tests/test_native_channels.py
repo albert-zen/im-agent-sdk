@@ -37,10 +37,10 @@ from imagent.contracts import (
     AttachmentContent,
     ConversationRef,
     DeliveryItemStatus,
+    DeliverySupportLevel,
     LocalPath,
     OutboundMessage,
     RemoteUrl,
-    SupportLevel,
     TextContent,
 )
 from imagent.diagnostics import ConnectionDiagnosticState, QueueDiagnosticName
@@ -1165,11 +1165,11 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all("start and stop lifecycle" in report.check_names for report in reports))
         self.assertEqual(
             adapters[0].capabilities.delivery.markdown,
-            SupportLevel.NATIVE,
+            DeliverySupportLevel.NATIVE,
         )
         self.assertTrue(
             all(
-                adapter.capabilities.delivery.markdown is not SupportLevel.UNSUPPORTED
+                adapter.capabilities.delivery.markdown is not DeliverySupportLevel.UNSUPPORTED
                 for adapter in adapters
             )
         )

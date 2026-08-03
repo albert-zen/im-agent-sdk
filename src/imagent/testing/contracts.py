@@ -16,6 +16,7 @@ from imagent.contracts import (
     ApplicationOperationFailed,
     CreateThread,
     DeleteThread,
+    DeliverySupportLevel,
     GetProject,
     GetThread,
     GetThreadHistory,
@@ -77,7 +78,7 @@ async def verify_channel_adapter(
 
     capabilities = adapter.capabilities
     profile = capabilities.delivery
-    if profile.plain_text is SupportLevel.UNSUPPORTED:
+    if profile.plain_text is DeliverySupportLevel.UNSUPPORTED:
         raise AssertionError("Channel adapter must support plain text natively or by fallback")
     if profile.max_text_length is not None and profile.max_text_length < 1:
         raise AssertionError("max_text_length must be positive")

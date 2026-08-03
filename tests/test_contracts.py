@@ -35,6 +35,7 @@ from imagent.contracts import (
     DeliveryReceiptStatus,
     DeliverySegmentReceipt,
     DeliverySegmentStatus,
+    DeliverySupportLevel,
     EventSequenceScope,
     GatewayOperationType,
     GetThreadHistory,
@@ -623,23 +624,29 @@ class VersionOneSchemaCompatibilityTests(unittest.TestCase):
 
     def test_channel_capabilities_keep_the_v1_positional_constructor_order(self) -> None:
         capabilities = ChannelCapabilities(
-            SupportLevel.FALLBACK,
-            SupportLevel.NATIVE,
-            SupportLevel.FALLBACK,
-            SupportLevel.NATIVE,
-            SupportLevel.FALLBACK,
-            SupportLevel.NATIVE,
-            SupportLevel.FALLBACK,
-            SupportLevel.NATIVE,
-            SupportLevel.FALLBACK,
+            DeliverySupportLevel.FALLBACK,
+            DeliverySupportLevel.NATIVE,
+            DeliverySupportLevel.FALLBACK,
+            DeliverySupportLevel.NATIVE,
+            DeliverySupportLevel.FALLBACK,
+            DeliverySupportLevel.NATIVE,
+            DeliverySupportLevel.FALLBACK,
+            DeliverySupportLevel.NATIVE,
+            DeliverySupportLevel.FALLBACK,
             (AttachmentSourceKind.REMOTE_URL,),
             101,
             202,
             3,
         )
 
-        self.assertIs(capabilities.reply_references, SupportLevel.NATIVE)
-        self.assertIs(capabilities.native_threads_or_topics, SupportLevel.FALLBACK)
+        self.assertIs(
+            capabilities.reply_references,
+            DeliverySupportLevel.NATIVE,
+        )
+        self.assertIs(
+            capabilities.native_threads_or_topics,
+            DeliverySupportLevel.FALLBACK,
+        )
         self.assertEqual(
             capabilities.attachment_sources,
             (AttachmentSourceKind.REMOTE_URL,),
@@ -650,11 +657,14 @@ class VersionOneSchemaCompatibilityTests(unittest.TestCase):
 
     def test_channel_capabilities_keep_the_flat_v1_surface(self) -> None:
         capabilities = ChannelCapabilities(
-            markdown=SupportLevel.NATIVE,
+            markdown=DeliverySupportLevel.NATIVE,
             max_text_length=4_000,
         )
-        self.assertIs(capabilities.markdown, SupportLevel.NATIVE)
-        self.assertIs(capabilities.delivery.markdown, SupportLevel.NATIVE)
+        self.assertIs(capabilities.markdown, DeliverySupportLevel.NATIVE)
+        self.assertIs(
+            capabilities.delivery.markdown,
+            DeliverySupportLevel.NATIVE,
+        )
         self.assertEqual(capabilities.delivery.max_text_length, 4_000)
 
         self._validate_definition(
@@ -667,6 +677,27 @@ class VersionOneSchemaCompatibilityTests(unittest.TestCase):
                 "attachments": "unsupported",
                 "interactiveActions": "unsupported",
             },
+        )
+
+    def test_channel_and_application_support_are_nominally_distinct_in_schema(
+        self,
+    ) -> None:
+        schema_path = (
+            Path(__file__).resolve().parents[1] / "schemas" / "v1" / "capabilities.schema.json"
+        )
+        definitions = json.loads(schema_path.read_text(encoding="utf-8"))["$defs"]
+
+        self.assertEqual(
+            definitions["DeliverySupportLevel"]["enum"],
+            definitions["SupportLevel"]["enum"],
+        )
+        self.assertEqual(
+            definitions["ChannelCapabilities"]["properties"]["plainText"]["$ref"],
+            "#/$defs/DeliverySupportLevel",
+        )
+        self.assertEqual(
+            definitions["RuntimeCapabilities"]["properties"]["history"]["$ref"],
+            "#/$defs/SupportLevel",
         )
 
     def test_delivery_receipt_segments_remain_an_optional_v1_extension(self) -> None:

@@ -3,6 +3,10 @@
 Required evidence:
 
 - stable configured Channel identity and immutable truthful capabilities;
+- Channel capability fields use `DeliverySupportLevel`, while Application
+  capabilities continue using the distinct `SupportLevel` type;
+- v1 capability field/positional order, string discriminants, and derived
+  `DeliveryProfile` remain stable through the API transition;
 - modern three-callback lifecycle plus explicit legacy two-callback migration
   behavior without retrying a partially started adapter;
 - one-shot admission lease identity, ownership transfer, fenced release, and
@@ -19,6 +23,7 @@ Required evidence:
 Focused evidence currently lives in `tests/test_adapter_contracts.py`,
 `tests/test_native_channels.py`, Channel-specific suites, Gateway admission
 tests, schema validation, and Pyright. Receipt identity and validation evidence
-lives in `tests/interaction/channels/test_contract.py`; lifecycle, capability,
-and admission evidence remains in the historical suites until its own focused
-mechanical slice.
+lives in `tests/interaction/channels/test_contract.py`; native Channel suites
+and planner tests provide capability/profile parity. Lifecycle and admission
+evidence remains in the historical suites until its own focused mechanical
+slice.

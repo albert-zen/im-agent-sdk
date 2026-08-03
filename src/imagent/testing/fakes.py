@@ -26,6 +26,7 @@ from imagent.contracts import (
     DeleteThread,
     DeliveryReceipt,
     DeliveryReceiptStatus,
+    DeliverySupportLevel,
     EventSequenceScope,
     GetProject,
     GetThread,
@@ -129,8 +130,8 @@ class FakeChannelAdapter:
     def __init__(self, channel_instance_id: str = "fake-channel") -> None:
         self._channel_instance_id = channel_instance_id
         self._capabilities = ChannelCapabilities(
-            markdown=SupportLevel.NATIVE,
-            reply_references=SupportLevel.NATIVE,
+            markdown=DeliverySupportLevel.NATIVE,
+            reply_references=DeliverySupportLevel.NATIVE,
         )
         self.started = False
         self.sent: list[OutboundMessage] = []

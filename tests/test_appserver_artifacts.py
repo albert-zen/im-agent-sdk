@@ -33,10 +33,10 @@ from imagent.contracts import (
     AttachmentSourceKind,
     ChannelCapabilities,
     ConversationRef,
+    DeliverySupportLevel,
     GetThreadHistory,
     LocalPath,
     OutboundMessage,
-    SupportLevel,
     TextContent,
     ThreadHistoryRead,
     ThreadRef,
@@ -487,8 +487,8 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
 
         channel = FakeChannelAdapter()
         channel._capabilities = ChannelCapabilities(
-            markdown=SupportLevel.NATIVE,
-            attachments=SupportLevel.NATIVE,
+            markdown=DeliverySupportLevel.NATIVE,
+            attachments=DeliverySupportLevel.NATIVE,
             attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
             attachment_media_types=("image/png",),
             max_attachment_count=4,
