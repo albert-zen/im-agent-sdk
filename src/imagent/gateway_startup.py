@@ -19,7 +19,7 @@ class GatewayNotRunning(RuntimeError):
 
 
 class GatewayStartupAdmission(Generic[T]):
-    """One bounded cross-kind FIFO for callbacks received during Gateway startup."""
+    """One bounded FIFO for claimed inbound received during Gateway startup."""
 
     def __init__(self, *, max_pending: int) -> None:
         if max_pending < 1:

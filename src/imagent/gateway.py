@@ -221,7 +221,7 @@ class ImAgentGateway:
         ] = {}
         self._starting = False
         self._accepting_inbound = False
-        self._startup_admission = GatewayStartupAdmission[ClaimedInbound | GatewayOperation](
+        self._startup_admission = GatewayStartupAdmission[ClaimedInbound](
             max_pending=limits.startup_buffer_max_pending
         )
         projection_repository = repositories.projections or InMemoryProjectionRouteRepository()
@@ -289,7 +289,6 @@ class ImAgentGateway:
                     await start_channel_with_admission(
                         channel,
                         self._handle_message_entry,
-                        self._handle_operation_entry,
                         partial(self._begin_inbound, channel.channel_instance_id),
                     )
                 except BaseException as start_error:
@@ -311,10 +310,7 @@ class ImAgentGateway:
             self._startup_admission.raise_if_overflowed()
             while self._startup_admission:
                 entry = self._startup_admission.popleft()
-                if isinstance(entry, ClaimedInbound):
-                    await self._handle_claimed_message(entry)
-                else:
-                    await self._handle_operation(entry)
+                await self._handle_claimed_message(entry)
                 self._startup_admission.raise_if_overflowed()
             self._starting = False
         except BaseException as error:
@@ -322,8 +318,6 @@ class ImAgentGateway:
             self._starting = False
             while self._startup_admission:
                 entry = self._startup_admission.popleft()
-                if not isinstance(entry, ClaimedInbound):
-                    continue
                 try:
                     await self._idempotency.release(
                         entry.scope,
@@ -1046,26 +1040,6 @@ class ImAgentGateway:
                 reply_to_message_id=message.message_id,
                 before_application_send=before_application_send,
             )
-
-    async def _handle_operation(self, operation: GatewayOperation) -> None:
-        result = await self.execute_gateway(operation)
-        if isinstance(result, GatewayOperationFailed):
-            logger.warning(
-                "Gateway operation %s failed: %s",
-                operation.operation_id,
-                result.error.message,
-            )
-
-    async def _handle_operation_entry(
-        self,
-        operation: GatewayOperation,
-    ) -> None:
-        if self._starting:
-            self._startup_admission.admit(operation)
-            return
-        if not self._accepting_inbound:
-            raise GatewayNotRunning("gateway is not accepting Channel callbacks")
-        await self._handle_operation(operation)
 
     async def _deliver_error(
         self,

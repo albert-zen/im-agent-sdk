@@ -87,7 +87,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         async def ignore(_item) -> None:
             return None
 
-        await adapter.start(ignore, ignore)
+        await adapter.start(ignore)
         self.assertIsNotNone(adapter.diagnostic_facts().connection)
         with self.assertRaisesRegex(RuntimeError, "stop failed"):
             await adapter.stop()
@@ -123,7 +123,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         async def ignore(_item) -> None:
             return None
 
-        await adapter.start(ignore, ignore)
+        await adapter.start(ignore)
         ready = adapter.diagnostic_facts()
         ready_connection = ready.connection
         self.assertIsNotNone(ready_connection)
@@ -171,7 +171,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
                 return None
 
             for adapter in adapters:
-                await adapter.start(ignore, ignore)
+                await adapter.start(ignore)
             try:
                 adapter_by_kind = {adapter.kind: adapter for adapter in adapters}
                 facts = {adapter.kind: adapter.diagnostic_facts() for adapter in adapters}
@@ -303,7 +303,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
 
             for kind in ("qq", "feishu"):
                 adapter = next(item for item in adapters if item.kind == kind)
-                await adapter.start(ignore, ignore)
+                await adapter.start(ignore)
                 try:
                     connection = adapter.diagnostic_facts().connection
                     self.assertIsNotNone(connection)
@@ -371,7 +371,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         async def ignore(_item) -> None:
             return None
 
-        await adapter.start(capture, ignore)
+        await adapter.start(capture)
         try:
             self.assertEqual(len(captured), 1)
             self.assertEqual(tuple(item.text for item in captured[0].content), ("ordinary text",))
@@ -437,7 +437,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
             startup_validator=lambda: None,
             native_factory=Native,
         )
-        await adapter.start(ignore, ignore, admit)
+        await adapter.start(ignore, admit)
         try:
             await captured.handle_inbound(
                 adapter,
@@ -503,7 +503,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
             startup_validator=lambda: None,
             native_factory=Native,
         )
-        await adapter.start(ignore, ignore, admit)
+        await adapter.start(ignore, admit)
         try:
             with self.assertRaisesRegex(RuntimeError, "media download failed"):
                 await captured.handle_inbound(
@@ -567,7 +567,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
             startup_validator=lambda: None,
             native_factory=Native,
         )
-        await adapter.start(ignore, ignore, admit)
+        await adapter.start(ignore, admit)
         try:
             with self.assertRaises(RuntimeError) as raised:
                 await captured.handle_inbound(
@@ -630,7 +630,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
             startup_validator=lambda: None,
             native_factory=Native,
         )
-        await adapter.start(ignore, ignore, admit)
+        await adapter.start(ignore, admit)
         try:
             with self.assertRaisesRegex(RuntimeError, "gateway processing failed"):
                 await captured.handle_inbound(
@@ -675,7 +675,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         async def ignore(_item) -> None:
             return None
 
-        await adapter.start(ignore, ignore)
+        await adapter.start(ignore)
         try:
             receipt = await adapter.send(
                 OutboundMessage(
@@ -741,7 +741,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         async def ignore(_item) -> None:
             return None
 
-        await adapter.start(ignore, ignore)
+        await adapter.start(ignore)
         try:
             receipt = await adapter.send(
                 OutboundMessage(
@@ -838,7 +838,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         async def ignore(_item) -> None:
             return None
 
-        await adapter.start(ignore, ignore)
+        await adapter.start(ignore)
         try:
             with self.assertRaisesRegex(RuntimeError, "delivery is disabled"):
                 await adapter.send(
@@ -880,7 +880,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         async def ignore(_item) -> None:
             return None
 
-        await adapter.start(ignore, ignore)
+        await adapter.start(ignore)
         try:
             receipt = await adapter.send(
                 OutboundMessage(
@@ -925,7 +925,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         async def ignore(_item) -> None:
             return None
 
-        await adapter.start(ignore, ignore)
+        await adapter.start(ignore)
         try:
             receipt = await adapter.send(
                 OutboundMessage(
@@ -986,7 +986,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         async def ignore(_item) -> None:
             return None
 
-        await adapter.start(ignore, ignore)
+        await adapter.start(ignore)
         try:
             with self.assertRaisesRegex(ValueError, "require.*LocalPath"):
                 await adapter.send(
@@ -1097,9 +1097,9 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
             return None
 
         with self.assertRaisesRegex(RuntimeError, "startup failed"):
-            await adapter.start(ignore, ignore)
+            await adapter.start(ignore)
         with self.assertRaisesRegex(RuntimeError, "startup failed"):
-            await adapter.start(ignore, ignore)
+            await adapter.start(ignore)
         self.assertEqual(attempts, 2)
 
     def test_shared_admission_policy_and_chunking_keep_native_semantics(self) -> None:
@@ -1149,7 +1149,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
             async def ignore(_item) -> None:
                 return None
 
-            await adapters[0].start(ignore, ignore)
+            await adapters[0].start(ignore)
             try:
                 self.assertTrue(getattr(adapters[0]._native, "markdown_enabled", False))
             finally:

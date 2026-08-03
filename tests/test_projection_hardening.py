@@ -3008,8 +3008,8 @@ class EagerInboundChannel(FakeChannelAdapter):
         self._inbound = inbound
         self.delivery_task: asyncio.Task[None] | None = None
 
-    async def start(self, on_message, on_operation, on_admission=None) -> None:
-        await super().start(on_message, on_operation, on_admission)
+    async def start(self, on_message, on_admission=None) -> None:
+        await super().start(on_message, on_admission)
         self.delivery_task = asyncio.create_task(self.emit_message(self._inbound))
         await asyncio.sleep(0)
 

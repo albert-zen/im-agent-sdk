@@ -21,7 +21,6 @@ from .contracts import (
     DeliverySubmissionRecord,
     DeliverySubmissionState,
     DestinationDeliveryRecord,
-    GatewayOperation,
     InputContinuationPreference,
     InteractiveRequest,
     RequestRef,
@@ -45,7 +44,6 @@ from .interaction.channels import (
 )
 from .interaction.messages import ConversationRef, OutboundMessage
 
-OperationHandler = Callable[[GatewayOperation], Awaitable[None]]
 ApplicationInputDispatchHandler = Callable[[ApplicationInputDispatch], Awaitable[None]]
 
 
@@ -85,7 +83,6 @@ class ChannelAdapter(Protocol):
     async def start(
         self,
         on_message: MessageHandler,
-        on_operation: OperationHandler,
         on_admission: InboundAdmissionHandler | None = None,
     ) -> None: ...
 

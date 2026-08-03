@@ -21,10 +21,10 @@ cannot be reconstructed after their transient open event is lost.
 ### Every bridge-owned admission point has a finite capacity
 
 Each live `EventBroadcaster` subscription has an independently configurable
-positive event limit. Gateway startup uses one FIFO capacity shared by inbound
-messages and typed operations. The per-Thread buffer that holds events until
-all concurrent input acceptances have recorded reply correlation also has a
-positive configurable limit.
+positive event limit. Gateway startup uses one FIFO capacity for claimed
+inbound messages. Typed operations are not Channel startup callbacks. The
+per-Thread buffer that holds events until all concurrent input acceptances have
+recorded reply correlation also has a positive configurable limit.
 
 Application adapters, Gateway startup, and projection runtime provide safe
 defaults. Consumers may tune capacity, but cannot select silent loss.

@@ -144,10 +144,9 @@ class FakeChannelAdapter:
     def capabilities(self) -> ChannelCapabilities:
         return self._capabilities
 
-    async def start(self, on_message, on_operation, on_admission=None) -> None:
+    async def start(self, on_message, on_admission=None) -> None:
         self.started = True
         self.on_message = on_message
-        self.on_operation = on_operation
         self.on_admission = on_admission
 
     async def emit_message(self, message: InboundMessage) -> None:

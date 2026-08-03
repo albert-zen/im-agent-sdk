@@ -703,10 +703,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             async def on_message(message) -> None:
                 received.append(message)
 
-            async def on_operation(_operation) -> None:
-                return None
-
-            await channel.start(on_message, on_operation)
+            await channel.start(on_message)
             try:
                 await native_channel.receive(
                     "",
