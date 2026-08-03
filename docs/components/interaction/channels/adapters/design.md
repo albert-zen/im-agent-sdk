@@ -42,3 +42,11 @@ Feishu, and Weixin temporarily import the same shared base, media,
 artifact, and diagnostic helpers from `src/imagent/channels/native` while those
 independently reviewed boundaries remain in place. QQ, runtime composition,
 and the remaining shared helpers move only in later focused mechanical slices.
+
+The adapters package exposes only the component-map-approved QQ adapter and
+bounded quote constants through a lazy public facade. Importing the package or
+another provider does not load QQ; resolving one of those exact names loads
+the current QQ owner and preserves object identity. The old module path remains
+public only for the bounded transition to the immediately following QQ cluster
+move, which deletes that path rather than keeping a permanent compatibility
+shim. No other provider-private symbol is promoted.

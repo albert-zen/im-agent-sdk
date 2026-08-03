@@ -31,6 +31,15 @@ path supplies the provider snapshot. A caller may mimic the label as ordinary
 untrusted text, but cannot gain authority or forge a trusted snapshot because
 none exists and Metadata is ignored for this feature.
 
+## Public facade transition
+
+The approved QQ adapter and bounded quote constants are available from
+`imagent.interaction.channels.adapters` through a lazy identity-preserving
+facade. This is the target public path. The historical native module remains
+only until the immediately following mechanical cluster move; it is not a
+permanent compatibility surface. Importing the Interaction adapter package
+must not eagerly load QQ or any optional provider dependency.
+
 ## Failure and validation
 
 Enabled instances require normalized `app_id` and `client_secret` values and

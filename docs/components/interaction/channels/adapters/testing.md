@@ -30,3 +30,9 @@ whitespace, missing hosts, invalid ports, userinfo, query strings, and
 fragments. QQ and Telegram startup tests additionally prove that both adapters
 consume the single Interaction-owned helper without allocating transport
 resources.
+
+Facade tests prove the approved QQ names are exact object-identity re-exports,
+unknown names fail with `AttributeError`, and importing the adapters package or
+another provider does not eagerly import the QQ module. The follow-up QQ move
+must replace the lazy transition with direct target ownership and prove that
+the old module path is absent.
