@@ -9,7 +9,6 @@ from typing import Protocol
 
 from .adapters import DeliverySubmissionConflict
 from .contracts import (
-    ConversationRef,
     DeliveryItemReceipt,
     DeliveryItemStatus,
     DeliveryReceipt,
@@ -26,6 +25,7 @@ from .contracts import (
     ThreadRef,
     validate_delivery_submission_record,
 )
+from .interaction.messages import ConversationRef
 
 
 class _SQLiteOwner(Protocol):

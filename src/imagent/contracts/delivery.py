@@ -14,17 +14,14 @@ from ..interaction.media import (
     LocalPath,
     RemoteUrl,
 )
+from ..interaction.messages import Content, ConversationRef, Metadata, TextContent
 from ..interaction.operations import ContractViolation, require_identifier
 from ._validation import validate_thread_ref
 from .model import (
-    Content,
-    ConversationRef,
     DeliveryItemStatus,
     DeliveryReceipt,
     DeliveryReceiptStatus,
     DeliverySegmentStatus,
-    Metadata,
-    TextContent,
     ThreadRef,
 )
 

@@ -32,15 +32,12 @@ from imagent.contracts import (
     GetThreadHistory,
     GetThreadStatus,
     GetTurnCatchup,
-    InboundMessage,
     InputContinuationPreference,
     InputDisposition,
     InterruptTurn,
     ListProjects,
     ListThreads,
-    MessageRole,
     NativeThreadActivated,
-    OutboundMessage,
     Page,
     ProjectCapabilities,
     ProjectMode,
@@ -60,8 +57,6 @@ from imagent.contracts import (
     RespondRequest,
     RuntimeCapabilities,
     SupportLevel,
-    TextContent,
-    TextFormat,
     ThreadCapabilities,
     ThreadCreated,
     ThreadDeleted,
@@ -90,6 +85,13 @@ from imagent.contracts import (
     validate_request_response,
 )
 from imagent.events import CursorExpired, EventBroadcaster
+from imagent.interaction.messages import (
+    InboundMessage,
+    MessageRole,
+    OutboundMessage,
+    TextContent,
+    TextFormat,
+)
 from imagent.interaction.operations import operation_error
 
 

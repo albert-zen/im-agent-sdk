@@ -14,7 +14,7 @@ from .adapters import (
     MessageHandler,
     OperationHandler,
 )
-from .contracts import ConversationRef, InboundMessage
+from .interaction.messages import ConversationRef, InboundMessage
 
 
 @dataclass(frozen=True, slots=True)

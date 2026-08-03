@@ -15,7 +15,6 @@ from .contracts import (
     ApplicationSummary,
     ChannelCapabilities,
     ConversationBinding,
-    ConversationRef,
     DeliveryPrincipal,
     DeliveryReceipt,
     DeliveryReservation,
@@ -23,10 +22,8 @@ from .contracts import (
     DeliverySubmissionState,
     DestinationDeliveryRecord,
     GatewayOperation,
-    InboundMessage,
     InputContinuationPreference,
     InteractiveRequest,
-    OutboundMessage,
     RequestRef,
     RequestRouteCorrelation,
     RequestRouteState,
@@ -34,6 +31,7 @@ from .contracts import (
     ThreadRef,
     TurnReplyCorrelation,
 )
+from .interaction.messages import ConversationRef, InboundMessage, OutboundMessage
 
 MessageHandler = Callable[[InboundMessage], Awaitable[None]]
 OperationHandler = Callable[[GatewayOperation], Awaitable[None]]

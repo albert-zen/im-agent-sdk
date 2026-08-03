@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 
-from .contracts import ConversationBinding, ConversationRef, validate_binding
+from .contracts import ConversationBinding, validate_binding
+from .interaction.messages import ConversationRef
 
 
 class BindingConflict(RuntimeError):

@@ -18,16 +18,21 @@ Tests for `interaction.messages` must prove:
   attachment location in place of typed media content;
 - immutable values do not expose a mutable shared Gateway/Application context.
 
-Current focused evidence is:
+The dependency-safe message-foundation extraction establishes focused
+evidence at:
 
 ```sh
-PYTHONPATH=src python -m unittest tests.test_contracts -v
+PYTHONPATH=src python -m unittest \
+  tests.interaction.test_messages \
+  tests.test_contracts -v
 python scripts/validate_schemas.py
 ```
 
-During the mechanical move, equivalent focused coverage moves once to
-`tests/interaction/test_messages.py`; the historical test remains only until
-all of its other owner-specific cases have moved.
+`tests/interaction/test_messages.py` owns exact facade identity, closed ordered
+content, text discriminants, and distinct inbound/outbound identity. Canonical
+Agent item, Application history/event, Gateway correlation, and schema cases
+remain with their current owning tests until the `AgentMessage` dependency gap
+is resolved; they are not duplicated in the foundation test.
 
 Any schema or public-contract change also requires Python/schema discriminant
 parity, concrete adapter conformance where the envelope crosses a native

@@ -15,7 +15,6 @@ from .adapters import (
 from .bindings import BindingConflict
 from .contracts import (
     ConversationBinding,
-    ConversationRef,
     ThreadProjectionRoute,
     ThreadRef,
     TurnReplyCorrelation,
@@ -27,6 +26,7 @@ from .delivery_submissions import (
     SQLiteDeliverySubmissionMixin,
     initialize_delivery_submission_schema,
 )
+from .interaction.messages import ConversationRef
 from .request_correlations import (
     SQLiteRequestCorrelationMixin,
     initialize_request_correlation_schema,

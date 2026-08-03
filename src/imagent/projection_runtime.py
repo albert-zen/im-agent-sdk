@@ -24,7 +24,6 @@ from .contracts import (
     ApplicationOperation,
     ApplicationOperationResult,
     ConversationBinding,
-    ConversationRef,
     InputContinuationPreference,
     InputDisposition,
     ProjectionPolicy,
@@ -37,6 +36,7 @@ from .contracts import (
 )
 from .controllers import RequestPresenter
 from .events import EventBufferOverflow, EventStreamGap
+from .interaction.messages import ConversationRef
 from .projection_routes import ProjectionRouteCoordinator
 from .projections import (
     DeliverOutbound,

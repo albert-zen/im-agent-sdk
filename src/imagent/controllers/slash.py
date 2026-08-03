@@ -14,19 +14,16 @@ from ..contracts import (
     ClearConversationThread,
     ConversationBinding,
     ConversationBound,
-    ConversationRef,
     CreateThread,
     DeleteThread,
     GatewayOperationFailed,
     GetThreadHistory,
     GetThreadStatus,
     GetTurnCatchup,
-    InboundMessage,
     ListApplications,
     ListProjects,
     ListThreads,
     ObserveThread,
-    OutboundMessage,
     ProjectMode,
     ProjectsListed,
     ProjectSummary,
@@ -34,7 +31,6 @@ from ..contracts import (
     RequestResponseRouted,
     RespondToRequest,
     SelectApplication,
-    TextContent,
     ThreadCreated,
     ThreadDeleted,
     ThreadDeletionCapability,
@@ -47,6 +43,7 @@ from ..contracts import (
     TurnCatchupRead,
     UserInputResponse,
 )
+from ..interaction.messages import ConversationRef, InboundMessage, OutboundMessage, TextContent
 from .base import ControllerActions
 from .markdown import MarkdownSlashPresenter
 

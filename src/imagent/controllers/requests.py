@@ -7,14 +7,11 @@ from datetime import UTC, datetime
 
 from ..contracts import (
     ApprovalRequest,
-    ConversationRef,
     InteractiveRequest,
-    OutboundMessage,
-    TextContent,
-    TextFormat,
     UserInputQuestion,
     UserInputRequest,
 )
+from ..interaction.messages import ConversationRef, OutboundMessage, TextContent, TextFormat
 from .base import RequestPresentation
 
 

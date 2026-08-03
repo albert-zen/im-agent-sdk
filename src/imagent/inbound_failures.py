@@ -11,17 +11,19 @@ from typing import Protocol
 from .adapters import IdempotencyRepository
 from .contracts import (
     ApplicationInputOutcomeUnknown,
-    ConversationRef,
-    InboundMessage,
-    OutboundMessage,
-    TextContent,
-    TextFormat,
 )
 from .diagnostics import (
     InboundFailurePresentationFailureCode,
     InboundFailurePresenterDiagnosticFacts,
 )
 from .inbound_admission import ClaimedInbound
+from .interaction.messages import (
+    ConversationRef,
+    InboundMessage,
+    OutboundMessage,
+    TextContent,
+    TextFormat,
+)
 from .projection_runtime import InputPostAcceptanceError
 
 

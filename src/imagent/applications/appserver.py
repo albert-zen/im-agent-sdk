@@ -39,7 +39,6 @@ from ..contracts import (
     InterruptTurn,
     ListProjects,
     ListThreads,
-    MessageRole,
     NativeThreadActivated,
     Page,
     ProjectCapabilities,
@@ -47,8 +46,6 @@ from ..contracts import (
     RespondRequest,
     RuntimeCapabilities,
     SupportLevel,
-    TextContent,
-    TextFormat,
     ThreadCapabilities,
     ThreadCreated,
     ThreadDeletionCapability,
@@ -77,6 +74,7 @@ from ..interaction.media import (
     configure_shared_filesystem_root,
     resolve_local_attachment,
 )
+from ..interaction.messages import MessageRole, TextContent, TextFormat
 from ..interaction.operations import operation_error
 from .appserver_artifacts import (
     ApplicationArtifactMaterialization,

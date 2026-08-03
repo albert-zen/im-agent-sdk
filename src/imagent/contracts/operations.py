@@ -6,13 +6,12 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TypeAlias
 
+from ..interaction.messages import Content, ConversationRef
 from ..interaction.operations import ContractError, OperationResultStatus
 from .model import (
     ApplicationRef,
     ApplicationSummary,
-    Content,
     ConversationBinding,
-    ConversationRef,
     Page,
     ProjectRef,
     ProjectSummary,

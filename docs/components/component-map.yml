@@ -112,17 +112,17 @@ components:
     outputs: [InboundMessage, OutboundMessage, AgentMessage, TextContent]
     public_contracts: [InboundMessage, OutboundMessage, AgentMessage, Content, TextContent, ConversationRef, MessageRole, Metadata, TextFormat, TextLengthUnit]
     public_exports:
-      current: [imagent.contracts:InboundMessage, imagent.contracts:OutboundMessage, imagent.contracts:AgentMessage, imagent.contracts:Content, imagent.contracts:TextContent, imagent.contracts:ConversationRef, imagent.contracts:MessageRole, imagent.contracts:Metadata, imagent.contracts:TextFormat, imagent.contracts:TextLengthUnit]
-      target: [imagent.interaction.messages:InboundMessage, imagent.interaction.messages:OutboundMessage, imagent.interaction.messages:AgentMessage, imagent.interaction.messages:Content, imagent.interaction.messages:TextContent, imagent.interaction.messages:ConversationRef, imagent.interaction.messages:MessageRole, imagent.interaction.messages:Metadata, imagent.interaction.messages:TextFormat, imagent.interaction.messages:TextLengthUnit]
+      current: [imagent.contracts:InboundMessage, imagent.contracts:OutboundMessage, imagent.contracts:AgentMessage, imagent.contracts:Content, imagent.contracts:TextContent, imagent.contracts:ConversationRef, imagent.contracts:MessageRole, imagent.contracts:Metadata, imagent.contracts:TextFormat, imagent.contracts:TextLengthUnit, imagent.interaction.messages:InboundMessage, imagent.interaction.messages:OutboundMessage, imagent.interaction.messages:Content, imagent.interaction.messages:TextContent, imagent.interaction.messages:ConversationRef, imagent.interaction.messages:MessageRole, imagent.interaction.messages:Metadata, imagent.interaction.messages:TextFormat, imagent.interaction.messages:TextLengthUnit]
+      target: [imagent.contracts:InboundMessage, imagent.contracts:OutboundMessage, imagent.contracts:AgentMessage, imagent.contracts:Content, imagent.contracts:TextContent, imagent.contracts:ConversationRef, imagent.contracts:MessageRole, imagent.contracts:Metadata, imagent.contracts:TextFormat, imagent.contracts:TextLengthUnit, imagent.interaction.messages:InboundMessage, imagent.interaction.messages:OutboundMessage, imagent.interaction.messages:AgentMessage, imagent.interaction.messages:Content, imagent.interaction.messages:TextContent, imagent.interaction.messages:ConversationRef, imagent.interaction.messages:MessageRole, imagent.interaction.messages:Metadata, imagent.interaction.messages:TextFormat, imagent.interaction.messages:TextLengthUnit]
     dependencies: [interaction.media]
     state_recovery: Stateless values; stable IDs, never text or timestamps, drive replay identity.
-    current_code: [schemas/v1/common.schema.json, schemas/v1/messages.schema.json, src/imagent/contracts/model.py]
+    current_code: [schemas/v1/common.schema.json, schemas/v1/messages.schema.json, src/imagent/contracts/model.py, src/imagent/interaction/messages.py]
     target_code: [schemas/v1/common.schema.json, schemas/v1/messages.schema.json, src/imagent/interaction/messages.py]
-    current_tests: [tests/test_contracts.py]
+    current_tests: [tests/interaction/test_messages.py, tests/test_contracts.py]
     target_tests: [tests/interaction/test_messages.py]
     authoritative_docs: [docs/components/interaction/messages/design.md, docs/components/interaction/messages/testing.md, docs/components/contracts/protocol.md]
     adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0002-design-authority-and-control-boundaries.md]
-    gaps: [current cross-owner contract model and schema remain declared split candidates pending the mechanical Interaction move]
+    gaps: [AgentMessage remains in the mixed model until its Applications-owned ThreadRef dependency can be separated without a cycle; the language-neutral message schema remains a declared cross-owner union]
 
   interaction.operations:
     id: interaction.operations

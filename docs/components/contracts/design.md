@@ -3,8 +3,9 @@
 > Migration note: focused Interaction authority now lives in
 > [messages](../interaction/messages/design.md) and
 > [operations](../interaction/operations/design.md), with attachment source
-> and trust authority in [media](../interaction/media/design.md). This broad document
-> remains current evidence for contract leaves that have not yet been split.
+> and trust authority in [media](../interaction/media/design.md). This broad
+> document remains current evidence for contract leaves and the canonical
+> `AgentMessage` dependency that have not yet been physically split.
 
 ## Purpose
 
@@ -18,8 +19,8 @@ framework.
 This component owns:
 
 - resource references and summaries;
-- content envelopes and the language-neutral schema union that references
-  Interaction-owned attachment sources;
+- the remaining canonical `AgentMessage` dependency and the language-neutral
+  schema union that references Interaction-owned message/media values;
 - typed Application and Gateway operations and results;
 - capabilities and explicit error shapes;
 - Agent events, ordering fields, history projections, bindings, projection
