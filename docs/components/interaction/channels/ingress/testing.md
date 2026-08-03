@@ -18,6 +18,10 @@ Required scenarios:
   admission authority; and
 - QQ, Telegram, Feishu, and Weixin counterexamples all use the same ordering.
 
-Current evidence is in `tests/test_native_channels.py` and the four
-Channel-specific suites, plus admission/media/restart vertical tests. Target
-placement is `tests/interaction/channels/test_ingress.py`.
+Focused policy evidence lives in
+`tests/interaction/channels/test_ingress.py`: configuration parsing,
+unrestricted and deny-all sentinels, `any`/`all` matching, and invalid mixed or
+unknown modes. The four Channel suites prove provider configuration uses the
+same owner and access still precedes admission/media work. Admission,
+media/restart, queue, and shutdown evidence remains in the native and vertical
+suites until those mechanics move in later focused slices.

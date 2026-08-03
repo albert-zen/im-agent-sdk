@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 import websockets
 
-from .access import ChannelAccessPolicy
+from ...interaction.channels.ingress import ChannelAccessPolicy
 from .artifacts import (
     ArtifactDeliveryReceipt,
     PermanentArtifactDeliveryError,

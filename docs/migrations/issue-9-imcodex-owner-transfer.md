@@ -65,13 +65,15 @@ input again. Gateway persists that distinction independently of IMCodex.
 
 ## Channel transport modules
 
-Transferred code lives below `src/imagent/channels/native/`. These are
-Channel-private transport models and helpers, not a second copy of SDK Core
+Transferred provider transports live below `src/imagent/channels/native/`.
+Their shared access policy now lives with the Interaction ingress owner at
+`src/imagent/interaction/channels/ingress.py`. Provider-native models and
+helpers remain private implementation, not a second copy of SDK Core
 contracts.
 
 | IMCodex source | SDK destination/decision | Ownership and modification |
 |---|---|---|
-| `channels/access.py` | `native/access.py` | transfer stable-ID admission policy; consumers choose configured IDs |
+| `channels/access.py` | `interaction/channels/ingress.py` | transfer shared stable-ID access policy to Interaction ingress; consumers choose configured IDs |
 | `channels/base.py` | `native/base.py` | transfer lifecycle/access base; replace product telemetry with logging |
 | `channels/artifacts.py` | `native/artifacts.py` | transfer native attachment-send helpers used by platform transports |
 | `channels/media.py` | `native/media.py` | transfer bounded staging/materialization; keep trust/materialization Channel-local |

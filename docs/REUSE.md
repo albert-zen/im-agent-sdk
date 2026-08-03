@@ -58,12 +58,13 @@ Behaviors to preserve:
 - attachment staging and platform size limits;
 - reconnect tokens that belong to the Channel adapter.
 
-The SDK copy lives under `src/imagent/channels/native/`; its exact
-source-to-destination decisions, exclusions, local modifications, and test
-proof are recorded in the
+Provider transports remain under `src/imagent/channels/native/`; shared access
+policy now lives with the Interaction ingress owner under
+`src/imagent/interaction/channels/`. Exact source-to-destination decisions,
+exclusions, local modifications, and test proof are recorded in the
 [Issue #9 transfer map](migrations/issue-9-imcodex-owner-transfer.md). Product middleware,
-registry, commands, login UX, allowlists, bot policy, and deployment
-configuration were deliberately excluded.
+registry, commands, login UX, configured allowlist values and UX, bot policy,
+and deployment configuration were deliberately excluded.
 
 The SDK no longer imports the consumer package. The later IMCodex migration
 must consume these SDK APIs and delete its duplicated production copies before

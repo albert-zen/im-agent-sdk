@@ -278,7 +278,7 @@ components:
     id: interaction.channels.ingress
     parent: interaction.channels
     purpose: Apply shared authorization, ordering, normalization, and safe staging to an authenticated native IM event before handoff.
-    owns: [access evaluation, native identity normalization, pre-media admission use, media staging]
+    owns: [ChannelAccessPolicy, access evaluation, native identity normalization, pre-media admission use, media staging]
     does_not_own: [durable claim transitions after handoff, binding, input dispatch]
     inputs: [authenticated native event, admission lease]
     outputs: [verified InboundMessage]
@@ -288,13 +288,13 @@ components:
       target: []
     dependencies: [interaction.channels.channel-contract, interaction.messages, interaction.media]
     state_recovery: Native cursors and transient duplicate caches stay adapter-owned; durable claim stays Gateway-owned.
-    current_code: [src/imagent/channels/runtime.py, src/imagent/channels/native/access.py, src/imagent/channels/native/base.py, src/imagent/channels/native/diagnostics.py, src/imagent/channels/native/file_types.py, src/imagent/channels/native/media.py, src/imagent/channels/native/models.py, src/imagent/channels/native/windows_security.py]
+    current_code: [src/imagent/interaction/channels/ingress.py, src/imagent/channels/runtime.py, src/imagent/channels/native/base.py, src/imagent/channels/native/diagnostics.py, src/imagent/channels/native/file_types.py, src/imagent/channels/native/media.py, src/imagent/channels/native/models.py, src/imagent/channels/native/windows_security.py]
     target_code: [src/imagent/interaction/channels/ingress.py]
-    current_tests: [tests/test_native_channels.py, tests/test_channel_qq.py, tests/test_channel_telegram.py, tests/test_channel_feishu.py, tests/test_channel_weixin.py]
+    current_tests: [tests/interaction/channels/test_ingress.py, tests/test_native_channels.py, tests/test_channel_qq.py, tests/test_channel_telegram.py, tests/test_channel_feishu.py, tests/test_channel_weixin.py]
     target_tests: [tests/interaction/channels/test_ingress.py]
     authoritative_docs: [docs/components/interaction/channels/ingress/design.md, docs/components/interaction/channels/ingress/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
-    gaps: [shared ingress mechanics are interleaved with platform adapters]
+    gaps: [native identity normalization, admission use, and media staging remain interleaved with platform adapters]
 
   interaction.channels.outbound-delivery:
     id: interaction.channels.outbound-delivery

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from threading import Lock
 
-from .access import ChannelAccessPolicy
+from ...interaction.channels.ingress import ChannelAccessPolicy
 from .diagnostics import (
     NativeChannelDiagnosticState,
     NativeConnectionDiagnosticSnapshot,
