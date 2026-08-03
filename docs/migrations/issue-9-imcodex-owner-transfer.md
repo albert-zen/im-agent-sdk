@@ -21,6 +21,13 @@ later IMCodex consumer migration. It is not a claim that Issue #9 is complete.
 
 ## Provenance and license fact
 
+This section is the repository's authoritative source-provenance record for
+the copied implementation. The transferred destination families are
+`src/imagent/channels/native/` and
+`src/imagent/applications/appserver_client/`; the detailed tables below record
+the source paths, exclusions, modifications, and test proof. This provenance
+record is not a replacement for a repository license.
+
 The transfer source is
 [`albert-zen/imcodex`](https://github.com/albert-zen/imcodex) commit
 `858398226e8f76e49f8259ae686939f209e1bb36`, which is the commit already pinned

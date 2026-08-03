@@ -61,8 +61,7 @@ Behaviors to preserve:
 The SDK copy lives under `src/imagent/channels/native/`; its exact
 source-to-destination decisions, exclusions, local modifications, and test
 proof are recorded in the
-[Issue #9 transfer map](migrations/issue-9-imcodex-owner-transfer.md) and
-[third-party/provenance notice](../THIRD_PARTY_NOTICES.md). Product middleware,
+[Issue #9 transfer map](migrations/issue-9-imcodex-owner-transfer.md). Product middleware,
 registry, commands, login UX, allowlists, bot policy, and deployment
 configuration were deliberately excluded.
 
