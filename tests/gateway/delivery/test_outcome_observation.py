@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
+import sys
 import unittest
 from datetime import UTC, datetime
 
@@ -23,15 +25,20 @@ from imagent.contracts import (
     ThreadProjectionRoute,
     ThreadRef,
 )
-from imagent.delivery_outcomes import (
+from imagent.diagnostics import DeliveryOutcomeObserverFailureCode
+from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway.delivery import (
+    DeliveryCoordinator,
+    DeliveryCoordinatorConfig,
     DeliveryOutcome,
     DeliveryOutcomeContext,
     DeliveryOutcomeErrorCode,
+    DeliveryOutcomeObserver,
+)
+from imagent.gateway.delivery import outcome_observation as outcome_observation_owner
+from imagent.gateway.delivery.outcome_observation import (
     DeliveryOutcomeObserverRuntime,
 )
-from imagent.diagnostics import DeliveryOutcomeObserverFailureCode
-from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
-from imagent.gateway.delivery import DeliveryCoordinator, DeliveryCoordinatorConfig
 from imagent.outbound_presentation import (
     OutboundPresentationContext,
     ProjectionPresentationOrigin,
@@ -49,6 +56,16 @@ from imagent.projections import (
 )
 from imagent.storage import InMemoryIdempotencyRepository
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
+
+
+class DeliveryOutcomeObservationFacadeTests(unittest.TestCase):
+    def test_gateway_facade_uses_exact_owner_objects_and_old_module_is_absent(self) -> None:
+        self.assertIs(DeliveryOutcome, outcome_observation_owner.DeliveryOutcome)
+        self.assertIs(DeliveryOutcomeContext, outcome_observation_owner.DeliveryOutcomeContext)
+        self.assertIs(DeliveryOutcomeErrorCode, outcome_observation_owner.DeliveryOutcomeErrorCode)
+        self.assertIs(DeliveryOutcomeObserver, outcome_observation_owner.DeliveryOutcomeObserver)
+        self.assertNotIn("imagent.delivery_outcomes", sys.modules)
+        self.assertIsNone(importlib.util.find_spec("imagent.delivery_outcomes"))
 
 
 class _Observer:
@@ -70,6 +87,26 @@ class _Observer:
             await self.release.wait()
         if self.fail:
             raise RuntimeError("observer secret")
+
+
+class _CancellationOverrunObserver:
+    def __init__(self) -> None:
+        self.calls: list[tuple[DeliveryOutcomeContext, DeliveryOutcome]] = []
+        self.entered = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def observe_delivery_outcome(
+        self,
+        context: DeliveryOutcomeContext,
+        outcome: DeliveryOutcome,
+    ) -> None:
+        self.calls.append((context, outcome))
+        self.entered.set()
+        while not self.release.is_set():
+            try:
+                await self.release.wait()
+            except asyncio.CancelledError:
+                continue
 
 
 class _ReceiptChannel(FakeChannelAdapter):
@@ -117,7 +154,7 @@ class DeliveryOutcomeObserverTests(unittest.IsolatedAsyncioTestCase):
 
     def _gateway(
         self,
-        observer: _Observer | None,
+        observer: DeliveryOutcomeObserver | None,
         *,
         channel: FakeChannelAdapter | None = None,
         coordinator: DeliveryCoordinator | None = None,
@@ -405,6 +442,51 @@ class DeliveryOutcomeObserverTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(facts.last_failure_code, DeliveryOutcomeObserverFailureCode.TIMED_OUT)
         self.assertNotIn("observer-timeout", repr(facts))
 
+    async def test_cancellation_overrun_is_bounded_retains_capacity_and_not_result(self) -> None:
+        observer = _CancellationOverrunObserver()
+        gateway = self._gateway(
+            observer,
+            limits=GatewayLimits(
+                delivery_outcome_observer_timeout_seconds=0.005,
+                delivery_outcome_observer_max_concurrency=1,
+            ),
+        )
+        await gateway.start()
+        try:
+            first = await gateway.deliver_proactively(
+                self._intent("observer-overrun-one"),
+                credential=self.token,
+            )
+            await observer.entered.wait()
+
+            def overran() -> bool:
+                current = gateway.diagnostics_snapshot().gateway.delivery_outcome_observer
+                return current is not None and current.cancellation_overrun_count == 1
+
+            await _wait_until(overran)
+            second = await gateway.deliver_proactively(
+                self._intent("observer-overrun-two"),
+                credential=self.token,
+            )
+            await asyncio.wait_for(gateway.stop(), timeout=0.2)
+        finally:
+            observer.release.set()
+            await asyncio.sleep(0)
+
+        self.assertEqual(first.state.value, "accepted")
+        self.assertEqual(second.state.value, "accepted")
+        facts = gateway.diagnostics_snapshot().gateway.delivery_outcome_observer
+        assert facts is not None
+        self.assertEqual(facts.notification_count, 2)
+        self.assertEqual(facts.timeout_count, 1)
+        self.assertEqual(facts.cancellation_overrun_count, 1)
+        self.assertEqual(facts.capacity_rejection_count, 1)
+        self.assertEqual(
+            facts.last_failure_code,
+            DeliveryOutcomeObserverFailureCode.CAPACITY_EXHAUSTED,
+        )
+        self.assertNotIn("observer-overrun", repr(facts))
+
     async def test_attachment_and_receipt_string_facts_share_a_finite_budget(self) -> None:
         observer = _Observer()
         runtime = DeliveryOutcomeObserverRuntime(
@@ -462,6 +544,55 @@ class DeliveryOutcomeObserverTests(unittest.IsolatedAsyncioTestCase):
         facts = runtime.diagnostic_facts()
         self.assertEqual(facts.notification_count, 3)
         self.assertEqual(facts.failure_count, 3)
+        self.assertEqual(
+            facts.last_failure_code,
+            DeliveryOutcomeObserverFailureCode.INVALID_FACTS,
+        )
+
+    async def test_message_and_attachment_metadata_must_be_bounded_scalars(self) -> None:
+        observer = _Observer()
+        runtime = DeliveryOutcomeObserverRuntime(
+            observer,
+            timeout_seconds=1,
+            max_items=4,
+            max_text_characters=1_024,
+            max_concurrency=1,
+        )
+        runtime.start()
+        try:
+            runtime.notify(
+                OutboundMessage(
+                    delivery_id="metadata-count",
+                    conversation_ref=ConversationRef("c", "v"),
+                    content=(TextContent("x"),),
+                    created_at=datetime(2026, 8, 3, tzinfo=UTC),
+                    metadata={f"key-{index}": index for index in range(17)},
+                ),
+                receipt=DeliveryReceipt(status=DeliveryReceiptStatus.ACCEPTED_BY_PLATFORM),
+            )
+            runtime.notify(
+                OutboundMessage(
+                    delivery_id="metadata-type",
+                    conversation_ref=ConversationRef("c", "v"),
+                    content=(
+                        AttachmentContent(
+                            attachment_id="a",
+                            media_type="text/plain",
+                            source=LocalPath("/tmp/a"),
+                            metadata={"nested": ["not", "scalar"]},
+                        ),
+                    ),
+                    created_at=datetime(2026, 8, 3, tzinfo=UTC),
+                ),
+                receipt=DeliveryReceipt(status=DeliveryReceiptStatus.ACCEPTED_BY_PLATFORM),
+            )
+        finally:
+            await runtime.close()
+
+        self.assertEqual(observer.calls, [])
+        facts = runtime.diagnostic_facts()
+        self.assertEqual(facts.notification_count, 2)
+        self.assertEqual(facts.failure_count, 2)
         self.assertEqual(
             facts.last_failure_code,
             DeliveryOutcomeObserverFailureCode.INVALID_FACTS,

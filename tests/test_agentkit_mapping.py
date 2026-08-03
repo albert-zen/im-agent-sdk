@@ -91,7 +91,9 @@ class AgentKitMappingTests(unittest.TestCase):
             "src/imagent/keyed_locks.py": {"delivery-planning-and-coordination"},
             "src/imagent/gateway/delivery/coordination.py": {"delivery-planning-and-coordination"},
             "src/imagent/gateway/delivery/planning.py": {"delivery-planning-and-coordination"},
-            "src/imagent/delivery_outcomes.py": {"delivery-planning-and-coordination"},
+            "src/imagent/gateway/delivery/outcome_observation.py": {
+                "delivery-planning-and-coordination"
+            },
             "src/imagent/outbound_presentation.py": {"delivery-planning-and-coordination"},
             "src/imagent/events.py": {"projections-and-recovery"},
             "src/imagent/projection_routes.py": {"projections-and-recovery"},
@@ -137,7 +139,9 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/test_inbound_failure_presenter.py": {"gateway"},
             "tests/gateway/delivery/test_planning.py": {"delivery-planning-and-coordination"},
             "tests/gateway/delivery/test_coordination.py": {"delivery-planning-and-coordination"},
-            "tests/test_delivery_outcomes.py": {"delivery-planning-and-coordination"},
+            "tests/gateway/delivery/test_outcome_observation.py": {
+                "delivery-planning-and-coordination"
+            },
             "tests/test_outbound_presentation.py": {"delivery-planning-and-coordination"},
             "tests/test_event_fanout.py": {"projections-and-recovery"},
             "tests/test_storage.py": {"persistence"},

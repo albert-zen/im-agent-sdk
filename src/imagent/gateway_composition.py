@@ -9,7 +9,7 @@ from .adapters import (
     ProjectionRouteRepository,
     RequestCorrelationRepository,
 )
-from .delivery_outcomes import DeliveryOutcomeObserver
+from .gateway.delivery.outcome_observation import DeliveryOutcomeObserver
 from .inbound_content import InboundContentTransformer
 from .inbound_failures import InboundFailurePresenter
 from .interaction.controllers import InboundController, RequestPresenter
