@@ -36,6 +36,10 @@ ADR 0014 diagnostics tests cover lifecycle transitions for all four native
 Channels, bounded QQ/Feishu inbound queue facts, configured identity pinning,
 provider failure/invalid-shape fallback, and repeated side-effect-free reads.
 
+Ownership tests also require the Interaction runtime objects and formal
+`imagent.channels` facade to be object-identical, keep provider imports lazy,
+and reject the removed historical `imagent.channels.runtime` path.
+
 QQ-only quote fixtures additionally cover direct and group events, missing and
 malformed provider fields, every text/field/count bound, ignored nested history
 and media URLs, anti-forgery boundaries, and one

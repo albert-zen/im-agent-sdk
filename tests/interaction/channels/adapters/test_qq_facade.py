@@ -12,6 +12,7 @@ from imagent.interaction.channels.adapters import qq_quote as target_qq_quote
 class QQAdapterFacadeTests(unittest.TestCase):
     def test_approved_exports_preserve_exact_object_identity(self) -> None:
         approved = {
+            "NativeTransportChannelAdapter",
             "QQChannelAdapter",
             "QQ_QUOTE_ATTACHMENT_LIMIT",
             "QQ_QUOTE_CONTENT_LIMIT",
@@ -19,10 +20,15 @@ class QQAdapterFacadeTests(unittest.TestCase):
             "QQ_QUOTE_MESSAGE_TYPE",
             "QQ_QUOTE_REFERENCE_LIMIT",
             "QQ_QUOTE_TRANSCRIPT_LIMIT",
+            "channel_from_config",
         }
         self.assertEqual(set(adapter_facade.__all__), approved)
         self.assertIs(adapter_facade.QQChannelAdapter, target_qq.QQChannelAdapter)
-        for name in approved - {"QQChannelAdapter"}:
+        for name in approved - {
+            "NativeTransportChannelAdapter",
+            "QQChannelAdapter",
+            "channel_from_config",
+        }:
             with self.subTest(name=name):
                 self.assertIs(getattr(adapter_facade, name), getattr(target_qq_quote, name))
 
