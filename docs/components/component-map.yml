@@ -274,14 +274,14 @@ components:
     target_code: [schemas/v1/capabilities.schema.json, schemas/v1/deliveries.schema.json, src/imagent/interaction/channels/contract.py]
     current_tests: [tests/test_adapter_contracts.py, tests/test_native_channels.py]
     target_tests: [tests/interaction/channels/test_contract.py]
-    authoritative_docs: [docs/components/ports/design.md, docs/components/channel-adapters/design.md]
-    adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
+    authoritative_docs: [docs/components/interaction/channels/channel-contract/design.md, docs/components/interaction/channels/channel-contract/testing.md]
+    adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0010-capability-driven-delivery-coordination.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
     gaps: [adapters.py and channels/runtime.py are split candidates, current OperationHandler names GatewayOperation and must converge to the Interaction operation boundary without a target Channel-to-Gateway dependency]
 
   interaction.channels.ingress:
     id: interaction.channels.ingress
     parent: interaction.channels
-    purpose: Authenticate, authorize, deduplicate, normalize, and safely stage native IM input before handoff.
+    purpose: Apply shared authorization, ordering, normalization, and safe staging to an authenticated native IM event before handoff.
     owns: [access evaluation, native identity normalization, pre-media admission use, media staging]
     does_not_own: [durable claim transitions after handoff, binding, input dispatch]
     inputs: [authenticated native event, admission lease]
@@ -296,16 +296,16 @@ components:
     target_code: [src/imagent/interaction/channels/ingress.py]
     current_tests: [tests/test_native_channels.py, tests/test_channel_qq.py, tests/test_channel_telegram.py, tests/test_channel_feishu.py, tests/test_channel_weixin.py]
     target_tests: [tests/interaction/channels/test_ingress.py]
-    authoritative_docs: [docs/components/channel-adapters/design.md, docs/components/attachments-and-media/design.md]
+    authoritative_docs: [docs/components/interaction/channels/ingress/design.md, docs/components/interaction/channels/ingress/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
     gaps: [shared ingress mechanics are interleaved with platform adapters]
 
   interaction.channels.outbound-delivery:
     id: interaction.channels.outbound-delivery
     parent: interaction.channels
-    purpose: Translate planned logical output into native sends and truthful typed receipts.
-    owns: [native artifact preparation helpers, receipt mapping, native text splitting fallback]
-    does_not_own: [Gateway planning/retry policy, transcript, durable outbox]
+    purpose: Apply cross-Channel validation and correlation to planned logical output and normalize native evidence into truthful typed receipts.
+    owns: [shared delivery validation, stable correlation propagation, receipt normalization, shared text splitting fallback]
+    does_not_own: [provider encoding or upload, native API calls, native response mapping, Gateway planning/retry policy, transcript, durable outbox]
     inputs: [OutboundMessage segment, Channel capability profile]
     outputs: [DeliveryReceipt and per-item evidence]
     public_contracts: []
@@ -318,8 +318,8 @@ components:
     target_code: [src/imagent/interaction/channels/outbound_delivery.py]
     current_tests: [tests/test_native_channels.py, tests/test_channel_qq.py, tests/test_channel_telegram.py, tests/test_channel_feishu.py, tests/test_channel_weixin.py]
     target_tests: [tests/interaction/channels/test_outbound_delivery.py]
-    authoritative_docs: [docs/components/channel-adapters/design.md, docs/components/channel-adapters/testing.md]
-    adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
+    authoritative_docs: [docs/components/interaction/channels/outbound-delivery/design.md, docs/components/interaction/channels/outbound-delivery/testing.md]
+    adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
     gaps: [runtime.py mixes contract ingress delivery and composition]
 
   interaction.channels.adapters:
@@ -340,9 +340,9 @@ components:
     target_code: [src/imagent/interaction/channels/adapters/**]
     current_tests: [tests/test_native_channels.py, tests/test_channel_qq.py, tests/test_channel_telegram.py, tests/test_channel_feishu.py, tests/test_channel_weixin.py]
     target_tests: [tests/interaction/channels/adapters/**]
-    authoritative_docs: [docs/components/channel-adapters/design.md, docs/components/channel-adapters/testing.md, docs/components/channel-adapters/adapters/qq.md, docs/components/channel-adapters/adapters/telegram.md, docs/components/channel-adapters/adapters/feishu.md, docs/components/channel-adapters/adapters/weixin.md]
-    adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0010-capability-driven-delivery-coordination.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0014-read-only-diagnostics-surface.md]
-    gaps: [target adapter parent navigation and leaf testing mirrors not yet created]
+    authoritative_docs: [docs/components/interaction/channels/adapters/design.md, docs/components/interaction/channels/adapters/testing.md, docs/components/channel-adapters/adapters/qq.md, docs/components/channel-adapters/adapters/telegram.md, docs/components/channel-adapters/adapters/feishu.md, docs/components/channel-adapters/adapters/weixin.md]
+    adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0010-capability-driven-delivery-coordination.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0014-read-only-diagnostics-surface.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [target adapter source and platform test mirrors have not yet moved]
 
   gateway.composition:
     id: gateway.composition

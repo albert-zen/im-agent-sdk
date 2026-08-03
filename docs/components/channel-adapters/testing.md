@@ -46,7 +46,7 @@ or routing/approval identity.
 Run the reusable Channel contract suite plus native adapter tests:
 
 ```sh
-PYTHONPATH=src python -m unittest \
+PYTHONPATH=src:tests python -m unittest \
   tests.test_native_channels \
   tests.test_channel_qq \
   tests.test_channel_telegram \

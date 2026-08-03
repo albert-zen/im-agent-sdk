@@ -41,9 +41,8 @@ See the [Interaction navigation](interaction/README.md) and the authoritative
 leaf docs for [messages](interaction/messages/design.md),
 [operations](interaction/operations/design.md), and
 [media](interaction/media/design.md), plus the
-[Controller subtree](interaction/controllers/README.md). The remaining Channel
-leaves still use their current broad component documents until their focused
-slices land.
+[Controller subtree](interaction/controllers/README.md) and
+[Channel subtree](interaction/channels/README.md).
 
 ## Gateway
 
