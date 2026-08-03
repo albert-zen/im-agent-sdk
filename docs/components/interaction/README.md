@@ -13,6 +13,9 @@ does not own Gateway orchestration or native Agent truth.
   error, and validation vocabulary; see [testing](operations/testing.md).
 - [Media](media/design.md) — attachment sources and source/type/size/trust
   boundaries; see [testing](media/testing.md).
+- [Controllers](controllers/README.md) — optional typed Controller contract,
+  explicit bounded command composition, common commands, and request
+  presentation.
 
 `Message` carries content. `Operation` carries control intent. A Controller
 may recognize a command in an inbound Message and invoke a typed action, but
@@ -21,17 +24,11 @@ and product commands do not enter SDK Core.
 
 ## Remaining subtree
 
-The approved target also contains the following logical leaves. Their current
+The approved target also contains the following Channel leaves. Their current
 broad documentation remains authoritative until their focused rollout slices
 create leaf documents:
 
 ```text
-controllers
-├── controller-contract
-├── command-registry
-├── common-commands
-└── request-presentation
-
 channels
 ├── channel-contract
 ├── ingress
