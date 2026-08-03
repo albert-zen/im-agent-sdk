@@ -15,12 +15,12 @@ from typing import Any, Generic, Protocol, TypeVar
 
 from PIL import Image
 
-from .diagnostics import emit_event
-from .file_types import (
+from ...interaction.media import (
     InvalidGenericFileError,
     UnsupportedGenericFileError,
     detect_generic_file,
 )
+from .diagnostics import emit_event
 from .models import InboundAttachment, InboundMessage
 from .windows_security import secure_windows_path
 

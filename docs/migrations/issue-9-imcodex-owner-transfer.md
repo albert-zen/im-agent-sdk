@@ -67,8 +67,9 @@ input again. Gateway persists that distinction independently of IMCodex.
 
 Transferred provider transports live below `src/imagent/channels/native/`.
 Their shared access policy now lives with the Interaction ingress owner at
-`src/imagent/interaction/channels/ingress.py`. Provider-native models and
-helpers remain private implementation, not a second copy of SDK Core
+`src/imagent/interaction/channels/ingress.py`, and shared generic-file
+validation lives at `src/imagent/interaction/media.py`. Provider-native models
+and helpers remain private implementation, not a second copy of SDK Core
 contracts.
 
 | IMCodex source | SDK destination/decision | Ownership and modification |
@@ -86,7 +87,7 @@ contracts.
 | `channels/weixin_state.py` | `native/weixin_state.py` | transfer Channel-owned credential/reconnect state |
 | `channels/weixin.py` | `native/weixin.py` | transfer Weixin transport; product login UX remains downstream |
 | top-level `models.py` | `native/models.py` | transfer only native transport DTOs used by the modules above |
-| top-level `file_types.py` | `native/file_types.py` | transfer media type/extension validation |
+| top-level `file_types.py` | `interaction/media.py` | transfer shared generic-file type/byte validation to Interaction media |
 | top-level `windows_security.py` | `native/windows_security.py` | transfer secure staging helper |
 | top-level `config.py` | no wholesale transfer | extract only neutral endpoint validation into `native/endpoints.py`; product config loading remains IMCodex |
 

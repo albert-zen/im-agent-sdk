@@ -7,6 +7,9 @@ Tests for `interaction.media` must prove:
 - each attachment source has one stable discriminant and schema/Python shape;
 - source kind, media type, declared size/count, grouping, and accepting
   capability limits fail explicitly before unsupported native work;
+- generic UTF-8 text and structurally valid PDF bytes map to their declared
+  media type, while unsupported suffixes, NUL/non-UTF-8 text, and malformed
+  PDF bytes fail explicitly;
 - `LocalPath` is rejected without an explicit shared root, when relative, or
   when resolved outside that root, and succeeds only inside the trusted root;
 - `RemoteUrl` is never fetched by an unrestricted common downloader and
@@ -34,7 +37,7 @@ PYTHONPATH=src python -m unittest \
 ```
 
 `tests/interaction/test_media.py` owns exact facade identity, discriminant,
-and local shared-root trust cases. Proactive ingress, admission, native
+local shared-root trust, and generic-file byte/type validation cases. Proactive ingress, admission, native
 Channel I/O, and Application materialization cases remain with their owning
 components; they are not moved merely because they consume typed media.
 

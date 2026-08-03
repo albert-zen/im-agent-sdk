@@ -59,9 +59,9 @@ Behaviors to preserve:
 - reconnect tokens that belong to the Channel adapter.
 
 Provider transports remain under `src/imagent/channels/native/`; shared access
-policy now lives with the Interaction ingress owner under
-`src/imagent/interaction/channels/`. Exact source-to-destination decisions,
-exclusions, local modifications, and test proof are recorded in the
+policy lives with the Interaction ingress owner, and shared generic-file
+validation lives with the Interaction media owner. Exact source-to-destination
+decisions, exclusions, local modifications, and test proof are recorded in the
 [Issue #9 transfer map](migrations/issue-9-imcodex-owner-transfer.md). Product middleware,
 registry, commands, login UX, configured allowlist values and UX, bot policy,
 and deployment configuration were deliberately excluded.
