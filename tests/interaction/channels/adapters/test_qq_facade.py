@@ -5,7 +5,8 @@ import sys
 import unittest
 
 import imagent.interaction.channels.adapters as adapter_facade
-from imagent.channels.native import qq as current_qq
+from imagent.interaction.channels.adapters import qq as target_qq
+from imagent.interaction.channels.adapters import qq_quote as target_qq_quote
 
 
 class QQAdapterFacadeTests(unittest.TestCase):
@@ -20,9 +21,10 @@ class QQAdapterFacadeTests(unittest.TestCase):
             "QQ_QUOTE_TRANSCRIPT_LIMIT",
         }
         self.assertEqual(set(adapter_facade.__all__), approved)
-        for name in approved:
+        self.assertIs(adapter_facade.QQChannelAdapter, target_qq.QQChannelAdapter)
+        for name in approved - {"QQChannelAdapter"}:
             with self.subTest(name=name):
-                self.assertIs(getattr(adapter_facade, name), getattr(current_qq, name))
+                self.assertIs(getattr(adapter_facade, name), getattr(target_qq_quote, name))
 
     def test_unknown_export_fails_explicitly(self) -> None:
         with self.assertRaisesRegex(AttributeError, "has no attribute 'QQ_INTERNAL'"):
@@ -35,11 +37,15 @@ class QQAdapterFacadeTests(unittest.TestCase):
                 "-c",
                 (
                     "import sys; "
+                    "from importlib.util import find_spec; "
                     "import imagent.interaction.channels.adapters; "
                     "import imagent.interaction.channels.adapters.feishu; "
                     "import imagent.interaction.channels.adapters.telegram; "
                     "import imagent.interaction.channels.adapters.weixin; "
-                    "assert 'imagent.channels.native.qq' not in sys.modules"
+                    "assert 'imagent.interaction.channels.adapters.qq' not in sys.modules; "
+                    "assert find_spec('imagent.channels.native.qq') is None; "
+                    "assert find_spec('imagent.channels.native.qq_media') is None; "
+                    "assert find_spec('imagent.channels.native.qq_quote') is None"
                 ),
             ],
             check=False,

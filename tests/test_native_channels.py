@@ -1233,7 +1233,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with (
-            patch("imagent.channels.native.qq.httpx.AsyncClient") as qq_client,
+            patch("imagent.interaction.channels.adapters.qq.httpx.AsyncClient") as qq_client,
             patch(
                 "imagent.interaction.channels.adapters.telegram.httpx.AsyncClient"
             ) as telegram_client,

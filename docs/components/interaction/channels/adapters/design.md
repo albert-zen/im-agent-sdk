@@ -34,19 +34,18 @@ not become a common message/resource contract. Weixin credential/cursor state
 remains native Channel state, not Gateway persistence.
 
 The target `src/imagent/interaction/channels/adapters/` package contains the
-Telegram, Feishu/Lark, and Weixin provider modules plus the shared QQ/Telegram
-HTTP endpoint validator.
+QQ, Telegram, Feishu/Lark, and Weixin provider modules plus the shared
+QQ/Telegram HTTP endpoint validator.
 The validator remains adapter-internal: it validates provider configuration
-without opening a transport and is not part of the Channel facade. Telegram,
-Feishu, and Weixin temporarily import the same shared base, media,
-artifact, and diagnostic helpers from `src/imagent/channels/native` while those
-independently reviewed boundaries remain in place. QQ, runtime composition,
-and the remaining shared helpers move only in later focused mechanical slices.
+without opening a transport and is not part of the Channel facade. All four
+providers temporarily import the same shared base, media, artifact, and
+diagnostic helpers from `src/imagent/channels/native` while those independently
+reviewed boundaries remain in place. Runtime composition and the remaining
+shared helpers move only in later focused mechanical slices.
 
 The adapters package exposes only the component-map-approved QQ adapter and
 bounded quote constants through a lazy public facade. Importing the package or
 another provider does not load QQ; resolving one of those exact names loads
-the current QQ owner and preserves object identity. The old module path remains
-public only for the bounded transition to the immediately following QQ cluster
-move, which deletes that path rather than keeping a permanent compatibility
-shim. No other provider-private symbol is promoted.
+the target QQ owner and preserves object identity. The three historical QQ
+native module paths are deleted without compatibility shims. No other
+provider-private symbol is promoted.

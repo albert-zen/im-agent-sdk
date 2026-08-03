@@ -5,8 +5,9 @@ import unittest
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from imagent.channels.native.qq import QQ_TEXT_LIMIT, QQChannelAdapter
-from imagent.channels.native.qq_quote import (
+from imagent.contracts import ConversationRef, InboundMessage, TextContent
+from imagent.interaction.channels.adapters.qq import QQ_TEXT_LIMIT, QQChannelAdapter
+from imagent.interaction.channels.adapters.qq_quote import (
     QQ_QUOTE_ATTACHMENT_LIMIT,
     QQ_QUOTE_CONTENT_LIMIT,
     QQ_QUOTE_FILENAME_LIMIT,
@@ -17,7 +18,6 @@ from imagent.channels.native.qq_quote import (
     parse_qq_quote,
     render_qq_quote_context,
 )
-from imagent.contracts import ConversationRef, InboundMessage, TextContent
 from imagent.interaction.channels.outbound_delivery import OutboundArtifact, OutboundMessage
 from imagent.interaction.controllers.common import parse_slash_command
 

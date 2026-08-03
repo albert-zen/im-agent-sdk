@@ -15,15 +15,7 @@ from typing import Any
 import httpx
 import websockets
 
-from ...interaction.channels.adapters.endpoints import validate_http_endpoint
-from ...interaction.channels.ingress import ChannelAccessPolicy, InboundMessage
-from ...interaction.channels.outbound_delivery import (
-    NativeDeliveryResult,
-    OutboundArtifact,
-    OutboundMessage,
-    split_text,
-)
-from .artifacts import (
+from ....channels.native.artifacts import (
     ArtifactDeliveryReceipt,
     PermanentArtifactDeliveryError,
     append_artifact_failures,
@@ -32,13 +24,21 @@ from .artifacts import (
     record_artifact_failure,
     stable_artifact_identity,
 )
-from .base import BaseChannelAdapter
-from .diagnostics import (
+from ....channels.native.base import BaseChannelAdapter
+from ....channels.native.diagnostics import (
     NativeConnectionDiagnosticSnapshot,
     NativeQueueDiagnosticSnapshot,
     emit_event,
 )
-from .media import materialize_inbound_media
+from ....channels.native.media import materialize_inbound_media
+from ..ingress import ChannelAccessPolicy, InboundMessage
+from ..outbound_delivery import (
+    NativeDeliveryResult,
+    OutboundArtifact,
+    OutboundMessage,
+    split_text,
+)
+from .endpoints import validate_http_endpoint
 from .qq_media import (
     QQFileMaterializer,
     QQFileReference,
@@ -47,28 +47,9 @@ from .qq_media import (
     parse_qq_file_references,
     parse_qq_image_references,
 )
-from .qq_quote import (
-    QQ_QUOTE_ATTACHMENT_LIMIT,
-    QQ_QUOTE_CONTENT_LIMIT,
-    QQ_QUOTE_FILENAME_LIMIT,
-    QQ_QUOTE_MESSAGE_TYPE,
-    QQ_QUOTE_REFERENCE_LIMIT,
-    QQ_QUOTE_TRANSCRIPT_LIMIT,
-    parse_qq_quote,
-    render_qq_quote_context,
-)
+from .qq_quote import parse_qq_quote, render_qq_quote_context
 
 logger = logging.getLogger(__name__)
-
-__all__ = (
-    "QQ_QUOTE_ATTACHMENT_LIMIT",
-    "QQ_QUOTE_CONTENT_LIMIT",
-    "QQ_QUOTE_FILENAME_LIMIT",
-    "QQ_QUOTE_MESSAGE_TYPE",
-    "QQ_QUOTE_REFERENCE_LIMIT",
-    "QQ_QUOTE_TRANSCRIPT_LIMIT",
-    "QQChannelAdapter",
-)
 
 DEFAULT_API_BASE = "https://api.sgroup.qq.com"
 SANDBOX_API_BASE = "https://sandbox.api.sgroup.qq.com"
