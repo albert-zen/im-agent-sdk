@@ -16,14 +16,6 @@ from urllib.parse import quote, urlsplit
 
 import httpx
 
-from ....channels.native.artifacts import (
-    ArtifactDeliveryReceipt,
-    PermanentArtifactDeliveryError,
-    deliver_artifact_batch,
-    delivered_artifact_message_ids,
-    read_managed_artifact,
-    stable_artifact_identity,
-)
 from ....channels.native.base import BaseChannelAdapter
 from ....channels.native.media import (
     MAX_FILE_BYTES,
@@ -39,10 +31,16 @@ from ....channels.native.media import (
 )
 from ..ingress import ChannelAccessPolicy, InboundMessage
 from ..outbound_delivery import (
+    ArtifactDeliveryReceipt,
     NativeDeliveryResult,
     OutboundArtifact,
     OutboundMessage,
+    PermanentArtifactDeliveryError,
+    deliver_artifact_batch,
+    delivered_artifact_message_ids,
+    read_managed_artifact,
     split_text,
+    stable_artifact_identity,
 )
 from .diagnostics import (
     NativeConnectionDiagnosticSnapshot,

@@ -7,6 +7,12 @@ Required scenarios:
 - attachment grouping, type/size/source, trusted path, and reply-scope limits
   fail before unsupported native effects;
 - stable delivery/segment/attachment identity does not depend on staging path;
+- ordered artifact execution records each accepted or permanently failed item,
+  continues after permanent failure, and retains the failed plus unattempted
+  suffix on cancellation or unclassified exception without claiming durable
+  retry authority;
+- caller-managed trusted-root reads reject escape/missing/non-file sources and
+  verify declared byte count and optional SHA-256;
 - accepted/rejected/retryable/partial/unknown and per-item evidence is truthful
   and validates against source content;
 - retryable/unknown receipts contain no invented acceptance identity;
@@ -26,4 +32,7 @@ current owner until later focused slices.
 
 Focused tests additionally lock native result defaults, mutable artifact-list
 behavior, and mapping-to-`OutboundArtifact` coercion without promoting these
-leaf-internal DTOs to public contracts.
+leaf-internal DTOs to public contracts. They also prove the historical
+`imagent.channels.native.artifacts` module is absent, stable attachment
+identity ignores temporary path changes, and artifact recovery state remains
+bounded to the current native-message attempt.

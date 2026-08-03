@@ -78,7 +78,7 @@ contracts.
 |---|---|---|
 | `channels/access.py` | `interaction/channels/ingress.py` | transfer shared stable-ID access policy to Interaction ingress; consumers choose configured IDs |
 | `channels/base.py` | `native/base.py` | transfer lifecycle/access base; replace product telemetry with logging |
-| `channels/artifacts.py` | `native/artifacts.py` | transfer native attachment-send helpers used by platform transports |
+| `channels/artifacts.py` | `interaction/channels/outbound_delivery.py` | transfer shared attachment-send helpers for one native attempt; consumer retains bytes/root/quota/ledger/sweep ownership |
 | `channels/media.py` | `native/media.py` | transfer bounded staging/materialization; keep trust/materialization Channel-local |
 | `channels/text.py` | `interaction/channels/outbound_delivery.py` | transfer shared defensive native text splitting to Interaction outbound delivery |
 | `channels/qq_media.py` | `interaction/channels/adapters/qq_media.py` | transfer QQ media upload/download behavior |
