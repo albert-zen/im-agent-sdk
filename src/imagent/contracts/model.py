@@ -6,7 +6,6 @@ from enum import StrEnum
 from typing import Generic, TypeAlias, TypeVar
 
 from ..interaction.media import (
-    AttachmentGrouping,
     AttachmentSourceKind,
 )
 from ..interaction.messages import (
@@ -14,7 +13,6 @@ from ..interaction.messages import (
     ConversationRef,
     MessageRole,
     Metadata,
-    TextLengthUnit,
 )
 
 T = TypeVar("T")
@@ -106,11 +104,6 @@ class ThreadDeletionCapability(StrEnum):
     PERMANENT = "permanent"
 
 
-class ReplyReferenceScope(StrEnum):
-    FIRST_SEGMENT = "first_segment"
-    EVERY_SEGMENT = "every_segment"
-
-
 @dataclass(frozen=True, slots=True)
 class ProjectCapabilities:
     mode: ProjectMode
@@ -147,68 +140,6 @@ class ApplicationCapabilities:
     threads: ThreadCapabilities
     runtime: RuntimeCapabilities
     attachment_sources: tuple[AttachmentSourceKind, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class DeliveryProfile:
-    plain_text: SupportLevel = SupportLevel.NATIVE
-    markdown: SupportLevel = SupportLevel.UNSUPPORTED
-    attachments: SupportLevel = SupportLevel.UNSUPPORTED
-    attachment_sources: tuple[AttachmentSourceKind, ...] = ()
-    attachment_media_types: tuple[str, ...] = ()
-    attachment_grouping: AttachmentGrouping = AttachmentGrouping.NONE
-    reply_references: SupportLevel = SupportLevel.UNSUPPORTED
-    reply_reference_scope: ReplyReferenceScope = ReplyReferenceScope.FIRST_SEGMENT
-    text_length_unit: TextLengthUnit = TextLengthUnit.CODE_POINTS
-    max_text_length: int | None = None
-    max_attachment_size: int | None = None
-    max_attachment_count: int | None = None
-    max_attachment_group_size: int | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class ChannelCapabilities:
-    # Keep the v1 flat constructor/attribute surface. ``delivery`` below is a
-    # derived planning view, so there is one source of capability truth and
-    # existing Channel adapters do not need a flag-day migration.
-    plain_text: SupportLevel = SupportLevel.NATIVE
-    markdown: SupportLevel = SupportLevel.UNSUPPORTED
-    message_edits: SupportLevel = SupportLevel.UNSUPPORTED
-    message_deletion: SupportLevel = SupportLevel.UNSUPPORTED
-    typing_indicators: SupportLevel = SupportLevel.UNSUPPORTED
-    interactive_actions: SupportLevel = SupportLevel.UNSUPPORTED
-    attachments: SupportLevel = SupportLevel.UNSUPPORTED
-    reply_references: SupportLevel = SupportLevel.UNSUPPORTED
-    native_threads_or_topics: SupportLevel = SupportLevel.UNSUPPORTED
-    attachment_sources: tuple[AttachmentSourceKind, ...] = ()
-    max_text_length: int | None = None
-    max_attachment_size: int | None = None
-    max_attachment_count: int | None = None
-    attachment_media_types: tuple[str, ...] = ()
-    attachment_grouping: AttachmentGrouping = AttachmentGrouping.NONE
-    reply_reference_scope: ReplyReferenceScope = ReplyReferenceScope.FIRST_SEGMENT
-    text_length_unit: TextLengthUnit = TextLengthUnit.CODE_POINTS
-    max_attachment_group_size: int | None = None
-
-    @property
-    def delivery(self) -> DeliveryProfile:
-        """Return the deterministic planner view without duplicating state."""
-
-        return DeliveryProfile(
-            plain_text=self.plain_text,
-            markdown=self.markdown,
-            attachments=self.attachments,
-            attachment_sources=self.attachment_sources,
-            attachment_media_types=self.attachment_media_types,
-            attachment_grouping=self.attachment_grouping,
-            reply_references=self.reply_references,
-            reply_reference_scope=self.reply_reference_scope,
-            text_length_unit=self.text_length_unit,
-            max_text_length=self.max_text_length,
-            max_attachment_size=self.max_attachment_size,
-            max_attachment_count=self.max_attachment_count,
-            max_attachment_group_size=self.max_attachment_group_size,
-        )
 
 
 class ThreadStatus(StrEnum):

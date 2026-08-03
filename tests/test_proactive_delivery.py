@@ -24,11 +24,11 @@ from imagent.contracts import (
     DeliverySegmentStatus,
     DeliverySubmissionOrigin,
     DeliverySubmissionState,
+    DeliverySupportLevel,
     LocalPath,
     OutboundMessage,
     ProjectionPolicy,
     ProjectMode,
-    SupportLevel,
     TextContent,
     ThreadProjectionRoute,
     ThreadRef,
@@ -481,7 +481,7 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_attachment_preflight_rejects_all_before_send(self) -> None:
         self.channel_a._capabilities = ChannelCapabilities(
-            attachments=SupportLevel.NATIVE,
+            attachments=DeliverySupportLevel.NATIVE,
             attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
             max_attachment_size=4,
             max_attachment_count=2,
@@ -570,7 +570,7 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_proactive_local_path_requires_content_digest(self) -> None:
         self.channel_a._capabilities = ChannelCapabilities(
-            attachments=SupportLevel.NATIVE,
+            attachments=DeliverySupportLevel.NATIVE,
             attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
         )
         await self.put_route(self.conversation_a, route_id="route-a")
@@ -622,7 +622,7 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_preflight_rejection_pins_route_for_same_delivery_id(self) -> None:
         self.channel_a._capabilities = ChannelCapabilities(
-            attachments=SupportLevel.NATIVE,
+            attachments=DeliverySupportLevel.NATIVE,
             attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
             max_attachment_size=4,
         )
@@ -655,7 +655,7 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         self.channel_a._capabilities = ChannelCapabilities(
-            attachments=SupportLevel.NATIVE,
+            attachments=DeliverySupportLevel.NATIVE,
             attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
             max_attachment_size=10,
         )

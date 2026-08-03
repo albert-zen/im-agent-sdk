@@ -21,9 +21,12 @@ media-capable adapters, an `InboundAdmissionHandler`. `stop` joins owned
 workers. `send` receives one logical or already planned outbound unit and
 returns a typed `DeliveryReceipt`; it never claims device display.
 
-`ChannelCapabilities` is the single capability authority. `DeliveryProfile`
-is its derived planning view for text units/limits, Markdown fallback,
-attachments/grouping, and reply scope. Unsupported behavior fails explicitly.
+`ChannelCapabilities` is the single capability authority. Channel delivery
+support uses the Interaction-owned `DeliverySupportLevel` values `native`,
+`fallback`, and `unsupported`; it does not reuse the similarly shaped
+Application `SupportLevel`. `DeliveryProfile` is the derived planning view for
+text units/limits, Markdown fallback, attachments/grouping, and the
+Interaction-owned `ReplyReferenceScope`. Unsupported behavior fails explicitly.
 Optional `ChannelStartupConfigurationValidator` is pure and repeatable; ADR
 0014 diagnostics is a separate synchronous read-only structural capability.
 
@@ -42,15 +45,16 @@ or Agent execution on a native socket-read task.
 
 ## Current and target placement
 
-The component is converging through behavior-preserving slices because its
-current `ChannelCapabilities` public surface reuses the Application capability
-enum `SupportLevel`. Receipt values and their validation have no such layer
-dependency: their implementation owner is
-`src/imagent/interaction/channels/contract.py`, while `imagent.contracts`
-remains an exact formal re-export facade. Capability decoupling and the
-lifecycle/admission protocol move are separate API and mechanical slices; they
-must not be hidden inside receipt extraction.
+Receipt values, capability/profile values, delivery support, reply scope, and
+their validation have one implementation owner in
+`src/imagent/interaction/channels/contract.py`. `imagent.contracts` remains an
+exact formal re-export facade; it does not retain parallel implementations.
+The stable v1 `ChannelCapabilities` field and positional-constructor order and
+the wire string discriminants remain unchanged. The schema exposes a distinct
+`DeliverySupportLevel` definition for Channel/profile fields even though its
+three wire values match `SupportLevel`. `SupportLevel` remains the Application
+capability type and is not accepted as the typed Channel API.
 
-The completed target has one implementation owner in
-`src/imagent/interaction/channels/contract.py`. Top-level compatibility exports
-exist only where the component map declares a formal facade.
+Lifecycle/admission protocol movement remains a separate mechanical slice.
+Top-level compatibility exports exist only where the component map declares a
+formal facade.

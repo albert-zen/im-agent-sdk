@@ -20,10 +20,10 @@ from imagent.contracts import (
     DeliveryReceipt,
     DeliverySubmissionOrigin,
     DeliverySubmissionState,
+    DeliverySupportLevel,
     LocalPath,
     ProjectionPolicy,
     ProjectMode,
-    SupportLevel,
     TextContent,
     ThreadProjectionRoute,
     ThreadRef,
@@ -43,8 +43,8 @@ class _ReadingChannel(FakeChannelAdapter):
     def __init__(self) -> None:
         super().__init__("channel")
         self._capabilities = ChannelCapabilities(
-            markdown=SupportLevel.FALLBACK,
-            attachments=SupportLevel.NATIVE,
+            markdown=DeliverySupportLevel.FALLBACK,
+            attachments=DeliverySupportLevel.NATIVE,
             attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
             attachment_grouping=AttachmentGrouping.MIXED,
             max_attachment_count=4,

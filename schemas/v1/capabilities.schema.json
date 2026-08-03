@@ -6,6 +6,9 @@
     "SupportLevel": {
       "enum": ["native", "fallback", "unsupported"]
     },
+    "DeliverySupportLevel": {
+      "enum": ["native", "fallback", "unsupported"]
+    },
     "AttachmentSourceKind": {
       "enum": ["local_path", "remote_url", "attachment_handle"]
     },
@@ -31,9 +34,9 @@
         "replyReferences"
       ],
       "properties": {
-        "plainText": { "$ref": "#/$defs/SupportLevel" },
-        "markdown": { "$ref": "#/$defs/SupportLevel" },
-        "attachments": { "$ref": "#/$defs/SupportLevel" },
+        "plainText": { "$ref": "#/$defs/DeliverySupportLevel" },
+        "markdown": { "$ref": "#/$defs/DeliverySupportLevel" },
+        "attachments": { "$ref": "#/$defs/DeliverySupportLevel" },
         "attachmentSources": {
           "type": "array",
           "items": { "$ref": "#/$defs/AttachmentSourceKind" },
@@ -45,7 +48,7 @@
           "uniqueItems": true
         },
         "attachmentGrouping": { "$ref": "#/$defs/AttachmentGrouping" },
-        "replyReferences": { "$ref": "#/$defs/SupportLevel" },
+        "replyReferences": { "$ref": "#/$defs/DeliverySupportLevel" },
         "replyReferenceScope": { "$ref": "#/$defs/ReplyReferenceScope" },
         "textLengthUnit": { "$ref": "#/$defs/TextLengthUnit" },
         "maxTextLength": { "type": ["integer", "null"], "minimum": 1 },
@@ -65,13 +68,13 @@
         "interactiveActions"
       ],
       "properties": {
-        "plainText": { "$ref": "#/$defs/SupportLevel" },
-        "markdown": { "$ref": "#/$defs/SupportLevel" },
-        "messageEdits": { "$ref": "#/$defs/SupportLevel" },
-        "messageDeletion": { "$ref": "#/$defs/SupportLevel" },
-        "typingIndicators": { "$ref": "#/$defs/SupportLevel" },
-        "interactiveActions": { "$ref": "#/$defs/SupportLevel" },
-        "attachments": { "$ref": "#/$defs/SupportLevel" },
+        "plainText": { "$ref": "#/$defs/DeliverySupportLevel" },
+        "markdown": { "$ref": "#/$defs/DeliverySupportLevel" },
+        "messageEdits": { "$ref": "#/$defs/DeliverySupportLevel" },
+        "messageDeletion": { "$ref": "#/$defs/DeliverySupportLevel" },
+        "typingIndicators": { "$ref": "#/$defs/DeliverySupportLevel" },
+        "interactiveActions": { "$ref": "#/$defs/DeliverySupportLevel" },
+        "attachments": { "$ref": "#/$defs/DeliverySupportLevel" },
         "attachmentSources": {
           "type": "array",
           "items": { "$ref": "#/$defs/AttachmentSourceKind" },
@@ -83,10 +86,10 @@
           "uniqueItems": true
         },
         "attachmentGrouping": { "$ref": "#/$defs/AttachmentGrouping" },
-        "replyReferences": { "$ref": "#/$defs/SupportLevel" },
+        "replyReferences": { "$ref": "#/$defs/DeliverySupportLevel" },
         "replyReferenceScope": { "$ref": "#/$defs/ReplyReferenceScope" },
         "textLengthUnit": { "$ref": "#/$defs/TextLengthUnit" },
-        "nativeThreadsOrTopics": { "$ref": "#/$defs/SupportLevel" },
+        "nativeThreadsOrTopics": { "$ref": "#/$defs/DeliverySupportLevel" },
         "maxTextLength": { "type": ["integer", "null"], "minimum": 1 },
         "maxAttachmentSize": { "type": ["integer", "null"], "minimum": 1 },
         "maxAttachmentCount": { "type": ["integer", "null"], "minimum": 1 },

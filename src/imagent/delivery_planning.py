@@ -7,8 +7,8 @@ from dataclasses import dataclass
 
 from .contracts import (
     DeliveryProfile,
+    DeliverySupportLevel,
     ReplyReferenceScope,
-    SupportLevel,
 )
 from .interaction.media import AttachmentContent, AttachmentGrouping, LocalPath
 from .interaction.messages import (
@@ -65,7 +65,10 @@ class DeliveryPlanner:
         if max_segments is not None and max_segments < 1:
             raise DeliveryPlanningError("delivery segment limit must be positive")
         _validate_profile(profile)
-        if message.reply_to is not None and profile.reply_references is SupportLevel.UNSUPPORTED:
+        if (
+            message.reply_to is not None
+            and profile.reply_references is DeliverySupportLevel.UNSUPPORTED
+        ):
             raise DeliveryPlanningError("destination Channel does not support reply references")
 
         segments: list[PlannedDeliverySegment] = []
@@ -257,13 +260,13 @@ def _prepare_text(
     if not item.text.strip():
         raise DeliveryPlanningError("text content cannot be empty")
     if item.format is TextFormat.PLAIN:
-        if profile.plain_text is SupportLevel.UNSUPPORTED:
+        if profile.plain_text is DeliverySupportLevel.UNSUPPORTED:
             raise DeliveryPlanningError("destination Channel does not support plain text")
         return item.text, TextFormat.PLAIN
-    if profile.markdown is SupportLevel.NATIVE:
+    if profile.markdown is DeliverySupportLevel.NATIVE:
         return item.text, TextFormat.MARKDOWN
-    if profile.markdown is SupportLevel.FALLBACK:
-        if profile.plain_text is SupportLevel.UNSUPPORTED:
+    if profile.markdown is DeliverySupportLevel.FALLBACK:
+        if profile.plain_text is DeliverySupportLevel.UNSUPPORTED:
             raise DeliveryPlanningError("Markdown fallback requires plain-text support")
         return markdown_to_plain(item.text), TextFormat.PLAIN
     raise DeliveryPlanningError("destination Channel does not support Markdown")
@@ -273,7 +276,7 @@ def _validate_attachment(
     item: AttachmentContent,
     profile: DeliveryProfile,
 ) -> None:
-    if profile.attachments is SupportLevel.UNSUPPORTED:
+    if profile.attachments is DeliverySupportLevel.UNSUPPORTED:
         raise DeliveryPlanningError("destination Channel does not support attachments")
     if item.source.kind not in profile.attachment_sources:
         raise DeliveryPlanningError(

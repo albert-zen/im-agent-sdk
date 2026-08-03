@@ -4,9 +4,118 @@ import math
 from dataclasses import dataclass
 from enum import StrEnum
 
-from ..media import AttachmentContent
-from ..messages import Content
+from ..media import AttachmentContent, AttachmentGrouping, AttachmentSourceKind
+from ..messages import Content, TextLengthUnit
 from ..operations import ContractViolation, require_identifier
+
+
+class DeliverySupportLevel(StrEnum):
+    NATIVE = "native"
+    FALLBACK = "fallback"
+    UNSUPPORTED = "unsupported"
+
+
+class ReplyReferenceScope(StrEnum):
+    FIRST_SEGMENT = "first_segment"
+    EVERY_SEGMENT = "every_segment"
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryProfile:
+    plain_text: DeliverySupportLevel = DeliverySupportLevel.NATIVE
+    markdown: DeliverySupportLevel = DeliverySupportLevel.UNSUPPORTED
+    attachments: DeliverySupportLevel = DeliverySupportLevel.UNSUPPORTED
+    attachment_sources: tuple[AttachmentSourceKind, ...] = ()
+    attachment_media_types: tuple[str, ...] = ()
+    attachment_grouping: AttachmentGrouping = AttachmentGrouping.NONE
+    reply_references: DeliverySupportLevel = DeliverySupportLevel.UNSUPPORTED
+    reply_reference_scope: ReplyReferenceScope = ReplyReferenceScope.FIRST_SEGMENT
+    text_length_unit: TextLengthUnit = TextLengthUnit.CODE_POINTS
+    max_text_length: int | None = None
+    max_attachment_size: int | None = None
+    max_attachment_count: int | None = None
+    max_attachment_group_size: int | None = None
+
+    def __post_init__(self) -> None:
+        _validate_delivery_support_values(
+            plain_text=self.plain_text,
+            markdown=self.markdown,
+            attachments=self.attachments,
+            reply_references=self.reply_references,
+        )
+        _validate_reply_reference_scope(self.reply_reference_scope)
+
+
+@dataclass(frozen=True, slots=True)
+class ChannelCapabilities:
+    # Keep the v1 flat constructor/attribute surface. ``delivery`` below is a
+    # derived planning view, so there is one source of capability truth and
+    # existing Channel adapters do not need a flag-day migration.
+    plain_text: DeliverySupportLevel = DeliverySupportLevel.NATIVE
+    markdown: DeliverySupportLevel = DeliverySupportLevel.UNSUPPORTED
+    message_edits: DeliverySupportLevel = DeliverySupportLevel.UNSUPPORTED
+    message_deletion: DeliverySupportLevel = DeliverySupportLevel.UNSUPPORTED
+    typing_indicators: DeliverySupportLevel = DeliverySupportLevel.UNSUPPORTED
+    interactive_actions: DeliverySupportLevel = DeliverySupportLevel.UNSUPPORTED
+    attachments: DeliverySupportLevel = DeliverySupportLevel.UNSUPPORTED
+    reply_references: DeliverySupportLevel = DeliverySupportLevel.UNSUPPORTED
+    native_threads_or_topics: DeliverySupportLevel = DeliverySupportLevel.UNSUPPORTED
+    attachment_sources: tuple[AttachmentSourceKind, ...] = ()
+    max_text_length: int | None = None
+    max_attachment_size: int | None = None
+    max_attachment_count: int | None = None
+    attachment_media_types: tuple[str, ...] = ()
+    attachment_grouping: AttachmentGrouping = AttachmentGrouping.NONE
+    reply_reference_scope: ReplyReferenceScope = ReplyReferenceScope.FIRST_SEGMENT
+    text_length_unit: TextLengthUnit = TextLengthUnit.CODE_POINTS
+    max_attachment_group_size: int | None = None
+
+    def __post_init__(self) -> None:
+        _validate_delivery_support_values(
+            plain_text=self.plain_text,
+            markdown=self.markdown,
+            message_edits=self.message_edits,
+            message_deletion=self.message_deletion,
+            typing_indicators=self.typing_indicators,
+            interactive_actions=self.interactive_actions,
+            attachments=self.attachments,
+            reply_references=self.reply_references,
+            native_threads_or_topics=self.native_threads_or_topics,
+        )
+        _validate_reply_reference_scope(self.reply_reference_scope)
+
+    @property
+    def delivery(self) -> DeliveryProfile:
+        """Return the deterministic planner view without duplicating state."""
+
+        return DeliveryProfile(
+            plain_text=self.plain_text,
+            markdown=self.markdown,
+            attachments=self.attachments,
+            attachment_sources=self.attachment_sources,
+            attachment_media_types=self.attachment_media_types,
+            attachment_grouping=self.attachment_grouping,
+            reply_references=self.reply_references,
+            reply_reference_scope=self.reply_reference_scope,
+            text_length_unit=self.text_length_unit,
+            max_text_length=self.max_text_length,
+            max_attachment_size=self.max_attachment_size,
+            max_attachment_count=self.max_attachment_count,
+            max_attachment_group_size=self.max_attachment_group_size,
+        )
+
+
+def _validate_delivery_support_values(**values: DeliverySupportLevel) -> None:
+    for name, value in values.items():
+        if not isinstance(value, DeliverySupportLevel):
+            raise ContractViolation(
+                f"{name} must be a DeliverySupportLevel, not an Application SupportLevel"
+            )
+
+
+def _validate_reply_reference_scope(value: ReplyReferenceScope) -> None:
+    if not isinstance(value, ReplyReferenceScope):
+        raise ContractViolation("reply_reference_scope must be a ReplyReferenceScope")
 
 
 class DeliveryReceiptStatus(StrEnum):

@@ -322,8 +322,12 @@ Metadata for native request routing.
 ## Capabilities and failures
 
 Capabilities distinguish native support, declared fallback, and unsupported
-behavior. Project mode, Thread deletion, native activation, attachment source
-kinds, replay, gap detection, and sequence scope are separate facts.
+behavior. Channel delivery fields use `DeliverySupportLevel`; Application
+resource/runtime capability fields use the nominally distinct `SupportLevel`.
+Their v1 string values intentionally match, but schema consumers must not treat
+the two ownership domains as one type. Project mode, Thread deletion, native
+activation, attachment source kinds, replay, gap detection, and sequence scope
+are separate facts.
 The v1 `ChannelCapabilities` wire/Python constructor remains flat.
 `ChannelCapabilities.delivery` is a derived typed `DeliveryProfile` covering
 the same text format/length units, attachment source/media/grouping limits,

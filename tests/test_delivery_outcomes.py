@@ -15,10 +15,10 @@ from imagent.contracts import (
     DeliveryPrincipal,
     DeliveryReceipt,
     DeliveryReceiptStatus,
+    DeliverySupportLevel,
     LocalPath,
     MessageRole,
     OutboundMessage,
-    SupportLevel,
     TextContent,
     ThreadProjectionRoute,
     ThreadRef,
@@ -184,7 +184,7 @@ class DeliveryOutcomeObserverTests(unittest.IsolatedAsyncioTestCase):
             DeliveryReceiptStatus.ACCEPTED_BY_PLATFORM,
         ]
         channel._capabilities = ChannelCapabilities(
-            plain_text=SupportLevel.NATIVE,
+            plain_text=DeliverySupportLevel.NATIVE,
             max_text_length=3,
         )
         coordinator = DeliveryCoordinator(
@@ -268,7 +268,7 @@ class DeliveryOutcomeObserverTests(unittest.IsolatedAsyncioTestCase):
         observer = _Observer()
         channel = _ReceiptChannel()
         channel._capabilities = ChannelCapabilities(
-            plain_text=SupportLevel.NATIVE,
+            plain_text=DeliverySupportLevel.NATIVE,
             max_text_length=3,
         )
         channel.statuses = [
@@ -481,8 +481,8 @@ class DeliveryOutcomeObserverTests(unittest.IsolatedAsyncioTestCase):
 
             oversized = self._intent("preflight", "too much")
             channel._capabilities = ChannelCapabilities(
-                plain_text=SupportLevel.UNSUPPORTED,
-                markdown=SupportLevel.UNSUPPORTED,
+                plain_text=DeliverySupportLevel.UNSUPPORTED,
+                markdown=DeliverySupportLevel.UNSUPPORTED,
             )
             await gateway.deliver_proactively(oversized, credential=self.token)
             await asyncio.sleep(0)

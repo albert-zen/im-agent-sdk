@@ -19,11 +19,11 @@ from imagent.contracts import (
     DeliveryReceipt,
     DeliveryReceiptStatus,
     DeliverySegmentStatus,
+    DeliverySupportLevel,
     LocalPath,
     OutboundMessage,
     RemoteUrl,
     ReplyReferenceScope,
-    SupportLevel,
     TextContent,
     TextFormat,
     TextLengthUnit,
@@ -93,8 +93,8 @@ class DeliveryPlannerTests(unittest.TestCase):
 
     def test_native_markdown_golden_plan_is_stable(self) -> None:
         profile = DeliveryProfile(
-            markdown=SupportLevel.NATIVE,
-            reply_references=SupportLevel.NATIVE,
+            markdown=DeliverySupportLevel.NATIVE,
+            reply_references=DeliverySupportLevel.NATIVE,
             max_text_length=8,
         )
         message = self._message(
@@ -129,7 +129,7 @@ class DeliveryPlannerTests(unittest.TestCase):
 
     def test_plain_fallback_and_utf8_byte_limit_golden(self) -> None:
         profile = DeliveryProfile(
-            markdown=SupportLevel.FALLBACK,
+            markdown=DeliverySupportLevel.FALLBACK,
             max_text_length=6,
             text_length_unit=TextLengthUnit.UTF8_BYTES,
         )
@@ -197,7 +197,7 @@ class DeliveryPlannerTests(unittest.TestCase):
 
     def test_text_attachment_order_and_mixed_grouping_are_preserved(self) -> None:
         profile = DeliveryProfile(
-            attachments=SupportLevel.NATIVE,
+            attachments=DeliverySupportLevel.NATIVE,
             attachment_sources=(AttachmentSourceKind.REMOTE_URL,),
             attachment_grouping=AttachmentGrouping.MIXED,
             max_attachment_count=2,
@@ -223,7 +223,7 @@ class DeliveryPlannerTests(unittest.TestCase):
 
     def test_same_media_family_and_count_limits_split_groups(self) -> None:
         profile = DeliveryProfile(
-            attachments=SupportLevel.NATIVE,
+            attachments=DeliverySupportLevel.NATIVE,
             attachment_sources=(AttachmentSourceKind.REMOTE_URL,),
             attachment_grouping=AttachmentGrouping.SAME_MEDIA_FAMILY,
             max_attachment_count=2,
@@ -245,7 +245,7 @@ class DeliveryPlannerTests(unittest.TestCase):
 
     def test_none_grouping_requires_measurable_single_attachment_groups(self) -> None:
         profile = DeliveryProfile(
-            attachments=SupportLevel.NATIVE,
+            attachments=DeliverySupportLevel.NATIVE,
             attachment_sources=(AttachmentSourceKind.REMOTE_URL,),
             attachment_grouping=AttachmentGrouping.NONE,
             max_attachment_group_size=10,
@@ -271,7 +271,7 @@ class DeliveryPlannerTests(unittest.TestCase):
 
     def test_every_segment_reply_scope_is_explicit(self) -> None:
         profile = DeliveryProfile(
-            reply_references=SupportLevel.NATIVE,
+            reply_references=DeliverySupportLevel.NATIVE,
             reply_reference_scope=ReplyReferenceScope.EVERY_SEGMENT,
             max_text_length=3,
         )
@@ -294,7 +294,7 @@ class DeliveryPlannerTests(unittest.TestCase):
             )
 
         bounded_profile = DeliveryProfile(
-            attachments=SupportLevel.NATIVE,
+            attachments=DeliverySupportLevel.NATIVE,
             attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
             max_attachment_size=10,
         )
@@ -323,7 +323,7 @@ class DeliveryPlannerTests(unittest.TestCase):
             )
 
         typed_profile = DeliveryProfile(
-            attachments=SupportLevel.NATIVE,
+            attachments=DeliverySupportLevel.NATIVE,
             attachment_sources=(AttachmentSourceKind.REMOTE_URL,),
             attachment_media_types=("image/*",),
         )
@@ -422,7 +422,7 @@ class DeliveryCoordinatorTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_unrepresentable_later_attachment_fails_before_any_send(self) -> None:
         profile = DeliveryProfile(
-            attachments=SupportLevel.NATIVE,
+            attachments=DeliverySupportLevel.NATIVE,
             attachment_sources=(AttachmentSourceKind.REMOTE_URL,),
             attachment_grouping=AttachmentGrouping.NONE,
             max_attachment_group_size=10,

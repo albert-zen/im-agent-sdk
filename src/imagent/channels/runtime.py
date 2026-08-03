@@ -17,7 +17,7 @@ from ..contracts import (
     DeliveryItemStatus,
     DeliveryReceipt,
     DeliveryReceiptStatus,
-    SupportLevel,
+    DeliverySupportLevel,
 )
 from ..interaction.media import AttachmentContent, AttachmentSourceKind, LocalPath
 from ..interaction.messages import (
@@ -59,35 +59,35 @@ StartupValidator = Callable[[], None]
 
 _CHANNEL_CAPABILITIES = {
     "qq": ChannelCapabilities(
-        markdown=SupportLevel.NATIVE,
-        attachments=SupportLevel.NATIVE,
+        markdown=DeliverySupportLevel.NATIVE,
+        attachments=DeliverySupportLevel.NATIVE,
         attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
-        reply_references=SupportLevel.NATIVE,
+        reply_references=DeliverySupportLevel.NATIVE,
         max_text_length=3_500,
     ),
     "telegram": ChannelCapabilities(
-        markdown=SupportLevel.FALLBACK,
-        attachments=SupportLevel.NATIVE,
+        markdown=DeliverySupportLevel.FALLBACK,
+        attachments=DeliverySupportLevel.NATIVE,
         attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
-        reply_references=SupportLevel.NATIVE,
+        reply_references=DeliverySupportLevel.NATIVE,
         # Match the SDK-owned native adapter's defensive limit so one
         # planned segment remains one native send unit.
         max_text_length=4_000,
-        native_threads_or_topics=SupportLevel.NATIVE,
+        native_threads_or_topics=DeliverySupportLevel.NATIVE,
     ),
     "feishu": ChannelCapabilities(
-        markdown=SupportLevel.FALLBACK,
-        attachments=SupportLevel.NATIVE,
+        markdown=DeliverySupportLevel.FALLBACK,
+        attachments=DeliverySupportLevel.NATIVE,
         attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
-        reply_references=SupportLevel.NATIVE,
+        reply_references=DeliverySupportLevel.NATIVE,
         max_text_length=3_500,
-        native_threads_or_topics=SupportLevel.NATIVE,
+        native_threads_or_topics=DeliverySupportLevel.NATIVE,
     ),
     "weixin": ChannelCapabilities(
-        markdown=SupportLevel.FALLBACK,
-        attachments=SupportLevel.NATIVE,
+        markdown=DeliverySupportLevel.FALLBACK,
+        attachments=DeliverySupportLevel.NATIVE,
         attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
-        reply_references=SupportLevel.NATIVE,
+        reply_references=DeliverySupportLevel.NATIVE,
         max_text_length=4_000,
     ),
 }
