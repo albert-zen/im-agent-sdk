@@ -19,7 +19,9 @@ callback through its lifecycle. Focused native/Gateway tests must additionally
 prove that durable admission happens before media preparation, a missing lease
 stops work without preventing a later reclaim attempt, preparation failure
 releases the lease, handoff transfers terminal ownership to Gateway, and the
-legacy two-callback startup shape remains usable during migration.
+legacy message-only startup shape remains usable during migration. The modern
+shape accepts only message and admission callbacks; no Channel contract, fake,
+or native wrapper imports or stores `GatewayOperation`.
 
 Startup-validation coverage checks structural capability detection, all four
 SDK native implementations, bounded explicit failures, configuration parity

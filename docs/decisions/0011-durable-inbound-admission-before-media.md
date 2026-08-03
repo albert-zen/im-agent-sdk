@@ -21,7 +21,7 @@ release or use a replacement worker's claim.
 ### Channel and Gateway share an opaque admission lease
 
 The Python Channel Port accepts an `InboundAdmissionHandler` in addition to
-the completed-message and operation callbacks. After native authentication,
+the completed-message callback. After native authentication,
 stable identity normalization, and access policy, a Channel requests admission
 with only:
 
@@ -75,8 +75,8 @@ a callback racing failed startup receives no lease or releases a just-handed
 claim instead of entering live processing. Gateway never drops an owned claim
 without an explicit transition.
 
-Startup remains in buffering mode until its queued messages and operations
-drain successfully. Input racing an awaited drain failure is therefore added
+Startup remains in buffering mode until its queued claimed messages drain
+successfully. Input racing an awaited drain failure is therefore added
 to the rollback set rather than processed as live traffic before `start()` has
 a successful outcome.
 
@@ -89,9 +89,14 @@ contract kit makes the handler part of the Channel Port so this is not hidden
 Gateway-specific duck typing.
 
 During migration, Gateway inspects the Channel `start` signature before calling
-it and uses the legacy two-callback form when the admission callback is not
+it and uses the legacy message-only form when the admission callback is not
 accepted. It does not retry a `start` call after side effects. Legacy adapters
 retain the late durable claim but do not gain the pre-media duplicate guarantee.
+
+Channel lifecycle does not carry Gateway operations. A native product action
+may still submit the typed operation described by ADR 0008, but the consumer
+normalizes it through its Controller/typed action surface rather than making a
+Channel adapter depend on Gateway operation types.
 
 Process-local duplicate sets remain an optional fast path. A durable no-lease
 result removes the transient key so a later redelivery can retry after a stale

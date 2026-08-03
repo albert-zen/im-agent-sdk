@@ -20,7 +20,6 @@ from imagent.contracts import (
     InboundMessage,
     ProjectionPolicy,
     ProjectMode,
-    SelectApplication,
     SupportLevel,
     TextContent,
     ThreadRef,
@@ -474,19 +473,11 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
 
 
 class GatewayStartupAdmissionTests(unittest.IsolatedAsyncioTestCase):
-    async def test_startup_entries_drain_in_cross_kind_fifo_order(self) -> None:
+    async def test_startup_claimed_messages_drain_in_fifo_order(self) -> None:
         conversation = ConversationRef("startup-channel", "conversation")
-        operation = SelectApplication(
-            operation_id="startup-operation",
-            conversation_ref=conversation,
-            actor="user-1",
-            application_ref=ApplicationRef("fake-agent"),
-            created_at=datetime.now(UTC),
-        )
         channel = _StartupEntriesChannel(
             (
                 _inbound(conversation, "first"),
-                operation,
                 _inbound(conversation, "second"),
             )
         )
@@ -511,16 +502,12 @@ class GatewayStartupAdmissionTests(unittest.IsolatedAsyncioTestCase):
             del idempotency_owner_token, before_application_send
             drained.append(f"message:{message.message_id}")
 
-        async def record_operation(operation) -> None:
-            drained.append(f"operation:{operation.operation_id}")
-
         gateway._process_message = record_message
-        gateway._handle_operation = record_operation
         await gateway.start()
         try:
             self.assertEqual(
                 drained,
-                ["message:first", "operation:startup-operation", "message:second"],
+                ["message:first", "message:second"],
             )
         finally:
             await gateway.stop()
@@ -629,13 +616,10 @@ class _StartupEntriesChannel(FakeChannelAdapter):
         super().__init__("startup-channel")
         self._entries = entries
 
-    async def start(self, on_message, on_operation, on_admission=None) -> None:
-        await super().start(on_message, on_operation, on_admission)
+    async def start(self, on_message, on_admission=None) -> None:
+        await super().start(on_message, on_admission)
         for entry in self._entries:
-            if isinstance(entry, InboundMessage):
-                await on_message(entry)
-            else:
-                await on_operation(entry)
+            await on_message(entry)
 
 
 class _BlockingStopStartupChannel(FakeChannelAdapter):
@@ -654,8 +638,8 @@ class _FailingStartupChannel(FakeChannelAdapter):
     def __init__(self) -> None:
         super().__init__("failing-startup-channel")
 
-    async def start(self, on_message, on_operation, on_admission=None) -> None:
-        await super().start(on_message, on_operation, on_admission)
+    async def start(self, on_message, on_admission=None) -> None:
+        await super().start(on_message, on_admission)
         raise RuntimeError("simulated channel startup failure")
 
 

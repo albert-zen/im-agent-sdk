@@ -30,9 +30,10 @@ Interaction's Channel contract owns `MessageHandler`, the optional structural
 `ChannelStartupConfigurationValidator`, and the opaque `InboundAdmission`
 lease and handler used before Channel media preparation. `adapters.py`
 re-exports those exact objects for compatibility. `ChannelAdapter` and the
-historical `OperationHandler[GatewayOperation]` remain here until the accepted
-owner-typed operation seam allows issue #93 to converge them without changing
-the lifecycle contract.
+remaining repository/Application Ports stay here until focused mechanical
+owner moves. The historical `OperationHandler[GatewayOperation]` is removed:
+Channel lifecycle accepts messages/admission only, while Controllers invoke
+typed operations through `ControllerActions`.
 
 It does not own:
 
@@ -122,10 +123,12 @@ Channel adapters release only preparation failures before handoff; after
 `IdempotencyRepository.refresh` fences the handoff by updating only the owned
 `in_flight` timestamp.
 
-Gateway preserves the legacy two-callback `ChannelAdapter.start` shape during
-migration by inspecting its signature before invocation. Such adapters retain
-late Gateway idempotency but cannot claim the pre-media guarantee. A Channel
-that accepts the new optional callback must use a returned lease for media work.
+Gateway preserves the legacy message-only `ChannelAdapter.start(on_message)`
+shape during migration by inspecting its signature before invocation. Such
+adapters retain late Gateway idempotency but cannot claim the pre-media
+guarantee. A modern Channel accepts
+`start(on_message, on_admission=None)` and must use a returned lease for media
+work. Gateway never retries a partially started adapter with another shape.
 
 ## Change obligations
 

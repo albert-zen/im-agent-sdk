@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
-from ....adapters import OperationHandler
 from ....channels.native.base import ChannelRouteContext
 from ....contracts import (
     ChannelCapabilities,
@@ -162,7 +161,6 @@ class NativeTransportChannelAdapter:
     async def start(
         self,
         on_message: MessageHandler,
-        on_operation: OperationHandler,
         on_admission: InboundAdmissionHandler | None = None,
     ) -> None:
         if self._native is not None:
@@ -170,7 +168,6 @@ class NativeTransportChannelAdapter:
         middleware = _InboundMiddleware(
             channel_instance_id=self._channel_instance_id,
             on_message=on_message,
-            on_operation=on_operation,
             on_admission=on_admission,
         )
         native = self._native_factory(middleware)
@@ -324,12 +321,10 @@ class _InboundMiddleware:
         *,
         channel_instance_id: str,
         on_message: MessageHandler,
-        on_operation: OperationHandler,
         on_admission: InboundAdmissionHandler | None,
     ) -> None:
         self._channel_instance_id = channel_instance_id
         self._on_message = on_message
-        self._on_operation = on_operation
         self._on_admission = on_admission
         self._routes: dict[tuple[str, str], object] = {}
         self._admitted_inbound: set[tuple[str, str, str]] = set()

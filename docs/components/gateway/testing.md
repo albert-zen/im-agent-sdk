@@ -101,7 +101,7 @@
 - the optional JSON ingress removes staged bytes and the reference CLI refuses
   non-loopback endpoints;
 - slow Channel delivery does not await/block the native event producer;
-- startup message/operation admission is FIFO and bounded, overflow fails
+- startup claimed-message admission is FIFO and bounded, overflow fails
   startup, and teardown leaves no owned work running;
 - callbacks racing failed startup or shutdown are explicitly rejected rather
   than reaching a stopping Application;

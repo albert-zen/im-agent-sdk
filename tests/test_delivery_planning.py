@@ -70,7 +70,7 @@ class _Channel:
     def capabilities(self) -> ChannelCapabilities:
         return self._capabilities
 
-    async def start(self, on_message, on_operation, on_admission=None) -> None:
+    async def start(self, on_message, on_admission=None) -> None:
         return None
 
     async def stop(self) -> None:

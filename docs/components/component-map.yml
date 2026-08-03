@@ -44,10 +44,6 @@ architecture_lint:
   split_candidate_policy: require-one-explicit-owner-edge
   formal_facade_policy: declared-reexports-only
   current_import_exceptions:
-    - from: src/imagent/adapters.py
-      to: src/imagent/contracts/__init__.py
-      symbol: GatewayOperation
-      reason: The historical Channel OperationHandler names GatewayOperation; the Interaction mechanical slice replaces it with the approved Interaction operation boundary.
     - from: src/imagent/applications/appserver_client/__init__.py
       to: src/imagent/__init__.py
       symbol: __version__
@@ -258,7 +254,7 @@ components:
     purpose: Define Channel lifecycle, capabilities, startup validation, admission callback, send, and receipt contracts.
     owns: [ChannelAdapter, ChannelCapabilities, DeliveryProfile, DeliverySupportLevel, ReplyReferenceScope, ChannelStartupConfigurationValidator, MessageHandler, InboundAdmission, InboundAdmissionHandler]
     does_not_own: [Gateway admission state, native platform implementation, Agent resources]
-    inputs: [Inbound callback, operation callback, admission handler]
+    inputs: [Inbound callback, admission handler]
     outputs: [DeliveryReceipt, lifecycle completion]
     public_contracts: [ChannelAdapter, ChannelCapabilities, DeliveryProfile, DeliverySupportLevel, ReplyReferenceScope, ChannelStartupConfigurationValidator, MessageHandler, InboundAdmission, InboundAdmissionHandler, DeliveryReceipt, DeliveryItemReceipt, DeliverySegmentReceipt, DeliveryItemStatus, DeliveryReceiptStatus, DeliverySegmentStatus, validate_delivery_receipt, validate_delivery_receipt_for_content]
     public_exports:
@@ -272,7 +268,7 @@ components:
     target_tests: [tests/interaction/channels/test_contract.py]
     authoritative_docs: [docs/components/interaction/channels/channel-contract/design.md, docs/components/interaction/channels/channel-contract/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0010-capability-driven-delivery-coordination.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
-    gaps: [ChannelAdapter and OperationHandler still share adapters.py pending the owner-typed operation seam, interaction/channels/adapters/runtime.py remains a split candidate]
+    gaps: [ChannelAdapter remains in adapters.py pending a focused mechanical owner move, interaction/channels/adapters/runtime.py remains a split candidate]
 
   interaction.channels.ingress:
     id: interaction.channels.ingress

@@ -1,14 +1,26 @@
 from __future__ import annotations
 
+import inspect
 import unittest
 
 from imagent import adapters, contracts
 from imagent.interaction import channels
+from imagent.interaction.channels.adapters import NativeTransportChannelAdapter
 from imagent.interaction.messages import TextContent
 from imagent.interaction.operations import ContractViolation
 
 
 class ChannelReceiptContractTests(unittest.TestCase):
+    def test_channel_lifecycle_has_no_gateway_operation_callback(self) -> None:
+        self.assertFalse(hasattr(adapters, "OperationHandler"))
+        for owner in (adapters.ChannelAdapter, NativeTransportChannelAdapter):
+            with self.subTest(owner=owner.__name__):
+                parameters = inspect.signature(owner.start).parameters
+                self.assertEqual(
+                    tuple(parameters),
+                    ("self", "on_message", "on_admission"),
+                )
+
     def test_adapters_facade_reexports_exact_admission_contract_owners(self) -> None:
         names = (
             "ChannelStartupConfigurationValidator",

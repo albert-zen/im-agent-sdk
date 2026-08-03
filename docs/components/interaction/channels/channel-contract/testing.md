@@ -7,8 +7,8 @@ Required evidence:
   capabilities continue using the distinct `SupportLevel` type;
 - v1 capability field/positional order, string discriminants, and derived
   `DeliveryProfile` remain stable through the API transition;
-- modern three-callback lifecycle plus explicit legacy two-callback migration
-  behavior without retrying a partially started adapter;
+- modern message-plus-admission lifecycle plus explicit legacy message-only
+  migration behavior without retrying a partially started adapter;
 - one-shot admission lease identity, ownership transfer, fenced release, and
   mismatch/duplicate rejection;
 - send/receipt validation for accepted, rejected, retryable, partial, and
@@ -18,13 +18,14 @@ Required evidence:
 - diagnostic capability absence/failure cannot break lifecycle or inject
   provider identity;
 - fakes and all native adapters satisfy the structural contract; and
-- Interaction contract code imports no Gateway or concrete adapter.
+- Channel contract/runtime/fakes import no `GatewayOperation`, operation
+  handler, Gateway implementation, or concrete adapter.
 
 Focused evidence currently lives in `tests/test_adapter_contracts.py`,
 `tests/test_native_channels.py`, Channel-specific suites, Gateway admission
 tests, schema validation, and Pyright. Exact ownership identity for admission,
 startup validation, capability, and receipt contracts lives in
 `tests/interaction/channels/test_contract.py`; native Channel suites and
-planner tests provide behavioral parity. The remaining `ChannelAdapter`
-lifecycle Port stays in the historical suite until its owner-typed operation
-dependency is resolved.
+planner tests provide behavioral parity. Gateway operation tests enter through
+`ControllerActions` or the public typed Gateway execution surface rather than
+injecting an operation through a fake Channel lifecycle callback.

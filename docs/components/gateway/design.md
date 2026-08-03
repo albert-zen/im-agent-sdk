@@ -318,13 +318,14 @@ or mismatched provider degrades to identity-only facts. Collection performs no
 repository/native I/O and remains explicitly non-authoritative; consumer
 health rendering and export are outside Gateway.
 
-During `start()`, Channel callbacks are admitted into one bounded,
-process-local FIFO shared by messages and typed operations until durable
-projection routes have been restored. This prevents a Channel that immediately
-produces input from racing restoration while preserving cross-kind arrival
-order. Overflow fails startup explicitly and normal teardown cancels/joins
-owned component work; no inbound mutation is silently discarded.
-`GatewayLimits.startup_buffer_max_pending` configures this shared bound.
+During `start()`, claimed inbound messages are admitted into one bounded,
+process-local FIFO until durable projection routes have been restored. Typed
+operations enter only through Controller actions or the public Gateway surface
+and are not Channel startup callbacks. The FIFO prevents a Channel that
+immediately produces input from racing restoration while preserving message
+arrival order. Overflow fails startup explicitly and normal teardown
+cancels/joins owned component work; no inbound mutation is silently discarded.
+`GatewayLimits.startup_buffer_max_pending` configures this bound.
 If startup fails, or once shutdown begins, the live admission gate rejects
 later Channel callbacks until another start completes successfully.
 
@@ -381,7 +382,9 @@ waits instead of relying on optional native replay; fan-out larger than the
 configured backlog is delivered in bounded batches.
 
 Slash text and Channel-native actions submit
-`conversation.respond_request`. Gateway then:
+`conversation.respond_request` through a consumer Controller's typed actions
+or the public typed Gateway execution surface, never through Channel startup.
+Gateway then:
 
 1. finds all correlations for the application-scoped `RequestRef` under a
    request-scoped lock;

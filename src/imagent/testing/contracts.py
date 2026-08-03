@@ -89,18 +89,14 @@ async def verify_channel_adapter(
     checks.append(ContractCheck("valid channel capabilities"))
 
     received_messages = []
-    received_operations = []
 
     async def on_message(message):
         received_messages.append(message)
 
-    async def on_operation(operation):
-        received_operations.append(operation)
-
     async def on_admission(_conversation_ref, _message_id):
         return None
 
-    await adapter.start(on_message, on_operation, on_admission)
+    await adapter.start(on_message, on_admission)
     await adapter.stop()
     checks.append(ContractCheck("start and stop lifecycle"))
     checks.append(ContractCheck("admission callback accepted at startup"))

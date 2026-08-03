@@ -97,7 +97,7 @@ class InboundAdmissionTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([item.message for item in handed_off], [message])
 
-    async def test_gateway_starts_legacy_two_callback_channel(self) -> None:
+    async def test_gateway_starts_legacy_message_only_channel(self) -> None:
         class LegacyChannel:
             def __init__(self) -> None:
                 self.delegate = FakeChannelAdapter("legacy-channel")
@@ -110,8 +110,8 @@ class InboundAdmissionTests(unittest.IsolatedAsyncioTestCase):
             def capabilities(self):
                 return self.delegate.capabilities
 
-            async def start(self, on_message, on_operation) -> None:
-                await self.delegate.start(on_message, on_operation)
+            async def start(self, on_message) -> None:
+                await self.delegate.start(on_message)
 
             async def stop(self) -> None:
                 await self.delegate.stop()
@@ -133,6 +133,49 @@ class InboundAdmissionTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(legacy.delegate.started)
         finally:
             await gateway.stop()
+
+    async def test_modern_start_type_error_after_effect_is_not_retried(self) -> None:
+        class FailingModernChannel:
+            def __init__(self) -> None:
+                self.delegate = FakeChannelAdapter("modern-channel")
+                self.start_attempts = 0
+                self.stop_attempts = 0
+
+            @property
+            def channel_instance_id(self):
+                return self.delegate.channel_instance_id
+
+            @property
+            def capabilities(self):
+                return self.delegate.capabilities
+
+            async def start(self, on_message, on_admission=None) -> None:
+                self.start_attempts += 1
+                await self.delegate.start(on_message, on_admission)
+                raise TypeError("failure after modern startup effect")
+
+            async def stop(self) -> None:
+                self.stop_attempts += 1
+                await self.delegate.stop()
+
+            async def send(self, message):
+                return await self.delegate.send(message)
+
+        channel = FailingModernChannel()
+        gateway = ImAgentGateway(
+            channels=[cast(ChannelAdapter, channel)],
+            applications=[],
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+            ),
+        )
+
+        with self.assertRaisesRegex(TypeError, "after modern startup effect"):
+            await gateway.start()
+
+        self.assertEqual(channel.start_attempts, 1)
+        self.assertEqual(channel.stop_attempts, 1)
+        self.assertFalse(channel.delegate.started)
 
     async def test_reclaimed_preparation_worker_is_fenced_before_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

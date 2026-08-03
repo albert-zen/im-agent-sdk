@@ -9,7 +9,6 @@ from .adapters import (
     ChannelAdapter,
     IdempotencyClaimStatus,
     IdempotencyRepository,
-    OperationHandler,
 )
 from .interaction.channels import (
     InboundAdmission,
@@ -33,7 +32,6 @@ ClaimedInboundHandler = Callable[[ClaimedInbound], Awaitable[None]]
 async def start_channel_with_admission(
     channel: ChannelAdapter,
     on_message: MessageHandler,
-    on_operation: OperationHandler,
     on_admission: InboundAdmissionHandler,
 ) -> None:
     """Start a modern Channel, preserving the pre-admission migration fallback."""
@@ -45,13 +43,13 @@ async def start_channel_with_admission(
         pass
     else:
         try:
-            signature.bind(on_message, on_operation, on_admission)
+            signature.bind(on_message, on_admission)
         except TypeError:
             supports_admission = False
     if supports_admission:
-        await channel.start(on_message, on_operation, on_admission)
+        await channel.start(on_message, on_admission)
     else:
-        await channel.start(on_message, on_operation)
+        await channel.start(on_message)
 
 
 class InboundAdmissionService:

@@ -16,10 +16,16 @@ honest capability difference, not implicit success.
 ## Contract
 
 One stable `channel_instance_id` identifies one configured account/bot
-instance. `start` installs bounded inbound/operation callbacks and, for modern
-media-capable adapters, an `InboundAdmissionHandler`. `stop` joins owned
-workers. `send` receives one logical or already planned outbound unit and
-returns a typed `DeliveryReceipt`; it never claims device display.
+instance. `start` installs the completed inbound-message callback and, for
+modern media-capable adapters, an `InboundAdmissionHandler`. `stop` joins
+owned workers. `send` receives one logical or already planned outbound unit
+and returns a typed `DeliveryReceipt`; it never claims device display.
+
+The Channel lifecycle carries no Gateway operation callback. A native button,
+card, or other product action is normalized by the consumer's Controller and
+invokes the same typed `ControllerActions`/Gateway operation surface as a text
+command. Channel implementations therefore import neither `GatewayOperation`
+nor Gateway orchestration.
 
 `ChannelCapabilities` is the single capability authority. Channel delivery
 support uses the Interaction-owned `DeliverySupportLevel` values `native`,
@@ -57,7 +63,7 @@ capability type and is not accepted as the typed Channel API.
 
 `MessageHandler`, `InboundAdmission`, `InboundAdmissionHandler`, and
 `ChannelStartupConfigurationValidator` share the same Interaction owner as the
-capability and receipt values. `ChannelAdapter` and its historical operation
-callback remain in the mixed Port module until the owner-typed operation seam
-can move without contradicting ADR 0008/0011. Top-level compatibility exports
-exist only where the component map declares a formal facade.
+capability and receipt values. `ChannelAdapter` remains in the mixed Port
+module pending a later mechanical owner move, but its lifecycle signature no
+longer creates a Channel-to-Gateway dependency. Top-level compatibility
+exports exist only where the component map declares a formal facade.

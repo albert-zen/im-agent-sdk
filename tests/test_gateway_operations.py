@@ -914,7 +914,7 @@ class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
             OperationErrorCode.REQUEST_RESOLVED.value,
         )
 
-    async def test_native_action_and_markdown_use_same_typed_response_operation(
+    async def test_typed_action_and_markdown_use_same_response_operation(
         self,
     ) -> None:
         native_request = await self.application.open_approval_request(
@@ -926,9 +926,9 @@ class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
             native_request.request_ref,
             2,
         )
-        await self.channel.on_operation(
+        result = await self.gateway.execute_gateway(
             RespondToRequest(
-                operation_id="native-action-response",
+                operation_id="typed-action-response",
                 conversation_ref=self.conversation_a,
                 actor="user-a",
                 request_ref=native_request.request_ref,
@@ -936,6 +936,7 @@ class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
                 created_at=_now(),
             )
         )
+        self.assertNotIsInstance(result, GatewayOperationFailed)
         self.assertEqual(
             self.application.request_responses[native_request.request_ref],
             ApprovalResponse("accept"),
