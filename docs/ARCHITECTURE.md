@@ -55,38 +55,46 @@ separate Agent state tier.
 
 ## Product components
 
-| Component | Owns | Does not own | Detail |
-|---|---|---|---|
-| Contracts | language-neutral resources, messages, operations, capabilities, events, validation | Python runtime implementations | [design](components/contracts/design.md) |
-| Python Ports | runtime interfaces for integrations and repositories | semantic or native behavior | [design](components/ports/design.md) |
-| Gateway | deterministic input routing and composition | Agent or Channel truth | [design](components/gateway/design.md) |
-| Projections and recovery | live observation, routes, authoritative reconciliation mechanics | transcript/event journal | [design](components/projections-and-recovery/design.md) |
-| Persistence | minimal Gateway-owned state | Agent transcript/Turn/request state | [design](components/persistence/design.md) |
-| Attachments and media | explicit source/trust/materialization boundary | universal blob store or product media policy | [design](components/attachments-and-media/design.md) |
-| Delivery planning and coordination | pure capability plans, per-destination FIFO, bounded execution and honest receipts | native platform encoding, durable jobs, or product retry policy | [design](components/delivery-planning-and-coordination/design.md) |
-| Controllers | optional common UX over typed Operations | Core semantics or binding authority | [design](components/controllers/design.md) |
-| Channel integrations | native admission, rendering, media, delivery, reconnect | Agent resources/execution | [design](components/channel-adapters/design.md) |
-| Application integrations | native resource/input/event/history/request translation | native resource/execution ownership | [design](components/application-adapters/design.md) |
-| Diagnostics | stable redacted process-local infrastructure facts | Agent health authority, exporter, endpoint, or operator UX | [design](components/diagnostics/design.md) |
-| Testing and conformance | reusable fakes and honesty suites | production runtime | [design](components/testing-and-conformance/design.md) |
+The approved runtime architecture has three ownership layers. Existing broad
+documentation groups remain navigation evidence while focused leaf docs and
+modules are migrated; they are not a fourth ownership model.
 
-Repository maintainability is an operational AgentKit component, not runtime
-architecture. See
-[its design](components/repository-maintainability/design.md).
+| Layer | Owns | Does not own | Detail |
+|---|---|---|---|
+| Interaction | message/content/operation contracts, Controller contracts and command composition, Channel ingress and delivery | Gateway orchestration or native Agent truth | [component tree](components/README.md#interaction) |
+| Gateway | composition, admission, binding/routing, input dispatch, projection/recovery, delivery, bridge persistence, diagnostics | product commands, Channel transport truth, Agent transcript/runtime | [component tree](components/README.md#gateway) |
+| Applications | Application contracts/capabilities/events/operations/requests, native presentation, and concrete Agent adapters | Conversation binding, IM delivery, product policy | [component tree](components/README.md#applications) |
+
+Engineering support owns conformance, language-neutral schema validation/navigation,
+repository maintainability, AgentKit, and release mechanics outside the runtime dependency graph. The complete leaf
+inventory, current/target paths, public exports, tests, decisions, and known
+split candidates live in the machine-readable
+[component map](components/component-map.yml).
 
 ## Dependency direction
 
-Contracts are the semantic bottom. Python Ports depend on Contracts.
-Persistence, Controllers, media helpers, and eventing are lower services.
-Concrete integrations depend inward. Gateway is the high-level composition
-root. Test helpers depend on public Contracts/Ports, never the reverse.
+Versioned language-neutral schemas bind the applicable owning leaves and remain
+the semantic source of truth. Interaction message/operation contracts are the
+lowest runtime surface. Applications implement their typed native boundary without importing Gateway. ControllerActions
+and SDK common commands may consume only the exact public typed Application/Gateway
+contracts and passive ConversationBinding value recorded in the component map. A Controller request
+presenter may consume the public typed Application request contract. Those exact
+contract exceptions are recorded in the component map; they do not allow
+Controller or Channel code to import an Application or Gateway implementation.
+Channel implementations stay inside Interaction
+and import neither Gateway nor concrete Applications. Gateway is the
+composition root and may call both lower-facing contract surfaces; neither
+lower layer calls Gateway implementation. Test helpers depend on public
+contracts, never the reverse.
 
 The precise current import graph and allowed edges are documented in
 [dependency rules](architecture/dependency-rules.md) and enforced by
 `python scripts/agentkit.py lint-architecture`.
 
-Components describe responsibility; lint layers describe imports. They need
-not have identical names.
+The component map is the ownership authority for both navigation and the
+target import graph. During the mechanical rollout, lint may temporarily use
+the current paths recorded by that map; any exception must be explicit rather
+than inferred from a broad source catch-all.
 
 ## Authority and persistence
 
@@ -343,6 +351,9 @@ IM admission. Attachments cannot grant shared-filesystem trust.
 - [Vision](VISION.md): purpose, non-goals, Core admission.
 - this document: system map, ownership, dependencies, flows.
 - [accepted ADRs](decisions/README.md): reviewed cross-component decisions.
-- `components/<name>/`: local design, protocol where needed, and tests.
+- `components/<layer>/<leaf>/`: local design, testing, and focused supporting
+  documents where needed.
+- `components/component-map.yml`: machine-readable ownership, current/target
+  paths, exports, tests, ADRs, and structural gaps.
 - [Reuse](REUSE.md): provenance and transfer constraints.
 - [Roadmap](ROADMAP.md): future/unresolved work only.
