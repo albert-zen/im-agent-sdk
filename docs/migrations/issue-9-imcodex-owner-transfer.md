@@ -90,7 +90,7 @@ contracts.
 | `channels/weixin.py` | `interaction/channels/adapters/weixin.py` | transfer Weixin transport; product login UX remains downstream |
 | top-level `models.py` | `interaction/channels/ingress.py` and `interaction/channels/outbound_delivery.py` | split provider-private inbound and outbound/native-delivery DTOs by Interaction owner |
 | top-level `file_types.py` | `interaction/media.py` | transfer shared generic-file type/byte validation to Interaction media |
-| top-level `windows_security.py` | `native/windows_security.py` | transfer secure staging helper |
+| top-level `windows_security.py` | `interaction/channels/ingress_security.py` | transfer the private secure-staging helper to Interaction ingress without a historical native-path shim |
 | top-level `config.py` | no wholesale transfer | neutral endpoint validation now lives in `interaction/channels/adapters/endpoints.py`; product config loading remains IMCodex |
 
 The following adjacent modules do not transfer:

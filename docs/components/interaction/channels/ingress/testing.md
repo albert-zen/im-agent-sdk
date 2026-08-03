@@ -29,3 +29,9 @@ suites until those mechanics move in later focused slices.
 Focused tests also lock the leaf-internal inbound attachment tuple/defaults;
 provider and vertical suites continue proving normalization into the public
 Interaction message without treating the mutable native DTO as a contract.
+
+Windows staging-security tests prove the helper is a no-op off Windows, is
+owned only by Interaction ingress, and has no historical native import path.
+Windows CI and the existing media materialization suite remain responsible for
+the unchanged current-user SID, protected DACL, file/directory flag, and
+failure behavior.

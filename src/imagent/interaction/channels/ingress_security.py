@@ -1,4 +1,4 @@
-"""Small Windows filesystem-security helpers for native Channel staging."""
+"""Private Windows filesystem-security helpers for Channel ingress staging."""
 
 from __future__ import annotations
 

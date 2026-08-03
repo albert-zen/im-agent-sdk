@@ -56,6 +56,14 @@ interleaved in Channel runtime/native helpers for later mechanical slices.
 Platform-specific authentication, retrieval/decryption, and acknowledgement
 remain under adapters.
 
+`ingress_security.py` owns the private Windows staging-path DACL helper. On
+Windows it resolves the current process user SID and replaces each staged file
+or directory DACL with current-user-only full control; on other platforms it
+is a no-op. It is not a public generic filesystem API and does not choose the
+staging root, quota, retention, ledger, or cleanup policy. The historical
+`imagent.channels.native.windows_security` module is removed without a
+compatibility shim.
+
 The mutable provider-normalization `InboundMessage` and immutable
 `InboundAttachment` DTOs are also leaf-internal ingress values. They exist
 before construction of the public typed Interaction message, are not exported

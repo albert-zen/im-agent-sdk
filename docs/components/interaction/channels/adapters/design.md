@@ -55,9 +55,9 @@ providers import `BaseChannelAdapter` and `ChannelRouteContext` from
 The base still coordinates adapter-owned diagnostics with shared ingress access
 and outbound validation, so it remains an explicit split candidate until those
 responsibilities move in later focused slices; this placement change does not
-alter lifecycle, policy, or delivery behavior. Shared media and Windows path
-security helpers remain temporarily under `src/imagent/channels/native` for
-their own independently reviewed ownership slices.
+alter lifecycle, policy, or delivery behavior. Shared media remains temporarily
+under `src/imagent/channels/native` for its own independently reviewed
+ownership slice; Windows staging security now lives with Interaction ingress.
 
 The adapters package exposes only the component-map-approved QQ adapter and
 bounded quote constants through a lazy public facade. Importing the package or
