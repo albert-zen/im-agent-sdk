@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from ..contracts import (
+from ...contracts import (
     AgentMessage,
     ApplicationSummary,
     ProjectSummary,
@@ -11,7 +11,7 @@ from ..contracts import (
     TurnCatchup,
     TurnStatus,
 )
-from ..interaction.messages import InboundMessage, OutboundMessage, TextContent, TextFormat
+from ..messages import InboundMessage, OutboundMessage, TextContent, TextFormat
 
 _HISTORY_TEXT_LIMIT = 1_200
 _CATCHUP_TEXT_LIMIT = 800

@@ -17,8 +17,8 @@ from imagent.contracts import (
     TextFormat,
 )
 from imagent.controllers import SlashController
-from imagent.controllers.slash import parse_slash_command
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
+from imagent.interaction.controllers.common import parse_slash_command
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

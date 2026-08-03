@@ -17,12 +17,12 @@ from imagent.contracts import (
     UserInputQuestion,
     UserInputRequest,
 )
-from imagent.controllers.slash import parse_slash_command
 from imagent.interaction.controllers import (
     MarkdownRequestPresenter,
     RequestPresentation,
     RequestPresenter,
 )
+from imagent.interaction.controllers.common import parse_slash_command
 
 
 class RequestPresentationOwnershipTests(unittest.TestCase):

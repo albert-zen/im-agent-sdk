@@ -8,6 +8,8 @@ from imagent.interaction.controllers import (
     CommandInvocationFacts,
     ControllerActions,
     InboundController,
+    SlashController,
+    register_common_commands,
 )
 
 
@@ -16,9 +18,13 @@ class ControllerContractOwnershipTests(unittest.TestCase):
         self.assertIs(controllers_facade.ControllerActions, ControllerActions)
         self.assertIs(controllers_facade.CommandInvocationFacts, CommandInvocationFacts)
         self.assertIs(controllers_facade.InboundController, InboundController)
+        self.assertIs(controllers_facade.SlashController, SlashController)
+        self.assertIs(controllers_facade.register_common_commands, register_common_commands)
 
     def test_legacy_base_is_removed_after_its_leaves_move(self) -> None:
         self.assertIsNone(find_spec("imagent.controllers.base"))
+        self.assertIsNone(find_spec("imagent.controllers.markdown"))
+        self.assertIsNone(find_spec("imagent.controllers.slash"))
         self.assertEqual(
             set(controllers_facade.__all__),
             {

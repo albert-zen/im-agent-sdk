@@ -41,7 +41,7 @@ Gateway's binding operation remains the authority that prepares the matching
 route and removes projection authority after a Conversation switches; other
 current Conversations observing the old Thread are unaffected.
 
-Target operation IDs are stable functions of the complete scoped inbound
+Operation IDs are stable functions of the complete scoped inbound
 identity—Channel instance, Conversation, native message—and typed operation
 kind, never presentation text or timestamps. Unsupported
 capabilities and typed failures remain explicit and user-safe. Common command
@@ -80,11 +80,16 @@ mutation. Restart discards views and reconstructs behavior through bindings
 and authoritative Application reads; there is no command transcript or
 durable Controller spool.
 
-## Implementation slice
+## Physical ownership
 
-The registry conversion replaces fixed dispatch with explicit common
-definitions, namespaces operation IDs by the complete stable inbound identity,
-and adds finite capacity/lifetime bounds to both selection views while
-preserving command presentation and typed-action behavior. The later
-mechanical move places the single common implementation under
-`imagent.interaction.controllers` and removes the old internal path.
+`src/imagent/interaction/controllers/common.py` owns the common definitions,
+handlers, parser, and bounded selection views.
+`src/imagent/interaction/controllers/common_presentation.py` owns their
+portable Markdown presentation. `imagent.interaction.controllers` exposes the
+owning public API. The finite top-level `imagent.controllers` facade re-exports
+those exact objects while other Controller leaves still require that facade;
+it is not a second implementation or an accepted internal import path.
+
+The mechanical ownership slice removes the historical
+`imagent.controllers.slash` and `imagent.controllers.markdown` modules without
+changing registry, command, presentation, action, fence, or replay behavior.

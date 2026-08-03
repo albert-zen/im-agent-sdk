@@ -41,6 +41,8 @@ PYTHONPATH=src python -m unittest \
   tests.test_projection_routing -v
 ```
 
-Registry conversion adds `tests/interaction/controllers/test_common_commands.py`
-and preserves the historical Slash behavior suite as parity evidence until
-the old physical path is removed.
+`tests/interaction/controllers/test_common_commands.py` owns registry
+composition and bound tests. The historical root suites remain temporary
+parity evidence until their later mechanical test move. Exact facade identity
+tests also prove the removed historical implementation modules cannot be
+imported.

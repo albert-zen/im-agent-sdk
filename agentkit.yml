@@ -565,7 +565,7 @@ maintainability:
       paths:
         - src/imagent/projection_routes.py
         - src/imagent/sqlite_rows.py
-        - src/imagent/controllers/slash.py
+        - src/imagent/interaction/controllers/common.py
         - src/imagent/contracts/validators.py
       max_lines: 700
       max_functions: 40

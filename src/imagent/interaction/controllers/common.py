@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
-from ..contracts import (
+from ...contracts import (
     ApplicationOperationFailed,
     ApplicationRef,
     ApplicationsListed,
@@ -48,19 +48,18 @@ from ..contracts import (
     TurnCatchupRead,
     UserInputResponse,
 )
-from ..interaction.controllers import (
+from ..messages import ConversationRef, InboundMessage, OutboundMessage, TextContent
+from .common_presentation import MarkdownSlashPresenter
+from .contract import CommandHandlerActions, ControllerActions
+from .registry import (
     CommandArgumentContract,
     CommandDefinition,
     CommandExecutionSafety,
-    CommandHandlerActions,
     CommandInvocation,
     CommandRegistry,
     CommandRegistryLimits,
     CommandResult,
-    ControllerActions,
 )
-from ..interaction.messages import ConversationRef, InboundMessage, OutboundMessage, TextContent
-from .markdown import MarkdownSlashPresenter
 
 
 @dataclass(frozen=True, slots=True)
