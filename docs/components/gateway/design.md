@@ -166,9 +166,40 @@ supplied.
 Listing never changes a binding. Binding a Thread does not activate native UI
 state. Observing a Thread does not select it for future input.
 
+Under `foreground_only`, `BindConversationToThread` also prepares the desired
+`(Conversation, Thread)` projection route before the binding compare-and-swap.
+The route write is additive and preserves any existing checkpoint; it never
+replaces another Conversation's route for the same Thread. A crash after route
+preparation but before binding leaves an inactive route because foreground
+resolution still requires the matching binding. Route bootstrap is fenced
+before durable visibility and remains fenced through binding convergence, so
+an existing Thread worker cannot deliver live output ahead of reconciliation.
+A newly created route receives the normal bounded baseline without a false
+missing-checkpoint gap. A retry that observes the same desired binding and
+route converges to that postcondition without advancing the binding revision
+only when its guard names the current or immediately preceding revision;
+an existing route still uses checkpoint-directed recovery and reports a
+missing checkpoint rather than silently downgrading to a new-route baseline.
+A checkpoint-free route surviving a pre-CAS process crash is therefore allowed
+to converge with an explicit bounded-recovery gap: it is not safely
+distinguishable from an older checkpoint-free historical route after restart.
+A baseline/recovery failure after binding keeps the prepared route fenced; a
+newly started worker is stopped rather than allowing live output to advance the
+checkpoint past unseen history. A same-target retry repeats recovery and opens
+the route only after reconciliation succeeds. An unknown binding write outcome
+also stays fenced when the repository cannot verify whether the CAS committed.
+Invalid same-target revision guards are rejected before route preparation, so
+they cannot release a fence retained by an earlier recovery failure.
+A later different binding is never overwritten by the stale retry. Other
+projection policies retain explicit `ObserveThread` route semantics.
+
 ## Failure and restart
 
 Conversation mutations use revision guards and serialize per Conversation.
+Foreground Thread binding prepares its inactive-until-bound route before the
+binding CAS, so restart never exposes a completed binding with a missing
+delivery edge. A same-target retry may converge a binding already advanced by
+that operation; a different current target remains a conflict.
 Idempotency claims are completed only after the scoped operation succeeds and
 are released on failure known to precede a native side effect. The adapter's
 typed pre-dispatch hook protects the inbound claim immediately before native

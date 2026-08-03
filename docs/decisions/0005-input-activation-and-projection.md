@@ -15,7 +15,14 @@ and loses background output.
 - `thread.activate_native` optionally changes native Application UI state.
 - `ThreadProjectionRoute` selects IM output destinations.
 
-No one implies another. Default UX may compose them explicitly.
+No one activates another, and observing never selects input. The narrow
+`foreground_only` consistency exception is that `conversation.bind_thread`
+prepares the matching `ThreadProjectionRoute` before binding CAS: binding
+equality is already that policy's sole output authority, so the route is
+inactive before the bind and after a later switch. This does not activate
+native UI state or apply to `remembered_last_recipient`/`all_observers`;
+products may compose explicit observation for those policies and to refresh
+destination reply context.
 
 Routes persist only stable Thread/Conversation references, optional
 destination reply context, a per-destination delivery checkpoint, and update

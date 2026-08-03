@@ -155,6 +155,7 @@ class ImAgentGateway:
             for application in applications
         }
         self._bindings = repositories.bindings
+        self._projection_policy = projection_policy
         self._idempotency = repositories.idempotency or InMemoryIdempotencyRepository()
         self._request_correlations = (
             repositories.request_correlations or InMemoryRequestCorrelationRepository()
@@ -557,6 +558,91 @@ class ImAgentGateway:
             if not isinstance(read, ThreadRead):
                 raise RuntimeError("thread.get returned an incompatible result")
             previous = await self._bindings.get(operation.conversation_ref)
+            if self._projection_policy is ProjectionPolicy.FOREGROUND_ONLY:
+                same_target = (
+                    previous is not None
+                    and previous.application_ref == application.summary.ref
+                    and previous.project_ref == read.thread.ref.project_ref
+                    and previous.thread_ref == read.thread.ref
+                )
+                if (
+                    same_target
+                    and previous is not None
+                    and operation.expected_revision
+                    not in {None, previous.revision, previous.revision - 1}
+                ):
+                    raise BindingConflict(
+                        "same-target bind retry does not match the current "
+                        "or immediately preceding revision"
+                    )
+                (
+                    prepared_route,
+                    route_was_created,
+                ) = await self._projection_runtime.prepare_foreground_binding_route(
+                    read.thread.ref, operation.conversation_ref
+                )
+                retain_prepared_barrier = False
+                try:
+                    require_checkpoint = not route_was_created
+                    if same_target:
+                        assert previous is not None
+                        retain_prepared_barrier = True
+                        await self._projection_runtime.handle_binding_change(
+                            None,
+                            previous,
+                            require_checkpoint=require_checkpoint,
+                        )
+                        return ConversationBound(
+                            operation_id=operation.operation_id,
+                            type=operation.type,
+                            completed_at=completed_at,
+                            binding=previous,
+                        )
+                    desired_binding = ConversationBinding(
+                        conversation_ref=operation.conversation_ref,
+                        application_ref=application.summary.ref,
+                        project_ref=read.thread.ref.project_ref,
+                        thread_ref=read.thread.ref,
+                    )
+                    try:
+                        binding = await self._bindings.put(
+                            desired_binding,
+                            expected_revision=operation.expected_revision,
+                        )
+                    except BaseException as error:
+                        retain_prepared_barrier = True
+                        try:
+                            current = await self._bindings.get(operation.conversation_ref)
+                        except BaseException as verification_error:
+                            error.add_note(
+                                "Binding outcome verification also failed; the prepared "
+                                f"route remains fenced: {verification_error!r}"
+                            )
+                        else:
+                            retain_prepared_barrier = (
+                                current is not None
+                                and current.application_ref == desired_binding.application_ref
+                                and current.project_ref == desired_binding.project_ref
+                                and current.thread_ref == desired_binding.thread_ref
+                            )
+                        raise
+                    retain_prepared_barrier = True
+                    await self._projection_runtime.handle_binding_change(
+                        previous,
+                        binding,
+                        require_checkpoint=require_checkpoint,
+                    )
+                    return ConversationBound(
+                        operation_id=operation.operation_id,
+                        type=operation.type,
+                        completed_at=completed_at,
+                        binding=binding,
+                    )
+                finally:
+                    if not retain_prepared_barrier:
+                        self._projection_runtime.complete_foreground_binding_route(
+                            prepared_route.route_id
+                        )
             binding = await self._bindings.put(
                 ConversationBinding(
                     conversation_ref=operation.conversation_ref,

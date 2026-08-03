@@ -15,12 +15,16 @@ from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     ActivateNativeThread,
     AgentInput,
+    ApplicationOperation,
+    ApplicationOperationResult,
     ApplicationRef,
     BindConversationToThread,
     ContractViolation,
     ConversationBinding,
     ConversationBound,
     ConversationRef,
+    GatewayOperationFailed,
+    GetThreadHistory,
     InboundMessage,
     NativeThreadActivated,
     ObserveThread,
@@ -39,6 +43,69 @@ from imagent.projections import (
 )
 from imagent.storage import SQLiteGatewayState
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
+
+
+class _CrashBindingRepository(InMemoryBindingRepository):
+    def __init__(self) -> None:
+        super().__init__()
+        self.fail_before_put = False
+        self.fail_after_put = False
+        self.fail_get_after_failed_put = False
+        self.fail_next_get = False
+        self.pause_after_put = False
+        self.put_committed = asyncio.Event()
+        self.release_put = asyncio.Event()
+
+    async def put(
+        self,
+        binding: ConversationBinding,
+        expected_revision: int | None = None,
+    ) -> ConversationBinding:
+        if self.fail_before_put:
+            self.fail_before_put = False
+            raise RuntimeError("crash before binding commit")
+        stored = await super().put(binding, expected_revision=expected_revision)
+        if self.pause_after_put:
+            self.pause_after_put = False
+            self.put_committed.set()
+            await self.release_put.wait()
+        if self.fail_after_put:
+            self.fail_after_put = False
+            if self.fail_get_after_failed_put:
+                self.fail_get_after_failed_put = False
+                self.fail_next_get = True
+            raise RuntimeError("crash after binding commit")
+        return stored
+
+    async def get(
+        self,
+        conversation: ConversationRef,
+    ) -> ConversationBinding | None:
+        if self.fail_next_get:
+            self.fail_next_get = False
+            raise RuntimeError("binding outcome verification unavailable")
+        return await super().get(conversation)
+
+
+class _DelayedHistoryApplication(FakeAgentApplicationAdapter):
+    def __init__(self) -> None:
+        super().__init__(project_mode=ProjectMode.FLAT)
+        self.pause_history = False
+        self.fail_history_once = False
+        self.history_started = asyncio.Event()
+        self.release_history = asyncio.Event()
+
+    async def execute(
+        self,
+        operation: ApplicationOperation,
+    ) -> ApplicationOperationResult:
+        if self.fail_history_once and isinstance(operation, GetThreadHistory):
+            self.fail_history_once = False
+            raise RuntimeError("temporary history failure")
+        if self.pause_history and isinstance(operation, GetThreadHistory):
+            self.history_started.set()
+            await self.release_history.wait()
+        return await super().execute(operation)
 
 
 class ProjectionRouteRepositoryTests(unittest.IsolatedAsyncioTestCase):
@@ -275,6 +342,596 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await gateway.stop()
 
+    async def test_foreground_bind_prepares_inactive_route_before_binding_cas(
+        self,
+    ) -> None:
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        thread = await application.create_thread(title="prepared")
+        conversation = ConversationRef("fake-channel", "conversation")
+        bindings = _CrashBindingRepository()
+        initial = await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+            )
+        )
+        projections = InMemoryProjectionRouteRepository()
+        route_id = derive_projection_route_id(thread.ref, conversation)
+        await projections.put_projection_route(
+            ThreadProjectionRoute(
+                route_id=route_id,
+                thread_ref=thread.ref,
+                conversation_ref=conversation,
+            )
+        )
+        checkpointed_at = datetime.now(UTC)
+        await projections.advance_projection_checkpoint(
+            route_id,
+            expected_agent_item_id=None,
+            agent_item_id="agent-item-before-bind",
+            checkpointed_at=checkpointed_at,
+        )
+        gateway = ImAgentGateway(
+            channels=[],
+            applications=[application],
+            repositories=GatewayRepositories(
+                bindings=bindings,
+                projections=projections,
+            ),
+            projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+        )
+        await gateway.start()
+        try:
+            bindings.fail_before_put = True
+            failed = await gateway.execute_gateway(
+                BindConversationToThread(
+                    operation_id="bind-crash-before",
+                    conversation_ref=conversation,
+                    actor="user",
+                    thread_ref=thread.ref,
+                    expected_revision=initial.revision,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(failed, GatewayOperationFailed)
+            self.assertEqual(await bindings.get(conversation), initial)
+            self.assertEqual(
+                await gateway._projection_runtime.active_routes(thread.ref),
+                (),
+            )
+            prepared = (await projections.list_projection_routes(thread.ref))[0]
+            self.assertEqual(
+                prepared.checkpoint_agent_item_id,
+                "agent-item-before-bind",
+            )
+            self.assertEqual(prepared.checkpointed_at, checkpointed_at)
+
+            retried = await gateway.execute_gateway(
+                BindConversationToThread(
+                    operation_id="bind-crash-before-retry",
+                    conversation_ref=conversation,
+                    actor="user",
+                    thread_ref=thread.ref,
+                    expected_revision=initial.revision,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(retried, ConversationBound)
+            self.assertEqual(
+                tuple(
+                    route.conversation_ref
+                    for route in await gateway._projection_runtime.active_routes(thread.ref)
+                ),
+                (conversation,),
+            )
+        finally:
+            await gateway.stop()
+
+    async def test_foreground_bind_creates_missing_route_before_failed_cas(
+        self,
+    ) -> None:
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        thread = await application.create_thread(title="prepared")
+        conversation = ConversationRef("fake-channel", "conversation")
+        bindings = _CrashBindingRepository()
+        initial = await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+            )
+        )
+        projections = InMemoryProjectionRouteRepository()
+        gateway = ImAgentGateway(
+            channels=[],
+            applications=[application],
+            repositories=GatewayRepositories(
+                bindings=bindings,
+                projections=projections,
+            ),
+            projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+        )
+        await gateway.start()
+        try:
+            bindings.fail_before_put = True
+            failed = await gateway.execute_gateway(
+                BindConversationToThread(
+                    operation_id="bind-missing-route-crash-before",
+                    conversation_ref=conversation,
+                    actor="user",
+                    thread_ref=thread.ref,
+                    expected_revision=initial.revision,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(failed, GatewayOperationFailed)
+            routes = await projections.list_projection_routes(thread.ref)
+            self.assertEqual(len(routes), 1)
+            self.assertEqual(routes[0].conversation_ref, conversation)
+            self.assertEqual(
+                await gateway._projection_runtime.active_routes(thread.ref),
+                (),
+            )
+        finally:
+            await gateway.stop()
+
+    async def test_foreground_bind_retry_converges_after_binding_commit_crash(
+        self,
+    ) -> None:
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        thread_a = await application.create_thread(title="A")
+        thread_b = await application.create_thread(title="B")
+        conversation = ConversationRef("fake-channel", "conversation")
+        bindings = _CrashBindingRepository()
+        initial = await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+            )
+        )
+        projections = InMemoryProjectionRouteRepository()
+        gateway = ImAgentGateway(
+            channels=[],
+            applications=[application],
+            repositories=GatewayRepositories(
+                bindings=bindings,
+                projections=projections,
+            ),
+            projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+        )
+        await gateway.start()
+        try:
+            bindings.fail_after_put = True
+            failed = await gateway.execute_gateway(
+                BindConversationToThread(
+                    operation_id="bind-crash-after",
+                    conversation_ref=conversation,
+                    actor="user",
+                    thread_ref=thread_a.ref,
+                    expected_revision=initial.revision,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(failed, GatewayOperationFailed)
+            committed = await bindings.get(conversation)
+            assert committed is not None
+            self.assertEqual(committed.thread_ref, thread_a.ref)
+
+            retried = await gateway.execute_gateway(
+                BindConversationToThread(
+                    operation_id="bind-crash-after-retry",
+                    conversation_ref=conversation,
+                    actor="user",
+                    thread_ref=thread_a.ref,
+                    expected_revision=initial.revision,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(retried, ConversationBound)
+            assert isinstance(retried, ConversationBound)
+            self.assertEqual(retried.binding, committed)
+            self.assertEqual(
+                tuple(
+                    route.conversation_ref
+                    for route in await gateway._projection_runtime.active_routes(thread_a.ref)
+                ),
+                (conversation,),
+            )
+            for invalid_revision in (0, 99):
+                invalid_retry = await gateway.execute_gateway(
+                    BindConversationToThread(
+                        operation_id=f"bind-invalid-retry-{invalid_revision}",
+                        conversation_ref=conversation,
+                        actor="user",
+                        thread_ref=thread_a.ref,
+                        expected_revision=invalid_revision,
+                        created_at=datetime.now(UTC),
+                    )
+                )
+                self.assertIsInstance(invalid_retry, GatewayOperationFailed)
+
+            switched = await gateway.execute_gateway(
+                BindConversationToThread(
+                    operation_id="bind-later-target",
+                    conversation_ref=conversation,
+                    actor="user",
+                    thread_ref=thread_b.ref,
+                    expected_revision=committed.revision,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(switched, ConversationBound)
+            stale = await gateway.execute_gateway(
+                BindConversationToThread(
+                    operation_id="bind-stale-retry",
+                    conversation_ref=conversation,
+                    actor="user",
+                    thread_ref=thread_a.ref,
+                    expected_revision=initial.revision,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(stale, GatewayOperationFailed)
+            current = await bindings.get(conversation)
+            assert current is not None
+            self.assertEqual(current.thread_ref, thread_b.ref)
+        finally:
+            await gateway.stop()
+
+    async def test_foreground_bind_keeps_routes_for_multiple_conversations(
+        self,
+    ) -> None:
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        thread = await application.create_thread(title="shared")
+        bindings = InMemoryBindingRepository()
+        projections = InMemoryProjectionRouteRepository()
+        gateway = ImAgentGateway(
+            channels=[],
+            applications=[application],
+            repositories=GatewayRepositories(
+                bindings=bindings,
+                projections=projections,
+            ),
+            projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+        )
+        conversations = (
+            ConversationRef("fake-channel", "first"),
+            ConversationRef("fake-channel", "second"),
+        )
+        await gateway.start()
+        try:
+            for index, conversation in enumerate(conversations, start=1):
+                result = await gateway.execute_gateway(
+                    BindConversationToThread(
+                        operation_id=f"bind-shared-{index}",
+                        conversation_ref=conversation,
+                        actor="user",
+                        thread_ref=thread.ref,
+                        created_at=datetime.now(UTC),
+                    )
+                )
+                self.assertIsInstance(result, ConversationBound)
+
+            routes = await projections.list_projection_routes(thread.ref)
+            self.assertEqual(
+                {route.conversation_ref for route in routes},
+                set(conversations),
+            )
+            self.assertEqual(
+                {
+                    route.conversation_ref
+                    for route in await gateway._projection_runtime.active_routes(thread.ref)
+                },
+                set(conversations),
+            )
+        finally:
+            await gateway.stop()
+
+    async def test_foreground_bind_fences_live_delivery_until_reconciliation(
+        self,
+    ) -> None:
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        thread = await application.create_thread(title="shared")
+        first = ConversationRef("fake-channel", "first")
+        second = ConversationRef("fake-channel", "second")
+        bindings = _CrashBindingRepository()
+        projections = InMemoryProjectionRouteRepository()
+        channel = FakeChannelAdapter()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            repositories=GatewayRepositories(
+                bindings=bindings,
+                projections=projections,
+            ),
+            projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+        )
+        await gateway.start()
+        try:
+            first_bound = await gateway.execute_gateway(
+                BindConversationToThread(
+                    operation_id="bind-first",
+                    conversation_ref=first,
+                    actor="user",
+                    thread_ref=thread.ref,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(first_bound, ConversationBound)
+            health = gateway.get_projection_health(thread.ref)
+            assert health is not None
+            self.assertIsNone(health.last_gap)
+
+            bindings.pause_after_put = True
+            bind_second = asyncio.create_task(
+                gateway.execute_gateway(
+                    BindConversationToThread(
+                        operation_id="bind-second",
+                        conversation_ref=second,
+                        actor="user",
+                        thread_ref=thread.ref,
+                        created_at=datetime.now(UTC),
+                    )
+                )
+            )
+            await asyncio.wait_for(bindings.put_committed.wait(), timeout=1)
+            route_id = derive_projection_route_id(thread.ref, second)
+            barrier = gateway._projection_runtime._routes._bootstrap[route_id]
+            self.assertFalse(barrier.is_set())
+
+            await application.send_input(
+                thread.ref,
+                AgentInput(
+                    client_message_id="live-during-bind",
+                    content=(TextContent("live"),),
+                ),
+            )
+            await asyncio.sleep(0)
+            self.assertFalse(any(message.conversation_ref == second for message in channel.sent))
+
+            bindings.release_put.set()
+            result = await bind_second
+            self.assertIsInstance(result, ConversationBound)
+            async with asyncio.timeout(1):
+                while not any(message.conversation_ref == second for message in channel.sent):
+                    await asyncio.sleep(0)
+            self.assertTrue(barrier.is_set())
+        finally:
+            bindings.release_put.set()
+            await gateway.stop()
+
+    async def test_first_foreground_bind_reconciles_before_live_delivery(
+        self,
+    ) -> None:
+        application = _DelayedHistoryApplication()
+        thread = await application.create_thread(title="history")
+        await application.send_input(
+            thread.ref,
+            AgentInput(
+                client_message_id="before-bind",
+                content=(TextContent("before"),),
+            ),
+        )
+        conversation = ConversationRef("fake-channel", "conversation")
+        bindings = InMemoryBindingRepository()
+        projections = InMemoryProjectionRouteRepository()
+        channel = FakeChannelAdapter()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            repositories=GatewayRepositories(
+                bindings=bindings,
+                projections=projections,
+            ),
+            projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+        )
+        await gateway.start()
+        try:
+            application.pause_history = True
+            binding_task = asyncio.create_task(
+                gateway.execute_gateway(
+                    BindConversationToThread(
+                        operation_id="bind-with-history",
+                        conversation_ref=conversation,
+                        actor="user",
+                        thread_ref=thread.ref,
+                        created_at=datetime.now(UTC),
+                    )
+                )
+            )
+            await asyncio.wait_for(application.history_started.wait(), timeout=1)
+            route_id = derive_projection_route_id(thread.ref, conversation)
+            barrier = gateway._projection_runtime._routes._bootstrap[route_id]
+            self.assertFalse(barrier.is_set())
+            self.assertFalse(binding_task.done())
+
+            await application.send_input(
+                thread.ref,
+                AgentInput(
+                    client_message_id="during-baseline",
+                    content=(TextContent("during"),),
+                ),
+            )
+            await asyncio.sleep(0)
+            self.assertEqual(channel.sent, [])
+
+            application.release_history.set()
+            result = await binding_task
+            self.assertIsInstance(result, ConversationBound)
+            async with asyncio.timeout(1):
+                while len(channel.sent) < 4:
+                    await asyncio.sleep(0)
+            self.assertEqual(len(channel.sent), 4)
+            self.assertTrue(
+                all(message.conversation_ref == conversation for message in channel.sent)
+            )
+            health = gateway.get_projection_health(thread.ref)
+            assert health is not None
+            self.assertIsNone(health.last_gap)
+        finally:
+            application.release_history.set()
+            await gateway.stop()
+
+    async def test_failed_foreground_baseline_stays_fenced_until_retry(
+        self,
+    ) -> None:
+        application = _DelayedHistoryApplication()
+        thread = await application.create_thread(title="history")
+        await application.send_input(
+            thread.ref,
+            AgentInput(
+                client_message_id="before-bind",
+                content=(TextContent("before"),),
+            ),
+        )
+        conversation = ConversationRef("fake-channel", "conversation")
+        bindings = InMemoryBindingRepository()
+        projections = InMemoryProjectionRouteRepository()
+        channel = FakeChannelAdapter()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            repositories=GatewayRepositories(
+                bindings=bindings,
+                projections=projections,
+            ),
+            projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+        )
+        await gateway.start()
+        try:
+            application.fail_history_once = True
+            failed = await gateway.execute_gateway(
+                BindConversationToThread(
+                    operation_id="bind-history-fails",
+                    conversation_ref=conversation,
+                    actor="user",
+                    thread_ref=thread.ref,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(failed, GatewayOperationFailed)
+            committed = await bindings.get(conversation)
+            assert committed is not None
+            self.assertEqual(committed.thread_ref, thread.ref)
+            route = (await projections.list_projection_routes(thread.ref))[0]
+            barrier = gateway._projection_runtime._routes._bootstrap[route.route_id]
+            self.assertFalse(barrier.is_set())
+            self.assertIsNone(route.checkpoint_agent_item_id)
+
+            invalid_retry = await gateway.execute_gateway(
+                BindConversationToThread(
+                    operation_id="bind-history-invalid-retry",
+                    conversation_ref=conversation,
+                    actor="user",
+                    thread_ref=thread.ref,
+                    expected_revision=99,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(invalid_retry, GatewayOperationFailed)
+            self.assertFalse(barrier.is_set())
+
+            await application.send_input(
+                thread.ref,
+                AgentInput(
+                    client_message_id="while-fenced",
+                    content=(TextContent("during"),),
+                ),
+            )
+            await asyncio.sleep(0)
+            self.assertEqual(channel.sent, [])
+            self.assertIsNone(
+                (await projections.list_projection_routes(thread.ref))[0].checkpoint_agent_item_id
+            )
+
+            retried = await gateway.execute_gateway(
+                BindConversationToThread(
+                    operation_id="bind-history-retry",
+                    conversation_ref=conversation,
+                    actor="user",
+                    thread_ref=thread.ref,
+                    expected_revision=committed.revision,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(retried, ConversationBound)
+            self.assertEqual(len(channel.sent), 4)
+            self.assertTrue(barrier.is_set())
+            self.assertIsNotNone(
+                (await projections.list_projection_routes(thread.ref))[0].checkpoint_agent_item_id
+            )
+        finally:
+            await gateway.stop()
+
+    async def test_unknown_binding_outcome_keeps_prepared_route_fenced(
+        self,
+    ) -> None:
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        thread = await application.create_thread(title="shared")
+        first = ConversationRef("fake-channel", "first")
+        second = ConversationRef("fake-channel", "second")
+        bindings = _CrashBindingRepository()
+        projections = InMemoryProjectionRouteRepository()
+        channel = FakeChannelAdapter()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            repositories=GatewayRepositories(
+                bindings=bindings,
+                projections=projections,
+            ),
+            projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+        )
+        await gateway.start()
+        try:
+            first_bound = await gateway.execute_gateway(
+                BindConversationToThread(
+                    operation_id="bind-first",
+                    conversation_ref=first,
+                    actor="user",
+                    thread_ref=thread.ref,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(first_bound, ConversationBound)
+
+            bindings.fail_after_put = True
+            bindings.fail_get_after_failed_put = True
+            failed = await gateway.execute_gateway(
+                BindConversationToThread(
+                    operation_id="bind-unknown-outcome",
+                    conversation_ref=second,
+                    actor="user",
+                    thread_ref=thread.ref,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(failed, GatewayOperationFailed)
+            route = next(
+                route
+                for route in await projections.list_projection_routes(thread.ref)
+                if route.conversation_ref == second
+            )
+            barrier = gateway._projection_runtime._routes._bootstrap[route.route_id]
+            self.assertFalse(barrier.is_set())
+
+            await application.send_input(
+                thread.ref,
+                AgentInput(
+                    client_message_id="unknown-outcome-live",
+                    content=(TextContent("live"),),
+                ),
+            )
+            await asyncio.sleep(0)
+            self.assertFalse(any(message.conversation_ref == second for message in channel.sent))
+            stored_second = next(
+                item
+                for item in await projections.list_projection_routes(thread.ref)
+                if item.conversation_ref == second
+            )
+            self.assertIsNone(stored_second.checkpoint_agent_item_id)
+        finally:
+            await gateway.stop()
+
     async def test_foreground_switch_a_to_b_to_a_reconciles_missed_output(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
         thread_a = await application.create_thread(title="A")
@@ -344,6 +1001,8 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
             self.assertIsInstance(switched_a, ConversationBound)
+            await _wait_for_deliveries(channel, 6)
+            self.assertIsNone(channel.sent[-1].reply_to)
             observed = await gateway.execute_gateway(
                 ObserveThread(
                     operation_id="observe-a-again",
@@ -355,8 +1014,6 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
             self.assertIsInstance(observed, ThreadObserved)
-            await _wait_for_deliveries(channel, 6)
-            self.assertEqual(channel.sent[-1].reply_to, "return-a")
             async with asyncio.timeout(1):
                 while True:
                     health_a = gateway.get_projection_health(thread_a.ref)
@@ -372,6 +1029,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
                 ),
             )
             await _wait_for_deliveries(channel, 8)
+            self.assertEqual(channel.sent[-1].reply_to, "return-a")
         finally:
             await gateway.stop()
 

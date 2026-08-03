@@ -1,6 +1,6 @@
 # IMCodex consumer follow-up blockers
 
-Status: SDK ADR 0015 rollout through O2 merged; A1 artifact materialization and downstream cutover pending
+Status: SDK ADR 0015 slices merged; downstream cutover validation in progress
 
 This note records the SDK-side gaps found while attempting the downstream
 IMCodex migration from SDK merge commit
@@ -25,6 +25,7 @@ baseline was `251` unit tests passing.
 | App Server tool/system/artifact projection | App Server adapter-specific event/history capability | T3 activities and Codex items have different native shapes | Preserve the native items needed for declared visibility and artifact delivery without a consumer raw-notification side channel. |
 | Subscriber/startup/acceptance buffering | Core runtime safety; capacity and overflow UX are consumer policy | Codex, Zen, and T3 can all outpace a slow Channel | Bound every internal accumulation point or define an explicit overflow/reconciliation path before removing the consumer's bounded stage. |
 | Adapter diagnostics/health | Optional adapter capability plus consumer presentation policy | Every long-lived native Channel/Application needs operability; products may render health differently | Expose bounded non-secret adapter facts; IMCodex keeps its `health.json` and event UX. |
+| Foreground binding route preparation | SDK binding/projection consistency | IMCodex uses `foreground_only`; remembered-recipient and all-observer products retain explicit observation | The typed Thread-bind operation prepares the additive Conversation route before binding CAS. A pre-CAS crash leaves an inactive route; a same-target retry converges; a stale retry cannot overwrite a later binding. |
 
 ## Cutover rule
 
@@ -58,6 +59,13 @@ review, and merges before the next slice is based:
 
 IMCodex pins none of the intermediate branch commits. Its dependency advances
 only to the final required SDK merge commit present on `main`.
+
+During final IMCodex cutover validation, a crash window was found between its
+typed Thread bind and a separate `ObserveThread`: the binding could commit
+without a foreground route. The fix belongs in the SDK typed bind operation,
+not in a consumer-side repair path. Under `foreground_only`, route preparation
+is additive and precedes binding CAS; binding equality remains the sole
+delivery authority, so an uncommitted prepared route cannot authorize output.
 
 Consumer projection and presentation follow-ups are additionally governed by
 ADR 0015. Metadata fidelity, Channel diagnostics, Application presentation or

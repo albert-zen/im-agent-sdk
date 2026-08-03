@@ -203,7 +203,11 @@ class ThreadProjectionRuntime:
         for route in restored_routes:
             await self._routes.begin_bootstrap(route.route_id)
         for thread_ref in {route.thread_ref for route in restored_routes}:
-            await self._ensure_projection(thread_ref, recover_existing=True)
+            await self._ensure_projection(
+                thread_ref,
+                reconcile_existing=True,
+                require_checkpoint=True,
+            )
 
     def mark_delivery_ready(self) -> None:
         """Release restored workers after producers are observed and Channels can send."""
@@ -282,6 +286,33 @@ class ThreadProjectionRuntime:
             return route
         finally:
             self._routes.complete_bootstrap(route_id)
+
+    async def prepare_foreground_binding_route(
+        self,
+        thread_ref: ThreadRef,
+        conversation_ref: ConversationRef,
+    ) -> tuple[ThreadProjectionRoute, bool]:
+        """Persist an inactive-until-bound route before a foreground binding CAS."""
+
+        if self._projection_policy is not ProjectionPolicy.FOREGROUND_ONLY:
+            raise RuntimeError("foreground binding route preparation requires foreground_only")
+        route_id = derive_projection_route_id(thread_ref, conversation_ref)
+        await self._routes.begin_bootstrap(route_id)
+        try:
+            route, created = await self._remember_route(
+                thread_ref,
+                conversation_ref,
+                reply_to_message_id=None,
+            )
+            return route, created
+        except BaseException:
+            self._routes.complete_bootstrap(route_id)
+            raise
+
+    def complete_foreground_binding_route(self, route_id: str) -> None:
+        """Release a route barrier after foreground binding convergence or failure."""
+
+        self._routes.complete_bootstrap(route_id)
 
     async def prepare_input_route(
         self,
@@ -459,6 +490,8 @@ class ThreadProjectionRuntime:
         self,
         previous: ConversationBinding | None,
         current: ConversationBinding,
+        *,
+        require_checkpoint: bool = True,
     ) -> None:
         if self._projection_policy is not ProjectionPolicy.FOREGROUND_ONLY:
             return
@@ -482,18 +515,38 @@ class ThreadProjectionRuntime:
             if activated_route is None:
                 return
             await self._routes.begin_bootstrap(activated_route.route_id)
-            try:
-                await self._routes.reconcile_route(
-                    self._application(current.thread_ref.application_instance_id),
-                    activated_route,
-                    require_checkpoint=True,
-                )
-            finally:
-                self._routes.complete_bootstrap(activated_route.route_id)
+            await self._routes.reconcile_route(
+                self._application(current.thread_ref.application_instance_id),
+                activated_route,
+                require_checkpoint=require_checkpoint,
+                retain_barrier_on_failure=True,
+            )
             return
         for route in routes:
             await self._routes.begin_bootstrap(route.route_id)
-        await self._ensure_projection(current.thread_ref, recover_existing=True)
+        await self._ensure_projection(current.thread_ref)
+        try:
+            await asyncio.gather(
+                *(
+                    self._routes.reconcile_route(
+                        self._application(current.thread_ref.application_instance_id),
+                        route,
+                        require_checkpoint=(
+                            require_checkpoint
+                            if route.conversation_ref == current.conversation_ref
+                            else True
+                        ),
+                        retain_barrier_on_failure=True,
+                    )
+                    for route in routes
+                )
+            )
+        except BaseException:
+            task = self._tasks.get(current.thread_ref)
+            if task is not None:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+            raise
 
     async def _remember_route(
         self,
@@ -560,7 +613,8 @@ class ThreadProjectionRuntime:
         self,
         thread_ref: ThreadRef,
         *,
-        recover_existing: bool = False,
+        reconcile_existing: bool = False,
+        require_checkpoint: bool = True,
     ) -> None:
         task = self._tasks.get(thread_ref)
         if task is None or task.done():
@@ -569,7 +623,8 @@ class ThreadProjectionRuntime:
                 self._project_thread(
                     thread_ref,
                     ready,
-                    recover_existing=recover_existing,
+                    reconcile_existing=reconcile_existing,
+                    require_checkpoint=require_checkpoint,
                 )
             )
             self._tasks[thread_ref] = task
@@ -617,10 +672,12 @@ class ThreadProjectionRuntime:
         thread_ref: ThreadRef,
         ready: asyncio.Event,
         *,
-        recover_existing: bool,
+        reconcile_existing: bool,
+        require_checkpoint: bool,
     ) -> None:
         restart_count = 0
-        needs_recovery = recover_existing
+        needs_recovery = reconcile_existing
+        recovery_requires_checkpoint = require_checkpoint
         recover_requests_after_gap = False
         while not self._stopping:
             events: AsyncIterator[AgentEvent] | None = None
@@ -648,8 +705,9 @@ class ThreadProjectionRuntime:
                     await self._routes.reconcile_routes(
                         application,
                         await self._active_routes(thread_ref),
-                        require_checkpoint=True,
+                        require_checkpoint=recovery_requires_checkpoint,
                     )
+                    recovery_requires_checkpoint = True
                     if recover_requests_after_gap:
                         request_recovery_degraded = (
                             await self._request_projection.reconcile_application_after_event_gap(
@@ -739,6 +797,7 @@ class ThreadProjectionRuntime:
                     delay = max(delay, error.retry_after_seconds or 0)
                 await asyncio.sleep(delay)
                 needs_recovery = True
+                recovery_requires_checkpoint = True
             finally:
                 ready.set()
                 if events is not None:

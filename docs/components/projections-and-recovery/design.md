@@ -88,11 +88,22 @@ reply context, per-destination completion checkpoint, and update times.
 Supported policies:
 
 - `foreground_only`: deliver only while the Conversation is bound to Thread;
+  the typed Thread-bind operation prepares that Conversation's route before
+  binding CAS so a crash cannot expose a selected Thread without its edge;
 - `remembered_last_recipient`: retain one last destination per Thread;
 - `all_observers`: retain all explicit observers.
 
 Destinations are resolved at delivery time. One inbound message object is not
 retained as routing truth.
+
+A foreground route prepared before a failed or conflicting bind remains
+inactive and harmless. Historical routes may retain independent checkpoint
+progress after a Conversation switches away, but binding equality is the only
+delivery authority. Its bootstrap barrier is installed before the route write
+and released only after binding convergence or failure, preserving baseline/
+live ordering when another Conversation already keeps the Thread worker alive.
+Multiple Conversations may bind the same Thread and keep independent routes
+while one Application subscription worker fans out to all active destinations.
 
 The completion checkpoint is per route because one destination can deliver,
 suppress, or fail independently. It stores only the last stable Agent item ID
