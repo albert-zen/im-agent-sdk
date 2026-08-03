@@ -23,9 +23,11 @@ separates SDK ownership work from the later IMCodex consumer migration.
 
 | Change area | Read first | Validate first |
 |---|---|---|
-| `contracts/**`, `schemas/v1/**` | [contracts design](components/contracts/design.md), [protocol](components/contracts/protocol.md), [testing](components/contracts/testing.md) | `test_contracts.py`, schema validator |
+| Interaction message values in `contracts/**`, `schemas/v1/messages.schema.json` | [messages design](components/interaction/messages/design.md), [testing](components/interaction/messages/testing.md), [protocol](components/contracts/protocol.md#message-envelopes) | `test_contracts.py`, schema validator |
+| Common operation values in `contracts/**`, `schemas/v1/operations.schema.json` | [operations design](components/interaction/operations/design.md), [testing](components/interaction/operations/testing.md), [protocol](components/contracts/protocol.md#typed-operations) | `test_contracts.py`, schema validator |
+| Remaining unsplit `contracts/**` and contract schemas | [contracts design](components/contracts/design.md), [protocol](components/contracts/protocol.md), [testing](components/contracts/testing.md) | `test_contracts.py`, schema validator |
 | `adapters.py` | [ports design](components/ports/design.md), [testing](components/ports/testing.md) | adapter contract kit and static typing |
-| `attachments.py` | [attachments/media design](components/attachments-and-media/design.md), [testing](components/attachments-and-media/testing.md) | attachment trust and vertical-slice tests |
+| `attachments.py` and Interaction media values | [media design](components/interaction/media/design.md), [testing](components/interaction/media/testing.md) | attachment trust, contract, and vertical-slice tests |
 | `delivery_planning.py`, `keyed_locks.py` | [delivery planning/coordination design](components/delivery-planning-and-coordination/design.md), [testing](components/delivery-planning-and-coordination/testing.md) | deterministic plan, ordering, backpressure, and retry tests |
 | `gateway.py` | [gateway design](components/gateway/design.md), [testing](components/gateway/testing.md) | gateway operation and vertical-slice tests |
 | `events.py`, `projection_routes.py`, `projection_runtime.py`, `projections.py`, `recovery.py` | [projection/recovery design](components/projections-and-recovery/design.md), [testing](components/projections-and-recovery/testing.md) | fan-out, projection routing, recovery tests |

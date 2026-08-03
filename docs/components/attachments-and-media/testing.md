@@ -1,5 +1,10 @@
 # Attachments and media testing
 
+The focused product-neutral source/trust scenarios are owned by
+[`interaction.media`](../interaction/media/testing.md). This broad page
+remains migration evidence for tests still physically mixed with Gateway and
+Application behavior.
+
 Required scenarios:
 
 - A1 artifact candidates confer no path/URL trust, and O2 loss on process

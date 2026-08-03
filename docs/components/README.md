@@ -37,6 +37,12 @@ control intent. Product commands compose a local registry in the consumer and
 do not enter SDK Core. Channel code does not depend on Gateway or concrete
 Application implementations.
 
+See the [Interaction navigation](interaction/README.md) and the authoritative
+leaf docs for [messages](interaction/messages/design.md),
+[operations](interaction/operations/design.md), and
+[media](interaction/media/design.md). The remaining Interaction leaves still
+use their current broad component documents until their focused slices land.
+
 ## Gateway
 
 ```text
@@ -132,7 +138,8 @@ protocol, security, or operations pages are added only where they carry real
 additional authority. A parent `README.md` navigates its children and never
 substitutes for a leaf design.
 
-Until a leaf is physically migrated, the component map points to its current
-broad design/testing evidence and records the missing target leaf docs as a
-gap. Each rollout slice updates the map together with code, tests, AgentKit,
-and public exports.
+Before physical migration, a leaf may already have focused target docs while
+its current code and tests remain declared split candidates. The component map
+states which authority applies to each leaf and records the remaining
+structural gap. Each rollout slice updates the map together with the affected
+code, tests, AgentKit routing, and public exports.

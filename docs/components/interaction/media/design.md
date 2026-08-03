@@ -1,0 +1,121 @@
+# Interaction media design
+
+Component ID: `interaction.media`
+
+Parent: `interaction`
+
+## Purpose
+
+This leaf defines typed attachment content and the source, media type, size,
+and trust boundaries shared by Channel and Application integrations. It makes
+media location explicit without making a path, URL, or message grant access.
+
+## Ownership
+
+This leaf owns:
+
+- `AttachmentContent`, `AttachmentSource`, `AttachmentSourceKind`,
+  `AttachmentGrouping`, `LocalPath`, `RemoteUrl`, and `AttachmentHandle`;
+- validation of typed source shape, declared size, media type, and accepting
+  capability limits;
+- resolution of `LocalPath` only beneath an explicitly configured trusted
+  shared root;
+- bounded inline staging mechanics used by the optional proactive ingress.
+
+It does not own:
+
+- attachment bytes, a durable blob store, SDK spool/outbox, quota ledger, or
+  crash-cleanup ledger;
+- Channel download/upload APIs, credentials, native receipts, or retry
+  policy;
+- Application-specific materialization, encoding, or native upload behavior;
+- unrestricted URL fetching or redirect/network policy;
+- Gateway admission, delivery coordination, projection checkpoints, or
+  idempotency;
+- consumer staging-directory placement or artifact product UX.
+
+## Source and trust contract
+
+`AttachmentContent` carries a stable attachment identity, media type,
+discriminated source, optional filename and declared byte size, and passive
+Metadata. Attachment locations never travel through Metadata.
+
+- `LocalPath` conveys a location, not authority. The accepting integration
+  resolves an absolute path against deployment-configured shared-root trust
+  and rejects missing trust, relative paths, and escape from that root.
+- `RemoteUrl` requires the accepting integration to enforce scheme, address,
+  redirect, credential, byte-size, and media policy. Core provides no
+  unrestricted downloader.
+- `AttachmentHandle` remains reserved until an explicit resolver is
+  configured; unsupported consumers fail explicitly.
+
+Channel capabilities declare accepted source kinds, media types, maximum
+size/count, and grouping. Application capabilities currently declare accepted
+source kinds; concrete accepting adapters enforce their evidenced native
+media and size policy. Validation happens before native I/O where the boundary
+has the required facts. Declared size is not proof of byte identity. Public
+proactive `LocalPath` delivery additionally requires a lowercase SHA-256
+content identity, and the accepting Channel verifies the actual bytes before
+upload.
+
+## Flow and dependency boundary
+
+Native Channel authentication, stable identity, and access policy precede
+media preparation. Media-capable Channel adapters acquire the opaque durable
+admission lease from Gateway before download, staging, parsing, or quota work.
+This leaf consumes the typed lease-independent media facts; it does not own or
+persist admission.
+
+Application adapters accept only declared source kinds. ADR 0015 A1 artifact
+candidates are bounded untrusted facts, never `LocalPath` authority. The
+consumer materializer owns validation, byte acquisition, quota, lifetime, and
+crash-safe cleanup before returning bounded typed `AttachmentContent`. O2 may
+notify clean-process release but is best-effort and cannot become a durable
+cleanup mechanism.
+
+The leaf depends on `interaction.messages` for the shared content vocabulary.
+Channel and Application leaves may depend on media; media imports neither
+Gateway nor a Channel/Application implementation.
+
+## State and recovery
+
+Typed media values and trust configuration are process-local. This leaf
+persists no bytes or paths. A preparation failure before handoff releases only
+the still-owned pre-handoff `in_flight` admission lease; after the handoff
+callback starts, Gateway owns the terminal transition. Restart redelivery is
+durably rejected before repeated media work when the prior identity completed
+or remains in flight.
+
+Authoritative Application history may invoke consumer materialization again,
+so consumers use stable candidate/item identity and replay-safe acquisition.
+Crash-safe byte cleanup remains a consumer ledger or startup sweep. Live-only
+materialization never advances a recoverable completion checkpoint.
+
+## Current and target structure
+
+Media values and helpers are currently spread across message, capability, and
+delivery schemas plus `src/imagent/attachments.py`,
+`src/imagent/contracts/model.py`, `src/imagent/contracts/delivery.py`, and
+`src/imagent/delivery_ingress.py`. These are declared split candidates where
+they also contain Channel, Gateway, persistence, or Application concerns.
+
+The mechanical target is:
+
+```text
+src/imagent/interaction/media.py
+tests/interaction/test_media.py
+```
+
+The later move must preserve schema and public-facade compatibility while
+leaving byte lifetime, proactive orchestration, native delivery, and
+Application materialization in their owning components. It must not retain a
+second media implementation or introduce an SDK durable spool.
+
+## Authority
+
+- [Vision](../../../VISION.md)
+- [Architecture](../../../ARCHITECTURE.md)
+- [Common protocol](../../contracts/protocol.md#message-envelopes)
+- [ADR 0003](../../../decisions/0003-attachment-sources-and-trust.md)
+- [ADR 0011](../../../decisions/0011-durable-inbound-admission-before-media.md)
+- [ADR 0015](../../../decisions/0015-typed-extension-seams-and-composition.md)

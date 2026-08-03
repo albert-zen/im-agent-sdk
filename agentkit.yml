@@ -25,6 +25,13 @@ components:
       # Tests.
       - tests/test_contracts.py
     docs:
+      - docs/components/interaction/README.md
+      - docs/components/interaction/messages/design.md
+      - docs/components/interaction/messages/testing.md
+      - docs/components/interaction/operations/design.md
+      - docs/components/interaction/operations/testing.md
+      - docs/components/interaction/media/design.md
+      - docs/components/interaction/media/testing.md
       - docs/components/contracts/design.md
       - docs/components/contracts/protocol.md
       - docs/components/contracts/testing.md
@@ -83,6 +90,8 @@ components:
       - src/imagent/attachments.py
       - tests/test_attachments.py
     docs:
+      - docs/components/interaction/media/design.md
+      - docs/components/interaction/media/testing.md
       - docs/components/attachments-and-media/design.md
       - docs/components/attachments-and-media/testing.md
       - docs/migrations/imcodex-followup-blockers.md

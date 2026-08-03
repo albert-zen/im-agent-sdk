@@ -1,5 +1,10 @@
 # Contracts testing
 
+Focused Interaction scenarios are now owned by the
+[messages](../interaction/messages/testing.md) and
+[operations](../interaction/operations/testing.md) test designs. This broad
+page remains current evidence for contract leaves not yet mechanically split.
+
 ## Required checks
 
 Run:

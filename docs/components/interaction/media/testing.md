@@ -1,0 +1,44 @@
+# Interaction media testing
+
+## Contract and trust scenarios
+
+Tests for `interaction.media` must prove:
+
+- each attachment source has one stable discriminant and schema/Python shape;
+- source kind, media type, declared size/count, grouping, and accepting
+  capability limits fail explicitly before unsupported native work;
+- `LocalPath` is rejected without an explicit shared root, when relative, or
+  when resolved outside that root, and succeeds only inside the trusted root;
+- `RemoteUrl` is never fetched by an unrestricted common downloader and
+  `AttachmentHandle` remains unsupported without a resolver;
+- attachment locations cannot be smuggled through Metadata;
+- durable inbound admission rejects restart duplicates before Channel media
+  preparation and releases only the still-owned pre-handoff claim on
+  preparation failure;
+- proactive inline staging authenticates before decoding, bounds byte count,
+  confines generated paths, preserves content order, includes a stable
+  digest, and cleans process-local staging after synchronous submission;
+- public proactive `LocalPath` content requires lowercase SHA-256 identity and
+  native loading rejects changed bytes;
+- A1 candidates confer no trust, materialization is bounded and replay-safe,
+  and O2 loss cannot turn the SDK into a durable spool or cleanup ledger;
+- absence of optional materialization preserves existing adapter behavior.
+
+Current focused evidence is:
+
+```sh
+PYTHONPATH=src python -m unittest \
+  tests.test_attachments \
+  tests.test_contracts \
+  tests.test_gateway_vertical_slice -v
+```
+
+Native Channel and Application suites remain responsible for their provider
+media I/O and materialization behavior. During the mechanical move, shared
+source/trust cases move once to `tests/interaction/test_media.py`; owner-
+specific admission, proactive-delivery, Channel, and Application cases stay
+with those components.
+
+Any schema or public-contract change also requires `validate_schemas.py`,
+component-map validation, affected native adapter tests, and the repository-
+wide checks in `AGENTS.md`.
