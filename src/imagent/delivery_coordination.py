@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 from .adapters import ChannelAdapter
 from .contracts import (
-    AttachmentContent,
     ConversationRef,
     DeliveryItemReceipt,
     DeliveryItemStatus,
@@ -23,6 +22,7 @@ from .delivery_planning import (
     DeliveryPlanningError,
     PlannedDeliverySegment,
 )
+from .interaction.media import AttachmentContent
 from .keyed_locks import KeyedLockRegistry
 
 

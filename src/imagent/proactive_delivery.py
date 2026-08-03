@@ -13,7 +13,6 @@ from .adapters import (
     DeliverySubmissionRepository,
 )
 from .contracts import (
-    AttachmentContent,
     ConversationDeliveryTarget,
     DeliveryIntent,
     DeliveryItemReceipt,
@@ -30,7 +29,6 @@ from .contracts import (
     DeliveryTarget,
     DestinationDeliveryRecord,
     DestinationDeliveryResult,
-    LocalPath,
     OutboundMessage,
     ProactiveDeliveryResult,
     ThreadProjectionRoute,
@@ -51,6 +49,7 @@ from .delivery_outcomes import (
     DeliveryOutcomeObserverRuntime,
 )
 from .delivery_planning import DeliveryPlanningError
+from .interaction.media import AttachmentContent, LocalPath
 from .interaction.operations import ContractViolation
 
 ResolveThreadRoutes = Callable[

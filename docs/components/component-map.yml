@@ -114,7 +114,7 @@ components:
     public_exports:
       current: [imagent.contracts:InboundMessage, imagent.contracts:OutboundMessage, imagent.contracts:AgentMessage, imagent.contracts:Content, imagent.contracts:TextContent, imagent.contracts:ConversationRef, imagent.contracts:MessageRole, imagent.contracts:Metadata, imagent.contracts:TextFormat, imagent.contracts:TextLengthUnit]
       target: [imagent.interaction.messages:InboundMessage, imagent.interaction.messages:OutboundMessage, imagent.interaction.messages:AgentMessage, imagent.interaction.messages:Content, imagent.interaction.messages:TextContent, imagent.interaction.messages:ConversationRef, imagent.interaction.messages:MessageRole, imagent.interaction.messages:Metadata, imagent.interaction.messages:TextFormat, imagent.interaction.messages:TextLengthUnit]
-    dependencies: []
+    dependencies: [interaction.media]
     state_recovery: Stateless values; stable IDs, never text or timestamps, drive replay identity.
     current_code: [schemas/v1/common.schema.json, schemas/v1/messages.schema.json, src/imagent/contracts/model.py]
     target_code: [schemas/v1/common.schema.json, schemas/v1/messages.schema.json, src/imagent/interaction/messages.py]
@@ -154,19 +154,19 @@ components:
     does_not_own: [artifact bytes, durable spool, unrestricted URL fetching, product quota]
     inputs: [typed attachment source, deployment trust root]
     outputs: [validated typed attachment location]
-    public_contracts: [AttachmentContent, LocalPath, RemoteUrl, AttachmentHandle, AttachmentGrouping, AttachmentSource, AttachmentSourceKind]
+    public_contracts: [AttachmentContent, LocalPath, RemoteUrl, AttachmentHandle, AttachmentGrouping, AttachmentSource, AttachmentSourceKind, configure_shared_filesystem_root, resolve_local_attachment]
     public_exports:
-      current: [imagent.contracts:AttachmentContent, imagent.contracts:LocalPath, imagent.contracts:RemoteUrl, imagent.contracts:AttachmentHandle, imagent.contracts:AttachmentGrouping, imagent.contracts:AttachmentSource, imagent.contracts:AttachmentSourceKind]
-      target: [imagent.interaction.media:AttachmentContent, imagent.interaction.media:LocalPath, imagent.interaction.media:RemoteUrl, imagent.interaction.media:AttachmentHandle, imagent.interaction.media:AttachmentGrouping, imagent.interaction.media:AttachmentSource, imagent.interaction.media:AttachmentSourceKind]
-    dependencies: [interaction.messages]
+      current: [imagent.contracts:AttachmentContent, imagent.contracts:LocalPath, imagent.contracts:RemoteUrl, imagent.contracts:AttachmentHandle, imagent.contracts:AttachmentGrouping, imagent.contracts:AttachmentSource, imagent.contracts:AttachmentSourceKind, imagent.interaction.media:AttachmentContent, imagent.interaction.media:LocalPath, imagent.interaction.media:RemoteUrl, imagent.interaction.media:AttachmentHandle, imagent.interaction.media:AttachmentGrouping, imagent.interaction.media:AttachmentSource, imagent.interaction.media:AttachmentSourceKind, imagent.interaction.media:configure_shared_filesystem_root, imagent.interaction.media:resolve_local_attachment]
+      target: [imagent.contracts:AttachmentContent, imagent.contracts:LocalPath, imagent.contracts:RemoteUrl, imagent.contracts:AttachmentHandle, imagent.contracts:AttachmentGrouping, imagent.contracts:AttachmentSource, imagent.contracts:AttachmentSourceKind, imagent.interaction.media:AttachmentContent, imagent.interaction.media:LocalPath, imagent.interaction.media:RemoteUrl, imagent.interaction.media:AttachmentHandle, imagent.interaction.media:AttachmentGrouping, imagent.interaction.media:AttachmentSource, imagent.interaction.media:AttachmentSourceKind, imagent.interaction.media:configure_shared_filesystem_root, imagent.interaction.media:resolve_local_attachment]
+    dependencies: []
     state_recovery: Trust configuration is process-local; content lifetime and crash cleanup stay consumer-owned.
-    current_code: [schemas/v1/capabilities.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, src/imagent/attachments.py, src/imagent/contracts/delivery.py, src/imagent/contracts/model.py, src/imagent/delivery_ingress.py]
+    current_code: [schemas/v1/capabilities.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, src/imagent/contracts/delivery.py, src/imagent/delivery_ingress.py, src/imagent/interaction/media.py]
     target_code: [schemas/v1/capabilities.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, src/imagent/interaction/media.py]
-    current_tests: [tests/test_attachments.py, tests/test_contracts.py]
+    current_tests: [tests/interaction/test_media.py, tests/test_contracts.py]
     target_tests: [tests/interaction/test_media.py]
     authoritative_docs: [docs/components/interaction/media/design.md, docs/components/interaction/media/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [current media contracts and helpers remain declared split candidates pending the mechanical Interaction move]
+    gaps: [mixed delivery validation and bounded proactive inline staging remain declared split candidates for later owner-specific moves]
 
   interaction.controllers.controller-contract:
     id: interaction.controllers.controller-contract
@@ -1430,7 +1430,7 @@ structural_status:
       owners: [interaction.channels.channel-contract, gateway.delivery.proactive-authorization, gateway.persistence.repository-contracts, applications.application-contract]
       reason: Channel/admission, proactive authorization, repository, and Application Ports share one historical module.
     src/imagent/contracts/model.py:
-      owners: [interaction.messages, interaction.media, interaction.channels.channel-contract, gateway.persistence.state-contracts, applications.application-contract, applications.capabilities, applications.events, applications.requests]
+      owners: [interaction.messages, interaction.channels.channel-contract, gateway.persistence.state-contracts, applications.application-contract, applications.capabilities, applications.events, applications.requests]
       reason: The language-neutral model is semantically correct but physically crosses all three target layers.
     src/imagent/contracts/delivery.py:
       owners: [interaction.media, interaction.channels.channel-contract, gateway.delivery.submissions, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.persistence.state-contracts]

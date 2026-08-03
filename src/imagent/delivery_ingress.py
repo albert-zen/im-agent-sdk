@@ -16,12 +16,10 @@ from typing import Protocol
 
 from .adapters import DeliverySubmissionConflict
 from .contracts import (
-    AttachmentContent,
     ConversationDeliveryTarget,
     ConversationRef,
     DeliveryIntent,
     DeliveryTarget,
-    LocalPath,
     ProactiveDeliveryResult,
     ProjectRef,
     TextContent,
@@ -29,6 +27,7 @@ from .contracts import (
     ThreadRef,
     ThreadRouteDeliveryTarget,
 )
+from .interaction.media import AttachmentContent, LocalPath
 from .interaction.operations import ContractViolation
 from .keyed_locks import KeyedLockRegistry
 from .proactive_delivery import DeliveryAuthorizationError, DeliveryRouteError

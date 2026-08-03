@@ -6,12 +6,9 @@ import re
 from dataclasses import dataclass
 
 from .contracts import (
-    AttachmentContent,
-    AttachmentGrouping,
     Content,
     ConversationRef,
     DeliveryProfile,
-    LocalPath,
     OutboundMessage,
     ReplyReferenceScope,
     SupportLevel,
@@ -19,6 +16,7 @@ from .contracts import (
     TextFormat,
     TextLengthUnit,
 )
+from .interaction.media import AttachmentContent, AttachmentGrouping, LocalPath
 
 
 class DeliveryPlanningError(ValueError):

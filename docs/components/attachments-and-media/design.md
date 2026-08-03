@@ -63,8 +63,11 @@ not fetch remote URLs.
 
 ## Dependency direction
 
-Media helpers depend on Contracts. Channel and Application integrations may
-depend on Media. Media never imports either integration family or Gateway.
+The focused Interaction media leaf owns its values and filesystem trust
+helpers directly. Mixed language-neutral schemas may describe those values,
+but the Python leaf imports no broad Contracts facade. Channel and Application
+integrations may depend on Media. Media never imports either integration
+family or Gateway.
 
 If future proactive Artifact delivery needs storage, planning, or retry, those
 responsibilities belong to their owning component rather than expanding this

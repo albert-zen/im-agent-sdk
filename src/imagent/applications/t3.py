@@ -12,7 +12,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
-from ..attachments import configure_shared_filesystem_root, resolve_local_attachment
 from ..contracts import (
     AcceptedTurn,
     ActivateNativeThread,
@@ -27,8 +26,6 @@ from ..contracts import (
     ApplicationOperationResult,
     ApplicationRef,
     ApplicationSummary,
-    AttachmentContent,
-    AttachmentSourceKind,
     CreateThread,
     DeleteThread,
     EventSequenceScope,
@@ -80,6 +77,12 @@ from ..contracts import (
 )
 from ..diagnostics import ApplicationDiagnosticFacts
 from ..events import EventBroadcaster, EventStreamGap, EventStreamReset
+from ..interaction.media import (
+    AttachmentContent,
+    AttachmentSourceKind,
+    configure_shared_filesystem_root,
+    resolve_local_attachment,
+)
 from ..interaction.operations import operation_error
 from .presentation import (
     ApplicationPresentationCapacityError,

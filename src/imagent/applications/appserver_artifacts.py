@@ -9,16 +9,16 @@ from itertools import islice
 from types import MappingProxyType
 from typing import Protocol
 
-from ..contracts import (
+from ..contracts import ThreadRef
+from ..diagnostics import (
+    ApplicationArtifactMaterializationDiagnosticFacts,
+    ApplicationArtifactMaterializationFailureCode,
+)
+from ..interaction.media import (
     AttachmentContent,
     AttachmentHandle,
     LocalPath,
     RemoteUrl,
-    ThreadRef,
-)
-from ..diagnostics import (
-    ApplicationArtifactMaterializationDiagnosticFacts,
-    ApplicationArtifactMaterializationFailureCode,
 )
 from .appserver_mapping import normalized_item_type
 

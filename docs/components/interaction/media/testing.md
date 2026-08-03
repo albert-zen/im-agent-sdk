@@ -24,14 +24,19 @@ Tests for `interaction.media` must prove:
   and O2 loss cannot turn the SDK into a durable spool or cleanup ledger;
 - absence of optional materialization preserves existing adapter behavior.
 
-Current focused evidence is:
+The value/trust extraction establishes focused evidence at:
 
 ```sh
 PYTHONPATH=src python -m unittest \
-  tests.test_attachments \
+  tests.interaction.test_media \
   tests.test_contracts \
   tests.test_gateway_vertical_slice -v
 ```
+
+`tests/interaction/test_media.py` owns exact facade identity, discriminant,
+and local shared-root trust cases. Proactive ingress, admission, native
+Channel I/O, and Application materialization cases remain with their owning
+components; they are not moved merely because they consume typed media.
 
 Native Channel and Application suites remain responsible for their provider
 media I/O and materialization behavior. During the mechanical move, shared
