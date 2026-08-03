@@ -7,7 +7,13 @@ from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
 from ..media import AttachmentContent, AttachmentGrouping, AttachmentSourceKind
-from ..messages import Content, ConversationRef, InboundMessage, TextLengthUnit
+from ..messages import (
+    Content,
+    ConversationRef,
+    InboundMessage,
+    OutboundMessage,
+    TextLengthUnit,
+)
 from ..operations import ContractViolation, require_identifier
 
 MessageHandler = Callable[[InboundMessage], Awaitable[None]]
@@ -25,6 +31,24 @@ InboundAdmissionHandler = Callable[
     [ConversationRef, str],
     Awaitable[InboundAdmission | None],
 ]
+
+
+class ChannelAdapter(Protocol):
+    @property
+    def channel_instance_id(self) -> str: ...
+
+    @property
+    def capabilities(self) -> ChannelCapabilities: ...
+
+    async def start(
+        self,
+        on_message: MessageHandler,
+        on_admission: InboundAdmissionHandler | None = None,
+    ) -> None: ...
+
+    async def stop(self) -> None: ...
+
+    async def send(self, message: OutboundMessage) -> DeliveryReceipt: ...
 
 
 @runtime_checkable

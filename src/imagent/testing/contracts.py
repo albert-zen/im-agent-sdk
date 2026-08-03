@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from imagent.adapters import AgentApplicationAdapter, ChannelAdapter
+from imagent.adapters import AgentApplicationAdapter
 from imagent.contracts import (
     ActivateNativeThread,
     AgentEvent,
@@ -47,6 +47,7 @@ from imagent.contracts import (
     validate_application_operation_result,
     validate_thread_ref,
 )
+from imagent.interaction.channels import ChannelAdapter
 from imagent.interaction.messages import InboundMessage, OutboundMessage, TextContent
 
 

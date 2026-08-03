@@ -13,7 +13,7 @@ from imagent.interaction.operations import ContractViolation
 class ChannelReceiptContractTests(unittest.TestCase):
     def test_channel_lifecycle_has_no_gateway_operation_callback(self) -> None:
         self.assertFalse(hasattr(adapters, "OperationHandler"))
-        for owner in (adapters.ChannelAdapter, NativeTransportChannelAdapter):
+        for owner in (channels.ChannelAdapter, NativeTransportChannelAdapter):
             with self.subTest(owner=owner.__name__):
                 parameters = inspect.signature(owner.start).parameters
                 self.assertEqual(
@@ -21,8 +21,9 @@ class ChannelReceiptContractTests(unittest.TestCase):
                     ("self", "on_message", "on_admission"),
                 )
 
-    def test_adapters_facade_reexports_exact_admission_contract_owners(self) -> None:
+    def test_adapters_facade_reexports_exact_channel_contract_owners(self) -> None:
         names = (
+            "ChannelAdapter",
             "ChannelStartupConfigurationValidator",
             "InboundAdmission",
             "InboundAdmissionHandler",

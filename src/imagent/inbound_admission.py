@@ -6,11 +6,11 @@ from dataclasses import dataclass
 from uuid import uuid4
 
 from .adapters import (
-    ChannelAdapter,
     IdempotencyClaimStatus,
     IdempotencyRepository,
 )
 from .interaction.channels import (
+    ChannelAdapter,
     InboundAdmission,
     InboundAdmissionHandler,
     MessageHandler,

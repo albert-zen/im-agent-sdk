@@ -12,7 +12,6 @@ callers migrate, but it does not retain a second implementation.
 
 The remaining Ports surface owns:
 
-- `ChannelAdapter` lifecycle, inbound callback, and send signatures;
 - `AgentApplicationAdapter` lifecycle, typed operation, input, and Thread
   subscription signatures;
 - the common input continuation preference, typed pre-dispatch intent, and
@@ -29,11 +28,12 @@ The remaining Ports surface owns:
 Interaction's Channel contract owns `MessageHandler`, the optional structural
 `ChannelStartupConfigurationValidator`, and the opaque `InboundAdmission`
 lease and handler used before Channel media preparation. `adapters.py`
-re-exports those exact objects for compatibility. `ChannelAdapter` and the
-remaining repository/Application Ports stay here until focused mechanical
-owner moves. The historical `OperationHandler[GatewayOperation]` is removed:
-Channel lifecycle accepts messages/admission only, while Controllers invoke
-typed operations through `ControllerActions`.
+re-exports those exact objects plus the Interaction-owned `ChannelAdapter` for
+compatibility. The remaining repository/Application Ports stay here until
+focused mechanical owner moves. The historical
+`OperationHandler[GatewayOperation]` is removed: Channel lifecycle accepts
+messages/admission only, while Controllers invoke typed operations through
+`ControllerActions`.
 
 It does not own:
 

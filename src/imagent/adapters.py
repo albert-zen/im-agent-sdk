@@ -13,10 +13,8 @@ from .contracts import (
     ApplicationOperation,
     ApplicationOperationResult,
     ApplicationSummary,
-    ChannelCapabilities,
     ConversationBinding,
     DeliveryPrincipal,
-    DeliveryReceipt,
     DeliveryReservation,
     DeliverySubmissionRecord,
     DeliverySubmissionState,
@@ -31,6 +29,9 @@ from .contracts import (
     TurnReplyCorrelation,
 )
 from .interaction.channels import (
+    ChannelAdapter as ChannelAdapter,
+)
+from .interaction.channels import (
     ChannelStartupConfigurationValidator as ChannelStartupConfigurationValidator,
 )
 from .interaction.channels import (
@@ -42,7 +43,7 @@ from .interaction.channels import (
 from .interaction.channels import (
     MessageHandler as MessageHandler,
 )
-from .interaction.messages import ConversationRef, OutboundMessage
+from .interaction.messages import ConversationRef
 
 ApplicationInputDispatchHandler = Callable[[ApplicationInputDispatch], Awaitable[None]]
 
@@ -71,24 +72,6 @@ class TurnReplyCorrelationConflict(RuntimeError):
 
 class DeliverySubmissionConflict(RuntimeError):
     """A stable delivery ID was reused for a different immutable submission."""
-
-
-class ChannelAdapter(Protocol):
-    @property
-    def channel_instance_id(self) -> str: ...
-
-    @property
-    def capabilities(self) -> ChannelCapabilities: ...
-
-    async def start(
-        self,
-        on_message: MessageHandler,
-        on_admission: InboundAdmissionHandler | None = None,
-    ) -> None: ...
-
-    async def stop(self) -> None: ...
-
-    async def send(self, message: OutboundMessage) -> DeliveryReceipt: ...
 
 
 class AgentApplicationAdapter(Protocol):

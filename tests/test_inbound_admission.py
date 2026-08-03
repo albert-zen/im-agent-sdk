@@ -7,11 +7,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
-from imagent.adapters import ChannelAdapter
 from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import ConversationRef, InboundMessage, TextContent
 from imagent.gateway import GatewayRepositories, ImAgentGateway
 from imagent.inbound_admission import ClaimedInbound, InboundAdmissionService
+from imagent.interaction.channels import ChannelAdapter
 from imagent.storage import InMemoryIdempotencyRepository, SQLiteGatewayState
 from imagent.testing import FakeChannelAdapter
 
