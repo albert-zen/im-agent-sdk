@@ -337,7 +337,9 @@ components:
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - docs/migrations/issue-9-imcodex-owner-transfer.md
       - docs/migrations/imcodex-followup-blockers.md
+      - src/imagent/interaction/channels/**
       - src/imagent/channels/**
+      - tests/interaction/channels/**
       - tests/test_native_channels.py
       - tests/test_channel_qq.py
       - tests/test_channel_telegram.py

@@ -94,29 +94,6 @@ class RequestRouteState(StrEnum):
     STALE = "stale"
 
 
-class DeliveryReceiptStatus(StrEnum):
-    ACCEPTED_BY_PLATFORM = "accepted_by_platform"
-    REJECTED_BY_PLATFORM = "rejected_by_platform"
-    RETRYABLE_FAILURE = "retryable_failure"
-    UNKNOWN = "unknown"
-
-
-class DeliveryItemStatus(StrEnum):
-    ACCEPTED = "accepted"
-    REJECTED = "rejected"
-    RETRYABLE_FAILURE = "retryable_failure"
-    UNKNOWN = "unknown"
-    SKIPPED = "skipped"
-
-
-class DeliverySegmentStatus(StrEnum):
-    ACCEPTED_BY_PLATFORM = "accepted_by_platform"
-    REJECTED_BY_PLATFORM = "rejected_by_platform"
-    RETRYABLE_FAILURE = "retryable_failure"
-    UNKNOWN = "unknown"
-    SKIPPED = "skipped"
-
-
 class ProjectMode(StrEnum):
     MANAGED = "managed"
     FLAT = "flat"
@@ -531,33 +508,3 @@ class TurnReplyCorrelation:
     conversation_ref: ConversationRef
     reply_to_message_id: str
     created_at: datetime
-
-
-@dataclass(frozen=True, slots=True)
-class DeliveryItemReceipt:
-    content_index: int
-    status: DeliveryItemStatus
-    attachment_id: str | None = None
-    native_message_id: str | None = None
-    detail: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class DeliverySegmentReceipt:
-    segment_index: int
-    delivery_id: str
-    source_content_indexes: tuple[int, ...]
-    status: DeliverySegmentStatus
-    native_message_id: str | None = None
-    detail: str | None = None
-    retry_after_seconds: float | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class DeliveryReceipt:
-    status: DeliveryReceiptStatus
-    native_message_id: str | None = None
-    detail: str | None = None
-    items: tuple[DeliveryItemReceipt, ...] = ()
-    segments: tuple[DeliverySegmentReceipt, ...] = ()
-    retry_after_seconds: float | None = None

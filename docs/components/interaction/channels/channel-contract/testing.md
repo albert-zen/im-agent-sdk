@@ -18,5 +18,7 @@ Required evidence:
 
 Focused evidence currently lives in `tests/test_adapter_contracts.py`,
 `tests/test_native_channels.py`, Channel-specific suites, Gateway admission
-tests, schema validation, and Pyright. It moves to
-`tests/interaction/channels/test_contract.py` in a later mechanical slice.
+tests, schema validation, and Pyright. Receipt identity and validation evidence
+lives in `tests/interaction/channels/test_contract.py`; lifecycle, capability,
+and admission evidence remains in the historical suites until its own focused
+mechanical slice.
