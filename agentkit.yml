@@ -457,7 +457,6 @@ components:
       - .gitignore
       - AGENTS.md
       - README.md
-      - THIRD_PARTY_NOTICES.md
       - agentkit.yml
       - pyproject.toml
       - uv.lock

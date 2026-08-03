@@ -40,7 +40,6 @@ ROOT_MAINTENANCE_PATHS = {
     ".gitignore",
     "AGENTS.md",
     "README.md",
-    "THIRD_PARTY_NOTICES.md",
     "agentkit.yml",
     "pyproject.toml",
     "uv.lock",
@@ -279,6 +278,7 @@ class AgentKitMappingTests(unittest.TestCase):
 
     def test_removed_broad_docs_do_not_remain_as_duplicate_authority(self) -> None:
         for path in (
+            "THIRD_PARTY_NOTICES.md",
             "docs/design.md",
             "docs/workflow.md",
             "docs/ADAPTERS.md",
