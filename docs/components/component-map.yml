@@ -300,7 +300,7 @@ components:
     id: interaction.channels.outbound-delivery
     parent: interaction.channels
     purpose: Apply cross-Channel validation and correlation to planned logical output and normalize native evidence into truthful typed receipts.
-    owns: [shared delivery validation, stable correlation propagation, receipt normalization, shared text splitting fallback]
+    owns: [split_text, shared delivery validation, stable correlation propagation, receipt normalization, shared text splitting fallback]
     does_not_own: [provider encoding or upload, native API calls, native response mapping, Gateway planning/retry policy, transcript, durable outbox]
     inputs: [OutboundMessage segment, Channel capability profile]
     outputs: [DeliveryReceipt and per-item evidence]
@@ -310,13 +310,13 @@ components:
       target: []
     dependencies: [interaction.channels.channel-contract, interaction.messages, interaction.media]
     state_recovery: Native acceptance identity is evidence; unknown outcomes never authorize hidden replay.
-    current_code: [src/imagent/channels/runtime.py, src/imagent/channels/native/artifacts.py, src/imagent/channels/native/base.py, src/imagent/channels/native/models.py, src/imagent/channels/native/text.py]
+    current_code: [src/imagent/interaction/channels/outbound_delivery.py, src/imagent/channels/runtime.py, src/imagent/channels/native/artifacts.py, src/imagent/channels/native/base.py, src/imagent/channels/native/models.py]
     target_code: [src/imagent/interaction/channels/outbound_delivery.py]
-    current_tests: [tests/test_native_channels.py, tests/test_channel_qq.py, tests/test_channel_telegram.py, tests/test_channel_feishu.py, tests/test_channel_weixin.py]
+    current_tests: [tests/interaction/channels/test_outbound_delivery.py, tests/test_native_channels.py, tests/test_channel_qq.py, tests/test_channel_telegram.py, tests/test_channel_feishu.py, tests/test_channel_weixin.py]
     target_tests: [tests/interaction/channels/test_outbound_delivery.py]
     authoritative_docs: [docs/components/interaction/channels/outbound-delivery/design.md, docs/components/interaction/channels/outbound-delivery/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
-    gaps: [runtime.py mixes contract ingress delivery and composition]
+    gaps: [receipt and artifact helpers remain interleaved with runtime and provider adapters]
 
   interaction.channels.adapters:
     id: interaction.channels.adapters

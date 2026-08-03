@@ -34,7 +34,15 @@ bytes, quotas, ledger, sweep, and crash cleanup remain consumer/materializer
 owned.
 
 Current shared delivery code is interleaved with Channel runtime/native base,
-artifact/model/text helpers. Only cross-Channel helpers move to the target
-shared owner
-`src/imagent/interaction/channels/outbound_delivery.py`; platform encoders and
-API clients remain adapter-owned.
+artifact/model helpers. The defensive native `split_text` fallback lives in
+`src/imagent/interaction/channels/outbound_delivery.py` and is shared by QQ,
+Telegram, Feishu, and Weixin. It preserves Unicode code points, prefers bounded
+paragraph/newline/space breaks, and falls back to the declared positive
+code-point limit. A soft break before half of the current limit is deliberately
+ignored so defensive splitting cannot emit a pathologically short prefix.
+
+This helper does not replace Gateway delivery planning or become a second
+segmentation policy. The Gateway planner remains authoritative for normal
+capability-driven segmentation; Channel adapters use the helper only to
+defend direct calls that exceed their native limit. Platform encoders and API
+clients remain adapter-owned.

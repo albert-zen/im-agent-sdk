@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from ...interaction.channels.ingress import ChannelAccessPolicy
+from ...interaction.channels.outbound_delivery import split_text
 from .artifacts import (
     ArtifactDeliveryReceipt,
     PermanentArtifactDeliveryError,
@@ -32,7 +33,6 @@ from .models import (
     OutboundArtifact,
     OutboundMessage,
 )
-from .text import split_text
 from .weixin_ilink import (
     ILinkError,
     WeixinFileReference,

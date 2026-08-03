@@ -17,6 +17,7 @@ from urllib.parse import quote, urlsplit
 import httpx
 
 from ...interaction.channels.ingress import ChannelAccessPolicy
+from ...interaction.channels.outbound_delivery import split_text
 from .artifacts import (
     ArtifactDeliveryReceipt,
     PermanentArtifactDeliveryError,
@@ -49,7 +50,6 @@ from .models import (
     OutboundArtifact,
     OutboundMessage,
 )
-from .text import split_text
 
 logger = logging.getLogger(__name__)
 
