@@ -11,9 +11,7 @@ Focused tests mirror the owner at
   objects; and
 - the historical `imagent.delivery_planning` implementation module is absent.
 
-The mirrored file temporarily retains its historical coordinator cases so this
-mechanical move cannot drop coverage. The component map marks that multi-owner
-test path as an explicit split gap; the focused coordination slice will move
-those cases to `tests/gateway/delivery/test_coordination.py`. Until then they
-prove that planner output is consumed without changing ordering, backpressure,
+Coordinator cases live in the adjacent focused
+`tests/gateway/delivery/test_coordination.py` suite. Cross-component tests prove
+that planner output is consumed without changing ordering, backpressure,
 retry, receipt, or Gateway behavior.

@@ -48,8 +48,8 @@ from imagent.contracts import (
     UserInputResponse,
 )
 from imagent.controllers import MarkdownRequestPresenter, SlashController
-from imagent.delivery_coordination import DeliveryCoordinator, DeliveryCoordinatorConfig
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway.delivery import DeliveryCoordinator, DeliveryCoordinatorConfig
 from imagent.projections import (
     InMemoryProjectionRouteRepository,
     derive_projection_route_id,

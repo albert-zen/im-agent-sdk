@@ -23,7 +23,6 @@ from imagent.contracts import (
     ThreadProjectionRoute,
     ThreadRef,
 )
-from imagent.delivery_coordination import DeliveryCoordinator, DeliveryCoordinatorConfig
 from imagent.delivery_outcomes import (
     DeliveryOutcome,
     DeliveryOutcomeContext,
@@ -32,6 +31,7 @@ from imagent.delivery_outcomes import (
 )
 from imagent.diagnostics import DeliveryOutcomeObserverFailureCode
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway.delivery import DeliveryCoordinator, DeliveryCoordinatorConfig
 from imagent.outbound_presentation import (
     OutboundPresentationContext,
     ProjectionPresentationOrigin,

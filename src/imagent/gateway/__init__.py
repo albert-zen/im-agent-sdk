@@ -63,7 +63,6 @@ from ..contracts import (
     validate_gateway_operation_result,
     validate_request_response,
 )
-from ..delivery_coordination import DeliveryCoordinator
 from ..delivery_outcomes import (
     DeliveryOutcomeObserver as DeliveryOutcomeObserver,
 )
@@ -138,6 +137,7 @@ from ..projections import (
 )
 from ..request_correlations import InMemoryRequestCorrelationRepository
 from ..storage import InMemoryIdempotencyRepository
+from .delivery.coordination import DeliveryCoordinator
 from .delivery.planning import DeliveryPlanningError
 
 logger = logging.getLogger(__name__)
