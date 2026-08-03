@@ -1,3 +1,5 @@
+"""Stable Gateway package root and current orchestration implementation."""
+
 from __future__ import annotations
 
 import asyncio
@@ -7,15 +9,15 @@ from datetime import UTC, datetime
 from functools import partial
 from uuid import uuid4
 
-from .adapters import (
+from ..adapters import (
     AgentApplicationAdapter,
     DeliveryAuthorizer,
     DeliverySubmissionConflict,
     IdempotencyClaimStatus,
     RequestCorrelationConflict,
 )
-from .bindings import BindingConflict
-from .contracts import (
+from ..bindings import BindingConflict
+from ..contracts import (
     AgentInput,
     ApplicationOperation,
     ApplicationOperationFailed,
@@ -61,15 +63,15 @@ from .contracts import (
     validate_gateway_operation_result,
     validate_request_response,
 )
-from .delivery_coordination import DeliveryCoordinator
-from .delivery_outcomes import (
+from ..delivery_coordination import DeliveryCoordinator
+from ..delivery_outcomes import (
     DeliveryOutcomeObserver as DeliveryOutcomeObserver,
 )
-from .delivery_outcomes import (
+from ..delivery_outcomes import (
     DeliveryOutcomeObserverRuntime,
 )
-from .delivery_planning import DeliveryPlanningError
-from .diagnostics import (
+from ..delivery_planning import DeliveryPlanningError
+from ..diagnostics import (
     DiagnosticsSnapshot,
     GatewayDiagnosticFacts,
     QueueDiagnosticFacts,
@@ -79,64 +81,64 @@ from .diagnostics import (
     new_diagnostics_snapshot,
     summarize_projection_health,
 )
-from .gateway_composition import GatewayExtensions, GatewayLimits, GatewayRepositories
-from .gateway_startup import (
+from ..gateway_composition import GatewayExtensions, GatewayLimits, GatewayRepositories
+from ..gateway_startup import (
     GatewayNotRunning,
     GatewayStartupAdmission,
 )
-from .inbound_admission import (
+from ..inbound_admission import (
     ClaimedInbound,
     InboundAdmissionService,
     inbound_idempotency_identity,
     start_channel_with_admission,
 )
-from .inbound_content import InboundContentTransformer as InboundContentTransformer
-from .inbound_content import InboundContentTransformRuntime
-from .inbound_failures import InboundFailurePhase as InboundFailurePhase
-from .inbound_failures import InboundFailurePresentationRuntime, handle_claimed_inbound
-from .inbound_failures import InboundFailurePresenter as InboundFailurePresenter
-from .interaction.channels import ChannelAdapter, InboundAdmission
-from .interaction.controllers import ControllerActions, ControllerLifecycle
-from .interaction.controllers.contract import (
+from ..inbound_content import InboundContentTransformer as InboundContentTransformer
+from ..inbound_content import InboundContentTransformRuntime
+from ..inbound_failures import InboundFailurePhase as InboundFailurePhase
+from ..inbound_failures import InboundFailurePresentationRuntime, handle_claimed_inbound
+from ..inbound_failures import InboundFailurePresenter as InboundFailurePresenter
+from ..interaction.channels import ChannelAdapter, InboundAdmission
+from ..interaction.controllers import ControllerActions, ControllerLifecycle
+from ..interaction.controllers.contract import (
     CommandInvocationFacts,
     _derive_command_invocation_id,
 )
-from .interaction.messages import (
+from ..interaction.messages import (
     ConversationRef,
     InboundMessage,
     OutboundMessage,
     TextContent,
     TextFormat,
 )
-from .interaction.operations import (
+from ..interaction.operations import (
     ContractError,
     ContractViolation,
     OperationErrorCode,
     operation_error,
 )
-from .keyed_locks import KeyedLockRegistry
-from .outbound_presentation import (
+from ..keyed_locks import KeyedLockRegistry
+from ..outbound_presentation import (
     OutboundPresentationContext,
     OutboundPresentationRuntime,
 )
-from .outbound_presentation import (
+from ..outbound_presentation import (
     OutboundPresentationPolicy as OutboundPresentationPolicy,
 )
-from .outbound_presentation import (
+from ..outbound_presentation import (
     ProjectionPresentationOrigin as ProjectionPresentationOrigin,
 )
-from .proactive_delivery import (
+from ..proactive_delivery import (
     InMemoryDeliverySubmissionRepository,
     ProactiveDeliveryService,
 )
-from .projection_runtime import ThreadProjectionRuntime
-from .projections import (
+from ..projection_runtime import ThreadProjectionRuntime
+from ..projections import (
     InMemoryProjectionRouteRepository,
     ProjectionWorkerHealth,
     RetryableDeliveryError,
 )
-from .request_correlations import InMemoryRequestCorrelationRepository
-from .storage import InMemoryIdempotencyRepository
+from ..request_correlations import InMemoryRequestCorrelationRepository
+from ..storage import InMemoryIdempotencyRepository
 
 logger = logging.getLogger(__name__)
 

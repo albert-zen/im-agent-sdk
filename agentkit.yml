@@ -163,12 +163,13 @@ components:
       - src/imagent/inbound_admission.py
       - src/imagent/inbound_content.py
       - src/imagent/inbound_failures.py
-      - src/imagent/gateway.py
+      - src/imagent/gateway/__init__.py
       - src/imagent/gateway_composition.py
       - src/imagent/gateway_startup.py
       - src/imagent/delivery_ingress.py
       - src/imagent/proactive_delivery.py
       - src/imagent/cli/**
+      - tests/gateway/**
       - tests/test_gateway_operations.py
       - tests/test_gateway_vertical_slice.py
       - tests/test_inbound_admission.py
@@ -552,7 +553,7 @@ maintainability:
   budgets:
     - name: gateway-orchestration
       paths:
-        - src/imagent/gateway.py
+        - src/imagent/gateway/__init__.py
       max_lines: 1100
       max_functions: 40
       max_classes: 4

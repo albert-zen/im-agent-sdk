@@ -417,9 +417,20 @@ When no Presenter is configured, an unexpected request is an explicit
 projection failure and creates no response correlation. A Full Access product
 that never receives native requests therefore incurs no prompt or SDK policy.
 
+## Package placement
+
+The stable `imagent.gateway` public surface is the target package at
+`src/imagent/gateway/__init__.py`. The initial package-establishment slice moves
+the existing `ImAgentGateway` implementation there unchanged so later focused
+PRs can extract one documented leaf at a time. The package initializer is
+temporarily the same explicit composition/runtime split candidate; it is not a
+facade over a second implementation. Public constructors, exported object
+identity, defaults, ordering, claims, checkpoints, and shutdown semantics do
+not change merely because the module became a package.
+
 ## Change obligations
 
-Changes to `gateway.py` require checking:
+Changes to the Gateway package root require checking:
 
 - projection/recovery design when subscription, routing, or recovery changes;
 - persistence design when stored bridge state changes;

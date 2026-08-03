@@ -29,7 +29,7 @@ separates SDK ownership work from the later IMCodex consumer migration.
 | `adapters.py` | [ports design](components/ports/design.md), [testing](components/ports/testing.md) | adapter contract kit and static typing |
 | `interaction/media.py` and media schemas | [media design](components/interaction/media/design.md), [testing](components/interaction/media/testing.md) | Interaction media, contract, and vertical-slice tests |
 | `delivery_planning.py`, `keyed_locks.py` | [delivery planning/coordination design](components/delivery-planning-and-coordination/design.md), [testing](components/delivery-planning-and-coordination/testing.md) | deterministic plan, ordering, backpressure, and retry tests |
-| `gateway.py` | [gateway design](components/gateway/design.md), [testing](components/gateway/testing.md) | gateway operation and vertical-slice tests |
+| Gateway package root (`gateway/__init__.py`) | [gateway design](components/gateway/design.md), [testing](components/gateway/testing.md) | gateway operation and vertical-slice tests |
 | `events.py`, `projection_routes.py`, `projection_runtime.py`, `projections.py`, `recovery.py` | [projection/recovery design](components/projections-and-recovery/design.md), [testing](components/projections-and-recovery/testing.md) | fan-out, projection routing, recovery tests |
 | `bindings.py`, `sqlite_rows.py`, `storage.py` | [persistence design](components/persistence/design.md), [testing](components/persistence/testing.md) | binding and storage tests |
 | `controllers/**` | [Controller subtree](components/interaction/controllers/README.md) and the affected leaf design/testing docs | Controller contract, registry, common-command, or request-presentation focused tests |

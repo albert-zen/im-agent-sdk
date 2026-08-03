@@ -2,6 +2,9 @@
 
 ## Critical scenarios
 
+- the target `imagent.gateway` package preserves the exact public export set
+  and one implementation identity while the historical single-file module is
+  absent;
 - repository, limit, and extension composition groups are immutable, typed,
   and preserve all former defaults while the removed flat keywords fail
   explicitly;
