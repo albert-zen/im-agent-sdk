@@ -46,7 +46,7 @@ from imagent.contracts import (
 from imagent.controllers import ControllerActions
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import DeliveryCoordinator, DeliveryCoordinatorConfig
-from imagent.outbound_presentation import OutboundPresentationContext
+from imagent.gateway.presentation import OutboundPresentationContext
 from imagent.projection_runtime import TurnAcceptanceBufferOverflow
 from imagent.projections import (
     InMemoryProjectionRouteRepository,

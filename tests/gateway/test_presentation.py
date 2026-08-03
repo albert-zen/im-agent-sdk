@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import unittest
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 
+import imagent.gateway as gateway_facade
 from imagent.adapters import IdempotencyClaimStatus
 from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
@@ -22,7 +24,8 @@ from imagent.contracts import (
     ThreadRef,
 )
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
-from imagent.outbound_presentation import (
+from imagent.gateway import presentation as presentation_owner
+from imagent.gateway.presentation import (
     OutboundPresentationCapacityError,
     OutboundPresentationContext,
     OutboundPresentationError,
@@ -93,6 +96,23 @@ class _CancellationOverrunPolicy:
         except asyncio.CancelledError:
             await self.release.wait()
         return message
+
+
+class OutboundPresentationOwnershipTests(unittest.TestCase):
+    def test_gateway_facade_uses_exact_owner_and_old_module_is_absent(self) -> None:
+        self.assertIs(
+            gateway_facade.OutboundPresentationPolicy,
+            presentation_owner.OutboundPresentationPolicy,
+        )
+        self.assertIs(
+            gateway_facade.OutboundPresentationContext,
+            presentation_owner.OutboundPresentationContext,
+        )
+        self.assertIs(
+            gateway_facade.ProjectionPresentationOrigin,
+            presentation_owner.ProjectionPresentationOrigin,
+        )
+        self.assertIsNone(importlib.util.find_spec("imagent.outbound_presentation"))
 
 
 class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):

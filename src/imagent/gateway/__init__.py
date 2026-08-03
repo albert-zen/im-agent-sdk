@@ -109,16 +109,6 @@ from ..interaction.operations import (
     operation_error,
 )
 from ..keyed_locks import KeyedLockRegistry
-from ..outbound_presentation import (
-    OutboundPresentationContext,
-    OutboundPresentationRuntime,
-)
-from ..outbound_presentation import (
-    OutboundPresentationPolicy as OutboundPresentationPolicy,
-)
-from ..outbound_presentation import (
-    ProjectionPresentationOrigin as ProjectionPresentationOrigin,
-)
 from ..proactive_delivery import (
     InMemoryDeliverySubmissionRepository,
     ProactiveDeliveryService,
@@ -139,6 +129,16 @@ from .delivery.outcome_observation import (
     DeliveryOutcomeObserverRuntime,
 )
 from .delivery.planning import DeliveryPlanningError
+from .presentation import (
+    OutboundPresentationContext,
+    OutboundPresentationRuntime,
+)
+from .presentation import (
+    OutboundPresentationPolicy as OutboundPresentationPolicy,
+)
+from .presentation import (
+    ProjectionPresentationOrigin as ProjectionPresentationOrigin,
+)
 
 logger = logging.getLogger(__name__)
 

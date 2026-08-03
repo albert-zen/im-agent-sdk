@@ -118,13 +118,14 @@ components:
       - docs/ARCHITECTURE.md
       - docs/decisions/README.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
+      - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/keyed_locks.py
       - src/imagent/gateway/delivery/**
-      - src/imagent/outbound_presentation.py
+      - src/imagent/gateway/presentation.py
       - tests/gateway/delivery/**
-      - tests/test_outbound_presentation.py
+      - tests/gateway/test_presentation.py
     docs:
       - docs/components/gateway/delivery/README.md
       - docs/components/gateway/delivery/planning/design.md
@@ -133,6 +134,8 @@ components:
       - docs/components/gateway/delivery/coordination/testing.md
       - docs/components/gateway/delivery/outcome-observation/design.md
       - docs/components/gateway/delivery/outcome-observation/testing.md
+      - docs/components/gateway/presentation/design.md
+      - docs/components/gateway/presentation/testing.md
       - docs/components/delivery-planning-and-coordination/design.md
       - docs/components/delivery-planning-and-coordination/testing.md
     required_docs:
