@@ -5,6 +5,8 @@ Required evidence:
 - `python scripts/agentkit.py doctor`;
 - `python scripts/agentkit.py check`;
 - `python scripts/agentkit.py lint-architecture`;
+- `python scripts/validate_component_map.py`, proving every internal Python
+  import resolves through mapped ownership and an explicit direct dependency;
 - `python scripts/agentkit.py lint-maintainability` with zero warnings;
 - `python scripts/check_doc_links.py`;
 - representative `orient` and `docs-impact --path` routes;
@@ -16,6 +18,13 @@ Required evidence:
   script, CI, and durable AgentKit path has an owner, with precise
   representative route assertions and only narrow documented shared-path
   exceptions.
+
+Component-map tests must include forbidden reverse-layer edges, split
+candidates without an owner/dependency pairing, undeclared facade re-exports,
+unknown internal modules, and unused exact current-import exceptions. Both
+AgentKit architecture commands must invoke the validator in an isolated base
+environment before delegating to AgentKit; `agentkit.yml` must not restore a
+parallel import graph.
 
 When a warning is resolved by extraction, focused behavior suites must cover
 the new seam. Direct App Server mapping tests cover native shape and fallback

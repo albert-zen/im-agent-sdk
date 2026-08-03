@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import copy
 import unittest
 from pathlib import Path
@@ -8,7 +9,10 @@ from unittest.mock import patch
 from scripts.agentkit import _validate_component_map
 from scripts.validate_component_map import (
     ComponentMapError,
+    _facade_reexport_is_allowed,
     _load_component_map_text,
+    _resolve_internal_module,
+    _resolved_imports,
     load_component_map,
     validate_component_map,
 )
@@ -23,6 +27,87 @@ class ComponentMapTests(unittest.TestCase):
         self.assertEqual(summary["orphans"], 0)
         self.assertGreater(summary["split_candidates"], 0)
         self.assertGreaterEqual(summary["public_facade_exports"], 240)
+        self.assertGreaterEqual(summary["internal_imports"], 1400)
+
+    def test_split_candidate_import_requires_an_explicit_owner_edge(self) -> None:
+        component_map = copy.deepcopy(load_component_map())
+        for component_id in (
+            "applications.adapters.codex",
+            "applications.adapters.zen",
+        ):
+            component_map["components"][component_id]["dependencies"].remove("interaction.media")
+
+        with self.assertRaisesRegex(
+            ComponentMapError,
+            "(?s)forbidden internal component imports.*appserver.py",
+        ):
+            validate_component_map(component_map)
+
+    def test_formal_facade_reexports_must_be_declared(self) -> None:
+        component_map = copy.deepcopy(load_component_map())
+        component_map["structural_status"]["formal_facades"] = [
+            facade
+            for facade in component_map["structural_status"]["formal_facades"]
+            if facade["path"] != "src/imagent/contracts/__init__.py"
+        ]
+
+        with self.assertRaisesRegex(
+            ComponentMapError,
+            "(?s)forbidden internal component imports.*contracts/__init__.py",
+        ):
+            validate_component_map(component_map)
+
+    def test_facade_reexport_requires_exact_imported_symbol_owner(self) -> None:
+        public_owners = {"imagent.facade:Public": ["component.public"]}
+
+        self.assertFalse(
+            _facade_reexport_is_allowed(
+                source_path="src/imagent/facade.py",
+                facade_reference="imagent.facade:Public",
+                target_owners=["component.other"],
+                public_export_owners=public_owners,
+                formal_facade_paths={"src/imagent/facade.py"},
+            )
+        )
+        self.assertTrue(
+            _facade_reexport_is_allowed(
+                source_path="src/imagent/facade.py",
+                facade_reference="imagent.facade:Public",
+                target_owners=["component.public"],
+                public_export_owners=public_owners,
+                formal_facade_paths={"src/imagent/facade.py"},
+            )
+        )
+
+    def test_facade_alias_preserves_imported_and_bound_symbol_names(self) -> None:
+        node = ast.parse("from .model import Internal as Public").body[0]
+
+        self.assertEqual(
+            _resolved_imports(node, package="imagent.facade"),
+            [("imagent.facade.model", "Internal", "Public")],
+        )
+
+    def test_current_import_exceptions_must_match_a_real_import(self) -> None:
+        component_map = copy.deepcopy(load_component_map())
+        component_map["architecture_lint"]["current_import_exceptions"][0]["symbol"] = (
+            "MissingGatewayOperation"
+        )
+
+        with self.assertRaisesRegex(ComponentMapError, "unused current import exceptions"):
+            validate_component_map(component_map)
+
+    def test_unknown_internal_import_target_fails_explicitly(self) -> None:
+        with self.assertRaisesRegex(ComponentMapError, "unknown internal import target"):
+            _resolve_internal_module(
+                "imagent.missing.module",
+                internal_package="imagent",
+                module_paths={"imagent": "src/imagent/__init__.py"},
+            )
+
+    def test_agentkit_has_no_second_import_graph(self) -> None:
+        config = Path("agentkit.yml").read_text(encoding="utf-8")
+
+        self.assertNotIn("\nlayers:", config)
 
     def test_dunder_all_exports_must_have_component_ownership(self) -> None:
         component_map = copy.deepcopy(load_component_map())
@@ -62,6 +147,15 @@ class ComponentMapTests(unittest.TestCase):
         with self.assertRaisesRegex(ComponentMapError, "component dependency cycle"):
             validate_component_map(component_map)
 
+    def test_forbidden_reverse_layer_edge_fails_explicitly(self) -> None:
+        component_map = copy.deepcopy(load_component_map())
+        component_map["components"]["interaction.channels.channel-contract"]["dependencies"].append(
+            "gateway.composition"
+        )
+
+        with self.assertRaisesRegex(ComponentMapError, "violates layer dependencies"):
+            validate_component_map(component_map)
+
     def test_port_and_composition_contract_edges_are_explicit(self) -> None:
         component_map = load_component_map()
         components = component_map["components"]
@@ -91,10 +185,23 @@ class ComponentMapTests(unittest.TestCase):
             common_command_edges,
         )
         exceptions = {(item["from"], item["to"]) for item in component_map["dependency_exceptions"]}
-        for target in controller_action_edges:
-            self.assertIn(("interaction.controllers.controller-contract", target), exceptions)
-        for target in common_command_edges:
-            self.assertIn(("interaction.controllers.common-commands", target), exceptions)
+        self.assertEqual(
+            exceptions,
+            {
+                *(
+                    ("interaction.controllers.controller-contract", target)
+                    for target in controller_action_edges
+                ),
+                *(
+                    ("interaction.controllers.common-commands", target)
+                    for target in common_command_edges
+                ),
+                (
+                    "interaction.controllers.request-presentation",
+                    "applications.requests",
+                ),
+            },
+        )
 
         self.assertGreaterEqual(
             set(components["applications.application-contract"]["dependencies"]),
@@ -163,8 +270,13 @@ class ComponentMapTests(unittest.TestCase):
         component_map = load_component_map()
 
         self.assertEqual(
-            set(component_map["layers"]),
-            {"interaction", "gateway", "applications", "engineering"},
+            {layer: config["may_depend_on"] for layer, config in component_map["layers"].items()},
+            {
+                "interaction": [],
+                "applications": ["interaction"],
+                "gateway": ["interaction", "applications"],
+                "engineering": ["interaction", "applications", "gateway"],
+            },
         )
         registry = component_map["components"]["interaction.controllers.command-registry"]
         self.assertEqual(registry["current_code"], [])

@@ -4,6 +4,7 @@ import ast
 import fnmatch
 import importlib
 from collections import defaultdict
+from importlib.util import resolve_name
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +42,7 @@ REQUIRED_TOP_LEVEL_FIELDS = {
     "inventory",
     "layers",
     "target_documentation",
+    "architecture_lint",
     "dependency_exceptions",
     "components",
     "structural_status",
@@ -206,6 +208,202 @@ def _public_facade_exports(source_paths: set[str]) -> set[str]:
     return exports
 
 
+def _internal_module_paths(
+    source_paths: set[str], architecture_lint: dict[str, Any]
+) -> tuple[dict[str, str], dict[str, str]]:
+    pattern = architecture_lint["source_pattern"]
+    lint_paths = _source_paths([pattern])
+    module_paths: dict[str, str] = {}
+    path_modules: dict[str, str] = {}
+    for path in sorted(source_paths):
+        if path not in lint_paths:
+            continue
+        module_name = _module_name_for_source_path(path)
+        if module_name is None:
+            raise ComponentMapError(f"architecture lint source is not Python: {path}")
+        module_paths[module_name] = path
+        path_modules[path] = module_name
+    if not module_paths:
+        raise ComponentMapError("architecture lint source pattern matched no modules")
+    return module_paths, path_modules
+
+
+def _resolve_internal_module(
+    module_name: str,
+    *,
+    internal_package: str,
+    module_paths: dict[str, str],
+) -> str | None:
+    if module_name != internal_package and not module_name.startswith(f"{internal_package}."):
+        return None
+    if module_name in module_paths:
+        return module_name
+    raise ComponentMapError(f"unknown internal import target: {module_name}")
+
+
+def _component_edge_is_allowed(
+    source_owners: list[str],
+    target_owners: list[str],
+    components: dict[str, Any],
+) -> bool:
+    return any(
+        source_owner == target_owner or target_owner in components[source_owner]["dependencies"]
+        for source_owner in source_owners
+        for target_owner in target_owners
+    )
+
+
+def _facade_reexport_is_allowed(
+    *,
+    source_path: str,
+    facade_reference: str | None,
+    target_owners: list[str],
+    public_export_owners: dict[str, list[str]],
+    formal_facade_paths: set[str],
+) -> bool:
+    return (
+        source_path in formal_facade_paths
+        and facade_reference in public_export_owners
+        and any(owner in target_owners for owner in public_export_owners[facade_reference])
+    )
+
+
+def _resolved_imports(node: ast.AST, *, package: str) -> list[tuple[str, str | None, str | None]]:
+    if isinstance(node, ast.Import):
+        return [(alias.name, None, alias.asname) for alias in node.names]
+    if isinstance(node, ast.ImportFrom):
+        base_module = (
+            resolve_name(
+                "." * node.level + (node.module or ""),
+                package,
+            )
+            if node.level
+            else (node.module or "")
+        )
+        return [(base_module, alias.name, alias.asname or alias.name) for alias in node.names]
+    return []
+
+
+def _lint_internal_imports(
+    *,
+    architecture_lint: dict[str, Any],
+    source_paths: set[str],
+    owners: dict[str, list[str]],
+    components: dict[str, Any],
+    public_export_owners: dict[str, list[str]],
+    formal_facade_paths: set[str],
+) -> int:
+    module_paths, path_modules = _internal_module_paths(source_paths, architecture_lint)
+    internal_package = architecture_lint["internal_package"]
+    declared_exceptions: dict[tuple[str, str, str | None], str] = {}
+    for item in architecture_lint["current_import_exceptions"]:
+        if not isinstance(item, dict) or set(item) not in (
+            {"from", "to", "reason"},
+            {"from", "to", "symbol", "reason"},
+        ):
+            raise ComponentMapError(
+                "architecture current import exceptions require from/to/optional-symbol/reason"
+            )
+        source = item["from"]
+        target = item["to"]
+        symbol = item.get("symbol")
+        reason = item["reason"]
+        if (
+            not isinstance(source, str)
+            or source not in path_modules
+            or not isinstance(target, str)
+            or target not in path_modules
+            or (symbol is not None and (not isinstance(symbol, str) or not symbol))
+            or not isinstance(reason, str)
+            or not reason.strip()
+        ):
+            raise ComponentMapError(
+                "architecture current import exceptions require mapped Python "
+                "from/to paths, an optional non-empty symbol, and a reason"
+            )
+        declared_exceptions[(source, target, symbol)] = reason
+    if len(declared_exceptions) != len(architecture_lint["current_import_exceptions"]):
+        raise ComponentMapError(
+            "architecture current import exceptions require unique from/to/symbol and reasons"
+        )
+    used_exceptions: set[tuple[str, str, str | None]] = set()
+    violations: list[str] = []
+    import_count = 0
+
+    for source_path, source_module in sorted(path_modules.items()):
+        source_owners = owners[source_path]
+        package = (
+            source_module
+            if source_path.endswith("/__init__.py")
+            else source_module.rpartition(".")[0]
+        )
+        tree = ast.parse(
+            (ROOT / source_path).read_text(encoding="utf-8"),
+            filename=source_path,
+        )
+        for node in ast.walk(tree):
+            for base_module, symbol, bound_name in _resolved_imports(node, package=package):
+                line_number = getattr(node, "lineno", 0)
+                candidate_module = base_module
+                if (
+                    symbol is not None
+                    and isinstance(node, ast.ImportFrom)
+                    and f"{base_module}.{symbol}" in module_paths
+                ):
+                    candidate_module = f"{base_module}.{symbol}"
+                target_module = _resolve_internal_module(
+                    candidate_module,
+                    internal_package=internal_package,
+                    module_paths=module_paths,
+                )
+                if target_module is None:
+                    continue
+                target_path = module_paths[target_module]
+                if target_path == source_path:
+                    continue
+                import_count += 1
+
+                target_owners = owners[target_path]
+                public_reference = f"{base_module}:{symbol}" if symbol is not None else None
+                if public_reference in public_export_owners:
+                    target_owners = public_export_owners[public_reference]
+
+                facade_reference = (
+                    f"{source_module}:{bound_name}" if bound_name is not None else None
+                )
+                if _facade_reexport_is_allowed(
+                    source_path=source_path,
+                    facade_reference=facade_reference,
+                    target_owners=target_owners,
+                    public_export_owners=public_export_owners,
+                    formal_facade_paths=formal_facade_paths,
+                ):
+                    continue
+
+                if _component_edge_is_allowed(source_owners, target_owners, components):
+                    continue
+
+                exception_key = (source_path, target_path, symbol)
+                if exception_key in declared_exceptions:
+                    used_exceptions.add(exception_key)
+                    continue
+                violations.append(
+                    f"{source_path}:{line_number} imports "
+                    f"{base_module}{':' + symbol if symbol else ''} -> {target_path}; "
+                    f"source owners={source_owners}, target owners={target_owners}"
+                )
+
+    problems: list[str] = []
+    if violations:
+        problems.append("forbidden internal component imports:\n- " + "\n- ".join(violations))
+    unused_exceptions = sorted(declared_exceptions.keys() - used_exceptions)
+    if unused_exceptions:
+        problems.append(f"unused current import exceptions: {unused_exceptions}")
+    if problems:
+        raise ComponentMapError("\n".join(problems))
+    return import_count
+
+
 def _validate_string_list(
     component_id: str, field: str, value: object, *, non_empty: bool = False
 ) -> list[str]:
@@ -263,6 +461,7 @@ def validate_component_map(data: dict[str, Any]) -> dict[str, int]:
     components = data.get("components")
     structural = data.get("structural_status")
     target_docs = data.get("target_documentation")
+    architecture_lint = data.get("architecture_lint")
     dependency_exceptions = data.get("dependency_exceptions")
     if not isinstance(layers, dict) or not layers:
         raise ComponentMapError("layers must be a non-empty mapping")
@@ -280,6 +479,27 @@ def validate_component_map(data: dict[str, Any]) -> dict[str, int]:
         "testing.md",
     ]:
         raise ComponentMapError("target documentation must require design.md and testing.md")
+    expected_architecture_lint = {
+        "internal_package",
+        "source_root",
+        "source_pattern",
+        "symbol_owner_precedence",
+        "split_candidate_policy",
+        "formal_facade_policy",
+        "current_import_exceptions",
+    }
+    if (
+        not isinstance(architecture_lint, dict)
+        or set(architecture_lint) != expected_architecture_lint
+        or architecture_lint.get("internal_package") != "imagent"
+        or architecture_lint.get("source_root") != "src"
+        or architecture_lint.get("source_pattern") != "src/imagent/**/*.py"
+        or architecture_lint.get("symbol_owner_precedence") != "exact-current-public-export"
+        or architecture_lint.get("split_candidate_policy") != "require-one-explicit-owner-edge"
+        or architecture_lint.get("formal_facade_policy") != "declared-reexports-only"
+        or not isinstance(architecture_lint.get("current_import_exceptions"), list)
+    ):
+        raise ComponentMapError("invalid architecture_lint configuration")
     if not isinstance(dependency_exceptions, list):
         raise ComponentMapError("dependency_exceptions must be a list")
     allowed_exceptions = {
@@ -452,6 +672,15 @@ def validate_component_map(data: dict[str, Any]) -> dict[str, int]:
         if path not in source_paths or owners[path] != [owner] or not facade.get("rationale"):
             raise ComponentMapError(f"invalid formal facade declaration: {facade}")
 
+    internal_imports = _lint_internal_imports(
+        architecture_lint=architecture_lint,
+        source_paths=source_paths,
+        owners=owners,
+        components=components,
+        public_export_owners=public_export_owners,
+        formal_facade_paths={facade["path"] for facade in facades},
+    )
+
     return {
         "components": len(components),
         "source_paths": len(source_paths),
@@ -459,6 +688,7 @@ def validate_component_map(data: dict[str, Any]) -> dict[str, int]:
         "split_candidates": len(actual_multi),
         "orphans": len(actual_orphans),
         "public_facade_exports": len(facade_exports),
+        "internal_imports": internal_imports,
     }
 
 
@@ -470,6 +700,7 @@ def main() -> None:
         f"{summary['test_paths']} tests, {summary['split_candidates']} split candidates, "
         f"{summary['orphans']} orphans, "
         f"{summary['public_facade_exports']} facade exports."
+        f" {summary['internal_imports']} internal imports checked."
     )
 
 
