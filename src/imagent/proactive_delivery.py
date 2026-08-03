@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import secrets
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -41,6 +40,7 @@ from .contracts import (
     validate_delivery_receipt_for_content,
     validate_delivery_submission_record,
 )
+from .gateway.delivery import proactive_authorization as _proactive_authorization
 from .gateway.delivery.coordination import DeliveryCoordinator
 from .gateway.delivery.outcome_observation import (
     DeliveryOutcomeErrorCode,
@@ -56,10 +56,6 @@ ResolveThreadRoutes = Callable[
     [ThreadRef],
     Awaitable[tuple[ThreadProjectionRoute, ...]],
 ]
-
-
-class DeliveryAuthorizationError(PermissionError):
-    pass
 
 
 class DeliveryRouteError(RuntimeError):
@@ -116,43 +112,6 @@ class InMemoryDeliverySubmissionRepository:
             return updated
 
 
-class ScopedDeliveryAuthorizer:
-    """Reference process-local capability registry; consumers may replace it."""
-
-    def __init__(self) -> None:
-        self._principals: dict[str, DeliveryPrincipal] = {}
-        self._lock = asyncio.Lock()
-
-    async def issue(
-        self,
-        principal: DeliveryPrincipal,
-        *,
-        credential: str | None = None,
-    ) -> str:
-        validate_delivery_principal(principal)
-        token = credential or secrets.token_urlsafe(32)
-        if not token or len(token) > 4_096:
-            raise ValueError("delivery credential must contain at most 4096 characters")
-        async with self._lock:
-            if token in self._principals:
-                raise ValueError("delivery credential already exists")
-            self._principals[token] = principal
-        return token
-
-    async def revoke(self, credential: str) -> bool:
-        async with self._lock:
-            return self._principals.pop(credential, None) is not None
-
-    async def authenticate(self, credential: str) -> DeliveryPrincipal:
-        if not credential:
-            raise DeliveryAuthorizationError("delivery credential is required")
-        async with self._lock:
-            principal = self._principals.get(credential)
-        if principal is None:
-            raise DeliveryAuthorizationError("delivery credential is invalid")
-        return principal
-
-
 class ProactiveDeliveryService:
     """Authorize and submit proactive content through the common Channel seam."""
 
@@ -190,7 +149,9 @@ class ProactiveDeliveryService:
     ) -> DeliveryPrincipal:
         authorizer = self._authorizer
         if authorizer is None:
-            raise DeliveryAuthorizationError("proactive delivery is not configured")
+            raise _proactive_authorization.DeliveryAuthorizationError(
+                "proactive delivery is not configured"
+            )
         principal = await authorizer.authenticate(credential)
         validate_delivery_principal(principal)
         authorize_delivery_target(principal, target)
@@ -587,17 +548,17 @@ def authorize_delivery_target(
 ) -> None:
     if isinstance(target, ConversationDeliveryTarget):
         if target.conversation_ref not in principal.allowed_conversations:
-            raise DeliveryAuthorizationError(
+            raise _proactive_authorization.DeliveryAuthorizationError(
                 "principal is not allowed to deliver to the explicit Conversation"
             )
         return
     if isinstance(target, ThreadRouteDeliveryTarget):
         if target.thread_ref not in principal.allowed_threads:
-            raise DeliveryAuthorizationError(
+            raise _proactive_authorization.DeliveryAuthorizationError(
                 "principal is not allowed to deliver through the requested Thread"
             )
         return
-    raise DeliveryAuthorizationError("delivery target is unsupported")
+    raise _proactive_authorization.DeliveryAuthorizationError("delivery target is unsupported")
 
 
 def _state_from_receipt(receipt: DeliveryReceipt) -> DeliverySubmissionState:

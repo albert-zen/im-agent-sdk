@@ -34,6 +34,7 @@ from imagent.gateway.delivery import (
     DeliveryOutcomeContext,
     DeliveryOutcomeErrorCode,
     DeliveryOutcomeObserver,
+    ScopedDeliveryAuthorizer,
 )
 from imagent.gateway.delivery import outcome_observation as outcome_observation_owner
 from imagent.gateway.delivery.outcome_observation import (
@@ -45,7 +46,6 @@ from imagent.gateway.presentation import (
 )
 from imagent.proactive_delivery import (
     InMemoryDeliverySubmissionRepository,
-    ScopedDeliveryAuthorizer,
 )
 from imagent.projections import (
     InMemoryProjectionRouteRepository,

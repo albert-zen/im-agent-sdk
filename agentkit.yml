@@ -137,6 +137,8 @@ components:
       - docs/components/gateway/delivery/outcome-observation/testing.md
       - docs/components/gateway/delivery/submissions/design.md
       - docs/components/gateway/delivery/submissions/testing.md
+      - docs/components/gateway/delivery/proactive-authorization/design.md
+      - docs/components/gateway/delivery/proactive-authorization/testing.md
       - docs/components/gateway/presentation/design.md
       - docs/components/gateway/presentation/testing.md
       - docs/components/delivery-planning-and-coordination/design.md

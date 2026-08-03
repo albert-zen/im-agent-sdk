@@ -720,17 +720,17 @@ components:
     outputs: [validated DeliveryPrincipal]
     public_contracts: [DeliveryAuthorizer, DeliveryPrincipal, ScopedDeliveryAuthorizer, validate_delivery_principal]
     public_exports:
-      current: [imagent.adapters:DeliveryAuthorizer, imagent.contracts:DeliveryPrincipal, imagent.proactive_delivery:ScopedDeliveryAuthorizer, imagent.contracts:validate_delivery_principal]
+      current: [imagent.gateway.delivery:DeliveryAuthorizer, imagent.gateway.delivery:DeliveryPrincipal, imagent.gateway.delivery:ScopedDeliveryAuthorizer, imagent.gateway.delivery:validate_delivery_principal, imagent.adapters:DeliveryAuthorizer, imagent.contracts:DeliveryPrincipal, imagent.contracts:validate_delivery_principal]
       target: [imagent.gateway.delivery:DeliveryAuthorizer, imagent.gateway.delivery:DeliveryPrincipal, imagent.gateway.delivery:ScopedDeliveryAuthorizer, imagent.gateway.delivery:validate_delivery_principal]
     dependencies: [applications.application-contract]
     state_recovery: Reference credentials are process-local; consumers own credential storage and revocation recovery.
-    current_code: [src/imagent/adapters.py, src/imagent/contracts/delivery.py, src/imagent/proactive_delivery.py]
+    current_code: [src/imagent/adapters.py, src/imagent/contracts/delivery.py, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/proactive_authorization.py]
     target_code: [src/imagent/gateway/delivery/proactive_authorization.py]
-    current_tests: [tests/test_proactive_delivery.py]
+    current_tests: [tests/gateway/delivery/test_proactive_authorization.py, tests/test_proactive_delivery.py]
     target_tests: [tests/gateway/delivery/test_proactive_authorization.py]
-    authoritative_docs: [docs/components/gateway/design.md, docs/components/ports/design.md]
+    authoritative_docs: [docs/components/gateway/delivery/proactive-authorization/design.md, docs/components/gateway/delivery/proactive-authorization/testing.md]
     adrs: [docs/decisions/0009-proactive-delivery-routing.md]
-    gaps: [authorization Protocol, value, and reference implementation currently span three historical modules]
+    gaps: [formal Port and principal value definitions remain in their existing shared modules until their focused owner splits]
 
   gateway.delivery.proactive-delivery:
     id: gateway.delivery.proactive-delivery
@@ -1455,7 +1455,7 @@ structural_status:
       owners: [gateway.composition, gateway.lifecycle, gateway.admission, gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.content-transformation, gateway.input.dispatch, gateway.input.failure-presentation, gateway.projection.observation, gateway.projection.request-correlation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.diagnostics]
       reason: The current composition root also sequences admission, input, observation, request routing, presentation, delivery, and diagnostics leaf behavior.
     src/imagent/gateway/delivery/__init__.py:
-      owners: [gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.outcome-observation]
+      owners: [gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.proactive-authorization, gateway.delivery.outcome-observation]
       reason: The intentional Gateway delivery package facade re-exports exact public values from focused delivery leaves without implementing any leaf.
     src/imagent/diagnostics.py:
       owners: [interaction.channels.adapters, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.presentation, gateway.delivery.outcome-observation, gateway.diagnostics, applications.application-contract, applications.presentation.live-activity, applications.presentation.artifact-materialization, applications.adapters.appserver.diagnostics]
@@ -1479,8 +1479,8 @@ structural_status:
       owners: [gateway.delivery.submissions, gateway.persistence.sqlite, gateway.persistence.row-mapping]
       reason: Submission state transitions and their SQLite persistence/mapping are co-located.
     src/imagent/proactive_delivery.py:
-      owners: [gateway.delivery.submissions, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.persistence.memory]
-      reason: In-memory submission repository, scoped authorization, and proactive orchestration share one module.
+      owners: [gateway.delivery.submissions, gateway.delivery.proactive-delivery, gateway.persistence.memory]
+      reason: In-memory submission repository and proactive orchestration share one module after authorization extraction.
     src/imagent/bindings.py:
       owners: [gateway.persistence.repository-contracts, gateway.persistence.memory]
       reason: The process-local binding implementation currently defines the optimistic conflict type consumed by the durable repository transaction owner.

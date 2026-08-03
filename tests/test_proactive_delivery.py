@@ -40,12 +40,12 @@ from imagent.gateway.delivery import (
     DeliveryCoordinator,
     DeliveryCoordinatorConfig,
     DeliveryPlanningError,
+    ScopedDeliveryAuthorizer,
 )
+from imagent.gateway.delivery.proactive_authorization import DeliveryAuthorizationError
 from imagent.proactive_delivery import (
-    DeliveryAuthorizationError,
     DeliveryRouteError,
     InMemoryDeliverySubmissionRepository,
-    ScopedDeliveryAuthorizer,
 )
 from imagent.projections import InMemoryProjectionRouteRepository
 from imagent.storage import SQLiteGatewayState

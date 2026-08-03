@@ -31,9 +31,9 @@ from imagent.contracts import (
 )
 from imagent.delivery_ingress import ProactiveDeliveryJsonHandler
 from imagent.gateway import GatewayRepositories, ImAgentGateway
+from imagent.gateway.delivery import ScopedDeliveryAuthorizer
 from imagent.proactive_delivery import (
     InMemoryDeliverySubmissionRepository,
-    ScopedDeliveryAuthorizer,
 )
 from imagent.projections import InMemoryProjectionRouteRepository
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
