@@ -15,6 +15,7 @@ from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 import httpx
 
+from ...interaction.channels.adapters.endpoints import validate_http_endpoint
 from ...interaction.channels.ingress import ChannelAccessPolicy, InboundMessage
 from ...interaction.channels.outbound_delivery import (
     NativeDeliveryResult,
@@ -31,7 +32,6 @@ from .artifacts import (
 )
 from .base import BaseChannelAdapter
 from .diagnostics import emit_event
-from .endpoints import validate_http_endpoint
 from .media import (
     MAX_FILE_COUNT,
     MAX_IMAGE_COUNT,

@@ -48,7 +48,8 @@ Conversation/message identity, media path, or exception text.
 
 ## Change checks
 
-Changes to `native/qq.py` or `native/qq_media.py` require
+Changes to `native/qq.py`, `native/qq_media.py`, or the shared Interaction
+adapter endpoint validator require
 `test_channel_qq.py`, the common native Channel tests, attachment tests, and
 the adapter contract suite. Quote changes additionally require direct/group,
 missing, malformed, oversized, nested-payload, anti-forgery, and Gateway

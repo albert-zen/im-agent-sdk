@@ -15,6 +15,7 @@ from typing import Any
 import httpx
 import websockets
 
+from ...interaction.channels.adapters.endpoints import validate_http_endpoint
 from ...interaction.channels.ingress import ChannelAccessPolicy, InboundMessage
 from ...interaction.channels.outbound_delivery import (
     NativeDeliveryResult,
@@ -37,7 +38,6 @@ from .diagnostics import (
     NativeQueueDiagnosticSnapshot,
     emit_event,
 )
-from .endpoints import validate_http_endpoint
 from .media import materialize_inbound_media
 from .qq_media import (
     QQFileMaterializer,

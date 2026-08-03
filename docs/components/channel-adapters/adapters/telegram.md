@@ -28,5 +28,6 @@ message identity, or exception text.
 
 ## Change checks
 
-Changes to `native/telegram.py` require `test_channel_telegram.py`, common
-native Channel tests, media/attachment tests, and the adapter contract suite.
+Changes to `native/telegram.py` or the shared Interaction adapter endpoint
+validator require `test_channel_telegram.py`, common native Channel tests,
+media/attachment tests, and the adapter contract suite.
