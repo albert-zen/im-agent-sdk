@@ -92,6 +92,7 @@ components:
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/migrations/imcodex-followup-blockers.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
+      - docs/decisions/0014-read-only-diagnostics-surface.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/interaction/media.py
       - tests/interaction/test_media.py
@@ -332,6 +333,7 @@ components:
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
+      - docs/decisions/0014-read-only-diagnostics-surface.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - docs/migrations/issue-9-imcodex-owner-transfer.md
       - docs/migrations/imcodex-followup-blockers.md
@@ -342,6 +344,16 @@ components:
       - tests/test_channel_feishu.py
       - tests/test_channel_weixin.py
     docs:
+      - docs/components/interaction/README.md
+      - docs/components/interaction/channels/README.md
+      - docs/components/interaction/channels/channel-contract/design.md
+      - docs/components/interaction/channels/channel-contract/testing.md
+      - docs/components/interaction/channels/ingress/design.md
+      - docs/components/interaction/channels/ingress/testing.md
+      - docs/components/interaction/channels/outbound-delivery/design.md
+      - docs/components/interaction/channels/outbound-delivery/testing.md
+      - docs/components/interaction/channels/adapters/design.md
+      - docs/components/interaction/channels/adapters/testing.md
       - docs/components/channel-adapters/design.md
       - docs/components/channel-adapters/testing.md
       - docs/components/channel-adapters/adapters/qq.md

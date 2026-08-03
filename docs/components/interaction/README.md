@@ -16,25 +16,17 @@ does not own Gateway orchestration or native Agent truth.
 - [Controllers](controllers/README.md) — optional typed Controller contract,
   explicit bounded command composition, common commands, and request
   presentation.
+- [Channels](channels/README.md) — lifecycle/admission contracts, verified
+  ingress, native outbound evidence, and concrete IM adapters.
 
 `Message` carries content. `Operation` carries control intent. A Controller
 may recognize a command in an inbound Message and invoke a typed action, but
 the command text does not become message content at an Application boundary
 and product commands do not enter SDK Core.
 
-## Remaining subtree
-
-The approved target also contains the following Channel leaves. Their current
-broad documentation remains authoritative until their focused rollout slices
-create leaf documents:
-
-```text
-channels
-├── channel-contract
-├── ingress
-├── outbound-delivery
-└── adapters
-```
+Controller contracts, registry, common commands, and request presentation now
+reside under Interaction. The historical `imagent.controllers` package is a
+finite exact-object public facade, not a second implementation.
 
 See the exhaustive [component map](../component-map.yml) for current and target
 code paths, tests, exports, dependencies, accepted decisions, and declared
