@@ -20,9 +20,10 @@ Every built-in adapter must prove:
 
 Run the reusable contract kit, `test_native_channels.py`, all four platform
 suites, Gateway vertical tests, package-independence, wheel build, and clean
-install smoke. Telegram and Feishu focused tests plus endpoint-validator tests
-now mirror their source under `tests/interaction/channels/adapters/`; the other
-platform tests move only with their provider modules.
+install smoke. Telegram, Feishu, and Weixin focused tests plus endpoint-
+validator tests now mirror their source under
+`tests/interaction/channels/adapters/`; QQ tests move only with its provider
+cluster.
 
 The shared endpoint-validator test owns the exact accepted schemes and rejects
 whitespace, missing hosts, invalid ports, userinfo, query strings, and

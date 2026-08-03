@@ -66,7 +66,7 @@ input again. Gateway persists that distinction independently of IMCodex.
 ## Channel transport modules
 
 Transferred provider transports are moving into
-`src/imagent/interaction/channels/adapters/`; Telegram and Feishu are there now, while the
+`src/imagent/interaction/channels/adapters/`; Telegram, Feishu, and Weixin are there now, while the
 remaining providers and shared helpers still live below
 `src/imagent/channels/native/` during focused mechanical slices.
 Their shared access policy now lives with the Interaction ingress owner at
@@ -86,9 +86,9 @@ contracts.
 | `channels/qq.py` | `native/qq.py` | transfer QQ transport; replace product config/path imports |
 | `channels/telegram.py` | `interaction/channels/adapters/telegram.py` | transfer Telegram transport; replace product config/path imports |
 | `channels/feishu.py` | `interaction/channels/adapters/feishu.py` | transfer Feishu transport; preserve optional native SDK loading |
-| `channels/weixin_ilink.py` | `native/weixin_ilink.py` | transfer iLink protocol/crypto transport |
-| `channels/weixin_state.py` | `native/weixin_state.py` | transfer Channel-owned credential/reconnect state |
-| `channels/weixin.py` | `native/weixin.py` | transfer Weixin transport; product login UX remains downstream |
+| `channels/weixin_ilink.py` | `interaction/channels/adapters/weixin_ilink.py` | transfer iLink protocol/crypto transport |
+| `channels/weixin_state.py` | `interaction/channels/adapters/weixin_state.py` | transfer Channel-owned credential/reconnect state |
+| `channels/weixin.py` | `interaction/channels/adapters/weixin.py` | transfer Weixin transport; product login UX remains downstream |
 | top-level `models.py` | `interaction/channels/ingress.py` and `interaction/channels/outbound_delivery.py` | split provider-private inbound and outbound/native-delivery DTOs by Interaction owner |
 | top-level `file_types.py` | `interaction/media.py` | transfer shared generic-file type/byte validation to Interaction media |
 | top-level `windows_security.py` | `native/windows_security.py` | transfer secure staging helper |

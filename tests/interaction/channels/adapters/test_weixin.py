@@ -5,9 +5,12 @@ import unittest
 from pathlib import Path
 
 from imagent import __version__
-from imagent.channels.native.weixin import WeixinChannelAdapter
-from imagent.channels.native.weixin_ilink import BASE_INFO, WeixinILinkTransport
-from imagent.channels.native.weixin_state import (
+from imagent.interaction.channels.adapters.weixin import WeixinChannelAdapter
+from imagent.interaction.channels.adapters.weixin_ilink import (
+    BASE_INFO,
+    WeixinILinkTransport,
+)
+from imagent.interaction.channels.adapters.weixin_state import (
     WeixinCredentials,
     WeixinStateStore,
     WeixinTransportState,

@@ -21,7 +21,6 @@ from imagent.channels.native.diagnostics import (
     NativeChannelDiagnosticState,
     NativeConnectionDiagnosticSnapshot,
 )
-from imagent.channels.native.weixin_state import WeixinCredentials, WeixinStateStore
 from imagent.contracts import (
     AttachmentContent,
     ConversationRef,
@@ -36,6 +35,10 @@ from imagent.diagnostics import ConnectionDiagnosticState, QueueDiagnosticName
 from imagent.interaction.channels import (
     ChannelStartupConfigurationValidator,
     InboundAdmission,
+)
+from imagent.interaction.channels.adapters.weixin_state import (
+    WeixinCredentials,
+    WeixinStateStore,
 )
 from imagent.interaction.channels.ingress import ChannelAccessPolicy, InboundMessage
 from imagent.interaction.channels.outbound_delivery import (
