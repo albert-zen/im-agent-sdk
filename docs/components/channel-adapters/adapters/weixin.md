@@ -30,6 +30,7 @@ endpoints, native user/message identity, media paths, or exception text.
 
 ## Change checks
 
-Changes to `native/weixin.py`, `native/weixin_ilink.py`, or
-`native/weixin_state.py` require `test_channel_weixin.py`, common native
-Channel tests, media/attachment tests, and the adapter contract suite.
+Changes to `interaction/channels/adapters/weixin.py`, `weixin_ilink.py`, or
+`weixin_state.py` require
+`tests/interaction/channels/adapters/test_weixin.py`, common native Channel
+tests, media/attachment tests, and the adapter contract suite.

@@ -306,7 +306,9 @@ def channel_from_config(
             FeishuChannelAdapter as NativeAdapter,
         )
     elif channel_id == "weixin":
-        from .native.weixin import WeixinChannelAdapter as NativeAdapter
+        from ..interaction.channels.adapters.weixin import (
+            WeixinChannelAdapter as NativeAdapter,
+        )
     else:
         raise ValueError(f"unsupported native channel: {channel_id}")
     resolved_config = dict(config)

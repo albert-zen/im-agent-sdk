@@ -52,7 +52,7 @@ architecture_lint:
       to: src/imagent/__init__.py
       symbol: __version__
       reason: The current App Server client user-agent reads package release metadata through the root facade; target packaging will inject or relocate that value without an Applications-to-engineering edge.
-    - from: src/imagent/channels/native/weixin_ilink.py
+    - from: src/imagent/interaction/channels/adapters/weixin_ilink.py
       to: src/imagent/__init__.py
       symbol: __version__
       reason: The current Weixin transport user-agent reads package release metadata through the root facade; target packaging will inject or relocate that value without an Interaction-to-engineering edge.
@@ -290,7 +290,7 @@ components:
     state_recovery: Native cursors and transient duplicate caches stay adapter-owned; durable claim stays Gateway-owned.
     current_code: [src/imagent/interaction/channels/ingress.py, src/imagent/channels/runtime.py, src/imagent/channels/native/base.py, src/imagent/channels/native/diagnostics.py, src/imagent/channels/native/media.py, src/imagent/channels/native/windows_security.py]
     target_code: [src/imagent/interaction/channels/ingress.py]
-    current_tests: [tests/interaction/channels/test_ingress.py, tests/test_native_channels.py, tests/test_channel_qq.py, tests/interaction/channels/adapters/test_telegram.py, tests/interaction/channels/adapters/test_feishu.py, tests/test_channel_weixin.py]
+    current_tests: [tests/interaction/channels/test_ingress.py, tests/test_native_channels.py, tests/test_channel_qq.py, tests/interaction/channels/adapters/test_telegram.py, tests/interaction/channels/adapters/test_feishu.py, tests/interaction/channels/adapters/test_weixin.py]
     target_tests: [tests/interaction/channels/test_ingress.py]
     authoritative_docs: [docs/components/interaction/channels/ingress/design.md, docs/components/interaction/channels/ingress/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
@@ -312,7 +312,7 @@ components:
     state_recovery: Native acceptance identity is evidence; unknown outcomes never authorize hidden replay.
     current_code: [src/imagent/interaction/channels/outbound_delivery.py, src/imagent/channels/runtime.py, src/imagent/channels/native/artifacts.py, src/imagent/channels/native/base.py]
     target_code: [src/imagent/interaction/channels/outbound_delivery.py]
-    current_tests: [tests/interaction/channels/test_outbound_delivery.py, tests/test_native_channels.py, tests/test_channel_qq.py, tests/interaction/channels/adapters/test_telegram.py, tests/interaction/channels/adapters/test_feishu.py, tests/test_channel_weixin.py]
+    current_tests: [tests/interaction/channels/test_outbound_delivery.py, tests/test_native_channels.py, tests/test_channel_qq.py, tests/interaction/channels/adapters/test_telegram.py, tests/interaction/channels/adapters/test_feishu.py, tests/interaction/channels/adapters/test_weixin.py]
     target_tests: [tests/interaction/channels/test_outbound_delivery.py]
     authoritative_docs: [docs/components/interaction/channels/outbound-delivery/design.md, docs/components/interaction/channels/outbound-delivery/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
@@ -332,13 +332,13 @@ components:
       target: [imagent.interaction.channels.adapters:NativeTransportChannelAdapter, imagent.interaction.channels.adapters:channel_from_config, imagent.interaction.channels.adapters:QQChannelAdapter, imagent.interaction.channels.adapters:QQ_QUOTE_ATTACHMENT_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_CONTENT_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_FILENAME_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_MESSAGE_TYPE, imagent.interaction.channels.adapters:QQ_QUOTE_REFERENCE_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_TRANSCRIPT_LIMIT]
     dependencies: [interaction.channels.channel-contract, interaction.channels.ingress, interaction.channels.outbound-delivery]
     state_recovery: Each adapter owns bounded native reconnect/cursor and process-local transport diagnostics.
-    current_code: [src/imagent/diagnostics.py, src/imagent/interaction/channels/adapters/__init__.py, src/imagent/interaction/channels/adapters/endpoints.py, src/imagent/interaction/channels/adapters/telegram.py, src/imagent/interaction/channels/adapters/feishu.py, src/imagent/channels/native/__init__.py, src/imagent/channels/native/base.py, src/imagent/channels/native/diagnostics.py, src/imagent/channels/native/qq.py, src/imagent/channels/native/qq_media.py, src/imagent/channels/native/qq_quote.py, src/imagent/channels/native/weixin.py, src/imagent/channels/native/weixin_ilink.py, src/imagent/channels/native/weixin_state.py, src/imagent/channels/runtime.py]
+    current_code: [src/imagent/diagnostics.py, src/imagent/interaction/channels/adapters/__init__.py, src/imagent/interaction/channels/adapters/endpoints.py, src/imagent/interaction/channels/adapters/telegram.py, src/imagent/interaction/channels/adapters/feishu.py, src/imagent/interaction/channels/adapters/weixin.py, src/imagent/interaction/channels/adapters/weixin_ilink.py, src/imagent/interaction/channels/adapters/weixin_state.py, src/imagent/channels/native/__init__.py, src/imagent/channels/native/base.py, src/imagent/channels/native/diagnostics.py, src/imagent/channels/native/qq.py, src/imagent/channels/native/qq_media.py, src/imagent/channels/native/qq_quote.py, src/imagent/channels/runtime.py]
     target_code: [src/imagent/interaction/channels/adapters/**]
-    current_tests: [tests/interaction/channels/adapters/test_endpoints.py, tests/interaction/channels/adapters/test_telegram.py, tests/interaction/channels/adapters/test_feishu.py, tests/test_native_channels.py, tests/test_channel_qq.py, tests/test_channel_weixin.py]
+    current_tests: [tests/interaction/channels/adapters/test_endpoints.py, tests/interaction/channels/adapters/test_telegram.py, tests/interaction/channels/adapters/test_feishu.py, tests/interaction/channels/adapters/test_weixin.py, tests/test_native_channels.py, tests/test_channel_qq.py]
     target_tests: [tests/interaction/channels/adapters/**]
     authoritative_docs: [docs/components/interaction/channels/adapters/design.md, docs/components/interaction/channels/adapters/testing.md, docs/components/channel-adapters/adapters/qq.md, docs/components/channel-adapters/adapters/telegram.md, docs/components/channel-adapters/adapters/feishu.md, docs/components/channel-adapters/adapters/weixin.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0010-capability-driven-delivery-coordination.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0014-read-only-diagnostics-surface.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [remaining provider adapter source and platform test mirrors have not yet moved]
+    gaps: [QQ provider cluster and focused test mirror have not yet moved]
 
   gateway.composition:
     id: gateway.composition

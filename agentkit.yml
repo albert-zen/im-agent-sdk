@@ -344,7 +344,7 @@ components:
       - tests/test_channel_qq.py
       - tests/interaction/channels/adapters/test_telegram.py
       - tests/interaction/channels/adapters/test_feishu.py
-      - tests/test_channel_weixin.py
+      - tests/interaction/channels/adapters/test_weixin.py
     docs:
       - docs/components/interaction/README.md
       - docs/components/interaction/channels/README.md
@@ -608,8 +608,8 @@ maintainability:
         - src/imagent/channels/native/qq_quote.py
         - src/imagent/interaction/channels/adapters/telegram.py
         - src/imagent/interaction/channels/adapters/feishu.py
-        - src/imagent/channels/native/weixin.py
-        - src/imagent/channels/native/weixin_ilink.py
+        - src/imagent/interaction/channels/adapters/weixin.py
+        - src/imagent/interaction/channels/adapters/weixin_ilink.py
         - src/imagent/channels/native/media.py
       max_lines: 1400
       max_functions: 65

@@ -148,7 +148,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/test_channel_qq.py": {"channel-adapters"},
             "tests/interaction/channels/adapters/test_telegram.py": {"channel-adapters"},
             "tests/interaction/channels/adapters/test_feishu.py": {"channel-adapters"},
-            "tests/test_channel_weixin.py": {"channel-adapters"},
+            "tests/interaction/channels/adapters/test_weixin.py": {"channel-adapters"},
             "tests/test_appserver_client.py": {"application-adapters-appserver"},
             "tests/test_appserver_input.py": {"application-adapters-appserver"},
             "tests/test_appserver_mapping.py": {"application-adapters-appserver"},
