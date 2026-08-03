@@ -20,6 +20,15 @@ from ..contracts import (
     DeliverySupportLevel,
 )
 from ..interaction.channels import InboundAdmissionHandler, MessageHandler
+from ..interaction.channels.outbound_delivery import (
+    NativeDeliveryResult,
+)
+from ..interaction.channels.outbound_delivery import (
+    OutboundArtifact as NativeOutboundArtifact,
+)
+from ..interaction.channels.outbound_delivery import (
+    OutboundMessage as NativeOutboundMessage,
+)
 from ..interaction.media import AttachmentContent, AttachmentSourceKind, LocalPath
 from ..interaction.messages import (
     ConversationRef,
@@ -32,15 +41,6 @@ from .native.base import ChannelRouteContext
 from .native.diagnostics import (
     NativeChannelDiagnosticSnapshot,
     NativeConnectionDiagnosticSnapshot,
-)
-from .native.models import (
-    NativeDeliveryResult,
-)
-from .native.models import (
-    OutboundArtifact as NativeOutboundArtifact,
-)
-from .native.models import (
-    OutboundMessage as NativeOutboundMessage,
 )
 
 

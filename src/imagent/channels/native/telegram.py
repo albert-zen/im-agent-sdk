@@ -15,8 +15,13 @@ from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 import httpx
 
-from ...interaction.channels.ingress import ChannelAccessPolicy
-from ...interaction.channels.outbound_delivery import split_text
+from ...interaction.channels.ingress import ChannelAccessPolicy, InboundMessage
+from ...interaction.channels.outbound_delivery import (
+    NativeDeliveryResult,
+    OutboundArtifact,
+    OutboundMessage,
+    split_text,
+)
 from .artifacts import (
     ArtifactDeliveryReceipt,
     PermanentArtifactDeliveryError,
@@ -34,12 +39,6 @@ from .media import (
     ImageMediaMaterializer,
     MediaDownloadError,
     materialize_inbound_media,
-)
-from .models import (
-    InboundMessage,
-    NativeDeliveryResult,
-    OutboundArtifact,
-    OutboundMessage,
 )
 
 logger = logging.getLogger(__name__)

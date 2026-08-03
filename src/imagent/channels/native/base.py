@@ -8,14 +8,17 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from threading import Lock
 
-from ...interaction.channels.ingress import ChannelAccessPolicy
+from ...interaction.channels.ingress import ChannelAccessPolicy, InboundMessage
+from ...interaction.channels.outbound_delivery import (
+    NativeDeliveryResult,
+    OutboundMessage,
+)
 from .diagnostics import (
     NativeChannelDiagnosticState,
     NativeConnectionDiagnosticSnapshot,
     emit_event,
     mark_channel_health,
 )
-from .models import InboundMessage, NativeDeliveryResult, OutboundMessage
 
 logger = logging.getLogger(__name__)
 ACCESS_DENIAL_REPORT_LIMIT = 10

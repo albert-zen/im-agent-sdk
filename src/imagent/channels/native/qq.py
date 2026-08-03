@@ -15,8 +15,13 @@ from typing import Any
 import httpx
 import websockets
 
-from ...interaction.channels.ingress import ChannelAccessPolicy
-from ...interaction.channels.outbound_delivery import split_text
+from ...interaction.channels.ingress import ChannelAccessPolicy, InboundMessage
+from ...interaction.channels.outbound_delivery import (
+    NativeDeliveryResult,
+    OutboundArtifact,
+    OutboundMessage,
+    split_text,
+)
 from .artifacts import (
     ArtifactDeliveryReceipt,
     PermanentArtifactDeliveryError,
@@ -34,12 +39,6 @@ from .diagnostics import (
 )
 from .endpoints import validate_http_endpoint
 from .media import materialize_inbound_media
-from .models import (
-    InboundMessage,
-    NativeDeliveryResult,
-    OutboundArtifact,
-    OutboundMessage,
-)
 from .qq_media import (
     QQFileMaterializer,
     QQFileReference,

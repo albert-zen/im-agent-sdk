@@ -21,14 +21,6 @@ from imagent.channels.native.diagnostics import (
     NativeChannelDiagnosticState,
     NativeConnectionDiagnosticSnapshot,
 )
-from imagent.channels.native.models import (
-    InboundMessage,
-    NativeDeliveryResult,
-    OutboundArtifact,
-)
-from imagent.channels.native.models import (
-    OutboundMessage as NativeOutboundMessage,
-)
 from imagent.channels.native.weixin_state import WeixinCredentials, WeixinStateStore
 from imagent.contracts import (
     AttachmentContent,
@@ -45,8 +37,15 @@ from imagent.interaction.channels import (
     ChannelStartupConfigurationValidator,
     InboundAdmission,
 )
-from imagent.interaction.channels.ingress import ChannelAccessPolicy
-from imagent.interaction.channels.outbound_delivery import split_text
+from imagent.interaction.channels.ingress import ChannelAccessPolicy, InboundMessage
+from imagent.interaction.channels.outbound_delivery import (
+    NativeDeliveryResult,
+    OutboundArtifact,
+    split_text,
+)
+from imagent.interaction.channels.outbound_delivery import (
+    OutboundMessage as NativeOutboundMessage,
+)
 from imagent.testing import verify_channel_adapter
 
 

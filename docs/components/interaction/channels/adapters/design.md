@@ -35,5 +35,6 @@ remains native Channel state, not Gateway persistence.
 
 Current native code remains under `src/imagent/channels/native` and runtime
 during migration. Target placement is
-`src/imagent/interaction/channels/adapters/` with platform modules and shared
-helpers, after contract/ingress/outbound leaves move independently.
+`src/imagent/interaction/channels/adapters/` with platform modules and their
+remaining shared helpers, after contract/ingress/outbound leaves move
+independently.

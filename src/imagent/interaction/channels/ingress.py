@@ -94,3 +94,28 @@ class ChannelAccessPolicy:
         if not matches:
             return True
         return any(matches) if self.access_match == "any" else all(matches)
+
+
+@dataclass(frozen=True, slots=True)
+class InboundAttachment:
+    kind: Literal["image", "file"]
+    content_type: str
+    local_path: str
+    size_bytes: int
+    filename: str = ""
+    source_channel_id: str = ""
+    source_message_id: str = ""
+
+
+@dataclass(slots=True)
+class InboundMessage:
+    channel_id: str
+    conversation_id: str
+    user_id: str
+    message_id: str
+    text: str
+    attachments: tuple[InboundAttachment, ...] = ()
+    input_error: str | None = None
+    reply_to_message_id: str | None = None
+    sent_at: str | None = None
+    trace_id: str | None = None

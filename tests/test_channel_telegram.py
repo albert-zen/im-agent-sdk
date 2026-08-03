@@ -3,9 +3,9 @@ from __future__ import annotations
 import unittest
 from typing import Any, cast
 
-from imagent.channels.native.models import OutboundMessage
 from imagent.channels.native.telegram import TelegramChannelAdapter
 from imagent.interaction.channels.ingress import ChannelAccessPolicy
+from imagent.interaction.channels.outbound_delivery import OutboundMessage
 
 
 class TelegramChannelTests(unittest.IsolatedAsyncioTestCase):

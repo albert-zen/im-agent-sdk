@@ -46,3 +46,9 @@ segmentation policy. The Gateway planner remains authoritative for normal
 capability-driven segmentation; Channel adapters use the helper only to
 defend direct calls that exceed their native limit. Platform encoders and API
 clients remain adapter-owned.
+
+Leaf-internal `OutboundArtifact`, mutable native `OutboundMessage`, and
+`NativeDeliveryResult` DTOs carry data between common outbound helpers and
+provider adapters before normalization into public receipts. They are not
+top-level exports, do not duplicate the public Message contract, and hold no
+retry, checkpoint, or persistence authority.

@@ -5,7 +5,6 @@ import unittest
 from pathlib import Path
 
 from imagent import __version__
-from imagent.channels.native.models import OutboundMessage
 from imagent.channels.native.weixin import WeixinChannelAdapter
 from imagent.channels.native.weixin_ilink import BASE_INFO, WeixinILinkTransport
 from imagent.channels.native.weixin_state import (
@@ -14,6 +13,7 @@ from imagent.channels.native.weixin_state import (
     WeixinTransportState,
 )
 from imagent.interaction.channels.ingress import ChannelAccessPolicy
+from imagent.interaction.channels.outbound_delivery import OutboundMessage
 
 
 def _raw_message(*, text: str = "inspect repo") -> dict[str, object]:

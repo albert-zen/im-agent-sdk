@@ -67,6 +67,10 @@ destination decisions, exclusions, local modifications, and test proof are recor
 registry, commands, login UX, configured allowlist values and UX, bot policy,
 and deployment configuration were deliberately excluded.
 
+Provider-private transport DTOs are split between the Interaction Channel
+ingress and outbound-delivery owners; they are leaf-internal values, not common
+Message or Operation contracts.
+
 The SDK no longer imports the consumer package. The later IMCodex migration
 must consume these SDK APIs and delete its duplicated production copies before
 Issue #9 can close.

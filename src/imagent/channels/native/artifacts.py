@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from .models import OutboundArtifact, OutboundMessage
+from ...interaction.channels.outbound_delivery import OutboundArtifact, OutboundMessage
 
 
 class PermanentArtifactDeliveryError(RuntimeError):
