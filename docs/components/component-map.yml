@@ -350,13 +350,13 @@ components:
       target: [imagent.gateway.composition:GatewayRepositories, imagent.gateway.composition:GatewayLimits, imagent.gateway.composition:GatewayExtensions]
     dependencies: [interaction.controllers.controller-contract, interaction.controllers.request-presentation, interaction.channels.channel-contract, applications.application-contract, gateway.admission, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.projection.observation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.memory, gateway.persistence.idempotency]
     state_recovery: Frozen construction values only; no runtime state or locator lookup.
-    current_code: [src/imagent/gateway_composition.py, src/imagent/gateway.py]
+    current_code: [src/imagent/gateway_composition.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/composition.py]
-    current_tests: [tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py]
-    target_tests: [tests/gateway/test_composition.py]
+    current_tests: [tests/gateway/test_package_root.py, tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py]
+    target_tests: [tests/gateway/test_composition.py, tests/gateway/test_package_root.py]
     authoritative_docs: [docs/components/gateway/design.md, docs/components/gateway/testing.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [gateway.py still combines composition and runtime orchestration]
+    gaps: [the Gateway package root still combines composition and runtime orchestration]
 
   gateway.lifecycle:
     id: gateway.lifecycle
@@ -372,13 +372,13 @@ components:
       target: [imagent.gateway:ImAgentGateway]
     dependencies: [gateway.composition, gateway.admission, gateway.projection.observation]
     state_recovery: Bounded process-local FIFO; rollback closes admission before awaiting cleanup.
-    current_code: [src/imagent/gateway.py, src/imagent/gateway_startup.py]
+    current_code: [src/imagent/gateway/__init__.py, src/imagent/gateway_startup.py]
     target_code: [src/imagent/gateway/lifecycle.py]
     current_tests: [tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py, tests/test_diagnostics.py]
     target_tests: [tests/gateway/test_lifecycle.py]
     authoritative_docs: [docs/components/gateway/design.md, docs/components/gateway/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0013-bounded-application-event-admission.md]
-    gaps: [lifecycle logic is split between gateway.py and gateway_startup.py]
+    gaps: [lifecycle logic is split between the Gateway package root and gateway_startup.py]
 
   gateway.admission:
     id: gateway.admission
@@ -394,7 +394,7 @@ components:
       target: [imagent.gateway.admission:InboundAdmissionService, imagent.gateway.admission:ClaimedInbound]
     dependencies: [interaction.channels.channel-contract, interaction.messages, gateway.persistence.idempotency, gateway.persistence.repository-contracts]
     state_recovery: Fenced in_flight leases reclaim safely; side_effect_started never expires into retry authority.
-    current_code: [src/imagent/inbound_admission.py, src/imagent/gateway.py]
+    current_code: [src/imagent/inbound_admission.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/admission.py]
     current_tests: [tests/test_inbound_admission.py, tests/test_native_channels.py]
     target_tests: [tests/gateway/test_admission.py]
@@ -416,13 +416,13 @@ components:
       target: [imagent.gateway.routing:BindConversationToProject, imagent.gateway.routing:BindConversationToThread, imagent.gateway.routing:ClearConversationThread, imagent.gateway.routing:ConversationBound]
     dependencies: [interaction.operations, applications.application-contract, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Persisted optimistic revision is authoritative; same-target crash retry converges without overwriting a later binding.
-    current_code: [schemas/v1/operations.schema.json, src/imagent/contracts/operations.py, src/imagent/contracts/validators.py, src/imagent/gateway.py]
+    current_code: [schemas/v1/operations.schema.json, src/imagent/contracts/operations.py, src/imagent/contracts/validators.py, src/imagent/gateway/__init__.py]
     target_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/bindings.py]
     current_tests: [tests/test_bindings.py, tests/test_gateway_operations.py, tests/test_projection_routing.py]
     target_tests: [tests/gateway/routing/test_bindings.py]
     authoritative_docs: [docs/components/gateway/design.md, docs/components/persistence/design.md, docs/components/projections-and-recovery/design.md]
     adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md]
-    gaps: [binding contract and orchestration are spread across contracts and gateway.py]
+    gaps: [binding contract and orchestration are spread across contracts and the Gateway package root]
 
   gateway.routing.gateway-operations:
     id: gateway.routing.gateway-operations
@@ -438,7 +438,7 @@ components:
       target: [imagent.gateway.routing:GatewayOperation, imagent.gateway.routing:GatewayOperationResult, imagent.gateway.routing:GatewayOperationFailed, imagent.gateway.routing:GatewayOperationType, imagent.gateway.routing:ListApplications, imagent.gateway.routing:SelectApplication, imagent.gateway.routing:ApplicationsListed, imagent.gateway.routing:validate_gateway_operation, imagent.gateway.routing:validate_gateway_operation_result]
     dependencies: [interaction.operations, gateway.routing.bindings, gateway.routing.projection-routes]
     state_recovery: Stable operation IDs and revision guards make mutations explicit; unknown outcomes fail closed.
-    current_code: [schemas/v1/operations.schema.json, src/imagent/contracts/operations.py, src/imagent/contracts/validators.py, src/imagent/gateway.py]
+    current_code: [schemas/v1/operations.schema.json, src/imagent/contracts/operations.py, src/imagent/contracts/validators.py, src/imagent/gateway/__init__.py]
     target_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/operations.py]
     current_tests: [tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py]
     target_tests: [tests/gateway/routing/test_operations.py]
@@ -460,7 +460,7 @@ components:
       target: [imagent.gateway.routing:ObserveThread, imagent.gateway.routing:ThreadObserved]
     dependencies: [gateway.routing.bindings, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Routes persist independently; foreground authority requires current binding equality.
-    current_code: [schemas/v1/operations.schema.json, src/imagent/contracts/operations.py, src/imagent/contracts/validators.py, src/imagent/projection_routes.py, src/imagent/projections.py, src/imagent/gateway.py]
+    current_code: [schemas/v1/operations.schema.json, src/imagent/contracts/operations.py, src/imagent/contracts/validators.py, src/imagent/projection_routes.py, src/imagent/projections.py, src/imagent/gateway/__init__.py]
     target_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/projection_routes.py]
     current_tests: [tests/test_projection_routing.py, tests/test_projection_hardening.py, tests/test_gateway_operations.py]
     target_tests: [tests/gateway/routing/test_projection_routes.py]
@@ -482,7 +482,7 @@ components:
       target: [imagent.gateway.input:InboundContentTransformer]
     dependencies: [interaction.messages, interaction.media, gateway.admission, gateway.diagnostics]
     state_recovery: Pre-dispatch result is not persisted and may be reinvoked after safe reclaim/restart.
-    current_code: [src/imagent/inbound_content.py, src/imagent/gateway.py, src/imagent/diagnostics.py]
+    current_code: [src/imagent/inbound_content.py, src/imagent/gateway/__init__.py, src/imagent/diagnostics.py]
     target_code: [src/imagent/gateway/input/content_transformation.py]
     current_tests: [tests/test_inbound_content_transformer.py]
     target_tests: [tests/gateway/input/test_content_transformation.py]
@@ -504,7 +504,7 @@ components:
       target: [imagent.gateway.input:derive_client_message_id]
     dependencies: [applications.application-contract, applications.operations, gateway.admission, gateway.projection.request-correlation]
     state_recovery: Pre-dispatch failures release; outcome_unknown stays side_effect_started; accepted results are terminal for inbound idempotency.
-    current_code: [src/imagent/contracts/validators.py, src/imagent/gateway.py, src/imagent/projection_runtime.py]
+    current_code: [src/imagent/contracts/validators.py, src/imagent/gateway/__init__.py, src/imagent/projection_runtime.py]
     target_code: [src/imagent/gateway/input/dispatch.py]
     current_tests: [tests/test_gateway_vertical_slice.py, tests/test_projection_hardening.py, tests/test_recovery.py]
     target_tests: [tests/gateway/input/test_dispatch.py]
@@ -526,7 +526,7 @@ components:
       target: [imagent.gateway.input:InboundFailurePresenter, imagent.gateway.input:InboundFailurePhase]
     dependencies: [interaction.messages, applications.application-contract, gateway.admission, gateway.input.dispatch, gateway.projection.observation, gateway.projection.recovery, gateway.delivery.coordination, gateway.persistence.repository-contracts, gateway.diagnostics]
     state_recovery: Configured pre_acceptance completes before presentation; unknown and post_acceptance never reopen input.
-    current_code: [src/imagent/inbound_failures.py, src/imagent/gateway.py, src/imagent/diagnostics.py]
+    current_code: [src/imagent/inbound_failures.py, src/imagent/gateway/__init__.py, src/imagent/diagnostics.py]
     target_code: [src/imagent/gateway/input/failure_presentation.py]
     current_tests: [tests/test_inbound_failure_presenter.py, tests/test_storage.py]
     target_tests: [tests/gateway/input/test_failure_presentation.py]
@@ -548,7 +548,7 @@ components:
       target: [imagent.gateway.projection:ThreadProjectionRuntime, imagent.gateway.projection:ProjectionWorkerHealth]
     dependencies: [interaction.messages, interaction.controllers.request-presentation, applications.application-contract, applications.capabilities, applications.events, applications.requests, gateway.routing.projection-routes, gateway.projection.recovery, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Bounded queue gaps terminate only one observation; worker resubscribes and reconciles authoritatively.
-    current_code: [src/imagent/gateway.py, src/imagent/projection_runtime.py, src/imagent/projections.py]
+    current_code: [src/imagent/gateway/__init__.py, src/imagent/projection_runtime.py, src/imagent/projections.py]
     target_code: [src/imagent/gateway/projection/observation.py]
     current_tests: [tests/test_event_fanout.py, tests/test_projection_hardening.py, tests/test_projection_routing.py]
     target_tests: [tests/gateway/projection/test_observation.py]
@@ -592,7 +592,7 @@ components:
       target: [imagent.gateway.projection:InteractiveRequestProjection, imagent.gateway.projection:RespondToRequest, imagent.gateway.projection:RequestResponseRouted]
     dependencies: [interaction.messages, applications.application-contract, applications.capabilities, applications.requests, interaction.controllers.request-presentation, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Correlations are minimal, bounded, persisted, monotonic, and reconciled only from native authoritative facts.
-    current_code: [src/imagent/contracts/operations.py, src/imagent/contracts/request_validation.py, src/imagent/contracts/validators.py, src/imagent/gateway.py, src/imagent/request_correlations.py, src/imagent/request_projection_runtime.py, src/imagent/projection_routes.py]
+    current_code: [src/imagent/contracts/operations.py, src/imagent/contracts/request_validation.py, src/imagent/contracts/validators.py, src/imagent/gateway/__init__.py, src/imagent/request_correlations.py, src/imagent/request_projection_runtime.py, src/imagent/projection_routes.py]
     target_code: [src/imagent/gateway/projection/request_correlation.py]
     current_tests: [tests/test_appserver_requests.py, tests/test_projection_hardening.py, tests/test_storage.py]
     target_tests: [tests/gateway/projection/test_request_correlation.py]
@@ -636,7 +636,7 @@ components:
       target: [imagent.gateway.presentation:OutboundPresentationPolicy, imagent.gateway.presentation:OutboundPresentationContext, imagent.gateway.presentation:ProjectionPresentationOrigin]
     dependencies: [interaction.messages, interaction.media, applications.application-contract, gateway.projection.checkpoints, gateway.persistence.idempotency]
     state_recovery: Replay-safe suppression completes outbound idempotency before checkpoint CAS; live-only never checkpoints.
-    current_code: [src/imagent/outbound_presentation.py, src/imagent/projections.py, src/imagent/gateway.py, src/imagent/diagnostics.py]
+    current_code: [src/imagent/outbound_presentation.py, src/imagent/projections.py, src/imagent/gateway/__init__.py, src/imagent/diagnostics.py]
     target_code: [src/imagent/gateway/presentation.py]
     current_tests: [tests/test_outbound_presentation.py, tests/test_projection_hardening.py]
     target_tests: [tests/gateway/test_presentation.py]
@@ -680,7 +680,7 @@ components:
       target: [imagent.gateway.delivery:DeliveryCoordinator, imagent.gateway.delivery:DeliveryCoordinatorConfig, imagent.gateway.delivery:DeliveryHandle]
     dependencies: [interaction.messages, interaction.media, interaction.channels.channel-contract, interaction.channels.outbound-delivery, gateway.delivery.planning]
     state_recovery: Process-local lanes are cancelled/joined at stop; unknown outcomes never auto-retry.
-    current_code: [src/imagent/delivery_coordination.py, src/imagent/keyed_locks.py, src/imagent/gateway.py]
+    current_code: [src/imagent/delivery_coordination.py, src/imagent/keyed_locks.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/delivery/coordination.py]
     current_tests: [tests/test_delivery_planning.py, tests/test_delivery_outcomes.py, tests/test_gateway_vertical_slice.py]
     target_tests: [tests/gateway/delivery/test_coordination.py]
@@ -746,7 +746,7 @@ components:
       target: [imagent.gateway.delivery:ProactiveDeliveryService, imagent.gateway.delivery:ProactiveDeliveryJsonHandler, imagent.gateway.delivery:DeliveryIntent, imagent.gateway.delivery:ConversationDeliveryTarget, imagent.gateway.delivery:DeliveryTarget, imagent.gateway.delivery:DeliveryTargetKind, imagent.gateway.delivery:DestinationDeliveryResult, imagent.gateway.delivery:ProactiveDeliveryResult, imagent.gateway.delivery:ThreadRouteDeliveryTarget, imagent.gateway.delivery:validate_delivery_intent]
     dependencies: [interaction.messages, interaction.operations, interaction.media, interaction.channels.channel-contract, applications.application-contract, gateway.delivery.proactive-authorization, gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.outcome-observation, gateway.routing.projection-routes, gateway.persistence.repository-contracts]
     state_recovery: Persist identity/snapshots/outcomes only; staged inline bytes live through one synchronous attempt and are removed after join.
-    current_code: [schemas/v1/deliveries.schema.json, src/imagent/contracts/delivery.py, src/imagent/proactive_delivery.py, src/imagent/delivery_ingress.py, src/imagent/cli/__init__.py, src/imagent/cli/send.py, src/imagent/gateway.py]
+    current_code: [schemas/v1/deliveries.schema.json, src/imagent/contracts/delivery.py, src/imagent/proactive_delivery.py, src/imagent/delivery_ingress.py, src/imagent/cli/__init__.py, src/imagent/cli/send.py, src/imagent/gateway/__init__.py]
     target_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/proactive.py]
     current_tests: [tests/test_proactive_delivery.py, tests/test_delivery_ingress.py]
     target_tests: [tests/gateway/delivery/test_proactive_delivery.py]
@@ -768,7 +768,7 @@ components:
       target: [imagent.gateway.delivery:DeliveryOutcomeObserver, imagent.gateway.delivery:DeliveryOutcome, imagent.gateway.delivery:DeliveryOutcomeContext]
     dependencies: [interaction.messages, interaction.media, interaction.channels.channel-contract, gateway.delivery.coordination, gateway.diagnostics]
     state_recovery: Non-durable and at-most-offered once per actual attempt; replay/suppression/preflight fabricate no notification.
-    current_code: [src/imagent/delivery_outcomes.py, src/imagent/gateway.py, src/imagent/diagnostics.py]
+    current_code: [src/imagent/delivery_outcomes.py, src/imagent/gateway/__init__.py, src/imagent/diagnostics.py]
     target_code: [src/imagent/gateway/delivery/outcome_observation.py]
     current_tests: [tests/test_delivery_outcomes.py, tests/test_proactive_delivery.py]
     target_tests: [tests/gateway/delivery/test_outcome_observation.py]
@@ -922,7 +922,7 @@ components:
       target: [imagent.gateway.diagnostics:DiagnosticsSnapshot, imagent.gateway.diagnostics:DiagnosticsProvider, imagent.gateway.diagnostics:ChannelDiagnosticsProvider]
     dependencies: [interaction.channels.channel-contract, applications.application-contract]
     state_recovery: Process-lifetime counters only; snapshot is synchronous, side-effect-free, bounded, and non-authoritative.
-    current_code: [src/imagent/diagnostics.py, src/imagent/gateway.py]
+    current_code: [src/imagent/diagnostics.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/diagnostics.py]
     current_tests: [tests/test_diagnostics.py]
     target_tests: [tests/gateway/test_diagnostics.py]
@@ -1451,7 +1451,7 @@ structural_status:
     src/imagent/interaction/channels/adapters/base.py:
       owners: [interaction.channels.ingress, interaction.channels.outbound-delivery, interaction.channels.adapters]
       reason: BaseChannelAdapter combines lifecycle/startup validation, ingress access, outbound send validation, and native diagnostic state.
-    src/imagent/gateway.py:
+    src/imagent/gateway/__init__.py:
       owners: [gateway.composition, gateway.lifecycle, gateway.admission, gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.content-transformation, gateway.input.dispatch, gateway.input.failure-presentation, gateway.projection.observation, gateway.projection.request-correlation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.diagnostics]
       reason: The current composition root also sequences admission, input, observation, request routing, presentation, delivery, and diagnostics leaf behavior.
     src/imagent/diagnostics.py:
