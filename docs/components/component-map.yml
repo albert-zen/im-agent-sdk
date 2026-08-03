@@ -244,17 +244,17 @@ components:
     outputs: [bounded RequestPresentation]
     public_contracts: [RequestPresenter, RequestPresentation, MarkdownRequestPresenter]
     public_exports:
-      current: [imagent.controllers:RequestPresenter, imagent.controllers:RequestPresentation, imagent.controllers:MarkdownRequestPresenter]
+      current: [imagent.interaction.controllers:RequestPresenter, imagent.interaction.controllers:RequestPresentation, imagent.interaction.controllers:MarkdownRequestPresenter, imagent.controllers:RequestPresenter, imagent.controllers:RequestPresentation, imagent.controllers:MarkdownRequestPresenter]
       target: [imagent.interaction.controllers:RequestPresenter, imagent.interaction.controllers:RequestPresentation, imagent.interaction.controllers:MarkdownRequestPresenter]
     dependencies: [interaction.messages, applications.requests]
     state_recovery: Stateless rendering; Gateway creates response correlation only after successful delivery.
-    current_code: [src/imagent/controllers/base.py, src/imagent/controllers/requests.py]
+    current_code: [src/imagent/interaction/controllers/request_presentation.py]
     target_code: [src/imagent/interaction/controllers/request_presentation.py]
-    current_tests: [tests/test_slash_controller.py, tests/test_appserver_requests.py]
+    current_tests: [tests/interaction/controllers/test_request_presentation.py, tests/test_appserver_requests.py]
     target_tests: [tests/interaction/controllers/test_request_presentation.py]
     authoritative_docs: [docs/components/interaction/controllers/request-presentation/design.md, docs/components/interaction/controllers/request-presentation/testing.md]
     adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [physical move to the request-presentation owner remains a separate mechanical slice]
+    gaps: [old imagent.controllers exact-object facade remains only until the common-command leaf moves]
 
   interaction.channels.channel-contract:
     id: interaction.channels.channel-contract
@@ -1398,6 +1398,9 @@ structural_status:
     - path: src/imagent/controllers/__init__.py
       owner: interaction.controllers.controller-contract
       rationale: Current public Controller facade; registry/common/request exports move without retaining duplicate implementations.
+    - path: src/imagent/interaction/controllers/__init__.py
+      owner: interaction.controllers.controller-contract
+      rationale: Target Interaction Controller facade; each public symbol delegates to its owning leaf and no implementation lives here.
     - path: src/imagent/channels/__init__.py
       owner: interaction.channels.channel-contract
       rationale: Current public Channel facade; it delegates to the adapters leaf and retains no transport implementation.

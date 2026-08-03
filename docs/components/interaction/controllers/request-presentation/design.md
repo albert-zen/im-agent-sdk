@@ -57,9 +57,14 @@ not invent request state to close that gap.
 
 ## Physical migration
 
-The current presentation protocol is mixed into
-`src/imagent/controllers/base.py` and the Markdown implementation is in
-`requests.py`. A focused mechanical slice will move the exact objects to
-`src/imagent/interaction/controllers/request_presentation.py`, update owner
-imports, and retain one implementation. It does not belong in the registry
-behavior PR.
+`src/imagent/interaction/controllers/request_presentation.py` owns the exact
+presentation protocol and portable Markdown implementation. The focused
+mechanical extraction moved those objects without changing rendering, bounds,
+correlation, delivery, replay, or security behavior. During the finite
+Controller package migration,
+`imagent.controllers` remains an exact-object public facade; the historical
+mixed modules retain no second implementation.
+
+This leaf remains separate from command registration and common-command
+parsing. The move does not introduce a registry, product command, Channel card
+protocol, or request mutation.
