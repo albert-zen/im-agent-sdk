@@ -77,7 +77,7 @@ contracts.
 | IMCodex source | SDK destination/decision | Ownership and modification |
 |---|---|---|
 | `channels/access.py` | `interaction/channels/ingress.py` | transfer shared stable-ID access policy to Interaction ingress; consumers choose configured IDs |
-| `channels/base.py` | `native/base.py` | transfer lifecycle/access base; replace product telemetry with logging |
+| `channels/base.py` | `interaction/channels/adapters/base.py` | transfer the single lifecycle/access base to its Interaction adapter owner; preserve behavior, replace product telemetry with logging, and retain no historical native-path shim |
 | `channels/artifacts.py` | `interaction/channels/outbound_delivery.py` | transfer shared attachment-send helpers for one native attempt; consumer retains bytes/root/quota/ledger/sweep ownership |
 | `channels/media.py` | `native/media.py` | transfer bounded staging/materialization; keep trust/materialization Channel-local |
 | `channels/text.py` | `interaction/channels/outbound_delivery.py` | transfer shared defensive native text splitting to Interaction outbound delivery |

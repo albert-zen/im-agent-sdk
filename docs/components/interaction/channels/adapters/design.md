@@ -46,13 +46,18 @@ remains native Channel state, not Gateway persistence.
 
 The target `src/imagent/interaction/channels/adapters/` package contains the
 QQ, Telegram, Feishu/Lark, and Weixin provider modules plus the shared
-QQ/Telegram HTTP endpoint validator.
+QQ/Telegram HTTP endpoint validator and the shared native adapter base.
 The validator remains adapter-internal: it validates provider configuration
 without opening a transport and is not part of the Channel facade. All four
-providers temporarily import the same shared base, media, and artifact helpers
-from `src/imagent/channels/native` while those independently reviewed
-boundaries remain in place. The remaining shared helpers move only in later
-focused ownership slices.
+providers import `BaseChannelAdapter` and `ChannelRouteContext` from
+`src/imagent/interaction/channels/adapters/base.py`. The historical
+`imagent.channels.native.base` path is removed without a compatibility shim.
+The base still coordinates adapter-owned diagnostics with shared ingress access
+and outbound validation, so it remains an explicit split candidate until those
+responsibilities move in later focused slices; this placement change does not
+alter lifecycle, policy, or delivery behavior. Shared media and Windows path
+security helpers remain temporarily under `src/imagent/channels/native` for
+their own independently reviewed ownership slices.
 
 The adapters package exposes only the component-map-approved QQ adapter and
 bounded quote constants through a lazy public facade. Importing the package or

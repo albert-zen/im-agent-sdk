@@ -7,7 +7,6 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, cast
 
-from ....channels.native.base import BaseChannelAdapter
 from ....channels.native.media import (
     MAX_FILE_COUNT,
     MAX_IMAGE_COUNT,
@@ -29,6 +28,7 @@ from ..outbound_delivery import (
     split_text,
     stable_artifact_identity,
 )
+from .base import BaseChannelAdapter
 from .diagnostics import emit_event
 from .weixin_ilink import (
     ILinkError,

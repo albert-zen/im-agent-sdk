@@ -15,7 +15,6 @@ from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 import httpx
 
-from ....channels.native.base import BaseChannelAdapter
 from ....channels.native.media import (
     MAX_FILE_COUNT,
     MAX_IMAGE_COUNT,
@@ -36,6 +35,7 @@ from ..outbound_delivery import (
     read_managed_artifact,
     split_text,
 )
+from .base import BaseChannelAdapter
 from .diagnostics import emit_event
 from .endpoints import validate_http_endpoint
 
