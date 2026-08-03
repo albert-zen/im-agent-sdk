@@ -116,6 +116,15 @@
 - started/steered reply correlation is per Turn and destination-safe across
   two Conversations, persistence, and restart;
 - foreground restart/switch reclaims and restores the correct worker;
+- foreground bind prepares an additive route before CAS, converges a
+  same-target crash retry, leaves a pre-CAS route inactive, preserves two
+  Conversations on one Thread, fences live output until baseline completion,
+  avoids false missing-checkpoint degradation for a new route, and never
+  overwrites a later different binding;
+- failed foreground baseline keeps live output fenced and cannot advance a
+  checkpoint until a same-target recovery retry succeeds;
+- an unverified binding-write outcome fails closed with its route fenced, and
+  an invalid same-target revision cannot release a retained recovery fence;
 - Application subscription failure self-recovers while one destination
   failure remains isolated and visible;
 - attachment and delivery failures stay explicit.

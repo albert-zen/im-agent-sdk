@@ -187,7 +187,7 @@ Gateway operations mutate only Gateway-owned selection or routing:
 | `application.list` | `ApplicationsListed` | list configured Application instances |
 | `application.select` | `ConversationBound` | select Application and clear narrower selection |
 | `conversation.bind_project` | `ConversationBound` | validate/select Project and clear Thread |
-| `conversation.bind_thread` | `ConversationBound` | select future input destination |
+| `conversation.bind_thread` | `ConversationBound` | select future input destination; under `foreground_only`, atomically prepare its policy-required output edge before binding CAS |
 | `conversation.clear_thread` | `ConversationBound` | clear selected Thread |
 | `thread.observe` | `ThreadObserved` | establish/refresh output route |
 | `conversation.respond_request` | `RequestResponseRouted` | validate one delivered destination and route a native response |
@@ -198,9 +198,13 @@ use named fields. Failures use `ApplicationOperationFailed` or
 `GatewayOperationFailed` with a stable `ContractError`.
 
 Listing is side-effect free and paginated. Thread creation does not bind a
-Conversation. Binding a Thread does not activate native UI state. Observing a
-Thread does not bind input or activate it. A product may compose these
-operations explicitly.
+Conversation. Binding a Thread does not activate native UI state. Under
+`foreground_only`, binding also prepares the matching additive projection route
+because binding equality is that policy's output authority; before the bind or
+after a switch, the route is inactive. Other projection policies retain
+explicit observation. Observing a Thread never binds input or activates native
+state. A product may compose these operations explicitly where those separate
+effects are intended.
 
 Thread deletion declares `unsupported`, `archive`, or `permanent`. Destructive
 semantics are never silently approximated.

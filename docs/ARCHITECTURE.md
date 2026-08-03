@@ -135,8 +135,12 @@ The default binding key is:
 
 The `ConversationBinding` answers where the next input goes. The
 `ThreadProjectionRoute` answers where completed output may be delivered.
-`thread.activate_native` optionally changes native UI state. No one mutation
-implies another.
+`thread.activate_native` optionally changes native UI state. No mutation
+activates another. The narrow `foreground_only` consistency exception is that
+Thread binding prepares the additive Conversation route before binding CAS;
+the route has no output authority before that matching binding or after a
+later switch. Other projection policies keep binding and observation as
+explicitly composed mutations.
 
 Projection policies:
 

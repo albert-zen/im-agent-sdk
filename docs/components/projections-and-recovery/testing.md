@@ -20,6 +20,13 @@ Protect these historical and known failure modes:
 - accepting an expired cursor without authoritative recovery;
 - manufacturing replay/sequence support;
 - input switching accidentally removing a remembered projection route;
+- foreground binding becoming durable without its Conversation/Thread route,
+  live delivery crossing its pre-bind bootstrap barrier, or a stale crash retry
+  overwriting a later different binding;
+- first foreground binding to an existing Thread skipping its bounded baseline,
+  or one new route weakening checkpoint requirements for other active routes;
+- failed foreground baseline opening its route to live checkpoint advancement
+  before a retry completes authoritative recovery;
 - restart losing output because route state was not rebuilt.
 - concurrent first observers regressing the current one-worker/no-orphan
   behavior;

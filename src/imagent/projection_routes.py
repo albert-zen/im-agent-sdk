@@ -207,8 +207,10 @@ class ProjectionRouteCoordinator:
         route: ThreadProjectionRoute,
         *,
         require_checkpoint: bool,
+        retain_barrier_on_failure: bool = False,
     ) -> None:
         lock = self._locks.setdefault(route.route_id, asyncio.Lock())
+        completed = False
         try:
             async with lock:
                 current = await get_projection_route(
@@ -240,8 +242,10 @@ class ProjectionRouteCoordinator:
                     projection.messages,
                     authoritative=True,
                 )
+                completed = True
         finally:
-            self.complete_bootstrap(route.route_id)
+            if completed or not retain_barrier_on_failure:
+                self.complete_bootstrap(route.route_id)
 
     async def deliver_to_routes(
         self,
