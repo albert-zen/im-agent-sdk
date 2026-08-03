@@ -1,5 +1,10 @@
 # Attachments and media component design
 
+> Migration note: the product-neutral Interaction source/trust authority now
+> lives in [`interaction.media`](../interaction/media/design.md). This broad
+> document remains migration evidence for media behavior still physically
+> mixed with Gateway and Application components.
+
 ## Purpose
 
 This component owns explicit media-source boundaries shared by Channel and

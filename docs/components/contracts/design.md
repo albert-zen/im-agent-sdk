@@ -1,5 +1,10 @@
 # Contracts component design
 
+> Migration note: focused Interaction authority now lives in
+> [messages](../interaction/messages/design.md) and
+> [operations](../interaction/operations/design.md). This broad document
+> remains current evidence for contract leaves that have not yet been split.
+
 ## Purpose
 
 Contracts define the smallest language-neutral semantics shared between IM

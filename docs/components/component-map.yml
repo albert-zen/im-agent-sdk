@@ -120,9 +120,9 @@ components:
     target_code: [schemas/v1/common.schema.json, schemas/v1/messages.schema.json, src/imagent/interaction/messages.py]
     current_tests: [tests/test_contracts.py]
     target_tests: [tests/interaction/test_messages.py]
-    authoritative_docs: [docs/components/contracts/design.md, docs/components/contracts/protocol.md]
+    authoritative_docs: [docs/components/interaction/messages/design.md, docs/components/interaction/messages/testing.md, docs/components/contracts/protocol.md]
     adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0002-design-authority-and-control-boundaries.md]
-    gaps: [target leaf design/testing docs not yet split from contracts]
+    gaps: [current cross-owner contract model and schema remain declared split candidates pending the mechanical Interaction move]
 
   interaction.operations:
     id: interaction.operations
@@ -142,7 +142,7 @@ components:
     target_code: [schemas/v1/common.schema.json, schemas/v1/operations.schema.json, src/imagent/interaction/operations.py]
     current_tests: [tests/test_contracts.py]
     target_tests: [tests/interaction/test_operations.py]
-    authoritative_docs: [docs/components/contracts/design.md, docs/components/contracts/protocol.md]
+    authoritative_docs: [docs/components/interaction/operations/design.md, docs/components/interaction/operations/testing.md, docs/components/contracts/protocol.md]
     adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0002-design-authority-and-control-boundaries.md]
     gaps: [current operation module mixes Interaction, Gateway, and Applications variants]
 
@@ -164,9 +164,9 @@ components:
     target_code: [schemas/v1/capabilities.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, src/imagent/interaction/media.py]
     current_tests: [tests/test_attachments.py, tests/test_contracts.py]
     target_tests: [tests/interaction/test_media.py]
-    authoritative_docs: [docs/components/attachments-and-media/design.md, docs/components/attachments-and-media/testing.md]
+    authoritative_docs: [docs/components/interaction/media/design.md, docs/components/interaction/media/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [target leaf design/testing docs not yet created]
+    gaps: [current media contracts and helpers remain declared split candidates pending the mechanical Interaction move]
 
   interaction.controllers.controller-contract:
     id: interaction.controllers.controller-contract
