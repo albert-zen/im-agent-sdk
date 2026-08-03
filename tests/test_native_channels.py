@@ -10,7 +10,6 @@ from typing import Any, cast
 from unittest.mock import patch
 
 from imagent.channels import NativeTransportChannelAdapter, channel_from_config
-from imagent.channels.native.access import ChannelAccessPolicy
 from imagent.channels.native.artifacts import (
     delivered_artifact_message_ids,
     record_artifact_delivery,
@@ -47,6 +46,7 @@ from imagent.interaction.channels import (
     ChannelStartupConfigurationValidator,
     InboundAdmission,
 )
+from imagent.interaction.channels.ingress import ChannelAccessPolicy
 from imagent.testing import verify_channel_adapter
 
 

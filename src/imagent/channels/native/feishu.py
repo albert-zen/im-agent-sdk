@@ -16,7 +16,7 @@ from urllib.parse import quote, urlsplit
 
 import httpx
 
-from .access import ChannelAccessPolicy
+from ...interaction.channels.ingress import ChannelAccessPolicy
 from .artifacts import (
     ArtifactDeliveryReceipt,
     PermanentArtifactDeliveryError,

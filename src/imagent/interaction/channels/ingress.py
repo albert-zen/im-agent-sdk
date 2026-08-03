@@ -23,10 +23,10 @@ def parse_id_set(value: object) -> frozenset[str]:
 
 @dataclass(frozen=True, slots=True)
 class ChannelAccessPolicy:
-    """Optional channel restrictions based on stable platform identifiers.
+    """Optional Channel restrictions based on stable platform identifiers.
 
     Empty dimensions and ``*`` do not restrict platform-delivered messages.
-    ``none`` explicitly denies the whole channel without disconnecting it.
+    ``none`` explicitly denies the whole Channel without disconnecting it.
     """
 
     allowed_user_ids: frozenset[str] = frozenset()

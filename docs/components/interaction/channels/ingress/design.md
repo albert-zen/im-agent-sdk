@@ -42,7 +42,16 @@ remote retrieval remains native adapter policy with explicit scheme/address/
 redirect/credential/size/media checks. Preparation crash leaves reclaimable
 claim state, not an SDK content job.
 
-Current shared mechanics are interleaved in Channel runtime/native helpers.
-The target shared owner is `src/imagent/interaction/channels/ingress.py`;
-platform-specific authentication, retrieval/decryption, and acknowledgement
+`ChannelAccessPolicy`, its `any`/`all` match mode, and configuration ID
+parsing live in `src/imagent/interaction/channels/ingress.py`. The policy takes
+only stable native user and Conversation IDs; it does not authenticate a
+provider, infer identity from text or time, or become a product permission
+service. QQ, Telegram, Feishu, and Weixin construct and evaluate that one
+shared value before admission and media work.
+
+The obsolete provider-native access module is not a compatibility facade:
+access policy is an internal owning-leaf contract, so repository callers use
+the Interaction path directly. Other shared ingress mechanics remain
+interleaved in Channel runtime/native helpers for later mechanical slices.
+Platform-specific authentication, retrieval/decryption, and acknowledgement
 remain under adapters.

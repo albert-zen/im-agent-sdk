@@ -4,13 +4,13 @@ import unittest
 import warnings
 from types import SimpleNamespace
 
-from imagent.channels.native.access import ChannelAccessPolicy
 from imagent.channels.native.feishu import (
     FEISHU_DOMAIN,
     LARK_DOMAIN,
     FeishuChannelAdapter,
 )
 from imagent.channels.native.models import OutboundMessage
+from imagent.interaction.channels.ingress import ChannelAccessPolicy
 
 
 def _message(
