@@ -20,7 +20,10 @@ records only bridge identity/evidence needed for safe convergence.
 - [proactive authorization design](proactive-authorization/design.md) and
   [testing](proactive-authorization/testing.md) — opaque credential to typed
   stable delivery scope.
+- [proactive delivery design](proactive-delivery/design.md) and
+  [testing](proactive-delivery/testing.md) — authorized, route-pinned,
+  idempotent delivery through the common bounded path.
 
-Proactive delivery orchestration remains mapped to its current authoritative
-documents until its own focused move. Delivery owns no native encoding,
-durable job, content storage, route policy, or checkpoint authority.
+JSON/CLI proactive ingress remains mapped to its current authoritative
+documents until its focused move. Delivery owns no native encoding, durable
+job, content storage, route policy, or checkpoint authority.

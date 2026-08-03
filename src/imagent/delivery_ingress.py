@@ -24,12 +24,12 @@ from .contracts import (
     ThreadRef,
     ThreadRouteDeliveryTarget,
 )
+from .gateway.delivery.proactive import DeliveryRouteError
 from .gateway.delivery.proactive_authorization import DeliveryAuthorizationError
 from .interaction.media import AttachmentContent, LocalPath
 from .interaction.messages import ConversationRef, TextContent, TextFormat
 from .interaction.operations import ContractViolation
 from .keyed_locks import KeyedLockRegistry
-from .proactive_delivery import DeliveryRouteError
 
 
 class ProactiveDeliveryEndpoint(Protocol):

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import unittest
 
 import imagent.adapters as adapter_facade
 import imagent.contracts as contract_facade
 import imagent.gateway.delivery as delivery_facade
-import imagent.proactive_delivery as historical_mixed_module
 from imagent.gateway.delivery import proactive_authorization as authorization_owner
 
 
@@ -34,8 +34,7 @@ class ProactiveAuthorizationOwnershipTests(unittest.TestCase):
             delivery_facade.ScopedDeliveryAuthorizer,
             authorization_owner.ScopedDeliveryAuthorizer,
         )
-        self.assertFalse(hasattr(historical_mixed_module, "ScopedDeliveryAuthorizer"))
-        self.assertFalse(hasattr(historical_mixed_module, "DeliveryAuthorizationError"))
+        self.assertIsNone(importlib.util.find_spec("imagent.proactive_delivery"))
 
 
 class ScopedDeliveryAuthorizerTests(unittest.IsolatedAsyncioTestCase):

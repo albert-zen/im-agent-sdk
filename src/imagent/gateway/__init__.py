@@ -109,10 +109,6 @@ from ..interaction.operations import (
     operation_error,
 )
 from ..keyed_locks import KeyedLockRegistry
-from ..proactive_delivery import (
-    InMemoryDeliverySubmissionRepository,
-    ProactiveDeliveryService,
-)
 from ..projection_runtime import ThreadProjectionRuntime
 from ..projections import (
     InMemoryProjectionRouteRepository,
@@ -129,6 +125,10 @@ from .delivery.outcome_observation import (
     DeliveryOutcomeObserverRuntime,
 )
 from .delivery.planning import DeliveryPlanningError
+from .delivery.proactive import (
+    InMemoryDeliverySubmissionRepository,
+    ProactiveDeliveryService,
+)
 from .presentation import (
     OutboundPresentationContext,
     OutboundPresentationRuntime,

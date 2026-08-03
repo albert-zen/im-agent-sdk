@@ -138,7 +138,7 @@ Run:
 uv run python -m unittest discover -s tests -p "test_gateway*.py" -v
 uv run python -m unittest discover -s tests -p "test_projection*.py" -v
 uv run python -m unittest discover -s tests -p "test_event_fanout.py" -v
-uv run python -m unittest tests.test_proactive_delivery tests.test_delivery_ingress -v
+uv run python -m unittest tests.gateway.delivery.test_proactive_delivery tests.test_delivery_ingress -v
 ```
 
 Also run the full adapter contract suite after changing a Gateway-facing port.
