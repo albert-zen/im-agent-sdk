@@ -22,7 +22,7 @@ from .contracts import (
     validate_projection_route,
     validate_turn_reply_correlation,
 )
-from .delivery_submissions import (
+from .gateway.delivery.submissions import (
     SQLiteDeliverySubmissionMixin,
     initialize_delivery_submission_schema,
 )

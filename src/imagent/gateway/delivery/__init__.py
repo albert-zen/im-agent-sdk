@@ -13,6 +13,13 @@ from .planning import (
     DeliveryPlanningError,
     PlannedDeliverySegment,
 )
+from .submissions import (
+    DeliverySubmissionOrigin,
+    derive_delivery_payload_fingerprint,
+    derive_delivery_submission_id,
+    derive_delivery_target_fingerprint,
+    derive_destination_delivery_id,
+)
 
 __all__ = [
     "DeliveryCoordinator",
@@ -25,5 +32,10 @@ __all__ = [
     "DeliveryPlan",
     "DeliveryPlanner",
     "DeliveryPlanningError",
+    "DeliverySubmissionOrigin",
     "PlannedDeliverySegment",
+    "derive_delivery_payload_fingerprint",
+    "derive_delivery_submission_id",
+    "derive_delivery_target_fingerprint",
+    "derive_destination_delivery_id",
 ]

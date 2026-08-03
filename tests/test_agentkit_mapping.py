@@ -34,6 +34,10 @@ SHARED_PATH_OWNERS = {
         "application-adapters-appserver",
         "application-adapters-t3",
     },
+    "src/imagent/gateway/delivery/submissions.py": {
+        "delivery-planning-and-coordination",
+        "persistence",
+    },
 }
 
 ROOT_MAINTENANCE_PATHS = {
@@ -94,6 +98,10 @@ class AgentKitMappingTests(unittest.TestCase):
             "src/imagent/gateway/delivery/outcome_observation.py": {
                 "delivery-planning-and-coordination"
             },
+            "src/imagent/gateway/delivery/submissions.py": {
+                "delivery-planning-and-coordination",
+                "persistence",
+            },
             "src/imagent/gateway/presentation.py": {"delivery-planning-and-coordination"},
             "src/imagent/events.py": {"projections-and-recovery"},
             "src/imagent/projection_routes.py": {"projections-and-recovery"},
@@ -142,6 +150,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/gateway/delivery/test_outcome_observation.py": {
                 "delivery-planning-and-coordination"
             },
+            "tests/gateway/delivery/test_submissions.py": {"delivery-planning-and-coordination"},
             "tests/gateway/test_presentation.py": {"delivery-planning-and-coordination"},
             "tests/test_event_fanout.py": {"projections-and-recovery"},
             "tests/test_storage.py": {"persistence"},

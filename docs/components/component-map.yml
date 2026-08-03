@@ -698,17 +698,17 @@ components:
     outputs: [DeliverySubmissionRecord]
     public_contracts: [DeliverySubmissionOrigin, derive_delivery_payload_fingerprint, derive_delivery_submission_id, derive_delivery_target_fingerprint, derive_destination_delivery_id]
     public_exports:
-      current: [imagent.contracts:DeliverySubmissionOrigin, imagent.contracts:derive_delivery_payload_fingerprint, imagent.contracts:derive_delivery_submission_id, imagent.contracts:derive_delivery_target_fingerprint, imagent.contracts:derive_destination_delivery_id]
+      current: [imagent.gateway.delivery:DeliverySubmissionOrigin, imagent.gateway.delivery:derive_delivery_payload_fingerprint, imagent.gateway.delivery:derive_delivery_submission_id, imagent.gateway.delivery:derive_delivery_target_fingerprint, imagent.gateway.delivery:derive_destination_delivery_id, imagent.contracts:DeliverySubmissionOrigin, imagent.contracts:derive_delivery_payload_fingerprint, imagent.contracts:derive_delivery_submission_id, imagent.contracts:derive_delivery_target_fingerprint, imagent.contracts:derive_destination_delivery_id]
       target: [imagent.gateway.delivery:DeliverySubmissionOrigin, imagent.gateway.delivery:derive_delivery_payload_fingerprint, imagent.gateway.delivery:derive_delivery_submission_id, imagent.gateway.delivery:derive_delivery_target_fingerprint, imagent.gateway.delivery:derive_destination_delivery_id]
     dependencies: [interaction.messages, interaction.channels.channel-contract, applications.application-contract, gateway.delivery.proactive-authorization, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: In-flight/unknown remain ambiguous; immutable snapshots prevent route drift on retry.
-    current_code: [schemas/v1/deliveries.schema.json, src/imagent/contracts/delivery.py, src/imagent/delivery_submissions.py, src/imagent/proactive_delivery.py]
+    current_code: [schemas/v1/deliveries.schema.json, src/imagent/contracts/delivery.py, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/submissions.py, src/imagent/proactive_delivery.py]
     target_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/submissions.py]
-    current_tests: [tests/test_delivery_ingress.py, tests/test_proactive_delivery.py, tests/test_storage.py]
+    current_tests: [tests/gateway/delivery/test_submissions.py, tests/test_delivery_ingress.py, tests/test_proactive_delivery.py, tests/test_storage.py]
     target_tests: [tests/gateway/delivery/test_submissions.py]
-    authoritative_docs: [docs/components/gateway/design.md, docs/components/persistence/design.md]
+    authoritative_docs: [docs/components/gateway/delivery/submissions/design.md, docs/components/gateway/delivery/submissions/testing.md]
     adrs: [docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
-    gaps: [contract state machine, service, and SQLite rows are currently separated by historical files]
+    gaps: [contract values and proactive orchestration remain in their existing modules; SQLite row encoding remains co-located here until the focused persistence split]
 
   gateway.delivery.proactive-authorization:
     id: gateway.delivery.proactive-authorization
@@ -878,7 +878,7 @@ components:
       target: [imagent.gateway.persistence.sqlite:SQLiteGatewayState]
     dependencies: [interaction.messages, applications.application-contract, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.row-mapping, gateway.persistence.idempotency]
     state_recovery: Additive schema migrations preserve bindings/routes/claims/correlations/submission evidence without content.
-    current_code: [src/imagent/storage.py, src/imagent/delivery_submissions.py, src/imagent/request_correlations.py]
+    current_code: [src/imagent/storage.py, src/imagent/gateway/delivery/submissions.py, src/imagent/request_correlations.py]
     target_code: [src/imagent/gateway/persistence/sqlite.py]
     current_tests: [tests/test_storage.py, tests/test_bindings.py]
     target_tests: [tests/gateway/persistence/test_sqlite.py]
@@ -900,7 +900,7 @@ components:
       target: []
     dependencies: [interaction.messages, applications.application-contract, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Stateless pure mapping; invalid persisted shape fails explicitly.
-    current_code: [src/imagent/sqlite_rows.py, src/imagent/delivery_submissions.py, src/imagent/request_correlations.py, src/imagent/storage.py]
+    current_code: [src/imagent/sqlite_rows.py, src/imagent/gateway/delivery/submissions.py, src/imagent/request_correlations.py, src/imagent/storage.py]
     target_code: [src/imagent/gateway/persistence/row_mapping.py]
     current_tests: [tests/test_storage.py]
     target_tests: [tests/gateway/persistence/test_row_mapping.py]
@@ -1455,7 +1455,7 @@ structural_status:
       owners: [gateway.composition, gateway.lifecycle, gateway.admission, gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.content-transformation, gateway.input.dispatch, gateway.input.failure-presentation, gateway.projection.observation, gateway.projection.request-correlation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.diagnostics]
       reason: The current composition root also sequences admission, input, observation, request routing, presentation, delivery, and diagnostics leaf behavior.
     src/imagent/gateway/delivery/__init__.py:
-      owners: [gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.outcome-observation]
+      owners: [gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.outcome-observation]
       reason: The intentional Gateway delivery package facade re-exports exact public values from focused delivery leaves without implementing any leaf.
     src/imagent/diagnostics.py:
       owners: [interaction.channels.adapters, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.presentation, gateway.delivery.outcome-observation, gateway.diagnostics, applications.application-contract, applications.presentation.live-activity, applications.presentation.artifact-materialization, applications.adapters.appserver.diagnostics]
@@ -1475,7 +1475,7 @@ structural_status:
     src/imagent/request_correlations.py:
       owners: [gateway.projection.request-correlation, gateway.persistence.memory, gateway.persistence.sqlite, gateway.persistence.row-mapping]
       reason: Correlation semantics, in-memory implementation, SQLite mixin, and row mapping share one module.
-    src/imagent/delivery_submissions.py:
+    src/imagent/gateway/delivery/submissions.py:
       owners: [gateway.delivery.submissions, gateway.persistence.sqlite, gateway.persistence.row-mapping]
       reason: Submission state transitions and their SQLite persistence/mapping are co-located.
     src/imagent/proactive_delivery.py:

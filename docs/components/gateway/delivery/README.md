@@ -14,8 +14,10 @@ records only bridge identity/evidence needed for safe convergence.
 - [outcome observation design](outcome-observation/design.md) and
   [testing](outcome-observation/testing.md) — bounded best-effort O2
   notification after one logical delivery attempt.
+- [submissions design](submissions/design.md) and
+  [testing](submissions/testing.md) — immutable proactive-delivery identity,
+  destination snapshots, and durable typed outcomes.
 
-Submissions and proactive delivery/authorization remain mapped to their
-current authoritative documents until their own focused moves. Delivery owns
-no native encoding, durable job, content storage, route policy, or checkpoint
-authority.
+Proactive delivery/authorization remains mapped to its current authoritative
+documents until its own focused move. Delivery owns no native encoding,
+durable job, content storage, route policy, or checkpoint authority.
