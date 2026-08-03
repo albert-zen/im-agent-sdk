@@ -64,6 +64,17 @@ staging root, quota, retention, ledger, or cleanup policy. The historical
 `imagent.channels.native.windows_security` module is removed without a
 compatibility shim.
 
+`ingress_media.py` owns the shared inbound image/file download-validation and
+private staging transaction used by all four built-in Channels. Image and file
+staging intentionally remain together because they share one cross-process
+lock, quota, secure-create, retention cleanup, killable-worker, deadline, and
+cancellation boundary. The module maps Interaction media validation into
+bounded provider-facing outcomes but is not the public `interaction.media`
+value/trust contract. Its spool is process-local inbound preparation, never a
+durable SDK content outbox or consumer artifact ledger. The historical
+`imagent.channels.native.media` module and now-empty native package are removed
+without compatibility shims.
+
 The mutable provider-normalization `InboundMessage` and immutable
 `InboundAttachment` DTOs are also leaf-internal ingress values. They exist
 before construction of the public typed Interaction message, are not exported

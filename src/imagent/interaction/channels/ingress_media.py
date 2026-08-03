@@ -15,13 +15,13 @@ from typing import Any, Generic, Protocol, TypeVar
 
 from PIL import Image
 
-from ...interaction.channels.ingress import InboundAttachment, InboundMessage
-from ...interaction.channels.ingress_security import secure_windows_path
-from ...interaction.media import (
+from ..media import (
     InvalidGenericFileError,
     UnsupportedGenericFileError,
     detect_generic_file,
 )
+from .ingress import InboundAttachment, InboundMessage
+from .ingress_security import secure_windows_path
 
 logger = logging.getLogger(__name__)
 

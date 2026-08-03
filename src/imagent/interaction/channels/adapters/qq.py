@@ -15,8 +15,8 @@ from typing import Any
 import httpx
 import websockets
 
-from ....channels.native.media import materialize_inbound_media
 from ..ingress import ChannelAccessPolicy, InboundMessage
+from ..ingress_media import materialize_inbound_media
 from ..outbound_delivery import (
     ArtifactDeliveryReceipt,
     NativeDeliveryResult,

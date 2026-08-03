@@ -49,9 +49,7 @@ class QQAdapterFacadeTests(unittest.TestCase):
                     "import imagent.interaction.channels.adapters.telegram; "
                     "import imagent.interaction.channels.adapters.weixin; "
                     "assert 'imagent.interaction.channels.adapters.qq' not in sys.modules; "
-                    "assert find_spec('imagent.channels.native.qq') is None; "
-                    "assert find_spec('imagent.channels.native.qq_media') is None; "
-                    "assert find_spec('imagent.channels.native.qq_quote') is None"
+                    "assert find_spec('imagent.channels.native') is None"
                 ),
             ],
             check=False,

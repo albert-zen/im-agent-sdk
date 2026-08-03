@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from ....channels.native.media import (
+from ..ingress_media import (
     MAX_FILE_COUNT,
     MAX_IMAGE_COUNT,
     FileMediaMaterializer,
