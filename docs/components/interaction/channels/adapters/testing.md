@@ -22,3 +22,9 @@ Run the reusable contract kit, `test_native_channels.py`, all four platform
 suites, Gateway vertical tests, package-independence, wheel build, and clean
 install smoke. Target tests mirror platform modules under
 `tests/interaction/channels/adapters/` after the mechanical adapter move.
+
+The shared endpoint-validator test owns the exact accepted schemes and rejects
+whitespace, missing hosts, invalid ports, userinfo, query strings, and
+fragments. QQ and Telegram startup tests additionally prove that both adapters
+consume the single Interaction-owned helper without allocating transport
+resources.

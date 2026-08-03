@@ -33,8 +33,10 @@ QQ quote normalization remains QQ-specific bounded untrusted content and does
 not become a common message/resource contract. Weixin credential/cursor state
 remains native Channel state, not Gateway persistence.
 
-Current native code remains under `src/imagent/channels/native` and runtime
-during migration. Target placement is
-`src/imagent/interaction/channels/adapters/` with platform modules and their
-remaining shared helpers, after contract/ingress/outbound leaves move
-independently.
+The target `src/imagent/interaction/channels/adapters/` package is established
+with the shared QQ/Telegram HTTP endpoint validator. That helper remains
+adapter-internal: it validates provider configuration without opening a
+transport and is not part of the Channel facade. Provider implementations and
+their remaining shared helpers still live under `src/imagent/channels/native`
+and runtime during migration; they move only in later focused mechanical
+slices.
