@@ -8,20 +8,22 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TypeAlias
 
+from ..interaction.media import (
+    AttachmentContent,
+    AttachmentHandle,
+    LocalPath,
+    RemoteUrl,
+)
 from ..interaction.operations import ContractViolation, require_identifier
 from ._validation import validate_thread_ref
 from .model import (
-    AttachmentContent,
-    AttachmentHandle,
     Content,
     ConversationRef,
     DeliveryItemStatus,
     DeliveryReceipt,
     DeliveryReceiptStatus,
     DeliverySegmentStatus,
-    LocalPath,
     Metadata,
-    RemoteUrl,
     TextContent,
     ThreadRef,
 )

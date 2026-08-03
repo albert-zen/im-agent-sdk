@@ -10,7 +10,6 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Protocol, cast
 
-from ..attachments import configure_shared_filesystem_root, resolve_local_attachment
 from ..contracts import (
     AcceptedTurn,
     ActivateNativeThread,
@@ -26,8 +25,6 @@ from ..contracts import (
     ApplicationOperationResult,
     ApplicationRef,
     ApplicationSummary,
-    AttachmentContent,
-    AttachmentSourceKind,
     CreateThread,
     DeleteThread,
     EventSequenceScope,
@@ -74,6 +71,12 @@ from ..contracts import (
 )
 from ..diagnostics import ApplicationDiagnosticFacts, ConnectionDiagnosticFacts
 from ..events import EventBroadcaster, EventStreamReset
+from ..interaction.media import (
+    AttachmentContent,
+    AttachmentSourceKind,
+    configure_shared_filesystem_root,
+    resolve_local_attachment,
+)
 from ..interaction.operations import operation_error
 from .appserver_artifacts import (
     ApplicationArtifactMaterialization,

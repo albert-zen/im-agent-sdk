@@ -61,12 +61,13 @@ language-neutral shapes. The Python dataclasses and validators are the
 reference implementation. Identifiers are non-empty and at most 512
 characters; message content is non-empty at the schema boundary.
 
-This is the lowest runtime value leaf and has no dependency on Gateway or
-Applications implementations. Other leaves may consume these values. A
-message never becomes a generic mutable context bag: behavior-critical values
-require typed fields, while Metadata remains passive extension data and is
-subject to the bounded validation at the boundary that interprets or projects
-it.
+This is a lowest runtime value boundary. It depends only on
+`interaction.media` to include the typed `AttachmentContent` variant in the
+closed `Content` union; it has no dependency on Gateway or Applications
+implementations. Other leaves may consume these values. A message never
+becomes a generic mutable context bag: behavior-critical values require typed
+fields, while Metadata remains passive extension data and is subject to the
+bounded validation at the boundary that interprets or projects it.
 
 Control intent is represented by typed Operations. A Slash command may be
 recognized from inbound text by a Controller, but neither the grammar nor its

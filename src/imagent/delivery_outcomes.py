@@ -10,20 +10,17 @@ from types import MappingProxyType
 from typing import Protocol
 
 from .contracts import (
-    AttachmentContent,
-    AttachmentHandle,
     DeliveryItemReceipt,
     DeliveryReceipt,
     DeliverySegmentReceipt,
-    LocalPath,
     OutboundMessage,
-    RemoteUrl,
     TextContent,
 )
 from .diagnostics import (
     DeliveryOutcomeObserverDiagnosticFacts,
     DeliveryOutcomeObserverFailureCode,
 )
+from .interaction.media import AttachmentContent, AttachmentHandle, LocalPath, RemoteUrl
 
 
 class DeliveryOutcomeErrorCode(StrEnum):

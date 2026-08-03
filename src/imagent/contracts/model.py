@@ -6,6 +6,12 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Generic, TypeAlias, TypeVar
 
+from ..interaction.media import (
+    AttachmentContent,
+    AttachmentGrouping,
+    AttachmentSourceKind,
+)
+
 Metadata: TypeAlias = Mapping[str, object]
 T = TypeVar("T")
 
@@ -125,22 +131,10 @@ class ThreadDeletionCapability(StrEnum):
     PERMANENT = "permanent"
 
 
-class AttachmentSourceKind(StrEnum):
-    LOCAL_PATH = "local_path"
-    REMOTE_URL = "remote_url"
-    ATTACHMENT_HANDLE = "attachment_handle"
-
-
 class TextLengthUnit(StrEnum):
     CODE_POINTS = "code_points"
     UTF16_CODE_UNITS = "utf16_code_units"
     UTF8_BYTES = "utf8_bytes"
-
-
-class AttachmentGrouping(StrEnum):
-    NONE = "none"
-    SAME_MEDIA_FAMILY = "same_media_family"
-    MIXED = "mixed"
 
 
 class ReplyReferenceScope(StrEnum):
@@ -295,46 +289,6 @@ class TextFormat(StrEnum):
 class TextContent:
     text: str
     format: TextFormat = TextFormat.PLAIN
-
-
-@dataclass(frozen=True, slots=True)
-class LocalPath:
-    path: str
-    kind: AttachmentSourceKind = field(
-        init=False,
-        default=AttachmentSourceKind.LOCAL_PATH,
-    )
-
-
-@dataclass(frozen=True, slots=True)
-class RemoteUrl:
-    url: str
-    kind: AttachmentSourceKind = field(
-        init=False,
-        default=AttachmentSourceKind.REMOTE_URL,
-    )
-
-
-@dataclass(frozen=True, slots=True)
-class AttachmentHandle:
-    handle_id: str
-    kind: AttachmentSourceKind = field(
-        init=False,
-        default=AttachmentSourceKind.ATTACHMENT_HANDLE,
-    )
-
-
-AttachmentSource: TypeAlias = LocalPath | RemoteUrl | AttachmentHandle
-
-
-@dataclass(frozen=True, slots=True)
-class AttachmentContent:
-    attachment_id: str
-    media_type: str
-    source: AttachmentSource
-    filename: str | None = None
-    size_bytes: int | None = None
-    metadata: Metadata = field(default_factory=dict)
 
 
 Content: TypeAlias = TextContent | AttachmentContent

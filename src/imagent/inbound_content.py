@@ -5,11 +5,12 @@ import math
 from collections.abc import Callable
 from typing import Protocol
 
-from .contracts import AttachmentContent, Content, InboundMessage, TextContent
+from .contracts import Content, InboundMessage, TextContent
 from .diagnostics import (
     InboundContentTransformerDiagnosticFacts,
     InboundContentTransformFailureCode,
 )
+from .interaction.media import AttachmentContent
 
 
 class InboundContentTransformer(Protocol):

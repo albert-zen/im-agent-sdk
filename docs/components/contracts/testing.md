@@ -2,7 +2,8 @@
 
 Focused Interaction scenarios are now owned by the
 [messages](../interaction/messages/testing.md) and
-[operations](../interaction/operations/testing.md) test designs. This broad
+[operations](../interaction/operations/testing.md) test designs, with source
+and trust coverage owned by [media](../interaction/media/testing.md). This broad
 page remains current evidence for contract leaves not yet mechanically split.
 
 ## Required checks

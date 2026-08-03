@@ -91,8 +91,8 @@ components:
       - docs/migrations/imcodex-followup-blockers.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
-      - src/imagent/attachments.py
-      - tests/test_attachments.py
+      - src/imagent/interaction/media.py
+      - tests/interaction/test_media.py
     docs:
       - docs/components/interaction/media/design.md
       - docs/components/interaction/media/testing.md

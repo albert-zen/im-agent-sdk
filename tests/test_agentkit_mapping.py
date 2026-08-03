@@ -82,7 +82,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "src/imagent/interaction/operations.py": {"contracts"},
             "src/imagent/contracts/operations.py": {"contracts"},
             "src/imagent/adapters.py": {"ports"},
-            "src/imagent/attachments.py": {"attachments-and-media"},
+            "src/imagent/interaction/media.py": {"attachments-and-media"},
             "src/imagent/gateway.py": {"gateway"},
             "src/imagent/gateway_composition.py": {"gateway"},
             "src/imagent/inbound_content.py": {"gateway"},
@@ -124,7 +124,7 @@ class AgentKitMappingTests(unittest.TestCase):
         expected = {
             "tests/interaction/test_operations.py": {"contracts"},
             "tests/test_contracts.py": {"contracts"},
-            "tests/test_attachments.py": {"attachments-and-media"},
+            "tests/interaction/test_media.py": {"attachments-and-media"},
             "tests/test_gateway_operations.py": {"gateway"},
             "tests/test_inbound_content_transformer.py": {"gateway"},
             "tests/test_inbound_failure_presenter.py": {"gateway"},

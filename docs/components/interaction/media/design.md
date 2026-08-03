@@ -73,9 +73,10 @@ crash-safe cleanup before returning bounded typed `AttachmentContent`. O2 may
 notify clean-process release but is best-effort and cannot become a durable
 cleanup mechanism.
 
-The leaf depends on `interaction.messages` for the shared content vocabulary.
-Channel and Application leaves may depend on media; media imports neither
-Gateway nor a Channel/Application implementation.
+`interaction.messages` depends on this leaf to include `AttachmentContent` in
+its closed `Content` union. Media itself imports no Message, Gateway, Channel,
+or Application implementation; Channel and Application leaves may consume
+the typed media values.
 
 ## State and recovery
 
@@ -93,11 +94,13 @@ materialization never advances a recoverable completion checkpoint.
 
 ## Current and target structure
 
-Media values and helpers are currently spread across message, capability, and
-delivery schemas plus `src/imagent/attachments.py`,
-`src/imagent/contracts/model.py`, `src/imagent/contracts/delivery.py`, and
-`src/imagent/delivery_ingress.py`. These are declared split candidates where
-they also contain Channel, Gateway, persistence, or Application concerns.
+The extraction is intentionally split by ownership. The first mechanical
+slice moves the source discriminants, attachment value, and local-filesystem
+trust helpers from `src/imagent/contracts/model.py` and
+`src/imagent/attachments.py` into the owning leaf. The mixed message Content
+union, capability declarations, delivery records, and proactive ingress stay
+in their current owners until their own focused slices; this move does not
+change their behavior or schemas.
 
 The mechanical target is:
 
@@ -106,10 +109,14 @@ src/imagent/interaction/media.py
 tests/interaction/test_media.py
 ```
 
-The later move must preserve schema and public-facade compatibility while
-leaving byte lifetime, proactive orchestration, native delivery, and
-Application materialization in their owning components. It must not retain a
-second media implementation or introduce an SDK durable spool.
+The deliberate `imagent.contracts` public facade re-exports the exact media
+objects from this leaf. Repository runtime imports use the owning leaf, and
+the obsolete `imagent.attachments` internal module is not retained. Inline
+artifact staging remains physically in Gateway proactive ingress for now and
+is an explicit remaining split: a later mechanical slice may extract its pure
+bounded staging mechanics without moving authorization, delivery, or cleanup
+lifetime into Interaction. No phase retains a second implementation or
+introduces an SDK durable spool.
 
 ## Authority
 

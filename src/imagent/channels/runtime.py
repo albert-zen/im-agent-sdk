@@ -12,8 +12,6 @@ from typing import Protocol
 
 from ..adapters import InboundAdmissionHandler, MessageHandler, OperationHandler
 from ..contracts import (
-    AttachmentContent,
-    AttachmentSourceKind,
     ChannelCapabilities,
     ConversationRef,
     DeliveryItemReceipt,
@@ -21,12 +19,12 @@ from ..contracts import (
     DeliveryReceipt,
     DeliveryReceiptStatus,
     InboundMessage,
-    LocalPath,
     OutboundMessage,
     SupportLevel,
     TextContent,
     TextFormat,
 )
+from ..interaction.media import AttachmentContent, AttachmentSourceKind, LocalPath
 from .native.base import ChannelRouteContext
 from .native.diagnostics import (
     NativeChannelDiagnosticSnapshot,
