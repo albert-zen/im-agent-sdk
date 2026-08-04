@@ -19,14 +19,22 @@ Persistence owns implementations for:
   and typed receipts.
 
 The current implementations are in-memory repositories and
-`SQLiteGatewayState`; `sqlite_rows.py` contains only SQLite row/merge mapping
-helpers used by that implementation.
+`SQLiteGatewayState`. Pure row conversion is split across `sqlite_rows.py`,
+the request-correlation SQLite mixin, the delivery-submission SQLite mixin,
+and a few transaction-owner helpers. `sqlite_rows.py` also contains
+`merge_projection_route`, whose endpoint-conflict and checkpoint-preservation
+rules are SQLite repository mutation policy rather than pure row mapping.
 
 `SQLiteGatewayState` intentionally keeps bindings, routes/correlations, and
 idempotency in one adapter because they share one connection, lock, migration,
 and transaction boundary. Row conversion is extracted, but splitting the
 transaction owner merely to meet a line-count warning would weaken that
 boundary without creating a second responsibility.
+
+The shared transaction owner and pure row mapping therefore remain an
+explained extraction gap; the target move keeps `merge_projection_route` with
+SQLite mutation policy and consolidates only pure conversion in the row-mapping
+leaf.
 
 It must not store:
 

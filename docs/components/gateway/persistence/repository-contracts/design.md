@@ -59,4 +59,7 @@ across memory and SQLite.
 - [Persistence design](../../../persistence/design.md)
 - [Ports design](../../../ports/design.md)
 - [ADR 0007](../../../../decisions/0007-projection-lifecycle-and-delivery-boundaries.md)
+- [ADR 0008](../../../../decisions/0008-interactive-request-routing.md)
+- [ADR 0009](../../../../decisions/0009-proactive-delivery-routing.md)
 - [ADR 0011](../../../../decisions/0011-durable-inbound-admission-before-media.md)
+- [ADR 0012](../../../../decisions/0012-input-continuation-and-reply-correlation.md)
