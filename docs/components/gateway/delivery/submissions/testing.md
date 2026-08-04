@@ -13,6 +13,11 @@ until their later test-convergence slice because moving their surrounding
 orchestration fixtures here would mix proactive-delivery behavior into a
 mechanical ownership move.
 
+Current-schema row tests also prove that malformed delivery snapshot scope,
+timestamp, state, enum, or receipt JSON is rejected after complete typed
+record validation. SQLite must leave that evidence untouched and must not
+interpret it as permission to retry or resend.
+
 Reservation parity tests must prove that memory and SQLite both accept the
 same root plus the same order-independent destination snapshot set, while
 rejecting a changed destination ID or any changed snapshot field. The existing

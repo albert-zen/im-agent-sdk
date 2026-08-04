@@ -19,6 +19,7 @@ from .contracts import (
     validate_request_route_correlation,
 )
 from .interaction.messages import ConversationRef
+from .sqlite_rows import decode_datetime, empty_storage_text, required_text
 
 
 class InMemoryRequestCorrelationRepository:
@@ -590,36 +591,42 @@ def _write_correlation(
 
 
 def _correlation_from_row(row: sqlite3.Row) -> RequestRouteCorrelation:
-    application_id = str(row["application_instance_id"])
-    project_id = str(row["project_id"])
+    application_id = required_text(row["application_instance_id"], "application_instance_id")
+    project_id = empty_storage_text(row["project_id"], "project_id")
     project_ref = ProjectRef(application_id, project_id) if project_id else None
-    return RequestRouteCorrelation(
-        correlation_id=str(row["correlation_id"]),
+    correlation = RequestRouteCorrelation(
+        correlation_id=required_text(row["correlation_id"], "correlation_id"),
         request_ref=RequestRef(
             application_ref=ApplicationRef(application_id),
-            native_request_id=str(row["native_request_id"]),
+            native_request_id=required_text(row["native_request_id"], "native_request_id"),
         ),
         thread_ref=ThreadRef(
             application_instance_id=application_id,
-            native_thread_id=str(row["thread_id"]),
+            native_thread_id=required_text(row["thread_id"], "thread_id"),
             project_ref=project_ref,
         ),
-        turn_id=str(row["turn_id"]),
+        turn_id=required_text(row["turn_id"], "turn_id"),
         conversation_ref=ConversationRef(
-            channel_instance_id=str(row["channel_instance_id"]),
-            native_conversation_id=str(row["native_conversation_id"]),
+            channel_instance_id=required_text(row["channel_instance_id"], "channel_instance_id"),
+            native_conversation_id=required_text(
+                row["native_conversation_id"], "native_conversation_id"
+            ),
         ),
-        delivery_id=str(row["delivery_id"]),
-        response_shape=_decode_response_shape(str(row["response_shape_json"])),
-        state=RequestRouteState(str(row["state"])),
-        created_at=datetime.fromisoformat(str(row["created_at"])),
-        updated_at=datetime.fromisoformat(str(row["updated_at"])),
+        delivery_id=required_text(row["delivery_id"], "delivery_id"),
+        response_shape=_decode_response_shape(
+            required_text(row["response_shape_json"], "response_shape_json")
+        ),
+        state=RequestRouteState(required_text(row["state"], "state")),
+        created_at=decode_datetime(row["created_at"], "created_at"),
+        updated_at=decode_datetime(row["updated_at"], "updated_at"),
         expires_at=(
-            datetime.fromisoformat(str(row["expires_at"]))
+            decode_datetime(row["expires_at"], "expires_at")
             if row["expires_at"] is not None
             else None
         ),
     )
+    validate_request_route_correlation(correlation)
+    return correlation
 
 
 def _encode_response_shape(correlation: RequestRouteCorrelation) -> str:
@@ -655,21 +662,57 @@ def _decode_response_shape(value: str):
         UserInputResponseShape,
     )
 
-    payload = json.loads(value)
-    if payload.get("kind") == "approval":
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError as error:
+        raise ValueError("response_shape_json must be valid JSON") from error
+    if not isinstance(payload, dict):
+        raise ValueError("response_shape_json must contain an object")
+    kind = payload.get("kind")
+    if kind == "approval":
+        if set(payload) != {"kind", "choice_ids"} or not isinstance(payload["choice_ids"], list):
+            raise ValueError("approval response shape is malformed")
+        if not all(isinstance(choice_id, str) for choice_id in payload["choice_ids"]):
+            raise ValueError("approval response shape choice IDs must be text")
         return ApprovalResponseShape(choice_ids=tuple(payload["choice_ids"]))
-    return UserInputResponseShape(
-        questions=tuple(
+    if kind != "user_input" or set(payload) != {"kind", "questions"}:
+        raise ValueError("response shape kind is invalid")
+    questions = payload["questions"]
+    if not isinstance(questions, list):
+        raise ValueError("user input response shape questions must be a list")
+    decoded_questions: list[UserInputQuestionShape] = []
+    expected_keys = {
+        "question_id",
+        "choice_ids",
+        "allows_other",
+        "min_answers",
+        "max_answers",
+    }
+    for question in questions:
+        if not isinstance(question, dict) or set(question) != expected_keys:
+            raise ValueError("user input response shape question is malformed")
+        choice_ids = question["choice_ids"]
+        if (
+            not isinstance(question["question_id"], str)
+            or not isinstance(choice_ids, list)
+            or not all(isinstance(choice_id, str) for choice_id in choice_ids)
+            or not isinstance(question["allows_other"], bool)
+            or not isinstance(question["min_answers"], int)
+            or isinstance(question["min_answers"], bool)
+            or not isinstance(question["max_answers"], int)
+            or isinstance(question["max_answers"], bool)
+        ):
+            raise ValueError("user input response shape question fields are malformed")
+        decoded_questions.append(
             UserInputQuestionShape(
-                question_id=str(question["question_id"]),
-                choice_ids=tuple(question["choice_ids"]),
-                allows_other=bool(question["allows_other"]),
-                min_answers=int(question["min_answers"]),
-                max_answers=int(question["max_answers"]),
+                question_id=question["question_id"],
+                choice_ids=tuple(choice_ids),
+                allows_other=question["allows_other"],
+                min_answers=question["min_answers"],
+                max_answers=question["max_answers"],
             )
-            for question in payload["questions"]
         )
-    )
+    return UserInputResponseShape(questions=tuple(decoded_questions))
 
 
 def _thread_storage_key(thread_ref: ThreadRef) -> tuple[str, str, str]:

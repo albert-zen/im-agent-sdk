@@ -11,6 +11,9 @@ from .contracts import (
     ThreadProjectionRoute,
     ThreadRef,
     TurnReplyCorrelation,
+    validate_binding,
+    validate_projection_route,
+    validate_turn_reply_correlation,
 )
 from .interaction.messages import ConversationRef
 
@@ -19,32 +22,41 @@ def binding_from_row(row: sqlite3.Row) -> ConversationBinding:
     application_id = row["application_instance_id"]
     project_id = row["project_id"]
     thread_id = row["thread_id"]
-    application_ref = ApplicationRef(str(application_id)) if application_id is not None else None
+    if application_id is None and (project_id is not None or thread_id is not None):
+        raise ValueError("binding scope requires an application")
+    application_ref = None
+    if application_id is not None:
+        application_ref = ApplicationRef(required_text(application_id, "application_instance_id"))
     project_ref = (
-        ProjectRef(str(application_id), str(project_id))
-        if application_id is not None and project_id is not None
+        ProjectRef(
+            application_ref.application_instance_id,
+            required_text(project_id, "project_id"),
+        )
+        if application_ref is not None and project_id is not None
         else None
     )
     thread_ref = (
         ThreadRef(
-            application_instance_id=str(application_id),
-            native_thread_id=str(thread_id),
+            application_instance_id=application_ref.application_instance_id,
+            native_thread_id=required_text(thread_id, "thread_id"),
             project_ref=project_ref,
         )
-        if application_id is not None and thread_id is not None
+        if application_ref is not None and thread_id is not None
         else None
     )
-    return ConversationBinding(
+    binding = ConversationBinding(
         conversation_ref=ConversationRef(
-            str(row["channel_instance_id"]),
-            str(row["native_conversation_id"]),
+            required_text(row["channel_instance_id"], "channel_instance_id"),
+            required_text(row["native_conversation_id"], "native_conversation_id"),
         ),
         application_ref=application_ref,
         project_ref=project_ref,
         thread_ref=thread_ref,
-        revision=int(row["revision"]),
-        updated_at=datetime.fromisoformat(str(row["updated_at"])),
+        revision=required_integer(row["revision"], "revision"),
+        updated_at=decode_datetime(row["updated_at"], "updated_at"),
     )
+    validate_binding(binding)
+    return binding
 
 
 def thread_storage_key(thread_ref: ThreadRef) -> tuple[str, str, str]:
@@ -92,56 +104,96 @@ def merge_projection_route(
 
 
 def projection_route_from_row(row: sqlite3.Row) -> ThreadProjectionRoute:
-    application_id = str(row["application_instance_id"])
-    project_id = str(row["project_id"])
+    application_id = required_text(row["application_instance_id"], "application_instance_id")
+    project_id = empty_storage_text(row["project_id"], "project_id")
     project_ref = ProjectRef(application_id, project_id) if project_id else None
-    return ThreadProjectionRoute(
-        route_id=str(row["route_id"]),
+    route = ThreadProjectionRoute(
+        route_id=required_text(row["route_id"], "route_id"),
         thread_ref=ThreadRef(
             application_instance_id=application_id,
-            native_thread_id=str(row["thread_id"]),
+            native_thread_id=required_text(row["thread_id"], "thread_id"),
             project_ref=project_ref,
         ),
         conversation_ref=ConversationRef(
-            channel_instance_id=str(row["channel_instance_id"]),
-            native_conversation_id=str(row["native_conversation_id"]),
+            channel_instance_id=required_text(row["channel_instance_id"], "channel_instance_id"),
+            native_conversation_id=required_text(
+                row["native_conversation_id"], "native_conversation_id"
+            ),
         ),
-        reply_to_message_id=(
-            str(row["reply_to_message_id"]) if row["reply_to_message_id"] is not None else None
-        ),
-        checkpoint_agent_item_id=(
-            str(row["checkpoint_agent_item_id"])
-            if row["checkpoint_agent_item_id"] is not None
-            else None
+        reply_to_message_id=optional_text(row["reply_to_message_id"], "reply_to_message_id"),
+        checkpoint_agent_item_id=optional_text(
+            row["checkpoint_agent_item_id"], "checkpoint_agent_item_id"
         ),
         checkpointed_at=(
-            datetime.fromisoformat(str(row["checkpointed_at"]))
+            decode_datetime(row["checkpointed_at"], "checkpointed_at")
             if row["checkpointed_at"] is not None
             else None
         ),
-        updated_at=datetime.fromisoformat(str(row["updated_at"])),
+        updated_at=decode_datetime(row["updated_at"], "updated_at"),
     )
+    validate_projection_route(route)
+    return route
 
 
 def turn_reply_correlation_from_row(
     row: sqlite3.Row,
 ) -> TurnReplyCorrelation:
-    application_id = str(row["application_instance_id"])
-    project_id = str(row["project_id"])
+    application_id = required_text(row["application_instance_id"], "application_instance_id")
+    project_id = empty_storage_text(row["project_id"], "project_id")
     project_ref = ProjectRef(application_id, project_id) if project_id else None
-    return TurnReplyCorrelation(
-        correlation_id=str(row["correlation_id"]),
+    correlation = TurnReplyCorrelation(
+        correlation_id=required_text(row["correlation_id"], "correlation_id"),
         thread_ref=ThreadRef(
             application_instance_id=application_id,
-            native_thread_id=str(row["thread_id"]),
+            native_thread_id=required_text(row["thread_id"], "thread_id"),
             project_ref=project_ref,
         ),
-        turn_id=str(row["turn_id"]),
-        client_message_id=str(row["client_message_id"]),
+        turn_id=required_text(row["turn_id"], "turn_id"),
+        client_message_id=required_text(row["client_message_id"], "client_message_id"),
         conversation_ref=ConversationRef(
-            channel_instance_id=str(row["channel_instance_id"]),
-            native_conversation_id=str(row["native_conversation_id"]),
+            channel_instance_id=required_text(row["channel_instance_id"], "channel_instance_id"),
+            native_conversation_id=required_text(
+                row["native_conversation_id"], "native_conversation_id"
+            ),
         ),
-        reply_to_message_id=str(row["reply_to_message_id"]),
-        created_at=datetime.fromisoformat(str(row["created_at"])),
+        reply_to_message_id=required_text(row["reply_to_message_id"], "reply_to_message_id"),
+        created_at=decode_datetime(row["created_at"], "created_at"),
     )
+    validate_turn_reply_correlation(correlation)
+    return correlation
+
+
+def required_text(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{label} must be a non-empty SQLite text value")
+    return value
+
+
+def optional_text(value: object, label: str) -> str | None:
+    if value is None:
+        return None
+    return required_text(value, label)
+
+
+def empty_storage_text(value: object, label: str) -> str | None:
+    """Decode the current NOT NULL empty-string sentinel for an absent Project."""
+
+    if value == "":
+        return None
+    return required_text(value, label)
+
+
+def required_integer(value: object, label: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"{label} must be an SQLite integer")
+    return value
+
+
+def decode_datetime(value: object, label: str) -> datetime:
+    try:
+        decoded = datetime.fromisoformat(required_text(value, label))
+    except ValueError as error:
+        raise ValueError(f"{label} must be an ISO timestamp") from error
+    if decoded.tzinfo is None or decoded.utcoffset() is None:
+        raise ValueError(f"{label} must include a timezone")
+    return decoded

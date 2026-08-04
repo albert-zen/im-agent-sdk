@@ -30,13 +30,26 @@ not be inferred from text or timestamps. Optional values must remain
 distinguishable from empty stable identifiers. Enums and structured JSON use
 closed typed decoders rather than falling back to a default policy or state.
 
-The current helpers do not yet meet that complete target. In particular,
-`binding_from_row` silently collapses project/thread columns when the
-Application column is null, and route/checkpoint/Turn decoders do not all run
-the complete state-contract validator after construction. This is an explicit
-validation gap. The later row-mapping move must preserve current behavior as a
-mechanical slice; tightening malformed-row behavior requires its own focused
-behavior issue and migration compatibility decision.
+Every current-schema row is decoded as a complete typed value and then passes
+its owning state-contract validator. A nullable binding Application scope is
+valid only when its Project and Thread columns are also null; a mapper must
+reject, never discard, a partial scope. Checkpoint ID/time is an all-or-nothing
+pair. Request shapes and delivery receipts are closed JSON payloads: unknown
+kinds, missing required fields, incompatible scalar/container types, invalid
+enums, timestamps, identities, or response cardinality reject the row.
+
+## Compatibility decision
+
+The immediately preceding supported SQLite schema is upgraded only by the
+SQLite transaction owner before mapping: it adds the checkpoint columns and
+clears the legacy `reply_to_message_id`, whose former latest-inbound meaning
+cannot safely become durable reply authority. That valid legacy shape remains
+supported. After that upgrade, every persisted row is interpreted as the
+current schema and must be complete and valid. The mapper does not silently
+repair malformed rows, guess a missing Application, default an enum, coerce a
+partial route into an explicit Conversation snapshot, or authorize recovery,
+replay, retry, or a native side effect. A malformed current row therefore
+fails the repository read explicitly and remains operator-visible.
 
 Datetime values round-trip in their declared ISO representation and are used
 as facts, not idempotency keys or sortable Application cursors. Delivery
@@ -59,8 +72,8 @@ mapper: it enforces endpoint conflicts and preserves a prior checkpoint during
 a route write. That mutation policy belongs to the SQLite owner and must move
 with it. The target mechanical slice consolidates only pure conversion in
 `gateway/persistence/row_mapping.py`, without moving SQL mutation order or
-creating a public API, and without silently folding the separate validation
-gap into a file move.
+creating a public API, and without changing this validation or compatibility
+decision.
 
 ## Authority
 

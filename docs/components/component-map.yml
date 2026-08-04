@@ -877,7 +877,7 @@ components:
       current: [imagent.storage:SQLiteGatewayState]
       target: [imagent.gateway.persistence.sqlite:SQLiteGatewayState]
     dependencies: [interaction.messages, applications.application-contract, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.row-mapping]
-    state_recovery: Additive schema migrations preserve bindings/routes/claims/correlations/submission evidence without content.
+    state_recovery: The SQLite owner upgrades only the immediately preceding route shape; current malformed rows fail closed without repair, authority inference, replay, or resend.
     current_code: [src/imagent/storage.py, src/imagent/sqlite_rows.py, src/imagent/gateway/delivery/submissions.py, src/imagent/request_correlations.py]
     target_code: [src/imagent/gateway/persistence/sqlite.py]
     current_tests: [tests/test_storage.py, tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_submission_identity.py]
@@ -899,14 +899,14 @@ components:
       current: []
       target: []
     dependencies: [interaction.messages, applications.application-contract, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
-    state_recovery: Stateless pure mapping; complete explicit rejection of invalid persisted shape is a recorded target gap, not a current recovery guarantee.
+    state_recovery: Stateless pure mapping rejects malformed current rows after complete typed validation; only the SQLite owner transforms the immediately supported legacy route shape before mapping.
     current_code: [src/imagent/sqlite_rows.py, src/imagent/gateway/delivery/submissions.py, src/imagent/request_correlations.py, src/imagent/storage.py]
     target_code: [src/imagent/gateway/persistence/row_mapping.py]
     current_tests: [tests/test_storage.py]
     target_tests: [tests/gateway/persistence/test_row_mapping.py]
     authoritative_docs: [docs/components/gateway/persistence/row-mapping/design.md, docs/components/gateway/persistence/row-mapping/testing.md, docs/components/persistence/design.md, docs/components/repository-maintainability/design.md]
     adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [delivery/request row helpers remain mixed into SQLite mixins, current decoders can collapse malformed nullable binding scope and do not uniformly run complete state validators]
+    gaps: [delivery/request row helpers remain mixed into SQLite mixins]
 
   gateway.diagnostics:
     id: gateway.diagnostics

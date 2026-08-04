@@ -744,6 +744,238 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                 await gateway.stop()
                 await state.close()
 
+    async def test_valid_legacy_route_upgrade_survives_restart(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "legacy-restart.sqlite3"
+            now = datetime.now(UTC)
+            connection = sqlite3.connect(path)
+            try:
+                connection.executescript(
+                    """
+                    CREATE TABLE thread_projection_routes (
+                        route_id TEXT NOT NULL PRIMARY KEY,
+                        application_instance_id TEXT NOT NULL,
+                        project_id TEXT NOT NULL,
+                        thread_id TEXT NOT NULL,
+                        channel_instance_id TEXT NOT NULL,
+                        native_conversation_id TEXT NOT NULL,
+                        reply_to_message_id TEXT,
+                        updated_at TEXT NOT NULL
+                    );
+                    """
+                )
+                connection.execute(
+                    """
+                    INSERT INTO thread_projection_routes VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "route-legacy",
+                        "app-legacy",
+                        "",
+                        "thread-legacy",
+                        "qq",
+                        "c",
+                        "old",
+                        now.isoformat(),
+                    ),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            first = SQLiteGatewayState(path)
+            try:
+                migrated = (await first.list_projection_routes())[0]
+                self.assertIsNone(migrated.reply_to_message_id)
+                self.assertIsNone(migrated.checkpoint_agent_item_id)
+            finally:
+                await first.close()
+
+            second = SQLiteGatewayState(path)
+            try:
+                recovered = (await second.list_projection_routes())[0]
+                self.assertEqual(recovered, migrated)
+            finally:
+                await second.close()
+
+    async def test_malformed_current_rows_fail_closed_without_repair(self) -> None:
+        now = datetime.now(UTC)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "malformed.sqlite3"
+            state = SQLiteGatewayState(path)
+            binding = ConversationBinding(
+                conversation_ref=ConversationRef("qq", "binding"),
+                application_ref=ApplicationRef("app"),
+                project_ref=ProjectRef("app", "project"),
+            )
+            route = ThreadProjectionRoute(
+                route_id="route",
+                thread_ref=ThreadRef("app", "thread"),
+                conversation_ref=ConversationRef("qq", "route"),
+                updated_at=now,
+            )
+            request = self._request_correlation(
+                application_id="app",
+                native_request_id="request",
+                conversation_id="request",
+                now=now,
+            )
+            malformed_shape_request = self._request_correlation(
+                application_id="app",
+                native_request_id="malformed-shape",
+                conversation_id="malformed-shape",
+                now=now,
+            )
+            turn_correlation = TurnReplyCorrelation(
+                correlation_id="turn-correlation",
+                thread_ref=ThreadRef("app", "turn-thread"),
+                turn_id="turn",
+                client_message_id="client",
+                conversation_ref=ConversationRef("qq", "turn"),
+                reply_to_message_id="reply",
+                created_at=now,
+            )
+            try:
+                await state.put(binding)
+                await state.put_projection_route(route)
+                await state.put_request_correlation(request)
+                await state.put_request_correlation(malformed_shape_request)
+                await state.put_turn_reply_correlation(turn_correlation)
+            finally:
+                await state.close()
+
+            connection = sqlite3.connect(path)
+            try:
+                connection.execute(
+                    """
+                    UPDATE conversation_bindings
+                    SET application_instance_id = NULL, project_id = 'orphan'
+                    """
+                )
+                connection.execute(
+                    """
+                    UPDATE thread_projection_routes
+                    SET checkpoint_agent_item_id = 'item', checkpointed_at = NULL
+                    """
+                )
+                connection.execute(
+                    """
+                    UPDATE request_route_correlations
+                    SET state = 'invalid'
+                    WHERE native_request_id = 'request'
+                    """
+                )
+                connection.execute(
+                    """
+                    UPDATE request_route_correlations
+                    SET response_shape_json = '{"kind":"unknown"}'
+                    WHERE native_request_id = 'malformed-shape'
+                    """
+                )
+                connection.execute(
+                    """
+                    UPDATE turn_reply_correlations SET created_at = 'not-a-timestamp'
+                    """
+                )
+                connection.execute(
+                    """
+                    INSERT INTO delivery_submissions VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "submission",
+                        "delivery",
+                        "external",
+                        "principal",
+                        "target",
+                        "payload",
+                        now.isoformat(),
+                        now.isoformat(),
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO delivery_submission_destinations VALUES
+                    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "submission",
+                        "destination",
+                        "qq",
+                        "delivery",
+                        "",
+                        "",
+                        "",
+                        "",
+                        None,
+                        None,
+                        "accepted",
+                        "{not-json}",
+                        None,
+                        now.isoformat(),
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO idempotency_records VALUES (?, ?, ?, ?, ?)
+                    """,
+                    ("scope", "key", "not-a-status", None, now.isoformat()),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO idempotency_records VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "scope",
+                        "naive-time",
+                        "in_flight",
+                        None,
+                        now.replace(tzinfo=None).isoformat(),
+                    ),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            corrupted = SQLiteGatewayState(path)
+            try:
+                with self.assertRaisesRegex(ValueError, "binding scope"):
+                    await corrupted.get(binding.conversation_ref)
+                with self.assertRaisesRegex(Exception, "checkpoint"):
+                    await corrupted.list_projection_routes()
+                with self.assertRaisesRegex(ValueError, "RequestRouteState"):
+                    await corrupted.list_request_correlations(request_ref=request.request_ref)
+                with self.assertRaisesRegex(ValueError, "response shape"):
+                    await corrupted.list_request_correlations(
+                        request_ref=malformed_shape_request.request_ref
+                    )
+                with self.assertRaisesRegex(ValueError, "created_at"):
+                    await corrupted.list_turn_reply_correlations()
+                with self.assertRaisesRegex(ValueError, "receipt_json"):
+                    await corrupted.get_delivery_submission("submission")
+                with self.assertRaisesRegex(ValueError, "idempotency status"):
+                    await corrupted.claim("scope", "key")
+                with self.assertRaisesRegex(ValueError, "timezone"):
+                    await corrupted.claim("scope", "naive-time")
+            finally:
+                await corrupted.close()
+
+            connection = sqlite3.connect(path)
+            try:
+                binding_row = connection.execute(
+                    "SELECT application_instance_id, project_id FROM conversation_bindings"
+                ).fetchone()
+                self.assertEqual(binding_row, (None, "orphan"))
+                route_row = connection.execute(
+                    "SELECT checkpoint_agent_item_id, checkpointed_at FROM thread_projection_routes"
+                ).fetchone()
+                self.assertEqual(route_row, ("item", None))
+                receipt_row = connection.execute(
+                    "SELECT receipt_json FROM delivery_submission_destinations"
+                ).fetchone()
+                self.assertEqual(receipt_row, ("{not-json}",))
+            finally:
+                connection.close()
+
 
 if __name__ == "__main__":
     unittest.main()
