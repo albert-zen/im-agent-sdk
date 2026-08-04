@@ -14,9 +14,17 @@ It is a wiring boundary, not a service locator or a fourth business layer.
 
 This leaf owns the immutable `GatewayRepositories`, `GatewayLimits`, and
 `GatewayExtensions` construction values and the wiring that passes each value
-to its single owning runtime. It does not own product commands, native adapter
-internals, repository implementations, Channel access policy, Application
-execution truth, or a generic pipeline/hook registry.
+to its documented owner or read-only consumer. It does not own product
+commands, native adapter internals, repository implementations, Channel access
+policy, Application execution truth, or a generic pipeline/hook registry.
+
+The configured binding repository is constructor-injected into the sole
+mutating `gateway.routing.bindings` runtime. Projection-route policy receives
+the same repository only as the read authority needed to test foreground
+binding equality; `ImAgentGateway` itself does not retain or call the binding
+repository. Composition still sequences Application Project/Thread truth,
+binding transition facts, and foreground projection-route preparation without
+becoming a second mutation owner.
 
 Inputs are explicitly configured Application and Channel instances plus typed
 Controller, repository, delivery, authorization, limit, and extension

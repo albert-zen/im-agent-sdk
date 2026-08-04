@@ -83,9 +83,10 @@ the exact projection-route operation/result values from
 their request-correlation owner; it does not define a second union or preserve
 the moved route values in `imagent.contracts`. They do not dispatch
 `ApplicationOperation`, receive a generic repository/context object, or perform
-owner mutation or concrete validation. Root binding delegates may query
-Application truth through their existing typed root methods; that is binding
-composition, not Gateway aggregate dispatch. The projection-route
+owner mutation or concrete validation. Gateway composition queries
+Application truth through its existing typed Application path, then passes the
+validated references to the binding runtime; that is cross-owner sequencing,
+not Gateway aggregate dispatch or binding repository ownership. The projection-route
 implementation and policy are in their focused leaf; this owner invokes its
 typed route port and does not create a second route authority or observation
 worker. Interaction

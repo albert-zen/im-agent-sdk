@@ -5,9 +5,10 @@
 `gateway.routing.bindings` owns the typed contract values for binding a
 Conversation to a Project or Thread, clearing its Thread, and reporting the
 result. It also owns their pure field/postcondition validation, the binding
-repository/CAS authority, and same-target convergence. The Gateway package
-root remains the current composition site for those typed binding-owner
-methods until the later physical binding migration.
+repository/CAS authority, and same-target convergence. One private, typed,
+constructor-injected binding runtime is the sole caller that mutates the
+binding repository; Gateway composition supplies validated Application truth
+and sequences that runtime with projection-route work.
 
 This leaf owns:
 
@@ -30,8 +31,10 @@ A stable Conversation key and its one current binding are represented and
 mutated through the binding owner. Multiple Conversations may independently
 bind the same Application Thread. The binding repository stores only the
 bridge-owned binding reference and revision; it never persists or copies
-Project, Thread, transcript, Turn, or execution state. The current Gateway
-root composes these binding-owner operations through explicit typed methods.
+Project, Thread, transcript, Turn, or execution state. Gateway composition
+constructs the binding runtime with the configured repository and calls its
+explicit typed methods; it does not perform repository reads, writes, CAS, or
+same-target comparison itself.
 
 The public operation/result contracts are `BindConversationToProject`,
 `BindConversationToThread`, `ClearConversationThread`, and
@@ -42,6 +45,17 @@ target exports are recorded in the [component map](../../../component-map.yml).
 Repository interfaces and concrete in-memory implementations remain in
 Gateway persistence; the binding owner supplies the typed CAS calls and
 postconditions rather than exposing a generic repository to operations.
+
+The runtime returns typed before/after binding facts for ordinary selection,
+Project binding, Thread binding, and Thread clearing. A foreground Thread bind
+is split into a typed preparation fact and commit so composition can prepare
+the projection route before CAS without taking ownership of binding mutation.
+Preparation compares the exact Application/Project/Thread target and rejects
+a same-target guard unless it is absent, the current revision, or the
+immediately preceding revision. Commit then converges that accepted
+same-target retry without a write or revision bump. A non-foreground,
+revisionless same-target bind remains an ordinary repository write and
+advances the revision; revisionless input is not a general idempotency key.
 
 `imagent.contracts` remains a finite exact public facade. Its runtime
 `__getattr__` handles only the declared Gateway operation, binding, validator,
@@ -67,14 +81,24 @@ foreground-route, fan-out, and restart behavior. Binding state is bridge-owned
 and repository-backed; it does not select a route, start observation, or
 recover Application history.
 
+If a foreground binding write raises after its outcome may be unknown, the
+binding runtime reads the repository and compares the complete desired target.
+Only a verified exact target may be treated as a possibly committed write for
+route fencing. A different or absent current binding cannot authorize the
+prepared route. If verification itself fails, the original failure is
+preserved, annotated, and the route remains fenced; Gateway composition still
+owns applying that returned fence fact to projection recovery.
+
 ## Physical boundary
 
 The contract values and validators live in
-`src/imagent/gateway/routing/bindings.py`; the current root composition site
-invokes the binding owner's repository/CAS and same-target methods. This leaf
-does not own `GatewayOperationType`, the mixed `GatewayOperation` union,
-Gateway aggregate execution, Conversation locks, foreground route
+`src/imagent/gateway/routing/bindings.py`, together with the private binding
+runtime and its typed transition facts. The Gateway package root composes that
+runtime but retains no binding repository/CAS or same-target implementation.
+This leaf does not own `GatewayOperationType`, the mixed `GatewayOperation`
+union, Gateway aggregate execution, Conversation locks, foreground route
 preparation, or recovery. Aggregate Gateway validators call the exact
-binding-owner validators and typed methods. No new routing behavior is
-introduced, and the stable `imagent.contracts` facade preserves public object
-identity without retaining retired binding names in `contracts.operations`.
+binding-owner validators, and composition calls the runtime's typed methods.
+No new routing behavior is introduced, and the stable `imagent.contracts`
+facade preserves public object identity without retaining retired binding
+names in `contracts.operations`.

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ForwardRef, TypeAlias
+from typing import ForwardRef, TypeAlias
 
-from ...applications.contract import ProjectRef, ThreadRef
+from ...applications.contract import ApplicationRef, ProjectRef, ThreadRef
+from ...interaction.messages import ConversationRef
 from ...interaction.operations import ContractViolation, require_identifier
+from ..persistence.repository_contracts import BindingConflict, BindingRepository
+from ..persistence.state_contracts import ConversationBinding
 from .operations import (
     GatewayOperationType as _GatewayOperationType,
 )
@@ -18,8 +21,176 @@ from .operations import (
     _GatewayOperationSucceeded,
 )
 
-if TYPE_CHECKING:
-    from ...gateway.persistence.state_contracts import ConversationBinding
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _BindingChange:
+    previous: ConversationBinding | None
+    binding: ConversationBinding
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _PreparedThreadBinding:
+    previous: ConversationBinding | None
+    desired: ConversationBinding
+    expected_revision: int | None
+    converge_without_write: bool
+
+
+class _BindingRuntime:
+    """Sole typed owner of Conversation binding repository mutation."""
+
+    def __init__(self, repository: BindingRepository) -> None:
+        self._repository = repository
+
+    async def current(
+        self,
+        conversation_ref: ConversationRef,
+    ) -> ConversationBinding | None:
+        return await self._repository.get(conversation_ref)
+
+    async def select_application(
+        self,
+        conversation_ref: ConversationRef,
+        application_ref: ApplicationRef,
+        *,
+        expected_revision: int | None,
+    ) -> _BindingChange:
+        return await self._replace(
+            ConversationBinding(
+                conversation_ref=conversation_ref,
+                application_ref=application_ref,
+            ),
+            expected_revision=expected_revision,
+        )
+
+    async def bind_project(
+        self,
+        conversation_ref: ConversationRef,
+        application_ref: ApplicationRef,
+        project_ref: ProjectRef,
+        *,
+        expected_revision: int | None,
+    ) -> _BindingChange:
+        return await self._replace(
+            ConversationBinding(
+                conversation_ref=conversation_ref,
+                application_ref=application_ref,
+                project_ref=project_ref,
+            ),
+            expected_revision=expected_revision,
+        )
+
+    async def prepare_thread_binding(
+        self,
+        conversation_ref: ConversationRef,
+        application_ref: ApplicationRef,
+        thread_ref: ThreadRef,
+        *,
+        expected_revision: int | None,
+        converge_same_target: bool,
+    ) -> _PreparedThreadBinding:
+        previous = await self._repository.get(conversation_ref)
+        desired = ConversationBinding(
+            conversation_ref=conversation_ref,
+            application_ref=application_ref,
+            project_ref=thread_ref.project_ref,
+            thread_ref=thread_ref,
+        )
+        converge_without_write = converge_same_target and _has_same_target(
+            previous,
+            desired,
+        )
+        if (
+            converge_without_write
+            and previous is not None
+            and expected_revision not in {None, previous.revision, previous.revision - 1}
+        ):
+            raise BindingConflict(
+                "same-target bind retry does not match the current "
+                "or immediately preceding revision"
+            )
+        return _PreparedThreadBinding(
+            previous=previous,
+            desired=desired,
+            expected_revision=expected_revision,
+            converge_without_write=converge_without_write,
+        )
+
+    async def commit_thread_binding(
+        self,
+        prepared: _PreparedThreadBinding,
+    ) -> _BindingChange:
+        if prepared.converge_without_write:
+            previous = prepared.previous
+            if previous is None:
+                raise RuntimeError("same-target binding convergence has no current binding")
+            return _BindingChange(previous=previous, binding=previous)
+        binding = await self._repository.put(
+            prepared.desired,
+            expected_revision=prepared.expected_revision,
+        )
+        return _BindingChange(previous=prepared.previous, binding=binding)
+
+    async def binding_write_may_have_committed(
+        self,
+        prepared: _PreparedThreadBinding,
+        error: BaseException,
+    ) -> bool:
+        """Verify an unknown write outcome, preserving uncertainty as a fence."""
+
+        try:
+            current = await self._repository.get(prepared.desired.conversation_ref)
+        except BaseException as verification_error:
+            error.add_note(
+                "Binding outcome verification also failed; the prepared "
+                f"route remains fenced: {verification_error!r}"
+            )
+            return True
+        return _has_same_target(current, prepared.desired)
+
+    async def clear_thread(
+        self,
+        conversation_ref: ConversationRef,
+        *,
+        expected_revision: int | None,
+    ) -> _BindingChange:
+        current = await self._repository.get(conversation_ref)
+        if current is None:
+            raise ValueError("Conversation has no binding")
+        binding = await self._repository.put(
+            ConversationBinding(
+                conversation_ref=current.conversation_ref,
+                application_ref=current.application_ref,
+                project_ref=current.project_ref,
+            ),
+            expected_revision=expected_revision,
+        )
+        return _BindingChange(previous=current, binding=binding)
+
+    async def _replace(
+        self,
+        desired: ConversationBinding,
+        *,
+        expected_revision: int | None,
+    ) -> _BindingChange:
+        previous = await self._repository.get(desired.conversation_ref)
+        binding = await self._repository.put(
+            desired,
+            expected_revision=expected_revision,
+        )
+        return _BindingChange(previous=previous, binding=binding)
+
+
+def _has_same_target(
+    current: ConversationBinding | None,
+    desired: ConversationBinding,
+) -> bool:
+    return (
+        current is not None
+        and current.application_ref == desired.application_ref
+        and current.project_ref == desired.project_ref
+        and current.thread_ref == desired.thread_ref
+    )
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
