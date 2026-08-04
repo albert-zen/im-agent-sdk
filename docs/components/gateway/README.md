@@ -13,6 +13,9 @@ Channel transport, Agent transcript, or second runtime.
 - [presentation design](presentation/design.md) and
   [testing](presentation/testing.md) — O1 bounded per-destination projection
   presentation and suppression.
+- [persistence](persistence/README.md) — bridge-state contracts and repository
+  implementations, including process-local [memory](persistence/memory/design.md)
+  and its [tests](persistence/memory/testing.md).
 - [Gateway aggregate design](design.md) and [testing](testing.md) — current
   orchestration evidence while the remaining leaves are extracted.
 

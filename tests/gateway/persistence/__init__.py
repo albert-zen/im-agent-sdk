@@ -1,0 +1,1 @@
+"""Gateway persistence component tests."""
