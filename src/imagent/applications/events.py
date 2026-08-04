@@ -13,11 +13,10 @@ from .capabilities import ApplicationCapabilities, EventSequenceScope, SupportLe
 
 if TYPE_CHECKING:
     from ..contracts.model import (
-        InteractiveRequest,
         ProjectRef,
-        RequestResolution,
         ThreadRef,
     )
+    from .requests import InteractiveRequest, RequestResolution
 
 K = TypeVar("K", bound=Hashable)
 V = TypeVar("V")
@@ -63,10 +62,10 @@ def validate_agent_event(
 ) -> None:
     """Validate event facts without claiming request/resource ownership."""
 
-    # Request/resource validators remain in their focused historical leaves
-    # until those values move; this event owner keeps their semantics intact.
+    # Event validation delegates request facts to the request leaf and keeps
+    # its event ownership/semantics intact.
     from ..contracts._validation import validate_thread_ref
-    from ..contracts.request_validation import (
+    from .requests import (
         validate_interactive_request,
         validate_request_resolution,
     )
@@ -300,9 +299,5 @@ class EventBroadcaster(Generic[K, V]):
 # Bind the remaining historical resource/request references only after the
 # event owner is fully defined, so `get_type_hints(AgentEvent)` stays stable
 # without an import-time cycle through the contracts facade.
-from ..contracts.model import (  # noqa: E402
-    InteractiveRequest,
-    ProjectRef,
-    RequestResolution,
-    ThreadRef,
-)
+from ..contracts.model import ProjectRef, ThreadRef  # noqa: E402
+from .requests import InteractiveRequest, RequestResolution  # noqa: E402

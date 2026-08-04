@@ -41,12 +41,13 @@ silently repeat it. `CreateThread` carries only shared control intent—native
 option vocabularies and product UX remain a concrete adapter/consumer seam.
 
 Current code is `schemas/v1/operations.schema.json`,
-`src/imagent/contracts/{operations.py,validators.py}`. The current modules
-also retain Gateway variants and request-owned response values until their
-focused leaves move. This slice makes the Application operation/result
+`src/imagent/applications/operations.py`, and historical
+`src/imagent/contracts/{operations.py,validators.py}`. The historical modules
+retain Gateway variants and validators; request-owned response values now live
+in `applications.requests`. This leaf makes the Application operation/result
 variants and their validators authoritative at
 `src/imagent/applications/operations.py`; the historical module remains only
-as a declared transition surface for the unmoved Gateway and request leaves.
+as a declared transition surface for the unmoved Gateway leaf.
 Current tests are `tests/test_contracts.py`, `tests/test_adapter_contracts.py`,
 and `tests/test_appserver_input.py`; focused ownership evidence moves to
 `tests/applications/test_operations.py` while affected integration tests remain

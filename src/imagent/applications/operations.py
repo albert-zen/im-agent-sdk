@@ -5,7 +5,6 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, TypeAlias
 
-from ..contracts.operations import ApprovalResponse, UserInputResponse
 from ..interaction.messages import Content
 from ..interaction.operations import (
     ContractError,
@@ -13,6 +12,7 @@ from ..interaction.operations import (
     OperationResultStatus,
     require_identifier,
 )
+from .requests import ApprovalResponse, UserInputResponse
 
 if TYPE_CHECKING:
     from ..contracts.model import (
@@ -20,14 +20,13 @@ if TYPE_CHECKING:
         Page,
         ProjectRef,
         ProjectSummary,
-        RequestRef,
         ThreadHistory,
         ThreadRef,
         ThreadStatus,
         ThreadSummary,
         TurnCatchup,
     )
-    from ..contracts.operations import RequestResponse
+    from .requests import RequestRef, RequestResponse
 
 
 class ApplicationOperationType(StrEnum):
@@ -344,10 +343,10 @@ ApplicationOperationResult: TypeAlias = (
 
 
 def validate_application_operation(operation: ApplicationOperation) -> None:
-    # These validators remain in their focused historical leaves until those
-    # values move; this owner keeps the existing invariants unchanged.
+    # Application operation validation delegates shared resource and request
+    # invariants to their focused leaves without changing operation semantics.
     from ..contracts._validation import validate_thread_ref
-    from ..contracts.request_validation import validate_request_ref
+    from .requests import validate_request_ref
 
     require_identifier(operation.operation_id, "operation_id")
     application_id = operation.application_ref.application_instance_id
@@ -535,11 +534,10 @@ from ..contracts.model import (  # noqa: E402
     Page,
     ProjectRef,
     ProjectSummary,
-    RequestRef,
     ThreadHistory,
     ThreadRef,
     ThreadStatus,
     ThreadSummary,
     TurnCatchup,
 )
-from ..contracts.operations import RequestResponse  # noqa: E402
+from .requests import RequestRef, RequestResponse  # noqa: E402
