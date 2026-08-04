@@ -26,9 +26,13 @@ values for canonical message payloads and their strong `ThreadRef` scope,
 alongside Interaction message and validation values, the Applications
 capability declaration, and the request leaf. It owns only the event envelope,
 ordering fields, validation, fan-out, and explicit gaps; it never owns
-AgentMessage, history, Thread, request, or Gateway truth. Stable event/item
-identities and any sequence/cursor fields describe only native guarantees; text
-and time do not establish identity.
+AgentMessage, history, Thread, request, or Gateway truth. Adapter mapping must
+validate a finite native fact and its method-required identity before invoking
+this leaf. An App Server mapping failure emits no partial event and terminates
+the affected live projection through the fixed
+`application_native_mapping_failed` recovery gap. Stable event/item identities
+and any sequence/cursor fields describe only native guarantees; text and time
+do not establish identity.
 
 The sole implementation owner is `imagent.applications.events`, in
 `src/imagent/applications/events.py`. The stable formal facades are explicit

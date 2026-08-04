@@ -18,6 +18,11 @@ from imagent.applications.adapters.appserver.client.supervisor import (
     AppServerSupervisor,
     MissingAppServerDependencyError,
 )
+from imagent.applications.adapters.appserver.mapping import (
+    MAX_NATIVE_MAPPING_KEYS,
+    AppServerMappingError,
+    normalize_appserver_message,
+)
 from imagent.applications.contract import ApplicationInputOutcomeUnknown
 from imagent.applications.operations import CreateThread, ThreadCreated
 from imagent.interaction.diagnostics import (
@@ -365,8 +370,10 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             )
 
             self.assertEqual(result["thread"]["id"], "thread-1")
-            self.assertEqual(captured[0]["params"]["_transport_request_id"], 99)
-            self.assertEqual(captured[0]["params"]["_connection_epoch"], 1)
+            self.assertEqual(captured[0]["id"], 99)
+            self.assertEqual(captured[0]["_connection_epoch"], 1)
+            self.assertNotIn("_transport_request_id", captured[0]["params"])
+            self.assertNotIn("_connection_epoch", captured[0]["params"])
             self.assertEqual(
                 process.sent[-1],
                 {
@@ -637,11 +644,116 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
                 captured[0]["params"],
                 {
                     "requestId": 99,
-                    "_connection_epoch": 1,
                 },
             )
+            self.assertEqual(captured[0]["_connection_epoch"], 1)
         finally:
             await client.close()
+
+    async def test_dispatch_preserves_native_payload_key_budget(self) -> None:
+        client = _client(_ScriptedProcess({}))
+        received: list[Any] = []
+        failures: list[dict] = []
+
+        def normalize_server_request(message: dict) -> None:
+            try:
+                received.append(normalize_appserver_message(message))
+            except AppServerMappingError:
+                failures.append(message)
+
+        def normalize_notification(message: dict) -> None:
+            try:
+                received.append(normalize_appserver_message(message))
+            except AppServerMappingError:
+                failures.append(message)
+
+        client.add_server_request_handler(normalize_server_request)
+        client.add_notification_handler(normalize_notification)
+        server_request_params = {
+            "threadId": "thread-1",
+            "turnId": "turn-1",
+            **{f"server-field-{index}": index for index in range(MAX_NATIVE_MAPPING_KEYS - 2)},
+        }
+        notification_params = {
+            "threadId": "thread-1",
+            **{
+                f"notification-field-{index}": index for index in range(MAX_NATIVE_MAPPING_KEYS - 1)
+            },
+        }
+
+        await client._dispatch(
+            {
+                "id": 99,
+                "method": "item/fileChange/requestApproval",
+                "params": server_request_params,
+            },
+            epoch=1,
+        )
+        await client._dispatch(
+            {
+                "method": "thread/status/changed",
+                "params": notification_params,
+            },
+            epoch=1,
+        )
+        await client._dispatch(
+            {
+                "id": 100,
+                "method": "item/fileChange/requestApproval",
+                "params": {**server_request_params, "server-over-limit": True},
+            },
+            epoch=1,
+        )
+        await client._dispatch(
+            {
+                "method": "thread/status/changed",
+                "params": {
+                    **notification_params,
+                    "notification-over-limit": True,
+                },
+            },
+            epoch=1,
+        )
+
+        self.assertEqual(len(received), 2)
+        self.assertEqual(len(failures), 2)
+        self.assertEqual(received[0].payload, server_request_params)
+        self.assertEqual(received[0].transport_request_id, 99)
+        self.assertEqual(received[1].payload, notification_params)
+        self.assertIsNone(received[1].transport_request_id)
+        for message in failures:
+            self.assertNotIn("_transport_request_id", message["params"])
+            self.assertNotIn("_connection_epoch", message["params"])
+
+    async def test_server_request_dispatch_distinguishes_absent_and_invalid_params(self) -> None:
+        client = _client(_ScriptedProcess({}))
+        mapped = []
+        failures: list[dict] = []
+
+        def normalize(message: dict) -> None:
+            try:
+                mapped.append(normalize_appserver_message(message))
+            except AppServerMappingError:
+                failures.append(message)
+
+        client.add_server_request_handler(normalize)
+        await client._dispatch(
+            {"id": 99, "method": "item/unknown/request"},
+            epoch=1,
+        )
+        for invalid_params in (None, []):
+            await client._dispatch(
+                {
+                    "id": 100,
+                    "method": "item/unknown/request",
+                    "params": invalid_params,
+                },
+                epoch=1,
+            )
+
+        self.assertEqual(len(mapped), 1)
+        self.assertEqual(mapped[0].payload, {})
+        self.assertEqual(len(failures), 2)
 
     async def test_stdio_eof_respawns_and_advances_connection_epoch(self) -> None:
         first = _ScriptedProcess({"initialize": [{"result": {"ok": True}}]})

@@ -32,6 +32,10 @@ Every adapter should prove:
   positive shared-base Zen case, while generic files remain explicit
   unsupported without a downstream exposure/encoding policy;
 - canonical user and Agent message events;
+- App Server resource/history/notification/server-request mapping rejects
+  oversize or malformed bounded native facts with fixed redacted errors before
+  event, history, request, or A1 consumer dispatch, while valid Codex/Zen
+  ordering and unknown-method classification remain unchanged;
 - multiple completed messages before an explicit terminal Turn event;
 - fan-out-safe subscriptions;
 - bounded fan-out overflow isolates the slow subscriber and leaves unrelated

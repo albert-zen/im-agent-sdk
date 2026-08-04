@@ -11,6 +11,7 @@ from typing import Any
 
 from imagent.applications import CodexApplicationAdapter
 from imagent.applications.adapters.appserver.client import AppServerError
+from imagent.applications.adapters.appserver.mapping import APP_SERVER_MAPPING_ERROR_MESSAGE
 from imagent.applications.adapters.codex import (
     CodexApplicationAdapter as CodexApplicationAdapterOwner,
 )
@@ -19,6 +20,7 @@ from imagent.applications.contract import (
     AgentMessage,
     ApplicationInputDispatch,
     ApplicationInputOutcomeUnknown,
+    ApplicationRef,
     InputContinuationPreference,
     InputDisposition,
     ThreadRef,
@@ -29,7 +31,12 @@ from imagent.applications.events import (
     EventStreamOverflow,
     EventStreamReset,
 )
-from imagent.applications.operations import CreateThread, ThreadCreated
+from imagent.applications.operations import (
+    ApplicationOperationFailed,
+    CreateThread,
+    GetThreadHistory,
+    ThreadCreated,
+)
 from imagent.interaction.media import AttachmentContent, LocalPath
 from imagent.interaction.messages import TextContent
 from tests.applications.adapters._appserver_fakes import NativeZenClient
@@ -740,6 +747,65 @@ class CodexEventFanoutTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(EventStreamReset) as raised:
             await anext(events)
         self.assertEqual(raised.exception.gap_code, "application_event_connection_reset")
+
+    async def test_invalid_native_item_identity_stops_before_event_dispatch(self) -> None:
+        native = NativeZenClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=native,
+            cwd="/repo",
+        )
+        events = adapter.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        try:
+            await native._notify(
+                {
+                    "method": "item/completed",
+                    "params": {
+                        "threadId": "thread-1",
+                        "turnId": "turn-1",
+                        "item": {
+                            "type": "agentMessage",
+                            "text": "must not become an Agent message",
+                        },
+                    },
+                }
+            )
+            with self.assertRaises(EventStreamReset) as raised:
+                await anext(events)
+            self.assertEqual(raised.exception.gap_code, "application_native_mapping_failed")
+        finally:
+            await _close(events)
+
+    async def test_invalid_native_history_identity_stops_before_history_result(self) -> None:
+        class InvalidHistoryClient(NativeZenClient):
+            async def list_thread_turns(self, thread_id: str, **params):
+                del thread_id, params
+                return {
+                    "data": [
+                        {
+                            "id": "",
+                            "status": "completed",
+                            "items": [],
+                        }
+                    ]
+                }
+
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=InvalidHistoryClient(),
+            cwd="/repo",
+        )
+        result = await adapter.execute(
+            GetThreadHistory(
+                operation_id="invalid-native-history",
+                application_ref=ApplicationRef("codex-main"),
+                thread_ref=ThreadRef("codex-main", "thread-1"),
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(result, ApplicationOperationFailed)
+        assert isinstance(result, ApplicationOperationFailed)
+        self.assertEqual(result.error.message, APP_SERVER_MAPPING_ERROR_MESSAGE)
 
 
 async def _close(events) -> None:

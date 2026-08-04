@@ -164,12 +164,11 @@ def _server_request(
     return {
         "id": transport_request_id,
         "method": method,
+        "_connection_epoch": connection_epoch,
         "params": {
             "threadId": "thread-1",
             "turnId": "turn-1",
             "itemId": "item-1",
-            "_transport_request_id": transport_request_id,
-            "_connection_epoch": connection_epoch,
             **params,
         },
     }

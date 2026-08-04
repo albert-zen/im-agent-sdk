@@ -337,15 +337,26 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
             client=client,
             cwd="/workspace",
         )
-        self.assertIsNone(codex.diagnostic_facts().presentation)
-        await client.handlers[0](
-            {
-                "method": "turn/plan/updated",
-                "params": {"threadId": "thread-1", "eventId": "event-1"},
-            }
-        )
-        self.assertIsNone(codex.diagnostic_facts().presentation)
-        await codex.stop()
+        events = codex.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        try:
+            self.assertIsNone(codex.diagnostic_facts().presentation)
+            pending = asyncio.ensure_future(anext(events))
+            await asyncio.sleep(0)
+            await client.handlers[0](
+                {
+                    "method": "turn/plan/updated",
+                    "params": {"threadId": "thread-1"},
+                }
+            )
+            await asyncio.sleep(0)
+            self.assertFalse(pending.done())
+            pending.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await pending
+            self.assertIsNone(codex.diagnostic_facts().presentation)
+        finally:
+            await cast(Any, events).aclose()
+            await codex.stop()
 
         with self.assertRaises(TypeError):
             cast(Any, ZenApplicationAdapter)(
@@ -381,6 +392,35 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(EventStreamReset):
                 await anext(events)
             self.assertEqual(len(presenter.facts), 1)
+        finally:
+            await cast(Any, events).aclose()
+            await application.stop()
+
+    async def test_configured_codex_presenter_requires_native_event_identity(self) -> None:
+        client = _AppServerClient()
+        presenter = _CodexPresenter()
+        application = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            cwd="/workspace",
+            live_activity_presenter=presenter,
+        )
+        events = application.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        try:
+            await client.handlers[0](
+                {
+                    "method": "turn/plan/updated",
+                    "params": {
+                        "threadId": "thread-1",
+                        "turnId": "turn-1",
+                        "plan": [{"status": "inProgress", "step": "Must not present"}],
+                    },
+                }
+            )
+            with self.assertRaises(EventStreamReset) as raised:
+                await anext(events)
+            self.assertEqual(raised.exception.gap_code, "application_native_mapping_failed")
+            self.assertEqual(presenter.facts, [])
         finally:
             await cast(Any, events).aclose()
             await application.stop()

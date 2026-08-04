@@ -29,6 +29,12 @@ constructor; they do not define another framing rule. Outputs are
 Notification and server-request handlers receive the client's internal JSON
 mapping at the adapter boundary only.
 
+When it enriches an admitted callback, the client keeps its connection epoch
+at the callback envelope root. A server request already carries its JSON-RPC
+`id` there. It does not mutate native `params` with transport metadata, so
+mapping's native payload bounds apply to the native payload rather than SDK
+bookkeeping.
+
 The exact target facade exports `AppServerClient`,
 `AppServerDispatchPosition`, `AppServerError`, `AppServerResponse`,
 `AppServerSupervisor`, `APP_SERVER_DISPATCH_POSITION_KEY`, and

@@ -20,7 +20,11 @@ evidence and recovery semantics differ.
 
 Codex passes `CodexLiveActivityFacts`; T3 passes `T3ActivityFacts`. Each fact
 already has fixed stable identity, native kind, scalar bounds, and no raw
-protocol envelope. A presenter returns `ApplicationTextPresentation` or
+protocol envelope. A configured Codex A1 method without its required native
+stable event ID fails the App Server mapping boundary before presenter
+invocation or `message.created`; it does not substitute a UUID, text, time, or
+raw-payload-derived identity. The extension-absent adapter leaves that native
+method invisible as before. A presenter returns `ApplicationTextPresentation` or
 `None`: finite typed text only, with no power to change item/event identity,
 Thread, Turn, role, metadata, attachments, destination, or recoverability.
 

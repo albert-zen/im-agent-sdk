@@ -3,8 +3,9 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from ....interaction.diagnostics import (
     ConnectionDiagnosticFacts,
@@ -13,7 +14,12 @@ from ....interaction.diagnostics import (
     QueueDiagnosticFacts,
     QueueDiagnosticName,
 )
-from .mapping import normalize_appserver_message
+from .mapping import (
+    APP_SERVER_MAPPING_ERROR_MESSAGE,
+    AppServerMappingError,
+    native_mapping,
+    normalize_appserver_message,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +36,17 @@ def summarize_transport_message(
 ) -> dict[str, Any]:
     transport_shape = _transport_shape(message)
     summary: dict[str, Any] = {"transport_shape": transport_shape}
+    try:
+        normalized_message = native_mapping(message)
+    except AppServerMappingError:
+        summary["mapping_error"] = APP_SERVER_MAPPING_ERROR_MESSAGE
+        return summary
 
     if transport_shape == "response":
-        summary["response_id"] = message.get("id")
-        if "error" in message:
+        summary["response_id"] = normalized_message.get("id")
+        if "error" in normalized_message:
             summary["has_error"] = True
-            error = message.get("error")
+            error = normalized_message.get("error")
             if isinstance(error, dict):
                 summary["error_code"] = error.get("code")
                 summary["error_message"] = _safe_preview(
@@ -45,7 +56,7 @@ def summarize_transport_message(
             else:
                 summary["error_message"] = _safe_preview(str(error), max_preview_chars)
         else:
-            result = message.get("result")
+            result = normalized_message.get("result")
             summary["has_error"] = False
             if isinstance(result, dict):
                 summary["result_keys"] = sorted(result.keys())
@@ -53,13 +64,23 @@ def summarize_transport_message(
                 summary["result_type"] = type(result).__name__
         return _redact_managed_media(summary)
 
-    if "method" not in message:
+    if "method" not in normalized_message:
         return _redact_managed_media(summary)
 
-    event = normalize_appserver_message(message)
+    try:
+        event = normalize_appserver_message(normalized_message)
+    except AppServerMappingError:
+        summary["mapping_error"] = APP_SERVER_MAPPING_ERROR_MESSAGE
+        return summary
     payload = event.payload
-    item = payload.get("item") if isinstance(payload.get("item"), dict) else {}
-    turn = payload.get("turn") if isinstance(payload.get("turn"), dict) else {}
+    item_value = payload.get("item")
+    item: Mapping[str, object] = (
+        cast(Mapping[str, object], item_value) if isinstance(item_value, Mapping) else {}
+    )
+    turn_value = payload.get("turn")
+    turn: Mapping[str, object] = (
+        cast(Mapping[str, object], turn_value) if isinstance(turn_value, Mapping) else {}
+    )
     summary.update(
         {
             "method": event.method,
@@ -123,27 +144,36 @@ def summarize_transport_message(
             value = payload.get(key)
         if value is not None:
             summary[key] = value
-    if isinstance(payload.get("questions"), list):
-        questions = payload.get("questions") or []
+    questions_value = payload.get("questions")
+    if isinstance(questions_value, list):
+        questions = cast(list[object], questions_value)
         summary["question_count"] = len(questions)
         summary["questions"] = [
             {
-                "id": question.get("id"),
-                "header": question.get("header"),
-                "question": _trim_preview(str(question.get("question") or ""), max_preview_chars),
+                "id": mapped_question.get("id"),
+                "header": mapped_question.get("header"),
+                "question": _trim_preview(
+                    str(mapped_question.get("question") or ""), max_preview_chars
+                ),
             }
             for question in questions[:3]
-            if isinstance(question, dict)
+            if isinstance(question, Mapping)
+            for mapped_question in (cast(Mapping[str, object], question),)
         ]
-    if item and item.get("changes") is not None and isinstance(item.get("changes"), list):
+    changes_value = item.get("changes")
+    if isinstance(changes_value, list):
         changes = [
-            change.get("path")
-            for change in item.get("changes", [])
-            if isinstance(change, dict) and change.get("path")
+            mapped_change.get("path")
+            for change in cast(list[object], changes_value)
+            if isinstance(change, Mapping)
+            for mapped_change in (cast(Mapping[str, object], change),)
+            if mapped_change.get("path")
         ]
         summary["changed_paths"] = changes[:10]
-    if isinstance(payload.get("permissions"), dict):
-        summary["permissions_keys"] = sorted((payload.get("permissions") or {}).keys())
+    permissions_value = payload.get("permissions")
+    if isinstance(permissions_value, Mapping):
+        permissions = cast(Mapping[str, object], permissions_value)
+        summary["permissions_keys"] = sorted(permissions.keys())
     return _redact_managed_media(summary)
 
 

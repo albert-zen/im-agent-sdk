@@ -19,11 +19,14 @@ unsupported here.
 
 ## Typed boundary and public facade
 
-Inputs are bounded native server-request mappings containing method, stable
-transport request ID, Thread/Turn identity, and connection epoch; responses
-are typed `RequestResponse` values validated against the derived request
-shape. Outputs are canonical `InteractiveRequest`/Application request events
-and the exact native JSON response or typed request error.
+Inputs are the mapping owner's bounded internal `AppServerEvent` facts, with
+method, stable transport request ID, Thread/Turn identity, and connection
+epoch already validated. The runtime gives a raw callback to that same mapping
+owner exactly once at its ingress; this leaf does not duplicate native
+identity parsing. Responses are typed `RequestResponse` values validated
+against the derived request shape. Outputs are canonical
+`InteractiveRequest`/Application request events and the exact native JSON
+response or typed request error.
 
 The formal contracts are `PendingAppServerRequest` and
 `AppServerRequestRuntime` from the exact target facade
@@ -33,13 +36,16 @@ modules are removed, preserving exact objects and no second request contract.
 
 ## Dependencies, state, and recovery
 
-The leaf depends on Applications contract/events/operations/requests and the
-App Server client. Request IDs are scoped by Application instance, connection
-epoch, and native transport ID. A reset stales active and responded handles
-when no authoritative pending snapshot exists. Response/resolve races use
-first-writer native authority; duplicate, resolved, stale, invalid-shape, and
-unsupported cases retain their current explicit errors. The terminal outcome
-cache is finite and process-local; no request truth is persisted by the SDK.
+The leaf depends on Applications contract/events/operations/requests, the App
+Server client, and the App Server mapping owner. Request IDs are scoped by
+Application instance, connection epoch, and native transport ID. A reset
+stales active and responded handles when no authoritative pending snapshot
+exists. A malformed supported request receives the fixed redacted invalid
+params response before any request-open event; a valid unsupported request
+remains method-not-found. Response/resolve races use first-writer native
+authority; duplicate, resolved, stale, invalid-shape, and unsupported cases
+retain their current explicit errors. The terminal outcome cache is finite and
+process-local; no request truth is persisted by the SDK.
 
 ## Current, target, and structural gap
 

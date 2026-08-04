@@ -25,6 +25,11 @@ explicit terminal Turn event. The tests also prove the owner import remains
 Gateway-independent, the explicit facades preserve exact nominal identities,
 and the facade modules contain no duplicate implementation or lazy lookup.
 
+App Server adapter evidence additionally proves that an invalid bounded native
+mapping cannot reach this event leaf: no partial message/Turn/request event is
+published, the gap code is fixed and redacted, and later valid events retain
+their native order after the subscriber recovers.
+
 ```sh
 PYTHONPATH=src uv run python -m unittest tests.applications.test_events -v
 PYTHONPATH=src uv run python -m unittest tests.applications.adapters.test_codex -v

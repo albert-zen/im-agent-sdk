@@ -763,17 +763,14 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("secret", str(raised.exception))
         self.assertEqual(
             raised.exception.gap_code,
-            "application_artifact_materialization_failed",
+            "application_native_mapping_failed",
         )
         self.assertEqual(materializer.item_facts, [])
         facts = application.diagnostic_facts().artifact_materialization
         assert facts is not None
-        self.assertEqual(facts.invocation_count, 1)
-        self.assertEqual(facts.failure_count, 1)
-        self.assertEqual(
-            facts.last_failure_code,
-            ApplicationArtifactMaterializationFailureCode.INVALID_FACTS,
-        )
+        self.assertEqual(facts.invocation_count, 0)
+        self.assertEqual(facts.failure_count, 0)
+        self.assertIsNone(facts.last_failure_code)
 
     async def test_missing_native_turn_and_item_ids_fail_closed(self) -> None:
         client = _AppServerClient()
@@ -794,7 +791,7 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
             await anext(turn_events)
         self.assertEqual(
             turn_gap.exception.gap_code,
-            "application_artifact_materialization_failed",
+            "application_native_mapping_failed",
         )
 
         missing_item = _artifact_notification()
@@ -805,7 +802,18 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
             await anext(item_events)
         self.assertEqual(
             item_gap.exception.gap_code,
-            "application_artifact_materialization_failed",
+            "application_native_mapping_failed",
+        )
+
+        conflicting_item = _artifact_notification()
+        conflicting_item["params"]["itemId"] = "item-conflicts-with-nested-id"
+        conflicting_events = application.subscribe_thread(thread_ref)
+        await client.notify(conflicting_item)
+        with self.assertRaises(EventStreamReset) as conflicting_gap:
+            await anext(conflicting_events)
+        self.assertEqual(
+            conflicting_gap.exception.gap_code,
+            "application_native_mapping_failed",
         )
 
         missing_terminal_turn = _terminal_notification("completed")
@@ -816,7 +824,7 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
             await anext(terminal_events)
         self.assertEqual(
             terminal_gap.exception.gap_code,
-            "application_artifact_materialization_failed",
+            "application_native_mapping_failed",
         )
         self.assertEqual(materializer.item_facts, [])
         self.assertEqual(materializer.terminal_facts, [])
@@ -837,12 +845,45 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
 
         diagnostics = application.diagnostic_facts().artifact_materialization
         assert diagnostics is not None
-        self.assertEqual(diagnostics.invocation_count, 4)
-        self.assertEqual(diagnostics.failure_count, 4)
-        self.assertEqual(
-            diagnostics.last_failure_code,
-            ApplicationArtifactMaterializationFailureCode.INVALID_FACTS,
+        self.assertEqual(diagnostics.invocation_count, 0)
+        self.assertEqual(diagnostics.failure_count, 0)
+        self.assertIsNone(diagnostics.last_failure_code)
+
+    async def test_conflicting_history_turn_alias_fails_before_history_or_materializer(
+        self,
+    ) -> None:
+        client = _AppServerClient()
+        materializer = _AssociatingMaterializer()
+        application = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            cwd="/workspace",
+            artifact_materializer=materializer,
         )
+        thread_ref = ThreadRef("codex-main", "thread-1")
+        conflicting_turn = _native_turn("completed")
+        conflicting_turn["turnId"] = "turn-conflicts-with-id"
+        client.turns = [conflicting_turn]
+
+        result = await application.execute(
+            GetThreadHistory(
+                operation_id="conflicting-history-turn",
+                application_ref=ApplicationRef("codex-main"),
+                thread_ref=thread_ref,
+                limit=10,
+                page=1,
+                created_at=datetime(2026, 8, 3, tzinfo=UTC),
+            )
+        )
+
+        self.assertIsInstance(result, ApplicationOperationFailed)
+        self.assertEqual(materializer.item_facts, [])
+        self.assertEqual(materializer.terminal_facts, [])
+        diagnostics = application.diagnostic_facts().artifact_materialization
+        assert diagnostics is not None
+        self.assertEqual(diagnostics.invocation_count, 0)
+        self.assertEqual(diagnostics.failure_count, 0)
+        self.assertIsNone(diagnostics.last_failure_code)
 
     async def test_absent_materializer_preserves_codex_and_zen_diagnostics(self) -> None:
         codex = CodexApplicationAdapter(
