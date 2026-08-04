@@ -41,11 +41,11 @@ from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,
 )
+from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.projections import (
     ProjectionWorkerState,
     derive_projection_route_id,
 )
-from imagent.storage import SQLiteGatewayState
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

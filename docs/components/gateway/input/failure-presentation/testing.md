@@ -1,7 +1,7 @@
 # Gateway inbound failure presentation testing
 
 Focused evidence is `tests/gateway/input/test_failure_presentation.py`, with
-durable restart evidence in `tests/test_storage.py`; persistence integration
+durable restart evidence in `tests/gateway/persistence/test_sqlite.py`; persistence integration
 stays with the SQLite owner.
 
 Tests must prove:
@@ -24,5 +24,5 @@ Tests must prove:
 Run:
 
 ```sh
-PYTHONPATH=src uv run python -m unittest tests.gateway.input.test_failure_presentation tests.test_storage -v
+PYTHONPATH=src uv run python -m unittest tests.gateway.input.test_failure_presentation tests.gateway.persistence.test_sqlite -v
 ```

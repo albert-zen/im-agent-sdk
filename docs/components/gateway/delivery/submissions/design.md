@@ -70,13 +70,13 @@ when two first-reservation contenders race after independently resolving their
 destinations, and at each repository boundary; it prevents the losing caller
 or a non-conforming repository from silently changing the pinned set.
 
-SQLite table access remains co-located with this submission transaction mixin,
-but pure row encoding/decoding is owned by
-`gateway.persistence.row_mapping`. The mixin calls that leaf for scalar/JSON
-values while retaining SQL ordering, reservation CAS, destination mutation,
-and schema initialization. `_canonical_metadata` remains in this delivery
-leaf and is never recreated by persistence row mapping; moving the codec must
-not duplicate the repository or change submission transitions.
+SQLite table access, reservation CAS, destination mutation, and schema
+initialization are owned by the single
+`gateway.persistence.sqlite.SQLiteGatewayState` transaction owner. Pure row
+encoding/decoding is owned by `gateway.persistence.row_mapping`.
+`_canonical_metadata` remains in this delivery leaf and is never recreated by
+persistence; moving SQL ownership does not duplicate the repository or change
+submission transitions.
 
 ## Public surface
 

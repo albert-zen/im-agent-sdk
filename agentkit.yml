@@ -250,11 +250,13 @@ components:
       - src/imagent/projections.py
       - src/imagent/gateway/projection/__init__.py
       - src/imagent/gateway/projection/checkpoints.py
+      - src/imagent/gateway/projection/request_correlation.py
       - src/imagent/gateway/projection/recovery.py
       - tests/gateway/projection/test_observation.py
       - tests/test_projection_hardening.py
       - tests/test_projection_routing.py
       - tests/gateway/projection/test_checkpoints.py
+      - tests/gateway/projection/test_request_correlation.py
       - tests/gateway/projection/test_recovery.py
     docs:
       - docs/components/gateway/projection/README.md
@@ -326,15 +328,10 @@ components:
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
-      - src/imagent/gateway/delivery/submissions.py
       - src/imagent/gateway/persistence/**
       - src/imagent/gateway/persistence/row_mapping.py
-      - src/imagent/request_correlations.py
-      - src/imagent/sqlite_rows.py
-      - src/imagent/storage.py
       - tests/gateway/persistence/**
       - tests/gateway/persistence/test_row_mapping.py
-      - tests/test_storage.py
     docs:
       - docs/components/gateway/persistence/README.md
       - docs/components/gateway/persistence/idempotency/design.md
@@ -827,12 +824,12 @@ maintainability:
       guidance: Keep input acceptance, event admission, route barriers, and worker recovery together while they share one per-Thread ordering invariant; extract only across an independently testable state boundary.
     - name: sqlite-gateway-state
       paths:
-        - src/imagent/storage.py
-      max_lines: 925
-      max_functions: 35
+        - src/imagent/gateway/persistence/sqlite.py
+      max_lines: 1700
+      max_functions: 80
       max_classes: 4
       mode: warn
-      guidance: Keep repository protocols on one SQLite connection and transaction boundary; extract pure row mapping or an independently owned state boundary before adding more persistence behavior.
+      guidance: Keep every durable repository protocol, schema, migration, lock, and mutation policy on one SQLite connection and transaction boundary; do not add a parallel compatibility owner.
     - name: native-channel-transports
       paths:
         - src/imagent/interaction/channels/adapters/qq.py

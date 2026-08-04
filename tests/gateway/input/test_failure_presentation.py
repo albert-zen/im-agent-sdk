@@ -40,8 +40,8 @@ from imagent.gateway.input.failure_presentation import (
 )
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
+from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.projection_runtime import InputPostAcceptanceError
-from imagent.storage import SQLiteGatewayState
 from imagent.testing import FakeChannelAdapter
 
 

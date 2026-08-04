@@ -27,5 +27,5 @@ PYTHONPATH=src python -m unittest \
 
 Focused process-local claim evidence lives in
 `tests/gateway/persistence/test_idempotency.py`. SQLite restart/reclaim
-evidence remains with its transaction owner in `tests/test_storage.py`; the
+ evidence remains with its transaction owner in `tests/gateway/persistence/test_sqlite.py`; the
 move does not change the common repository Port or SQLite behavior.

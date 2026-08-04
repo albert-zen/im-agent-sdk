@@ -7,7 +7,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
-import imagent.request_correlations as historical_request_owner
+import imagent.gateway.projection.request_correlation as request_policy_owner
 from imagent import projections as projection_semantics
 from imagent.adapters import DeliverySubmissionCapacityError, DeliverySubmissionConflict
 from imagent.contracts import (
@@ -170,7 +170,8 @@ class InMemoryRequestCorrelationRepositoryOwnershipTests(unittest.IsolatedAsynci
             InMemoryRequestCorrelationRepository.__module__,
             "imagent.gateway.persistence.memory",
         )
-        self.assertFalse(hasattr(historical_request_owner, "InMemoryRequestCorrelationRepository"))
+        self.assertIsNone(importlib.util.find_spec("imagent.request_correlations"))
+        self.assertFalse(hasattr(request_policy_owner, "InMemoryRequestCorrelationRepository"))
 
     async def test_fresh_repository_starts_without_request_correlations(self) -> None:
         repository = InMemoryRequestCorrelationRepository()

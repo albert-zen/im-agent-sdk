@@ -19,8 +19,8 @@ from imagent.gateway.persistence import (
     DestinationDeliveryRecord,
 )
 from imagent.gateway.persistence.memory import InMemoryDeliverySubmissionRepository
+from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.interaction.channels import DeliveryReceipt, DeliveryReceiptStatus
-from imagent.storage import SQLiteGatewayState
 
 
 def _submission() -> DeliverySubmissionRecord:

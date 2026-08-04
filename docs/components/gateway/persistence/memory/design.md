@@ -83,10 +83,10 @@ Conversation, or retention selector.
 
 The implementation does not reconcile native request truth, execute a
 response, select a destination, or create a retry job. Those semantics remain
-in the Gateway request-correlation and delivery owners. The SQLite mixin
-continues to share the historical pure transition/selector helpers until its
-own transaction-owner extraction; this slice moves no durable implementation
-or schema.
+in the Gateway request-correlation and delivery owners. Durable SQLite
+transactions and schema are owned by `gateway.persistence.sqlite`; this leaf
+shares only pure request policy from
+`gateway.projection.request-correlation`.
 
 ## Delivery submission semantics
 
@@ -134,11 +134,11 @@ tests/gateway/persistence/test_memory.py
 ```
 
 The request-correlation implementation lives in
-`src/imagent/gateway/persistence/memory.py`. The historical
-`request_correlations.py` module retains only the request projection helpers,
-SQLite mixin, schema, and row/JSON conversion that are still shared by later
-focused slices. It does not retain a compatibility implementation of the
-process-local repository.
+`src/imagent/gateway/persistence/memory.py`. Pure request identity and
+monotonic-transition policy is shared from
+`src/imagent/gateway/projection/request_correlation.py`; SQLite SQL, schema,
+and row conversion are owned by their focused persistence leaves. No
+historical mixed module or compatibility implementation remains.
 
 ## Authority
 

@@ -49,6 +49,7 @@ from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,
 )
+from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.gateway.presentation import OutboundPresentationContext
 from imagent.gateway.projection import derive_projection_delivery_id
 from imagent.interaction.channels import DeliveryReceipt
@@ -61,7 +62,6 @@ from imagent.projections import (
     derive_turn_reply_correlation_id,
     immutable_projection_metadata,
 )
-from imagent.storage import SQLiteGatewayState
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

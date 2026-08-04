@@ -19,11 +19,12 @@ Persistence owns implementations for:
   and typed receipts.
 
 The current implementations are in-memory repositories and
-`SQLiteGatewayState`. Pure SQLite row conversion is owned by
-`gateway.persistence.row_mapping`; the request-correlation and
-delivery-submission mixins, and `storage.py`, call it from their transaction
-methods. `merge_projection_route` is SQLite repository mutation policy rather
-than pure row mapping and remains with the SQLite transaction owner.
+`gateway.persistence.sqlite.SQLiteGatewayState`. Pure SQLite row conversion is
+owned by `gateway.persistence.row_mapping`; request policy is owned by
+`gateway.projection.request_correlation`; the single SQLite owner performs all
+SQL, schema, migration, lock, and transaction work. `merge_projection_route`
+is SQLite repository mutation policy rather than pure row mapping and is
+co-located with that owner.
 
 `SQLiteGatewayState` intentionally keeps bindings, routes/correlations, and
 idempotency in one adapter because they share one connection, lock, migration,
@@ -31,10 +32,9 @@ and transaction boundary. Row conversion is extracted, but splitting the
 transaction owner merely to meet a line-count warning would weaken that
 boundary without creating a second responsibility.
 
-The shared transaction owner remains an explained future extraction gap; the
-row-mapping ownership move is complete. The transaction owner still keeps
-`merge_projection_route` with SQLite mutation policy and preserves one
-connection, lock, migration, and transaction boundary.
+The SQLite owner move is complete. It preserves one connection, lock,
+migration, and transaction boundary; no historical SQLite module or parallel
+compatibility implementation remains.
 
 It must not store:
 
@@ -229,6 +229,6 @@ or schema change.
 
 Changes to `gateway/persistence/repository_contracts.py`,
 `gateway/persistence/idempotency.py`, `gateway/persistence/memory.py`, or
-`storage.py` require checking schema migration, restart behavior, revision
+`gateway/persistence/sqlite.py` require checking schema migration, restart behavior, revision
 conflicts, idempotency semantics, projection route invariants, and the
 projections/recovery docs when checkpoint shape changes.

@@ -55,9 +55,9 @@ rendered errors, content, a callback, or work to replay.
 
 The one implementation lives in `gateway/persistence/idempotency.py`.
 `imagent.gateway.persistence.InMemoryIdempotencyRepository` is its exact
-public re-export. `storage.py` remains the separate SQLite transaction owner
-and does not retain a compatibility implementation or export for the
-process-local repository.
+public re-export. `gateway.persistence.sqlite` is the separate SQLite
+transaction owner and does not retain a compatibility implementation or
+export for the process-local repository.
 
 ## Authority
 

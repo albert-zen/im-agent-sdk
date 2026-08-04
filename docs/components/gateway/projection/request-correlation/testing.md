@@ -23,6 +23,8 @@ Request-correlation conformance must prove:
   otherwise records truthful degraded/stale state without manufacturing a
   pending request.
 
-Current evidence: `tests/test_appserver_requests.py`,
-`tests/test_projection_hardening.py`, and `tests/test_storage.py`. The target
-mirrored suite is `tests/gateway/projection/test_request_correlation.py`.
+Focused policy evidence lives in
+`tests/gateway/projection/test_request_correlation.py`. Durable SQLite evidence
+lives in `tests/gateway/persistence/test_sqlite.py`; broader integration
+coverage remains in `tests/test_appserver_requests.py` and
+`tests/test_projection_hardening.py`.

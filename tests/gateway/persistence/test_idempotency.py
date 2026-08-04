@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-import imagent.storage as storage
+import imagent.gateway.persistence.sqlite as sqlite_owner
 from imagent.adapters import IdempotencyClaimStatus
 from imagent.gateway import persistence
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
@@ -12,13 +12,13 @@ from imagent.gateway.persistence.idempotency import (
 
 
 class InMemoryIdempotencyRepositoryTests(unittest.IsolatedAsyncioTestCase):
-    def test_persistence_facade_is_exact_and_storage_export_is_absent(self) -> None:
+    def test_persistence_facade_is_exact_and_sqlite_owner_export_is_absent(self) -> None:
         self.assertIs(
             InMemoryIdempotencyRepository,
             LeafInMemoryIdempotencyRepository,
         )
         self.assertIs(persistence.InMemoryIdempotencyRepository, InMemoryIdempotencyRepository)
-        self.assertFalse(hasattr(storage, "InMemoryIdempotencyRepository"))
+        self.assertFalse(hasattr(sqlite_owner, "InMemoryIdempotencyRepository"))
 
     async def test_claim_transitions_are_owner_fenced(self) -> None:
         repository = InMemoryIdempotencyRepository()

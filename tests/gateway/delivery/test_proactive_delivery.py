@@ -58,6 +58,7 @@ from imagent.gateway.persistence.memory import (
     InMemoryDeliverySubmissionRepository,
     InMemoryProjectionRouteRepository,
 )
+from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.interaction.channels import (
     ChannelCapabilities,
     DeliveryItemReceipt,
@@ -68,7 +69,6 @@ from imagent.interaction.channels import (
     DeliverySupportLevel,
 )
 from imagent.interaction.operations import ContractViolation
-from imagent.storage import SQLiteGatewayState
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

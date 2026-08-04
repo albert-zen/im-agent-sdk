@@ -81,10 +81,10 @@ Protect these historical and known failure modes:
 - restart/reconnect manufacturing pending requests without a native snapshot.
 
 These cases are covered by `test_projection_hardening.py`,
-`test_projection_routing.py`, `gateway/projection/test_observation.py`,
-`gateway/test_lifecycle.py`, `gateway/projection/test_recovery.py`,
-`gateway/projection/test_checkpoints.py`, and `test_storage.py`. Gateway
-vertical slices additionally prove that Zen App
+`test_projection_routing.py`, `test_event_fanout.py`,
+`gateway/projection/test_observation.py`, `gateway/test_lifecycle.py`,
+`gateway/projection/test_recovery.py`, `gateway/projection/test_checkpoints.py`,
+and `gateway/persistence/test_sqlite.py`. Gateway vertical slices additionally prove that Zen App
 Server and T3 `AcceptedTurn` identities reach a reply-capable QQ projection;
 the flat/no-reply fake Channel profile proves that reply context remains
 optional and destination-safe. Native rendering details stay adapter tests.
@@ -95,8 +95,8 @@ component enters that same injected Coordinator path.
 Repository ownership checks additionally live in
 `tests/gateway/persistence/test_memory.py`; they assert the implementation is
 not retained or re-exported from the historical projection module. The shared
-memory/SQLite route conformance cases remain in `test_storage.py` until the
-durable persistence test tree is mechanically reorganized.
+memory/SQLite route conformance cases now live in the focused durable SQLite
+owner suite.
 
 Run:
 
