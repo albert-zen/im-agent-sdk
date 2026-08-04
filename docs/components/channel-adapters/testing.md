@@ -5,6 +5,8 @@ Every Channel adapter should prove:
 - stable configured Channel and native Conversation identity;
 - duplicate inbound delivery does not repeat Agent mutation;
 - access checks occur before media work;
+- access-denial reporting remains bounded without allowing denied input to
+  reach preparation or handoff;
 - durable completed/in-flight admission rejects restart redelivery before
   attachment preparation;
 - a durable in-flight rejection does not let the process-local fast path block
@@ -21,6 +23,14 @@ Every Channel adapter should prove:
   identity independent of staging path;
 - native retryable/unknown receipt mapping when idempotency is absent;
 - reconnect state remains Channel-owned.
+
+Base ownership tests additionally prove that the inherited access, denial
+report, inbound handoff, and outbound enforcement methods delegate to the
+focused Interaction leaves while native route context and diagnostics remain
+adapter-owned. They lock virtual inbound override order and
+denial-before-handoff, lazy outbound route/fallback override behavior, explicit
+denial event ordering, and propagation of policy-raised `PermissionError`
+without a synthetic event or health update.
 
 Facade ownership tests additionally prove that all internal consumers import
 Channel contract/admission/receipt values from `imagent.interaction.channels`,

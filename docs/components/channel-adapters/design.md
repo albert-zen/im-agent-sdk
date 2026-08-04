@@ -39,10 +39,16 @@ Channel adapters own:
   final validation, and receipts;
 - real platform capabilities and limits.
 
-Shared admission/normalization, media staging, delivery helpers, and receipt
-contract values remain owned by the focused Interaction Channel leaves. Native
-adapters invoke those boundaries and retain provider policy; they do not add a
-second admission, delivery, or contract implementation.
+Shared admission/normalization, access-denial bounds, media staging, delivery
+helpers, outbound access enforcement, and receipt contract values remain owned
+by the focused Interaction Channel leaves. Native adapters invoke those
+boundaries and retain provider policy; they do not add a second admission,
+delivery, or contract implementation. `BaseChannelAdapter` is a thin native
+delegator; its route context and diagnostic state remain adapter-owned, and
+diagnostic emission is not part of this mechanical ownership move. Its inbound
+dispatch retains the existing virtual access/report/diagnostic call order
+before leaf-owned admitted handoff, while outbound access retains virtual
+route-user resolution and lazy conversation fallback.
 
 They do not own:
 

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import logging
-import time
 from abc import ABC, abstractmethod
-from collections import deque
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from threading import Lock
+from typing import cast
 
+from .. import ingress as _ingress
+from .. import outbound_delivery as _outbound_delivery
 from ..ingress import ChannelAccessPolicy, InboundMessage, _InboundPreparation
 from ..outbound_delivery import (
     NativeDeliveryResult,
@@ -21,8 +21,6 @@ from .diagnostics import (
 )
 
 logger = logging.getLogger(__name__)
-ACCESS_DENIAL_REPORT_LIMIT = 10
-ACCESS_DENIAL_REPORT_WINDOW_S = 60.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,29 +28,6 @@ class ChannelRouteContext:
     admitted_user_id: str = ""
     last_inbound_message_id: str = ""
     last_inbound_seen_at: float | None = None
-
-
-class _AccessDenialLimiter:
-    """Bound access-denial diagnostics without weakening the actual gate."""
-
-    def __init__(self) -> None:
-        self._reported_at: deque[float] = deque()
-        self._suppressed = 0
-        self._lock = Lock()
-
-    def note(self) -> int | None:
-        now = time.monotonic()
-        with self._lock:
-            cutoff = now - ACCESS_DENIAL_REPORT_WINDOW_S
-            while self._reported_at and self._reported_at[0] <= cutoff:
-                self._reported_at.popleft()
-            if len(self._reported_at) >= ACCESS_DENIAL_REPORT_LIMIT:
-                self._suppressed += 1
-                return None
-            self._reported_at.append(now)
-            suppressed = self._suppressed
-            self._suppressed = 0
-            return suppressed
 
 
 class BaseChannelAdapter(ABC):
@@ -66,7 +41,7 @@ class BaseChannelAdapter(ABC):
     ) -> None:
         self.middleware = middleware
         self.access_policy = access_policy or ChannelAccessPolicy()
-        self._access_denial_limiter = _AccessDenialLimiter()
+        self._access_denial_limiter = _ingress._AccessDenialLimiter()
         self._diagnostic_state = NativeChannelDiagnosticState()
 
     def mark_health(self, **state: object) -> None:
@@ -77,26 +52,23 @@ class BaseChannelAdapter(ABC):
         return self._diagnostic_state.snapshot()
 
     def inbound_allowed(self, inbound: InboundMessage) -> bool:
-        return self.access_policy.allows(
-            user_id=inbound.user_id,
-            conversation_id=inbound.conversation_id,
+        return _ingress.inbound_allowed(
+            access_policy=self.access_policy,
+            inbound=inbound,
         )
 
     @property
     def inbound_access_ready(self) -> bool:
-        return True
+        return _ingress.inbound_access_ready()
 
     def access_policy_health(self) -> dict[str, object]:
-        return {
-            "inbound_access_ready": self.inbound_access_ready,
-            "access_policy_mode": self.access_policy.mode,
-            "access_match": self.access_policy.access_match,
-            "allowed_user_count": len(self.access_policy.restricted_user_ids),
-            "allowed_conversation_count": len(self.access_policy.restricted_conversation_ids),
-        }
+        return _ingress.access_policy_health(
+            access_policy=self.access_policy,
+            inbound_access_ready_value=self.inbound_access_ready,
+        )
 
     def prepare_access_denial_report(self) -> int | None:
-        return self._access_denial_limiter.note()
+        return _ingress.prepare_access_denial_report(self._access_denial_limiter)
 
     def emit_access_denial(self, inbound: InboundMessage, suppressed: int) -> None:
         denial_reason = (
@@ -130,15 +102,18 @@ class BaseChannelAdapter(ABC):
         )
 
     def ensure_outbound_allowed(self, message: OutboundMessage) -> None:
-        user_id = str(
-            self._last_inbound_user_id(message)
-            or self._conversation_user_id(message.conversation_id)
-            or ""
+        route_user_id = self._last_inbound_user_id(message)
+        conversation_user_id = (
+            self._conversation_user_id(message.conversation_id) if not route_user_id else None
         )
-        if self.access_policy.allows(
-            user_id=user_id,
-            conversation_id=message.conversation_id,
-        ):
+        decision = _outbound_delivery.ensure_outbound_allowed(
+            channel_id=self.channel_id,
+            message=message,
+            access_policy=self.access_policy,
+            route_user_id=route_user_id,
+            conversation_user_id=conversation_user_id,
+        )
+        if decision.allowed:
             return
         emit_event(
             component=f"channels.{self.channel_id}",
@@ -147,21 +122,17 @@ class BaseChannelAdapter(ABC):
             message="Outbound channel message blocked by current access policy",
             channel_id=message.channel_id,
             conversation_id=message.conversation_id,
-            user_id=user_id or None,
+            user_id=decision.user_id or None,
         )
         raise PermissionError(
             f"{self.channel_id} outbound route is not admitted by the current access policy"
         )
 
     def _last_inbound_user_id(self, message: OutboundMessage) -> str | None:
-        context = self._route_context(message)
-        user_id = context.admitted_user_id.strip() if context is not None else ""
-        return user_id or None
+        return _outbound_delivery.route_context_user_id(self._route_context(message))
 
     def _last_inbound_message_id(self, message: OutboundMessage) -> str | None:
-        context = self._route_context(message)
-        message_id = context.last_inbound_message_id.strip() if context is not None else ""
-        return message_id or None
+        return _outbound_delivery.route_context_message_id(self._route_context(message))
 
     def _route_context(self, message: OutboundMessage) -> ChannelRouteContext | None:
         resolver = getattr(self.middleware, "get_route_context", None)
@@ -188,12 +159,14 @@ class BaseChannelAdapter(ABC):
             if suppressed is not None:
                 self.emit_access_denial(inbound, suppressed)
             return
-        dispatch_options: dict[str, object] = {"reply_to_message_id": reply_to_message_id}
-        if prepare_inbound is not None:
-            dispatch_options["prepare_inbound"] = prepare_inbound
-        if pending_attachment_count:
-            dispatch_options["pending_attachment_count"] = pending_attachment_count
-        await self.middleware.handle_inbound(self, inbound, **dispatch_options)
+        await _ingress.dispatch_inbound(
+            adapter=self,
+            middleware=cast(_ingress._InboundHandoffMiddleware, self.middleware),
+            inbound=inbound,
+            reply_to_message_id=reply_to_message_id,
+            prepare_inbound=prepare_inbound,
+            pending_attachment_count=pending_attachment_count,
+        )
 
     @classmethod
     @abstractmethod

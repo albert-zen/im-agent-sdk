@@ -397,7 +397,7 @@ components:
       - command
 
   channel-adapters:
-    description: IM admission, normalization, native delivery, media staging, and platform capability translation.
+    description: Interaction Channel ingress/admission, outbound delivery, native transport, media staging, and platform capability translation; the native base remains a thin adapter delegator.
     code:
       - docs/VISION.md
       - docs/ARCHITECTURE.md
@@ -412,6 +412,8 @@ components:
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - docs/migrations/issue-9-imcodex-owner-transfer.md
       - docs/migrations/imcodex-followup-blockers.md
+      # Issue #281 keeps this aggregate route shared while the component map
+      # records ingress/outbound ownership and the adapter-base delegator.
       - src/imagent/interaction/channels/__init__.py
       - src/imagent/interaction/channels/contract.py
       - src/imagent/interaction/channels/ingress.py

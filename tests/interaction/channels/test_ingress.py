@@ -10,12 +10,16 @@ from imagent.interaction.channels import InboundAdmission
 from imagent.interaction.channels.adapters.runtime import _InboundMiddleware
 from imagent.interaction.channels.ingress import (
     _TRANSIENT_ADMISSION_LIMIT,
+    ACCESS_DENIAL_REPORT_LIMIT,
+    ACCESS_DENIAL_REPORT_WINDOW_S,
     ChannelAccessPolicy,
     InboundAttachment,
     InboundMessage,
+    _AccessDenialLimiter,
     _InboundAdmissionTransaction,
     _normalize_inbound_message,
     _parse_datetime,
+    dispatch_inbound,
     parse_id_set,
 )
 from imagent.interaction.media import AttachmentContent, LocalPath
@@ -104,6 +108,20 @@ class ChannelAccessPolicyTests(unittest.TestCase):
             ChannelAccessPolicy(
                 allowed_user_ids=frozenset({"none", "user-1"}),
             )
+
+    def test_access_denial_reporting_is_bounded_in_the_ingress_leaf(self) -> None:
+        self.assertEqual(ACCESS_DENIAL_REPORT_LIMIT, 10)
+        self.assertEqual(ACCESS_DENIAL_REPORT_WINDOW_S, 60.0)
+        limiter = _AccessDenialLimiter()
+
+        self.assertEqual(
+            [limiter.note() for _ in range(ACCESS_DENIAL_REPORT_LIMIT)],
+            [0] * ACCESS_DENIAL_REPORT_LIMIT,
+        )
+        self.assertIsNone(limiter.note())
+        self.assertIsNone(limiter.note())
+
+        self.assertEqual(limiter._suppressed, 2)
 
 
 class InboundNormalizationTests(unittest.TestCase):
@@ -322,6 +340,39 @@ class InboundAdmissionTransactionTests(unittest.IsolatedAsyncioTestCase):
             message_id=message_id,
             text=message_id,
         )
+
+    async def test_dispatch_handoff_preserves_admitted_options(self) -> None:
+        handoffs: list[tuple[object, InboundMessage, dict[str, object]]] = []
+
+        class Middleware:
+            async def handle_inbound(
+                self,
+                adapter: object,
+                inbound: InboundMessage,
+                **options: object,
+            ) -> None:
+                handoffs.append((adapter, inbound, options))
+
+        async def prepare(message: InboundMessage) -> InboundMessage:
+            return message
+
+        adapter = object()
+        inbound = self._native("handoff-options")
+        await dispatch_inbound(
+            adapter=adapter,
+            middleware=Middleware(),
+            inbound=inbound,
+            reply_to_message_id="reply-1",
+            prepare_inbound=prepare,
+            pending_attachment_count=2,
+        )
+
+        self.assertEqual(len(handoffs), 1)
+        self.assertIs(handoffs[0][0], adapter)
+        self.assertIs(handoffs[0][1], inbound)
+        self.assertEqual(handoffs[0][2]["reply_to_message_id"], "reply-1")
+        self.assertIs(handoffs[0][2]["prepare_inbound"], prepare)
+        self.assertEqual(handoffs[0][2]["pending_attachment_count"], 2)
 
     @staticmethod
     def _normalize(

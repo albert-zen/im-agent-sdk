@@ -143,6 +143,8 @@ class AgentKitMappingTests(unittest.TestCase):
             "src/imagent/interaction/controllers/registry.py": {"controllers"},
             "src/imagent/interaction/controllers/request_presentation.py": {"controllers"},
             "src/imagent/interaction/channels/outbound_delivery.py": {"channel-adapters"},
+            "src/imagent/interaction/channels/ingress.py": {"channel-adapters"},
+            "src/imagent/interaction/channels/adapters/base.py": {"channel-adapters"},
             "src/imagent/interaction/channels/adapters/runtime.py": {"channel-adapters"},
             "src/imagent/interaction/channels/adapters/qq.py": {"channel-adapters"},
             "src/imagent/applications/adapters/appserver/_base.py": {
@@ -214,6 +216,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/interaction/controllers/test_optional_controller.py": {"controllers"},
             "tests/interaction/channels/test_outbound_delivery.py": {"channel-adapters"},
             "tests/interaction/channels/test_diagnostics.py": {"diagnostics"},
+            "tests/interaction/channels/test_ingress.py": {"channel-adapters"},
             "tests/test_native_channels.py": {"channel-adapters"},
             "tests/interaction/channels/adapters/test_qq.py": {"channel-adapters"},
             "tests/interaction/channels/adapters/test_telegram.py": {"channel-adapters"},

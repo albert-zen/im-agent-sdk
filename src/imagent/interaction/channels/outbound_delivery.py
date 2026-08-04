@@ -5,7 +5,7 @@ import hashlib
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 from ..media import AttachmentContent, LocalPath
 from ..messages import (
@@ -36,6 +36,24 @@ _NATIVE_OWNED_METADATA_KEYS = frozenset(
 )
 
 
+class _RouteContext(Protocol):
+    @property
+    def admitted_user_id(self) -> str: ...
+
+    @property
+    def last_inbound_message_id(self) -> str: ...
+
+
+class _AccessPolicy(Protocol):
+    def allows(self, *, user_id: str, conversation_id: str) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True)
+class _OutboundAccessDecision:
+    allowed: bool
+    user_id: str
+
+
 @dataclass(frozen=True, slots=True)
 class OutboundArtifact:
     kind: Literal["image", "file"]
@@ -60,6 +78,45 @@ class PermanentArtifactDeliveryError(RuntimeError):
 class ArtifactDeliveryReceipt:
     platform_message_id: str = ""
     delivery_identity: str = ""
+
+
+def route_context_user_id(context: _RouteContext | None) -> str | None:
+    user_id = context.admitted_user_id.strip() if context is not None else ""
+    return user_id or None
+
+
+def route_context_message_id(context: _RouteContext | None) -> str | None:
+    message_id = context.last_inbound_message_id.strip() if context is not None else ""
+    return message_id or None
+
+
+def resolve_outbound_user_id(
+    *,
+    route_user_id: str | None,
+    conversation_user_id: str | None,
+) -> str:
+    return str(route_user_id or conversation_user_id or "")
+
+
+def ensure_outbound_allowed(
+    *,
+    channel_id: str,
+    message: OutboundMessage,
+    access_policy: _AccessPolicy,
+    route_user_id: str | None,
+    conversation_user_id: str | None,
+) -> _OutboundAccessDecision:
+    user_id = resolve_outbound_user_id(
+        route_user_id=route_user_id,
+        conversation_user_id=conversation_user_id,
+    )
+    return _OutboundAccessDecision(
+        allowed=access_policy.allows(
+            user_id=user_id,
+            conversation_id=message.conversation_id,
+        ),
+        user_id=user_id,
+    )
 
 
 def _to_native_artifact(attachment: AttachmentContent) -> OutboundArtifact:

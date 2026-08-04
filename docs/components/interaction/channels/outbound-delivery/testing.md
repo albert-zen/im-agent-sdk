@@ -6,6 +6,9 @@ Required scenarios:
 - plain/Markdown fallback and code-point/UTF-16/UTF-8 limits preserve order;
 - attachment grouping, type/size/source, trusted path, and reply-scope limits
   fail before unsupported native effects;
+- outbound access enforcement uses the latest admitted route user, preserves
+  the conversation fallback and exact rejection error, and runs before any
+  native send;
 - stable delivery/segment/attachment identity does not depend on staging path;
 - ordered artifact execution records each accepted or permanently failed item,
   continues after permanent failure, and retains the failed plus unattempted
@@ -56,3 +59,10 @@ plus `_to_native_artifact`, `_to_native_outbound`, and
 `_native_delivery_receipt` ownership. Native adapter tests retain the same
 provider response mappings while proving the runtime only invokes the
 outbound-delivery receipt normalizer after the native call.
+
+Adapter-base parity tests prove the inherited outbound check preserves
+`_last_inbound_user_id` overrides and lazy conversation fallback, delegates the
+policy decision to this leaf, and emits/raises only for its explicit
+not-admitted result. A policy-raised `PermissionError` produces no synthetic
+denial event or health side effect. The diagnostic event for a rejected native
+send remains covered by adapter diagnostics and is not re-owned by this leaf.

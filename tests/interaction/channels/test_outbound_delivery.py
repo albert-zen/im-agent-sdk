@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from imagent.interaction.channels import DeliveryItemStatus
+from imagent.interaction.channels.ingress import ChannelAccessPolicy
 from imagent.interaction.channels.outbound_delivery import (
     ArtifactDeliveryReceipt,
     NativeDeliveryResult,
@@ -22,6 +23,7 @@ from imagent.interaction.channels.outbound_delivery import (
     _to_native_artifact,
     _to_native_outbound,
     deliver_artifact_batch,
+    ensure_outbound_allowed,
     read_managed_artifact,
     split_text,
     stable_artifact_identity,
@@ -38,6 +40,47 @@ from imagent.interaction.messages import (
 
 
 class ChannelOutboundTextTests(unittest.TestCase):
+    def test_outbound_access_enforcement_preserves_route_and_fallback_order(self) -> None:
+        message = OutboundMessage(
+            channel_id="telegram",
+            conversation_id="chat:42",
+            message_type="text",
+            text="hello",
+        )
+        policy = ChannelAccessPolicy(
+            allowed_user_ids=frozenset({"route-user", "fallback-user"}),
+        )
+
+        route_decision = ensure_outbound_allowed(
+            channel_id="telegram",
+            message=message,
+            access_policy=policy,
+            route_user_id="route-user",
+            conversation_user_id="fallback-user",
+        )
+        self.assertTrue(route_decision.allowed)
+        self.assertEqual(route_decision.user_id, "route-user")
+
+        fallback_decision = ensure_outbound_allowed(
+            channel_id="telegram",
+            message=message,
+            access_policy=policy,
+            route_user_id=None,
+            conversation_user_id="fallback-user",
+        )
+        self.assertTrue(fallback_decision.allowed)
+        self.assertEqual(fallback_decision.user_id, "fallback-user")
+
+        denied_decision = ensure_outbound_allowed(
+            channel_id="telegram",
+            message=message,
+            access_policy=policy,
+            route_user_id="blocked-user",
+            conversation_user_id="fallback-user",
+        )
+        self.assertFalse(denied_decision.allowed)
+        self.assertEqual(denied_decision.user_id, "blocked-user")
+
     def test_historical_native_artifact_module_is_absent(self) -> None:
         completed = subprocess.run(
             [
