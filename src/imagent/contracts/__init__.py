@@ -1,9 +1,37 @@
+from __future__ import annotations
+
+from importlib import import_module
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..gateway.delivery.proactive_authorization import (
         DeliveryPrincipal,
         validate_delivery_principal,
+    )
+    from ..gateway.routing.bindings import (
+        BindConversationToProject,
+        BindConversationToThread,
+        ClearConversationThread,
+        ConversationBound,
+    )
+    from ..interaction.messages import ConversationRef
+    from .operations import (
+        ApplicationsListed,
+        GatewayOperation,
+        GatewayOperationFailed,
+        GatewayOperationResult,
+        GatewayOperationType,
+        ListApplications,
+        ObserveThread,
+        RequestResponseRouted,
+        RespondToRequest,
+        SelectApplication,
+        ThreadObserved,
+    )
+    from .validators import (
+        derive_client_message_id,
+        validate_gateway_operation,
+        validate_gateway_operation_result,
     )
 
 from ..applications.capabilities import (
@@ -132,27 +160,36 @@ from ..interaction.operations import (
     operation_error,
     require_identifier,
 )
-from .operations import (
-    ApplicationsListed,
-    BindConversationToProject,
-    BindConversationToThread,
-    ClearConversationThread,
-    ConversationBound,
-    GatewayOperation,
-    GatewayOperationFailed,
-    GatewayOperationResult,
-    GatewayOperationType,
-    ListApplications,
-    ObserveThread,
-    RequestResponseRouted,
-    RespondToRequest,
-    SelectApplication,
-    ThreadObserved,
+
+_BINDING_EXPORTS = frozenset(
+    {
+        "BindConversationToProject",
+        "BindConversationToThread",
+        "ClearConversationThread",
+        "ConversationBound",
+    }
 )
-from .validators import (
-    derive_client_message_id,
-    validate_gateway_operation,
-    validate_gateway_operation_result,
+_GATEWAY_OPERATION_EXPORTS = frozenset(
+    {
+        "ApplicationsListed",
+        "GatewayOperation",
+        "GatewayOperationFailed",
+        "GatewayOperationResult",
+        "GatewayOperationType",
+        "ListApplications",
+        "ObserveThread",
+        "RequestResponseRouted",
+        "RespondToRequest",
+        "SelectApplication",
+        "ThreadObserved",
+    }
+)
+_GATEWAY_VALIDATOR_EXPORTS = frozenset(
+    {
+        "derive_client_message_id",
+        "validate_gateway_operation",
+        "validate_gateway_operation_result",
+    }
 )
 
 __all__ = [
@@ -294,7 +331,13 @@ __all__ = [
 
 
 def __getattr__(name: str) -> object:
-    if name in {"DeliveryPrincipal", "validate_delivery_principal"}:
+    if name in _BINDING_EXPORTS:
+        module = import_module("..gateway.routing.bindings", __name__)
+    elif name in _GATEWAY_OPERATION_EXPORTS:
+        module = import_module(".operations", __name__)
+    elif name in _GATEWAY_VALIDATOR_EXPORTS:
+        module = import_module(".validators", __name__)
+    elif name in {"DeliveryPrincipal", "validate_delivery_principal"}:
         from ..gateway.delivery.proactive_authorization import (
             DeliveryPrincipal,
             validate_delivery_principal,
@@ -303,4 +346,8 @@ def __getattr__(name: str) -> object:
         value = DeliveryPrincipal if name == "DeliveryPrincipal" else validate_delivery_principal
         globals()[name] = value
         return value
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    else:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(module, name)
+    globals()[name] = value
+    return value

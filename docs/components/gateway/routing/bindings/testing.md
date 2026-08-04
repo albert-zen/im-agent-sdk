@@ -1,6 +1,7 @@
 # Gateway routing bindings testing
 
-Binding conformance must prove:
+Gateway integration conformance must continue to prove, through the existing
+Gateway operation, persistence, routing, projection, and recovery owners:
 
 - one Conversation has at most one current binding while multiple
   Conversations may bind the same Thread;
@@ -23,8 +24,17 @@ Binding conformance must prove:
 - product command grammar, CWD/profile policy, and consumer JSON state are
   absent from the binding implementation.
 
-Current evidence is in `tests/test_gateway_operations.py`,
+The focused binding-leaf tests prove only typed operation/result shape,
+facade identity, field validation, and binding-result postconditions. They do
+not claim ownership of CAS, repository mutation, Conversation locks,
+foreground route authority, worker recovery, or fan-out.
+
+Current integration evidence remains in `tests/test_gateway_operations.py`,
 `tests/test_projection_routing.py`, and
-`tests/gateway/persistence/test_memory.py`. The target mirrored suite is
-`tests/gateway/routing/test_bindings.py`; the component map remains explicit
-about that pending mechanical move.
+`tests/gateway/persistence/test_memory.py`. The focused owner and facade
+coverage is mirrored in `tests/gateway/routing/test_bindings.py`; it proves
+that the routing facade and historical contracts facade expose the exact
+binding-owner objects and that the extracted validators preserve the existing
+messages and failure behavior. The integration suites continue to exercise
+the unchanged Gateway mutation, CAS, lock, route-preparation, and restart
+paths.

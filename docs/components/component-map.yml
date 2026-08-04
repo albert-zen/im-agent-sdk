@@ -116,6 +116,18 @@ architecture_lint:
       to: src/imagent/__init__.py
       symbol: __version__
       reason: The current Weixin transport user-agent reads package release metadata through the root facade; target packaging will inject or relocate that value without an Interaction-to-engineering edge.
+    - from: src/imagent/gateway/routing/bindings.py
+      to: src/imagent/contracts/operations.py
+      symbol: GatewayOperationType
+      reason: Binding value fields retain the shared Gateway discriminator until the later gateway-operations slice moves that exact owner; no binding implementation is duplicated.
+    - from: src/imagent/gateway/routing/bindings.py
+      to: src/imagent/contracts/operations.py
+      symbol: _GatewayOperation
+      reason: Binding operation values inherit the shared historical Gateway base until the later gateway-operations slice moves that exact owner; no compatibility base is duplicated.
+    - from: src/imagent/gateway/routing/bindings.py
+      to: src/imagent/contracts/operations.py
+      symbol: _GatewayOperationSucceeded
+      reason: Binding result values inherit the shared historical Gateway success base until the later gateway-operations slice moves that exact owner; no compatibility base is duplicated.
 dependency_exceptions:
   - from: interaction.controllers.controller-contract
     to: applications.operations
@@ -514,24 +526,24 @@ components:
   gateway.routing.bindings:
     id: gateway.routing.bindings
     parent: gateway.routing
-    purpose: Maintain one authoritative current Application/Project/Thread selection per Conversation.
-    owns: [binding semantics, optimistic revision postconditions, foreground selection authority]
-    does_not_own: [Application Thread truth, projection checkpoint, product JSON mirror]
-    inputs: [typed binding operation, current revision]
-    outputs: [ConversationBinding]
+    purpose: Define typed Conversation-binding operation/result values and pure field/postcondition validation.
+    owns: [typed binding operation/result values, pure binding field validation, pure binding postcondition validation]
+    does_not_own: [Conversation binding authority, optimistic CAS, repository mutation, Conversation locks, binding equality authority, foreground projection route changes, recovery policy, Application Thread truth, projection checkpoint, product JSON mirror]
+    inputs: [typed binding operation/result values]
+    outputs: [validated typed binding operation/result values or explicit ContractViolation]
     public_contracts: [BindConversationToProject, BindConversationToThread, ClearConversationThread, ConversationBound]
     public_exports:
-      current: [imagent.contracts:BindConversationToProject, imagent.contracts:BindConversationToThread, imagent.contracts:ClearConversationThread, imagent.contracts:ConversationBound]
-      target: [imagent.gateway.routing:BindConversationToProject, imagent.gateway.routing:BindConversationToThread, imagent.gateway.routing:ClearConversationThread, imagent.gateway.routing:ConversationBound]
-    dependencies: [interaction.operations, applications.application-contract, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
-    state_recovery: Persisted optimistic revision is authoritative; same-target crash retry converges without overwriting a later binding.
-    current_code: [schemas/v1/operations.schema.json, src/imagent/contracts/operations.py, src/imagent/contracts/validators.py, src/imagent/gateway/__init__.py]
-    target_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/bindings.py]
-    current_tests: [tests/gateway/persistence/test_memory.py, tests/test_gateway_operations.py, tests/test_projection_routing.py]
+      current: [imagent.contracts:BindConversationToProject, imagent.contracts:BindConversationToThread, imagent.contracts:ClearConversationThread, imagent.contracts:ConversationBound, imagent.gateway:BindConversationToProject, imagent.gateway:BindConversationToThread, imagent.gateway:ClearConversationThread, imagent.gateway:ConversationBound, imagent.gateway.routing:BindConversationToProject, imagent.gateway.routing:BindConversationToThread, imagent.gateway.routing:ClearConversationThread, imagent.gateway.routing:ConversationBound, imagent.gateway.routing.bindings:BindConversationToProject, imagent.gateway.routing.bindings:BindConversationToThread, imagent.gateway.routing.bindings:ClearConversationThread, imagent.gateway.routing.bindings:ConversationBound]
+      target: [imagent.contracts:BindConversationToProject, imagent.contracts:BindConversationToThread, imagent.contracts:ClearConversationThread, imagent.contracts:ConversationBound, imagent.gateway:BindConversationToProject, imagent.gateway:BindConversationToThread, imagent.gateway:ClearConversationThread, imagent.gateway:ConversationBound, imagent.gateway.routing:BindConversationToProject, imagent.gateway.routing:BindConversationToThread, imagent.gateway.routing:ClearConversationThread, imagent.gateway.routing:ConversationBound, imagent.gateway.routing.bindings:BindConversationToProject, imagent.gateway.routing.bindings:BindConversationToThread, imagent.gateway.routing.bindings:ClearConversationThread, imagent.gateway.routing.bindings:ConversationBound]
+    dependencies: [interaction.operations, applications.application-contract, gateway.persistence.state-contracts]
+    state_recovery: Stateless contract values and pure validators; Gateway operations, persistence, routing, locks, and recovery owners retain all binding authority and restart policy.
+    current_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/__init__.py, src/imagent/gateway/routing/bindings.py]
+    target_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/__init__.py, src/imagent/gateway/routing/bindings.py]
+    current_tests: [tests/gateway/persistence/test_memory.py, tests/test_gateway_operations.py, tests/test_projection_routing.py, tests/gateway/routing/test_bindings.py]
     target_tests: [tests/gateway/routing/test_bindings.py]
     authoritative_docs: [docs/components/gateway/routing/bindings/design.md, docs/components/gateway/routing/bindings/testing.md, docs/components/gateway/design.md, docs/components/persistence/design.md, docs/components/projections-and-recovery/design.md]
     adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md]
-    gaps: [binding contract and orchestration are spread across contracts and the Gateway package root]
+    gaps: [Gateway operation dispatch, repository CAS, Conversation serialization, binding equality, foreground route changes, and recovery remain in their existing owners until later routing slices]
 
   gateway.routing.gateway-operations:
     id: gateway.routing.gateway-operations
@@ -1498,7 +1510,7 @@ structural_status:
       rationale: Finite Applications presentation facade; it re-exports the live-activity and artifact-materialization leaves exactly and retains no runtime or compatibility implementation.
     - path: src/imagent/contracts/__init__.py
       owner: engineering.release
-      rationale: Deliberate cross-layer public contract facade; every symbol delegates to its mapped owner and no implementation lives here.
+      rationale: Deliberate finite cross-layer public contract facade; Gateway binding/operation/validator names have exact TYPE_CHECKING imports and finite runtime resolution solely to break the historical aggregate cycle, then cache the exact mapped owner without compatibility code or service lookup.
     - path: src/imagent/events.py
       owner: engineering.release
       rationale: Stable public Application-event facade; every symbol is an exact re-export from the focused events owner and no implementation remains here.
@@ -1508,6 +1520,9 @@ structural_status:
     - path: src/imagent/gateway/input/__init__.py
       owner: gateway.input.failure-presentation
       rationale: Gateway input facade re-exports exact I1 and I2 public contracts from their focused implementations without retaining historical modules.
+    - path: src/imagent/gateway/routing/__init__.py
+      owner: gateway.routing.bindings
+      rationale: Gateway routing facade re-exports the exact binding-owner contracts without retaining a compatibility implementation.
     - path: src/imagent/gateway/projection/__init__.py
       owner: gateway.projection.recovery
       rationale: Gateway projection facade re-exports exact public contracts from focused checkpoint and recovery leaves without implementing either leaf.
@@ -1546,11 +1561,11 @@ structural_status:
       owners: [gateway.delivery.proactive-authorization, gateway.persistence.repository-contracts, applications.application-contract]
       reason: The exact proactive-authorization compatibility Port, repository-contract aliases, and Application Ports share one historical facade module after the Channel/admission aliases were retired.
     src/imagent/contracts/operations.py:
-      owners: [gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.projection.request-correlation]
-      reason: Gateway binding, routing, observation, and request-correlation operations remain physically combined in the historical module after request response values moved to their Applications leaf.
+      owners: [gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.projection.request-correlation]
+      reason: Shared Gateway discriminator/base values, operation variants, observation, and request-correlation values remain physically combined in the historical module until the later routing slices move their exact owners; binding values are no longer owned here.
     src/imagent/contracts/validators.py:
-      owners: [gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.dispatch, gateway.projection.request-correlation]
-      reason: Gateway, dispatch, projection, and request-correlation validation remains in the historical aggregation while it consumes the Applications-owned ThreadRef validator.
+      owners: [gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.dispatch, gateway.projection.request-correlation]
+      reason: Gateway, dispatch, projection, and request-correlation validation remains in the historical aggregation while it consumes exact binding-owner validators and the Applications-owned ThreadRef validator.
     src/imagent/keyed_locks.py:
       owners: [gateway.routing.gateway-operations, gateway.delivery.coordination, gateway.delivery.proactive-delivery]
       reason: The process-local keyed serialization primitive currently serves bounded Conversation operation serialization, ordered destination delivery, and proactive delivery-ID serialization without owning any of those policies.
@@ -1561,8 +1576,8 @@ structural_status:
       owners: [interaction.channels.ingress, interaction.channels.outbound-delivery, interaction.channels.adapters]
       reason: BaseChannelAdapter combines lifecycle/startup validation, ingress access, outbound send validation, and native diagnostic state.
     src/imagent/gateway/__init__.py:
-      owners: [gateway.composition, gateway.lifecycle, gateway.admission, gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.content-transformation, gateway.input.dispatch, gateway.input.failure-presentation, gateway.projection.observation, gateway.projection.request-correlation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.diagnostics]
-      reason: The package facade re-exports composition values while the same module still sequences admission, input, observation, request routing, presentation, delivery, and diagnostics leaf behavior.
+      owners: [gateway.composition, gateway.lifecycle, gateway.admission, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.content-transformation, gateway.input.dispatch, gateway.input.failure-presentation, gateway.projection.observation, gateway.projection.request-correlation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.diagnostics]
+      reason: The package facade re-exports composition values while the same module still sequences admission, input, operation dispatch, observation, request routing, presentation, delivery, and diagnostics leaf behavior; binding values are delegated to their routing owner.
     src/imagent/gateway/delivery/__init__.py:
       owners: [gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation]
       reason: The intentional Gateway delivery package facade re-exports exact public values from focused delivery leaves without implementing any leaf.

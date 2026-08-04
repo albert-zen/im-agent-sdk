@@ -2,66 +2,73 @@
 
 ## Purpose and ownership
 
-`gateway.routing.bindings` owns the one current Application, Project, and
-optional Thread selection for a stable Conversation. A binding answers only
-where the Conversation's next input goes. It is passive Gateway bridge state,
-not native Application UI state and not a subscription.
+`gateway.routing.bindings` owns the typed contract values for binding a
+Conversation to a Project or Thread, clearing its Thread, and reporting the
+result. It also owns only the pure field and binding-postcondition validators
+for those values. The leaf does not own the current selection itself; that
+authority remains in the existing Gateway operation and persistence owners.
 
-This leaf owns:
+This leaf owns only:
 
-- typed project/Thread bind and Thread-clear postconditions;
-- the monotonically revised `ConversationBinding` value;
-- optimistic compare-and-swap coordination;
-- the binding-equality authority used by `foreground_only` projection.
+- typed project/Thread bind and Thread-clear operation/result values;
+- pure binding-operation field validation; and
+- pure binding-result identity and postcondition validation.
 
-It does not own Application Project or Thread truth, native Thread activation,
-projection checkpoints, Application observation workers, product command
-grammar, or a consumer's JSON display cache. Controllers may submit the public
-typed actions, but product UX such as `/new`, `/pick`, CWD, or profile selection
-stays outside Gateway routing.
+It does not own `ConversationBinding` persistence or authority, optimistic CAS,
+repository mutation, Conversation locks, binding-equality authority,
+foreground projection route changes, recovery policy, Application Project or
+Thread truth, native Thread activation, projection checkpoints, Application
+observation workers, product command grammar, or a consumer's JSON display
+cache. Controllers may submit the public typed actions, but product UX such as
+`/new`, `/pick`, CWD, or profile selection stays outside Gateway routing.
 
 ## Contract and dependencies
 
-A stable Conversation key has at most one current binding. Multiple
-Conversations may independently bind the same Application Thread. Binding
-operations validate referenced native resources through the Application
-contract, then persist only stable references and the revision; they never
-copy Project, Thread, transcript, Turn, or execution state.
+A stable Conversation key and its one current binding are represented and
+mutated by existing Gateway owners. Multiple Conversations may independently
+bind the same Application Thread. This leaf validates only the typed fields,
+stable Conversation identity, and returned binding postconditions; it never
+persists references or copies Project, Thread, transcript, Turn, or execution
+state.
 
 The public operation/result contracts are `BindConversationToProject`,
 `BindConversationToThread`, `ClearConversationThread`, and
-`ConversationBound`. Their current and target exports are recorded in the
-[component map](../../../component-map.yml). Repository contracts live in
-Gateway persistence; concrete repositories do not become part of this leaf.
+`ConversationBound`. Their focused implementation owner is
+`imagent.gateway.routing.bindings`; `imagent.gateway.routing` and the stable
+`imagent.contracts` facade re-export those exact objects. Their current and
+target exports are recorded in the [component map](../../../component-map.yml).
+Repository contracts live in Gateway persistence; concrete repositories do
+not become part of this leaf.
 
-## State, concurrency, and recovery
+`imagent.contracts` remains a finite exact public facade. Its runtime
+`__getattr__` handles only the declared Gateway operation, binding, validator,
+and delivery-facade names, while its `TYPE_CHECKING` branch imports the exact
+public symbols for static typing. This finite cycle break exists only because
+the historical aggregate operation module still assembles a mixed union; it is
+not a compatibility implementation, service locator, arbitrary module
+lookup, or second contract definition. Each resolved name is cached as the
+same owner object.
 
-Mutations for one Conversation are serialized and still use repository
-revision comparison as the durable conflict boundary. A stale writer cannot
-overwrite a later selection. After a crash or an ambiguous repository result,
-a same-target foreground bind may converge only when the stored binding equals
-the complete requested target **and** its supplied revision guard is absent,
-the current revision, or the immediately preceding revision. Any other guard
-fails before route preparation and cannot release an existing recovery fence.
-A different later binding remains authoritative and fails the stale attempt
-explicitly.
+## Execution boundary and recovery
 
-For `foreground_only`, binding a Thread prepares the matching additive route
-and its projection bootstrap ordering before the binding compare-and-swap.
-That prepared route has no delivery authority until the binding equals its
-Thread, and it immediately loses authority after a later binding switch. This
-narrow ordering rule prevents output gaps without merging binding and route
-state. Switching Conversation A away from Thread 1 stops Thread 1 projection
-to A; other Conversations still bound to Thread 1 are unaffected.
+The existing Gateway operation owner validates and dispatches these values;
+the persistence owner performs repository mutation and optimistic CAS; the
+existing Gateway locks serialize one Conversation; and the projection-routing
+owner controls binding equality, foreground route changes, and recovery policy.
+Those owners preserve the one-current-binding and stable-revision guarantees.
 
-After restart, persisted binding state selects foreground observation and
-delivery authority. Authoritative Thread existence and history are reconciled
-through the Application boundary; the binding never acts as a transcript or a
-second Thread registry.
+Integration tests retain evidence for those existing mutation, CAS, lock,
+foreground-route, fan-out, and restart owners. The binding leaf itself is
+stateless and does not select a route, start observation, or recover history.
 
-## Current structural gap
+## Physical boundary
 
-The operation values currently live in the broad contracts package while
-validation and execution are coordinated from the Gateway package root. A
-later behavior-preserving slice will move them to the target routing module
-and mirror their tests without retaining parallel internal implementations.
+This issue is a mechanical contract-owner extraction. The module contains
+only the binding operation/result dataclasses and pure binding field/
+postcondition validators. It does not own `GatewayOperationType`, the mixed
+`GatewayOperation` union, Gateway operation execution, repository CAS,
+Conversation locks, binding equality, foreground route preparation, or
+recovery. Aggregate Gateway validators and the existing Gateway owners call
+the exact binding-owner objects. No new routing behavior is introduced, and
+the stable `imagent.contracts` facade preserves public object identity without
+retaining retired binding names in `contracts.operations`.
