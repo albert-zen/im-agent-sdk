@@ -7,11 +7,11 @@ import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
-from .....contracts import ApplicationInputOutcomeUnknown
 from .....interaction.diagnostics import (
     ConnectionDiagnosticFacts,
     QueueDiagnosticName,
 )
+from ....contract import ApplicationInputOutcomeUnknown
 from ..diagnostics import (
     AppServerDiagnosticState,
     emit_event,

@@ -38,7 +38,8 @@ The complete Application model family is owned by
 `Page`, `ApplicationRef`, `ProjectRef`, `ThreadRef`, input continuation and
 dispatch values, Project/Thread/Turn summaries and statuses, `AgentInput`,
 `AgentMessage`, history/catch-up/snapshot values, `AcceptedTurn`,
-`ApplicationInputDispatch`, and `validate_thread_ref`.
+`ApplicationInputDispatch`, `ApplicationInputOutcomeUnknown`, and
+`validate_thread_ref`.
 
 It does not own:
 

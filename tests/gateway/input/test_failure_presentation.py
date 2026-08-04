@@ -9,9 +9,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from imagent.adapters import IdempotencyClaimStatus
+from imagent.applications.contract import ApplicationInputOutcomeUnknown
 from imagent.contracts import (
     AcceptedTurn,
-    ApplicationInputOutcomeUnknown,
     AttachmentContent,
     Content,
     ConversationRef,

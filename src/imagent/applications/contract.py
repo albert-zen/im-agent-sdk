@@ -55,6 +55,14 @@ class InputContinuationPreference(StrEnum):
     START_NEW_TURN = "start_new_turn"
 
 
+class ApplicationInputOutcomeUnknown(RuntimeError):
+    """Native input dispatch may have succeeded, so automatic retry is unsafe."""
+
+    def __init__(self, message: str, cause: BaseException) -> None:
+        super().__init__(message)
+        self.cause = cause
+
+
 class InputDisposition(StrEnum):
     STARTED = "started"
     STEERED = "steered"
@@ -239,6 +247,7 @@ __all__ = [
     "AgentMessage",
     "ApplicationInputDispatch",
     "ApplicationInputDispatchHandler",
+    "ApplicationInputOutcomeUnknown",
     "ApplicationRef",
     "ApplicationSummary",
     "InputContinuationPreference",

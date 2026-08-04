@@ -10,8 +10,7 @@ import httpx
 
 from imagent.applications import HttpT3Client
 from imagent.applications.adapters.t3 import T3ApplicationAdapter, _T3StateCapacityError
-from imagent.applications.contract import AgentInput, ThreadRef
-from imagent.contracts.errors import ApplicationInputOutcomeUnknown
+from imagent.applications.contract import AgentInput, ApplicationInputOutcomeUnknown, ThreadRef
 from imagent.interaction.messages import TextContent
 
 

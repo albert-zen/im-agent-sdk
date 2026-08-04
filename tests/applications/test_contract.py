@@ -63,6 +63,25 @@ def _summary_getter() -> Callable[..., object]:
 
 
 class ApplicationContractOwnershipTests(unittest.TestCase):
+    def test_unknown_input_outcome_has_one_exact_owner_and_signature(self) -> None:
+        owner_object = owner.ApplicationInputOutcomeUnknown
+        cause = RuntimeError("native dispatch was ambiguous")
+        error = owner_object("input outcome is unknown", cause)
+
+        self.assertIs(owner_object, getattr(facade, "ApplicationInputOutcomeUnknown"))
+        self.assertIs(owner_object, getattr(contracts, "ApplicationInputOutcomeUnknown"))
+        self.assertIs(RuntimeError, owner_object.__bases__[0])
+        self.assertEqual(owner_object.__module__, "imagent.applications.contract")
+        self.assertEqual(str(error), "input outcome is unknown")
+        self.assertEqual(error.args, ("input outcome is unknown",))
+        self.assertIs(error.cause, cause)
+        self.assertEqual(
+            str(inspect.signature(owner_object)),
+            "(message: 'str', cause: 'BaseException') -> 'None'",
+        )
+        with self.assertRaises(ModuleNotFoundError):
+            __import__("imagent.contracts.errors")
+
     def test_complete_application_model_family_has_one_owner_and_exact_aliases(self) -> None:
         for name in _APPLICATION_MODEL_FAMILY:
             with self.subTest(name=name):

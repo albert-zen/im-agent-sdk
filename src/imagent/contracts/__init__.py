@@ -22,6 +22,7 @@ from ..applications.contract import (
     AgentInput,
     AgentMessage,
     ApplicationInputDispatch,
+    ApplicationInputOutcomeUnknown,
     ApplicationRef,
     ApplicationSummary,
     InputContinuationPreference,
@@ -131,9 +132,6 @@ from ..interaction.operations import (
     operation_error,
     require_identifier,
 )
-from .errors import (
-    ApplicationInputOutcomeUnknown as ApplicationInputOutcomeUnknown,
-)
 from .operations import (
     ApplicationsListed,
     BindConversationToProject,
@@ -164,6 +162,7 @@ __all__ = [
     "AgentInput",
     "AgentMessage",
     "ApplicationInputDispatch",
+    "ApplicationInputOutcomeUnknown",
     "ApprovalRequest",
     "ApprovalResponseShape",
     "ApplicationCapabilities",

@@ -14,6 +14,7 @@ from imagent.applications.adapters.appserver.client import AppServerError
 from imagent.applications.adapters.codex import (
     CodexApplicationAdapter as CodexApplicationAdapterOwner,
 )
+from imagent.applications.contract import ApplicationInputOutcomeUnknown
 from imagent.applications.events import (
     AgentEventType,
     EventStreamOverflow,
@@ -23,7 +24,6 @@ from imagent.contracts import (
     AgentInput,
     AgentMessage,
     ApplicationInputDispatch,
-    ApplicationInputOutcomeUnknown,
     AttachmentContent,
     CreateThread,
     InputContinuationPreference,

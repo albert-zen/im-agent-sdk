@@ -10,13 +10,13 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from imagent.adapters import ApplicationInputDispatchHandler, IdempotencyClaimStatus
+from imagent.applications.contract import ApplicationInputOutcomeUnknown
 from imagent.applications.events import AgentEvent, AgentEventType
 from imagent.contracts import (
     AcceptedTurn,
     AgentInput,
     AgentMessage,
     ApplicationInputDispatch,
-    ApplicationInputOutcomeUnknown,
     ApplicationOperation,
     BindConversationToThread,
     ConversationBound,

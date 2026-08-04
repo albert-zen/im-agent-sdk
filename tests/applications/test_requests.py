@@ -77,19 +77,13 @@ class ApplicationRequestTests(unittest.TestCase):
                 self.assertIs(getattr(contracts, name), getattr(requests, name))
 
     def test_historical_contract_modules_no_longer_define_request_contract(self) -> None:
-        historical_errors = import_module("imagent.contracts.errors")
+        with self.assertRaises(ModuleNotFoundError):
+            import_module("imagent.contracts.errors")
         historical_operations = import_module("imagent.contracts.operations")
         with self.assertRaises(ModuleNotFoundError):
             import_module("imagent.contracts.model")
         with self.assertRaises(ModuleNotFoundError):
             import_module("imagent.contracts.request_validation")
-        for name in (
-            "RequestDuplicateError",
-            "RequestResolvedError",
-            "RequestStaleError",
-        ):
-            with self.subTest(module="errors", name=name):
-                self.assertFalse(hasattr(historical_errors, name))
         for name in ("ApprovalResponse", "UserInputResponse", "RequestResponse"):
             with self.subTest(module="operations", name=name):
                 self.assertFalse(hasattr(historical_operations, name))
