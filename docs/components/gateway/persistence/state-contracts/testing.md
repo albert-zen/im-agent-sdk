@@ -24,11 +24,9 @@ questions/choice IDs remain an explicit capacity gap. A later behavior slice
 must add focused boundary and over-limit tests before claiming that every
 persisted collection is bounded.
 
-Current Gateway callers exercise only their accepted forward request-state
-paths by supplying forward expected-state sets to the repository. The passive
-contract and repository Port do not independently enforce a monotonic target
-state, so a focused behavior slice must add that guard and conformance tests
-before backward transitions can be claimed impossible for arbitrary callers.
+Repository conformance tests cover the complete monotonic request-state graph;
+the passive value tests continue to validate one declared state without
+claiming native pending-request authority.
 
 Current focused coverage is:
 

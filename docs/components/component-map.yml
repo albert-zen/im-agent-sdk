@@ -796,7 +796,7 @@ components:
     target_tests: [tests/gateway/persistence/test_state_contracts.py]
     authoritative_docs: [docs/components/gateway/persistence/state-contracts/design.md, docs/components/gateway/persistence/state-contracts/testing.md, docs/components/contracts/protocol.md, docs/components/persistence/design.md, docs/components/projections-and-recovery/design.md]
     adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [passive bridge-state values currently share broad contracts/model.py and contracts/delivery.py modules, delivery destinations and request questions/choice IDs lack explicit finite cardinality limits, request correlation values validate one declared state but do not define a monotonic transition graph]
+    gaps: [passive bridge-state values currently share broad contracts/model.py and contracts/delivery.py modules, delivery destinations and request questions/choice IDs lack explicit finite cardinality limits]
 
   gateway.persistence.repository-contracts:
     id: gateway.persistence.repository-contracts
@@ -814,11 +814,11 @@ components:
     state_recovery: Contracts require fencing, create-only correlations, checkpoint CAS, and immutable submission identity.
     current_code: [src/imagent/adapters.py, src/imagent/gateway/persistence/__init__.py, src/imagent/gateway/persistence/repository_contracts.py, src/imagent/gateway/persistence/submission_identity.py]
     target_code: [src/imagent/gateway/persistence/__init__.py, src/imagent/gateway/persistence/repository_contracts.py, src/imagent/gateway/persistence/submission_identity.py]
-    current_tests: [tests/gateway/persistence/test_memory.py, tests/test_storage.py, tests/test_adapter_contracts.py, tests/gateway/persistence/test_submission_identity.py]
+    current_tests: [tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_repository_contracts.py, tests/test_storage.py, tests/test_adapter_contracts.py, tests/gateway/persistence/test_submission_identity.py]
     target_tests: [tests/gateway/persistence/test_repository_contracts.py, tests/gateway/persistence/test_submission_identity.py]
     authoritative_docs: [docs/components/gateway/persistence/repository-contracts/design.md, docs/components/gateway/persistence/repository-contracts/testing.md, docs/components/ports/design.md, docs/components/persistence/design.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [adapters.py is the largest cross-layer Port split candidate, request-correlation transition Port fences only caller-supplied expected states and lacks an independent monotonic target-state guard]
+    gaps: [adapters.py is the largest cross-layer Port split candidate]
 
   gateway.persistence.memory:
     id: gateway.persistence.memory
@@ -840,7 +840,7 @@ components:
     target_tests: [tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_submission_identity.py]
     authoritative_docs: [docs/components/gateway/persistence/memory/design.md, docs/components/gateway/persistence/memory/testing.md, docs/components/persistence/design.md, docs/components/persistence/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [request-correlation in-memory implementation remains colocated with its current semantic/SQLite module, current implementation fences only caller-supplied expected states and lacks an independent monotonic target-state guard]
+    gaps: [request-correlation in-memory implementation remains colocated with its current semantic/SQLite module]
 
   gateway.persistence.idempotency:
     id: gateway.persistence.idempotency
@@ -884,7 +884,7 @@ components:
     target_tests: [tests/gateway/persistence/test_sqlite.py, tests/gateway/persistence/test_submission_identity.py]
     authoritative_docs: [docs/components/gateway/persistence/sqlite/design.md, docs/components/gateway/persistence/sqlite/testing.md, docs/components/persistence/design.md, docs/components/persistence/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [three mixin files share one intentional transaction owner but also contain separable row mapping, current request-correlation transition implementation fences only caller-supplied expected states and lacks an independent monotonic target-state guard, sqlite_rows.py colocates SQLite route mutation policy with pure row conversion]
+    gaps: [three mixin files share one intentional transaction owner but also contain separable row mapping, sqlite_rows.py colocates SQLite route mutation policy with pure row conversion]
 
   gateway.persistence.row-mapping:
     id: gateway.persistence.row-mapping

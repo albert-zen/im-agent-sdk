@@ -416,6 +416,12 @@ def _transition_correlations(
     expected = set(expected_states)
     if any(correlation.state not in expected for correlation in correlations):
         raise RequestCorrelationConflict("request correlation state changed")
+    target_precedence = _REQUEST_STATE_PRECEDENCE[state]
+    if any(
+        target_precedence < _REQUEST_STATE_PRECEDENCE[correlation.state]
+        for correlation in correlations
+    ):
+        raise RequestCorrelationConflict("request correlation state cannot regress")
     transitioned = tuple(
         replace(correlation, state=state, updated_at=updated_at) for correlation in correlations
     )

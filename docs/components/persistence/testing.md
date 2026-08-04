@@ -44,6 +44,8 @@ Required scenarios:
 - a destination inserted after a request-wide response/resolution inherits
   that state instead of reintroducing `open`;
 - a later put cannot revive a stale epoch-scoped request correlation;
+- memory and SQLite independently reject every backward request-correlation
+  transition even when the caller names the current state as expected;
 - opening the previous SQLite schema adds request correlation storage without
   losing existing bridge state;
 - proactive route snapshots and per-item receipts survive restart without
