@@ -29,13 +29,23 @@ reconciles pending requests, and drains claimed inbound FIFO. The gate remains
 in startup mode through the entire drain, so a callback racing a drain failure
 joins rollback rather than entering live processing.
 
-Rollback closes inbound admission before its first cleanup await, releases
-only buffered pre-side-effect claims owned by that startup, stops projection
-and bounded extension/delivery runtimes, stops started Channels in reverse
-order, closes the Controller, and stops started Applications in reverse order.
-Normal shutdown closes the gate first and then performs the same bounded owner
-cleanup. A callback outside the live window fails explicitly or is released;
-it never starts Application work during teardown.
+Gateway starts each Channel exactly once with the completed-message callback
+and that Channel's admission handler. It performs no signature compatibility
+inspection and never retries `start` with one argument. A call-binding failure
+from a legacy implementation or a `TypeError` raised inside a valid
+two-argument body is one startup failure. The existing Channel failure boundary
+stops the current potentially partial Channel once, and common rollback stops
+each previously started Channel once in reverse order; no inbound callback can
+reach Controller or Application work after the failed startup is closed.
+
+After the current Channel failure boundary returns, common rollback closes
+inbound admission before its first common cleanup await, releases only buffered
+pre-side-effect claims owned by that startup, stops projection and bounded
+extension/delivery runtimes, stops started Channels in reverse order, closes
+the Controller, and stops started Applications in reverse order. Normal
+shutdown closes the gate first and then performs the same bounded owner cleanup.
+A callback outside the live window fails explicitly or is released; it never
+starts Application work during teardown.
 
 ## Bounds, state, and recovery
 
@@ -69,4 +79,5 @@ Interaction Controllers, Channels, and Applications.
 - [Gateway aggregate](../design.md)
 - [ADR 0004](../../../decisions/0004-event-fanout-and-recovery.md)
 - [ADR 0006](../../../decisions/0006-core-admission-and-policy-ownership.md)
+- [ADR 0011](../../../decisions/0011-durable-inbound-admission-before-media.md)
 - [ADR 0013](../../../decisions/0013-bounded-application-event-admission.md)

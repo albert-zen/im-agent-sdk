@@ -378,8 +378,8 @@ components:
     parent: interaction.channels
     purpose: Define Channel lifecycle, capabilities, startup validation, admission callback, send, and receipt contracts.
     owns: [ChannelAdapter, ChannelCapabilities, DeliveryProfile, DeliverySupportLevel, ReplyReferenceScope, ChannelStartupConfigurationValidator, MessageHandler, InboundAdmission, InboundAdmissionHandler]
-    does_not_own: [Gateway admission state, native platform implementation, Agent resources]
-    inputs: [Inbound callback, admission handler]
+    does_not_own: [Gateway admission state, Gateway signature compatibility, native platform implementation, Agent resources]
+    inputs: [Inbound callback, optional standalone admission handler]
     outputs: [DeliveryReceipt, lifecycle completion]
     public_contracts: [ChannelAdapter, ChannelCapabilities, DeliveryProfile, DeliverySupportLevel, ReplyReferenceScope, ChannelStartupConfigurationValidator, MessageHandler, InboundAdmission, InboundAdmissionHandler, DeliveryReceipt, DeliveryItemReceipt, DeliverySegmentReceipt, DeliveryItemStatus, DeliveryReceiptStatus, DeliverySegmentStatus, validate_delivery_receipt, validate_delivery_receipt_for_content]
     public_exports:
@@ -509,9 +509,9 @@ components:
     id: gateway.lifecycle
     parent: gateway
     purpose: Start and stop the assembled graph with bounded FIFO startup admission and complete cleanup.
-    owns: [startup ordering, rollback, shutdown ordering, startup admission gate]
-    does_not_own: [native transport supervision internals, durable work queue]
-    inputs: [composed Applications and Channels]
+    owns: [startup ordering, exact two-argument Channel start invocation, rollback, shutdown ordering, startup admission gate]
+    does_not_own: [Channel signature compatibility, native transport supervision internals, durable work queue]
+    inputs: [composed Applications and two-argument Channels]
     outputs: [running/stopped Gateway state]
     public_contracts: [ImAgentGateway]
     public_exports:
@@ -524,7 +524,7 @@ components:
     current_tests: [tests/gateway/test_lifecycle.py, tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py, tests/gateway/test_diagnostics.py]
     target_tests: [tests/gateway/test_lifecycle.py]
     authoritative_docs: [docs/components/gateway/lifecycle/design.md, docs/components/gateway/lifecycle/testing.md, docs/components/gateway/design.md, docs/components/gateway/testing.md]
-    adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0013-bounded-application-event-admission.md]
+    adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0013-bounded-application-event-admission.md]
     gaps: [GatewayStartupAdmission and its failures now have one lifecycle.py owner; ImAgentGateway start/stop orchestration remains at the Gateway package root until a later physical migration]
 
   gateway.admission:
@@ -532,7 +532,7 @@ components:
     parent: gateway
     purpose: Acquire and fence durable inbound identity before Channel media work and transfer claim ownership at handoff.
     owns: [inbound idempotency identity, admission lease lifecycle, handoff fencing]
-    does_not_own: [Channel access policy, media bytes, native input dispatch]
+    does_not_own: [Channel access policy, Channel signature compatibility, media bytes, native input dispatch]
     inputs: [ConversationRef, stable channel message ID]
     outputs: [one-shot InboundAdmission lease or duplicate rejection]
     public_contracts: [InboundAdmissionService, ClaimedInbound]
@@ -547,7 +547,7 @@ components:
     target_tests: [tests/gateway/test_admission.py, tests/gateway/test_package_root.py]
     authoritative_docs: [docs/components/gateway/admission/design.md, docs/components/gateway/admission/testing.md, docs/components/gateway/design.md, docs/components/persistence/design.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
-    gaps: [legacy Channel start-signature fallback remains until all supported Channels use pre-media admission directly]
+    gaps: []
 
   gateway.routing.bindings:
     id: gateway.routing.bindings

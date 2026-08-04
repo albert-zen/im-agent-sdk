@@ -16,6 +16,10 @@ Tests must cover:
 - deliver/release are one-shot and concurrent attempts cannot hand off twice;
 - failed preparation, cancellation, startup rejection, and shutdown races
   release only proven pre-side-effect ownership;
+- every SDK-owned Channel receives the exact supplied admission handler on the
+  Gateway path, with no second admission instance or message-only start;
+- a legacy one-argument start body is never entered, while an internal
+  two-argument `TypeError` is invoked once and remains the primary failure;
 - dispatch-fenced state is never reclaimed or reauthorized;
 - clean-process exact `imagent.gateway` facade identity and removal of the
   historical module.

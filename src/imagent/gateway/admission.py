@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import inspect
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from uuid import uuid4
@@ -34,22 +33,9 @@ async def start_channel_with_admission(
     on_message: MessageHandler,
     on_admission: InboundAdmissionHandler,
 ) -> None:
-    """Start a modern Channel, preserving the pre-admission migration fallback."""
+    """Start one Gateway-composed Channel with durable inbound admission."""
 
-    supports_admission = True
-    try:
-        signature = inspect.signature(channel.start)
-    except (TypeError, ValueError):
-        pass
-    else:
-        try:
-            signature.bind(on_message, on_admission)
-        except TypeError:
-            supports_admission = False
-    if supports_admission:
-        await channel.start(on_message, on_admission)
-    else:
-        await channel.start(on_message)
+    await channel.start(on_message, on_admission)
 
 
 class InboundAdmissionService:

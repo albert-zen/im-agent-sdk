@@ -7,8 +7,12 @@ Required evidence:
   capabilities continue using the distinct `SupportLevel` type;
 - v1 capability field/positional order, string discriminants, and derived
   `DeliveryProfile` remain stable through the API transition;
-- modern message-plus-admission lifecycle plus explicit legacy message-only
-  migration behavior without retrying a partially started adapter;
+- direct standalone Channel use may omit admission, while Gateway startup
+  passes the exact message and admission handlers once to every SDK-owned
+  Channel and has no legacy message-only compatibility path;
+- a one-argument Channel fails Gateway call binding before its body, and a
+  `TypeError` from a valid two-argument start body remains one real startup
+  failure rather than triggering another invocation;
 - one-shot admission lease identity, ownership transfer, fenced release, and
   mismatch/duplicate rejection;
 - send/receipt validation for accepted, rejected, retryable, partial, and

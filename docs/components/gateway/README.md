@@ -12,10 +12,10 @@ Channel transport, Agent transcript, or second runtime.
   extension groups plus explicit graph wiring.
 - [lifecycle design](lifecycle/design.md) and
   [testing](lifecycle/testing.md) — bounded startup admission, rollback, and
-  shutdown ordering.
+  shutdown ordering, with one mandatory two-argument Channel start path.
 - [admission design](admission/design.md) and
   [testing](admission/testing.md) — fenced durable inbound identity acquired
-  before Channel media work.
+  before Channel media work, without a legacy signature fallback.
 - [input](input/README.md) — independent content-transformation, dispatch, and
   failure-presentation leaves.
 - [routing](routing/README.md) — Conversation bindings, typed Gateway

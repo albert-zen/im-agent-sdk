@@ -121,6 +121,10 @@
 - slow Channel delivery does not await/block the native event producer;
 - startup claimed-message admission is FIFO and bounded, overflow fails
   startup, and teardown leaves no owned work running;
+- Gateway passes every SDK-owned Channel its exact admission handler once;
+  one-argument adapters fail before their body, internal startup `TypeError`
+  is not retried, and rollback/restart preserve exact stop counts without
+  inbound or Application work;
 - callbacks racing failed startup or shutdown are explicitly rejected rather
   than reaching a stopping Application;
 - Application event overflow is visible in bounded health and recovers only
