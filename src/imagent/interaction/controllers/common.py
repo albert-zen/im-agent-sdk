@@ -42,13 +42,12 @@ from ...contracts import (
     ConversationBound,
     GatewayOperationFailed,
     ListApplications,
-    ObserveThread,
     RequestResponseRouted,
     RespondToRequest,
     SelectApplication,
-    ThreadObserved,
 )
 from ...gateway.persistence.state_contracts import ConversationBinding
+from ...gateway.routing import ObserveThread, ThreadObserved
 from ..messages import ConversationRef, InboundMessage, OutboundMessage, TextContent
 from .common_presentation import MarkdownSlashPresenter
 from .contract import CommandHandlerActions, ControllerActions

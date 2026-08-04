@@ -14,7 +14,7 @@ from imagent.applications.contract import (
     ThreadRef,
 )
 from imagent.applications.operations import GetThreadHistory, ThreadHistoryRead
-from imagent.gateway.persistence import ProjectionPolicy
+from imagent.gateway.routing import ProjectionPolicy
 from imagent.interaction.controllers import (
     CommandDefinition,
     CommandRegistry,

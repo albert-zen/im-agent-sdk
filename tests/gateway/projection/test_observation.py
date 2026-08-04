@@ -24,19 +24,18 @@ from imagent.contracts import (
     ClearConversationThread,
     ConversationBound,
     GatewayOperationFailed,
-    ObserveThread,
 )
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence import (
     ConversationBinding,
     IdempotencyClaimStatus,
-    ProjectionPolicy,
 )
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,
     InMemoryRequestCorrelationRepository,
 )
+from imagent.gateway.routing import ObserveThread, ProjectionPolicy
 from imagent.interaction.messages import (
     ConversationRef,
     InboundMessage,

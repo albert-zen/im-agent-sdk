@@ -296,6 +296,81 @@ for first_import in (
             f"stdout={completed.stdout}\nstderr={completed.stderr}"
         )
 '''
+PROJECTION_ROUTE_IMPORT_ORDER_CHECK = r'''
+import subprocess
+import sys
+
+check_code = r"""
+import typing
+
+import imagent.contracts as contracts_facade
+import imagent.contracts.operations as historical_operations
+import imagent.contracts.validators as historical_validators
+import imagent.gateway as gateway_facade
+import imagent.gateway.persistence as persistence_facade
+import imagent.gateway.routing as routing_facade
+import imagent.gateway.routing.projection_routes as projection_route_owner
+from imagent.gateway.persistence import ThreadProjectionRoute
+
+assert projection_route_owner.__all__ == [
+    "ObserveThread",
+    "ProjectionPolicy",
+    "ThreadObserved",
+]
+for name in projection_route_owner.__all__:
+    owner = getattr(projection_route_owner, name)
+    assert getattr(routing_facade, name) is owner
+    assert owner.__module__ == "imagent.gateway.routing.projection_routes"
+for module in (contracts_facade, historical_operations, historical_validators):
+    for name in ("ObserveThread", "ThreadObserved"):
+        assert not hasattr(module, name)
+        assert name not in getattr(module, "__all__", ())
+assert not hasattr(persistence_facade, "ProjectionPolicy")
+assert "ProjectionPolicy" not in persistence_facade.__all__
+for module_name in (
+    "imagent.contracts",
+    "imagent.contracts.operations",
+    "imagent.contracts.validators",
+    "imagent.gateway.persistence",
+):
+    names = ("ProjectionPolicy",) if module_name.endswith("persistence") else (
+        "ObserveThread",
+        "ThreadObserved",
+    )
+    for name in names:
+        try:
+            exec(f"from {module_name} import {name}")
+        except ImportError:
+            pass
+        else:
+            raise AssertionError(f"historical {module_name}.{name} import unexpectedly succeeded")
+projection_hints = typing.get_type_hints(projection_route_owner.ThreadObserved)
+assert projection_hints["route"] is ThreadProjectionRoute
+root_hints = typing.get_type_hints(gateway_facade.ImAgentGateway._observe_thread)
+assert root_hints["operation"] is projection_route_owner.ObserveThread
+assert root_hints["return"] is projection_route_owner.ThreadObserved
+"""
+for first_import in (
+    "import imagent.gateway.routing.projection_routes\n",
+    "import imagent.gateway.routing.operations\n",
+    "import imagent.contracts.operations\n",
+    "import imagent.contracts.validators\n",
+    "import imagent.contracts\n",
+    "import imagent.gateway.routing\n",
+    "import imagent.gateway\n",
+):
+    completed = subprocess.run(
+        [sys.executable, "-c", first_import + check_code],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode:
+        raise AssertionError(
+            f"projection-route import-order smoke failed: {first_import!r}\n"
+            f"stdout={completed.stdout}\nstderr={completed.stderr}"
+        )
+'''
 CASES = {
     "base": (
         "",
@@ -303,6 +378,7 @@ CASES = {
         + APPLICATION_IMPORT_ISOLATION_CHECK
         + APPLICATION_FACADE_CHECK
         + BINDING_IMPORT_ORDER_CHECK
+        + PROJECTION_ROUTE_IMPORT_ORDER_CHECK
         + (
             "import asyncio, importlib, importlib.util, typing, imagent; "
             "import imagent.events as event_facade; "

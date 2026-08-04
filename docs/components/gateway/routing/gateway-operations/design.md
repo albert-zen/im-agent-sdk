@@ -77,14 +77,18 @@ a general durable operation log.
 ## Dependency boundary
 
 Gateway operations call explicit typed owner methods or ports for binding,
-projection-route, and request-correlation. They do not dispatch
+projection-route, and request-correlation. The closed aggregate union imports
+the exact projection-route operation/result values from
+`gateway.routing.projection_routes` and the still-pending request values from
+their request-correlation owner; it does not define a second union or preserve
+the moved route values in `imagent.contracts`. They do not dispatch
 `ApplicationOperation`, receive a generic repository/context object, or perform
 owner mutation or concrete validation. Root binding delegates may query
 Application truth through their existing typed root methods; that is binding
 composition, not Gateway aggregate dispatch. The projection-route
-implementation and policy remain in their next focused leaf; this owner
-invokes its typed route port and does not create a second route authority or
-observation worker. Interaction
+implementation and policy are in their focused leaf; this owner invokes its
+typed route port and does not create a second route authority or observation
+worker. Interaction
 Controllers depend on exact public typed actions, never on this leaf's
 implementation or Gateway context.
 

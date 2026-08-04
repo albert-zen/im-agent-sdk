@@ -10,16 +10,14 @@ from imagent.contracts import (
     BindConversationToThread,
     ConversationBound,
     GatewayOperationFailed,
-    ObserveThread,
-    ThreadObserved,
 )
 from imagent.gateway import ImAgentGateway
 from imagent.gateway.composition import GatewayExtensions, GatewayRepositories
-from imagent.gateway.persistence import ProjectionPolicy
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,
 )
+from imagent.gateway.routing import ObserveThread, ProjectionPolicy, ThreadObserved
 from imagent.interaction.controllers import CommandRegistry
 from imagent.interaction.messages import ConversationRef
 

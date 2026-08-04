@@ -21,10 +21,8 @@ from ...keyed_locks import KeyedLockCapacityError, KeyedLockRegistry
 
 if TYPE_CHECKING:
     from ...contracts.operations import (
-        ObserveThread,
         RequestResponseRouted,
         RespondToRequest,
-        ThreadObserved,
     )
     from .bindings import (
         BindConversationToProject,
@@ -32,6 +30,7 @@ if TYPE_CHECKING:
         ClearConversationThread,
         ConversationBound,
     )
+    from .projection_routes import ObserveThread, ThreadObserved
 
 
 _UNION_COMPLETED = False
@@ -197,6 +196,7 @@ def _complete_gateway_union() -> None:
     try:
         from ...contracts import operations as pending_operations
         from . import bindings as binding_owner
+        from . import projection_routes as projection_route_owner
 
         binding_names = (
             "BindConversationToProject",
@@ -204,15 +204,20 @@ def _complete_gateway_union() -> None:
             "ClearConversationThread",
             "ConversationBound",
         )
-        pending_names = (
+        projection_route_names = (
             "ObserveThread",
             "ThreadObserved",
+        )
+        pending_names = (
             "RespondToRequest",
             "RequestResponseRouted",
         )
         binding_values = vars(binding_owner)
+        projection_route_values = vars(projection_route_owner)
         pending_values = vars(pending_operations)
         if not all(name in binding_values for name in binding_names):
+            return
+        if not all(name in projection_route_values for name in projection_route_names):
             return
         if not all(name in pending_values for name in pending_names):
             return
@@ -223,17 +228,18 @@ def _complete_gateway_union() -> None:
             | binding_values["BindConversationToProject"]
             | binding_values["BindConversationToThread"]
             | binding_values["ClearConversationThread"]
-            | pending_values["ObserveThread"]
+            | projection_route_values["ObserveThread"]
             | pending_values["RespondToRequest"]
         )
         result_union = (
             ApplicationsListed
             | binding_values["ConversationBound"]
-            | pending_values["ThreadObserved"]
+            | projection_route_values["ThreadObserved"]
             | pending_values["RequestResponseRouted"]
             | GatewayOperationFailed
         )
         globals().update({name: binding_values[name] for name in binding_names})
+        globals().update({name: projection_route_values[name] for name in projection_route_names})
         globals().update({name: pending_values[name] for name in pending_names})
         globals()["GatewayOperation"] = operation_union
         globals()["GatewayOperationResult"] = result_union
@@ -285,7 +291,7 @@ def validate_gateway_operation(operation: GatewayOperation) -> None:
 
         _validate_binding_operation(operation)
     elif isinstance(operation, ObserveThread):
-        from ...contracts.validators import _validate_observe_operation
+        from .projection_routes import _validate_observe_operation
 
         _validate_observe_operation(operation)
     elif isinstance(operation, RespondToRequest):
@@ -330,7 +336,7 @@ def validate_gateway_operation_result(
         _validate_binding_operation_result(operation, result)
         return
     if isinstance(operation, ObserveThread):
-        from ...contracts.validators import _validate_observe_operation_result
+        from .projection_routes import _validate_observe_operation_result
 
         _validate_observe_operation_result(operation, result)
         return

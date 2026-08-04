@@ -36,7 +36,6 @@ from imagent.contracts import (
     ConversationBound,
     GatewayOperationFailed,
     ListApplications,
-    ObserveThread,
     RequestResponseRouted,
     RespondToRequest,
     SelectApplication,
@@ -48,7 +47,6 @@ from imagent.gateway.persistence import (
     ConversationBinding,
     IdempotencyCapacityError,
     InMemoryIdempotencyRepository,
-    ProjectionPolicy,
     RequestRouteState,
     ThreadProjectionRoute,
 )
@@ -58,6 +56,8 @@ from imagent.gateway.persistence.memory import (
     InMemoryRequestCorrelationRepository,
 )
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
+from imagent.gateway.routing import ObserveThread, ProjectionPolicy
+from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.channels import DeliveryReceipt
 from imagent.interaction.controllers import MarkdownRequestPresenter, SlashController
 from imagent.interaction.messages import (
@@ -68,9 +68,6 @@ from imagent.interaction.messages import (
 )
 from imagent.interaction.operations import OperationErrorCode
 from imagent.keyed_locks import KeyedLockCapacityError
-from imagent.projections import (
-    derive_projection_route_id,
-)
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

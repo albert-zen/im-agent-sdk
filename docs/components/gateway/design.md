@@ -456,9 +456,10 @@ that never receives native requests therefore incurs no prompt or SDK policy.
 The stable `imagent.gateway` public surface is the target package at
 `src/imagent/gateway/__init__.py`. The initial package-establishment slice
 moved the existing `ImAgentGateway` implementation there unchanged. The
-Gateway operation slice now composes `gateway.routing.operations` for typed
-dispatch and bounded Conversation serialization; later focused PRs can
-extract one documented leaf at a time. The package initializer remains
+Gateway operation slice composes `gateway.routing.operations` for typed
+dispatch and bounded Conversation serialization, while
+`gateway.routing.projection_routes` owns canonical route values, policy,
+identity, and persistence mechanics. The package initializer remains
 explicit composition/orchestration, not a facade over a second operation
 implementation. Public constructors, exported object identity, defaults,
 ordering, claims, checkpoints, and shutdown semantics do not change merely

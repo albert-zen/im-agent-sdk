@@ -36,10 +36,10 @@ from imagent.gateway.persistence.memory import (
 )
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.gateway.projection.request_correlation import derive_request_correlation_id
+from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.messages import ConversationRef, TextContent
 from imagent.interaction.operations import ContractViolation
 from imagent.projections import (
-    derive_projection_route_id,
     derive_turn_reply_correlation_id,
 )
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter

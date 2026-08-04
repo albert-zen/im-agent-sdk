@@ -28,7 +28,6 @@ from imagent.gateway.delivery.proactive_ingress import (
 from imagent.gateway.delivery.submissions import derive_delivery_submission_id
 from imagent.gateway.persistence import (
     DeliverySubmissionState,
-    ProjectionPolicy,
     ThreadProjectionRoute,
 )
 from imagent.gateway.persistence.memory import (
@@ -36,6 +35,7 @@ from imagent.gateway.persistence.memory import (
     InMemoryDeliverySubmissionRepository,
     InMemoryProjectionRouteRepository,
 )
+from imagent.gateway.routing import ProjectionPolicy
 from imagent.interaction.channels import (
     ChannelCapabilities,
     DeliveryReceipt,

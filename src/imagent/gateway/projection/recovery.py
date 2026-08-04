@@ -27,9 +27,9 @@ from ...interaction.messages import ConversationRef
 from ...projections import (
     AuthoritativeProjectionSlice,
     ProjectedAgentMessage,
-    derive_projection_route_id,
 )
 from ..persistence.state_contracts import ThreadProjectionRoute
+from ..routing.projection_routes import derive_projection_route_id
 
 
 class RecoveryMode(StrEnum):

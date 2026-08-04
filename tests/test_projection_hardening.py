@@ -33,14 +33,12 @@ from imagent.contracts import (
     BindConversationToThread,
     ConversationBound,
     GatewayOperationFailed,
-    ObserveThread,
 )
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import DeliveryCoordinator, DeliveryCoordinatorConfig
 from imagent.gateway.persistence import (
     ConversationBinding,
     InMemoryIdempotencyRepository,
-    ProjectionPolicy,
     ThreadProjectionRoute,
     TurnReplyCorrelation,
 )
@@ -51,6 +49,8 @@ from imagent.gateway.persistence.memory import (
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.gateway.presentation import OutboundPresentationContext
 from imagent.gateway.projection import derive_projection_delivery_id
+from imagent.gateway.routing import ObserveThread, ProjectionPolicy
+from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.channels import DeliveryReceipt
 from imagent.interaction.controllers import ControllerActions
 from imagent.interaction.messages import (
@@ -64,7 +64,6 @@ from imagent.projection_runtime import TurnAcceptanceBufferOverflow
 from imagent.projections import (
     ProjectionWorkerState,
     derive_live_projection_delivery_id,
-    derive_projection_route_id,
     derive_turn_reply_correlation_id,
     immutable_projection_metadata,
 )

@@ -26,6 +26,7 @@ from .gateway.projection.request_correlation import (
     derive_request_correlation_id,
     derive_request_delivery_id,
 )
+from .gateway.routing.projection_routes import get_projection_route
 from .interaction.controllers import RequestPresenter
 from .projections import (
     DeliverOutbound,
@@ -33,7 +34,6 @@ from .projections import (
     ProjectedAgentMessage,
     RetryableDeliveryError,
     deliver_projected_message,
-    get_projection_route,
 )
 
 RecordGap = Callable[[ThreadRef, str, str], None]

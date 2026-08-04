@@ -35,6 +35,7 @@ from imagent.gateway.presentation import (
     ProjectionPresentationOrigin,
 )
 from imagent.gateway.projection import derive_projection_delivery_id
+from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.channels import (
     ChannelCapabilities,
     DeliveryReceipt,
@@ -51,7 +52,6 @@ from imagent.interaction.messages import (
 from imagent.projections import (
     ProjectedAgentMessage,
     deliver_projected_message,
-    derive_projection_route_id,
 )
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
