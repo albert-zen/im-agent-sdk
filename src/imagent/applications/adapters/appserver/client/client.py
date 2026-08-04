@@ -20,10 +20,12 @@ from ..diagnostics import (
     summarize_transport_message,
 )
 from ..transport import (
+    _DEFAULT_MAX_INBOUND_FRAME_BYTES,
     AppServerError,
     AppServerTransport,
     StdioAppServerTransport,
     WebSocketAppServerTransport,
+    _validated_max_inbound_frame_bytes,
 )
 from .handoff import (
     APP_SERVER_DISPATCH_POSITION_KEY,
@@ -73,6 +75,7 @@ class AppServerClient:
         server_request_queue_size: int = DEFAULT_SERVER_REQUEST_QUEUE_SIZE,
         sleep: Callable[[float], Awaitable[None] | None] | None = None,
         random_float: Callable[[], float] | None = None,
+        max_inbound_frame_bytes: int = _DEFAULT_MAX_INBOUND_FRAME_BYTES,
     ) -> None:
         self._supervisor = supervisor
         self._client_info = client_info
@@ -87,6 +90,7 @@ class AppServerClient:
             raise ValueError("app-server dispatch queue sizes must be positive")
         self._notification_queue_size = int(notification_queue_size)
         self._server_request_queue_size = int(server_request_queue_size)
+        self._max_inbound_frame_bytes = _validated_max_inbound_frame_bytes(max_inbound_frame_bytes)
         self._sleep = sleep or asyncio.sleep
         self._random_float = random_float
         self._transport: AppServerTransport | None = None
@@ -778,7 +782,9 @@ class AppServerClient:
             message="Connecting to app-server",
         )
         try:
-            websocket = await self._supervisor.connect_external()
+            websocket = await self._supervisor.connect_external(
+                max_inbound_frame_bytes=self._max_inbound_frame_bytes
+            )
         except Exception as exc:
             self._diagnostics.record_connect_failure()
             emit_event(
@@ -804,7 +810,10 @@ class AppServerClient:
                             await result
             raise AppServerError("app-server client is closed")
         if websocket is not None:
-            transport: AppServerTransport = WebSocketAppServerTransport(websocket)
+            transport: AppServerTransport = WebSocketAppServerTransport(
+                websocket,
+                max_inbound_frame_bytes=self._max_inbound_frame_bytes,
+            )
             websocket_mode = self._supervisor.connection_mode or EXTERNAL_CONNECTION_MODE
             self.connection_mode = websocket_mode
             emit_event(
@@ -827,7 +836,10 @@ class AppServerClient:
                 )
                 raise AppServerError(self._unavailable_message(display_target, diagnostic))
             process = await self._supervisor.start()
-            transport = StdioAppServerTransport(process)
+            transport = StdioAppServerTransport(
+                process,
+                max_inbound_frame_bytes=self._max_inbound_frame_bytes,
+            )
             self.connection_mode = SPAWNED_STDIO_CONNECTION_MODE
             self._stderr_task = asyncio.create_task(self._drain_process_stderr(process))
             emit_event(

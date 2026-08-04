@@ -18,7 +18,7 @@ destination policy, and consumer materialization remain outside this block.
 | Leaf | Responsibility | Design | Testing |
 |---|---|---|---|
 | `applications.adapters.appserver.client` | bounded JSON-RPC client, targets, retry, supervision, and admission fence | [design](appserver/client/design.md) | [testing](appserver/client/testing.md) |
-| `applications.adapters.appserver.transport` | stdio/WebSocket JSON framing and close translation | [design](appserver/transport/design.md) | [testing](appserver/transport/testing.md) |
+| `applications.adapters.appserver.transport` | bounded stdio/WebSocket JSON framing, poison, and close translation | [design](appserver/transport/design.md) | [testing](appserver/transport/testing.md) |
 | `applications.adapters.appserver.mapping` | protocol/resource/item normalization into internal typed facts | [design](appserver/mapping/design.md) | [testing](appserver/mapping/testing.md) |
 | `applications.adapters.appserver.requests` | evidenced server-request mapping and bounded response runtime | [design](appserver/requests/design.md) | [testing](appserver/requests/testing.md) |
 | `applications.adapters.appserver.diagnostics` | redacted bounded connection, queue, and protocol diagnostics | [design](appserver/diagnostics/design.md) | [testing](appserver/diagnostics/testing.md) |

@@ -89,6 +89,9 @@ Every adapter should prove:
   connection-scoped; its reset becomes an Application observation gap and
   Gateway authoritative recovery, while T3 subscription overflow does not leak
   polling work;
+- App Server stdio and WebSocket input share one finite byte limit before
+  decode/dispatch; exact payloads succeed, oversize poisons and resets the
+  connection with fixed redacted failure, and a fresh epoch can recover;
 - App Server diagnostics cover ready/reconnect epochs and both dispatch-lane
   overflows without exposing endpoints, paths, native IDs, or error text;
 - T3 diagnostics expose no synthetic long-lived connection, proving the

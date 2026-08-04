@@ -140,6 +140,7 @@ def _client(
     request_timeout_s: float = 15.0,
     notification_queue_size: int = 1024,
     server_request_queue_size: int = 64,
+    max_inbound_frame_bytes: int = 64 * 1024 * 1024,
 ) -> AppServerClient:
     return AppServerClient(
         supervisor=AppServerSupervisor(
@@ -150,6 +151,7 @@ def _client(
         request_timeout_s=request_timeout_s,
         notification_queue_size=notification_queue_size,
         server_request_queue_size=server_request_queue_size,
+        max_inbound_frame_bytes=max_inbound_frame_bytes,
     )
 
 
@@ -672,6 +674,68 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(facts.reconnect_count, 1)
             self.assertTrue(facts.worker_running)
             self.assertFalse(facts.worker_degraded)
+        finally:
+            await client.close()
+
+    async def test_oversized_stdio_frame_resets_without_dispatch_and_respawns(self) -> None:
+        first = _ScriptedProcess({"initialize": [{"result": {"ok": True}}]})
+        second = _ScriptedProcess(
+            {
+                "initialize": [{"result": {"ok": True}}],
+                "thread/list": [{"result": {"threads": []}}],
+            }
+        )
+        processes = iter((first, second))
+        client = AppServerClient(
+            supervisor=AppServerSupervisor(
+                app_server_url="stdio://",
+                spawn_process=lambda *_args: next(processes),
+            ),
+            client_info={"name": "sdk-test", "title": "SDK Test", "version": "0"},
+            max_inbound_frame_bytes=64,
+        )
+        reset = asyncio.Event()
+        reset_epochs: list[int] = []
+        notifications: list[dict] = []
+        server_requests: list[dict] = []
+
+        def capture_reset(epoch: int) -> None:
+            reset_epochs.append(epoch)
+            reset.set()
+
+        client.add_connection_reset_handler(capture_reset)
+        client.add_notification_handler(notifications.append)
+        client.add_server_request_handler(server_requests.append)
+        try:
+            await client.initialize()
+            first_transport = cast(Any, client._transport)
+            self.assertEqual(first_transport._max_inbound_frame_bytes, 64)
+
+            oversized = json.dumps(
+                {
+                    "method": "thread/status/changed",
+                    "params": {"secret": "must-not-reach-dispatch" * 4},
+                }
+            ).encode()
+            self.assertGreater(len(oversized), 64)
+            first.stdout.lines.put_nowait(oversized + b"\n")
+            await asyncio.wait_for(reset.wait(), timeout=1)
+
+            self.assertEqual(reset_epochs, [1])
+            self.assertEqual(notifications, [])
+            self.assertEqual(server_requests, [])
+            self.assertIsNone(client._transport)
+            self.assertTrue(first.closed)
+            self.assertEqual(
+                client.connection_diagnostics().state,
+                ConnectionDiagnosticState.DISCONNECTED,
+            )
+
+            self.assertEqual(await client.list_threads(), {"threads": []})
+            second_transport = cast(Any, client._transport)
+            self.assertEqual(second_transport._max_inbound_frame_bytes, 64)
+            self.assertEqual(client.connection_epoch, 2)
+            self.assertEqual(second.sent[0]["method"], "initialize")
         finally:
             await client.close()
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..... import __version__
-from ..transport import AppServerError
+from ..transport import _DEFAULT_MAX_INBOUND_FRAME_BYTES, AppServerError
 from .client import AppServerClient
 from .handoff import (
     APP_SERVER_DISPATCH_POSITION_KEY,
@@ -20,6 +20,7 @@ def codex_app_server_client(
     auth_token: str | None = None,
     auth_token_file: str | Path | None = None,
     experimental_api_enabled: bool = False,
+    max_inbound_frame_bytes: int = _DEFAULT_MAX_INBOUND_FRAME_BYTES,
 ) -> AppServerClient:
     """Build the SDK-owned Codex App Server client and transport supervisor."""
 
@@ -37,6 +38,7 @@ def codex_app_server_client(
             "version": __version__,
         },
         experimental_api_enabled=experimental_api_enabled,
+        max_inbound_frame_bytes=max_inbound_frame_bytes,
     )
 
 

@@ -13,6 +13,10 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from ..diagnostics import emit_event
+from ..transport import (
+    _DEFAULT_MAX_INBOUND_FRAME_BYTES,
+    _validated_max_inbound_frame_bytes,
+)
 from .retry import RetryBackoff
 from .target import (
     SPAWNED_STDIO_CONNECTION_MODE,
@@ -25,11 +29,6 @@ ConnectWebSocket = Callable[..., Awaitable[Any] | Any]
 ConnectUnixWebSocket = Callable[..., Awaitable[Any] | Any]
 Sleep = Callable[[float], Awaitable[None] | None]
 STDIO_STREAM_LIMIT = 1024 * 1024
-# Native thread/resume may legitimately return the complete thread in one
-# WebSocket frame. A bridge-side cap can trap large threads in a reconnect loop
-# before the response can be normalized, so trust the explicitly configured
-# App Server endpoint and let JSON decoding provide the natural memory bound.
-WS_MAX_SIZE: int | None = None
 DEFAULT_HEALTH_PATHS = ("/readyz", "/healthz")
 DEFAULT_UNIX_WEBSOCKET_URI = "ws://localhost/"
 UNIX_ENDPOINT_PREFIX = "unix://"
@@ -256,7 +255,12 @@ class AppServerSupervisor:
             return {}
         return {"Authorization": f"Bearer {token}"}
 
-    async def connect_external(self) -> Any | None:
+    async def connect_external(
+        self,
+        *,
+        max_inbound_frame_bytes: int = _DEFAULT_MAX_INBOUND_FRAME_BYTES,
+    ) -> Any | None:
+        max_inbound_frame_bytes = _validated_max_inbound_frame_bytes(max_inbound_frame_bytes)
         self._last_connect_diagnostic = None
         if not self._target.is_external:
             return None
@@ -271,7 +275,12 @@ class AppServerSupervisor:
                 "error_type": type(exc).__name__,
             }
             raise
-        connection = await self._connect_with_retries(connect, url, headers)
+        connection = await self._connect_with_retries(
+            connect,
+            url,
+            headers,
+            max_inbound_frame_bytes=max_inbound_frame_bytes,
+        )
         if connection is None:
             if self._should_probe_health():
                 await self._probe_health(url, headers)
@@ -378,11 +387,18 @@ class AppServerSupervisor:
         connect: ConnectWebSocket,
         url: str,
         headers: dict[str, str],
+        *,
+        max_inbound_frame_bytes: int,
     ) -> Any | None:
         attempts = self.websocket_retry_policy.attempts
         for attempt in range(1, attempts + 1):
             try:
-                connection = self._open_websocket(connect, url, headers)
+                connection = self._open_websocket(
+                    connect,
+                    url,
+                    headers,
+                    max_inbound_frame_bytes=max_inbound_frame_bytes,
+                )
                 if inspect.isawaitable(connection):
                     connection = await connection
                 return connection
@@ -418,6 +434,8 @@ class AppServerSupervisor:
         connect: ConnectWebSocket,
         url: str,
         headers: dict[str, str],
+        *,
+        max_inbound_frame_bytes: int,
     ) -> Awaitable[Any] | Any:
         if _is_unix_endpoint(url):
             path = resolve_unix_socket_path(url)
@@ -425,7 +443,7 @@ class AppServerSupervisor:
             kwargs: dict[str, Any] = {
                 "uri": DEFAULT_UNIX_WEBSOCKET_URI,
                 "compression": None,
-                "max_size": WS_MAX_SIZE,
+                "max_size": max_inbound_frame_bytes,
                 "open_timeout": self.websocket_open_timeout_s,
             }
             if headers:
@@ -434,7 +452,7 @@ class AppServerSupervisor:
         if self.websocket_factory is None:
             websockets = _websocket_module()
             kwargs: dict[str, Any] = {
-                "max_size": WS_MAX_SIZE,
+                "max_size": max_inbound_frame_bytes,
                 "open_timeout": self.websocket_open_timeout_s,
             }
             if headers:

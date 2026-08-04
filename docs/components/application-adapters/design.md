@@ -198,6 +198,14 @@ exists. T3 polling uses the shared bounded per-subscriber fan-out and does not
 keep polling solely for an overflowed subscriber. Queue capacity is injectable
 adapter infrastructure; product retry and degraded UX remain consumer policy.
 
+Before either App Server callback lane, its transport applies one positive
+non-boolean byte limit to every stdio or WebSocket JSON frame. Oversize fails
+with a fixed redacted transport error, poisons that connection, and enters the
+same epoch reset without JSON decoding, callback dispatch, or suffix parsing.
+The 64 MiB default preserves complete native Thread/resume frames while making
+the former unbounded receive path finite; consumers may configure only this
+single transport value, not a second product framing path.
+
 An Application may optionally expose stable redacted `diagnostic_facts()`.
 This structural seam is not part of the required Application port: App Server
 has a meaningful connection epoch and bounded dispatch queues, while T3's HTTP
