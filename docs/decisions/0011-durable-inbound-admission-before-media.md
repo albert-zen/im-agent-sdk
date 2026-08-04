@@ -88,10 +88,16 @@ Production media-capable Channel adapters must use pre-admission. The reusable
 contract kit makes the handler part of the Channel Port so this is not hidden
 Gateway-specific duck typing.
 
-During migration, Gateway inspects the Channel `start` signature before calling
-it and uses the legacy message-only form when the admission callback is not
-accepted. It does not retry a `start` call after side effects. Legacy adapters
-retain the late durable claim but do not gain the pre-media duplicate guarantee.
+The Gateway migration is complete. `ChannelAdapter.start` keeps its optional
+admission parameter only for direct standalone Channel use, but
+`ImAgentGateway` always calls each Channel once with both the completed-message
+callback and its exact Channel-scoped admission handler. Gateway performs no
+signature inspection, reflective compatibility check, `TypeError` fallback,
+or message-only retry. A legacy one-argument implementation therefore fails at
+call binding before its body runs, while a `TypeError` raised inside a valid
+two-argument start body remains the real startup failure. Existing lifecycle
+rollback closes admission and cleans the current and previously started
+Channels without invoking any start method a second time.
 
 Channel lifecycle does not carry Gateway operations. A native product action
 may still submit the typed operation described by ADR 0008, but the consumer

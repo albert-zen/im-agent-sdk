@@ -232,6 +232,9 @@ components:
       - routing
       - binding
       - idempotency
+      - admission
+      - lifecycle
+      - startup
 
   projections-and-recovery:
     description: Gateway-owned one-worker Thread observation, per-route checkpoints, request correlation, and bounded authoritative recovery.
@@ -472,6 +475,8 @@ components:
       - testing
     keywords:
       - channel
+      - admission
+      - startup
       - qq
       - telegram
       - feishu

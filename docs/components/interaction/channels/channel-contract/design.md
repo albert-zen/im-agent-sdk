@@ -16,10 +16,15 @@ honest capability difference, not implicit success.
 ## Contract
 
 One stable `channel_instance_id` identifies one configured account/bot
-instance. `start` installs the completed inbound-message callback and, for
-modern media-capable adapters, an `InboundAdmissionHandler`. `stop` joins
-owned workers. `send` receives one logical or already planned outbound unit
-and returns a typed `DeliveryReceipt`; it never claims device display.
+instance. `start` installs the completed inbound-message callback and an
+`InboundAdmissionHandler`. The admission parameter remains optional only so a
+Channel may still be used directly outside Gateway with its message callback;
+every `ImAgentGateway` composition supplies both arguments exactly once. A
+one-argument implementation is not a Gateway-compatible Channel, and Gateway
+does not inspect signatures, reinterpret `TypeError`, or retry a message-only
+form. `stop` joins owned workers. `send` receives one logical or already
+planned outbound unit and returns a typed `DeliveryReceipt`; it never claims
+device display.
 
 The Channel lifecycle carries no Gateway operation callback. A native button,
 card, or other product action is normalized by the consumer's Controller and

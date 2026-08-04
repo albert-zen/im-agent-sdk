@@ -132,6 +132,13 @@ class GatewayStartupAdmissionTests(unittest.IsolatedAsyncioTestCase):
             active_channel.release_stop.set()
         with self.assertRaisesRegex(RuntimeError, "simulated channel startup failure"):
             await starting
+        self.assertEqual(active_channel.start_attempts, 1)
+        self.assertEqual(active_channel.stop_attempts, 1)
+        self.assertEqual(failing_channel.start_attempts, 1)
+        self.assertEqual(failing_channel.stop_attempts, 1)
+        self.assertFalse(active_channel.started)
+        self.assertFalse(failing_channel.started)
+        self.assertEqual(application._inputs, [])
 
 
 class _StartupEntriesChannel(FakeChannelAdapter):
@@ -150,8 +157,15 @@ class _BlockingStopStartupChannel(FakeChannelAdapter):
         super().__init__("active-startup-channel")
         self.stopping = asyncio.Event()
         self.release_stop = asyncio.Event()
+        self.start_attempts = 0
+        self.stop_attempts = 0
+
+    async def start(self, on_message, on_admission=None) -> None:
+        self.start_attempts += 1
+        await super().start(on_message, on_admission)
 
     async def stop(self) -> None:
+        self.stop_attempts += 1
         self.stopping.set()
         await self.release_stop.wait()
         await super().stop()
@@ -160,10 +174,17 @@ class _BlockingStopStartupChannel(FakeChannelAdapter):
 class _FailingStartupChannel(FakeChannelAdapter):
     def __init__(self) -> None:
         super().__init__("failing-startup-channel")
+        self.start_attempts = 0
+        self.stop_attempts = 0
 
     async def start(self, on_message, on_admission=None) -> None:
+        self.start_attempts += 1
         await super().start(on_message, on_admission)
         raise RuntimeError("simulated channel startup failure")
+
+    async def stop(self) -> None:
+        self.stop_attempts += 1
+        await super().stop()
 
 
 def _inbound(conversation: ConversationRef, message_id: str) -> InboundMessage:

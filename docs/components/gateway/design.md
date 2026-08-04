@@ -346,6 +346,10 @@ cancels/joins owned component work; no inbound mutation is silently discarded.
 `GatewayLimits.startup_buffer_max_pending` configures this bound.
 If startup fails, or once shutdown begins, the live admission gate rejects
 later Channel callbacks until another start completes successfully.
+Gateway invokes every Channel once with both message and Channel-scoped
+admission handlers; it has no signature inspection, one-argument fallback, or
+`TypeError` retry. Direct standalone Channel use may still omit the optional
+admission parameter without creating a second Gateway path.
 
 For IM-originated input, Gateway persists a minimal mapping from the returned
 `started/create_new` result to the originating Conversation/reply ID. A

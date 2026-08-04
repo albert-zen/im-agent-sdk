@@ -19,6 +19,12 @@ Tests must prove:
   cannot reach Controller or Application work;
 - partial startup stops only successfully started owners in reverse order and
   preserves the primary failure when cleanup also fails;
+- all SDK-owned Channels receive their exact admission handler through one
+  two-argument start invocation; a legacy one-argument body runs zero times,
+  and an internal two-argument `TypeError` runs once;
+- failed Channel startup closes inbound admission, performs no Controller or
+  Application work, stops the current and prior applicable Channels exactly
+  once per attempt, and leaves a later restart bounded and explicit;
 - normal stop closes projection and each bounded extension/delivery runtime and
   leaves no second Application subscription or Channel admission path.
 - `GatewayStartupAdmission`, `GatewayStartupOverflow`, and

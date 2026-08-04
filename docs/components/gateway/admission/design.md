@@ -32,12 +32,12 @@ pre-handoff fencing failure releases only that owner; a stale owner cannot
 release or use a replacement claim.
 
 The Channel contract offers admission before proportional media preparation.
-`start_channel_with_admission` currently retains the documented signature
-migration fallback for an older Channel implementation. That fallback cannot
-move admission ahead of legacy adapter preparation, but it still enters the
-same Gateway claim authority rather than creating a second authorization path.
-It remains an explicit removal gap; supported Channels must converge on the
-pre-media admission callback.
+`start_channel_with_admission` always forwards the exact message and admission
+handlers once through the two-argument Channel start path. It contains no
+signature inspection, reflection, `TypeError` compatibility rule, or fallback
+invocation. The contract's optional admission default remains solely for
+direct standalone Channel use; every Gateway-composed Channel must accept the
+pre-media admission callback, and failure is explicit before inbound work.
 
 ## State and recovery
 
