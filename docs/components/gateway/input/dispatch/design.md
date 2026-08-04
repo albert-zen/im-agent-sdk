@@ -49,6 +49,11 @@ Same-Conversation work serializes; a new key at capacity fails before
 Application effects. Consumer work never runs on Channel or Application socket
 read paths.
 
+The Gateway operation owner selects the stable Conversation key and maps the
+configured capacity failure. Its entry/wait/cancellation mechanics come from
+the dependency-neutral `gateway.concurrency` leaf, which owns no input,
+binding, claim, or side-effect policy.
+
 ## Contracts and structure
 
 The public fact currently exported from `imagent.contracts` is

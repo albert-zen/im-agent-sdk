@@ -17,7 +17,7 @@ from ...interaction.operations import (
     OperationResultStatus,
     require_identifier,
 )
-from ...keyed_locks import KeyedLockCapacityError, KeyedLockRegistry
+from ..concurrency import KeyedLockCapacityError, KeyedLockRegistry
 
 if TYPE_CHECKING:
     from ...contracts.operations import (

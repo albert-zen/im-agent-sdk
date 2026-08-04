@@ -62,6 +62,7 @@ gateway
 ├── composition
 ├── lifecycle
 ├── admission
+├── concurrency
 ├── routing
 │   ├── bindings
 │   ├── gateway-operations
@@ -104,7 +105,8 @@ spool/outbox.
 See the [Gateway navigation](gateway/README.md), including the authoritative
 [composition](gateway/composition/design.md),
 [lifecycle](gateway/lifecycle/design.md),
-[admission](gateway/admission/design.md), and
+[admission](gateway/admission/design.md),
+[concurrency](gateway/concurrency/design.md), and
 [input](gateway/input/README.md) and
 [diagnostics](gateway/diagnostics/design.md) leaves, plus the
 [projection subtree](gateway/projection/README.md).

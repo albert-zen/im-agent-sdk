@@ -22,6 +22,11 @@ Tests must prove:
 - bounded acceptance buffering closes synchronous event races without a second
   Application subscription.
 
+Focused registry mechanics and old-module absence live in
+`tests/gateway/test_concurrency.py`; dispatch integration retains the stable
+Conversation key, configured bound, pre-effect rejection, and claim-transition
+evidence.
+
 Run:
 
 ```sh

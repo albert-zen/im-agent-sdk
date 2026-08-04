@@ -19,7 +19,7 @@ from ...interaction.media_staging import (
 )
 from ...interaction.messages import ConversationRef, TextContent, TextFormat
 from ...interaction.operations import ContractViolation
-from ...keyed_locks import KeyedLockCapacityError, KeyedLockRegistry
+from ..concurrency import KeyedLockCapacityError, KeyedLockRegistry
 from ..persistence.repository_contracts import (
     DeliverySubmissionCapacityError,
     DeliverySubmissionConflict,

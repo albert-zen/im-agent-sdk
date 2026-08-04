@@ -234,6 +234,11 @@ class DeliveryCoordinatorTests(unittest.IsolatedAsyncioTestCase):
         )
         admitted = coordinator.submit(channel, self._message("a", "first"))
         await started.wait()
+        self.assertEqual(coordinator._destination_locks.active_key_count, 1)
+        self.assertLessEqual(
+            coordinator._destination_locks.active_key_count,
+            coordinator._config.max_pending,
+        )
         rejected = coordinator.submit(channel, self._message("b", "second"))
 
         self.assertTrue(admitted.admitted)
@@ -245,8 +250,10 @@ class DeliveryCoordinatorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(receipt.items, ())
         self.assertEqual(receipt.segments, ())
         self.assertEqual(len(channel.sent), 1)
+        self.assertEqual(coordinator._destination_locks.active_key_count, 1)
         release.set()
         await admitted.result()
+        self.assertEqual(coordinator._destination_locks.active_key_count, 0)
         await coordinator.close()
 
     def test_retry_timing_configuration_must_be_finite(self) -> None:

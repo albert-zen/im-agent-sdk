@@ -21,6 +21,14 @@
   active-key bound, retains no completed key, permits same-key waiters at
   capacity, rejects a new key before side effects, and releases cancelled
   owners/waiters exactly once;
+- the dependency-neutral keyed registry has one canonical internal owner,
+  rejects invalid bounds, preserves equal-key joins and independent-key
+  progress, cleans owner/waiter cancellation exactly once, and leaves no
+  historical root import or policy-specific dependency;
+- registries without an independent key limit remain inside a proved finite
+  enclosing admission: Coordinator destination keys cannot exceed reserved
+  `max_pending` work, and request keys cannot exceed admitted Conversation
+  operation lanes;
 - active Thread observation receives its finite positive `GatewayLimits` bound,
   joins same-Thread starters and waiters at the final slot, rejects only a
   distinct Thread before Application subscription/recovery/checkpoint or

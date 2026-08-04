@@ -39,11 +39,18 @@ re-exports the exact coordinator values. The package root may retain a stable
 `delivery_coordination` module attribute as an exact alias, but the historical
 internal module is not retained as an import path or implementation.
 
-`KeyedLockRegistry` remains in its current shared utility module during this
-slice because Gateway request serialization and proactive delivery ingress
-also use it. Folding that shared primitive into Coordinator would create the
-wrong ownership. The component map records this as a structural gap for a
-later focused ownership split.
+Coordinator selects `ConversationRef` as the destination key and owns FIFO
+lane policy. It consumes the dependency-neutral `KeyedLockRegistry` mechanics
+from `gateway.concurrency`; folding that shared primitive into Coordinator
+would give delivery the wrong ownership because Gateway operation, request,
+and proactive-ingress serialization also use it.
+
+The registry does not need a second independent key bound because Coordinator
+reserves one of its finite `max_pending` logical-delivery slots before planning
+or entering the destination lane and retains that reservation through lane
+exit. Therefore active destination keys can never exceed admitted pending
+work. This is an enclosing finite admission proof, not an unbounded-capacity
+exception.
 
 ## Authority
 
