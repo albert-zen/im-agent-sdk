@@ -33,7 +33,9 @@ idempotency completion but before checkpoint CAS, ordered authoritative
 recovery may advance the lagging checkpoint using that same stable delivery
 ID. If it occurs before completion, O1 may be reevaluated because no Channel
 side effect began. An already-completed live duplicate never guesses a
-different checkpoint from opaque identity.
+different checkpoint from opaque identity. A checkpoint repository/CAS failure
+is not a destination decision and remains explicit to the affected Thread's
+existing recovery supervisor.
 
 Live-only A1 output has an event-scoped delivery ID and may use outbound
 idempotency for that attempt, but it never advances a completed-item
@@ -68,12 +70,15 @@ retains projected-message construction, reply correlation lookup, and the call
 into the injected checkpoint authority after the existing delivery/O1 path
 returns its typed outcome. That forwarding does not make a checkpoint decision
 or perform a CAS.
-`projection_routes.py` retains route bootstrap, bounded recovery orchestration,
-and route ordering, but no checkpoint decision. O1 presentation returns a
-typed presented/suppressed/failed decision after a stable outbound claim
-exists; the idempotency owner completes a suppression before this authority
-can advance a route, or releases a failed/cancelled pre-Channel claim. Recovery
-supplies bounded ordered evidence and does not call route persistence directly.
+`projection_routes.py` retains route bootstrap, route locking, current-route
+refresh, and ordered delivery, but no recovery scan/gap policy or checkpoint
+decision. The recovery owner supplies its bounded authoritative read through a
+narrow typed callback, and the route coordinator forwards completed delivery
+evidence to this checkpoint authority. O1 presentation returns a typed
+presented/suppressed/failed decision after a stable outbound claim exists; the
+idempotency owner completes a suppression before this authority can advance a
+route, or releases a failed/cancelled pre-Channel claim. Recovery never calls
+route persistence or checkpoint CAS directly.
 Persistence continues to own the passive route record and atomic repository
 operations.
 

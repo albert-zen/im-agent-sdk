@@ -8,7 +8,6 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from .applications.capabilities import SupportLevel
 from .applications.contract import (
     AcceptedTurn,
     AgentApplicationAdapter,
@@ -22,7 +21,6 @@ from .applications.events import (
     AgentEvent,
     AgentEventType,
     EventBufferOverflow,
-    EventStreamGap,
 )
 from .applications.operations import ApplicationOperation, ApplicationOperationResult
 from .applications.requests import RequestRef
@@ -35,7 +33,7 @@ from .gateway.persistence.state_contracts import (
     ConversationBinding,
     ThreadProjectionRoute,
 )
-from .gateway.projection.recovery import ProjectionRecoveryUnavailable
+from .gateway.projection.recovery import _RecoveryHealthSnapshot, _RecoverySupervisor
 from .gateway.projection.request_correlation import InteractiveRequestProjection
 from .gateway.routing.projection_routes import (
     ProjectionPolicy,
@@ -52,7 +50,6 @@ from .projections import (
     ProjectedAgentMessage,
     ProjectionWorkerHealth,
     ProjectionWorkerState,
-    RetryableDeliveryError,
 )
 
 logger = logging.getLogger(__name__)
@@ -121,16 +118,6 @@ class ThreadProjectionRuntime:
         turn_correlation_retention_seconds: float = 7 * 24 * 60 * 60,
         request_correlation_retention_seconds: float = 7 * 24 * 60 * 60,
     ) -> None:
-        if baseline_history_limit < 1:
-            raise ValueError("baseline_history_limit must be positive")
-        if recovery_history_page_size < 1:
-            raise ValueError("recovery_history_page_size must be positive")
-        if recovery_max_pages < 1:
-            raise ValueError("recovery_max_pages must be positive")
-        if catchup_limit < 1:
-            raise ValueError("catchup_limit must be positive")
-        if projection_item_limit < 1:
-            raise ValueError("projection_item_limit must be positive")
         if turn_acceptance_event_max_pending < 1:
             raise ValueError("turn_acceptance_event_max_pending must be positive")
         if (
@@ -139,10 +126,6 @@ class ThreadProjectionRuntime:
             or max_active_threads < 1
         ):
             raise ValueError("max_active_threads must be a positive integer")
-        if subscription_retry_initial_seconds < 0:
-            raise ValueError("initial subscription retry delay must be non-negative")
-        if subscription_retry_max_seconds < subscription_retry_initial_seconds:
-            raise ValueError("maximum subscription retry delay is below initial delay")
         if turn_correlation_retention_seconds <= 0:
             raise ValueError("turn_correlation_retention_seconds must be positive")
         if request_correlation_retention_seconds <= 0:
@@ -155,8 +138,6 @@ class ThreadProjectionRuntime:
             projections=projections,
             policy=projection_policy,
         )
-        self._subscription_retry_initial_seconds = subscription_retry_initial_seconds
-        self._subscription_retry_max_seconds = subscription_retry_max_seconds
         self._turn_correlation_retention = timedelta(seconds=turn_correlation_retention_seconds)
         self._request_correlation_retention = timedelta(
             seconds=request_correlation_retention_seconds
@@ -185,19 +166,31 @@ class ThreadProjectionRuntime:
         )
         self._routes = ProjectionRouteCoordinator(
             projections=projections,
-            execute_application=execute_application,
             active_routes=self._active_routes,
             deliver_outbound=deliver_outbound,
             deliver_request_once=self._request_projection.deliver_request_once,
             wait_for_acceptance=self._wait_for_acceptance,
-            record_gap=self._record_gap,
             record_delivery_failure=self._record_delivery_failure,
+            request_delivery_max_pending=request_delivery_max_pending,
+        )
+        self._recovery = _RecoverySupervisor(
+            execute_application=execute_application,
+            active_routes=self._active_routes,
+            begin_bootstrap=self._routes.begin_bootstrap,
+            deliver_authoritative=self._routes.deliver_authoritative,
+            wait_until_delivery_ready=self._delivery_ready.wait,
+            record_gap=self._record_gap,
+            reconcile_request_snapshot=(
+                self._request_projection.reconcile_application_after_event_gap
+            ),
+            deliver_request=self._routes.deliver_request_to_routes,
             baseline_history_limit=baseline_history_limit,
             recovery_history_page_size=recovery_history_page_size,
             recovery_max_pages=recovery_max_pages,
             catchup_limit=catchup_limit,
             projection_item_limit=projection_item_limit,
-            request_delivery_max_pending=request_delivery_max_pending,
+            retry_initial_seconds=subscription_retry_initial_seconds,
+            retry_max_seconds=subscription_retry_max_seconds,
         )
         self._stopping = False
 
@@ -302,7 +295,7 @@ class ThreadProjectionRuntime:
             )
             await self._ensure_projection(route.thread_ref)
             if await self._route_is_active(route):
-                await self._routes.reconcile_route(
+                await self._recovery.reconcile_route(
                     application,
                     route,
                     require_checkpoint=False,
@@ -383,7 +376,7 @@ class ThreadProjectionRuntime:
             needs_reconcile = needs_reconcile or created
             await self._ensure_projection(thread_ref)
             if needs_reconcile and not thread_was_created:
-                await self._routes.reconcile_route(
+                await self._recovery.reconcile_route(
                     application,
                     route,
                     require_checkpoint=existing is not None,
@@ -511,7 +504,7 @@ class ThreadProjectionRuntime:
             if activated_route is None:
                 return
             await self._routes.begin_bootstrap(activated_route.route_id)
-            await self._routes.reconcile_route(
+            await self._recovery.reconcile_route(
                 self._application(current.thread_ref.application_instance_id),
                 activated_route,
                 require_checkpoint=require_checkpoint,
@@ -524,7 +517,7 @@ class ThreadProjectionRuntime:
         try:
             await asyncio.gather(
                 *(
-                    self._routes.reconcile_route(
+                    self._recovery.reconcile_route(
                         self._application(current.thread_ref.application_instance_id),
                         route,
                         require_checkpoint=(
@@ -701,10 +694,10 @@ class ThreadProjectionRuntime:
         reconcile_existing: bool,
         require_checkpoint: bool,
     ) -> None:
-        restart_count = 0
-        needs_recovery = reconcile_existing
-        recovery_requires_checkpoint = require_checkpoint
-        recover_requests_after_gap = False
+        recovery_attempt = self._recovery.start_attempt(
+            reconcile_existing=reconcile_existing,
+            require_checkpoint=require_checkpoint,
+        )
         while not self._stopping:
             events: AsyncIterator[AgentEvent] | None = None
             application: AgentApplicationAdapter | None = None
@@ -712,45 +705,35 @@ class ThreadProjectionRuntime:
                 if not await self._observation_required(thread_ref):
                     return
                 application = self._application(thread_ref.application_instance_id)
-                if needs_recovery:
-                    for route in await self._active_routes(thread_ref):
-                        await self._routes.begin_bootstrap(route.route_id)
+                await self._recovery.prepare_reconciliation(
+                    recovery_attempt,
+                    thread_ref,
+                )
                 self._update_health(
                     thread_ref,
                     state=(
                         ProjectionWorkerState.STARTING
-                        if restart_count == 0
+                        if recovery_attempt.restart_count == 0
                         else ProjectionWorkerState.RETRYING
                     ),
-                    restart_count=restart_count,
+                    restart_count=recovery_attempt.restart_count,
                 )
                 events = application.subscribe_thread(thread_ref)
                 ready.set()
-                if needs_recovery:
-                    await self._delivery_ready.wait()
-                    await self._routes.reconcile_routes(
-                        application,
-                        await self._active_routes(thread_ref),
-                        require_checkpoint=recovery_requires_checkpoint,
+                request_recovery_degraded = await self._recovery.reconcile_thread(
+                    recovery_attempt,
+                    application,
+                    thread_ref,
+                )
+                if request_recovery_degraded is not None:
+                    self._update_health(
+                        thread_ref,
+                        interactive_request_recovery_degraded=request_recovery_degraded,
                     )
-                    recovery_requires_checkpoint = True
-                    if recover_requests_after_gap:
-                        request_recovery_degraded = (
-                            await self._request_projection.reconcile_application_after_event_gap(
-                                application,
-                                thread_ref,
-                                deliver_request=self._routes.deliver_request_to_routes,
-                            )
-                        )
-                        self._update_health(
-                            thread_ref,
-                            interactive_request_recovery_degraded=(request_recovery_degraded),
-                        )
-                        recover_requests_after_gap = False
                 self._update_health(
                     thread_ref,
                     state=ProjectionWorkerState.RUNNING,
-                    restart_count=restart_count,
+                    restart_count=recovery_attempt.restart_count,
                     last_subscription_error=None,
                     last_recovery_error=None,
                 )
@@ -762,69 +745,42 @@ class ThreadProjectionRuntime:
             except asyncio.CancelledError:
                 raise
             except Exception as error:
-                restart_count += 1
                 ready.set()
-                recover_requests_after_gap = True
-                error_changes: dict[str, Any]
-                if isinstance(error, ProjectionRecoveryUnavailable):
-                    error_changes = {
-                        "last_recovery_error": str(error),
-                        "last_subscription_error": None,
-                    }
-                elif isinstance(error, EventStreamGap):
-                    current = self._health.get(thread_ref)
-                    error_changes = {
-                        "last_gap": error.gap_code,
-                        "last_event_gap": error.gap_code,
-                        "last_subscription_error": None,
-                        "interactive_request_recovery_degraded": (
-                            self._request_recovery_is_degraded(application)
-                            if application is not None
-                            else False
-                        ),
-                    }
-                    if isinstance(error, EventBufferOverflow):
-                        error_changes.update(
-                            last_event_overflow=error.gap_code,
-                            event_overflow_count=(
-                                current.event_overflow_count + 1 if current is not None else 1
-                            ),
+                current_health = self._health.get(thread_ref)
+                failure = self._recovery.record_failure(
+                    recovery_attempt,
+                    error,
+                    application=application,
+                    current_health=(
+                        _RecoveryHealthSnapshot(
+                            event_overflow_count=current_health.event_overflow_count,
+                            last_subscription_error=current_health.last_subscription_error,
+                            last_recovery_error=current_health.last_recovery_error,
+                            last_gap=current_health.last_gap,
+                            last_event_gap=current_health.last_event_gap,
+                            last_event_overflow=current_health.last_event_overflow,
                         )
-                else:
-                    error_changes = {
-                        "last_subscription_error": str(error),
-                        "interactive_request_recovery_degraded": (
-                            self._request_recovery_is_degraded(application)
-                            if application is not None
-                            else False
-                        ),
-                    }
-                error_changes.setdefault(
-                    "interactive_request_recovery_degraded",
-                    (
-                        self._request_recovery_is_degraded(application)
-                        if application is not None
-                        else False
+                        if current_health is not None
+                        else None
                     ),
                 )
                 self._update_health(
                     thread_ref,
                     state=ProjectionWorkerState.RETRYING,
-                    restart_count=restart_count,
-                    **error_changes,
+                    restart_count=failure.restart_count,
+                    event_overflow_count=failure.event_overflow_count,
+                    last_subscription_error=failure.last_subscription_error,
+                    last_recovery_error=failure.last_recovery_error,
+                    last_gap=failure.last_gap,
+                    last_event_gap=failure.last_event_gap,
+                    last_event_overflow=failure.last_event_overflow,
+                    interactive_request_recovery_degraded=(
+                        failure.interactive_request_recovery_degraded
+                    ),
                 )
                 if self._stopping:
                     return
-                exponent = min(restart_count - 1, 30)
-                delay = min(
-                    self._subscription_retry_initial_seconds * (2**exponent),
-                    self._subscription_retry_max_seconds,
-                )
-                if isinstance(error, RetryableDeliveryError):
-                    delay = max(delay, error.retry_after_seconds or 0)
-                await asyncio.sleep(delay)
-                needs_recovery = True
-                recovery_requires_checkpoint = True
+                await asyncio.sleep(failure.retry_delay_seconds)
             finally:
                 ready.set()
                 if events is not None:
@@ -966,16 +922,6 @@ class ThreadProjectionRuntime:
         self._update_health(
             thread_ref,
             last_gap=f"{route_id}:{gap}",
-        )
-
-    @staticmethod
-    def _request_recovery_is_degraded(
-        application: AgentApplicationAdapter,
-    ) -> bool:
-        runtime = application.summary.capabilities.runtime
-        return (
-            runtime.interactive_requests is not SupportLevel.UNSUPPORTED
-            and runtime.pending_request_snapshot is not SupportLevel.NATIVE
         )
 
     def _update_health(

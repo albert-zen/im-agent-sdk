@@ -3,20 +3,35 @@ from __future__ import annotations
 import importlib.util
 import inspect
 import unittest
+from dataclasses import replace
 from subprocess import run
 from sys import executable
+from typing import cast
 
 from imagent.applications import CodexApplicationAdapter
 from imagent.applications.capabilities import ProjectMode
 from imagent.applications.contract import AgentInput, ThreadRef
-from imagent.applications.events import AgentEvent, AgentEventType
+from imagent.applications.events import (
+    AgentEvent,
+    AgentEventType,
+    EventBufferOverflow,
+)
+from imagent.applications.operations import ApplicationOperation, GetThreadHistory
+from imagent.gateway.persistence import ThreadProjectionRoute
 from imagent.gateway.projection import (
     ProjectionRecoveryUnavailable,
     RecoveryMode,
     ThreadRecovery,
 )
-from imagent.gateway.projection.recovery import recover_thread
-from imagent.interaction.messages import TextContent
+from imagent.gateway.projection.recovery import (
+    _RecoveryHealthSnapshot,
+    _RecoveryLimits,
+    _RecoverySupervisor,
+    read_bounded_authoritative_projection,
+    recover_thread,
+)
+from imagent.gateway.routing.projection_routes import derive_projection_route_id
+from imagent.interaction.messages import ConversationRef, TextContent
 from imagent.testing import FakeAgentApplicationAdapter
 from tests.test_gateway_vertical_slice import NativeZenClient
 
@@ -166,6 +181,226 @@ class ThreadRecoveryTests(unittest.IsolatedAsyncioTestCase):
             await _close(recovery.events)
 
 
+class RecoverySupervisorTests(unittest.IsolatedAsyncioTestCase):
+    def test_limits_reject_non_integer_or_non_positive_scan_bounds(self) -> None:
+        valid = _recovery_limits()
+        invalid_values = (
+            0,
+            -1,
+            True,
+            cast(int, "1"),
+            cast(int, None),
+        )
+        for field in (
+            "baseline_history_limit",
+            "recovery_history_page_size",
+            "recovery_max_pages",
+            "catchup_limit",
+            "projection_item_limit",
+        ):
+            for value in invalid_values:
+                with self.subTest(field=field, value=value):
+                    with self.assertRaisesRegex(ValueError, "positive integer"):
+                        replace(valid, **{field: value})
+
+    def test_limits_reject_non_finite_or_non_numeric_retry_bounds(self) -> None:
+        valid = _recovery_limits()
+        invalid_values = (
+            -1.0,
+            True,
+            float("nan"),
+            float("inf"),
+            float("-inf"),
+            cast(float, 10**10_000),
+            cast(float, "1"),
+            cast(float, None),
+        )
+        for field in ("retry_initial_seconds", "retry_max_seconds"):
+            for value in invalid_values:
+                with self.subTest(field=field, value=value):
+                    with self.assertRaisesRegex(ValueError, "finite non-negative number"):
+                        replace(valid, **{field: value})
+        with self.assertRaisesRegex(ValueError, "below initial"):
+            replace(valid, retry_initial_seconds=1.0, retry_max_seconds=0.5)
+
+    async def test_failure_classification_is_typed_bounded_and_thread_local(self) -> None:
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        first = await application.create_thread()
+        second = await application.create_thread()
+        supervisor = _recovery_supervisor(retry_initial_seconds=0.25, retry_max_seconds=1)
+        first_attempt = supervisor.start_attempt(
+            reconcile_existing=False,
+            require_checkpoint=False,
+        )
+        second_attempt = supervisor.start_attempt(
+            reconcile_existing=False,
+            require_checkpoint=False,
+        )
+        health = _RecoveryHealthSnapshot(
+            event_overflow_count=2,
+            last_recovery_error="prior-recovery",
+        )
+
+        failure = supervisor.record_failure(
+            first_attempt,
+            EventBufferOverflow("application_event_fanout_overflow", max_pending=2),
+            application=application,
+            current_health=health,
+        )
+
+        self.assertEqual(failure.restart_count, 1)
+        self.assertEqual(failure.retry_delay_seconds, 0.25)
+        self.assertEqual(failure.event_overflow_count, 3)
+        self.assertEqual(failure.last_gap, "application_event_fanout_overflow")
+        self.assertEqual(failure.last_event_gap, "application_event_fanout_overflow")
+        self.assertEqual(failure.last_event_overflow, "application_event_fanout_overflow")
+        self.assertEqual(failure.last_recovery_error, "prior-recovery")
+        self.assertTrue(first_attempt.needs_reconciliation)
+        self.assertTrue(first_attempt.require_checkpoint)
+        self.assertTrue(first_attempt.reconcile_requests)
+        self.assertEqual(second_attempt.restart_count, 0)
+        self.assertFalse(second_attempt.needs_reconciliation)
+        self.assertNotEqual(first.ref, second.ref)
+
+        delays = [failure.retry_delay_seconds]
+        for _ in range(4):
+            failure = supervisor.record_failure(
+                first_attempt,
+                RuntimeError("subscription unavailable"),
+                application=application,
+                current_health=health,
+            )
+            delays.append(failure.retry_delay_seconds)
+        self.assertEqual(delays, [0.25, 0.5, 1, 1, 1])
+
+    async def test_request_snapshot_coordination_uses_only_the_affected_thread(
+        self,
+    ) -> None:
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        affected = await application.create_thread()
+        unrelated = await application.create_thread()
+        reconciled: list[ThreadRef] = []
+
+        async def reconcile_request_snapshot(
+            candidate_application,
+            thread_ref,
+            *,
+            deliver_request,
+        ) -> bool:
+            del candidate_application, deliver_request
+            reconciled.append(thread_ref)
+            return True
+
+        supervisor = _recovery_supervisor(
+            reconcile_request_snapshot=reconcile_request_snapshot,
+        )
+        attempt = supervisor.start_attempt(
+            reconcile_existing=False,
+            require_checkpoint=False,
+        )
+        supervisor.record_failure(
+            attempt,
+            RuntimeError("subscription ended"),
+            application=application,
+            current_health=None,
+        )
+
+        degraded = await supervisor.reconcile_thread(
+            attempt,
+            application,
+            affected.ref,
+        )
+
+        self.assertTrue(degraded)
+        self.assertEqual(reconciled, [affected.ref])
+        self.assertNotIn(unrelated.ref, reconciled)
+        self.assertFalse(attempt.reconcile_requests)
+
+
+class BoundedAuthoritativeProjectionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_new_route_reads_one_bounded_page_and_caps_flattened_items(self) -> None:
+        application = _RecordingHistoryApplication()
+        thread = await application.create_thread()
+        for index in range(3):
+            await application.send_input(
+                thread.ref,
+                AgentInput(
+                    client_message_id=f"baseline-{index}",
+                    content=(TextContent(str(index)),),
+                ),
+            )
+        route = _route(thread.ref, ConversationRef("test-channel", "baseline"))
+
+        projection = await read_bounded_authoritative_projection(
+            application,
+            route,
+            execute_application=application.execute,
+            baseline_history_limit=1,
+            recovery_history_page_size=2,
+            recovery_max_pages=2,
+            catchup_limit=1,
+            projection_item_limit=1,
+        )
+
+        self.assertEqual(application.history_calls, [(1, 1)])
+        self.assertEqual(projection.pages_read, 1)
+        self.assertEqual(len(projection.messages), 1)
+        self.assertEqual(projection.gap, "projection_window_truncated")
+
+    async def test_existing_route_stops_at_page_bound_without_ordering_checkpoint(
+        self,
+    ) -> None:
+        application = _RecordingHistoryApplication()
+        thread = await application.create_thread()
+        for index in range(4):
+            await application.send_input(
+                thread.ref,
+                AgentInput(
+                    client_message_id=f"recovery-{index}",
+                    content=(TextContent(str(index)),),
+                ),
+            )
+        route = replace(
+            _route(thread.ref, ConversationRef("test-channel", "checkpoint")),
+            checkpoint_agent_item_id="opaque-checkpoint-not-in-window",
+        )
+
+        projection = await read_bounded_authoritative_projection(
+            application,
+            route,
+            execute_application=application.execute,
+            baseline_history_limit=1,
+            recovery_history_page_size=1,
+            recovery_max_pages=2,
+            catchup_limit=1,
+            projection_item_limit=20,
+        )
+
+        self.assertEqual(application.history_calls, [(1, 1), (1, 2)])
+        self.assertEqual(projection.pages_read, 2)
+        self.assertFalse(projection.checkpoint_found)
+        self.assertEqual(projection.gap, "checkpoint_out_of_window")
+
+    async def test_required_missing_checkpoint_stays_explicit(self) -> None:
+        application = _RecordingHistoryApplication()
+        thread = await application.create_thread()
+        route = _route(thread.ref, ConversationRef("test-channel", "missing"))
+
+        projection = await read_bounded_authoritative_projection(
+            application,
+            route,
+            execute_application=application.execute,
+            baseline_history_limit=1,
+            recovery_history_page_size=1,
+            recovery_max_pages=1,
+            catchup_limit=1,
+            projection_item_limit=1,
+            require_checkpoint=True,
+        )
+
+        self.assertEqual(projection.gap, "checkpoint_missing")
+
+
 async def _collect_turn(events, turn_id: str) -> tuple[AgentEvent, ...]:
     observed: list[AgentEvent] = []
     try:
@@ -190,3 +425,101 @@ async def _close(events) -> None:
         result = close()
         if inspect.isawaitable(result):
             await result
+
+
+def _recovery_limits() -> _RecoveryLimits:
+    return _RecoveryLimits(
+        baseline_history_limit=3,
+        recovery_history_page_size=10,
+        recovery_max_pages=5,
+        catchup_limit=10,
+        projection_item_limit=20,
+        retry_initial_seconds=0.05,
+        retry_max_seconds=2,
+    )
+
+
+class _RecordingHistoryApplication(FakeAgentApplicationAdapter):
+    def __init__(self) -> None:
+        super().__init__(project_mode=ProjectMode.FLAT)
+        self.history_calls: list[tuple[int, int]] = []
+
+    async def execute(self, operation: ApplicationOperation):
+        if isinstance(operation, GetThreadHistory):
+            self.history_calls.append((operation.limit, operation.page))
+        return await super().execute(operation)
+
+
+def _route(
+    thread_ref: ThreadRef,
+    conversation_ref: ConversationRef,
+) -> ThreadProjectionRoute:
+    return ThreadProjectionRoute(
+        route_id=derive_projection_route_id(thread_ref, conversation_ref),
+        thread_ref=thread_ref,
+        conversation_ref=conversation_ref,
+    )
+
+
+def _recovery_supervisor(
+    *,
+    retry_initial_seconds: float = 0,
+    retry_max_seconds: float = 0,
+    reconcile_request_snapshot=None,
+) -> _RecoverySupervisor:
+    async def execute_application(operation):
+        raise AssertionError(f"unexpected Application operation: {operation}")
+
+    async def active_routes(thread_ref):
+        del thread_ref
+        return ()
+
+    async def begin_bootstrap(route_id):
+        raise AssertionError(f"unexpected route bootstrap: {route_id}")
+
+    async def deliver_authoritative(
+        route,
+        *,
+        read_projection,
+        retain_barrier_on_failure=False,
+    ):
+        del route, read_projection, retain_barrier_on_failure
+        raise AssertionError("unexpected authoritative route delivery")
+
+    async def wait_until_delivery_ready():
+        return None
+
+    def record_gap(thread_ref, route_id, gap):
+        raise AssertionError(f"unexpected recovery gap: {thread_ref}:{route_id}:{gap}")
+
+    async def default_reconcile_request_snapshot(
+        application,
+        thread_ref,
+        *,
+        deliver_request,
+    ) -> bool:
+        del application, thread_ref, deliver_request
+        return False
+
+    async def deliver_request(routes, request):
+        raise AssertionError(f"unexpected request delivery: {routes}:{request}")
+
+    return _RecoverySupervisor(
+        execute_application=execute_application,
+        active_routes=active_routes,
+        begin_bootstrap=begin_bootstrap,
+        deliver_authoritative=deliver_authoritative,
+        wait_until_delivery_ready=wait_until_delivery_ready,
+        record_gap=record_gap,
+        reconcile_request_snapshot=(
+            reconcile_request_snapshot or default_reconcile_request_snapshot
+        ),
+        deliver_request=deliver_request,
+        baseline_history_limit=3,
+        recovery_history_page_size=10,
+        recovery_max_pages=5,
+        catchup_limit=10,
+        projection_item_limit=20,
+        retry_initial_seconds=retry_initial_seconds,
+        retry_max_seconds=retry_max_seconds,
+    )

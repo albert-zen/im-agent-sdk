@@ -87,9 +87,10 @@ validation, stable identities, destination selection, Turn-correlation
 orchestration, monotonic transition/claim fences, and authoritative pending
 request reconciliation live together in
 `gateway/projection/request_correlation.py`. One runtime instance is composed
-with the observation and route-delivery coordinators: those owners retain
-acceptance buffering and per-route delivery ordering, while delegating every
-correlation decision and mutation to this leaf. The historical
+with observation, recovery, and route delivery: observation retains acceptance
+buffering, routes retain per-route delivery ordering, and recovery invokes
+only the typed Thread-scoped pending-snapshot method after a supervised gap.
+Every correlation decision and mutation remains in this leaf. The historical
 `imagent.request_projection_runtime` module is absent.
 
 `imagent.gateway.projection` exposes the exact `InteractiveRequestProjection`,

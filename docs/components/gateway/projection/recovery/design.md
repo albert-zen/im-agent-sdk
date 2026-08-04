@@ -30,15 +30,23 @@ blocking the native producer.
 New routes use one configured recent history page plus bounded active-Turn
 catch-up. Existing routes scan newest authoritative pages toward their own
 opaque completion checkpoint. All page, item, and active-Turn limits are
-finite. Missing/expired checkpoints, page exhaustion, unavailable history, or
-an unsupported recovery capability remain explicit gap/degraded facts; none
-licenses a complete archive scan or a claim that output was fully recovered.
+positive non-boolean integers. Supervisor retry bounds are finite,
+non-negative numeric values, use capped exponential growth, and reject invalid
+configuration explicitly. Missing/expired checkpoints, page exhaustion,
+unavailable history, or an unsupported recovery capability remain explicit
+gap/degraded facts; none licenses a complete archive scan or a claim that
+output was fully recovered.
 
 ## Failure domains and request honesty
 
 Subscription and recovery failures are per-Thread worker infrastructure facts
-that use bounded supervisor backoff. A per-route Channel delivery failure is
-not a recovery trigger and does not restart the Application subscription. One
+that use bounded supervisor backoff. Only a typed Channel/destination decision
+failure is isolated to its route and does not restart the Application
+subscription, including when the destination reports a safe retry hint.
+Recovery never consumes that hint. Correlation-repository reads,
+delivery-idempotency or submission infrastructure, and checkpoint repository
+CAS remain outside that destination boundary: their failures propagate to the
+existing affected-Thread supervisor for authoritative convergence. One
 Thread's gap cannot cross another Thread's acceptance-order boundary.
 
 Completed messages reconcile through their stable Application item IDs and
@@ -51,21 +59,32 @@ capability: on a gap, only the affected Thread can reconcile that snapshot; in
 its absence Gateway reports request-recovery degradation rather than inventing
 a prompt or open request from bridge state.
 
-## Current structure and authority
+## Runtime supervision and typed collaboration
 
-The recovery mode/value definitions and bounded authoritative-read helpers live
-in `gateway/projection/recovery.py`. The
-`imagent.gateway.projection` facade re-exports `ThreadRecovery`,
+The recovery mode/value definitions, bounded authoritative-read helpers,
+route-reconciliation orchestration, and private recovery supervisor live in
+`gateway/projection/recovery.py`. The supervisor owns only per-worker recovery
+attempt state and produces typed retry delay and degraded-health facts. The
+observation owner still opens, consumes, closes, and resubscribes the one
+Application Thread subscription; it uses the supervisor's bounded inputs and
+does not create a second worker or event stream.
+
+Recovery invokes route ordering through a narrow typed collaborator. The route
+coordinator physically retains its route lock, the single observation-owned
+bootstrap fence, current-route refresh, Channel-delivery isolation, and
+checkpoint-facing delivery call pending the accepted move, but it no longer
+selects history pages, stores recovery limits, classifies gaps, or supervises
+retries. Its catch boundary accepts only the typed destination decision; it
+never catches across correlation reads or checkpoint persistence.
+Recovery likewise invokes the canonical
+request-correlation owner's Thread-scoped pending-snapshot method through its
+typed call boundary; it receives only the degraded result and never reads or
+mutates request correlations itself.
+
+The `imagent.gateway.projection` facade re-exports `ThreadRecovery`,
 `RecoveryMode`, and `ProjectionRecoveryUnavailable` as the exact owner
 objects. The historical `imagent.recovery` module is absent; it is not a
 compatibility import path.
-
-Generic recovery supervision remains distributed across
-`projection_runtime.py` and `projection_routes.py`. Authoritative pending
-request reconciliation is instead co-located with the one canonical
-request-correlation runtime in `gateway/projection/request_correlation.py`;
-generic recovery calls its typed Thread-scoped method after a gap and does not
-gain request authority.
 
 - [ADR 0004](../../../../decisions/0004-event-fanout-and-recovery.md)
 - [ADR 0007](../../../../decisions/0007-projection-lifecycle-and-delivery-boundaries.md)

@@ -12,11 +12,11 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from .applications.contract import AgentMessage, ThreadRef
+from .gateway.persistence.repository_contracts import IdempotencyClaimStatus
 from .interaction.messages import ConversationRef, OutboundMessage, TextContent, TextFormat
 
 if TYPE_CHECKING:
     from .gateway.persistence.repository_contracts import (
-        IdempotencyClaimStatus,
         ProjectionRouteRepository,
     )
     from .gateway.persistence.state_contracts import ThreadProjectionRoute
@@ -35,12 +35,20 @@ _PROJECTION_METADATA_MIN_INTEGER = -(2**63)
 _PROJECTION_METADATA_MAX_INTEGER = 2**63 - 1
 
 
-class RetryableDeliveryError(RuntimeError):
-    """A zero/known-outcome delivery deferral that authoritative recovery may retry."""
+class _DestinationDecisionError(RuntimeError):
+    """A typed Channel/destination decision failure isolated to one route."""
+
+
+class RetryableDeliveryError(_DestinationDecisionError):
+    """A safely deferred destination decision with an optional retry hint."""
 
     def __init__(self, message: str, *, retry_after_seconds: float | None = None) -> None:
         super().__init__(message)
         self.retry_after_seconds = retry_after_seconds
+
+
+class _ProjectionRecoveryRequired(RuntimeError):
+    """A released pre-Channel projection claim that authoritative recovery may retry."""
 
 
 class ProjectionWorkerState(StrEnum):
@@ -194,6 +202,8 @@ async def deliver_projected_message(
         ),
         projected.checkpoint,
     )
+    if claim is IdempotencyClaimStatus.IN_FLIGHT:
+        raise _DestinationDecisionError(f"delivery remains in flight: {delivery_id}")
     return await checkpoint_authority.apply_delivery_outcome(
         route,
         agent_item_id=agent_message.agent_item_id,

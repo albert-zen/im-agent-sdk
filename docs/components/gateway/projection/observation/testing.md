@@ -24,8 +24,10 @@ Observation conformance must prove:
   terminal Turn events do;
 - baseline delivery precedes live draining for each route without creating a
   second content queue;
-- one destination delivery failure does not restart the Thread worker or block
-  other routes, whereas subscription/recovery failures use bounded backoff;
+- retryable and terminal typed destination decisions do not restart the Thread
+  worker or block other routes, whereas an injected checkpoint/repository
+  failure enters only the affected Thread's existing recovery worker and
+  converges under bounded backoff;
 - live-only presentation shares route ordering but has a distinct stable event
   identity, never enters authoritative recovery, and never advances a
   checkpoint; and

@@ -41,11 +41,14 @@ delivery decisions, checkpoint convergence, worker health, and authoritative
 recovery remain here; the mechanical repository move does not transfer any of
 those policies into persistence.
 
-The focused recovery implementation now lives in
-`gateway/projection/recovery.py`, with exact public values exposed through
-`imagent.gateway.projection`. The historical `imagent.recovery` module is
-absent; the remaining aggregate runtime files retain only their documented
-observation, routing, and request-correlation responsibilities.
+The complete recovery owner now lives in
+`gateway/projection/recovery.py`: public recovery values, bounded reads,
+route-reconciliation orchestration, per-worker attempt state, typed retry and
+health inputs, and request-snapshot coordination. Exact public values remain
+exposed through `imagent.gateway.projection`. The historical
+`imagent.recovery` module is absent; aggregate runtime files retain only their
+documented observation, input-acceptance, route-delivery, and request-delivery
+coordination responsibilities.
 
 Stable completion delivery-ID derivation and the sole expected-current
 checkpoint convergence authority live in `gateway/projection/checkpoints.py`;
@@ -263,13 +266,16 @@ crash before suppression completes may reevaluate the destination policy
 without a Channel side effect; after completion, recovery passes the lagging
 checkpoint evidence without invoking O1 again.
 
-One route's permanent or ambiguous Channel failure blocks that route's later
-ordered decisions and records the route ID, without terminating/restarting the
-Application subscription or preventing other routes from succeeding. A
-zero-side-effect Coordinator capacity rejection is different: it re-enters
-bounded supervisor backoff and authoritative recovery, and never enters the
-sticky blocked-route set. The health snapshot is SDK infrastructure state,
-never Agent Turn/request truth.
+One route's typed permanent, ambiguous, or safely deferred Channel outcome
+remains inside that destination's route boundary: it blocks later ordered
+decisions for that route and records the route ID without
+terminating/restarting the Application subscription or preventing other routes
+from succeeding. The boundary catches only the typed destination decision;
+correlation reads, delivery infrastructure, and checkpoint CAS failures remain
+explicit and enter the affected Thread's existing authoritative recovery loop.
+Recovery supervision never consumes a Channel retry hint or turns destination
+availability into history replay. The health snapshot is SDK infrastructure
+state, never Agent Turn/request truth.
 
 Interactive requests cannot assume that recovery history contains the prompt
 or that every Application supports a pending-request snapshot. The route

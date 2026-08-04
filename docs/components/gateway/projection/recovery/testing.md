@@ -16,15 +16,26 @@ Recovery conformance must prove:
   evidence to converge a lagging checkpoint, while `in_flight` or live-only
   output cannot;
 - subscription/recovery failure uses bounded retry and is isolated per Thread;
-  one Channel destination failure does not restart observation;
+  one typed permanent or retryable Channel destination failure does not
+  restart observation and does not block a healthy destination, while an
+  injected checkpoint/repository failure restarts only the affected Thread's
+  existing worker and converges through authoritative recovery;
+- the focused supervisor returns capped retry and typed gap/degradation facts
+  while observation remains the sole owner of subscription open, consumption,
+  close, and resubscription;
+- count limits reject zero, negative, boolean, and non-integer values, while
+  retry bounds reject boolean, non-numeric, non-finite, negative, and reversed
+  ranges without leaking a generic type error;
 - native request snapshots are reconciled only for the affected Thread and
   only when the Application advertises authoritative support; and
 - no-snapshot reconnect/restart leaves request recovery explicitly degraded
   and never manufactures pending requests from correlations.
 
-Focused recovery evidence is `tests/gateway/projection/test_recovery.py`.
-Cross-leaf evidence remains in `tests/test_projection_hardening.py` and
-`tests/test_projection_routing.py` while their focused mechanical moves are
-pending. The focused suite also proves that the Gateway projection facade
-re-exports the exact owner objects and that the historical
-`imagent.recovery` module is unavailable in a clean process.
+Focused recovery evidence is `tests/gateway/projection/test_recovery.py`,
+including bounded route reads, supervisor classification/backoff, and typed
+request-snapshot coordination. Genuine worker, route-delivery, acceptance,
+and checkpoint integration evidence remains in
+`tests/test_projection_hardening.py` and `tests/test_projection_routing.py`.
+The focused suite also proves that the Gateway projection facade re-exports
+the exact owner objects and that the historical `imagent.recovery` module is
+unavailable in a clean process.
