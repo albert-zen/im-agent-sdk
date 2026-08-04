@@ -17,14 +17,14 @@ owner without reintroducing persistence inside delivery orchestration.
 
 Ownership tests additionally prove exact Gateway/proactive facade identity,
 that the eight vocabulary definitions and validator are single-owned by
-`gateway.delivery.proactive`, that `contracts.delivery` has no definition or
+`gateway.delivery.proactive`, that `gateway.persistence.state_contracts` is the
+sole passive definition, and that `contracts.delivery` has no definition or
 compatibility alias for them, that the eight historical
 `imagent.contracts` proactive names are absent in a clean process, and that
 the owner seam's finite `__all__` contains exactly those eight names. Both
 historical implementation modules remain absent. The tests also prove that
-`DeliverySubmissionOrigin` stays available through the deliberate
-`imagent.contracts` passive-state facade and that passive state/helper imports
-remain one-way.
+`DeliverySubmissionOrigin` stays available through the Gateway persistence and
+delivery facades, while passive state/helper imports remain one-way.
 The mirrored Gateway JSON/CLI ingress suite continues to cover authorization-before-staging,
 cancellation join, cleanup, route/result mapping, and loopback CLI policy.
 Pure decoded-byte, path-confinement, digest, and staged-content construction

@@ -20,8 +20,8 @@ State-contract tests must prove:
 - JSON schemas and Python values remain compatible at their public boundary.
 
 The proactive target/intent/result vocabulary and validator are tested through
-their `gateway.delivery.proactive` owner; passive submission state remains
-tested through `contracts.delivery` until the later state-contract extraction.
+their `gateway.delivery.proactive` owner; passive submission state is tested
+through `gateway.persistence.state_contracts` and its persistence facade.
 
 Focused boundary tests accept exactly 64 delivery destinations, 32 request
 questions, and 64 approval or per-question choice IDs. They reject one more
@@ -33,15 +33,12 @@ Repository conformance tests cover the complete monotonic request-state graph;
 the passive value tests continue to validate one declared state without
 claiming native pending-request authority.
 
-Current focused coverage is:
+Focused coverage is:
 
 ```sh
 PYTHONPATH=src python -m unittest \
-  tests.test_contracts \
-  tests.test_projection_routing \
-  tests.gateway.persistence.test_submission_identity -v
+  tests.gateway.persistence.test_state_contracts -v
 ```
 
-When the mechanical extraction lands, the same cases move to
-`tests/gateway/persistence/test_state_contracts.py`; the move must preserve the
-stable public facade and remove the old internal owner.
+The mirrored cases preserve the stable persistence facade and verify that the
+old internal owners are absent.

@@ -14,8 +14,8 @@ This leaf has an intentional same-leaf physical split:
 
 - `proactive.py` is the low-dependency proactive contract seam and the sole
   implementation owner of the proactive vocabulary and validator. It imports
-  only the passive submission state and shared validation helpers that remain
-  in `contracts.delivery`; the historical module has no proactive definition
+  only the passive submission state and shared validation helpers owned by
+  `gateway.persistence.state_contracts`; the historical module has no proactive definition
   or compatibility alias. Its explicit finite `__all__` contains exactly the
   eight owned vocabulary/validator names; support imports retained for runtime
   type-hint resolution are not part of the public seam.
@@ -24,7 +24,7 @@ This leaf has an intentional same-leaf physical split:
   by that service. It imports the contract seam and implementation Ports, but
   the contract seam never imports the runtime. This removes the direct
   same-leaf reverse edge needed by the later vocabulary move; it does not make
-  an eager historical package facade safe to import from `contracts.delivery`.
+  an eager historical package facade safe to import from the passive state leaf.
 
 `proactive.py` intentionally does not import or re-export runtime
 classes/helpers. The finite `imagent.gateway.delivery` and `imagent.gateway`
@@ -95,8 +95,9 @@ This ownership slice moves only the typed proactive vocabulary and
 reservations, `_canonical_metadata`, `_validate_conversation_ref`, the four
 submission identity helpers, authorization, JSON ingress, planning,
 coordination, O2, CLI, and persistence in their accepted owners. The
-`contracts.delivery` dependency is one-way: proactive delivery may consume
-passive state/helpers, but contracts never imports Gateway.
+`gateway.persistence.state_contracts` dependency is one-way: proactive delivery
+may consume passive state/helpers, but the state leaf never imports delivery
+orchestration.
 
 ## Authority
 

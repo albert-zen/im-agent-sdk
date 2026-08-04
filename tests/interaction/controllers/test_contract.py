@@ -12,7 +12,6 @@ import imagent.interaction.controllers as controllers_facade
 from imagent.contracts import (
     ApplicationOperation,
     ApplicationOperationResult,
-    ConversationBinding,
     ConversationRef,
     GatewayOperation,
     GatewayOperationResult,
@@ -21,6 +20,7 @@ from imagent.contracts import (
     OutboundMessage,
     TextContent,
 )
+from imagent.gateway.persistence import ConversationBinding
 from imagent.interaction.controllers import (
     CommandHandlerActions,
     ControllerActions,

@@ -64,8 +64,8 @@ wheel in an isolated temporary environment rather than relying on the source
 checkout's import path. The six clean-install cases must also prove that the
 retired Channel names and the retired proactive vocabulary/four
 submission-identity helpers are absent from their historical facades, while
-`DeliverySubmissionOrigin` and all unrelated Application/Gateway/passive-state
-names remain available, and that the focused Channel and Gateway facades
+`DeliverySubmissionOrigin` and all unrelated Application/Gateway names remain
+available through their Gateway persistence/delivery owners, and that the focused Channel and Gateway facades
 expose exact owner identities.
 
 ## Failure handling

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import TYPE_CHECKING
 
 from ..applications.contract import validate_thread_ref
 from ..applications.requests import (
@@ -12,7 +11,6 @@ from ..applications.requests import (
 )
 from ..interaction.messages import ConversationRef
 from ..interaction.operations import ContractViolation, require_identifier
-from .model import ConversationBinding, ThreadProjectionRoute, TurnReplyCorrelation
 from .operations import (
     ApplicationsListed,
     BindConversationToProject,
@@ -29,87 +27,6 @@ from .operations import (
     SelectApplication,
     ThreadObserved,
 )
-
-if TYPE_CHECKING:
-    from ..applications.capabilities import ApplicationCapabilities
-
-
-def validate_binding(
-    binding: ConversationBinding,
-    capabilities: ApplicationCapabilities | None = None,
-) -> None:
-    from ..applications.capabilities import ProjectMode
-
-    require_identifier(binding.conversation_ref.channel_instance_id, "channel_instance_id")
-    require_identifier(binding.conversation_ref.native_conversation_id, "native_conversation_id")
-    if binding.revision < 0:
-        raise ContractViolation("binding revision cannot be negative")
-
-    application_id = (
-        binding.application_ref.application_instance_id if binding.application_ref else None
-    )
-    if binding.project_ref is not None:
-        if application_id != binding.project_ref.application_instance_id:
-            raise ContractViolation("binding project belongs to a different application")
-    if binding.thread_ref is not None:
-        validate_thread_ref(binding.thread_ref)
-        if application_id != binding.thread_ref.application_instance_id:
-            raise ContractViolation("binding thread belongs to a different application")
-    if (
-        binding.project_ref is not None
-        and binding.thread_ref is not None
-        and binding.thread_ref.project_ref is not None
-        and binding.project_ref != binding.thread_ref.project_ref
-    ):
-        raise ContractViolation("binding thread belongs to a different project")
-    if (
-        capabilities is not None
-        and capabilities.projects.mode in (ProjectMode.FLAT, ProjectMode.FIXED)
-        and binding.project_ref is not None
-    ):
-        raise ContractViolation(
-            f"{capabilities.projects.mode.value} project mode cannot bind a project"
-        )
-
-
-def validate_projection_route(route: ThreadProjectionRoute) -> None:
-    require_identifier(route.route_id, "route_id")
-    validate_thread_ref(route.thread_ref)
-    require_identifier(
-        route.conversation_ref.channel_instance_id,
-        "channel_instance_id",
-    )
-    require_identifier(
-        route.conversation_ref.native_conversation_id,
-        "native_conversation_id",
-    )
-    if route.reply_to_message_id is not None:
-        require_identifier(route.reply_to_message_id, "reply_to_message_id")
-    if route.checkpoint_agent_item_id is not None:
-        require_identifier(
-            route.checkpoint_agent_item_id,
-            "checkpoint_agent_item_id",
-        )
-    if (route.checkpoint_agent_item_id is None) != (route.checkpointed_at is None):
-        raise ContractViolation(
-            "checkpoint_agent_item_id and checkpointed_at must be present together"
-        )
-
-
-def validate_turn_reply_correlation(correlation: TurnReplyCorrelation) -> None:
-    require_identifier(correlation.correlation_id, "correlation_id")
-    validate_thread_ref(correlation.thread_ref)
-    require_identifier(correlation.turn_id, "turn_id")
-    require_identifier(correlation.client_message_id, "client_message_id")
-    require_identifier(
-        correlation.conversation_ref.channel_instance_id,
-        "channel_instance_id",
-    )
-    require_identifier(
-        correlation.conversation_ref.native_conversation_id,
-        "native_conversation_id",
-    )
-    require_identifier(correlation.reply_to_message_id, "reply_to_message_id")
 
 
 def validate_gateway_operation(operation: GatewayOperation) -> None:
@@ -151,6 +68,11 @@ def validate_gateway_operation_result(
     operation: GatewayOperation,
     result: GatewayOperationResult,
 ) -> None:
+    from ..gateway.persistence.state_contracts import (
+        validate_binding,
+        validate_projection_route,
+    )
+
     require_identifier(result.operation_id, "operation_id")
     if result.operation_id != operation.operation_id:
         raise ContractViolation("Gateway result ID does not match the request")

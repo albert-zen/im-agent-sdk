@@ -7,9 +7,9 @@ from typing import get_type_hints
 
 import imagent.adapters as adapter_facade
 import imagent.contracts as contract_facade
-import imagent.contracts.delivery as historical_delivery_contracts
 import imagent.gateway as gateway_facade
 import imagent.gateway.delivery as delivery_facade
+import imagent.gateway.persistence as historical_delivery_contracts
 from imagent.gateway.delivery import proactive_authorization as authorization_owner
 
 

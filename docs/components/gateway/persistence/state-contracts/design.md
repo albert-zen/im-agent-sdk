@@ -57,8 +57,11 @@ set, and mutable per-destination outcome evidence. The snapshot set pins one
 logical delivery to the originally resolved destinations across retries and
 restart. It contains no text, artifact bytes, arbitrary local path, callback,
 or replayable work body, so it is neither a content spool nor an outbox.
-`DeliverySubmissionOrigin` and these passive state/record/reservation values
-remain in `contracts.delivery` for the current rollout. The proactive target,
+The submission origin enum is physically defined beside the record so the
+record remains a closed passive value, but its supported public facade and
+behavioral ownership stay in `gateway.delivery.submissions`; the persistence
+facade does not export it. The remaining passive state/record/reservation
+values are public from this leaf. The proactive target,
 intent, result, and validator vocabulary is Gateway delivery behavior, not
 passive state. The closed submission identity/fingerprint helpers are also
 Gateway delivery behavior, not passive state; their sole implementation is
@@ -84,11 +87,11 @@ or catch-up.
 
 ## Structure
 
-The values currently share `contracts/model.py`, `contracts/delivery.py`, and
-`contracts/request_validation.py`, plus their JSON schemas. That is an
-explicit split candidate. A later mechanical slice will move the complete
-passive surface to `gateway/persistence/state_contracts.py` and its facade
-without retaining two internal implementations.
+The values previously shared `contracts/model.py`, `contracts/delivery.py`, and
+`contracts/request_validation.py`, plus their JSON schemas. The mechanical
+extraction now has one implementation in
+`gateway/persistence/state_contracts.py`; the versioned schemas remain in
+`schemas/v1` and the old internal modules are removed.
 
 ## Authority
 

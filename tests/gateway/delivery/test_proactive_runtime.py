@@ -10,11 +10,12 @@ from pathlib import Path
 from typing import get_type_hints
 
 import imagent.contracts as contract_facade
-import imagent.contracts.delivery as delivery_contracts
 import imagent.gateway as gateway_facade
 import imagent.gateway.delivery as delivery_facade
+import imagent.gateway.persistence as persistence_facade
 from imagent.gateway.delivery import proactive as contract_seam
 from imagent.gateway.delivery import proactive_runtime as runtime_owner
+from imagent.gateway.persistence import state_contracts as state_owner
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CONTRACT_NAMES = {
@@ -102,14 +103,15 @@ class ProactiveRuntimeOwnershipTests(unittest.TestCase):
         )
         for name in CONTRACT_NAMES:
             with self.subTest(contract=name):
-                self.assertFalse(hasattr(delivery_contracts, name))
+                self.assertFalse(hasattr(state_owner, name))
                 self.assertIs(getattr(delivery_facade, name), getattr(contract_seam, name))
                 self.assertNotIn(name, contract_facade.__all__)
                 self.assertFalse(hasattr(contract_facade, name))
         self.assertIs(
-            contract_facade.DeliverySubmissionOrigin,
-            delivery_contracts.DeliverySubmissionOrigin,
+            delivery_facade.DeliverySubmissionOrigin,
+            state_owner.DeliverySubmissionOrigin,
         )
+        self.assertFalse(hasattr(persistence_facade, "DeliverySubmissionOrigin"))
 
     def test_runtime_source_has_the_exact_finite_owner_set(self) -> None:
         current_source = (
@@ -127,9 +129,8 @@ class ProactiveRuntimeOwnershipTests(unittest.TestCase):
         proactive_nodes.pop("__all__")
         self.assertEqual(set(proactive_nodes), CONTRACT_NAMES)
 
-        historical_source = (REPOSITORY_ROOT / "src/imagent/contracts/delivery.py").read_text()
-        historical_nodes = _top_level_named_nodes(ast.parse(historical_source))
-        self.assertTrue(CONTRACT_NAMES.isdisjoint(historical_nodes))
+        historical_path = REPOSITORY_ROOT / "src/imagent/contracts/delivery.py"
+        self.assertFalse(historical_path.exists())
 
     def test_runtime_signatures_and_type_hints_resolve(self) -> None:
         methods = (
@@ -178,7 +179,8 @@ class ProactiveRuntimeOwnershipTests(unittest.TestCase):
             "'derive_destination_delivery_id')\n"
             "assert all(not hasattr(contracts, name) and name not in contracts.__all__\n"
             "for name in removed)\n"
-            "assert contracts.DeliverySubmissionOrigin.EXTERNAL.value == 'external'\n"
+            "from imagent.gateway.delivery import DeliverySubmissionOrigin\n"
+            "assert DeliverySubmissionOrigin.EXTERNAL.value == 'external'\n"
             "assert not hasattr(seam, 'ProactiveDeliveryService')\n"
             "assert not hasattr(seam, 'DeliveryRouteError')\n"
             "assert delivery.ProactiveDeliveryService is runtime.ProactiveDeliveryService\n"

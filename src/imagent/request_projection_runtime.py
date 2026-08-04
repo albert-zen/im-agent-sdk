@@ -13,13 +13,13 @@ from .applications.requests import (
     RequestResolutionStatus,
     validate_interactive_request,
 )
-from .contracts import (
-    RequestRouteState,
-    ThreadProjectionRoute,
-)
 from .gateway.persistence.repository_contracts import (
     RequestCorrelationConflict,
     RequestCorrelationRepository,
+)
+from .gateway.persistence.state_contracts import (
+    RequestRouteState,
+    ThreadProjectionRoute,
 )
 
 logger = logging.getLogger(__name__)

@@ -9,12 +9,14 @@ from pathlib import Path
 from imagent.adapters import DeliverySubmissionConflict
 from imagent.contracts import (
     ConversationRef,
+    ThreadRef,
+)
+from imagent.gateway.delivery import DeliverySubmissionOrigin
+from imagent.gateway.persistence import (
     DeliveryRouteSnapshot,
-    DeliverySubmissionOrigin,
     DeliverySubmissionRecord,
     DeliverySubmissionState,
     DestinationDeliveryRecord,
-    ThreadRef,
 )
 from imagent.gateway.persistence.memory import InMemoryDeliverySubmissionRepository
 from imagent.interaction.channels import DeliveryReceipt, DeliveryReceiptStatus

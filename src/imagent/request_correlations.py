@@ -10,12 +10,12 @@ from typing import Protocol
 
 from .applications.contract import ApplicationRef, ProjectRef, ThreadRef
 from .applications.requests import RequestRef
-from .contracts import (
+from .gateway.persistence.repository_contracts import RequestCorrelationConflict
+from .gateway.persistence.state_contracts import (
     RequestRouteCorrelation,
     RequestRouteState,
     validate_request_route_correlation,
 )
-from .gateway.persistence.repository_contracts import RequestCorrelationConflict
 from .interaction.messages import ConversationRef
 from .sqlite_rows import decode_datetime, empty_storage_text, required_text
 
@@ -535,7 +535,7 @@ def _correlation_from_row(row: sqlite3.Row) -> RequestRouteCorrelation:
 
 
 def _encode_response_shape(correlation: RequestRouteCorrelation) -> str:
-    from .contracts import ApprovalResponseShape
+    from .applications.requests import ApprovalResponseShape
 
     shape = correlation.response_shape
     if isinstance(shape, ApprovalResponseShape):
@@ -561,7 +561,7 @@ def _encode_response_shape(correlation: RequestRouteCorrelation) -> str:
 
 
 def _decode_response_shape(value: str):
-    from .contracts import (
+    from .applications.requests import (
         ApprovalResponseShape,
         UserInputQuestionShape,
         UserInputResponseShape,

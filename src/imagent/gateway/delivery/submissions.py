@@ -8,17 +8,6 @@ from dataclasses import replace
 from typing import Protocol
 
 from ...applications.contract import ProjectRef, ThreadRef
-from ...contracts.delivery import (
-    DeliveryReservation,
-    DeliveryRouteSnapshot,
-    DeliverySubmissionOrigin,
-    DeliverySubmissionRecord,
-    DeliverySubmissionState,
-    DestinationDeliveryRecord,
-    _canonical_metadata,
-    _validate_conversation_ref,
-    validate_delivery_submission_record,
-)
 from ...interaction.channels import (
     DeliveryItemReceipt,
     DeliveryItemStatus,
@@ -28,10 +17,20 @@ from ...interaction.channels import (
     DeliverySegmentStatus,
 )
 from ...interaction.media import LocalPath, RemoteUrl
-from ...interaction.messages import Content, ConversationRef, TextContent
+from ...interaction.messages import Content, ConversationRef, Metadata, TextContent
 from ...interaction.operations import ContractViolation, require_identifier
 from ...sqlite_rows import decode_datetime, optional_text, required_text
 from ..persistence.repository_contracts import DeliverySubmissionConflict
+from ..persistence.state_contracts import (
+    DeliveryReservation,
+    DeliveryRouteSnapshot,
+    DeliverySubmissionOrigin,
+    DeliverySubmissionRecord,
+    DeliverySubmissionState,
+    DestinationDeliveryRecord,
+    _validate_conversation_ref,
+    validate_delivery_submission_record,
+)
 from ..persistence.submission_identity import (
     ensure_same_delivery_submission_reservation,
 )
@@ -41,6 +40,20 @@ from .proactive import (
     DeliveryTarget,
     validate_delivery_intent,
 )
+
+
+def _canonical_metadata(metadata: Metadata) -> object:
+    try:
+        return json.loads(
+            json.dumps(
+                dict(metadata),
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+        )
+    except (TypeError, ValueError) as error:
+        raise ContractViolation("delivery metadata must be JSON-compatible") from error
 
 
 def derive_delivery_target_fingerprint(target: DeliveryTarget) -> str:

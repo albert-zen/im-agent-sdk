@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from imagent.contracts import (
     ApplicationOperation,
     ApplicationOperationResult,
-    ConversationBinding,
     ConversationRef,
     GatewayOperation,
     GatewayOperationResult,
@@ -15,6 +14,7 @@ from imagent.contracts import (
     TextContent,
 )
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
+from imagent.gateway.persistence import ConversationBinding
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.interaction.controllers import (
     CommandExecutionSafety,

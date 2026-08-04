@@ -28,16 +28,16 @@ from .applications.events import (
 )
 from .applications.operations import ApplicationOperation, ApplicationOperationResult
 from .applications.requests import RequestRef
-from .contracts import (
-    ConversationBinding,
-    ProjectionPolicy,
-    ThreadProjectionRoute,
-    TurnReplyCorrelation,
-)
 from .gateway.persistence.repository_contracts import (
     BindingRepository,
     ProjectionRouteRepository,
     RequestCorrelationRepository,
+)
+from .gateway.persistence.state_contracts import (
+    ConversationBinding,
+    ProjectionPolicy,
+    ThreadProjectionRoute,
+    TurnReplyCorrelation,
 )
 from .gateway.projection.recovery import ProjectionRecoveryUnavailable
 from .interaction.controllers import RequestPresenter

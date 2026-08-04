@@ -7,15 +7,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from ...contracts.delivery import (
-    DeliveryRouteSnapshot,
-    DeliverySubmissionOrigin,
-    DeliverySubmissionRecord,
-    DeliverySubmissionState,
-    DestinationDeliveryRecord,
-    validate_delivery_submission_destination_count,
-)
-from ...contracts.model import ThreadProjectionRoute, ThreadRef
+from ...applications.contract import ThreadRef
 from ...interaction.channels import (
     ChannelAdapter,
     DeliveryItemReceipt,
@@ -31,6 +23,15 @@ from ...interaction.operations import ContractViolation
 from ..persistence.repository_contracts import (
     DeliverySubmissionConflict,
     DeliverySubmissionRepository,
+)
+from ..persistence.state_contracts import (
+    DeliveryRouteSnapshot,
+    DeliverySubmissionOrigin,
+    DeliverySubmissionRecord,
+    DeliverySubmissionState,
+    DestinationDeliveryRecord,
+    ThreadProjectionRoute,
+    validate_delivery_submission_destination_count,
 )
 from ..persistence.submission_identity import (
     ensure_same_delivery_submission_reservation,

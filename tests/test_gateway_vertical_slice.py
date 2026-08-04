@@ -22,7 +22,6 @@ from imagent.contracts import (
     AttachmentContent,
     AttachmentSourceKind,
     BindConversationToThread,
-    ConversationBinding,
     ConversationBound,
     ConversationRef,
     LocalPath,
@@ -33,6 +32,7 @@ from imagent.contracts import (
 )
 from imagent.events import EventStreamOverflow
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
+from imagent.gateway.persistence import ConversationBinding
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.interaction.channels.adapters.qq import QQChannelAdapter
 from imagent.interaction.channels.outbound_delivery import NativeDeliveryResult

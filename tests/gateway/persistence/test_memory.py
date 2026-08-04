@@ -11,19 +11,21 @@ import imagent.request_correlations as historical_request_owner
 from imagent import projections as projection_semantics
 from imagent.adapters import DeliverySubmissionCapacityError, DeliverySubmissionConflict
 from imagent.contracts import (
-    MAX_DELIVERY_SUBMISSION_DESTINATIONS,
     ApplicationRef,
-    ConversationBinding,
     ConversationRef,
+    ThreadRef,
+)
+from imagent.gateway.delivery import DeliverySubmissionOrigin
+from imagent.gateway.delivery import proactive as proactive_owner
+from imagent.gateway.persistence import (
+    MAX_DELIVERY_SUBMISSION_DESTINATIONS,
+    BindingConflict,
+    ConversationBinding,
     DeliveryRouteSnapshot,
-    DeliverySubmissionOrigin,
     DeliverySubmissionRecord,
     DeliverySubmissionState,
     DestinationDeliveryRecord,
-    ThreadRef,
 )
-from imagent.gateway.delivery import proactive as proactive_owner
-from imagent.gateway.persistence import BindingConflict
 from imagent.gateway.persistence import repository_contracts as repository_contract_owner
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,

@@ -36,11 +36,11 @@ from imagent.contracts import (
     ConversationRef,
     MessageRole,
     TextContent,
-    ThreadProjectionRoute,
     ThreadRef,
 )
 from imagent.diagnostics import ApplicationPresentationFailureCode
 from imagent.events import EventStreamReset
+from imagent.gateway.persistence import ThreadProjectionRoute
 from imagent.gateway.persistence.memory import InMemoryProjectionRouteRepository
 from imagent.projections import (
     ProjectedAgentMessage,

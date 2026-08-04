@@ -13,12 +13,12 @@ from imagent.contracts import (
     ApprovalResponse,
     ConversationRef,
     ObserveThread,
-    ProjectionPolicy,
     RequestResponseRouted,
     RespondToRequest,
     ThreadRef,
 )
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
+from imagent.gateway.persistence import ProjectionPolicy
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,

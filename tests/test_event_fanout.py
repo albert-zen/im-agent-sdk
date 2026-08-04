@@ -13,10 +13,8 @@ from imagent.contracts import (
     AgentEventType,
     AgentMessage,
     ApplicationRef,
-    ConversationBinding,
     ConversationRef,
     InboundMessage,
-    ProjectionPolicy,
     ProjectMode,
     SupportLevel,
     TextContent,
@@ -25,6 +23,7 @@ from imagent.contracts import (
 from imagent.events import EventStreamOverflow, EventStreamReset
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.lifecycle import GatewayNotRunning, GatewayStartupOverflow
+from imagent.gateway.persistence import ConversationBinding, ProjectionPolicy
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryRequestCorrelationRepository,

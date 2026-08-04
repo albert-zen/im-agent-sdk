@@ -7,10 +7,10 @@ from typing import Protocol, runtime_checkable
 from ...contracts import (
     ApplicationOperation,
     ApplicationOperationResult,
-    ConversationBinding,
     GatewayOperation,
     GatewayOperationResult,
 )
+from ...gateway.persistence.state_contracts import ConversationBinding
 from ..messages import ConversationRef, InboundMessage, OutboundMessage
 
 

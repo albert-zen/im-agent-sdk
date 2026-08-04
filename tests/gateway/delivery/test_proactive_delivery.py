@@ -9,38 +9,31 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import imagent.contracts as contract_facade
-import imagent.contracts.delivery as delivery_contracts
 import imagent.gateway as gateway_facade
 import imagent.gateway.delivery as delivery_facade
+import imagent.gateway.persistence as delivery_contracts
 from imagent.adapters import (
     DeliverySubmissionCapacityError,
     DeliverySubmissionConflict,
     IdempotencyClaimStatus,
 )
 from imagent.contracts import (
-    MAX_DELIVERY_SUBMISSION_DESTINATIONS,
     AttachmentContent,
     AttachmentSourceKind,
     ConversationRef,
     DeliveryPrincipal,
     LocalPath,
     OutboundMessage,
-    ProjectionPolicy,
     ProjectMode,
     TextContent,
-    ThreadProjectionRoute,
     ThreadRef,
-)
-from imagent.contracts.delivery import (
-    DeliveryReservation,
-    DeliverySubmissionOrigin,
-    DeliverySubmissionState,
 )
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import (
     DeliveryCoordinator,
     DeliveryCoordinatorConfig,
     DeliveryPlanningError,
+    DeliverySubmissionOrigin,
     ScopedDeliveryAuthorizer,
 )
 from imagent.gateway.delivery import proactive as proactive_owner
@@ -53,6 +46,13 @@ from imagent.gateway.delivery.proactive import (
 from imagent.gateway.delivery.proactive_authorization import DeliveryAuthorizationError
 from imagent.gateway.delivery.proactive_runtime import DeliveryRouteError
 from imagent.gateway.delivery.submissions import derive_delivery_submission_id
+from imagent.gateway.persistence import (
+    MAX_DELIVERY_SUBMISSION_DESTINATIONS,
+    DeliveryReservation,
+    DeliverySubmissionState,
+    ProjectionPolicy,
+    ThreadProjectionRoute,
+)
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryDeliverySubmissionRepository,

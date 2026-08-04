@@ -71,7 +71,7 @@ Turn.
 The owner implementation is `src/imagent/applications/contract.py` with
 focused ownership evidence in `tests/applications/test_contract.py`. Shared
 JSON Schemas remain cross-owner language-neutral documents; their Python
-reference values are not duplicated in `imagent.contracts.model` or
+reference values are not duplicated in the retired contracts model module or
 Interaction. `imagent.contracts` re-exports exact owner objects for temporary
 compatibility, while `imagent.applications` directly exposes the complete
 family and does not use a module-level lazy export to hide ownership or solve

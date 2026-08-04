@@ -21,7 +21,6 @@ from ...contracts import (
     GetThreadHistory,
     GetTurnCatchup,
     ThreadHistoryRead,
-    ThreadProjectionRoute,
     TurnCatchupRead,
 )
 from ...events import CursorExpired
@@ -31,6 +30,7 @@ from ...projections import (
     ProjectedAgentMessage,
     derive_projection_route_id,
 )
+from ..persistence.state_contracts import ThreadProjectionRoute
 
 
 class RecoveryMode(StrEnum):

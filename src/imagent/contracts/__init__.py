@@ -131,28 +131,8 @@ from ..interaction.operations import (
     operation_error,
     require_identifier,
 )
-from .delivery import (
-    MAX_DELIVERY_SUBMISSION_DESTINATIONS,
-    DeliveryReservation,
-    DeliveryRouteSnapshot,
-    DeliverySubmissionOrigin,
-    DeliverySubmissionRecord,
-    DeliverySubmissionState,
-    DestinationDeliveryRecord,
-    validate_delivery_route_snapshot,
-    validate_delivery_submission_destination_count,
-    validate_delivery_submission_record,
-)
 from .errors import (
     ApplicationInputOutcomeUnknown as ApplicationInputOutcomeUnknown,
-)
-from .model import (
-    ConversationBinding,
-    ProjectionPolicy,
-    RequestRouteCorrelation,
-    RequestRouteState,
-    ThreadProjectionRoute,
-    TurnReplyCorrelation,
 )
 from .operations import (
     ApplicationsListed,
@@ -171,14 +151,10 @@ from .operations import (
     SelectApplication,
     ThreadObserved,
 )
-from .request_validation import validate_request_route_correlation
 from .validators import (
     derive_client_message_id,
-    validate_binding,
     validate_gateway_operation,
     validate_gateway_operation_result,
-    validate_projection_route,
-    validate_turn_reply_correlation,
 )
 
 __all__ = [
@@ -201,15 +177,8 @@ __all__ = [
     "Content",
     "ContractError",
     "ContractViolation",
-    "ConversationBinding",
     "ConversationRef",
     "DeliveryPrincipal",
-    "DeliveryReservation",
-    "DeliveryRouteSnapshot",
-    "DeliverySubmissionRecord",
-    "DeliverySubmissionOrigin",
-    "DeliverySubmissionState",
-    "DestinationDeliveryRecord",
     "EventSequenceScope",
     "InputContinuationPreference",
     "InputDisposition",
@@ -217,7 +186,6 @@ __all__ = [
     "InteractiveRequest",
     "InteractiveRequestKind",
     "LocalPath",
-    "MAX_DELIVERY_SUBMISSION_DESTINATIONS",
     "MAX_INTERACTIVE_REQUEST_CHOICES",
     "MAX_INTERACTIVE_REQUEST_QUESTIONS",
     "MessageRole",
@@ -257,7 +225,6 @@ __all__ = [
     "RequestResolvedError",
     "RequestStaleError",
     "Page",
-    "ProjectionPolicy",
     "ProjectCapabilities",
     "ProjectMode",
     "ProjectRef",
@@ -273,8 +240,6 @@ __all__ = [
     "RequestResolutionStatus",
     "RequestRef",
     "RequestResponseShape",
-    "RequestRouteCorrelation",
-    "RequestRouteState",
     "RespondRequest",
     "RespondToRequest",
     "RuntimeCapabilities",
@@ -291,7 +256,6 @@ __all__ = [
     "ThreadHistoryRead",
     "ThreadObserved",
     "ThreadHistory",
-    "ThreadProjectionRoute",
     "ThreadRead",
     "ThreadRef",
     "ThreadSnapshot",
@@ -302,7 +266,6 @@ __all__ = [
     "TurnCatchup",
     "TurnCatchupRead",
     "TurnHistoryEntry",
-    "TurnReplyCorrelation",
     "TurnReplyCorrelationPolicy",
     "TurnInterrupted",
     "TurnStatus",
@@ -319,22 +282,15 @@ __all__ = [
     "validate_agent_event",
     "validate_application_operation",
     "validate_application_operation_result",
-    "validate_binding",
     "validate_delivery_principal",
-    "validate_delivery_route_snapshot",
-    "validate_delivery_submission_record",
-    "validate_delivery_submission_destination_count",
     "validate_gateway_operation",
     "validate_gateway_operation_result",
-    "validate_projection_route",
     "validate_interactive_request",
     "validate_request_resolution",
     "validate_request_ref",
     "validate_request_response",
     "validate_request_response_shape",
-    "validate_request_route_correlation",
     "validate_thread_ref",
-    "validate_turn_reply_correlation",
 ]
 
 

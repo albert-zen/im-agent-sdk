@@ -13,29 +13,31 @@ from imagent.adapters import (
     TurnReplyCorrelationConflict,
 )
 from imagent.contracts import (
-    MAX_DELIVERY_SUBMISSION_DESTINATIONS,
     AgentInput,
     ApplicationRef,
     ApprovalResponseShape,
-    ConversationBinding,
     ConversationRef,
-    DeliveryRouteSnapshot,
-    DeliverySubmissionOrigin,
-    DeliverySubmissionRecord,
-    DeliverySubmissionState,
-    DestinationDeliveryRecord,
     ProjectMode,
     ProjectRef,
     RequestRef,
-    RequestRouteCorrelation,
-    RequestRouteState,
     TextContent,
-    ThreadProjectionRoute,
     ThreadRef,
-    TurnReplyCorrelation,
 )
 from imagent.gateway import GatewayRepositories, ImAgentGateway
-from imagent.gateway.persistence import BindingConflict
+from imagent.gateway.delivery import DeliverySubmissionOrigin
+from imagent.gateway.persistence import (
+    MAX_DELIVERY_SUBMISSION_DESTINATIONS,
+    BindingConflict,
+    ConversationBinding,
+    DeliveryRouteSnapshot,
+    DeliverySubmissionRecord,
+    DeliverySubmissionState,
+    DestinationDeliveryRecord,
+    RequestRouteCorrelation,
+    RequestRouteState,
+    ThreadProjectionRoute,
+    TurnReplyCorrelation,
+)
 from imagent.gateway.persistence.memory import (
     InMemoryProjectionRouteRepository,
     InMemoryRequestCorrelationRepository,

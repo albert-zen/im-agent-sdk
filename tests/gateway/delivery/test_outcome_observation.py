@@ -15,7 +15,6 @@ from imagent.contracts import (
     MessageRole,
     OutboundMessage,
     TextContent,
-    ThreadProjectionRoute,
     ThreadRef,
 )
 from imagent.diagnostics import DeliveryOutcomeObserverFailureCode
@@ -34,7 +33,7 @@ from imagent.gateway.delivery.outcome_observation import (
     DeliveryOutcomeObserverRuntime,
 )
 from imagent.gateway.delivery.proactive import ConversationDeliveryTarget, DeliveryIntent
-from imagent.gateway.persistence import InMemoryIdempotencyRepository
+from imagent.gateway.persistence import InMemoryIdempotencyRepository, ThreadProjectionRoute
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryDeliverySubmissionRepository,
