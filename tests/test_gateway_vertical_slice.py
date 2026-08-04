@@ -33,10 +33,10 @@ from imagent.contracts import (
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence import ConversationBinding
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
+from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.interaction.channels.adapters.qq import QQChannelAdapter
 from imagent.interaction.channels.outbound_delivery import NativeDeliveryResult
 from imagent.interaction.controllers import SlashController
-from imagent.storage import SQLiteGatewayState
 from tests.applications.adapters._appserver_fakes import NativeZenClient
 
 

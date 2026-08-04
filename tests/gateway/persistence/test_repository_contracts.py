@@ -32,9 +32,9 @@ from imagent.gateway.persistence import (
 )
 from imagent.gateway.persistence import repository_contracts as owner
 from imagent.gateway.persistence.memory import InMemoryRequestCorrelationRepository
+from imagent.gateway.persistence.sqlite import SQLiteGatewayState
+from imagent.gateway.projection.request_correlation import derive_request_correlation_id
 from imagent.interaction.messages import ConversationRef
-from imagent.request_correlations import derive_request_correlation_id
-from imagent.storage import SQLiteGatewayState
 
 _MOVED_NAMES = (
     "BindingRepository",

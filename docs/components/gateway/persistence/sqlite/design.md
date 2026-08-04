@@ -71,16 +71,17 @@ upgrade decision and tests against the immediately supported legacy shape.
 
 ## Structure
 
-The transaction owner currently lives in `storage.py` and composes request-
-correlation and delivery-submission mixins. This is one intentional owner, not
-three independent databases. Pure row conversion now lives in
-`gateway/persistence/row_mapping.py`; the mixins retain only the SQL wrappers
-and transaction policy that call it. `merge_projection_route` preserves
-checkpoint evidence and enforces endpoint conflicts, so it remains in the
-SQLite-owned `sqlite_rows.py` helper and stays out of the pure mapper. A later
-mechanical slice may move the whole owner to
-`gateway/persistence/sqlite.py`; it must not create parallel connections,
-transactions, schemas, or compatibility implementations.
+The complete transaction owner is now
+`src/imagent/gateway/persistence/sqlite.py`. It co-locates
+`SQLiteGatewayState`, schema initialization and the immediately supported
+legacy migration, connection/lock/close behavior, all repository transaction
+methods, request-correlation and delivery-submission SQL, and
+`merge_projection_route` mutation policy. This remains one owner, not three
+independent databases. Pure row conversion lives in
+`gateway/persistence/row_mapping.py`; typed request-correlation policy lives
+in `gateway/projection/request_correlation.py`; delivery identity and planning
+remain in the delivery leaves. No historical SQLite implementation or
+compatibility copy remains.
 
 ## Authority
 

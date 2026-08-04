@@ -637,7 +637,7 @@ components:
     state_recovery: Configured pre_acceptance completes before presentation; unknown and post_acceptance never reopen input.
     current_code: [src/imagent/gateway/input/__init__.py, src/imagent/gateway/input/failure_presentation.py, src/imagent/gateway/__init__.py, src/imagent/diagnostics.py]
     target_code: [src/imagent/gateway/input/__init__.py, src/imagent/gateway/input/failure_presentation.py]
-    current_tests: [tests/gateway/input/test_failure_presentation.py, tests/test_storage.py]
+    current_tests: [tests/gateway/input/test_failure_presentation.py, tests/gateway/persistence/test_sqlite.py]
     target_tests: [tests/gateway/input/test_failure_presentation.py]
     authoritative_docs: [docs/components/gateway/input/failure-presentation/design.md, docs/components/gateway/input/failure-presentation/testing.md, docs/components/gateway/design.md, docs/components/persistence/design.md]
     adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -681,7 +681,7 @@ components:
     state_recovery: Completed idempotency converges lagging CAS during authoritative recovery; in_flight never advances.
     current_code: [src/imagent/gateway/projection/checkpoints.py, src/imagent/projections.py, src/imagent/projection_routes.py]
     target_code: [src/imagent/gateway/projection/checkpoints.py]
-    current_tests: [tests/gateway/projection/test_checkpoints.py, tests/test_projection_hardening.py, tests/test_projection_routing.py, tests/test_storage.py]
+    current_tests: [tests/gateway/projection/test_checkpoints.py, tests/test_projection_hardening.py, tests/test_projection_routing.py, tests/gateway/persistence/test_sqlite.py]
     target_tests: [tests/gateway/projection/test_checkpoints.py]
     authoritative_docs: [docs/components/gateway/projection/checkpoints/design.md, docs/components/gateway/projection/checkpoints/testing.md, docs/components/gateway/persistence/state-contracts/design.md]
     adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -701,13 +701,13 @@ components:
       target: [imagent.gateway.projection:InteractiveRequestProjection, imagent.gateway.projection:RespondToRequest, imagent.gateway.projection:RequestResponseRouted]
     dependencies: [interaction.messages, applications.application-contract, applications.capabilities, applications.requests, interaction.controllers.request-presentation, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Correlations are minimal, bounded, persisted, monotonic, and reconciled only from native authoritative facts.
-    current_code: [src/imagent/contracts/operations.py, src/imagent/contracts/validators.py, src/imagent/gateway/__init__.py, src/imagent/request_correlations.py, src/imagent/request_projection_runtime.py, src/imagent/projection_routes.py]
+    current_code: [src/imagent/contracts/operations.py, src/imagent/contracts/validators.py, src/imagent/gateway/__init__.py, src/imagent/gateway/projection/request_correlation.py, src/imagent/request_projection_runtime.py, src/imagent/projection_routes.py]
     target_code: [src/imagent/gateway/projection/request_correlation.py]
-    current_tests: [tests/test_appserver_requests.py, tests/test_projection_hardening.py, tests/test_storage.py]
+    current_tests: [tests/gateway/projection/test_request_correlation.py, tests/test_appserver_requests.py, tests/test_projection_hardening.py]
     target_tests: [tests/gateway/projection/test_request_correlation.py]
     authoritative_docs: [docs/components/gateway/projection/request-correlation/design.md, docs/components/gateway/projection/request-correlation/testing.md, docs/components/gateway/persistence/state-contracts/design.md, docs/components/interaction/controllers/request-presentation/design.md]
     adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [request_correlations.py mixes repository implementation and projection policy]
+    gaps: [Gateway root, request projection runtime, route orchestration, and contract-validation aggregation remain future focused projection slices]
 
   gateway.projection.recovery:
     id: gateway.projection.recovery
@@ -813,11 +813,11 @@ components:
     state_recovery: In-flight/unknown remain ambiguous; immutable snapshots prevent route drift on retry.
     current_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/submissions.py]
     target_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/submissions.py]
-    current_tests: [tests/gateway/delivery/test_submissions.py, tests/gateway/delivery/test_proactive_ingress.py, tests/gateway/delivery/test_proactive_delivery.py, tests/test_storage.py]
+    current_tests: [tests/gateway/delivery/test_submissions.py, tests/gateway/delivery/test_proactive_ingress.py, tests/gateway/delivery/test_proactive_delivery.py, tests/gateway/persistence/test_sqlite.py]
     target_tests: [tests/gateway/delivery/test_submissions.py]
     authoritative_docs: [docs/components/gateway/delivery/submissions/design.md, docs/components/gateway/delivery/submissions/testing.md]
     adrs: [docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
-    gaps: [proactive vocabulary is owned by gateway.delivery.proactive; SQLite row encoding remains co-located here until the focused persistence split]
+    gaps: []
 
   gateway.delivery.proactive-authorization:
     id: gateway.delivery.proactive-authorization
@@ -901,7 +901,7 @@ components:
     state_recovery: Values carry stable identities/revisions/state only; repository implementations own atomic recovery mutations.
     current_code: [schemas/v1/bindings.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, schemas/v1/projections.schema.json, src/imagent/gateway/persistence/state_contracts.py]
     target_code: [schemas/v1/bindings.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, schemas/v1/projections.schema.json, src/imagent/gateway/persistence/state_contracts.py]
-    current_tests: [tests/test_contracts.py, tests/gateway/persistence/test_memory.py, tests/test_projection_routing.py, tests/test_storage.py, tests/gateway/persistence/test_state_contracts.py]
+    current_tests: [tests/test_contracts.py, tests/gateway/persistence/test_memory.py, tests/test_projection_routing.py, tests/gateway/persistence/test_sqlite.py, tests/gateway/persistence/test_state_contracts.py]
     target_tests: [tests/gateway/persistence/test_state_contracts.py]
     authoritative_docs: [docs/components/gateway/persistence/state-contracts/design.md, docs/components/gateway/persistence/state-contracts/testing.md, docs/components/contracts/protocol.md, docs/components/persistence/design.md, docs/components/projections-and-recovery/design.md]
     adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
@@ -923,7 +923,7 @@ components:
     state_recovery: Contracts require fencing, create-only correlations, checkpoint CAS, and immutable submission identity.
     current_code: [src/imagent/adapters.py, src/imagent/gateway/persistence/__init__.py, src/imagent/gateway/persistence/repository_contracts.py, src/imagent/gateway/persistence/submission_identity.py]
     target_code: [src/imagent/gateway/persistence/__init__.py, src/imagent/gateway/persistence/repository_contracts.py, src/imagent/gateway/persistence/submission_identity.py]
-    current_tests: [tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_repository_contracts.py, tests/test_storage.py, tests/conformance/test_adapter_contracts.py, tests/gateway/persistence/test_submission_identity.py]
+    current_tests: [tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_repository_contracts.py, tests/gateway/persistence/test_sqlite.py, tests/conformance/test_adapter_contracts.py, tests/gateway/persistence/test_submission_identity.py]
     target_tests: [tests/gateway/persistence/test_repository_contracts.py, tests/gateway/persistence/test_submission_identity.py]
     authoritative_docs: [docs/components/gateway/persistence/repository-contracts/design.md, docs/components/gateway/persistence/repository-contracts/testing.md, docs/components/ports/design.md, docs/components/persistence/design.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
@@ -941,15 +941,15 @@ components:
     public_exports:
       current: []
       target: []
-    dependencies: [interaction.messages, applications.application-contract, applications.requests, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
+    dependencies: [interaction.messages, applications.application-contract, applications.requests, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.projection.request-correlation]
     state_recovery: Process-local state is intentionally non-durable and is rebuilt empty after restart.
-    current_code: [src/imagent/request_correlations.py, src/imagent/gateway/persistence/memory.py]
+    current_code: [src/imagent/gateway/persistence/memory.py]
     target_code: [src/imagent/gateway/persistence/memory.py]
-    current_tests: [tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_repository_contracts.py, tests/test_storage.py, tests/test_projection_routing.py]
+    current_tests: [tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_repository_contracts.py, tests/gateway/persistence/test_sqlite.py, tests/test_projection_routing.py]
     target_tests: [tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_repository_contracts.py]
     authoritative_docs: [docs/components/gateway/persistence/memory/design.md, docs/components/gateway/persistence/memory/testing.md, docs/components/persistence/design.md, docs/components/persistence/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [request-correlation policy helpers, SQLite mixin, schema, and row conversion remain co-located in historical modules for later focused persistence slices]
+    gaps: []
 
   gateway.persistence.idempotency:
     id: gateway.persistence.idempotency
@@ -983,17 +983,17 @@ components:
     outputs: [durable bridge state]
     public_contracts: [SQLiteGatewayState]
     public_exports:
-      current: [imagent.storage:SQLiteGatewayState]
+      current: [imagent.gateway.persistence.sqlite:SQLiteGatewayState]
       target: [imagent.gateway.persistence.sqlite:SQLiteGatewayState]
-    dependencies: [interaction.messages, applications.application-contract, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.row-mapping]
+    dependencies: [interaction.messages, applications.application-contract, applications.requests, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.row-mapping, gateway.projection.request-correlation]
     state_recovery: The SQLite owner upgrades only the immediately preceding route shape; current malformed rows fail closed without repair, authority inference, replay, or resend.
-    current_code: [src/imagent/storage.py, src/imagent/sqlite_rows.py, src/imagent/gateway/delivery/submissions.py, src/imagent/request_correlations.py]
+    current_code: [src/imagent/gateway/persistence/sqlite.py]
     target_code: [src/imagent/gateway/persistence/sqlite.py]
-    current_tests: [tests/test_storage.py, tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_submission_identity.py]
+    current_tests: [tests/gateway/persistence/test_sqlite.py, tests/gateway/persistence/test_submission_identity.py]
     target_tests: [tests/gateway/persistence/test_sqlite.py, tests/gateway/persistence/test_submission_identity.py]
     authoritative_docs: [docs/components/gateway/persistence/sqlite/design.md, docs/components/gateway/persistence/sqlite/testing.md, docs/components/persistence/design.md, docs/components/persistence/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [three mixin files share one intentional transaction owner; sqlite_rows.py retains route mutation policy until a later mechanical move may co-locate that owner in gateway/persistence/sqlite.py]
+    gaps: []
 
   gateway.persistence.row-mapping:
     id: gateway.persistence.row-mapping
@@ -1581,12 +1581,9 @@ structural_status:
     src/imagent/projections.py:
       owners: [gateway.routing.projection-routes, gateway.projection.observation, gateway.projection.checkpoints, gateway.presentation]
       reason: Projection values, delivery helper, and health types remain co-located after the in-memory repository moved to its persistence owner.
-    src/imagent/request_correlations.py:
-      owners: [gateway.projection.request-correlation, gateway.persistence.memory, gateway.persistence.sqlite]
-      reason: The in-memory repository class moved to memory.py; shared correlation policy helpers and the SQLite mixin remain co-located here until the later SQLite-owner move.
     src/imagent/gateway/delivery/submissions.py:
-      owners: [gateway.delivery.submissions, gateway.delivery.proactive-delivery, gateway.persistence.sqlite]
-      reason: Submission identity behavior and SQL transaction wrappers remain co-located; pure row mapping moved to gateway.persistence.row-mapping while the proactive runtime consumes this file's identity helpers.
+      owners: [gateway.delivery.submissions, gateway.delivery.proactive-delivery]
+      reason: Delivery identity, canonical metadata, and planning-facing helpers remain in delivery; SQLite SQL and schema now have one owner in gateway.persistence.sqlite.
     src/imagent/applications/adapters/appserver/_base.py:
       owners: [applications.adapters.codex, applications.adapters.zen]
       reason: Private shared App Server base owns typed start/input preparation, verified local-image epochs, the common STARTED/CREATE_NEW fence with no expected Turn ID, native turn/start, and common ordered normalization; Codex alone owns steer enablement, active-Turn selection, STEERED/PRESERVE_EXISTING classification with the active Turn ID, and turn/steer, while Zen remains start-only. No public aggregate facade is exposed.

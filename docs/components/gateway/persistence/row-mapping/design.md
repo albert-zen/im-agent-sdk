@@ -71,14 +71,13 @@ those conversions. Encoders return SQLite scalar/JSON values or parameter
 tuples; they never execute SQL. Decoders reconstruct complete typed values and
 apply the owning state validator where one exists.
 
-`storage.py`, `request_correlations.py`, and
-`gateway/delivery/submissions.py` retain their transaction-owner methods,
-schema initialization, SQL selection/insertion/update ordering, and mutation
-policy while calling the mapper. `_canonical_metadata` remains owned by
+`gateway/persistence/sqlite.py` retains the single transaction owner,
+schema/migration, SQL selection/insertion/update ordering, and mutation policy
+while calling the mapper. `_canonical_metadata` remains owned by
 `gateway.delivery.submissions`; it is delivery identity behavior rather than a
-row codec. The historical `sqlite_rows.py` module now retains only
-`merge_projection_route`, which is SQLite mutation policy and is not part of
-the mapper; the later whole-owner move may co-locate it with `SQLiteGatewayState`.
+row codec. Request policy stays in
+`gateway/projection/request_correlation.py`, and no SQLite row helper remains
+in the delivery or historical root modules.
 
 This is a mechanical ownership move: it does not create a public facade,
 second persistence path, generic serializer, or new durable state, and it does

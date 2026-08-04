@@ -27,21 +27,22 @@ SQLite tests must prove:
   message/artifact content, credential, callback, spool, outbox, or job-body
   columns.
 
-Run:
+Focused durable-owner coverage lives in
+`tests/gateway/persistence/test_sqlite.py` and the delivery identity suite:
 
 ```sh
 PYTHONPATH=src python -m unittest \
-  tests.test_storage \
+  tests.gateway.persistence.test_sqlite \
   tests.gateway.persistence.test_submission_identity -v
 ```
 
 Every schema change additionally requires a focused legacy-database fixture
 and restart test before implementation is accepted.
 
-The current nullable-binding collapse and incomplete post-decode validation
-remain explicit gaps. A separate behavior/migration slice must close them and
-add malformed-row conformance before this leaf can require universal explicit
-decode failure.
+The supported malformed-row, nullable-scope, migration, restart, rollback,
+CAS, claim-fencing, request-transition, and immutable-submission cases are
+covered by the owner and row-mapping suites. No SQLite helper or second
+transaction owner is retained outside `sqlite.py`.
 
 Current Gateway callers cover only their accepted forward request-state paths.
 Direct SQLite repository conformance also rejects a target such as `resolved`

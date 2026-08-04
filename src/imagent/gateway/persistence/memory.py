@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from ...applications.contract import ThreadRef
 from ...applications.requests import RequestRef
 from ...interaction.messages import ConversationRef
-from ...request_correlations import (
+from ..projection.request_correlation import (
     _matches,
     _merge_correlation,
     _reject_conflicting_endpoint,

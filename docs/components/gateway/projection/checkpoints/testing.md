@@ -22,5 +22,6 @@ Focused derivation/ownership evidence is
 the same stable identities, exact Gateway projection facade identity, and the
 absence of the historical `imagent.projections` symbol. Cross-leaf checkpoint
 evidence remains in `tests/test_projection_hardening.py`,
-`tests/test_projection_routing.py`, and `tests/test_storage.py` while their
-focused mechanical moves are pending.
+`tests/test_projection_routing.py`, and
+`tests/gateway/persistence/test_sqlite.py` while their focused mechanical
+moves are pending.

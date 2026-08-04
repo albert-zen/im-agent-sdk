@@ -6,32 +6,41 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import sqlite_rows
-from .applications.contract import ThreadRef
-from .gateway.delivery.submissions import (
-    SQLiteDeliverySubmissionMixin,
-    initialize_delivery_submission_schema,
+from ...applications.contract import ThreadRef
+from ...applications.requests import RequestRef
+from ...interaction.messages import ConversationRef
+from ..projection.request_correlation import (
+    _merge_correlation,
+    _require_delete_selector,
+    _transition_correlations,
 )
-from .gateway.persistence import row_mapping
-from .gateway.persistence.repository_contracts import (
+from . import row_mapping
+from .repository_contracts import (
     BindingConflict,
+    DeliverySubmissionConflict,
     IdempotencyClaimStatus,
     ProjectionCheckpointConflict,
+    ProjectionRouteConflict,
+    RequestCorrelationConflict,
     TurnReplyCorrelationConflict,
 )
-from .gateway.persistence.state_contracts import (
+from .state_contracts import (
     ConversationBinding,
+    DeliveryReservation,
+    DeliverySubmissionRecord,
+    DeliverySubmissionState,
+    DestinationDeliveryRecord,
+    RequestRouteCorrelation,
+    RequestRouteState,
     ThreadProjectionRoute,
     TurnReplyCorrelation,
     validate_binding,
+    validate_delivery_submission_record,
     validate_projection_route,
+    validate_request_route_correlation,
     validate_turn_reply_correlation,
 )
-from .interaction.messages import ConversationRef
-from .request_correlations import (
-    SQLiteRequestCorrelationMixin,
-    initialize_request_correlation_schema,
-)
+from .submission_identity import ensure_same_delivery_submission_reservation
 
 
 def _same_turn_reply_correlation(
@@ -48,10 +57,39 @@ def _same_turn_reply_correlation(
     )
 
 
-class SQLiteGatewayState(
-    SQLiteDeliverySubmissionMixin,
-    SQLiteRequestCorrelationMixin,
-):
+def merge_projection_route(
+    existing: ThreadProjectionRoute | None,
+    replacement: ThreadProjectionRoute,
+) -> ThreadProjectionRoute:
+    if existing is None:
+        return replacement
+    if (
+        existing.route_id != replacement.route_id
+        or existing.thread_ref != replacement.thread_ref
+        or existing.conversation_ref != replacement.conversation_ref
+    ):
+        raise ProjectionRouteConflict(
+            f"route ID belongs to different endpoints: {replacement.route_id}"
+        )
+    if replacement.checkpoint_agent_item_id is not None:
+        if (
+            replacement.checkpoint_agent_item_id != existing.checkpoint_agent_item_id
+            or replacement.checkpointed_at != existing.checkpointed_at
+        ):
+            raise ProjectionCheckpointConflict(
+                f"route refresh cannot change checkpoint: {replacement.route_id}"
+            )
+        return replacement
+    if existing.checkpoint_agent_item_id is None:
+        return replacement
+    return replace(
+        replacement,
+        checkpoint_agent_item_id=existing.checkpoint_agent_item_id,
+        checkpointed_at=existing.checkpointed_at,
+    )
+
+
+class SQLiteGatewayState:
     """Durable bindings, projection routes, and idempotency without Agent truth."""
 
     def __init__(
@@ -318,7 +356,7 @@ class SQLiteGatewayState(
                 existing = self._read_projection_route(
                     route.route_id
                 ) or self._read_projection_route_for_endpoints(route)
-                stored = sqlite_rows.merge_projection_route(existing, route)
+                stored = merge_projection_route(existing, route)
                 self._write_projection_route(stored)
                 self._connection.commit()
             except BaseException:
@@ -334,7 +372,7 @@ class SQLiteGatewayState(
         async with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
-                stored = sqlite_rows.merge_projection_route(
+                stored = merge_projection_route(
                     self._read_projection_route(route.route_id)
                     or self._read_projection_route_for_endpoints(route),
                     route,
@@ -590,6 +628,253 @@ class SQLiteGatewayState(
             self._connection.commit()
             return cursor.rowcount
 
+    async def list_request_correlations(
+        self,
+        *,
+        request_ref: RequestRef | None = None,
+        thread_ref: ThreadRef | None = None,
+        conversation_ref: ConversationRef | None = None,
+    ) -> tuple[RequestRouteCorrelation, ...]:
+        clauses: list[str] = []
+        parameters: list[object] = []
+        _append_request_selectors(
+            clauses,
+            parameters,
+            request_ref=request_ref,
+            thread_ref=thread_ref,
+            conversation_ref=conversation_ref,
+        )
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        async with self._lock:
+            rows = self._connection.execute(
+                f"SELECT * FROM request_route_correlations{where} "
+                "ORDER BY created_at, correlation_id",
+                tuple(parameters),
+            ).fetchall()
+        return tuple(row_mapping.request_correlation_from_row(row) for row in rows)
+
+    async def put_request_correlation(
+        self,
+        correlation: RequestRouteCorrelation,
+    ) -> RequestRouteCorrelation:
+        validate_request_route_correlation(correlation)
+        async with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                rows = self._connection.execute(
+                    """
+                    SELECT * FROM request_route_correlations
+                    WHERE application_instance_id = ?
+                      AND native_request_id = ?
+                    """,
+                    (
+                        correlation.request_ref.application_ref.application_instance_id,
+                        correlation.request_ref.native_request_id,
+                    ),
+                ).fetchall()
+                request_correlations = tuple(
+                    row_mapping.request_correlation_from_row(row) for row in rows
+                )
+                existing = next(
+                    (
+                        candidate
+                        for candidate in request_correlations
+                        if candidate.correlation_id == correlation.correlation_id
+                    ),
+                    None,
+                )
+                stored = _merge_correlation(
+                    existing,
+                    correlation,
+                    request_correlations=request_correlations,
+                )
+                conflicting = self._connection.execute(
+                    """
+                    SELECT * FROM request_route_correlations
+                    WHERE application_instance_id = ?
+                      AND native_request_id = ?
+                      AND channel_instance_id = ?
+                      AND native_conversation_id = ?
+                      AND correlation_id != ?
+                    """,
+                    (
+                        stored.request_ref.application_ref.application_instance_id,
+                        stored.request_ref.native_request_id,
+                        stored.conversation_ref.channel_instance_id,
+                        stored.conversation_ref.native_conversation_id,
+                        stored.correlation_id,
+                    ),
+                ).fetchone()
+                if conflicting is not None:
+                    raise RequestCorrelationConflict(
+                        "request destination belongs to a different correlation"
+                    )
+                _write_correlation(self._connection, stored)
+                self._connection.commit()
+                return stored
+            except BaseException:
+                self._connection.rollback()
+                raise
+
+    async def transition_request_correlations(
+        self,
+        request_ref: RequestRef,
+        *,
+        expected_states: tuple[RequestRouteState, ...],
+        state: RequestRouteState,
+        updated_at: datetime,
+    ) -> tuple[RequestRouteCorrelation, ...]:
+        async with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                rows = self._connection.execute(
+                    """
+                    SELECT * FROM request_route_correlations
+                    WHERE application_instance_id = ?
+                      AND native_request_id = ?
+                    """,
+                    (
+                        request_ref.application_ref.application_instance_id,
+                        request_ref.native_request_id,
+                    ),
+                ).fetchall()
+                selected = tuple(row_mapping.request_correlation_from_row(row) for row in rows)
+                transitioned = _transition_correlations(
+                    selected,
+                    expected_states=expected_states,
+                    state=state,
+                    updated_at=updated_at,
+                )
+                for correlation in transitioned:
+                    _write_correlation(self._connection, correlation)
+                self._connection.commit()
+                return transitioned
+            except BaseException:
+                self._connection.rollback()
+                raise
+
+    async def delete_request_correlations(
+        self,
+        *,
+        request_ref: RequestRef | None = None,
+        thread_ref: ThreadRef | None = None,
+        conversation_ref: ConversationRef | None = None,
+        older_than: datetime | None = None,
+    ) -> int:
+        _require_delete_selector(request_ref, thread_ref, conversation_ref, older_than)
+        clauses: list[str] = []
+        parameters: list[object] = []
+        _append_request_selectors(
+            clauses,
+            parameters,
+            request_ref=request_ref,
+            thread_ref=thread_ref,
+            conversation_ref=conversation_ref,
+        )
+        if older_than is not None:
+            clauses.append("updated_at < ?")
+            parameters.append(older_than.isoformat())
+        async with self._lock:
+            cursor = self._connection.execute(
+                f"DELETE FROM request_route_correlations WHERE {' AND '.join(clauses)}",
+                tuple(parameters),
+            )
+            self._connection.commit()
+            return cursor.rowcount
+
+    async def get_delivery_submission(
+        self,
+        submission_id: str,
+    ) -> DeliverySubmissionRecord | None:
+        async with self._lock:
+            return _read_submission(self._connection, submission_id)
+
+    async def reserve_delivery_submission(
+        self,
+        record: DeliverySubmissionRecord,
+    ) -> DeliveryReservation:
+        validate_delivery_submission_record(record)
+        async with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                existing = _read_submission(self._connection, record.submission_id)
+                if existing is not None:
+                    ensure_same_delivery_submission_reservation(existing, record)
+                    self._connection.commit()
+                    return DeliveryReservation(acquired=False, record=existing)
+                _write_submission(self._connection, record)
+                self._connection.commit()
+                return DeliveryReservation(acquired=True, record=record)
+            except BaseException:
+                self._connection.rollback()
+                raise
+
+    async def update_delivery_destination(
+        self,
+        submission_id: str,
+        destination_delivery_id: str,
+        *,
+        expected_state: DeliverySubmissionState,
+        destination: DestinationDeliveryRecord,
+    ) -> DeliverySubmissionRecord:
+        if destination.delivery_id != destination_delivery_id:
+            raise DeliverySubmissionConflict("destination delivery identity changed")
+        async with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                current = _read_submission(self._connection, submission_id)
+                if current is None:
+                    raise KeyError(f"delivery submission does not exist: {submission_id}")
+                existing = next(
+                    (
+                        candidate
+                        for candidate in current.destinations
+                        if candidate.delivery_id == destination_delivery_id
+                    ),
+                    None,
+                )
+                if existing is None:
+                    raise KeyError(
+                        f"delivery destination does not exist: {destination_delivery_id}"
+                    )
+                if existing.state is not expected_state:
+                    if existing == destination:
+                        self._connection.commit()
+                        return current
+                    raise DeliverySubmissionConflict("delivery destination state changed")
+                if existing.snapshot != destination.snapshot:
+                    raise DeliverySubmissionConflict("delivery destination snapshot changed")
+                _write_destination(
+                    self._connection,
+                    root_submission_id=submission_id,
+                    destination=destination,
+                )
+                updated_at = max(current.updated_at, destination.updated_at)
+                self._connection.execute(
+                    """
+                    UPDATE delivery_submissions
+                    SET updated_at = ?
+                    WHERE submission_id = ?
+                    """,
+                    (updated_at.isoformat(), submission_id),
+                )
+                updated = replace(
+                    current,
+                    destinations=tuple(
+                        destination
+                        if candidate.delivery_id == destination_delivery_id
+                        else candidate
+                        for candidate in current.destinations
+                    ),
+                    updated_at=updated_at,
+                )
+                validate_delivery_submission_record(updated)
+                self._connection.commit()
+                return updated
+            except BaseException:
+                self._connection.rollback()
+                raise
+
     def _write_projection_route(self, route: ThreadProjectionRoute) -> None:
         updated_at = route.updated_at or datetime.now(UTC)
         self._connection.execute(
@@ -795,3 +1080,242 @@ class SQLiteGatewayState(
                 (scope, key, owner_token),
             )
             self._connection.commit()
+
+
+def initialize_request_correlation_schema(connection: sqlite3.Connection) -> None:
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS request_route_correlations (
+            correlation_id TEXT NOT NULL PRIMARY KEY,
+            application_instance_id TEXT NOT NULL,
+            native_request_id TEXT NOT NULL,
+            project_id TEXT NOT NULL,
+            thread_id TEXT NOT NULL,
+            turn_id TEXT NOT NULL,
+            channel_instance_id TEXT NOT NULL,
+            native_conversation_id TEXT NOT NULL,
+            delivery_id TEXT NOT NULL,
+            response_shape_json TEXT NOT NULL,
+            state TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            expires_at TEXT,
+            UNIQUE (
+                application_instance_id,
+                native_request_id,
+                channel_instance_id,
+                native_conversation_id
+            )
+        );
+        CREATE INDEX IF NOT EXISTS request_route_correlations_request_ref
+            ON request_route_correlations (
+                application_instance_id,
+                native_request_id
+            );
+        """
+    )
+
+
+def initialize_delivery_submission_schema(connection: sqlite3.Connection) -> None:
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS delivery_submissions (
+            submission_id TEXT NOT NULL PRIMARY KEY,
+            delivery_id TEXT NOT NULL,
+            origin TEXT NOT NULL,
+            principal_id TEXT NOT NULL,
+            target_fingerprint TEXT NOT NULL,
+            payload_fingerprint TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS delivery_submission_destinations (
+            root_submission_id TEXT NOT NULL,
+            destination_delivery_id TEXT NOT NULL PRIMARY KEY,
+            channel_instance_id TEXT NOT NULL,
+            native_conversation_id TEXT NOT NULL,
+            application_instance_id TEXT NOT NULL,
+            project_id TEXT NOT NULL,
+            thread_id TEXT NOT NULL,
+            route_id TEXT NOT NULL,
+            route_updated_at TEXT,
+            reply_to_message_id TEXT,
+            state TEXT NOT NULL,
+            receipt_json TEXT,
+            error TEXT,
+            updated_at TEXT NOT NULL,
+            UNIQUE (
+                root_submission_id,
+                channel_instance_id,
+                native_conversation_id
+            ),
+            FOREIGN KEY(root_submission_id)
+                REFERENCES delivery_submissions(submission_id)
+                ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS delivery_destinations_root
+            ON delivery_submission_destinations(root_submission_id);
+        """
+    )
+
+
+def _append_request_selectors(
+    clauses: list[str],
+    parameters: list[object],
+    *,
+    request_ref: RequestRef | None,
+    thread_ref: ThreadRef | None,
+    conversation_ref: ConversationRef | None,
+) -> None:
+    if request_ref is not None:
+        clauses.extend(
+            (
+                "application_instance_id = ?",
+                "native_request_id = ?",
+            )
+        )
+        parameters.extend(
+            (
+                request_ref.application_ref.application_instance_id,
+                request_ref.native_request_id,
+            )
+        )
+    if thread_ref is not None:
+        clauses.extend(
+            (
+                "application_instance_id = ?",
+                "project_id = ?",
+                "thread_id = ?",
+            )
+        )
+        parameters.extend(row_mapping.thread_storage_key(thread_ref))
+    if conversation_ref is not None:
+        clauses.extend(
+            (
+                "channel_instance_id = ?",
+                "native_conversation_id = ?",
+            )
+        )
+        parameters.extend(
+            (
+                conversation_ref.channel_instance_id,
+                conversation_ref.native_conversation_id,
+            )
+        )
+
+
+def _write_correlation(
+    connection: sqlite3.Connection,
+    correlation: RequestRouteCorrelation,
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO request_route_correlations (
+            correlation_id,
+            application_instance_id,
+            native_request_id,
+            project_id,
+            thread_id,
+            turn_id,
+            channel_instance_id,
+            native_conversation_id,
+            delivery_id,
+            response_shape_json,
+            state,
+            created_at,
+            updated_at,
+            expires_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(correlation_id)
+        DO UPDATE SET
+            delivery_id = excluded.delivery_id,
+            response_shape_json = excluded.response_shape_json,
+            state = excluded.state,
+            updated_at = excluded.updated_at,
+            expires_at = excluded.expires_at
+        """,
+        row_mapping.request_correlation_to_row(correlation),
+    )
+
+
+def _read_submission(
+    connection: sqlite3.Connection,
+    submission_id: str,
+) -> DeliverySubmissionRecord | None:
+    root = connection.execute(
+        "SELECT * FROM delivery_submissions WHERE submission_id = ?",
+        (submission_id,),
+    ).fetchone()
+    if root is None:
+        return None
+    rows = connection.execute(
+        """
+        SELECT * FROM delivery_submission_destinations
+        WHERE root_submission_id = ?
+        ORDER BY channel_instance_id, native_conversation_id, destination_delivery_id
+        """,
+        (submission_id,),
+    ).fetchall()
+    return row_mapping.delivery_submission_from_rows(root, rows)
+
+
+def _write_submission(
+    connection: sqlite3.Connection,
+    record: DeliverySubmissionRecord,
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO delivery_submissions (
+            submission_id,
+            delivery_id,
+            origin,
+            principal_id,
+            target_fingerprint,
+            payload_fingerprint,
+            created_at,
+            updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        row_mapping.delivery_submission_to_row(record),
+    )
+    for destination in record.destinations:
+        _write_destination(
+            connection,
+            root_submission_id=record.submission_id,
+            destination=destination,
+        )
+
+
+def _write_destination(
+    connection: sqlite3.Connection,
+    *,
+    root_submission_id: str,
+    destination: DestinationDeliveryRecord,
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO delivery_submission_destinations (
+            root_submission_id,
+            destination_delivery_id,
+            channel_instance_id,
+            native_conversation_id,
+            application_instance_id,
+            project_id,
+            thread_id,
+            route_id,
+            route_updated_at,
+            reply_to_message_id,
+            state,
+            receipt_json,
+            error,
+            updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(destination_delivery_id)
+        DO UPDATE SET
+            state = excluded.state,
+            receipt_json = excluded.receipt_json,
+            error = excluded.error,
+            updated_at = excluded.updated_at
+        """,
+        row_mapping.delivery_destination_to_row(root_submission_id, destination),
+    )

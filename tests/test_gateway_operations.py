@@ -59,13 +59,13 @@ from imagent.gateway.persistence.memory import (
     InMemoryProjectionRouteRepository,
     InMemoryRequestCorrelationRepository,
 )
+from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.interaction.channels import DeliveryReceipt
 from imagent.interaction.controllers import MarkdownRequestPresenter, SlashController
 from imagent.keyed_locks import KeyedLockCapacityError
 from imagent.projections import (
     derive_projection_route_id,
 )
-from imagent.storage import SQLiteGatewayState
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

@@ -31,7 +31,7 @@ For the repository-Port extraction run:
 PYTHONPATH=src:tests python -m unittest \
   tests.gateway.persistence.test_repository_contracts \
   tests.gateway.persistence.test_memory \
-  tests.test_storage \
+  tests.gateway.persistence.test_sqlite \
   tests.conformance.test_adapter_contracts -v
 ```
 

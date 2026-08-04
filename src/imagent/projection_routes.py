@@ -22,6 +22,10 @@ from .gateway.persistence.state_contracts import (
     ThreadProjectionRoute,
 )
 from .gateway.projection.recovery import read_bounded_authoritative_projection
+from .gateway.projection.request_correlation import (
+    derive_request_correlation_id,
+    derive_request_delivery_id,
+)
 from .interaction.controllers import RequestPresenter
 from .projections import (
     DeliverOutbound,
@@ -30,10 +34,6 @@ from .projections import (
     RetryableDeliveryError,
     deliver_projected_message,
     get_projection_route,
-)
-from .request_correlations import (
-    derive_request_correlation_id,
-    derive_request_delivery_id,
 )
 
 RecordGap = Callable[[ThreadRef, str, str], None]

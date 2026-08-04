@@ -20,12 +20,13 @@ Row-mapping tests must prove:
 
 Focused pure-mapping coverage lives in
 `tests/gateway/persistence/test_row_mapping.py` and runs without opening a
-database. Durable integration coverage remains in `tests/test_storage.py`:
+database. Durable integration coverage remains in
+`tests/gateway/persistence/test_sqlite.py`:
 
 ```sh
 PYTHONPATH=src python -m unittest \
   tests.gateway.persistence.test_row_mapping \
-  tests.test_storage -v
+  tests.gateway.persistence.test_sqlite -v
 ```
 
 The focused suite proves the exact mapper output and identities, bounded

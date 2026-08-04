@@ -81,7 +81,7 @@ Run:
 ```sh
 PYTHONPATH=src python -m unittest \
   tests.test_bindings \
-  tests.test_storage \
+  tests.gateway.persistence.test_sqlite \
   tests.test_projection_hardening \
   tests.test_projection_routing -v
 ```
