@@ -13,8 +13,9 @@ Tests must prove:
 - unknown remains `side_effect_started` and post-acceptance remains terminal
   across timeout, cancellation, invalid output, presenter failure, Channel
   failure, duplicate delivery, and restart;
-- original pre-fence cancellation releases without presentation and a
-  post-fence race never reopens the claim;
+- original pre-native-side-effect-fence cancellation releases without
+  presentation and a post-native-side-effect-fence race never reopens the
+  claim;
 - presenter facts/output contain only fixed bounded typed identity, reject
   attachments/metadata/identity changes, and retain no exception or content;
 - active task capacity, lifetime, shutdown cleanup, and diagnostics are finite;

@@ -16,10 +16,15 @@ Recovery conformance must prove:
   evidence to converge a lagging checkpoint, while `in_flight` or live-only
   output cannot;
 - subscription/recovery failure uses bounded retry and is isolated per Thread;
-  one typed permanent or retryable Channel destination failure does not
-  restart observation and does not block a healthy destination, while an
-  injected checkpoint/repository failure restarts only the affected Thread's
-  existing worker and converges through authoritative recovery;
+  one typed permanent or retryable Channel destination failure does not restart
+  observation and does not block a healthy destination, while an injected
+  checkpoint/repository failure restarts only the affected Thread's existing
+  worker and converges through authoritative recovery;
+- an acceptance-buffer overflow or mid-drain ordered-event failure injects one
+  typed external gap into that same supervisor for only its Thread; it keeps
+  the accepted input terminal, preserves the one worker, uses the supervisor's
+  capped classification/backoff, and leaves no stale cancellation marker after
+  terminal-worker or no-longer-active-route recovery;
 - the focused supervisor returns capped retry and typed gap/degradation facts
   while observation remains the sole owner of subscription open, consumption,
   close, and resubscription;

@@ -16,13 +16,13 @@ from ...interaction.messages import (
     TextContent,
     TextFormat,
 )
-from ...projection_runtime import InputPostAcceptanceError
 from ..admission import ClaimedInbound
 from ..diagnostics import (
     InboundFailurePresentationFailureCode,
     InboundFailurePresenterDiagnosticFacts,
 )
 from ..persistence.repository_contracts import IdempotencyRepository
+from .dispatch import InputPostAcceptanceError
 
 
 class InboundFailurePhase(StrEnum):

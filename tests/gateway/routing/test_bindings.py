@@ -13,7 +13,6 @@ from typing import get_args
 from unittest.mock import patch
 
 import imagent.contracts as contracts_facade
-import imagent.contracts.validators as historical_validators
 import imagent.gateway as gateway_facade
 import imagent.gateway.routing as routing_facade
 from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef
@@ -41,7 +40,6 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     import typing
 
     import imagent.contracts as contracts_facade
-    import imagent.contracts.validators as validators_owner
     import imagent.gateway as gateway_facade
     import imagent.gateway.routing as routing_facade
     import imagent.gateway.routing.operations as operations_owner
@@ -61,9 +59,8 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
         assert getattr(gateway_facade, name) is owner
         assert inspect.signature(getattr(contracts_facade, name)) == inspect.signature(owner)
         assert owner.__module__ == "imagent.gateway.routing.bindings"
-        assert not hasattr(validators_owner, name)
-
     assert importlib.util.find_spec("imagent.contracts.operations") is None
+    assert importlib.util.find_spec("imagent.contracts.validators") is None
 
     binding_hints = typing.get_type_hints(binding_owner.ConversationBound)
     facade_hints = typing.get_type_hints(contracts_facade.ConversationBound)
@@ -94,7 +91,6 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
 _IMPORT_ORDERS = {
     "canonical owner first": "import imagent.gateway.routing.operations\n",
     "binding owner first": "import imagent.gateway.routing.bindings\n",
-    "validators first": "import imagent.contracts.validators\n",
     "contracts facade first": "import imagent.contracts\n",
     "routing facade first": "import imagent.gateway.routing\n",
 }
@@ -165,8 +161,8 @@ class BindingOwnerTests(unittest.TestCase):
                 self.assertIs(getattr(contracts_facade, name), owner)
                 self.assertIs(getattr(gateway_facade, name), owner)
                 self.assertEqual(owner.__module__, "imagent.gateway.routing.bindings")
-                self.assertFalse(hasattr(historical_validators, name))
         self.assertIsNone(importlib.util.find_spec("imagent.contracts.operations"))
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts.validators"))
 
     def test_clean_process_import_orders_preserve_identity_signatures_and_hints(self) -> None:
         environment = os.environ.copy()

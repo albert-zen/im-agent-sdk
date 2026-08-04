@@ -9,9 +9,6 @@ from typing import Any, cast
 
 from imagent.applications.capabilities import ProjectMode
 from imagent.applications.contract import AgentInput, InputContinuationPreference
-from imagent.contracts import (
-    derive_client_message_id,
-)
 from imagent.gateway import (
     GatewayExtensions,
     GatewayLimits,
@@ -20,6 +17,7 @@ from imagent.gateway import (
     InboundContentTransformer,
 )
 from imagent.gateway.diagnostics import InboundContentTransformFailureCode
+from imagent.gateway.input import derive_client_message_id
 from imagent.gateway.input.content_transformation import (
     InboundContentTransformationCapacityError,
     InboundContentTransformationError,

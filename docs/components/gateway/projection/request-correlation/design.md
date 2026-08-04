@@ -87,16 +87,19 @@ validation, stable identities, destination selection, Turn-correlation
 orchestration, monotonic transition/claim fences, and authoritative pending
 request reconciliation live together in
 `gateway/projection/request_correlation.py`. One runtime instance is composed
-with observation, recovery, and route delivery: observation retains acceptance
-buffering, routes retain per-route delivery ordering, and recovery invokes
-only the typed Thread-scoped pending-snapshot method after a supervised gap.
-Every correlation decision and mutation remains in this leaf. The historical
+with the input dispatcher, observation, recovery, and route-delivery
+coordinators: the dispatcher owns acceptance buffering and ordering,
+observation forwards events through its typed gate, routes retain per-route
+delivery ordering, and recovery invokes only the typed Thread-scoped
+pending-snapshot method after a supervised gap. Every correlation decision and
+mutation remains in this leaf. The historical
 `imagent.request_projection_runtime` module is absent.
 
 `imagent.gateway.projection` exposes the exact `InteractiveRequestProjection`,
 `RespondToRequest`, and `RequestResponseRouted` owner objects. The historical
-`imagent.contracts` facade and its `operations` and `validators` modules do not
-retain these moved request attributes. The closed Gateway operation aggregate
+`imagent.contracts` facade and its `operations` module do not retain these moved
+request attributes; `imagent.contracts.validators` is physically absent. The
+closed Gateway operation aggregate
 imports the exact operation family from this owner and the Gateway root only
 adapts an owner rejection into the aggregate failure result; it does not own
 response validation, request locking, transitions, correlation persistence,

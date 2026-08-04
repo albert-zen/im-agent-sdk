@@ -19,6 +19,7 @@ from imagent.gateway import (
 )
 from imagent.gateway.admission import ClaimedInbound
 from imagent.gateway.diagnostics import InboundFailurePresentationFailureCode
+from imagent.gateway.input.dispatch import InputPostAcceptanceError
 from imagent.gateway.input.failure_presentation import (
     InboundFailurePresentation,
     InboundFailurePresentationCapacityError,
@@ -38,7 +39,6 @@ from imagent.interaction.messages import (
     OutboundMessage,
     TextContent,
 )
-from imagent.projection_runtime import InputPostAcceptanceError
 from imagent.testing import FakeChannelAdapter
 
 

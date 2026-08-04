@@ -8,7 +8,6 @@ from dataclasses import fields, replace
 from datetime import UTC, datetime
 
 import imagent.contracts as contracts_facade
-import imagent.contracts.validators as historical_validators
 import imagent.gateway.projection as projection_facade
 import imagent.gateway.projection.request_correlation as owner
 from imagent.applications.capabilities import ProjectMode
@@ -90,6 +89,7 @@ class RequestCorrelationPolicyTests(unittest.TestCase):
     def test_policy_has_one_projection_owner_and_old_module_is_absent(self) -> None:
         self.assertIsNone(importlib.util.find_spec("imagent.request_correlations"))
         self.assertIsNone(importlib.util.find_spec("imagent.request_projection_runtime"))
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts.validators"))
         self.assertEqual(
             derive_request_correlation_id.__module__,
             "imagent.gateway.projection.request_correlation",
@@ -112,13 +112,9 @@ class RequestCorrelationPolicyTests(unittest.TestCase):
                 self.assertIs(getattr(projection_facade, name), value)
                 self.assertEqual(value.__module__, owner.__name__)
         for name in ("RespondToRequest", "RequestResponseRouted"):
-            for historical in (
-                contracts_facade,
-                historical_validators,
-            ):
-                with self.subTest(name=name, historical=historical.__name__):
-                    self.assertFalse(hasattr(historical, name))
-                    self.assertNotIn(name, getattr(historical, "__all__", ()))
+            with self.subTest(name=name, historical=contracts_facade.__name__):
+                self.assertFalse(hasattr(contracts_facade, name))
+                self.assertNotIn(name, getattr(contracts_facade, "__all__", ()))
         self.assertIsNone(importlib.util.find_spec("imagent.contracts.operations"))
 
     def test_historical_runtime_import_fails_in_a_clean_process(self) -> None:

@@ -56,9 +56,8 @@ class ApplicationOperationTests(unittest.TestCase):
     def test_historical_contract_modules_no_longer_define_application_operations(self) -> None:
         with self.assertRaises(ModuleNotFoundError):
             import_module("imagent.contracts.operations")
-        historical_validators = import_module("imagent.contracts.validators")
-        self.assertFalse(hasattr(historical_validators, "validate_application_operation"))
-        self.assertFalse(hasattr(historical_validators, "validate_application_operation_result"))
+        with self.assertRaises(ModuleNotFoundError):
+            import_module("imagent.contracts.validators")
 
     def test_operation_annotations_resolve_to_existing_contract_values(self) -> None:
         hints = get_type_hints(operations.RespondRequest)

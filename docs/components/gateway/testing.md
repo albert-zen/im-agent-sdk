@@ -34,7 +34,7 @@
   distinct Thread before Application subscription/recovery/checkpoint or
   delivery work, retains a same-Thread admission across task turnover, and
   releases terminal/cancelled/start-failed worker slots/health without clearing
-  a pending acceptance fence before its final owner drains it; restart retains
+  a pending acceptance-ordering gate before its final owner drains it; restart retains
   its existing acceptance-buffer reset boundary; a full foreground switch does
   not mutate the existing binding or persist the rejected candidate route;
 - grouping does not change binding, idempotency, projection recovery,

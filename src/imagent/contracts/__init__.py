@@ -27,9 +27,6 @@ if TYPE_CHECKING:
         validate_gateway_operation_result,
     )
     from ..interaction.messages import ConversationRef
-    from .validators import (
-        derive_client_message_id,
-    )
 
 from ..applications.contract import ApplicationInputOutcomeUnknown
 from ..applications.events import AgentEvent, AgentEventType, validate_agent_event
@@ -83,11 +80,6 @@ _GATEWAY_OPERATION_EXPORTS = frozenset(
         "validate_gateway_operation_result",
     }
 )
-_GATEWAY_VALIDATOR_EXPORTS = frozenset(
-    {
-        "derive_client_message_id",
-    }
-)
 _GATEWAY_PERSISTENCE_EXPORTS = frozenset(
     {
         "ConversationBinding",
@@ -131,7 +123,6 @@ __all__ = [
     "TextContent",
     "TextFormat",
     "TextLengthUnit",
-    "derive_client_message_id",
     "operation_error",
     "require_identifier",
     "validate_agent_event",
@@ -146,8 +137,6 @@ def __getattr__(name: str) -> object:
         module = import_module("..gateway.routing.bindings", __name__)
     elif name in _GATEWAY_OPERATION_EXPORTS:
         module = import_module("..gateway.routing.operations", __name__)
-    elif name in _GATEWAY_VALIDATOR_EXPORTS:
-        module = import_module(".validators", __name__)
     elif name in _GATEWAY_PERSISTENCE_EXPORTS:
         module = import_module("..gateway.persistence.state_contracts", __name__)
     elif name in {"DeliveryPrincipal", "validate_delivery_principal"}:

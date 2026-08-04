@@ -686,24 +686,24 @@ components:
   gateway.input.dispatch:
     id: gateway.input.dispatch
     parent: gateway.input
-    purpose: Serialize Conversation input, authorize the native pre-dispatch fence, and record truthful accepted-Turn correlation.
-    owns: [prefer_active_turn default, dispatch hook authorization, acceptance buffering]
-    does_not_own: [native steer implementation, active Turn truth, Channel input work]
-    inputs: [verified content, current binding, Application adapter]
-    outputs: [AcceptedTurn or classified dispatch failure]
+    purpose: Canonically derive stable input identity, authorize one native side-effect pre-dispatch fact, validate/correlate AcceptedTurn truth, and own a distinct finite per-Thread acceptance-ordering gate.
+    owns: [derive_client_message_id, prefer_active_turn default, exactly-once native side-effect ApplicationInputDispatch authorization, AcceptedTurn validation/correlation invocation, finite per-Thread acceptance-ordering gate/buffer/ordered drain]
+    does_not_own: [Gateway Conversation serialization, Controller/I1/I2, binding mutation, Thread creation, route preparation, native steer implementation, active Turn truth, worker lifecycle, recovery policy, Channel input work]
+    inputs: [verified content, established Conversation lock, prepared Application/Thread route, Application adapter]
+    outputs: [AcceptedTurn or classified dispatch failure, ordered typed projection-event release]
     public_contracts: [derive_client_message_id]
     public_exports:
-      current: [imagent.contracts:derive_client_message_id]
+      current: [imagent.gateway.input:derive_client_message_id]
       target: [imagent.gateway.input:derive_client_message_id]
-    dependencies: [interaction.messages, interaction.operations, applications.application-contract, applications.operations, gateway.concurrency, gateway.admission, gateway.projection.request-correlation]
-    state_recovery: Pre-dispatch failures release; outcome_unknown stays side_effect_started; accepted results are terminal for inbound idempotency.
-    current_code: [src/imagent/contracts/validators.py, src/imagent/gateway/__init__.py, src/imagent/projection_runtime.py]
+    dependencies: [interaction.messages, interaction.operations, applications.application-contract, applications.events, applications.operations, gateway.admission, gateway.projection.request-correlation]
+    state_recovery: The final pending dispatch exit always signals/drains/removes process-local acceptance-ordering-gate state. Buffer overflow or a mid-drain applier failure records an explicit per-Thread gap for the existing authoritative worker recovery; neither itself transitions an inbound claim. Known pre-native-side-effect-fence failure releases, while native-side-effect-fence-unknown and accepted input remain non-redeliverable.
+    current_code: [src/imagent/gateway/input/dispatch.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/input/dispatch.py]
-    current_tests: [tests/test_gateway_vertical_slice.py, tests/test_projection_hardening.py, tests/gateway/projection/test_recovery.py]
+    current_tests: [tests/gateway/input/test_dispatch.py]
     target_tests: [tests/gateway/input/test_dispatch.py]
     authoritative_docs: [docs/components/gateway/input/dispatch/design.md, docs/components/gateway/input/dispatch/testing.md, docs/components/gateway/design.md, docs/components/projections-and-recovery/design.md]
-    adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [dispatch and projection worker lifecycle share projection_runtime.py]
+    adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0013-bounded-application-event-admission.md]
+    gaps: [Gateway root retains the owned Conversation lock/I2 orchestration; projection worker lifecycle remains an explained separate move]
 
   gateway.input.failure-presentation:
     id: gateway.input.failure-presentation
@@ -732,22 +732,22 @@ components:
     parent: gateway.projection
     purpose: Maintain one bounded Application observation worker per active Thread and isolate bounded subscriber failures.
     owns: [Thread worker lifecycle, active-Thread capacity, terminal runtime-entry cleanup, live fan-out consumption, bootstrap barrier]
-    does_not_own: [native subscription producer, transcript, second event journal, checkpoint decision/CAS]
+    does_not_own: [native subscription producer, transcript, second event journal, dispatch native side-effect fence or acceptance-ordering gate/buffer, checkpoint decision/CAS]
     inputs: [Application Thread subscription]
     outputs: [ordered normalized events for active routes]
     public_contracts: [ThreadProjectionRuntime, ProjectionWorkerHealth]
     public_exports:
       current: [imagent.projection_runtime:ThreadProjectionRuntime, imagent.projections:ProjectionWorkerHealth]
       target: [imagent.gateway.projection:ThreadProjectionRuntime, imagent.gateway.projection:ProjectionWorkerHealth]
-    dependencies: [interaction.messages, interaction.controllers.request-presentation, applications.application-contract, applications.capabilities, applications.events, applications.requests, gateway.routing.projection-routes, gateway.projection.checkpoints, gateway.projection.request-correlation, gateway.projection.recovery, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
-    state_recovery: Active-worker capacity and per-Thread runtime entries are process-local; an in-flight same-Thread admission retains its identity across task turnover, bounded queue gaps retain the worker slot while supervised resubscription reconciles authoritatively, and terminal workers release it once no admission lease remains.
+    dependencies: [interaction.messages, interaction.controllers.request-presentation, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, gateway.input.dispatch, gateway.routing.projection-routes, gateway.projection.checkpoints, gateway.projection.request-correlation, gateway.projection.recovery, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
+    state_recovery: Active-worker capacity and per-Thread runtime entries are process-local; an in-flight same-Thread admission retains its identity across task turnover, bounded queue and dispatch-owned acceptance-ordering gaps retain the worker slot while supervised resubscription reconciles authoritatively, and terminal workers release it once no admission lease remains without clearing the dispatch-owned gate.
     current_code: [src/imagent/gateway/__init__.py, src/imagent/projection_runtime.py, src/imagent/projection_routes.py, src/imagent/projections.py]
     target_code: [src/imagent/gateway/projection/observation.py]
     current_tests: [tests/gateway/projection/test_observation.py, tests/test_projection_hardening.py, tests/test_projection_routing.py]
     target_tests: [tests/gateway/projection/test_observation.py]
     authoritative_docs: [docs/components/gateway/projection/observation/design.md, docs/components/gateway/projection/observation/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0013-bounded-application-event-admission.md]
-    gaps: [projection_runtime.py also owns input acceptance; projection_routes.py also owns request/destination delivery coordination]
+    gaps: [projection_routes.py also owns request/destination delivery coordination]
 
   gateway.projection.checkpoints:
     id: gateway.projection.checkpoints
@@ -1709,7 +1709,7 @@ structural_status:
       rationale: Gateway persistence facade; repository contracts and the idempotency reference implementation are exact re-exports from focused leaves.
     - path: src/imagent/gateway/input/__init__.py
       owner: gateway.input.failure-presentation
-      rationale: Gateway input facade re-exports exact I1 and I2 public contracts from their focused implementations without retaining historical modules.
+      rationale: Gateway input facade re-exports exact I1, dispatch, and I2 public contracts from their focused implementations without retaining historical modules.
     - path: src/imagent/diagnostics.py
       owner: gateway.diagnostics
       rationale: Stable finite diagnostics transition facade; it re-exports exact Interaction, Channel, Applications, and Gateway owner objects without retaining a definition or lazy resolver.
@@ -1759,9 +1759,6 @@ structural_status:
     src/imagent/gateway/delivery/__init__.py:
       owners: [gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation]
       reason: The intentional Gateway delivery package facade re-exports exact public values from focused delivery leaves without implementing any leaf.
-    src/imagent/projection_runtime.py:
-      owners: [gateway.input.dispatch, gateway.projection.observation]
-      reason: Acceptance ordering and one-worker observation share one current state machine; recovery-specific supervision delegates to the canonical recovery owner through typed inputs.
     src/imagent/gateway/delivery/submissions.py:
       owners: [gateway.delivery.submissions, gateway.delivery.proactive-delivery]
       reason: Delivery identity, canonical metadata, and planning-facing helpers remain in delivery; SQLite SQL and schema now have one owner in gateway.persistence.sqlite.

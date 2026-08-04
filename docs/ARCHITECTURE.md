@@ -302,9 +302,11 @@ contains no transcript or Turn truth.
   presentation, or Channel delivery. The in-flight admission lease preserves
   that identity across task turnover until its caller reaches its `finally`.
   Terminal/cancelled workers discard process-local health and normally release
-  their slot; an accepted-input correlation fence, its event lock, and buffered
-  events remain until the final input owner durably resolves the correlation
-  and drains them. Supervised resubscription keeps its existing slot and
+  their slot; an accepted-input acceptance-ordering gate, its event lock, and
+  buffered events remain until the final input owner durably resolves the
+  correlation and drains them. The distinct native side-effect fence is entered
+  only by the Application immediately before native mutation. Supervised
+  resubscription keeps its existing slot and
   recovery authority.
 - subscription/recovery failure enters bounded-backoff resubscription and is
   visible in process-local worker health;
@@ -324,7 +326,8 @@ contains no transcript or Turn truth.
   subscription.
 - Application event subscribers, Gateway startup admission, and per-Thread
   Turn-acceptance buffering have independently configurable finite limits;
-  overflow is an explicit per-Thread gap that enters authoritative recovery.
+  overflow or a failed ordered drain is an explicit per-Thread gap that enters
+  authoritative recovery without reopening accepted input.
 - The Gateway startup-admission FIFO and its explicit overflow/not-running
   failures are implemented by the `gateway.lifecycle` leaf. The
   `ImAgentGateway.start()`/`stop()` orchestration remains at the
