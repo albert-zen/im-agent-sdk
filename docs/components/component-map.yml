@@ -164,14 +164,6 @@ architecture_lint:
       to: src/imagent/gateway/routing/operations.py
       symbol: _complete_gateway_union
       reason: The finite named facade bootstrap completes the one closed aggregate after exact projection-route values load; it is not a runtime lookup or service locator.
-    - from: src/imagent/gateway/projection/recovery.py
-      to: src/imagent/projections.py
-      symbol: AuthoritativeProjectionSlice
-      reason: Bounded recovery consumes the historical observation slice value while its physical relocation remains separate from checkpoint decision/CAS ownership.
-    - from: src/imagent/gateway/projection/recovery.py
-      to: src/imagent/projections.py
-      symbol: ProjectedAgentMessage
-      reason: Bounded recovery consumes the historical observation message value while its physical relocation remains separate from checkpoint decision/CAS ownership.
     - from: src/imagent/interaction/controllers/contract.py
       to: src/imagent/contracts/__init__.py
       reason: Controller action annotations use the declared finite contracts facade to resolve exact Gateway operation and ConversationBinding objects after clean package initialization, without importing Gateway orchestration from the Interaction contract module.
@@ -659,7 +651,7 @@ components:
     target_tests: [tests/gateway/routing/test_projection_routes.py]
     authoritative_docs: [docs/components/gateway/routing/projection-routes/design.md, docs/components/gateway/routing/projection-routes/testing.md, docs/components/projections-and-recovery/design.md, docs/components/gateway/design.md]
     adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md]
-    gaps: [per-route delivery ordering remains in historical src/imagent/projection_routes.py pending a focused coordination move]
+    gaps: []
 
   gateway.input.content-transformation:
     id: gateway.input.content-transformation
@@ -731,23 +723,23 @@ components:
     id: gateway.projection.observation
     parent: gateway.projection
     purpose: Maintain one bounded Application observation worker per active Thread and isolate bounded subscriber failures.
-    owns: [Thread worker lifecycle, active-Thread capacity, terminal runtime-entry cleanup, live fan-out consumption, bootstrap barrier]
+    owns: [Thread worker lifecycle, active-Thread capacity, terminal runtime-entry cleanup, live fan-out consumption, bootstrap barrier, private per-route ordered delivery coordination]
     does_not_own: [native subscription producer, transcript, second event journal, dispatch native side-effect fence or acceptance-ordering gate/buffer, checkpoint decision/CAS]
     inputs: [Application Thread subscription]
     outputs: [ordered normalized events for active routes]
     public_contracts: [ThreadProjectionRuntime, ProjectionWorkerHealth]
     public_exports:
-      current: [imagent.projection_runtime:ThreadProjectionRuntime, imagent.projections:ProjectionWorkerHealth]
+      current: [imagent.gateway.projection:ThreadProjectionRuntime, imagent.gateway.projection:ProjectionWorkerHealth]
       target: [imagent.gateway.projection:ThreadProjectionRuntime, imagent.gateway.projection:ProjectionWorkerHealth]
     dependencies: [interaction.messages, interaction.controllers.request-presentation, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, gateway.input.dispatch, gateway.routing.projection-routes, gateway.projection.checkpoints, gateway.projection.request-correlation, gateway.projection.recovery, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Active-worker capacity and per-Thread runtime entries are process-local; an in-flight same-Thread admission retains its identity across task turnover, bounded queue and dispatch-owned acceptance-ordering gaps retain the worker slot while supervised resubscription reconciles authoritatively, and terminal workers release it once no admission lease remains without clearing the dispatch-owned gate.
-    current_code: [src/imagent/gateway/__init__.py, src/imagent/projection_runtime.py, src/imagent/projection_routes.py, src/imagent/projections.py]
+    current_code: [src/imagent/gateway/__init__.py, src/imagent/gateway/projection/observation.py]
     target_code: [src/imagent/gateway/projection/observation.py]
     current_tests: [tests/gateway/projection/test_observation.py, tests/test_projection_hardening.py, tests/test_projection_routing.py]
     target_tests: [tests/gateway/projection/test_observation.py]
     authoritative_docs: [docs/components/gateway/projection/observation/design.md, docs/components/gateway/projection/observation/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0013-bounded-application-event-admission.md]
-    gaps: [projection_routes.py also owns request/destination delivery coordination]
+    gaps: []
 
   gateway.projection.checkpoints:
     id: gateway.projection.checkpoints
@@ -797,7 +789,7 @@ components:
     id: gateway.projection.recovery
     parent: gateway.projection
     purpose: Reconcile live observation gaps from bounded authoritative Application history/catch-up.
-    owns: [recovery modes, bounded page/item scans, gap classification, resubscription policy inputs]
+    owns: [recovery modes, ProjectedAgentMessage, AuthoritativeProjectionSlice, bounded page/item scans, gap classification, resubscription policy inputs]
     does_not_own: [Agent history, synthetic cursor, unbounded archive scan]
     inputs: [Application subscription/history and per-route checkpoint]
     outputs: [bounded AuthoritativeProjectionSlice or explicit degraded gap]
@@ -1571,10 +1563,10 @@ components:
     does_not_own: [runtime component behavior, compatibility implementations]
     inputs: [three-layer public exports and package metadata]
     outputs: [installable typed wheel]
-    public_contracts: [__version__, adapters, contracts, delivery_coordination, delivery_planning, diagnostics, events, projections]
+    public_contracts: [__version__, adapters, contracts, delivery_coordination, delivery_planning, diagnostics, events]
     public_exports:
-      current: [imagent:__version__, imagent:adapters, imagent:contracts, imagent:delivery_coordination, imagent:delivery_planning, imagent:diagnostics, imagent:events, imagent:projections]
-      target: [imagent:__version__, imagent:adapters, imagent:contracts, imagent:delivery_coordination, imagent:delivery_planning, imagent:diagnostics, imagent:events, imagent:projections]
+      current: [imagent:__version__, imagent:adapters, imagent:contracts, imagent:delivery_coordination, imagent:delivery_planning, imagent:diagnostics, imagent:events]
+      target: [imagent:__version__, imagent:adapters, imagent:contracts, imagent:delivery_coordination, imagent:delivery_planning, imagent:diagnostics, imagent:events]
     dependencies: [interaction.messages, interaction.channels.channel-contract, gateway.composition, gateway.delivery.planning, gateway.delivery.coordination, gateway.projection.observation, gateway.projection.recovery, gateway.diagnostics, applications.application-contract, applications.events]
     state_recovery: Stateless packaging; build must not import optional native dependencies in the base install.
     current_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/contracts/__init__.py, src/imagent/events.py, src/imagent/py.typed]
@@ -1718,7 +1710,7 @@ structural_status:
       rationale: Gateway routing facade re-exports exact binding-owner, projection-route-owner, and aggregate-operation-owner contracts, including canonical aggregate validators, without exposing the private executor or retaining a compatibility implementation. The mixed imagent.gateway orchestration root separately has a finite lazy resolver for exactly ApplicationsListed, GatewayOperation, GatewayOperationFailed, GatewayOperationResult, GatewayOperationType, ListApplications, SelectApplication, validate_gateway_operation, and validate_gateway_operation_result; it resolves and caches exact routing-operation owner objects only after aggregate bootstrap, preserves import-order identity, rejects unknown names, and has no compatibility implementation.
     - path: src/imagent/gateway/projection/__init__.py
       owner: gateway.projection.recovery
-      rationale: Gateway projection facade re-exports exact public contracts from focused checkpoint, request-correlation, and recovery leaves without implementing any leaf.
+      rationale: Gateway projection facade re-exports exact public contracts from focused observation, checkpoint, request-correlation, and recovery leaves without implementing any leaf.
     - path: src/imagent/interaction/controllers/__init__.py
       owner: interaction.controllers.controller-contract
       rationale: Sole Interaction Controller facade; contract, registry, and presentation names bind eagerly while the finite cached common-command pair resolves exact owner objects only on demand, so Gateway composition does not load common behavior and no implementation lives here.

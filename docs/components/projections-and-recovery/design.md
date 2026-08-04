@@ -18,8 +18,9 @@ It owns:
 - independent subscriber queues for live Thread events;
 - `ThreadProjectionRuntime` worker supervision, correlation, and health
   lifecycle;
-- `ProjectionRouteCoordinator` bootstrap, authoritative reconciliation, and
-  serialized delivery decisions for each destination route;
+- the private observation coordinator's bootstrap, authoritative
+  reconciliation, and serialized delivery decisions for each destination
+  route;
 - stable projection route and delivery ID derivation;
 - Thread-scoped output observation;
 - projection policies and destination lookup inputs;
@@ -43,20 +44,20 @@ those policies into persistence.
 
 The complete recovery owner now lives in
 `gateway/projection/recovery.py`: public recovery values, bounded reads,
-route-reconciliation orchestration, per-worker attempt state, typed retry and
-health inputs, and request-snapshot coordination. Exact public values remain
-exposed through `imagent.gateway.projection`. The historical
-`imagent.recovery` module is absent; aggregate runtime files retain only their
-documented observation, input-acceptance, route-delivery, and request-delivery
-coordination responsibilities.
+route-reconciliation orchestration, projected-message and authoritative-slice
+facts, per-worker attempt state, typed retry and health inputs, and
+request-snapshot coordination. Exact public values remain exposed through
+`imagent.gateway.projection`. The historical `imagent.recovery` module is
+absent. The canonical observation leaf retains the one worker, live delivery
+helpers, and per-route coordination.
 
 Stable completion delivery-ID derivation and the sole expected-current
 checkpoint convergence authority live in `gateway/projection/checkpoints.py`;
 the derivation is exactly re-exported through `imagent.gateway.projection`.
-The historical `imagent.projections` symbol is absent. Its remaining module
-retains only documented projection values, outbound-message construction, and
-delivery orchestration, then passes typed completion evidence to the injected
-checkpoint authority.
+The historical `imagent.projection_runtime`, `imagent.projections`, and
+`imagent.projection_routes` modules are absent. The canonical observation leaf
+retains outbound-message construction and delivery orchestration, then passes
+typed completion evidence to the injected checkpoint authority.
 
 Typed interactive requests share route selection and per-route delivery
 serialization with message projection, but they do not advance transcript

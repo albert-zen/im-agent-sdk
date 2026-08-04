@@ -257,9 +257,7 @@ components:
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - docs/migrations/imcodex-followup-blockers.md
-      - src/imagent/projection_routes.py
-      - src/imagent/projection_runtime.py
-      - src/imagent/projections.py
+      - src/imagent/gateway/projection/observation.py
       - src/imagent/gateway/projection/__init__.py
       - src/imagent/gateway/projection/checkpoints.py
       - src/imagent/gateway/projection/request_correlation.py
@@ -833,7 +831,6 @@ maintainability:
       guidance: Keep native response mapping stateless and independently testable; do not add transport, lifecycle, or consumer policy.
     - name: focused-bridge-modules
       paths:
-        - src/imagent/projection_routes.py
         - src/imagent/interaction/controllers/common.py
       max_lines: 700
       max_functions: 40
@@ -848,14 +845,14 @@ maintainability:
       max_classes: 2
       mode: warn
       guidance: Keep SQLite row conversion pure, typed, bounded, and independently testable; do not add SQL lifecycle, mutation policy, generic serialization, or durable state.
-    - name: projection-runtime-coordination
+    - name: projection-observation-runtime
       paths:
-        - src/imagent/projection_runtime.py
-      max_lines: 950
-      max_functions: 35
-      max_classes: 5
+        - src/imagent/gateway/projection/observation.py
+      max_lines: 1500
+      max_functions: 70
+      max_classes: 10
       mode: warn
-      guidance: Keep input acceptance, event admission, route barriers, and worker recovery together while they share one per-Thread ordering invariant; extract only across an independently testable state boundary.
+      guidance: Keep the one-worker lifecycle, live delivery boundary, and per-route bootstrap barrier together; dispatch acceptance fencing and recovery facts remain typed collaborators with their own owners.
     - name: sqlite-gateway-state
       paths:
         - src/imagent/gateway/persistence/sqlite.py

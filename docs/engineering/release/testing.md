@@ -37,7 +37,7 @@ remains on `imagent.contracts`, that the retired Application names fail from
 both historical facades in multiple import orders, and that importing the
 Applications root does not eagerly load concrete adapters or Gateway modules.
 The base fingerprint separately starts from a cold top-level `import imagent`:
-it locks the seven finite root resolver names, verifies their exact canonical
+it locks the six finite root resolver names, verifies their exact canonical
 module identities and package-root cache, rejects unknown names, and confirms
 that the cold import has not loaded Gateway or optional native dependencies.
 The base case also verifies the formal `imagent.interaction.controllers` and Application

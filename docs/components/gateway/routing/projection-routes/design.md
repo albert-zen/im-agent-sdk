@@ -56,15 +56,13 @@ never ordered or used to infer progress.
 
 On restart, active routes and bindings determine which Thread-scoped workers
 must exist. Projection recovery owns bounded baseline/history reads and gap
-policy; observation semantically owns per-route bootstrap ordering. Pending
-the accepted physical move, the historical route coordinator still implements
-that one barrier and exposes only narrow current-route and ordered-delivery
-collaboration to recovery, without creating a second barrier, route authority,
-or event buffer. A typed destination decision failure is isolated from other
-routes and from Application observation. Correlation-repository reads and
-checkpoint CAS are deliberately outside that catch so transient infrastructure
-failure enters the affected Thread's existing supervisor rather than
-permanently blocking a route.
+policy; observation owns the sole per-route bootstrap barrier and exposes only
+narrow current-route and ordered-delivery collaboration to recovery, without
+creating a second barrier, route authority, or event buffer. A typed
+destination decision failure is isolated from other routes and from Application
+observation. Correlation-repository reads and checkpoint CAS are deliberately
+outside that catch so transient infrastructure failure enters the affected
+Thread's existing supervisor rather than permanently blocking a route.
 
 Interactive requests use the same route-selection policy, but request
 delivery correlation is stored only after that destination accepts the stable

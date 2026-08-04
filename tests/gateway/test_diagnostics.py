@@ -30,6 +30,7 @@ from imagent.gateway.diagnostics import (
     summarize_projection_health,
 )
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
+from imagent.gateway.projection.observation import ProjectionWorkerHealth, ProjectionWorkerState
 from imagent.interaction.channels.diagnostics import ChannelDiagnosticFacts
 from imagent.interaction.diagnostics import (
     ConnectionDiagnosticFacts,
@@ -38,7 +39,6 @@ from imagent.interaction.diagnostics import (
     QueueDiagnosticName,
 )
 from imagent.interaction.testing.fakes import FakeAgentApplicationAdapter
-from imagent.projections import ProjectionWorkerHealth, ProjectionWorkerState
 
 
 class _UnusedT3Client:

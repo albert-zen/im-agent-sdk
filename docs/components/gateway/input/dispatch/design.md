@@ -100,8 +100,8 @@ dispatcher after its own routing work, and the observation runtime uses its
 typed acceptance-ordering gate to preserve event ordering. Neither relationship creates a
 second Conversation registry, Application subscription, runtime, transcript,
 outbox, spool, generic hook, service locator, global registry, or `Any`-typed
-extension seam. Shared projection worker lifecycle remains an explained split
-candidate until its own focused move.
+extension seam. The canonical observation owner retains the shared worker
+lifecycle; dispatch consumes only its narrow typed event-applier boundary.
 
 Dependencies are the common Application contract/operations/events, Gateway
 admission, the request/reply-correlation owner, and the existing typed

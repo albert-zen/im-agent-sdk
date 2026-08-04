@@ -12,6 +12,7 @@ from typing import Protocol
 from ...applications.capabilities import SupportLevel
 from ...applications.contract import (
     AgentApplicationAdapter,
+    AgentMessage,
     ThreadHistory,
     ThreadRef,
     TurnCatchup,
@@ -33,10 +34,6 @@ from ...applications.operations import (
 )
 from ...applications.requests import InteractiveRequest
 from ...interaction.messages import ConversationRef
-from ...projections import (
-    AuthoritativeProjectionSlice,
-    ProjectedAgentMessage,
-)
 from ..persistence.state_contracts import ThreadProjectionRoute
 from ..routing.projection_routes import derive_projection_route_id
 
@@ -53,6 +50,26 @@ class ThreadRecovery:
     history: ThreadHistory | None = None
     catchup: TurnCatchup | None = None
     cursor_expired: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectedAgentMessage:
+    """One normalized item supplied by live observation or bounded recovery."""
+
+    message: AgentMessage
+    turn_id: str | None
+    event_id: str | None = None
+    checkpoint: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class AuthoritativeProjectionSlice:
+    """Bounded ordered recovery evidence for one destination route."""
+
+    messages: tuple[ProjectedAgentMessage, ...]
+    pages_read: int
+    checkpoint_found: bool
+    gap: str | None = None
 
 
 ExecuteApplication = Callable[

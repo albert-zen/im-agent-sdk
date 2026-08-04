@@ -59,7 +59,7 @@ objects and never hide a duplicate or lazy compatibility implementation. The
  owners.
 The finite top-level `imagent` lazy resolver is not a compatibility shim. Its
 only lazy module names are `adapters`, `contracts`, `delivery_coordination`,
-`delivery_planning`, `diagnostics`, `events`, and `projections`. It declares
+`delivery_planning`, `diagnostics`, and `events`. It declares
 those names under `TYPE_CHECKING`, resolves each to its exact canonical module
 object, and caches that object on the package root, preserving identity for
 later access. A cold `import imagent` loads neither Gateway nor optional native

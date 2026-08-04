@@ -35,13 +35,13 @@ from imagent.gateway.persistence.memory import (
     InMemoryProjectionRouteRepository,
 )
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
+from imagent.gateway.projection.observation import (
+    ProjectionWorkerState,
+)
 from imagent.gateway.routing import ObserveThread, ProjectionPolicy, ThreadObserved
 from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.messages import ConversationRef, InboundMessage, TextContent
 from imagent.interaction.operations import ContractViolation
-from imagent.projections import (
-    ProjectionWorkerState,
-)
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

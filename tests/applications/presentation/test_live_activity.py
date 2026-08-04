@@ -39,13 +39,13 @@ from imagent.applications.presentation import (
 from imagent.gateway.persistence import ThreadProjectionRoute
 from imagent.gateway.persistence.memory import InMemoryProjectionRouteRepository
 from imagent.gateway.projection.checkpoints import _ProjectionCheckpointAuthority
-from imagent.gateway.routing.projection_routes import derive_projection_route_id
-from imagent.interaction.messages import ConversationRef, MessageRole, TextContent
-from imagent.projections import (
-    ProjectedAgentMessage,
+from imagent.gateway.projection.observation import (
     deliver_projected_message,
     derive_live_projection_delivery_id,
 )
+from imagent.gateway.projection.recovery import ProjectedAgentMessage
+from imagent.gateway.routing.projection_routes import derive_projection_route_id
+from imagent.interaction.messages import ConversationRef, MessageRole, TextContent
 
 
 class _AppServerClient:

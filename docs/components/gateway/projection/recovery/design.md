@@ -73,10 +73,12 @@ a prompt or open request from bridge state.
 The recovery mode/value definitions, bounded authoritative-read helpers,
 route-reconciliation orchestration, and private recovery supervisor live in
 `gateway/projection/recovery.py`. The supervisor owns only per-worker recovery
-attempt state and produces typed retry delay and degraded-health facts. The
-observation owner still opens, consumes, closes, and resubscribes the one
-Application Thread subscription; it uses the supervisor's bounded inputs and
-does not create a second worker or event stream.
+attempt state and produces typed retry delay and degraded-health facts.
+`ProjectedAgentMessage` and `AuthoritativeProjectionSlice` are its bounded
+typed recovery facts. The observation owner imports the projected-message fact,
+opens, consumes, closes, and resubscribes the one Application Thread
+subscription; it uses the supervisor's bounded inputs and does not create a
+second worker or event stream.
 
 Recovery invokes route ordering through a narrow typed collaborator. The route
 coordinator physically retains its route lock, the single observation-owned

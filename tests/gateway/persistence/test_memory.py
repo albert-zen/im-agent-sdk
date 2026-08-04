@@ -7,8 +7,8 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
+import imagent.gateway.projection.observation as projection_semantics
 import imagent.gateway.projection.request_correlation as request_policy_owner
-from imagent import projections as projection_semantics
 from imagent.adapters import DeliverySubmissionCapacityError, DeliverySubmissionConflict
 from imagent.applications.contract import ApplicationRef, ThreadRef
 from imagent.gateway.delivery import DeliverySubmissionOrigin

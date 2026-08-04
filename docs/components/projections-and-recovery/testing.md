@@ -107,7 +107,7 @@ component enters that same injected Coordinator path.
 
 Repository ownership checks additionally live in
 `tests/gateway/persistence/test_memory.py`; they assert the implementation is
-not retained or re-exported from the historical projection module. The shared
+not retained or re-exported from a historical projection module. The shared
 memory/SQLite route conformance cases now live in the focused durable SQLite
 owner suite.
 

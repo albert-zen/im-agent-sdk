@@ -35,6 +35,11 @@ from imagent.gateway.presentation import (
     _projection_presentation_context,
 )
 from imagent.gateway.projection.checkpoints import _ProjectionCheckpointAuthority
+from imagent.gateway.projection.observation import (
+    _ProjectionRecoveryRequired,
+    deliver_projected_message,
+)
+from imagent.gateway.projection.recovery import ProjectedAgentMessage
 from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.media import AttachmentContent, AttachmentHandle
 from imagent.interaction.messages import (
@@ -42,11 +47,6 @@ from imagent.interaction.messages import (
     MessageRole,
     OutboundMessage,
     TextContent,
-)
-from imagent.projections import (
-    ProjectedAgentMessage,
-    _ProjectionRecoveryRequired,
-    deliver_projected_message,
 )
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 

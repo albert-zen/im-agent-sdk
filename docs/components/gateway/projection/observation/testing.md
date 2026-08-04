@@ -38,4 +38,6 @@ Observation conformance must prove:
 
 Current evidence: `tests/gateway/projection/test_observation.py`,
 `tests/test_projection_hardening.py`, and `tests/test_projection_routing.py`.
-The target mirrored suite is `tests/gateway/projection/test_observation.py`.
+The focused suite also proves exact finite projection-facade identity and that
+the historical observation runtime/value modules fail in a clean process. The
+target mirrored suite is `tests/gateway/projection/test_observation.py`.
