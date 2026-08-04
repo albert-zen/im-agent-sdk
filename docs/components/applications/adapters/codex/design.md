@@ -51,7 +51,8 @@ Current code is the shared `src/imagent/applications/appserver.py`; it contains
 the common App Server base plus `ZenApplicationAdapter`, so Codex and Zen are
 declared split candidates rather than duplicate implementations. Current
 evidence is in `tests/test_appserver_client.py`,
-`test_appserver_input.py`, `test_appserver_mapping.py`,
+`test_appserver_input.py`,
+`tests/applications/adapters/appserver/test_mapping.py`,
 `test_appserver_requests.py`, and the two Applications presentation suites.
 The target is `src/imagent/applications/adapters/codex.py` with focused tests
 at `tests/applications/adapters/test_codex.py`. The gap is the mechanical

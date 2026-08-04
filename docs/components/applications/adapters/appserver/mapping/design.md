@@ -28,12 +28,12 @@ normalize to empty values instead of failing closed. This leaf has no formal
 public contract/export: raw native values must remain internal to the adapter
 and may not cross into Gateway or Controllers.
 
-The current positions are `native_object`, `native_list`, status/ID/item/date
-helpers in `src/imagent/applications/appserver_mapping.py`, plus
-`AppServerEvent`, method sets, and `normalize_appserver_message` in
-`src/imagent/applications/appserver_client/protocol_map.py`. The target is one
-`src/imagent/applications/adapters/appserver/mapping.py` owner without a
-second normalizer.
+The implementation now co-locates `native_object`, `native_list`,
+status/ID/item/date helpers, `AppServerEvent`, method sets, and
+`normalize_appserver_message` in one
+`src/imagent/applications/adapters/appserver/mapping.py` owner. The two
+historical modules are removed; no second normalizer or public mapping facade
+is introduced.
 
 ## Dependencies, state, and recovery
 
@@ -46,16 +46,15 @@ unsupported methods fail rather than being converted to a product command.
 
 ## Current, target, and structural gap
 
-Current code is split across
-`src/imagent/applications/appserver_mapping.py` and
-`src/imagent/applications/appserver_client/protocol_map.py`. Current evidence
-is `tests/test_appserver_mapping.py` and the mapping portions of
-`tests/test_appserver_input.py`; the target suite is
-`tests/applications/adapters/appserver/test_mapping.py`. Beyond the two-file
-physical split, the boundary needs explicit text/collection limits and strict
-stable-identity validation before mapping facts leave the native adapter
-position. That work must preserve internal native ordering and must not expose
-`AppServerEvent.payload` outside Applications.
+Current code and pure mapping evidence now live at
+`src/imagent/applications/adapters/appserver/mapping.py` and
+`tests/applications/adapters/appserver/test_mapping.py`. The affected
+adapter/input evidence remains in `tests/test_appserver_input.py`. The
+boundary still needs explicit text/collection limits and strict stable-identity
+validation before mapping facts leave the native adapter position. That work
+must preserve internal native ordering and must not expose
+`AppServerEvent.payload` outside Applications; it is outside this mechanical
+move.
 
 ## Authority
 

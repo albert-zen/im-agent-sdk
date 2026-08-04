@@ -3,8 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import UTC, datetime
 
-from imagent.applications.appserver_client import AppServerError
-from imagent.applications.appserver_mapping import (
+from imagent.applications.adapters.appserver.mapping import (
     is_agent_item,
     is_unsupported_method_error,
     item_text,
@@ -23,6 +22,7 @@ from imagent.applications.appserver_mapping import (
     turn_status,
     turn_updated_at,
 )
+from imagent.applications.appserver_client import AppServerError
 from imagent.contracts import ThreadStatus, TurnStatus
 
 

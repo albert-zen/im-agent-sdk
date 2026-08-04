@@ -19,7 +19,7 @@ from ...interaction.media import (
     LocalPath,
     RemoteUrl,
 )
-from ..appserver_mapping import normalized_item_type
+from ..adapters.appserver.mapping import normalized_item_type
 from ..contract import ThreadRef
 
 _IDENTITY_MAX_CHARACTERS = 512

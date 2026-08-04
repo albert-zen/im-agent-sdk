@@ -4,7 +4,7 @@ import hashlib
 import re
 from typing import Any
 
-from .protocol_map import normalize_appserver_message
+from ..adapters.appserver.mapping import normalize_appserver_message
 
 _MAX_UNKNOWN_PAYLOAD_KEYS = 20
 _MANAGED_MEDIA_PATH_PATTERN = re.compile(
