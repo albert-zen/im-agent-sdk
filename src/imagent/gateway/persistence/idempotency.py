@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from ...adapters import IdempotencyClaimStatus
+from .repository_contracts import IdempotencyClaimStatus
 
 
 class InMemoryIdempotencyRepository:

@@ -6,7 +6,6 @@ import sqlite3
 from dataclasses import replace
 from typing import Protocol
 
-from ...adapters import DeliverySubmissionConflict
 from ...contracts import (
     DeliveryItemReceipt,
     DeliveryItemStatus,
@@ -38,6 +37,7 @@ from ...contracts import (
 )
 from ...interaction.messages import ConversationRef
 from ...sqlite_rows import decode_datetime, optional_text, required_text
+from ..persistence.repository_contracts import DeliverySubmissionConflict
 from ..persistence.submission_identity import (
     ensure_same_delivery_submission_reservation,
 )

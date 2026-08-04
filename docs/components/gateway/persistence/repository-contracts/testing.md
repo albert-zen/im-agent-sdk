@@ -2,6 +2,14 @@
 
 Repository-contract tests and implementation conformance must prove:
 
+- the owner module is importable in a clean process and every moved name has
+  one implementation owner;
+- `imagent.adapters` and `imagent.gateway.persistence` expose the exact same
+  objects as `gateway.persistence.repository_contracts`;
+- moved Protocol method signatures, annotations, defaults, and runtime
+  `typing.get_type_hints` remain exact;
+- enum values and every conflict/capacity exception preserve identity and
+  behavior;
 - memory and SQLite raise the exact `BindingConflict` type for stale expected
   revisions;
 - a conflict does not mutate or delete the current binding;
@@ -17,15 +25,15 @@ Repository-contract tests and implementation conformance must prove:
 - request-wide transition compare-and-swap and late-destination inheritance
   remain atomic across the same epoch-scoped request identity.
 
-For the binding extraction run:
+For the repository-Port extraction run:
 
 ```sh
-PYTHONPATH=src python -m unittest \
+PYTHONPATH=src:tests python -m unittest \
+  tests.gateway.persistence.test_repository_contracts \
   tests.gateway.persistence.test_memory \
   tests.test_storage \
   tests.test_adapter_contracts -v
 ```
 
-The complete repository-Port extraction will add
-`tests/gateway/persistence/test_repository_contracts.py`. Every focused slice
-also runs the full repository gates.
+Every focused slice also runs the full repository gates and the clean-wheel
+smoke check.

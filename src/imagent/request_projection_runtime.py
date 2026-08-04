@@ -4,11 +4,7 @@ import logging
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 
-from .adapters import (
-    AgentApplicationAdapter,
-    RequestCorrelationConflict,
-    RequestCorrelationRepository,
-)
+from .adapters import AgentApplicationAdapter
 from .applications.capabilities import SupportLevel
 from .applications.events import AgentEvent, AgentEventType
 from .contracts import (
@@ -19,6 +15,10 @@ from .contracts import (
     ThreadProjectionRoute,
     ThreadRef,
     validate_interactive_request,
+)
+from .gateway.persistence.repository_contracts import (
+    RequestCorrelationConflict,
+    RequestCorrelationRepository,
 )
 
 logger = logging.getLogger(__name__)

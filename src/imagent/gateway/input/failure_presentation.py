@@ -8,7 +8,6 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
-from ...adapters import IdempotencyRepository
 from ...contracts import (
     ApplicationInputOutcomeUnknown,
 )
@@ -25,6 +24,7 @@ from ...interaction.messages import (
 )
 from ...projection_runtime import InputPostAcceptanceError
 from ..admission import ClaimedInbound
+from ..persistence.repository_contracts import IdempotencyRepository
 
 
 class InboundFailurePhase(StrEnum):

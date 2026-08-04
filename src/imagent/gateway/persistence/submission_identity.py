@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ...adapters import DeliverySubmissionConflict
 from ...contracts import DeliverySubmissionRecord
+from .repository_contracts import DeliverySubmissionConflict
 
 
 def ensure_same_delivery_submission_reservation(

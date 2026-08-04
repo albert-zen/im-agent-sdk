@@ -19,11 +19,14 @@ The remaining Ports surface owns:
 - `ApplicationInputOutcomeUnknown`, which marks a dispatched native input
   whose acceptance result cannot be proven and therefore cannot be retried
   automatically;
-- `BindingRepository`, `ProjectionRouteRepository`, and
-  `IdempotencyRepository` interfaces;
-- `DeliverySubmissionRepository` interface for immutable route snapshots and
-  typed outcomes;
 - callback aliases that have not yet moved to their owner-typed seam.
+
+Gateway's `gateway.persistence.repository-contracts` leaf owns the complete
+Gateway repository Port/conflict family: binding, projection-route,
+idempotency, request-correlation, and delivery-submission Protocols, plus
+their claim, checkpoint, route, correlation, submission, and capacity
+conflicts. `adapters.py` keeps only exact compatibility aliases for callers
+that still use the historical Ports surface.
 
 The Gateway `gateway.delivery.proactive-authorization` leaf owns the
 `DeliveryAuthorizer` Port, `DeliveryPrincipal`, and principal validation.
@@ -34,8 +37,8 @@ Interaction's Channel contract owns `MessageHandler`, the optional structural
 `ChannelStartupConfigurationValidator`, and the opaque `InboundAdmission`
 lease and handler used before Channel media preparation. `adapters.py`
 re-exports those exact objects plus the Interaction-owned `ChannelAdapter` for
-compatibility. The remaining repository/Application Ports stay here until
-focused mechanical owner moves. The historical
+compatibility. The remaining Application Port stays here until its focused
+mechanical owner move. The historical
 `OperationHandler[GatewayOperation]` is removed: Channel lifecycle accepts
 messages/admission only, while Controllers invoke typed operations through
 `ControllerActions`.
@@ -94,10 +97,11 @@ against an expected opaque Agent item ID; implementations never infer ordering
 from that ID. Correlation bulk deletion requires at least one explicit
 selector.
 
-`BindingConflict` has moved to its Gateway repository-contract owner and is no
-longer defined beside the process-local implementation. The historical Ports
-module still owns the `BindingRepository` Protocol until its complete focused
-extraction; this mechanical split does not change that Protocol.
+`BindingConflict` and the complete repository Port/conflict family now live in
+the Gateway repository-contract owner and are no longer defined beside the
+process-local implementations. The historical Ports module exposes exact
+compatibility aliases only; it does not retain a second Protocol, enum, or
+exception implementation.
 
 `DeliveryAuthorizer.authenticate`, now owned by Gateway's proactive
 authorization leaf, converts an opaque untrusted credential into a trusted

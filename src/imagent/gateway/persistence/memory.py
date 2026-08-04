@@ -5,13 +5,6 @@ from collections.abc import Iterable
 from dataclasses import replace
 from datetime import UTC, datetime
 
-from ...adapters import (
-    DeliverySubmissionCapacityError,
-    DeliverySubmissionConflict,
-    ProjectionCheckpointConflict,
-    ProjectionRouteConflict,
-    TurnReplyCorrelationConflict,
-)
 from ...applications.requests import RequestRef
 from ...contracts import (
     ConversationBinding,
@@ -39,7 +32,14 @@ from ...request_correlations import (
     _select_correlations,
     _transition_correlations,
 )
-from .repository_contracts import BindingConflict
+from .repository_contracts import (
+    BindingConflict,
+    DeliverySubmissionCapacityError,
+    DeliverySubmissionConflict,
+    ProjectionCheckpointConflict,
+    ProjectionRouteConflict,
+    TurnReplyCorrelationConflict,
+)
 from .submission_identity import ensure_same_delivery_submission_reservation
 
 

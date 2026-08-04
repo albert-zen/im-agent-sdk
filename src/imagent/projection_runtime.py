@@ -8,12 +8,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from .adapters import (
-    AgentApplicationAdapter,
-    BindingRepository,
-    ProjectionRouteRepository,
-    RequestCorrelationRepository,
-)
+from .adapters import AgentApplicationAdapter
 from .applications.capabilities import SupportLevel
 from .applications.events import (
     AgentEvent,
@@ -37,6 +32,11 @@ from .contracts import (
     ThreadRef,
     TurnReplyCorrelation,
     TurnReplyCorrelationPolicy,
+)
+from .gateway.persistence.repository_contracts import (
+    BindingRepository,
+    ProjectionRouteRepository,
+    RequestCorrelationRepository,
 )
 from .gateway.projection.recovery import ProjectionRecoveryUnavailable
 from .interaction.controllers import RequestPresenter
