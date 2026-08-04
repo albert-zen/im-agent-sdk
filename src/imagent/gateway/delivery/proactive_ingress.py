@@ -31,8 +31,8 @@ from ..persistence.repository_contracts import (
     DeliverySubmissionCapacityError,
     DeliverySubmissionConflict,
 )
-from .proactive import DeliveryRouteError
 from .proactive_authorization import DeliveryAuthorizationError
+from .proactive_runtime import DeliveryRouteError
 
 
 class ProactiveDeliveryEndpoint(Protocol):

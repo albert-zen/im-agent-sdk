@@ -766,13 +766,13 @@ components:
       target: [imagent.gateway.delivery:ProactiveDeliveryService, imagent.gateway.delivery:ProactiveDeliveryJsonHandler, imagent.gateway.delivery:DeliveryIntent, imagent.gateway.delivery:ConversationDeliveryTarget, imagent.gateway.delivery:DeliveryTarget, imagent.gateway.delivery:DeliveryTargetKind, imagent.gateway.delivery:DestinationDeliveryResult, imagent.gateway.delivery:ProactiveDeliveryResult, imagent.gateway.delivery:ThreadRouteDeliveryTarget, imagent.gateway.delivery:validate_delivery_intent]
     dependencies: [interaction.messages, interaction.operations, interaction.media, interaction.channels.channel-contract, applications.application-contract, gateway.delivery.proactive-authorization, gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.outcome-observation, gateway.routing.projection-routes, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Persist identity/snapshots/outcomes only; staged inline bytes live through one synchronous attempt and are removed after join.
-    current_code: [schemas/v1/deliveries.schema.json, src/imagent/contracts/delivery.py, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/proactive.py, src/imagent/gateway/delivery/proactive_ingress.py, src/imagent/keyed_locks.py, src/imagent/cli/__init__.py, src/imagent/cli/send.py, src/imagent/gateway/__init__.py]
-    target_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/proactive.py, src/imagent/gateway/delivery/proactive_ingress.py]
-    current_tests: [tests/gateway/delivery/test_proactive_delivery.py, tests/gateway/delivery/test_proactive_ingress.py]
-    target_tests: [tests/gateway/delivery/test_proactive_delivery.py, tests/gateway/delivery/test_proactive_ingress.py]
+    current_code: [schemas/v1/deliveries.schema.json, src/imagent/contracts/delivery.py, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/proactive.py, src/imagent/gateway/delivery/proactive_runtime.py, src/imagent/gateway/delivery/proactive_ingress.py, src/imagent/keyed_locks.py, src/imagent/cli/__init__.py, src/imagent/cli/send.py, src/imagent/gateway/__init__.py]
+    target_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/proactive.py, src/imagent/gateway/delivery/proactive_runtime.py, src/imagent/gateway/delivery/proactive_ingress.py]
+    current_tests: [tests/gateway/delivery/test_proactive_runtime.py, tests/gateway/delivery/test_proactive_delivery.py, tests/gateway/delivery/test_proactive_ingress.py]
+    target_tests: [tests/gateway/delivery/test_proactive_runtime.py, tests/gateway/delivery/test_proactive_delivery.py, tests/gateway/delivery/test_proactive_ingress.py]
     authoritative_docs: [docs/components/gateway/delivery/proactive-delivery/design.md, docs/components/gateway/delivery/proactive-delivery/testing.md]
     adrs: [docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
-    gaps: [reference CLI remains in historical files pending its focused Interaction client-tool split]
+    gaps: ["the same-leaf proactive.py contract seam and proactive_runtime.py orchestration owner are now explicit; an explicit public-facade convergence slice must remove historical imagent.contracts proactive exports before #216 moves vocabulary without reverse aliases; the reference CLI remains in historical files pending its focused Interaction client-tool split"]
 
   gateway.delivery.outcome-observation:
     id: gateway.delivery.outcome-observation
