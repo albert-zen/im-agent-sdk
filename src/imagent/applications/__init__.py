@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .appserver import CodexApplicationAdapter, ZenApplicationAdapter
     from .appserver_client import codex_app_server_client
+    from .contract import AgentApplicationAdapter, ApplicationInputDispatchHandler
     from .presentation import (
         ApplicationArtifactMaterialization,
         ApplicationArtifactMaterializationCancelled,
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
     from .t3_client import HttpT3Client, T3ClientError
 
 __all__ = [
+    "AgentApplicationAdapter",
     "AppServerArtifactCandidate",
     "AppServerArtifactMaterializationLimits",
     "AppServerArtifactMaterializer",
@@ -62,6 +64,7 @@ __all__ = [
     "ApplicationPresentationFailed",
     "ApplicationPresentationLimits",
     "ApplicationPresentationTimeout",
+    "ApplicationInputDispatchHandler",
     "ApplicationTextPresentation",
     "CodexApplicationAdapter",
     "CodexLiveActivityFacts",
@@ -78,6 +81,12 @@ __all__ = [
     "codex_app_server_client",
 ]
 
+_CONTRACT_EXPORTS = frozenset(
+    {
+        "AgentApplicationAdapter",
+        "ApplicationInputDispatchHandler",
+    }
+)
 _APPSERVER_EXPORTS = frozenset({"CodexApplicationAdapter", "ZenApplicationAdapter"})
 _ARTIFACT_EXPORTS = frozenset(
     {
@@ -121,7 +130,9 @@ _T3_CLIENT_EXPORTS = frozenset({"HttpT3Client", "T3ClientError"})
 
 
 def __getattr__(name: str) -> object:
-    if name in _APPSERVER_EXPORTS:
+    if name in _CONTRACT_EXPORTS:
+        module = import_module("imagent.applications.contract")
+    elif name in _APPSERVER_EXPORTS:
         module = import_module("imagent.applications.appserver")
     elif name in _ARTIFACT_EXPORTS:
         module = import_module("imagent.applications.presentation")

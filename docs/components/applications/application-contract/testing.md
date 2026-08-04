@@ -1,8 +1,18 @@
 # Application contract testing
 
-The current test owner is `tests/conformance/test_adapter_contracts.py`; the target focused
-owner is `tests/applications/test_contract.py`. Mechanical migration must keep
-the language-neutral schemas and exact public facade identity aligned.
+The focused owner is `tests/applications/test_contract.py`; the concrete-adapter
+conformance suite remains affected evidence in
+`tests/conformance/test_adapter_contracts.py`. The tests must keep the
+language-neutral schemas and exact public facade identity aligned.
+
+The focused ownership tests assert that `AgentApplicationAdapter` and
+`ApplicationInputDispatchHandler` are one exact object each across
+`imagent.applications`, `imagent.applications.contract`, and the temporary
+`imagent.adapters` compatibility facade. They also assert the old module has
+no Protocol or callback implementation, contract imports do not initialize a
+concrete adapter or add Gateway imports, and runtime `typing.get_type_hints` preserves
+the native continuation, pre-dispatch fence, pending-request, and single
+Thread-subscription signatures.
 
 Required scenarios prove managed/flat/fixed Project shape, instance-scoped
 references, Thread lookup independent of native activation, typed operation
@@ -21,7 +31,7 @@ adds Gateway/product-command authority.
 Run the focused suite with:
 
 ```sh
-PYTHONPATH=src uv run python -m unittest tests.conformance.test_adapter_contracts -v
+PYTHONPATH=src uv run python -m unittest tests.applications.test_contract tests.conformance.test_adapter_contracts -v
 ```
 
 Changes to this public Port also require every affected native adapter,

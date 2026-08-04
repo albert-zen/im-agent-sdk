@@ -4,8 +4,8 @@ import logging
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 
-from .adapters import AgentApplicationAdapter
 from .applications.capabilities import SupportLevel
+from .applications.contract import AgentApplicationAdapter
 from .applications.events import AgentEvent, AgentEventType
 from .contracts import (
     InteractiveRequest,

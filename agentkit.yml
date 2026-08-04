@@ -523,6 +523,7 @@ components:
   applications-common:
     description: Typed Application contract, capability, event, operation, request, and adapter-owned A1 presentation boundaries.
     code:
+      - src/imagent/applications/contract.py
       - src/imagent/applications/capabilities.py
       - src/imagent/applications/events.py
       - src/imagent/applications/operations.py

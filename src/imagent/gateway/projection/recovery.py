@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from ...adapters import AgentApplicationAdapter
 from ...applications.capabilities import SupportLevel
+from ...applications.contract import AgentApplicationAdapter
 from ...applications.events import AgentEvent
 from ...contracts import (
     ApplicationOperation,

@@ -46,6 +46,12 @@ redelivery and restart. Every implementation must accept the default
 continuation preference, invoke the hook once immediately before native
 mutation, and return a result matching the authorized disposition/policy.
 
+The focused Applications contract tests additionally prove that
+`imagent.applications` and the temporary `imagent.adapters` export the exact
+same `AgentApplicationAdapter` and `ApplicationInputDispatchHandler` objects,
+that the historical facade contains no second Protocol/callback definition,
+and that cold-import/runtime type-hint evidence stays Gateway-independent.
+
 Delivery Port coverage must include atomic concurrent reservation, identity
 conflict, immutable snapshots, per-destination compare-and-set updates, and
 restart persistence. A bounded process-local implementation must distinguish

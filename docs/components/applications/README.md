@@ -23,6 +23,13 @@ adapter-owned positions. It is not a generic Application hook: facts are
 bounded and typed, raw native envelopes never cross it, and the adapter keeps
 native item/Turn/history authority.
 
+The common adapter Protocol and its pre-dispatch callback are owned by the
+`applications.application-contract` leaf in
+`src/imagent/applications/contract.py`. The finite `imagent.applications`
+facade exposes those exact objects; the historical `imagent.adapters` module
+is only a temporary compatibility facade for them and for unrelated legacy
+Channel/Gateway aliases.
+
 ## Native adapters
 
 The current aggregate [Application adapter design](../application-adapters/design.md)

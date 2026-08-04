@@ -8,8 +8,8 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from .adapters import AgentApplicationAdapter
 from .applications.capabilities import SupportLevel
+from .applications.contract import AgentApplicationAdapter
 from .applications.events import (
     AgentEvent,
     AgentEventType,

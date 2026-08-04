@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable, Callable
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .gateway.delivery.proactive_authorization import (
@@ -44,17 +43,11 @@ if TYPE_CHECKING:
         TurnReplyCorrelationConflict as TurnReplyCorrelationConflict,
     )
 
-from .applications.events import AgentEvent
-from .contracts import (
-    AcceptedTurn,
-    AgentInput,
-    ApplicationInputDispatch,
-    ApplicationOperation,
-    ApplicationOperationResult,
-    ApplicationSummary,
-    InputContinuationPreference,
-    InteractiveRequest,
-    ThreadRef,
+from .applications.contract import (
+    AgentApplicationAdapter as AgentApplicationAdapter,
+)
+from .applications.contract import (
+    ApplicationInputDispatchHandler as ApplicationInputDispatchHandler,
 )
 from .interaction.channels import (
     ChannelAdapter as ChannelAdapter,
@@ -71,41 +64,6 @@ from .interaction.channels import (
 from .interaction.channels import (
     MessageHandler as MessageHandler,
 )
-
-ApplicationInputDispatchHandler = Callable[[ApplicationInputDispatch], Awaitable[None]]
-
-
-class AgentApplicationAdapter(Protocol):
-    @property
-    def summary(self) -> ApplicationSummary: ...
-
-    async def start(self) -> None: ...
-
-    async def stop(self) -> None: ...
-
-    async def execute(
-        self,
-        operation: ApplicationOperation,
-    ) -> ApplicationOperationResult: ...
-
-    async def send_input(
-        self,
-        thread_ref: ThreadRef,
-        message: AgentInput,
-        *,
-        continuation: InputContinuationPreference = (
-            InputContinuationPreference.PREFER_ACTIVE_TURN
-        ),
-        before_dispatch: ApplicationInputDispatchHandler | None = None,
-    ) -> AcceptedTurn: ...
-
-    async def list_pending_requests(self) -> tuple[InteractiveRequest, ...]: ...
-
-    def subscribe_thread(
-        self,
-        thread_ref: ThreadRef,
-        after_cursor: str | None = None,
-    ) -> AsyncIterator[AgentEvent]: ...
 
 
 def __getattr__(name: str) -> object:
