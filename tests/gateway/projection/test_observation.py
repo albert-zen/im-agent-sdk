@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import subprocess
+import sys
 import unittest
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -31,6 +33,18 @@ from imagent.gateway.persistence.memory import (
     InMemoryProjectionRouteRepository,
     InMemoryRequestCorrelationRepository,
 )
+from imagent.gateway.projection import (
+    ProjectionWorkerHealth as facade_projection_worker_health,
+)
+from imagent.gateway.projection import (
+    ThreadProjectionRuntime as facade_thread_projection_runtime,
+)
+from imagent.gateway.projection.observation import (
+    ProjectionWorkerCapacityError,
+    ProjectionWorkerHealth,
+    ProjectionWorkerState,
+    ThreadProjectionRuntime,
+)
 from imagent.gateway.routing import ObserveThread, ProjectionPolicy
 from imagent.interaction.messages import (
     ConversationRef,
@@ -38,10 +52,39 @@ from imagent.interaction.messages import (
     TextContent,
 )
 from imagent.interaction.operations import OperationErrorCode
-from imagent.projection_runtime import ProjectionWorkerCapacityError, ThreadProjectionRuntime
-from imagent.projections import ProjectionWorkerHealth, ProjectionWorkerState
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 from tests.applications.adapters._appserver_fakes import NativeZenClient
+
+
+class ProjectionObservationOwnershipTests(unittest.TestCase):
+    def test_projection_facade_reexports_only_exact_public_observation_contracts(self) -> None:
+        import imagent.gateway.projection as projection_facade
+
+        self.assertIs(facade_thread_projection_runtime, ThreadProjectionRuntime)
+        self.assertIs(facade_projection_worker_health, ProjectionWorkerHealth)
+        self.assertNotIn("ProjectionWorkerCapacityError", projection_facade.__all__)
+        self.assertNotIn("ProjectionWorkerState", projection_facade.__all__)
+
+    def test_facade_identity_and_historical_module_absence_hold_in_a_clean_process(
+        self,
+    ) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import importlib.util; "
+                "import imagent.gateway.projection as facade; "
+                "import imagent.gateway.projection.observation as observation; "
+                "assert facade.ThreadProjectionRuntime is observation.ThreadProjectionRuntime; "
+                "assert facade.ProjectionWorkerHealth is observation.ProjectionWorkerHealth; "
+                "assert all(importlib.util.find_spec(name) is None for name in "
+                "('imagent.projection_runtime', 'imagent.projections', "
+                "'imagent.projection_routes'))",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
 
 class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):

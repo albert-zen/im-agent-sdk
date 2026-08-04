@@ -65,20 +65,19 @@ ordered authoritative recovery supplied the evidence; a live duplicate does
 not guess a new boundary. A same-item repeat needs no CAS, and a competing or
 stale expected value remains the repository's explicit conflict.
 
-`imagent.projections` remains an observation-side cross-owner consumer: it
-retains projected-message construction, reply correlation lookup, and the call
-into the injected checkpoint authority after the existing delivery/O1 path
-returns its typed outcome. That forwarding does not make a checkpoint decision
-or perform a CAS.
-`projection_routes.py` retains route bootstrap, route locking, current-route
-refresh, and ordered delivery, but no recovery scan/gap policy or checkpoint
-decision. The recovery owner supplies its bounded authoritative read through a
-narrow typed callback, and the route coordinator forwards completed delivery
-evidence to this checkpoint authority. O1 presentation returns a typed
-presented/suppressed/failed decision after a stable outbound claim exists; the
-idempotency owner completes a suppression before this authority can advance a
-route, or releases a failed/cancelled pre-Channel claim. Recovery never calls
-route persistence or checkpoint CAS directly.
+The observation owner retains projected-message construction, reply
+correlation lookup, and the call into the injected checkpoint authority after
+the existing delivery/O1 path returns its typed outcome. That forwarding does
+not make a checkpoint decision or perform a CAS. Its private route coordinator
+retains route bootstrap, route locking, current-route refresh, and ordered
+delivery, but no recovery scan/gap policy or checkpoint decision. The recovery
+owner supplies its bounded authoritative read through a narrow typed callback,
+and the coordinator forwards completed delivery evidence to this checkpoint
+authority. O1 presentation returns a typed presented/suppressed/failed
+decision after a stable outbound claim exists; the idempotency owner completes
+a suppression before this authority can advance a route, or releases a
+failed/cancelled pre-Channel claim. Recovery never calls route persistence or
+checkpoint CAS directly.
 Persistence continues to own the passive route record and atomic repository
 operations.
 

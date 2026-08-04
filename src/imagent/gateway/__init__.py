@@ -54,13 +54,6 @@ from ..interaction.operations import (
     OperationErrorCode,
     operation_error,
 )
-from ..projection_runtime import ProjectionWorkerCapacityError, ThreadProjectionRuntime
-from ..projections import (
-    ProjectionWorkerHealth,
-    RetryableDeliveryError,
-    _DestinationDecisionError,
-    _ProjectionRecoveryRequired,
-)
 from .admission import (
     ClaimedInbound,
     InboundAdmissionService,
@@ -132,6 +125,14 @@ from .presentation import (
     ProjectionPresentationOrigin as ProjectionPresentationOrigin,
 )
 from .projection import request_correlation as _request_correlation
+from .projection.observation import (
+    ProjectionWorkerCapacityError,
+    ProjectionWorkerHealth,
+    RetryableDeliveryError,
+    ThreadProjectionRuntime,
+    _DestinationDecisionError,
+    _ProjectionRecoveryRequired,
+)
 from .routing import projection_routes as _projection_routes
 from .routing.bindings import (
     BindConversationToProject,

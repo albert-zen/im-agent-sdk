@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import unittest
 from subprocess import run
 from sys import executable
 from typing import cast
 
-import imagent.projections as historical_projections
 from imagent.applications.contract import ThreadRef
 from imagent.gateway.persistence import ThreadProjectionRoute
 from imagent.gateway.persistence.memory import InMemoryProjectionRouteRepository
@@ -55,21 +55,22 @@ class ProjectionCheckpointOwnershipTests(unittest.TestCase):
             ),
         )
 
-    def test_historical_projection_symbol_is_absent(self) -> None:
-        self.assertFalse(hasattr(historical_projections, "derive_projection_delivery_id"))
-        result = run(
-            [
-                executable,
-                "-c",
-                "from imagent.projections import derive_projection_delivery_id",
-            ],
-            capture_output=True,
-            text=True,
-        )
+    def test_historical_projection_modules_are_absent(self) -> None:
+        for module_name in (
+            "imagent.projection_runtime",
+            "imagent.projections",
+            "imagent.projection_routes",
+        ):
+            self.assertIsNone(importlib.util.find_spec(module_name))
+            result = run(
+                [executable, "-c", f"import {module_name}"],
+                capture_output=True,
+                text=True,
+            )
 
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("ImportError", result.stderr)
-        self.assertIn("derive_projection_delivery_id", result.stderr)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("ModuleNotFoundError", result.stderr)
+            self.assertIn(module_name, result.stderr)
 
 
 class ProjectionCheckpointConvergenceTests(unittest.IsolatedAsyncioTestCase):

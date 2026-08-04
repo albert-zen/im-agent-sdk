@@ -20,7 +20,7 @@ Checkpoint conformance must prove:
 Focused derivation/ownership evidence is
 `tests/gateway/projection/test_checkpoints.py`; it proves stable output for
 the same stable identities, exact Gateway projection facade identity, and the
-absence of the historical `imagent.projections` symbol. It constructs the
+absence of the historical `imagent.projections` module. It constructs the
 narrow checkpoint authority with an in-memory route repository and proves
 fresh completion CAS, authoritative convergence from `already_completed`,
 live duplicate non-convergence, in-flight/live-only non-advancement,

@@ -80,9 +80,9 @@ owner_modules = {
     "delivery_planning": "imagent.gateway.delivery.planning",
     "diagnostics": "imagent.diagnostics",
     "events": "imagent.events",
-    "projections": "imagent.projections",
 }
 assert imagent.__all__ == list(owner_modules)
+assert not hasattr(imagent, "projections")
 assert typing.get_type_hints(imagent.__getattr__) == {"name": str, "return": object}
 assert all(name not in imagent.__dict__ for name in owner_modules)
 assert not any(

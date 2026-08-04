@@ -32,6 +32,10 @@ from imagent.gateway.persistence.memory import (
 )
 from imagent.gateway.projection import derive_projection_delivery_id
 from imagent.gateway.projection.checkpoints import _ProjectionCheckpointAuthority
+from imagent.gateway.projection.observation import (
+    deliver_projected_message,
+)
+from imagent.gateway.projection.recovery import ProjectedAgentMessage
 from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.channels import (
     ChannelCapabilities,
@@ -45,10 +49,6 @@ from imagent.interaction.messages import (
     MessageRole,
     OutboundMessage,
     TextContent,
-)
-from imagent.projections import (
-    ProjectedAgentMessage,
-    deliver_projected_message,
 )
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 

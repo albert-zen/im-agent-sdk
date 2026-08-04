@@ -121,9 +121,9 @@ owner_modules = {
     "delivery_planning": "imagent.gateway.delivery.planning",
     "diagnostics": "imagent.diagnostics",
     "events": "imagent.events",
-    "projections": "imagent.projections",
 }
 assert imagent.__all__ == list(owner_modules)
+assert not hasattr(imagent, "projections")
 assert typing.get_type_hints(imagent.__getattr__) == {"name": str, "return": object}
 assert all(name not in imagent.__dict__ for name in owner_modules)
 assert not any(
@@ -378,6 +378,7 @@ import typing
 import imagent.contracts as contracts_facade
 import imagent.gateway as gateway_facade
 import imagent.gateway.projection as projection_facade
+import imagent.gateway.projection.observation as observation_owner
 import imagent.gateway.projection.request_correlation as request_owner
 import imagent.gateway.routing.operations as operations_owner
 
@@ -390,6 +391,16 @@ for name in request_owner.__all__:
     owner = getattr(request_owner, name)
     assert getattr(projection_facade, name) is owner
     assert owner.__module__ == "imagent.gateway.projection.request_correlation"
+assert projection_facade.ThreadProjectionRuntime is observation_owner.ThreadProjectionRuntime
+assert projection_facade.ProjectionWorkerHealth is observation_owner.ProjectionWorkerHealth
+assert "ProjectionWorkerCapacityError" not in projection_facade.__all__
+assert "ProjectionWorkerState" not in projection_facade.__all__
+for module_name in (
+    "imagent.projection_runtime",
+    "imagent.projections",
+    "imagent.projection_routes",
+):
+    assert importlib.util.find_spec(module_name) is None
 assert importlib.util.find_spec("imagent.contracts.operations") is None
 assert importlib.util.find_spec("imagent.contracts.validators") is None
 for name in ("RespondToRequest", "RequestResponseRouted"):

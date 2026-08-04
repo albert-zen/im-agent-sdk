@@ -49,6 +49,11 @@ from imagent.gateway.persistence.memory import (
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.gateway.presentation import OutboundPresentationContext
 from imagent.gateway.projection import derive_projection_delivery_id
+from imagent.gateway.projection.observation import (
+    ProjectionWorkerState,
+    derive_live_projection_delivery_id,
+    immutable_projection_metadata,
+)
 from imagent.gateway.projection.request_correlation import (
     derive_turn_reply_correlation_id,
 )
@@ -62,11 +67,6 @@ from imagent.interaction.messages import (
     MessageRole,
     OutboundMessage,
     TextContent,
-)
-from imagent.projections import (
-    ProjectionWorkerState,
-    derive_live_projection_delivery_id,
-    immutable_projection_metadata,
 )
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 

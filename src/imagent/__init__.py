@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 __version__ = "0.1.0a1"
 
 if TYPE_CHECKING:
-    from . import adapters, contracts, diagnostics, events, projections
+    from . import adapters, contracts, diagnostics, events
     from .gateway.delivery import coordination as delivery_coordination
     from .gateway.delivery import planning as delivery_planning
 
@@ -19,7 +19,6 @@ __all__ = [
     "delivery_planning",
     "diagnostics",
     "events",
-    "projections",
 ]
 
 
@@ -36,8 +35,6 @@ def __getattr__(name: str) -> object:
         module = import_module(".diagnostics", __name__)
     elif name == "events":
         module = import_module(".events", __name__)
-    elif name == "projections":
-        module = import_module(".projections", __name__)
     else:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     globals()[name] = module
