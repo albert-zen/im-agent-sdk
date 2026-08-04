@@ -527,6 +527,7 @@ components:
       - src/imagent/applications/capabilities.py
       - src/imagent/applications/events.py
       - src/imagent/applications/operations.py
+      - src/imagent/applications/requests.py
       - tests/applications/**
     docs:
       - docs/components/applications/README.md

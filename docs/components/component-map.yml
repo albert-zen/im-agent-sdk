@@ -48,18 +48,22 @@ architecture_lint:
       to: src/imagent/contracts/_validation.py
       symbol: validate_thread_ref
       reason: Event validation preserves the existing ThreadRef invariant through the unmoved Application contract validator; moving that resource value is a later focused leaf.
-    - from: src/imagent/applications/events.py
-      to: src/imagent/contracts/request_validation.py
-      symbol: validate_interactive_request
-      reason: Event validation preserves the existing typed request invariant through the unmoved request validator; making events depend on the target request leaf would create the documented structural cycle.
-    - from: src/imagent/applications/events.py
-      to: src/imagent/contracts/request_validation.py
-      symbol: validate_request_resolution
-      reason: Event validation preserves the existing typed resolution invariant through the unmoved request validator; making events depend on the target request leaf would create the documented structural cycle.
     - from: src/imagent/applications/operations.py
       to: src/imagent/contracts/_validation.py
       symbol: validate_thread_ref
       reason: Application operation validation preserves the existing ThreadRef invariant through the unmoved Application contract validator; moving that resource value is a later focused leaf.
+    - from: src/imagent/applications/requests.py
+      to: src/imagent/contracts/_validation.py
+      symbol: validate_thread_ref
+      reason: Request validation preserves the existing ThreadRef invariant through the unmoved Application contract validator while this mechanical slice moves only request-owned values.
+    - from: src/imagent/contracts/request_validation.py
+      to: src/imagent/interaction/operations.py
+      symbol: ContractViolation
+      reason: Gateway request-correlation validation preserves the existing common contract error vocabulary while the request-owned validators move to their focused leaf.
+    - from: src/imagent/contracts/request_validation.py
+      to: src/imagent/interaction/operations.py
+      symbol: require_identifier
+      reason: Gateway request-correlation validation preserves the existing bounded identifier invariant while the request-owned validators move to their focused leaf.
     - from: src/imagent/applications/appserver_client/__init__.py
       to: src/imagent/__init__.py
       symbol: __version__
@@ -1002,7 +1006,7 @@ components:
     public_exports:
       current: [imagent.applications.events:AgentEvent, imagent.applications.events:AgentEventType, imagent.applications.events:CursorExpired, imagent.applications.events:EventBroadcaster, imagent.applications.events:EventBufferOverflow, imagent.applications.events:EventStreamGap, imagent.applications.events:EventStreamOverflow, imagent.applications.events:EventStreamReset, imagent.applications.events:FanoutSubscription, imagent.applications.events:validate_agent_event, imagent.contracts:AgentEvent, imagent.contracts:AgentEventType, imagent.contracts:validate_agent_event, imagent.events:AgentEvent, imagent.events:AgentEventType, imagent.events:CursorExpired, imagent.events:EventBroadcaster, imagent.events:EventBufferOverflow, imagent.events:EventStreamGap, imagent.events:EventStreamOverflow, imagent.events:EventStreamReset, imagent.events:FanoutSubscription, imagent.events:validate_agent_event]
       target: [imagent.applications.events:AgentEvent, imagent.applications.events:AgentEventType, imagent.applications.events:CursorExpired, imagent.applications.events:EventBroadcaster, imagent.applications.events:EventBufferOverflow, imagent.applications.events:EventStreamGap, imagent.applications.events:EventStreamOverflow, imagent.applications.events:EventStreamReset, imagent.applications.events:FanoutSubscription, imagent.applications.events:validate_agent_event]
-    dependencies: [interaction.messages, interaction.operations, applications.capabilities]
+    dependencies: [interaction.messages, interaction.operations, applications.capabilities, applications.requests]
     state_recovery: Queues are bounded/non-durable; gaps terminate the affected subscription and require authoritative recovery.
     current_code: [schemas/v1/events.schema.json, src/imagent/applications/events.py, src/imagent/events.py]
     target_code: [schemas/v1/events.schema.json, src/imagent/applications/events.py]
@@ -1010,7 +1014,7 @@ components:
     target_tests: [tests/applications/test_events.py]
     authoritative_docs: [docs/components/applications/events/design.md, docs/components/applications/events/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0013-bounded-application-event-admission.md]
-    gaps: [event request/resource annotations delegate to their unmoved focused leaves]
+    gaps: [event resource annotations still delegate to the unmoved Application contract values]
 
   applications.operations:
     id: applications.operations
@@ -1046,15 +1050,15 @@ components:
     public_exports:
       current: [imagent.contracts:ApprovalRequest, imagent.contracts:UserInputRequest, imagent.contracts:RequestResolution, imagent.contracts:RequestResponse, imagent.contracts:ApprovalResponse, imagent.contracts:ApprovalResponseShape, imagent.contracts:InteractiveRequest, imagent.contracts:InteractiveRequestKind, imagent.contracts:MAX_INTERACTIVE_REQUEST_CHOICES, imagent.contracts:MAX_INTERACTIVE_REQUEST_QUESTIONS, imagent.contracts:RequestChoice, imagent.contracts:RequestDuplicateError, imagent.contracts:RequestRef, imagent.contracts:RequestResolutionStatus, imagent.contracts:RequestResolvedError, imagent.contracts:RequestResponseShape, imagent.contracts:RequestStaleError, imagent.contracts:UserInputQuestion, imagent.contracts:UserInputQuestionShape, imagent.contracts:UserInputResponse, imagent.contracts:UserInputResponseShape, imagent.contracts:derive_request_response_shape, imagent.contracts:validate_interactive_request, imagent.contracts:validate_request_ref, imagent.contracts:validate_request_resolution, imagent.contracts:validate_request_response, imagent.contracts:validate_request_response_shape]
       target: [imagent.applications.requests:ApprovalRequest, imagent.applications.requests:UserInputRequest, imagent.applications.requests:RequestResolution, imagent.applications.requests:RequestResponse, imagent.applications.requests:ApprovalResponse, imagent.applications.requests:ApprovalResponseShape, imagent.applications.requests:InteractiveRequest, imagent.applications.requests:InteractiveRequestKind, imagent.applications.requests:MAX_INTERACTIVE_REQUEST_CHOICES, imagent.applications.requests:MAX_INTERACTIVE_REQUEST_QUESTIONS, imagent.applications.requests:RequestChoice, imagent.applications.requests:RequestDuplicateError, imagent.applications.requests:RequestRef, imagent.applications.requests:RequestResolutionStatus, imagent.applications.requests:RequestResolvedError, imagent.applications.requests:RequestResponseShape, imagent.applications.requests:RequestStaleError, imagent.applications.requests:UserInputQuestion, imagent.applications.requests:UserInputQuestionShape, imagent.applications.requests:UserInputResponse, imagent.applications.requests:UserInputResponseShape, imagent.applications.requests:derive_request_response_shape, imagent.applications.requests:validate_interactive_request, imagent.applications.requests:validate_request_ref, imagent.applications.requests:validate_request_resolution, imagent.applications.requests:validate_request_response, imagent.applications.requests:validate_request_response_shape]
-    dependencies: [interaction.operations, applications.events]
+    dependencies: [interaction.messages, interaction.operations]
     state_recovery: Native Application is first-writer; stale is emitted only when response authority is provably unusable.
-    current_code: [schemas/v1/events.schema.json, schemas/v1/operations.schema.json, schemas/v1/resources.schema.json, src/imagent/contracts/errors.py, src/imagent/contracts/model.py, src/imagent/contracts/request_validation.py, src/imagent/contracts/operations.py]
+    current_code: [schemas/v1/events.schema.json, schemas/v1/operations.schema.json, schemas/v1/resources.schema.json, src/imagent/applications/requests.py]
     target_code: [schemas/v1/events.schema.json, schemas/v1/operations.schema.json, schemas/v1/resources.schema.json, src/imagent/applications/requests.py]
-    current_tests: [tests/test_contracts.py, tests/test_appserver_requests.py]
+    current_tests: [tests/applications/test_requests.py]
     target_tests: [tests/applications/test_requests.py]
     authoritative_docs: [docs/components/applications/requests/design.md, docs/components/applications/requests/testing.md]
     adrs: [docs/decisions/0008-interactive-request-routing.md]
-    gaps: [request values/validation/results are spread across four contract files]
+    gaps: [versioned schemas remain cross-owner, Application resource identity annotations remain in historical model.py until the Application contract split breaks the physical cycle, Gateway route correlation remains in historical model/validation modules]
 
   applications.presentation.live-activity:
     id: applications.presentation.live-activity
@@ -1453,23 +1457,20 @@ structural_status:
       owners: [interaction.channels.channel-contract, gateway.delivery.proactive-authorization, gateway.persistence.repository-contracts, applications.application-contract]
       reason: Channel/admission, the exact proactive-authorization compatibility Port, repository, and Application Ports share one historical module.
     src/imagent/contracts/model.py:
-      owners: [interaction.messages, gateway.persistence.state-contracts, applications.application-contract, applications.requests]
-      reason: The language-neutral model is semantically correct but physically crosses remaining target layers.
+      owners: [interaction.messages, gateway.persistence.state-contracts, applications.application-contract]
+      reason: Shared non-request values and Gateway route correlation still share the historical model after request-owned values moved to the Applications leaf.
     src/imagent/contracts/delivery.py:
       owners: [interaction.media, gateway.delivery.submissions, gateway.delivery.proactive-delivery, gateway.persistence.state-contracts]
       reason: Media identity, proactive intent/results, submission identity, and passive delivery state share one contract module after authorization moved to its Gateway leaf.
-    src/imagent/contracts/errors.py:
-      owners: [applications.application-contract, applications.requests]
-      reason: Dispatched-input ambiguity and request lifecycle errors remain distinct Applications-owned values after common operation error projection moved to Interaction.
     src/imagent/contracts/operations.py:
-      owners: [gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.projection.request-correlation, applications.requests]
-      reason: Gateway binding, routing, observation, request-correlation, and request response values remain physically combined after the common Interaction vocabulary and Application operation variants moved to their owning leaves.
+      owners: [gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.projection.request-correlation]
+      reason: Gateway binding, routing, observation, and request-correlation operations remain physically combined in the historical module after request response values moved to their Applications leaf.
     src/imagent/contracts/validators.py:
       owners: [gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.dispatch, gateway.projection.request-correlation, applications.application-contract]
       reason: Gateway, dispatch, projection, and common Application contract validation remains in the historical aggregation until each focused validator leaf moves.
     src/imagent/contracts/request_validation.py:
-      owners: [gateway.projection.request-correlation, gateway.persistence.state-contracts, applications.requests]
-      reason: One module validates Application-owned request response shapes plus Gateway-owned route correlation and persisted state evidence.
+      owners: [gateway.projection.request-correlation, gateway.persistence.state-contracts]
+      reason: Gateway-owned request route correlation validation remains in the historical module after Application request response-shape validators moved to their focused leaf.
     src/imagent/keyed_locks.py:
       owners: [gateway.routing.gateway-operations, gateway.delivery.coordination, gateway.delivery.proactive-delivery]
       reason: The process-local keyed serialization primitive currently serves bounded Conversation operation serialization, ordered destination delivery, and proactive delivery-ID serialization without owning any of those policies.

@@ -12,6 +12,7 @@ from ...adapters import (
     ProjectionRouteConflict,
     TurnReplyCorrelationConflict,
 )
+from ...applications.requests import RequestRef
 from ...contracts import (
     ConversationBinding,
     DeliveryReservation,
@@ -29,7 +30,6 @@ from ...contracts import (
     validate_request_route_correlation,
     validate_turn_reply_correlation,
 )
-from ...contracts.model import RequestRef
 from ...interaction.messages import ConversationRef
 from ...request_correlations import (
     _matches,

@@ -22,9 +22,10 @@ and route/checkpoint recovery.
 
 Normalized native events enter this leaf and each subscriber receives its own
 bounded Thread event stream. It depends on Interaction message and validation
-values plus the Applications capability declaration, but never on Gateway. Its
-request/resource annotations and validation delegate to the still-unmoved
-focused contract leaves; they do not make this leaf an owner of request or
+values plus the Applications capability declaration and request leaf, but
+never on Gateway. Its request annotations and validation delegate to
+`applications.requests`; resource annotations still delegate to the historical
+Application contract values. They do not make this leaf an owner of request or
 Application-resource semantics. Stable event/item identities and any
 sequence/cursor fields describe only native guarantees; text and time do not
 establish identity.

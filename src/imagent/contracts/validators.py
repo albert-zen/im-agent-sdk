@@ -4,13 +4,17 @@ import hashlib
 import json
 from typing import TYPE_CHECKING
 
+from ..applications.requests import (
+    ApprovalResponse,
+    UserInputResponse,
+    validate_request_ref,
+)
 from ..interaction.messages import ConversationRef
 from ..interaction.operations import ContractViolation, require_identifier
 from ._validation import validate_thread_ref
 from .model import ConversationBinding, ThreadProjectionRoute, TurnReplyCorrelation
 from .operations import (
     ApplicationsListed,
-    ApprovalResponse,
     BindConversationToProject,
     BindConversationToThread,
     ClearConversationThread,
@@ -24,9 +28,7 @@ from .operations import (
     RespondToRequest,
     SelectApplication,
     ThreadObserved,
-    UserInputResponse,
 )
-from .request_validation import validate_request_ref
 
 if TYPE_CHECKING:
     from ..applications.capabilities import ApplicationCapabilities

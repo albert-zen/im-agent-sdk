@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import TypeAlias
 
+from ..applications.requests import (
+    RequestRef as _RequestRef,
+)
+from ..applications.requests import (
+    RequestResponse as _RequestResponse,
+)
 from ..interaction.messages import ConversationRef
 from ..interaction.operations import ContractError, OperationResultStatus
 from .model import (
@@ -13,7 +18,6 @@ from .model import (
     ApplicationSummary,
     ConversationBinding,
     ProjectRef,
-    RequestRef,
     ThreadProjectionRoute,
     ThreadRef,
 )
@@ -27,21 +31,6 @@ class GatewayOperationType(StrEnum):
     CONVERSATION_CLEAR_THREAD = "conversation.clear_thread"
     CONVERSATION_RESPOND_REQUEST = "conversation.respond_request"
     THREAD_OBSERVE = "thread.observe"
-
-
-@dataclass(frozen=True, slots=True)
-class ApprovalResponse:
-    choice_id: str
-    kind: str = field(init=False, default="approval")
-
-
-@dataclass(frozen=True, slots=True)
-class UserInputResponse:
-    answers: Mapping[str, tuple[str, ...]]
-    kind: str = field(init=False, default="user_input")
-
-
-RequestResponse: TypeAlias = ApprovalResponse | UserInputResponse
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -111,8 +100,8 @@ class ObserveThread(_GatewayOperation):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RespondToRequest(_GatewayOperation):
-    request_ref: RequestRef
-    response: RequestResponse
+    request_ref: _RequestRef
+    response: _RequestResponse
     type: GatewayOperationType = field(
         init=False,
         default=GatewayOperationType.CONVERSATION_RESPOND_REQUEST,
@@ -166,7 +155,7 @@ class ThreadObserved(_GatewayOperationSucceeded):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RequestResponseRouted(_GatewayOperationSucceeded):
-    request_ref: RequestRef
+    request_ref: _RequestRef
     type: GatewayOperationType = field(
         init=False,
         default=GatewayOperationType.CONVERSATION_RESPOND_REQUEST,
