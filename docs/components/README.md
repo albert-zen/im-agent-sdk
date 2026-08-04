@@ -127,6 +127,14 @@ concrete adapters normalize native resources/events/history/requests and report
 dispatch outcomes honestly. They never expose raw native events to Gateway or
 Controller consumers, invent recoverable history, or depend on Gateway.
 
+See the [Applications navigation](applications/README.md), the common leaf
+designs for [the Application contract](applications/application-contract/design.md),
+[capabilities](applications/capabilities/design.md), [events](applications/events/design.md),
+[operations](applications/operations/design.md), and [requests](applications/requests/design.md),
+and the [presentation subtree](applications/presentation/README.md). Native
+adapter pages remain the authority for Codex, Zen, T3, and App Server wire
+translation until their focused mechanical slices move them under this tree.
+
 ## Engineering support
 
 Engineering documentation will converge under `docs/engineering/` for:

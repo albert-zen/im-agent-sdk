@@ -948,7 +948,7 @@ components:
     target_code: [schemas/v1/common.schema.json, schemas/v1/history.schema.json, schemas/v1/messages.schema.json, schemas/v1/resources.schema.json, src/imagent/applications/contract.py]
     current_tests: [tests/test_adapter_contracts.py]
     target_tests: [tests/applications/test_contract.py]
-    authoritative_docs: [docs/components/ports/design.md, docs/components/application-adapters/design.md]
+    authoritative_docs: [docs/components/applications/application-contract/design.md, docs/components/applications/application-contract/testing.md]
     adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
     gaps: [common Application Port currently shares adapters.py with Channel and repository Ports]
 
@@ -970,7 +970,7 @@ components:
     target_code: [schemas/v1/capabilities.schema.json, src/imagent/applications/capabilities.py]
     current_tests: [tests/test_contracts.py, tests/test_adapter_contracts.py]
     target_tests: [tests/applications/test_capabilities.py]
-    authoritative_docs: [docs/components/contracts/protocol.md, docs/components/application-adapters/design.md]
+    authoritative_docs: [docs/components/applications/capabilities/design.md, docs/components/applications/capabilities/testing.md]
     adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0003-attachment-sources-and-trust.md]
     gaps: [capabilities are embedded in the cross-owner contract model]
 
@@ -992,7 +992,7 @@ components:
     target_code: [schemas/v1/events.schema.json, src/imagent/applications/events.py]
     current_tests: [tests/test_event_fanout.py, tests/test_contracts.py]
     target_tests: [tests/applications/test_events.py]
-    authoritative_docs: [docs/components/contracts/protocol.md, docs/components/projections-and-recovery/design.md]
+    authoritative_docs: [docs/components/applications/events/design.md, docs/components/applications/events/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0013-bounded-application-event-admission.md]
     gaps: [event values remain in cross-owner contracts/model.py]
 
@@ -1014,9 +1014,9 @@ components:
     target_code: [schemas/v1/operations.schema.json, src/imagent/applications/operations.py]
     current_tests: [tests/test_contracts.py, tests/test_adapter_contracts.py, tests/test_appserver_input.py]
     target_tests: [tests/applications/test_operations.py]
-    authoritative_docs: [docs/components/contracts/protocol.md, docs/components/application-adapters/design.md]
+    authoritative_docs: [docs/components/applications/operations/design.md, docs/components/applications/operations/testing.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [current operation union mixes Gateway operations; product-only commands remain intentionally absent]
+    gaps: [one current module co-locates separate Application and Gateway operation unions; product-only commands remain intentionally absent]
 
   applications.requests:
     id: applications.requests
@@ -1036,9 +1036,9 @@ components:
     target_code: [schemas/v1/events.schema.json, schemas/v1/operations.schema.json, schemas/v1/resources.schema.json, src/imagent/applications/requests.py]
     current_tests: [tests/test_contracts.py, tests/test_appserver_requests.py]
     target_tests: [tests/applications/test_requests.py]
-    authoritative_docs: [docs/components/contracts/protocol.md, docs/components/application-adapters/design.md]
+    authoritative_docs: [docs/components/applications/requests/design.md, docs/components/applications/requests/testing.md]
     adrs: [docs/decisions/0008-interactive-request-routing.md]
-    gaps: [request values/validation/results are spread across three contract files]
+    gaps: [request values/validation/results are spread across four contract files]
 
   applications.presentation.live-activity:
     id: applications.presentation.live-activity
@@ -1058,7 +1058,7 @@ components:
     target_code: [src/imagent/applications/presentation/live_activity.py]
     current_tests: [tests/test_application_presentation.py, tests/test_appserver_mapping.py, tests/test_t3_client.py]
     target_tests: [tests/applications/presentation/test_live_activity.py]
-    authoritative_docs: [docs/components/application-adapters/design.md, docs/components/application-adapters/testing.md]
+    authoritative_docs: [docs/components/applications/presentation/live-activity/design.md, docs/components/applications/presentation/live-activity/testing.md]
     adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
     gaps: [Codex and T3 fact shapes share runtime but must remain distinct typed positions]
 
@@ -1080,9 +1080,9 @@ components:
     target_code: [src/imagent/applications/presentation/artifact_materialization.py]
     current_tests: [tests/test_appserver_artifacts.py]
     target_tests: [tests/applications/presentation/test_artifact_materialization.py]
-    authoritative_docs: [docs/components/application-adapters/design.md, docs/components/attachments-and-media/design.md]
+    authoritative_docs: [docs/components/applications/presentation/artifact-materialization/design.md, docs/components/applications/presentation/artifact-materialization/testing.md]
     adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [target leaf design/testing docs not yet created]
+    gaps: [artifact materialization implementation remains at its historical applications path]
 
   applications.adapters.appserver.client:
     id: applications.adapters.appserver.client
