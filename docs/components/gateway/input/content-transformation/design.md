@@ -28,8 +28,9 @@ raw native event or generic stage callback.
 The public seam lives at `imagent.gateway.input.InboundContentTransformer`.
 The formal `imagent.gateway.InboundContentTransformer` facade re-exports that
 exact object. Its implementation is
-`src/imagent/gateway/input/content_transformation.py`; orchestration and shared
-diagnostic facts remain in the Gateway package root and diagnostics leaf.
+`src/imagent/gateway/input/content_transformation.py`; orchestration remains in
+the Gateway package root and diagnostic facts are owned by
+`src/imagent/gateway/diagnostics.py`.
 
 ## Replay, failure, and capacity
 

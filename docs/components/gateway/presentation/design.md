@@ -30,7 +30,8 @@ idempotency transitions, or checkpoint mutation.
 
 The implementation lives once at `src/imagent/gateway/presentation.py`; no
 historical `imagent.outbound_presentation` implementation/import path remains.
-Shared diagnostic values stay in `diagnostics.py` until their focused split.
+The O1 diagnostic enum and fact values are owned by
+`src/imagent/gateway/diagnostics.py` and imported directly by this runtime.
 
 ## Authority
 

@@ -52,7 +52,8 @@ native adapter behavior exactly.
 ## Current and target structure
 
 Before this slice, implementation was `src/imagent/applications/presentation.py`
-with diagnostic fact types in `src/imagent/diagnostics.py`. The moved owner is
+with diagnostic fact types in the transition surface. The moved diagnostic
+owner is
 `src/imagent/applications/presentation/live_activity.py` and its finite facade
 is `src/imagent/applications/presentation/__init__.py`; diagnostic fact
 ownership is now `src/imagent/applications/diagnostics.py`. Focused evidence is

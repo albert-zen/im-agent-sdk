@@ -46,6 +46,19 @@ DIAGNOSTICS_FACADE_CHECK = (
     "'summarize_projection_health', 'collect_application_diagnostics', "
     "'collect_channel_diagnostics', 'new_diagnostics_snapshot')); "
     "subprocess.run([sys.executable, '-c', "
+    '"import imagent.diagnostics as f; '
+    "import imagent.interaction.diagnostics as c; "
+    "import imagent.interaction.channels.diagnostics as ch; "
+    "import imagent.applications.diagnostics as a; "
+    "assert f.ConnectionDiagnosticState is c.ConnectionDiagnosticState; "
+    "assert f.QueueDiagnosticFacts is c.QueueDiagnosticFacts; "
+    "assert f.ChannelDiagnosticFacts is ch.ChannelDiagnosticFacts; "
+    "assert f.ChannelDiagnosticsProvider is ch.ChannelDiagnosticsProvider; "
+    "assert f.ApplicationDiagnosticFacts is a.ApplicationDiagnosticFacts; "
+    "assert f.ApplicationDiagnosticsProvider is a.ApplicationDiagnosticsProvider; "
+    'assert f.DiagnosticsProvider is a.DiagnosticsProvider"], '
+    "check=True); "
+    "subprocess.run([sys.executable, '-c', "
     '"import imagent.gateway.diagnostics as g; '
     "import imagent.diagnostics as f; "
     'assert all(getattr(f, n) is getattr(g, n) for n in g.__all__)"], '

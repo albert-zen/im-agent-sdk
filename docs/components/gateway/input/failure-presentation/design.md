@@ -28,7 +28,8 @@ idempotency path.
 Public I2 contracts are exposed by `imagent.gateway.input`; the established
 `imagent.gateway` facade re-exports the exact same objects. Implementation is
 `src/imagent/gateway/input/failure_presentation.py`, with Gateway orchestration
-and shared diagnostics remaining in their existing owners.
+in the package root and diagnostic facts owned by
+`src/imagent/gateway/diagnostics.py`.
 
 ## Claim and replay rules
 

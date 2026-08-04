@@ -14,8 +14,8 @@ becoming an operator or Gateway health policy.
 
 It does not own common diagnostic enums/value definitions, Application
 diagnostic facts, Gateway diagnostics, polling, retry decisions, or consumer
-presentation. The historical aggregate `src/imagent/diagnostics.py` remains the
-transition facade for exact Gateway and Application re-exports; the
+presentation. The stable `imagent.diagnostics` transition facade re-exports
+exact Gateway and Application owner objects; the
 dependency-neutral connection/queue contracts are owned by
 [`interaction.diagnostics`](../../../../interaction/diagnostics/design.md).
 Only its App Server-specific positions belong here.
@@ -51,8 +51,8 @@ content-derived values may be retained or emitted.
 The App Server diagnostic fact, summary, and runtime helpers now co-locate at
 `src/imagent/applications/adapters/appserver/diagnostics.py`.
 `src/imagent/applications/diagnostics.py` owns the Application fact contracts;
-`src/imagent/diagnostics.py` remains the explicit exact transition facade for
-Gateway facts and those exact Application re-exports. It is not moved or
+the stable `imagent.diagnostics` module is the explicit exact transition
+facade for Gateway facts and those exact Application re-exports. It is not moved or
 reclassified as an App Server leaf. Common connection/queue values come from
 `imagent.interaction.diagnostics`.
 Current evidence is `tests/applications/adapters/appserver/test_client.py`,
