@@ -16,11 +16,15 @@ live in `tests/gateway/persistence/test_memory.py`; this suite consumes that
 owner without reintroducing persistence inside delivery orchestration.
 
 Ownership tests additionally prove exact Gateway/proactive facade identity,
-that the temporary vocabulary definitions remain single-owned by
-`contracts.delivery`, that the eight historical `imagent.contracts` proactive
-names are absent in a clean process, and that both historical implementation
-modules remain absent. They also prove that `DeliverySubmissionOrigin` stays
-available through the deliberate `imagent.contracts` passive-state facade.
+that the eight vocabulary definitions and validator are single-owned by
+`gateway.delivery.proactive`, that `contracts.delivery` has no definition or
+compatibility alias for them, that the eight historical
+`imagent.contracts` proactive names are absent in a clean process, and that
+the owner seam's finite `__all__` contains exactly those eight names. Both
+historical implementation modules remain absent. The tests also prove that
+`DeliverySubmissionOrigin` stays available through the deliberate
+`imagent.contracts` passive-state facade and that passive state/helper imports
+remain one-way.
 The mirrored Gateway JSON/CLI ingress suite continues to cover authorization-before-staging,
 cancellation join, cleanup, route/result mapping, and loopback CLI policy.
 Pure decoded-byte, path-confinement, digest, and staged-content construction
@@ -37,10 +41,10 @@ owner-set checks, and the existing behavior suite guard the mechanical nature
 of the split. The one-time migration review compared the moved definitions to
 their predecessor; durable tests do not depend on Git history being available
 in a shallow source checkout. The vocabulary and validator definitions remain
-in `contracts.delivery` temporarily for #216; this slice only changes their
-public facade and internal import path. The clean-import test covers the
-current public graph and does not authorize a reverse `contracts.delivery`
-compatibility import. #216 owns the later definition move.
+in `gateway.delivery.proactive`; the clean-import test covers the public graph
+and rejects a reverse `contracts.delivery` compatibility import. The
+submission origin/state, records/reservations, metadata/conversation helpers,
+and identity helpers remain in their accepted owners.
 
 Run:
 

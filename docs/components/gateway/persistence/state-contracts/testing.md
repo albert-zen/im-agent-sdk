@@ -19,6 +19,10 @@ State-contract tests must prove:
   content, credential, callback, or retry job; and
 - JSON schemas and Python values remain compatible at their public boundary.
 
+The proactive target/intent/result vocabulary and validator are tested through
+their `gateway.delivery.proactive` owner; passive submission state remains
+tested through `contracts.delivery` until the later state-contract extraction.
+
 Focused boundary tests accept exactly 64 delivery destinations, 32 request
 questions, and 64 approval or per-question choice IDs. They reject one more
 member before fingerprinting/reservation/SQL or Channel/Application work, and

@@ -9,18 +9,14 @@ from typing import Protocol
 
 from ...applications.contract import ProjectRef, ThreadRef
 from ...contracts.delivery import (
-    ConversationDeliveryTarget,
-    DeliveryIntent,
     DeliveryReservation,
     DeliveryRouteSnapshot,
     DeliverySubmissionOrigin,
     DeliverySubmissionRecord,
     DeliverySubmissionState,
-    DeliveryTarget,
     DestinationDeliveryRecord,
     _canonical_metadata,
     _validate_conversation_ref,
-    validate_delivery_intent,
     validate_delivery_submission_record,
 )
 from ...interaction.channels import (
@@ -38,6 +34,12 @@ from ...sqlite_rows import decode_datetime, optional_text, required_text
 from ..persistence.repository_contracts import DeliverySubmissionConflict
 from ..persistence.submission_identity import (
     ensure_same_delivery_submission_reservation,
+)
+from .proactive import (
+    ConversationDeliveryTarget,
+    DeliveryIntent,
+    DeliveryTarget,
+    validate_delivery_intent,
 )
 
 
