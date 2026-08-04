@@ -298,6 +298,7 @@ assert {
 assert 'imagent.applications.adapters.codex' not in sys.modules
 assert 'imagent.applications.adapters.zen' not in sys.modules
 assert 'imagent.applications.adapters.appserver.client' not in sys.modules
+assert 'imagent.applications.adapters.t3' not in sys.modules
 assert 'imagent.applications.t3' not in sys.modules
 assert 'imagent.applications.t3_client' not in sys.modules
 """

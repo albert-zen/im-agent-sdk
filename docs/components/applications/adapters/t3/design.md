@@ -25,37 +25,56 @@ receipts, canonical `AgentEvent` values, and optional bounded recoverable
 `T3ActivityFacts` presentation. `T3ClientError` is the typed HTTP failure.
 Interactive requests remain an explicit unsupported capability.
 
-The current formal exports are `T3ApplicationAdapter`, `HttpT3Client`, and
-`T3ClientError` through `imagent.applications`; the adapter and client live in
-`src/imagent/applications/t3.py` and `t3_client.py`. The target exact facade is
-`imagent.applications.adapters.t3` with the same objects and no duplicate HTTP
-client.
+The stable formal exports are `T3ApplicationAdapter`, `HttpT3Client`, and
+`T3ClientError` through `imagent.applications`. Their one implementation owner
+is `imagent.applications.adapters.t3`, backed by the single source file
+`src/imagent/applications/adapters/t3.py`. The historical `t3.py` and
+`t3_client.py` modules are absent; the package facade resolves the exact
+objects from the target module and does not retain an internal import shim or
+duplicate HTTP client.
 
 ## Dependencies, state, and recovery
 
 T3 depends on Interaction messages/operations/media, common Applications
 contract/capabilities/events/operations/requests, and the live-activity
-presentation leaf. Stable native IDs/history and the optional A1
-cursor/presentation window are finite. The current adapter still retains
-`_turn_baselines`, `_send_locks`, `_seen_messages`, and `_terminal_turns`
-without an explicit capacity/eviction bound; finite poll/dedupe retention is a
-real implementation gap. A missing cursor or polling gap ends the affected
-subscription with explicit recoverable gap semantics; history/catch-up may
-recover the association. Configured T3 input returns native acceptance before
-optional presenter work. There is no long-lived connection diagnostic or
-synthetic connection epoch.
+presentation leaf. Stable native IDs/history and all process-local poll state
+are finite. The adapter's four explicit state capacities default to 4096
+turn-baseline entries, 1024 concurrently held Thread send locks, 8192 seen
+message identities, and 4096 terminal-Turn identities. Baselines are keyed by
+`(native_thread_id, native_turn_id)` and reserve capacity before the typed
+pre-dispatch callback; only baselines already observed terminal may be
+evicted, oldest first. If every baseline is active, input fails before native
+mutation rather than dropping active authority. Send-lock entries are retained
+only while a Thread has a waiter or owner and reject a new Thread when the
+active-key capacity is full. Seen-message and terminal-Turn windows use stable
+`(native_thread_id, native_id)` keys and deterministic oldest-first eviction;
+eviction can cause replay from native history but never changes native truth or
+creates a local transcript/spool.
+
+A missing cursor or polling gap ends the affected subscription with explicit
+recoverable gap semantics; history/catch-up may recover the association.
+T3 input performs all validation, baseline reading, command construction, and
+capacity admission before the typed pre-dispatch callback. If that callback
+raises, no native dispatch is attempted. Once the single native dispatch is
+attempted, every ordinary exception or cancellation from dispatch or the
+authoritative follow-up Thread read—including a missing Turn ID—is raised as
+`ApplicationInputOutcomeUnknown` with the original cause; an existing unknown
+outcome is not wrapped again. The adapter never retries or falls back to a
+second dispatch and releases only its process-local baseline reservation.
+After a stable Turn ID is recorded, `send_input` returns `AcceptedTurn`
+immediately. It does not synchronously publish or invoke presentation; the
+existing sole subscription poll/history path performs recoverable observation.
+There is no long-lived connection diagnostic or synthetic connection epoch.
 
 ## Current, target, and structural gap
 
-Current code is `src/imagent/applications/t3.py` plus
-`src/imagent/applications/t3_client.py`. Current evidence is
-`tests/test_t3_client.py`, `tests/conformance/test_adapter_contracts.py`,
-`tests/test_gateway_vertical_slice.py`, and the live-activity presentation
-suite. The target is `src/imagent/applications/adapters/t3.py` with focused
-tests at `tests/applications/adapters/test_t3.py`. The gap is that `t3.py`
-currently combines orchestration, mapping, polling, presentation invocation,
-and attachment encoding; later mechanical slices must preserve one ordered
-polling state machine.
+The implementation and focused owner evidence are now co-located at
+`src/imagent/applications/adapters/t3.py` and
+`tests/applications/adapters/test_t3.py`. The module intentionally keeps the
+HTTP client, adapter orchestration, mapping, polling, presentation invocation,
+and attachment encoding in one T3 owner; this slice does not introduce a
+second runtime or a generic internal plugin boundary. The remaining state
+rules are the finite capacities and explicit active-authority behavior above.
 
 ## Authority
 

@@ -165,7 +165,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "src/imagent/applications/adapters/appserver/requests.py": {
                 "application-adapters-appserver"
             },
-            "src/imagent/applications/t3.py": {"application-adapters-t3"},
+            "src/imagent/applications/adapters/t3.py": {"application-adapters-t3"},
             "src/imagent/interaction/testing/__init__.py": {"testing-and-conformance"},
             "src/imagent/interaction/testing/contracts.py": {"testing-and-conformance"},
             "src/imagent/interaction/testing/fakes.py": {"testing-and-conformance"},
@@ -235,7 +235,7 @@ class AgentKitMappingTests(unittest.TestCase):
                 "application-adapters-appserver"
             },
             "tests/applications/presentation/test_live_activity.py": {"applications-common"},
-            "tests/test_t3_client.py": {"application-adapters-t3"},
+            "tests/applications/adapters/test_t3.py": {"application-adapters-t3"},
             "tests/conformance/test_adapter_contracts.py": {"testing-and-conformance"},
             "tests/engineering/test_schema_conformance.py": {"schema-conformance"},
             "tests/engineering/test_repository_maintainability.py": {"repository-maintainability"},

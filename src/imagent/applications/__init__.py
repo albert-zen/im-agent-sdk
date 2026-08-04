@@ -32,6 +32,7 @@ from .contract import (
 if TYPE_CHECKING:
     from .adapters.appserver.client import codex_app_server_client
     from .adapters.codex import CodexApplicationAdapter
+    from .adapters.t3 import HttpT3Client, T3ApplicationAdapter, T3ClientError
     from .adapters.zen import ZenApplicationAdapter
     from .presentation import (
         ApplicationArtifactMaterialization,
@@ -64,8 +65,6 @@ if TYPE_CHECKING:
         T3ActivityFacts,
         T3ActivityPresenter,
     )
-    from .t3 import T3ApplicationAdapter
-    from .t3_client import HttpT3Client, T3ClientError
 
 __all__ = [
     "AcceptedTurn",
@@ -179,9 +178,9 @@ def __getattr__(name: str) -> object:
     elif name in _PRESENTATION_EXPORTS:
         module = import_module("imagent.applications.presentation")
     elif name in _T3_EXPORTS:
-        module = import_module("imagent.applications.t3")
+        module = import_module("imagent.applications.adapters.t3")
     elif name in _T3_CLIENT_EXPORTS:
-        module = import_module("imagent.applications.t3_client")
+        module = import_module("imagent.applications.adapters.t3")
     elif name == "codex_app_server_client":
         module = import_module("imagent.applications.adapters.appserver.client")
     else:

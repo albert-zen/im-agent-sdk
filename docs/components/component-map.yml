@@ -1312,17 +1312,17 @@ components:
     outputs: [common Application contract behavior]
     public_contracts: [T3ApplicationAdapter, HttpT3Client, T3ClientError]
     public_exports:
-      current: [imagent.applications:T3ApplicationAdapter, imagent.applications:HttpT3Client, imagent.applications:T3ClientError]
+      current: [imagent.applications:T3ApplicationAdapter, imagent.applications:HttpT3Client, imagent.applications:T3ClientError, imagent.applications.adapters.t3:T3ApplicationAdapter, imagent.applications.adapters.t3:HttpT3Client, imagent.applications.adapters.t3:T3ClientError]
       target: [imagent.applications.adapters.t3:T3ApplicationAdapter, imagent.applications.adapters.t3:HttpT3Client, imagent.applications.adapters.t3:T3ClientError]
     dependencies: [interaction.messages, interaction.operations, interaction.media, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, applications.presentation.live-activity]
-    state_recovery: Stable native IDs/history recover activity and finite A1 presentation cursors fail gaps explicitly; poll/dedupe dictionaries still require finite retention bounds.
-    current_code: [src/imagent/applications/t3.py, src/imagent/applications/t3_client.py]
+    state_recovery: Stable native IDs/history recover activity and finite A1 presentation cursors fail gaps explicitly; baseline, active send-lock, seen-message, and terminal-Turn tables have explicit stable-identity capacities, deterministic eviction/rejection, and active-baseline protection.
+    current_code: [src/imagent/applications/adapters/t3.py]
     target_code: [src/imagent/applications/adapters/t3.py]
-    current_tests: [tests/test_t3_client.py, tests/conformance/test_adapter_contracts.py, tests/test_gateway_vertical_slice.py, tests/applications/presentation/test_live_activity.py]
+    current_tests: [tests/applications/adapters/test_t3.py, tests/conformance/test_adapter_contracts.py, tests/test_gateway_vertical_slice.py, tests/test_diagnostics.py, tests/applications/presentation/test_live_activity.py]
     target_tests: [tests/applications/adapters/test_t3.py]
     authoritative_docs: [docs/components/applications/adapters/t3/design.md, docs/components/applications/adapters/t3/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [authoritative leaf docs now exist; t3.py still mixes adapter orchestration, native mapping, polling state, presentation invocation, and attachment encoding; turn baseline, send-lock, seen-message, and terminal-turn retention are not capacity-bounded]
+    gaps: []
 
   engineering.testing-and-conformance:
     id: engineering.testing-and-conformance
