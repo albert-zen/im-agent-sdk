@@ -5,9 +5,16 @@
 Run the reusable kit directly while developing it:
 
 ```sh
-PYTHONPATH=src uv run python -m unittest tests.test_adapter_contracts -v
+PYTHONPATH=src uv run python -m unittest tests.conformance.test_adapter_contracts -v
 uv run python scripts/validate_schemas.py
 ```
+
+The focused suite also checks the package boundary: the
+`imagent.interaction.testing` owner and the finite `imagent.testing`
+compatibility facade export the same objects in either import order, while the
+historical `imagent.testing.contracts` and `imagent.testing.fakes` modules do
+not exist. This proves the move did not leave a duplicate implementation or a
+second public module tree.
 
 The full repository gate remains the acceptance check for a conformance
 change:
@@ -52,4 +59,6 @@ fake alone is not evidence that a native adapter can recover the behavior.
 The reusable kit itself must remain independent of product packages. Its
 fixtures may use only public contracts and bounded state; they must not import
 Gateway orchestration or a concrete Application implementation to manufacture
-truth.
+truth. The moved test lives at `tests/conformance/test_adapter_contracts.py`;
+its native adapter cases continue to provide the existing cross-integration
+evidence without changing the contract kit's admission rules.

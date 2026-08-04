@@ -24,7 +24,7 @@ Required evidence:
   `imagent.adapters.ChannelAdapter` preserves exact object identity without a
   parallel definition.
 
-Focused evidence currently lives in `tests/test_adapter_contracts.py`,
+Focused evidence currently lives in `tests/conformance/test_adapter_contracts.py`,
 `tests/test_native_channels.py`, Channel-specific suites, Gateway admission
 tests, schema validation, and Pyright. Exact ownership identity for admission,
 startup validation, capability, and receipt contracts lives in

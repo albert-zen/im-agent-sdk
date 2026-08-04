@@ -54,7 +54,7 @@ Current code is split among `src/imagent/adapters.py`,
 `src/imagent/contracts/{_validation.py,errors.py,model.py,validators.py}`,
 `src/imagent/applications/__init__.py`, `src/imagent/diagnostics.py`, and the
 v1 common/history/messages/resources schemas. Current conformance evidence is
-`tests/test_adapter_contracts.py`.
+`tests/conformance/test_adapter_contracts.py`.
 
 The target is `src/imagent/applications/contract.py` with
 `tests/applications/test_contract.py`; shared JSON Schemas remain

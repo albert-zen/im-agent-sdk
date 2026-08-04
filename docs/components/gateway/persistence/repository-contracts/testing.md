@@ -32,7 +32,7 @@ PYTHONPATH=src:tests python -m unittest \
   tests.gateway.persistence.test_repository_contracts \
   tests.gateway.persistence.test_memory \
   tests.test_storage \
-  tests.test_adapter_contracts -v
+  tests.conformance.test_adapter_contracts -v
 ```
 
 Every focused slice also runs the full repository gates and the clean-wheel

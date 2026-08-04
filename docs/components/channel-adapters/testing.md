@@ -58,7 +58,7 @@ PYTHONPATH=src:tests python -m unittest \
   tests.interaction.channels.adapters.test_telegram \
   tests.interaction.channels.adapters.test_feishu \
   tests.interaction.channels.adapters.test_weixin \
-  tests.test_adapter_contracts \
+  tests.conformance.test_adapter_contracts \
   tests.test_gateway_vertical_slice -v
 ```
 

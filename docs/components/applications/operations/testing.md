@@ -1,7 +1,7 @@
 # Application operations testing
 
 Current test evidence is `tests/test_contracts.py`,
-`tests/test_adapter_contracts.py`, and `tests/test_appserver_input.py`; the
+`tests/conformance/test_adapter_contracts.py`, and `tests/test_appserver_input.py`; the
 target focused owner suite is `tests/applications/test_operations.py`.
 
 Tests cover closed operation/result discriminants, stable operation IDs,
@@ -22,6 +22,6 @@ boundary and must not auto-retry after an ambiguous native mutation.
 
 ```sh
 PYTHONPATH=src uv run python -m unittest \
-  tests.test_contracts tests.test_adapter_contracts tests.test_appserver_input -v
+  tests.test_contracts tests.conformance.test_adapter_contracts tests.test_appserver_input -v
 uv run python scripts/validate_schemas.py
 ```

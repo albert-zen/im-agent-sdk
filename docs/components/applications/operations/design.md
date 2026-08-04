@@ -48,7 +48,7 @@ in `applications.requests`. This leaf makes the Application operation/result
 variants and their validators authoritative at
 `src/imagent/applications/operations.py`; the historical module remains only
 as a declared transition surface for the unmoved Gateway leaf.
-Current tests are `tests/test_contracts.py`, `tests/test_adapter_contracts.py`,
+Current tests are `tests/test_contracts.py`, `tests/conformance/test_adapter_contracts.py`,
 and `tests/test_appserver_input.py`; focused ownership evidence moves to
 `tests/applications/test_operations.py` while affected integration tests remain
 in place. The language-neutral schema remains a deliberate cross-owner union.

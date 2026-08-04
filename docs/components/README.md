@@ -37,6 +37,12 @@ control intent. Product commands compose a local registry in the consumer and
 do not enter SDK Core. Channel code does not depend on Gateway or concrete
 Application implementations.
 
+The reusable conformance kit is physically mirrored under
+`src/imagent/interaction/testing/**` so its checks and bounded fakes sit beside
+the public Interaction contract package. Its authority remains the engineering
+`testing-and-conformance` leaf; this directory is test support, not a fourth
+runtime layer or an Interaction runtime dependency.
+
 See the [Interaction navigation](interaction/README.md) and the authoritative
 leaf docs for [messages](interaction/messages/design.md),
 [operations](interaction/operations/design.md), and

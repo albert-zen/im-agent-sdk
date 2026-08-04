@@ -333,6 +333,32 @@ class ComponentMapTests(unittest.TestCase):
             components["applications.application-contract"]["target_code"],
         )
 
+    def test_conformance_implementation_mirror_and_facade_are_explicit(self) -> None:
+        component = load_component_map()["components"]["engineering.testing-and-conformance"]
+
+        expected_code = [
+            "src/imagent/interaction/testing/__init__.py",
+            "src/imagent/interaction/testing/contracts.py",
+            "src/imagent/interaction/testing/fakes.py",
+            "src/imagent/testing/__init__.py",
+        ]
+        self.assertEqual(component["current_code"], expected_code)
+        self.assertEqual(component["target_code"], expected_code)
+        self.assertEqual(
+            component["current_tests"],
+            ["tests/conformance/test_adapter_contracts.py"],
+        )
+        self.assertEqual(component["target_tests"], component["current_tests"])
+        self.assertEqual(component["gaps"], [])
+        for module_name in ("imagent.interaction.testing", "imagent.testing"):
+            with self.subTest(module_name=module_name):
+                self.assertTrue(
+                    all(
+                        f"{module_name}:{name}" in component["public_exports"]["current"]
+                        for name in component["public_contracts"]
+                    )
+                )
+
     def test_application_input_contracts_are_not_owned_by_gateway(self) -> None:
         components = load_component_map()["components"]
 
