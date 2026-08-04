@@ -47,7 +47,8 @@ connection reset and observation/materialization failure are explicit gaps.
 Current code is co-located with Codex in
 `src/imagent/applications/appserver.py`. Current evidence is in
 `tests/applications/adapters/appserver/test_client.py`, `test_appserver_input.py`,
-`test_appserver_requests.py`, the artifact presentation suite, and
+`tests/applications/adapters/appserver/test_requests.py`, the artifact
+presentation suite, and
 `tests/test_gateway_vertical_slice.py` for distinct Zen/Codex behavior. The
 target is `src/imagent/applications/adapters/zen.py` with focused tests at
 `tests/applications/adapters/test_zen.py`. The exact gap is the mechanical

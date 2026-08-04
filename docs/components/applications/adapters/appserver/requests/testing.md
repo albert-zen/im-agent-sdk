@@ -1,14 +1,16 @@
 # App Server requests testing
 
-## Current evidence
+## Adapter-owned evidence
 
-`tests/test_appserver_requests.py` is the current authoritative suite. It
-covers approval/question/permission mapping, bounded and adversarial fields,
-Zen's evidenced command-approval-only surface, response-shape validation,
-connection-epoch request identity, open/respond/resolve wire behavior,
-duplicate and stale errors, races, terminal-cache capacity, and bounded
-diagnostics. The Gateway vertical cases verify projection integration without
-moving route correlation into this leaf.
+`tests/applications/adapters/appserver/test_requests.py` is the authoritative
+leaf suite. It covers approval/question/permission mapping, bounded and
+adversarial fields, Zen's evidenced command-approval-only surface,
+response-shape validation, connection-epoch request identity,
+open/respond/resolve wire behavior, duplicate and stale errors, races,
+terminal-cache capacity, and bounded diagnostics. The retained
+`tests/test_appserver_requests.py` case verifies Gateway projection,
+request-correlation, and presenter integration without moving that ownership
+into this leaf.
 
 The tests must preserve exact native response payload choices, scoped request
 IDs, first-writer resolution, and explicit unsupported behavior. A reset must
@@ -16,11 +18,10 @@ not pretend that a pending snapshot exists.
 
 ## Target evidence and verification
 
-The future mirrored path is
-`tests/applications/adapters/appserver/test_requests.py`. Before physical
-migration run:
+Run the leaf and retained integration evidence:
 
 ```sh
+uv run python -m unittest tests.applications.adapters.appserver.test_requests -v
 uv run python -m unittest tests.test_appserver_requests -v
 uv run python -m unittest tests.test_gateway_vertical_slice -v
 ```

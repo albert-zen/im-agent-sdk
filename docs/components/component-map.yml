@@ -1244,17 +1244,17 @@ components:
     outputs: [canonical interactive request/resolution and native response]
     public_contracts: [PendingAppServerRequest, AppServerRequestRuntime]
     public_exports:
-      current: [imagent.applications.appserver_requests:PendingAppServerRequest, imagent.applications.appserver_request_runtime:AppServerRequestRuntime]
+      current: [imagent.applications.adapters.appserver.requests:PendingAppServerRequest, imagent.applications.adapters.appserver.requests:AppServerRequestRuntime]
       target: [imagent.applications.adapters.appserver.requests:PendingAppServerRequest, imagent.applications.adapters.appserver.requests:AppServerRequestRuntime]
     dependencies: [applications.application-contract, applications.events, applications.operations, applications.requests, applications.adapters.appserver.client]
     state_recovery: Transport reset stales handles when no authoritative pending snapshot exists; terminal cache is bounded.
-    current_code: [src/imagent/applications/appserver_requests.py, src/imagent/applications/appserver_request_runtime.py]
+    current_code: [src/imagent/applications/adapters/appserver/requests.py]
     target_code: [src/imagent/applications/adapters/appserver/requests.py]
-    current_tests: [tests/test_appserver_requests.py]
+    current_tests: [tests/applications/adapters/appserver/test_requests.py, tests/test_appserver_requests.py]
     target_tests: [tests/applications/adapters/appserver/test_requests.py]
     authoritative_docs: [docs/components/applications/adapters/appserver/requests/design.md, docs/components/applications/adapters/appserver/requests/testing.md]
     adrs: [docs/decisions/0008-interactive-request-routing.md]
-    gaps: [authoritative leaf docs now exist; the two request-owned current files and their mirrored target suite remain to be moved together]
+    gaps: []
 
   applications.adapters.appserver.diagnostics:
     id: applications.adapters.appserver.diagnostics
@@ -1294,7 +1294,7 @@ components:
     state_recovery: Native history is authoritative; steer candidate read never authorizes fallback start; ambiguous dispatch is unknown.
     current_code: [src/imagent/applications/appserver.py]
     target_code: [src/imagent/applications/adapters/codex.py]
-    current_tests: [tests/applications/adapters/appserver/test_client.py, tests/test_appserver_input.py, tests/applications/adapters/appserver/test_mapping.py, tests/test_appserver_requests.py, tests/applications/presentation/test_artifact_materialization.py, tests/applications/presentation/test_live_activity.py]
+    current_tests: [tests/applications/adapters/appserver/test_client.py, tests/test_appserver_input.py, tests/applications/adapters/appserver/test_mapping.py, tests/applications/adapters/appserver/test_requests.py, tests/test_appserver_requests.py, tests/applications/presentation/test_artifact_materialization.py, tests/applications/presentation/test_live_activity.py]
     target_tests: [tests/applications/adapters/test_codex.py]
     authoritative_docs: [docs/components/applications/adapters/codex/design.md, docs/components/applications/adapters/codex/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -1316,7 +1316,7 @@ components:
     state_recovery: Starts new native Turns for prefer_active_turn until Zen proves steer; authoritative history handles gaps.
     current_code: [src/imagent/applications/appserver.py]
     target_code: [src/imagent/applications/adapters/zen.py]
-    current_tests: [tests/applications/adapters/appserver/test_client.py, tests/test_appserver_input.py, tests/test_appserver_requests.py, tests/applications/presentation/test_artifact_materialization.py, tests/test_gateway_vertical_slice.py]
+    current_tests: [tests/applications/adapters/appserver/test_client.py, tests/test_appserver_input.py, tests/applications/adapters/appserver/test_requests.py, tests/test_appserver_requests.py, tests/applications/presentation/test_artifact_materialization.py, tests/test_gateway_vertical_slice.py]
     target_tests: [tests/applications/adapters/test_zen.py]
     authoritative_docs: [docs/components/applications/adapters/zen/design.md, docs/components/applications/adapters/zen/testing.md]
     adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]

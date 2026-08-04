@@ -100,13 +100,16 @@ Every adapter should prove:
 - duplicate response and unsupported request shapes fail explicitly rather
   than selecting approval/sandbox policy.
 
-Codex and Zen request mapping is covered by `test_appserver_requests.py`, including
-permission response fidelity, secret sensitivity, transport-epoch staleness,
-JSON-RPC error classification, terminal-cache bounds, and adversarial
-Markdown fields. Zen's command approval round trip is backed by the IMZen
-native App Server integration and a Gateway projection/response vertical
-slice, while unevidenced Zen request kinds fail explicitly. T3 remains
-`unsupported` until its own native request/response evidence exists.
+Codex and Zen request mapping is covered by
+`tests/applications/adapters/appserver/test_requests.py`, including permission
+response fidelity, secret sensitivity, transport-epoch staleness, JSON-RPC
+error classification, terminal-cache bounds, and adversarial Markdown fields.
+The retained `tests/test_appserver_requests.py` case covers the Gateway
+projection/presenter response integration. Zen's command approval round trip
+is backed by the IMZen native App Server integration and a Gateway
+projection/response vertical slice, while unevidenced Zen request kinds fail
+explicitly. T3 remains `unsupported` until its own native request/response
+evidence exists.
 
 Run:
 
@@ -114,7 +117,8 @@ Run:
 uv run python -m unittest discover -s tests -p "test_adapter_contracts.py" -v
 PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.test_client -v
 uv run python -m unittest discover -s tests -p "test_appserver_transport.py" -v
-uv run python -m unittest discover -s tests -p "test_appserver_requests.py" -v
+uv run python -m unittest tests.applications.adapters.appserver.test_requests -v
+uv run python -m unittest tests.test_appserver_requests -v
 uv run python -m unittest discover -s tests -p "test_gateway_vertical_slice.py" -v
 uv run python -m unittest tests.gateway.projection.test_recovery -v
 ```

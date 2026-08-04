@@ -25,12 +25,11 @@ are typed `RequestResponse` values validated against the derived request
 shape. Outputs are canonical `InteractiveRequest`/Application request events
 and the exact native JSON response or typed request error.
 
-The current formal contracts are `PendingAppServerRequest` from
-`imagent.applications.appserver_requests` and `AppServerRequestRuntime` from
-`imagent.applications.appserver_request_runtime`; the mapper alias and
-`UnsupportedAppServerRequest` are internal typed positions. The target facade
-is `imagent.applications.adapters.appserver.requests`, preserving exact
-objects and no second request contract.
+The formal contracts are `PendingAppServerRequest` and
+`AppServerRequestRuntime` from the exact target facade
+`imagent.applications.adapters.appserver.requests`; the mapper alias and
+`UnsupportedAppServerRequest` are internal typed positions. The historical
+modules are removed, preserving exact objects and no second request contract.
 
 ## Dependencies, state, and recovery
 
@@ -44,15 +43,14 @@ cache is finite and process-local; no request truth is persisted by the SDK.
 
 ## Current, target, and structural gap
 
-Mapping lives in `src/imagent/applications/appserver_requests.py`; runtime
-state lives in `src/imagent/applications/appserver_request_runtime.py`.
-Current evidence is `tests/test_appserver_requests.py`, including the
-Codex/Zen wire fixtures, race/reset, bounds, and diagnostics cases. The target
-suite is `tests/applications/adapters/appserver/test_requests.py`, and the
-target implementation is
-`src/imagent/applications/adapters/appserver/requests.py`. The structural gap
-is physical co-location of the two request-owned files without changing
-request epoch, response-shape, or first-writer behavior.
+The co-located implementation is
+`src/imagent/applications/adapters/appserver/requests.py`. Adapter-owned
+evidence is in `tests/applications/adapters/appserver/test_requests.py`,
+including the Codex/Zen wire fixtures, race/reset, bounds, and diagnostics
+cases. The retained `tests/test_appserver_requests.py` suite contains only the
+Gateway request-correlation/presenter integration evidence. The structural
+move is complete without changing request epoch, response-shape, or
+first-writer behavior.
 
 ## Authority
 

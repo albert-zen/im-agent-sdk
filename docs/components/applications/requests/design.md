@@ -53,9 +53,11 @@ validators authoritative at `src/imagent/applications/requests.py` while the
 historical modules retain only their remaining owners: Application input
 outcome errors, shared non-request model values, Gateway route correlation, and
 Gateway operations. Current tests are `tests/test_contracts.py` and
-`tests/test_appserver_requests.py`; focused ownership evidence moves to
-`tests/applications/test_requests.py` while affected integration tests remain
-in place. The versioned schemas remain deliberate cross-owner contracts, and
+`tests/applications/adapters/appserver/test_requests.py`; the retained Gateway
+request-correlation/presenter integration remains in
+`tests/test_appserver_requests.py`. Focused ownership evidence moves to
+`tests/applications/test_requests.py` while other affected integration tests
+remain in place. The versioned schemas remain deliberate cross-owner contracts, and
 the temporary resource-identity import remains visible in the component gap
 above rather than being disguised as the final dependency graph.
 

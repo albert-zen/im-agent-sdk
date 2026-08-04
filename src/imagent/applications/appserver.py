@@ -68,11 +68,12 @@ from .adapters.appserver.mapping import (
 from .adapters.appserver.mapping import (
     turn_updated_at as _turn_updated_at,
 )
-from .appserver_request_runtime import (
+from .adapters.appserver.requests import (
     AppServerRequestRuntime,
     ServerRequestMapper,
+    map_appserver_request,
+    map_zen_appserver_request,
 )
-from .appserver_requests import map_appserver_request, map_zen_appserver_request
 from .capabilities import (
     ApplicationCapabilities,
     EventSequenceScope,
