@@ -1,6 +1,8 @@
 """Optional typed Controller contracts for Interaction composition."""
 
-from .common import SlashController, register_common_commands
+from importlib import import_module
+from typing import TYPE_CHECKING
+
 from .contract import (
     CommandHandlerActions,
     CommandInvocationFacts,
@@ -33,6 +35,11 @@ from .request_presentation import (
     RequestPresenter,
 )
 
+if TYPE_CHECKING:
+    from .common import SlashController, register_common_commands
+
+_COMMON_COMMAND_EXPORTS = frozenset({"SlashController", "register_common_commands"})
+
 __all__ = [
     "ControllerActions",
     "ControllerLifecycle",
@@ -62,3 +69,12 @@ __all__ = [
     "derive_command_invocation_id",
     "register_common_commands",
 ]
+
+
+def __getattr__(name: str) -> object:
+    """Resolve common-command exports only when callers request them."""
+    if name not in _COMMON_COMMAND_EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(import_module(".common", __name__), name)
+    globals()[name] = value
+    return value

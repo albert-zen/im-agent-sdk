@@ -11,10 +11,8 @@ from typing import get_type_hints
 import imagent.interaction.controllers as controllers_facade
 from imagent.applications.operations import ApplicationOperation, ApplicationOperationResult
 from imagent.applications.requests import InteractiveRequest
-from imagent.contracts import (
-    GatewayOperation,
-    GatewayOperationResult,
-)
+from imagent.contracts import ConversationBinding as ContractConversationBinding
+from imagent.contracts import GatewayOperation, GatewayOperationResult
 from imagent.gateway.persistence import ConversationBinding
 from imagent.interaction.controllers import (
     CommandHandlerActions,
@@ -96,6 +94,7 @@ class ControllerContractOwnershipTests(unittest.TestCase):
         binding_hints = get_type_hints(contract_owner.CommandHandlerActions.get_binding)
         self.assertIs(binding_hints["conversation_ref"], ConversationRef)
         self.assertEqual(binding_hints["return"], ConversationBinding | None)
+        self.assertIs(ContractConversationBinding, ConversationBinding)
 
         controller_hints = get_type_hints(contract_owner.InboundController.handle)
         self.assertIs(controller_hints["message"], InboundMessage)
@@ -160,14 +159,27 @@ class ControllerContractOwnershipTests(unittest.TestCase):
                 executable,
                 "-c",
                 "import typing; "
+                "import sys; "
                 "import imagent.interaction.controllers as facade; "
                 "import imagent.interaction.controllers.contract as owner; "
+                "import imagent.contracts as contracts_facade; "
                 "from imagent.applications.operations import ApplicationOperation; "
+                "from imagent.gateway.persistence.state_contracts import ConversationBinding; "
                 "assert facade.ControllerActions is owner.ControllerActions; "
+                "assert 'imagent.interaction.controllers.common' not in sys.modules; "
+                "first_common = facade.SlashController; "
+                "second_common = facade.SlashController; "
+                "from imagent.interaction.controllers.common import SlashController; "
+                "assert first_common is second_common is SlashController; "
+                "assert facade.__dict__['SlashController'] is SlashController; "
                 "assert typing.get_type_hints("
                 "owner.CommandHandlerActions.execute_application"
                 ')["operation"] '
-                "is ApplicationOperation",
+                "is ApplicationOperation; "
+                "assert contracts_facade.ConversationBinding is ConversationBinding; "
+                "assert typing.get_type_hints("
+                "owner.CommandHandlerActions.get_binding"
+                ')["return"] == ConversationBinding | None',
             ],
             capture_output=True,
             text=True,

@@ -51,6 +51,10 @@ Interaction, Channel, and Application diagnostics objects. It additionally
 imports the canonical Gateway owner first and the transition facade first in
 separate clean processes, proving exact Gateway identity in both orders. The
 canonical Interaction and Application leaves remain free of Gateway imports.
+The same base fingerprint proves that the permanent finite
+`imagent.contracts:ConversationBinding` delegate is the exact Gateway
+persistence owner value used by the Controller `get_binding` return hint, not
+a compatibility copy.
 
 ## Required repository evidence
 

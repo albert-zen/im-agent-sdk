@@ -48,7 +48,6 @@ from imagent.applications.operations import (
     validate_application_operation_result,
 )
 from imagent.interaction.channels.contract import ChannelAdapter, DeliverySupportLevel
-from imagent.contracts import derive_client_message_id
 from imagent.interaction.messages import InboundMessage, OutboundMessage, TextContent
 
 
@@ -237,10 +236,10 @@ async def verify_application_adapter(
         _require_result(activate_result, NativeThreadActivated)
         checks.append(ContractCheck("explicit native thread activation"))
 
-    client_message_id = derive_client_message_id(
-        sample_conversation(),
-        "contract-message-1",
-    )
+    # The reusable kit proves only that an adapter preserves a stable,
+    # non-empty bounded input identity. Derivation is Gateway input-dispatch
+    # behavior and must not make this lower-layer test kit import Gateway.
+    client_message_id = "contract-message-1"
     first_events = adapter.subscribe_thread(created.ref)
     second_events = adapter.subscribe_thread(created.ref)
     dispatches: list[ApplicationInputDispatch] = []

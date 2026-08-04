@@ -28,6 +28,11 @@ Required scenarios:
 - mechanical moves preserve exact formal-facade object identity and runtime
   type hints without leaving a second implementation or indefinite internal
   import path;
+- a clean process resolves `ControllerActions.get_binding` to the exact
+  Gateway persistence `ConversationBinding`, while importing the controller
+  facade alone does not load common-command behavior;
+- the finite lazy common-command facade resolves and caches only its two exact
+  owner objects;
 - a clean process cannot discover or import `imagent.controllers`, regardless
   of whether the formal Interaction facade is imported first.
 

@@ -44,7 +44,10 @@ metadata, source provenance, and any compatibility claim remain explicit and
 reviewable. The formal `imagent.contracts` facade deliberately omits the
 retired Channel capability/profile/support/reply-scope and delivery-receipt
 names, as well as the retired proactive vocabulary and closed
-submission-identity helper names; `DeliverySubmissionOrigin` remains a
+submission-identity helper names. Its permanent finite
+`ConversationBinding` delegate is the exact Gateway persistence-state object
+needed by the Interaction Controller contract's runtime-resolvable return
+hint; it is not a compatibility copy. `DeliverySubmissionOrigin` remains a
 documented Gateway persistence/delivery export. The historical
 `imagent.adapters` facade retains only its Gateway repository and
 proactive-authorization aliases; it has no Applications exports. The focused Interaction
@@ -54,6 +57,11 @@ objects and never hide a duplicate or lazy compatibility implementation. The
  aliases in `imagent.contracts`, and the package-root `events` module are
  formal explicit facades over `imagent.applications.events`, not implementation
  owners.
+The finite `imagent.applications` package-root lazy resolver is not a
+compatibility shim: it has a bounded set of named exports, resolves each name
+to its exact implementation-module identity, and declares those names under
+`TYPE_CHECKING`. A cold `import imagent.applications` loads neither Gateway nor
+concrete optional dependencies.
 The `imagent.diagnostics` transition facade likewise re-exports the exact
 canonical `imagent.interaction.diagnostics`,
 `imagent.interaction.channels.diagnostics`, and

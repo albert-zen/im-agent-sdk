@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from ..interaction.controllers.contract import InboundController
-    from ..interaction.controllers.request_presentation import RequestPresenter
+from ..interaction.controllers.contract import InboundController
+from ..interaction.controllers.request_presentation import RequestPresenter
 from .delivery.outcome_observation import DeliveryOutcomeObserver
 from .input import InboundContentTransformer
 from .input.failure_presentation import InboundFailurePresenter

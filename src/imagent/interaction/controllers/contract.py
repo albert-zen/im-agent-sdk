@@ -4,15 +4,12 @@ import hashlib
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
+import imagent.contracts as contracts_facade
+
 from ...applications.operations import (
     ApplicationOperation,
     ApplicationOperationResult,
 )
-from ...contracts import (
-    GatewayOperation,
-    GatewayOperationResult,
-)
-from ...gateway.persistence.state_contracts import ConversationBinding
 from ..messages import ConversationRef, InboundMessage, OutboundMessage
 
 
@@ -47,13 +44,13 @@ class CommandHandlerActions(Protocol):
 
     async def execute_gateway(
         self,
-        operation: GatewayOperation,
-    ) -> GatewayOperationResult: ...
+        operation: contracts_facade.GatewayOperation,
+    ) -> contracts_facade.GatewayOperationResult: ...
 
     async def get_binding(
         self,
         conversation_ref: ConversationRef,
-    ) -> ConversationBinding | None: ...
+    ) -> contracts_facade.ConversationBinding | None: ...
 
 
 class ControllerActions(CommandHandlerActions, Protocol):
@@ -79,14 +76,14 @@ class _CommandHandlerActionsView:
 
     async def execute_gateway(
         self,
-        operation: GatewayOperation,
-    ) -> GatewayOperationResult:
+        operation: contracts_facade.GatewayOperation,
+    ) -> contracts_facade.GatewayOperationResult:
         return await self._actions.execute_gateway(operation)
 
     async def get_binding(
         self,
         conversation_ref: ConversationRef,
-    ) -> ConversationBinding | None:
+    ) -> contracts_facade.ConversationBinding | None:
         return await self._actions.get_binding(conversation_ref)
 
 

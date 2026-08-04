@@ -93,6 +93,13 @@ extraction now has one implementation in
 `gateway/persistence/state_contracts.py`; the versioned schemas remain in
 `schemas/v1` and the old internal modules are removed.
 
+`imagent.gateway.persistence` is the primary Python facade. The permanent,
+finite `imagent.contracts:ConversationBinding` delegate is also an exact
+re-export of this leaf: it exists only so the Interaction-owned
+`ControllerActions.get_binding` return annotation resolves without making the
+Controller contract import Gateway orchestration during package initialization.
+It is not a compatibility model, fallback value, or second state contract.
+
 ## Authority
 
 - [Vision](../../../../VISION.md)

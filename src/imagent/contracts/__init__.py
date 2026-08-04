@@ -8,6 +8,7 @@ if TYPE_CHECKING:
         DeliveryPrincipal,
         validate_delivery_principal,
     )
+    from ..gateway.persistence.state_contracts import ConversationBinding
     from ..gateway.routing.bindings import (
         BindConversationToProject,
         BindConversationToThread,
@@ -101,6 +102,11 @@ _GATEWAY_VALIDATOR_EXPORTS = frozenset(
         "derive_client_message_id",
     }
 )
+_GATEWAY_PERSISTENCE_EXPORTS = frozenset(
+    {
+        "ConversationBinding",
+    }
+)
 
 __all__ = [
     "AgentEvent",
@@ -114,6 +120,7 @@ __all__ = [
     "Content",
     "ContractError",
     "ContractViolation",
+    "ConversationBinding",
     "ConversationRef",
     "DeliveryPrincipal",
     "InboundMessage",
@@ -161,6 +168,8 @@ def __getattr__(name: str) -> object:
         module = import_module(".operations", __name__)
     elif name in _GATEWAY_VALIDATOR_EXPORTS:
         module = import_module(".validators", __name__)
+    elif name in _GATEWAY_PERSISTENCE_EXPORTS:
+        module = import_module("..gateway.persistence.state_contracts", __name__)
     elif name in {"DeliveryPrincipal", "validate_delivery_principal"}:
         from ..gateway.delivery.proactive_authorization import (
             DeliveryPrincipal,

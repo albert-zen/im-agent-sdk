@@ -77,7 +77,10 @@ conformance abstraction.
 Application input checks also assert that the typed pre-dispatch position is
 invoked when applicable and that the adapter truthfully reports the accepted
 `started` or `steered` correlation policy. The kit never chooses a native
-continuation strategy on an adapter's behalf.
+continuation strategy on an adapter's behalf. Its round-trip uses one fixed,
+non-empty bounded client-message literal; Gateway's client-message derivation
+and input-dispatch implementation remain outside this reusable lower-layer
+evidence.
 
 ## Change authority
 

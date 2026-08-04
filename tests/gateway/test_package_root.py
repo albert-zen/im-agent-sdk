@@ -6,6 +6,7 @@ from importlib import import_module
 from pathlib import Path
 from subprocess import run
 from sys import executable
+from typing import get_type_hints
 
 import imagent.gateway as gateway_package
 from imagent.gateway import (
@@ -36,6 +37,7 @@ from imagent.gateway.input import (
 from imagent.gateway.input import (
     InboundFailurePresenter as InputInboundFailurePresenter,
 )
+from imagent.interaction.controllers import InboundController, RequestPresenter
 
 
 class GatewayPackageRootTests(unittest.TestCase):
@@ -52,6 +54,17 @@ class GatewayPackageRootTests(unittest.TestCase):
         self.assertEqual(GatewayExtensions.__module__, "imagent.gateway.composition")
         self.assertEqual(GatewayLimits.__module__, "imagent.gateway.composition")
         self.assertEqual(GatewayRepositories.__module__, "imagent.gateway.composition")
+
+    def test_composition_runtime_type_hints_resolve_canonical_controller_contracts(self) -> None:
+        hints = get_type_hints(GatewayExtensions)
+        self.assertEqual(
+            hints["controller"],
+            InboundController | None,
+        )
+        self.assertEqual(
+            hints["request_presenter"],
+            RequestPresenter | None,
+        )
 
     def test_removed_historical_composition_module_cannot_be_imported(self) -> None:
         with self.assertRaises(ModuleNotFoundError):

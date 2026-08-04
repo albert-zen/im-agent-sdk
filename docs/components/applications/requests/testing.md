@@ -1,9 +1,9 @@
 # Application requests testing
 
-Current coverage is `tests/test_contracts.py` and the adapter-owned
-`tests/applications/adapters/appserver/test_requests.py`; the retained Gateway
-integration evidence is `tests/test_appserver_requests.py`. Target focused
-coverage is `tests/applications/test_requests.py`.
+The current executable owner mirror is
+`tests/applications/test_requests.py`. It is the focused suite for this leaf;
+adapter-native and Gateway request-correlation suites remain separate,
+affected evidence rather than alternate owners.
 
 Tests prove Application-scoped request identity, bounded approval choices and
 user-input questions, typed response shape validation, explicit unsupported
@@ -16,7 +16,7 @@ when it advertises one and otherwise emits a truthful stale projection rather
 than inventing an open request. Neither request values nor tests may make a
 consumer permission or destination policy part of the Application contract.
 
-The focused owner suite also proves that `imagent.applications.requests` is the
+The focused owner suite proves that `imagent.applications.requests` is the
 sole implementation and public owner. Clean-process import-order cases prove
 that the package root and `imagent.contracts` do not retain the retired request
 names, while runtime annotation resolution continues to point at the canonical
@@ -24,9 +24,11 @@ Application resource and request owners. Gateway route-correlation records and
 their validator remain outside this leaf.
 
 ```sh
+uv run python -m unittest tests.applications.test_requests -v
+
+# Affected integration evidence (not this leaf's implementation owner)
 PYTHONPATH=src uv run python -m unittest \
-  tests.applications.test_requests \
-  tests.test_contracts tests.applications.adapters.appserver.test_requests \
+  tests.applications.adapters.appserver.test_requests \
   tests.test_appserver_requests -v
 uv run python scripts/validate_schemas.py
 ```

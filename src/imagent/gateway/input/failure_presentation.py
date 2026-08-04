@@ -16,6 +16,7 @@ from ...interaction.messages import (
     TextContent,
     TextFormat,
 )
+from ...projection_runtime import InputPostAcceptanceError
 from ..admission import ClaimedInbound
 from ..diagnostics import (
     InboundFailurePresentationFailureCode,
@@ -215,8 +216,6 @@ async def handle_claimed_inbound(
     presentation: InboundFailurePresentationRuntime | None,
     deliver: Callable[[OutboundMessage], Awaitable[object]],
 ) -> None:
-    from ...projection_runtime import InputPostAcceptanceError
-
     dispatch_fence_entered = False
     side_effect_started = False
 
