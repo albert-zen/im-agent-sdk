@@ -5,7 +5,7 @@ import json
 import math
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from enum import StrEnum
 from itertools import islice
 from types import MappingProxyType
@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     )
     from .gateway.persistence.state_contracts import ThreadProjectionRoute
     from .gateway.presentation import OutboundPresentationContext
+    from .gateway.projection.checkpoints import _ProjectionCheckpointAuthority
 
 DeliverOutbound = Callable[
     [OutboundMessage, "OutboundPresentationContext"],
@@ -171,10 +172,10 @@ async def deliver_projected_message(
     projected: ProjectedAgentMessage,
     *,
     deliver_outbound: DeliverOutbound,
+    checkpoint_authority: _ProjectionCheckpointAuthority,
     authoritative: bool,
 ) -> ThreadProjectionRoute:
     """Make one ordered route decision without adding retry/backpressure."""
-    from .gateway.persistence.repository_contracts import IdempotencyClaimStatus
     from .gateway.presentation import (
         OutboundPresentationContext,
         ProjectionPresentationOrigin,
@@ -227,17 +228,11 @@ async def deliver_projected_message(
             )
         ),
     )
-    if claim is IdempotencyClaimStatus.IN_FLIGHT:
-        raise RuntimeError(f"delivery remains in flight: {delivery_id}")
-    if not projected.checkpoint:
-        return route
-    if claim is IdempotencyClaimStatus.ALREADY_COMPLETED and not authoritative:
-        return route
-    if route.checkpoint_agent_item_id == agent_message.agent_item_id:
-        return route
-    return await repository.advance_projection_checkpoint(
-        route.route_id,
-        expected_agent_item_id=route.checkpoint_agent_item_id,
+    return await checkpoint_authority.apply_delivery_outcome(
+        route,
         agent_item_id=agent_message.agent_item_id,
-        checkpointed_at=datetime.now(UTC),
+        checkpointable=projected.checkpoint,
+        delivery_outcome=claim,
+        authoritative=authoritative,
+        delivery_id=delivery_id,
     )

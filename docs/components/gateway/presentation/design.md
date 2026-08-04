@@ -22,8 +22,9 @@ idempotency transitions, or checkpoint mutation.
 - content/item/text/metadata facts and execution capacity/lifetime are finite;
 - a crash before claim completion may reevaluate because no Channel side
   effect occurred;
-- suppression completes outbound idempotency before authoritative checkpoint
-  CAS; recovery converges a lagging checkpoint without reinvoking O1;
+- suppression completes outbound idempotency before the injected checkpoint
+  authority performs its expected-current CAS; bounded recovery can converge a
+  lagging checkpoint without reinvoking O1;
 - live-only presentation never advances a completion checkpoint;
 - policy failure before Channel effect releases only the owned claim;
 - absence preserves the prior projection delivery path exactly.

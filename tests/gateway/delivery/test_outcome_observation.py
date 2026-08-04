@@ -35,6 +35,7 @@ from imagent.gateway.presentation import (
     ProjectionPresentationOrigin,
 )
 from imagent.gateway.projection import derive_projection_delivery_id
+from imagent.gateway.projection.checkpoints import _ProjectionCheckpointAuthority
 from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.channels import (
     ChannelCapabilities,
@@ -675,6 +676,9 @@ class DeliveryOutcomeObserverTests(unittest.IsolatedAsyncioTestCase):
                 route,
                 projected,
                 deliver_outbound=gateway._deliver_outbound,
+                checkpoint_authority=_ProjectionCheckpointAuthority(
+                    projections=projections,
+                ),
                 authoritative=True,
             )
             await asyncio.sleep(0)

@@ -39,7 +39,7 @@ Live-only A1 output has an event-scoped delivery ID and may use outbound
 idempotency for that attempt, but it never advances a completed-item
 checkpoint or appears in authoritative completion recovery.
 
-## Bounds and current structure
+## Physical boundary
 
 Checkpoint values contain only a stable item ID and time, not content,
 transcript copies, native cursor invention, or unbounded history. Existing
@@ -47,12 +47,35 @@ routes scan only bounded authoritative pages toward their opaque boundary;
 missing/expired boundaries become explicit degraded recovery, not a full
 archive scan.
 
-Stable delivery-ID derivation lives in `gateway/projection/checkpoints.py`.
-The `imagent.gateway.projection` facade re-exports the exact owner function;
-`imagent.projections` does not retain a compatibility symbol. Checkpoint CAS,
-route interaction, and delivery orchestration remain split between
-`projections.py` and `projection_routes.py`. Persistence continues to own the
-passive route record and its atomic repository implementation.
+The canonical implementation is
+`src/imagent/gateway/projection/checkpoints.py`. In addition to stable
+destination-scoped projection delivery-ID derivation, it owns the one narrow
+checkpoint authority. That authority is constructed with only the typed
+`ProjectionRouteRepository`; it receives a current route, opaque Agent item
+identity, whether the observation is checkpointable, the completed-idempotency
+outcome, and whether the evidence came from bounded authoritative recovery.
+
+It rejects an `in_flight` outcome, leaves live-only output unchanged, and
+never derives progress by comparing opaque item IDs. A fresh completed outcome
+uses the route's current checkpoint as the expected value for one repository
+CAS. An `already_completed` outcome converges a lagging checkpoint only when
+ordered authoritative recovery supplied the evidence; a live duplicate does
+not guess a new boundary. A same-item repeat needs no CAS, and a competing or
+stale expected value remains the repository's explicit conflict.
+
+`imagent.projections` retains only projected-message construction, reply
+correlation lookup, and the call into the injected checkpoint authority after
+the existing delivery/O1 path returns its typed outcome.
+`projection_routes.py` retains route bootstrap, bounded recovery orchestration,
+and route ordering, but no checkpoint decision. O1 presentation still owns
+replacement/suppression and completes the existing outbound idempotency claim
+before this authority can advance a route. Recovery supplies bounded ordered
+evidence and does not call route persistence directly. Persistence continues
+to own the passive route record and atomic repository operations.
+
+The finite `imagent.gateway.projection` facade remains exact re-exports only;
+it exposes the stable delivery-ID function and does not become a second
+checkpoint implementation or service locator.
 
 - [ADR 0007](../../../../decisions/0007-projection-lifecycle-and-delivery-boundaries.md)
 - [ADR 0015](../../../../decisions/0015-typed-extension-seams-and-composition.md)

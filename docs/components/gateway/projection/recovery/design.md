@@ -41,8 +41,10 @@ that use bounded supervisor backoff. A per-route Channel delivery failure is
 not a recovery trigger and does not restart the Application subscription. One
 Thread's gap cannot cross another Thread's acceptance-order boundary.
 
-Completed messages reconcile through their stable Application item IDs,
-route-scoped idempotency, and checkpoint CAS. Live-only A1 activity is not in
+Completed messages reconcile through their stable Application item IDs and
+route-scoped idempotency. This leaf supplies only bounded ordered authoritative
+evidence to the checkpoint owner, which decides whether completed evidence can
+converge the expected-current CAS. Live-only A1 activity is not in
 authoritative history and is allowed to be lost across overflow/restart.
 Interactive requests require a separate authoritative pending-request snapshot
 capability: on a gap, only the affected Thread can reconcile that snapshot; in

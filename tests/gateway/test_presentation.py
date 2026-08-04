@@ -31,6 +31,7 @@ from imagent.gateway.presentation import (
     OutboundPresentationTimeout,
     ProjectionPresentationOrigin,
 )
+from imagent.gateway.projection.checkpoints import _ProjectionCheckpointAuthority
 from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.media import AttachmentContent, AttachmentHandle
 from imagent.interaction.messages import (
@@ -170,6 +171,9 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
                 visible,
                 projected,
                 deliver_outbound=gateway._deliver_outbound,
+                checkpoint_authority=_ProjectionCheckpointAuthority(
+                    projections=repository,
+                ),
                 authoritative=False,
             )
             hidden_result = await deliver_projected_message(
@@ -177,6 +181,9 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
                 hidden,
                 projected,
                 deliver_outbound=gateway._deliver_outbound,
+                checkpoint_authority=_ProjectionCheckpointAuthority(
+                    projections=repository,
+                ),
                 authoritative=False,
             )
         finally:
@@ -214,6 +221,9 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
                 route,
                 projected,
                 deliver_outbound=gateway._deliver_outbound,
+                checkpoint_authority=_ProjectionCheckpointAuthority(
+                    projections=repository,
+                ),
                 authoritative=True,
             )
         finally:
@@ -338,6 +348,9 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
                 route,
                 projected,
                 deliver_outbound=gateway._deliver_outbound,
+                checkpoint_authority=_ProjectionCheckpointAuthority(
+                    projections=repository,
+                ),
                 authoritative=False,
             )
         finally:

@@ -47,11 +47,13 @@ The focused recovery implementation now lives in
 absent; the remaining aggregate runtime files retain only their documented
 observation, routing, and request-correlation responsibilities.
 
-The stable completion delivery-ID derivation now lives in
-`gateway/projection/checkpoints.py` and is exactly re-exported through
-`imagent.gateway.projection`. The historical `imagent.projections` symbol is
-absent; its remaining module retains the documented projection values and
-delivery orchestration, including checkpoint compare-and-swap sequencing.
+Stable completion delivery-ID derivation and the sole expected-current
+checkpoint convergence authority live in `gateway/projection/checkpoints.py`;
+the derivation is exactly re-exported through `imagent.gateway.projection`.
+The historical `imagent.projections` symbol is absent. Its remaining module
+retains only documented projection values, outbound-message construction, and
+delivery orchestration, then passes typed completion evidence to the injected
+checkpoint authority.
 
 Typed interactive requests share route selection and per-route delivery
 serialization with message projection, but they do not advance transcript
@@ -251,14 +253,15 @@ under a configured page bound. Missing/expired checkpoints produce an
 explicit gap in worker health while still allowing a bounded recent
 projection; no path falls back to scanning the complete archive.
 
-Completed-idempotency and checkpoint state converge during authoritative
-ordered recovery. An `already_completed` stable delivery may advance a lagging
-checkpoint there; `in_flight` never advances it. Live duplicate events do not
-rewrite a different checkpoint because opaque item IDs provide no ordering.
-The same convergence applies to a durably suppressed O1 decision. A crash
-before suppression completes may reevaluate the destination policy without a
-Channel side effect; after completion, recovery advances the lagging
-checkpoint without invoking O1 again.
+Completed-idempotency evidence and checkpoint state converge through the
+checkpoint authority during authoritative ordered recovery. An
+`already_completed` stable delivery may advance a lagging checkpoint only from
+that bounded evidence; `in_flight` never advances it. Live duplicate events do
+not rewrite a different checkpoint because opaque item IDs provide no
+ordering. The same convergence applies to a durably suppressed O1 decision. A
+crash before suppression completes may reevaluate the destination policy
+without a Channel side effect; after completion, recovery passes the lagging
+checkpoint evidence without invoking O1 again.
 
 One route's permanent or ambiguous Channel failure blocks that route's later
 ordered decisions and records the route ID, without terminating/restarting the
