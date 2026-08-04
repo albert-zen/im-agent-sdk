@@ -10,14 +10,17 @@ uv build --wheel
 uv run python scripts/smoke_clean_install.py
 ```
 
-The smoke script installs exactly one built wheel into isolated environments.
-It checks the base package and the provider-specific optional-extra cases listed
-by the script (`qq`, `telegram`, `feishu`, `weixin`, and `appserver`) for expected
-public imports, native dependency boundaries, and absence of the consumer
-package. A clean base install must not discover optional integration
-dependencies that were not requested. The aggregate `channels` extra and wheel
-contents such as `py.typed` remain separate release checks; the smoke script
-does not claim to cover them.
+The smoke script installs exactly one built wheel into six isolated environments:
+the base package and the provider-specific optional-extra cases listed by the
+script (`qq`, `telegram`, `feishu`, `weixin`, and `appserver`). The base case
+also verifies the formal `imagent.interaction.controllers` facade identities,
+runtime type hints, and clean-process absence/unimportability of
+`imagent.controllers`. Every case checks expected public imports, native
+dependency boundaries, and absence of the consumer package. A clean base
+install must not discover optional integration dependencies that were not
+requested. The aggregate `channels` extra and wheel contents such as
+`py.typed` remain separate release checks; the smoke script does not claim to
+cover them.
 
 ## Required repository evidence
 

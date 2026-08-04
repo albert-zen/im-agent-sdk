@@ -35,7 +35,9 @@ Interaction owns content and control-intent contracts, bounded Controller UX,
 and native IM ingress/delivery. `Message` carries content; `Operation` carries
 control intent. Product commands compose a local registry in the consumer and
 do not enter SDK Core. Channel code does not depend on Gateway or concrete
-Application implementations.
+Application implementations. The formal Controller public surface is
+`imagent.interaction.controllers`; the historical `imagent.controllers` path
+is absent and is not a compatibility boundary.
 
 The reusable conformance kit is physically mirrored under
 `src/imagent/interaction/testing/**` so its checks and bounded fakes sit beside

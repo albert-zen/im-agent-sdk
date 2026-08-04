@@ -116,14 +116,14 @@ bounded by its owning command implementation.
 
 ## Physical migration
 
-`src/imagent/interaction/controllers/contract.py` owns the current exact
-`ControllerActions` and `InboundController` objects. The historical
-`imagent.controllers` package re-exports those same objects as a finite public
-migration facade. Request presentation, registry, and common-command
-implementations all reside under Interaction. Repository runtime code imports
-the owning Interaction leaves; there is no second contract implementation.
+`src/imagent/interaction/controllers/contract.py` owns the exact
+`ControllerActions` and `InboundController` objects, and
+`imagent.interaction.controllers` is the sole formal facade for them. Request
+presentation, registry, and common-command implementations all reside under
+Interaction. The historical `imagent.controllers` package has been removed;
+there is no compatibility alias, second contract implementation, or accepted
+repository-internal import path.
 
 The standalone registry behavior slice added the registry-only one-way effect
-fence without creating another admission path. The remaining historical
-`imagent.controllers` package is only a finite exact-object public facade, not
-an accepted repository-internal implementation path.
+fence without creating another admission path. This public-path cleanup does
+not change that fence, the registry behavior, or any Gateway action.

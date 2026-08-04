@@ -5,7 +5,7 @@ import unittest
 from datetime import UTC, datetime
 from importlib.util import find_spec
 
-from imagent import controllers as controllers_facade
+import imagent.interaction.controllers as controllers_facade
 from imagent.contracts import (
     ApplicationRef,
     ConversationRef,
@@ -35,8 +35,7 @@ class RequestPresentationOwnershipTests(unittest.TestCase):
         self.assertIs(controllers_facade.RequestPresenter, RequestPresenter)
 
     def test_historical_implementation_modules_are_removed(self) -> None:
-        self.assertIsNone(find_spec("imagent.controllers.base"))
-        self.assertIsNone(find_spec("imagent.controllers.requests"))
+        self.assertIsNone(find_spec("imagent.controllers"))
 
 
 class MarkdownRequestPresenterTests(unittest.TestCase):

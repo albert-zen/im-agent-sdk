@@ -43,6 +43,7 @@ PYTHONPATH=src python -m unittest \
 
 `tests/interaction/controllers/test_common_commands.py` owns registry
 composition and bound tests. The historical root suites remain temporary
-parity evidence until their later mechanical test move. Exact facade identity
-tests also prove the removed historical implementation modules cannot be
+parity evidence until their later mechanical test move. Formal-facade identity
+and clean-process/import-order tests prove every public common-command object
+comes from its Interaction owner and the removed historical package cannot be
 imported.

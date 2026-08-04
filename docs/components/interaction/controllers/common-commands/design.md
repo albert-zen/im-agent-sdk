@@ -86,10 +86,9 @@ durable Controller spool.
 handlers, parser, and bounded selection views.
 `src/imagent/interaction/controllers/common_presentation.py` owns their
 portable Markdown presentation. `imagent.interaction.controllers` exposes the
-owning public API. The finite top-level `imagent.controllers` facade re-exports
-those exact objects while other Controller leaves still require that facade;
-it is not a second implementation or an accepted internal import path.
+sole formal public API. The historical `imagent.controllers` package has been
+removed, with no compatibility alias or accepted internal import path.
 
 The mechanical ownership slice removes the historical
-`imagent.controllers.slash` and `imagent.controllers.markdown` modules without
-changing registry, command, presentation, action, fence, or replay behavior.
+`imagent.controllers` package without changing registry, command,
+presentation, action, fence, or replay behavior.

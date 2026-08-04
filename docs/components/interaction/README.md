@@ -25,8 +25,10 @@ the command text does not become message content at an Application boundary
 and product commands do not enter SDK Core.
 
 Controller contracts, registry, common commands, and request presentation now
-reside under Interaction. The historical `imagent.controllers` package is a
-finite exact-object public facade, not a second implementation.
+reside under Interaction. `imagent.interaction.controllers` is their sole
+formal public facade. The historical `imagent.controllers` package is absent
+and intentionally unimportable; no compatibility implementation or alias
+remains.
 
 The adapter conformance implementation is physically mirrored at
 `src/imagent/interaction/testing/**`; its repository authority remains the

@@ -14,4 +14,5 @@ code, exports, dependencies, tests, decisions, and structural gaps.
 
 This historical broad path remains temporarily for repository navigation and
 AgentKit compatibility during the physical rollout. It is not a fifth
-Controller component and does not override the leaf contracts.
+Controller component, does not override the leaf contracts, and does not
+restore the removed `imagent.controllers` import path.

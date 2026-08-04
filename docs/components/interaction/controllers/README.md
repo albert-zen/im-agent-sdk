@@ -31,9 +31,11 @@ use the same registry instance, which freezes before runtime input is accepted.
 
 The Controller contract, registry, request presentation, common commands, and
 portable Markdown implementation now live under
-`src/imagent/interaction/controllers`. The historical `imagent.controllers`
-package is only a finite exact-object public facade. The historical
-[Controllers overview](../../controllers/design.md) remains navigation
-evidence, not a substitute for these leaf contracts. The machine-readable
-[component map](../../component-map.yml) records each current path, target
-path, test owner, export, dependency, and remaining structural gap.
+`src/imagent/interaction/controllers`. `imagent.interaction.controllers` is
+the sole formal public facade; the historical `imagent.controllers` package
+has been removed and must be absent and unimportable in every import order.
+The historical [Controllers overview](../../controllers/design.md) remains
+navigation evidence, not a substitute for these leaf contracts. The
+machine-readable [component map](../../component-map.yml) records each
+current path, target path, test owner, export, dependency, and remaining
+structural gap.

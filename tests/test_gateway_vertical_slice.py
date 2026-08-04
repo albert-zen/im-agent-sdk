@@ -31,12 +31,12 @@ from imagent.contracts import (
     TextContent,
     ThreadRef,
 )
-from imagent.controllers import SlashController
 from imagent.events import EventStreamOverflow
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.interaction.channels.adapters.qq import QQChannelAdapter
 from imagent.interaction.channels.outbound_delivery import NativeDeliveryResult
+from imagent.interaction.controllers import SlashController
 from imagent.storage import SQLiteGatewayState
 
 

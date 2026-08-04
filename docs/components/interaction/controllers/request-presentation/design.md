@@ -59,12 +59,13 @@ not invent request state to close that gap.
 ## Physical migration
 
 `src/imagent/interaction/controllers/request_presentation.py` owns the exact
-presentation protocol and portable Markdown implementation. The focused
-mechanical extraction moved those objects without changing rendering, bounds,
-correlation, delivery, replay, or security behavior. During the finite
-Controller package migration,
-`imagent.controllers` remains an exact-object public facade; the historical
-mixed modules retain no second implementation.
+presentation protocol and portable Markdown implementation, exposed through
+the sole formal `imagent.interaction.controllers` facade. The focused
+mechanical extraction and public-path cleanup move those objects without
+changing rendering, bounds, correlation, delivery, replay, or security
+behavior. The historical `imagent.controllers` package has been removed; the
+historical mixed modules retain no second implementation or compatibility
+alias.
 
 This leaf remains separate from command registration and common-command
 parsing. The move does not introduce a registry, product command, Channel card

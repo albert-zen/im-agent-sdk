@@ -175,4 +175,7 @@ inbound identity, and bounds common selection views. It preserves
 `SlashController` as the default common-command convenience composition while
 making `CommandRegistry` the public consumer-composition surface. The common
 command implementation now resides under Interaction; the historical internal
-modules have been removed.
+modules and the historical `imagent.controllers` compatibility package have
+been removed. The formal public surface is
+`imagent.interaction.controllers`, and this path cleanup changes no registry,
+handler, grammar, fence, capacity, or result behavior.
