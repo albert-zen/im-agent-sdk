@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import unittest
+from datetime import UTC, datetime
+from types import SimpleNamespace
 
+from imagent.interaction.channels.adapters.runtime import _InboundMiddleware
 from imagent.interaction.channels.ingress import (
     ChannelAccessPolicy,
     InboundAttachment,
     InboundMessage,
+    _normalize_inbound_message,
+    _parse_datetime,
     parse_id_set,
 )
+from imagent.interaction.media import AttachmentContent, LocalPath
+from imagent.interaction.messages import ConversationRef, TextContent
 
 
 class ChannelAccessPolicyTests(unittest.TestCase):
@@ -86,6 +93,143 @@ class ChannelAccessPolicyTests(unittest.TestCase):
             ChannelAccessPolicy(
                 allowed_user_ids=frozenset({"none", "user-1"}),
             )
+
+
+class InboundNormalizationTests(unittest.TestCase):
+    def test_ingress_owns_public_identity_time_reply_and_selected_metadata(self) -> None:
+        inbound = SimpleNamespace(
+            channel_id="qq",
+            conversation_id="c2c:user-1",
+            user_id="user-1",
+            message_id="native-message-1",
+            reply_to_message_id=42,
+            sent_at="2026-08-04T12:34:56Z",
+            input_error="attachment warning",
+            trace_id="trace-1",
+            metadata={"forged": "ignored"},
+        )
+        content = (TextContent("hello"),)
+
+        message = _normalize_inbound_message(
+            channel_instance_id="qq-main",
+            inbound=inbound,
+            content=content,
+            reply_to_message_id="override-message",
+        )
+
+        self.assertEqual(message.message_id, "native-message-1")
+        self.assertEqual(
+            message.conversation_ref,
+            ConversationRef("qq-main", "c2c:user-1"),
+        )
+        self.assertEqual(message.sender, "user-1")
+        self.assertEqual(message.content, content)
+        self.assertEqual(
+            message.created_at,
+            datetime(2026, 8, 4, 12, 34, 56, tzinfo=UTC),
+        )
+        self.assertEqual(message.reply_to, "override-message")
+        self.assertEqual(
+            message.metadata,
+            {
+                "channel_id": "qq",
+                "input_error": "attachment warning",
+                "trace_id": "trace-1",
+            },
+        )
+
+        fallback_reply = _normalize_inbound_message(
+            channel_instance_id="qq-main",
+            inbound=inbound,
+            content=(),
+            reply_to_message_id=None,
+        )
+        self.assertEqual(fallback_reply.reply_to, 42)
+
+    def test_runtime_keeps_text_then_attachment_order_and_route_context(self) -> None:
+        async def ignore(_message) -> None:
+            return None
+
+        middleware = _InboundMiddleware(
+            channel_instance_id="qq-main",
+            on_message=ignore,
+            on_admission=None,
+        )
+        inbound = SimpleNamespace(
+            channel_id="qq",
+            conversation_id="c2c:user-1",
+            user_id="user-1",
+            message_id="native-message-2",
+            text="hello",
+            attachments=(
+                InboundAttachment(
+                    kind="image",
+                    content_type="image/png",
+                    local_path="/staged/image.png",
+                    size_bytes=3,
+                    source_message_id="native-attachment-1",
+                ),
+            ),
+            sent_at=None,
+        )
+
+        message = middleware._normalize_inbound(
+            inbound,
+            reply_to_message_id=None,
+        )
+
+        self.assertEqual(
+            message.content,
+            (
+                TextContent("hello"),
+                AttachmentContent(
+                    attachment_id="native-attachment-1",
+                    media_type="image/png",
+                    filename=None,
+                    size_bytes=3,
+                    source=LocalPath("/staged/image.png"),
+                    metadata={"kind": "image"},
+                ),
+            ),
+        )
+        self.assertEqual(
+            getattr(
+                middleware.get_route_context("qq", "c2c:user-1"),
+                "last_inbound_message_id",
+            ),
+            "native-message-2",
+        )
+
+    def test_datetime_parser_preserves_iso_and_current_time_fallback(self) -> None:
+        self.assertEqual(
+            _parse_datetime("2026-08-04T12:34:56+08:00"),
+            datetime.fromisoformat("2026-08-04T12:34:56+08:00"),
+        )
+        for value in (None, "", "not-a-date"):
+            with self.subTest(value=value):
+                before = datetime.now(UTC)
+                parsed = _parse_datetime(value)
+                after = datetime.now(UTC)
+                self.assertGreaterEqual(parsed, before)
+                self.assertLessEqual(parsed, after)
+
+    def test_moved_helper_keeps_required_identity_failures_and_runtime_ownership(self) -> None:
+        with self.assertRaises(AttributeError):
+            _normalize_inbound_message(
+                channel_instance_id="qq-main",
+                inbound=SimpleNamespace(
+                    channel_id="qq",
+                    conversation_id="c2c:user-1",
+                    user_id="user-1",
+                ),
+                content=(),
+                reply_to_message_id=None,
+            )
+
+        from imagent.interaction.channels.adapters import runtime
+
+        self.assertFalse(hasattr(runtime, "_normalize_inbound_message"))
+        self.assertFalse(hasattr(runtime, "_parse_datetime"))
 
 
 if __name__ == "__main__":

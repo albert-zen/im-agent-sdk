@@ -4,9 +4,10 @@
 
 Ingress turns one adapter-authenticated native event into one verified
 `InboundMessage`. It owns the shared ordering and helpers for configured access
-evaluation, stable account/Conversation/sender/message normalization, a
-bounded process-local duplicate fast path, pre-media admission use, common
-media validation/staging, and explicit `AttachmentSource` values.
+evaluation, stable account/Conversation/sender/message identity and public
+envelope normalization, a bounded process-local duplicate fast path, pre-media
+admission use, common media validation/staging, and explicit `AttachmentSource`
+values.
 
 It does not own provider signature/authentication algorithms, credential/API
 clients, provider-specific download/decryption/acknowledgement rules, the
@@ -20,18 +21,31 @@ the documented order.
 The required order is:
 
 1. receive an event authenticated by the concrete adapter;
-2. normalize bounded stable identities;
+2. normalize the bounded stable identities needed for access and admission;
 3. apply sender/Conversation access policy;
 4. acquire the opaque durable admission lease;
-5. retrieve, validate, and stage permitted media under explicit quotas/trust;
-6. deliver exactly one complete matching message, or release only a confirmed
-   pre-handoff preparation failure.
+5. retrieve, validate, and stage permitted media under explicit quotas/trust,
+   then assemble the ordered content tuple;
+6. normalize the final public inbound envelope and deliver exactly one complete
+   matching message, or release only a confirmed pre-handoff preparation
+   failure.
 
 Access and durable duplicate rejection precede network download, filesystem
 staging, parsing, and Agent mutation. A no-lease result removes the transient
 fast-path key so a future provider redelivery can reclaim an abandoned lease.
 Provider acknowledgements/cursors remain adapter state and never replace SDK
 stable identity.
+
+The private `_normalize_inbound_message` helper in `ingress.py` is the single
+leaf-owned public-envelope boundary after runtime has assembled the ordered
+content tuple. It preserves direct required native message, Conversation, and
+sender identity coercion; the explicit reply override and native reply
+fallback; the selected `channel_id`, `input_error`, and `trace_id` metadata;
+and `_parse_datetime` ISO/`Z` parsing with its current fallback behavior. It
+does not update route context, assemble or reorder text and attachments, run
+admission, retrieve or decrypt provider media, or acknowledge a provider.
+Those mechanics remain in their existing runtime and adapter owners for later
+focused slices.
 
 ## Capacity, trust, and recovery
 
@@ -51,10 +65,11 @@ shared value before admission and media work.
 
 The obsolete provider-native access module is not a compatibility facade:
 access policy is an internal owning-leaf contract, so repository callers use
-the Interaction path directly. Other shared ingress mechanics remain
-interleaved in Channel runtime/native helpers for later mechanical slices.
-Platform-specific authentication, retrieval/decryption, and acknowledgement
-remain under adapters.
+the Interaction path directly. Runtime still owns route-context updates and
+content/attachment assembly, while it invokes the ingress-owned public
+identity/time/metadata envelope helper. Admission handoff sequencing remains
+in runtime for a later mechanical slice. Platform-specific authentication,
+retrieval/decryption, and acknowledgement remain under adapters.
 
 `ingress_security.py` owns the private Windows staging-path DACL helper. On
 Windows it resolves the current process user SID and replaces each staged file

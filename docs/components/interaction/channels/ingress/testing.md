@@ -5,6 +5,9 @@ Required scenarios:
 - authentication and allow/deny policy precede media/network/filesystem work;
 - all native identity fields are stable, bounded, and normalized without text
   or timestamp idempotency fallbacks;
+- public inbound normalization preserves stable native message, Conversation,
+  sender, and reply identity, created-at parsing/fallback, selected metadata,
+  and text-before-attachments content ordering;
 - durable completed/in-flight duplicates stop before preparation;
 - preparation failure releases only its owned lease, while stale ownership
   cannot hand off or release a replacement claim;
@@ -25,6 +28,14 @@ unknown modes. The four Channel suites prove provider configuration uses the
 same owner and access still precedes admission/media work. Admission,
 media/restart, queue, and shutdown evidence remains in the native and vertical
 suites until those mechanics move in later focused slices.
+
+The same focused module covers the private ingress envelope helper and
+datetime parser: explicit reply overrides, native reply fallback, selected
+metadata, stable identity coercion, ordered content supplied by runtime, valid
+ISO/`Z` timestamps, and absent or malformed timestamp fallback. Runtime and
+provider suites continue proving that the helper is invoked without changing
+route-context updates, admission handoff, native retrieval/decryption, or
+acknowledgement behavior.
 
 Focused tests also lock the leaf-internal inbound attachment tuple/defaults;
 provider and vertical suites continue proving normalization into the public

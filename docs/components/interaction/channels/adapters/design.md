@@ -24,7 +24,10 @@ upload/download/decryption/acknowledgement, URL rules, QR/token state, rate
 limit/response mapping, and diagnostic worker facts.
 
 `runtime.py` owns the common native-transport wrapper and `channel_from_config`
-factory inside this leaf. Public `OutboundMessage` and `AttachmentContent`
+factory inside this leaf. Public inbound identity/time/selected-metadata
+normalization belongs to Interaction ingress; runtime invokes that leaf-owned
+envelope helper after retaining route-context updates and ordered
+text/attachment assembly. Public `OutboundMessage` and `AttachmentContent`
 conversion to leaf-internal outbound DTOs belongs to outbound-delivery; the
 runtime invokes those leaf-owned conversions around the native call while
 retaining only native send orchestration and the common transport factory. The
