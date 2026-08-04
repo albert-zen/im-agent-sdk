@@ -62,7 +62,7 @@ PYTHONPATH=src:tests python -m unittest \
   tests.test_gateway_vertical_slice -v
 ```
 
-`test_package_independence.py` additionally guards package metadata, lockfile,
+`tests/engineering/test_release.py` additionally guards package metadata, lockfile,
 CI, and `src/imagent` against reintroducing a consumer-package dependency.
 Release validation builds the wheel and constructs every adapter in clean
 environments with only its declared extra; each native clean-wheel case also

@@ -703,7 +703,7 @@ components:
       - src/imagent/__init__.py
       - src/imagent/contracts/__init__.py
       - src/imagent/py.typed
-      - tests/test_package_independence.py
+      - tests/engineering/test_release.py
     docs:
       - docs/engineering/release/design.md
       - docs/engineering/release/testing.md

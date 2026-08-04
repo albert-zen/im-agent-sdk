@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 DEPENDENCY_BOUNDARY_PATHS = (
     ROOT / "pyproject.toml",
     ROOT / "uv.lock",
@@ -20,6 +20,15 @@ def _is_dependency_boundary_text(path: Path) -> bool:
 
 
 class PackageIndependenceTests(unittest.TestCase):
+    def test_release_mirror_has_one_owner_and_no_historical_module(self) -> None:
+        expected = ROOT / "tests" / "engineering" / "test_release.py"
+        self.assertTrue(expected.is_file())
+        self.assertFalse((ROOT / "tests" / "test_package_independence.py").exists())
+        self.assertEqual(
+            set((ROOT / "tests").rglob("test_release.py")),
+            {expected},
+        )
+
     def test_sdk_dependency_graph_has_no_consumer_package_reference(self) -> None:
         paths = list(DEPENDENCY_BOUNDARY_PATHS)
         for root in DEPENDENCY_BOUNDARY_TREES:
