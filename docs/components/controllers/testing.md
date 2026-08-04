@@ -11,4 +11,6 @@ The current broad implementation is still exercised by
 `tests/test_slash_controller.py` and the typed Gateway/Application suites named
 by those leaf documents. The machine-readable
 [component map](../component-map.yml) records the finite migration to mirrored
-`tests/interaction/controllers/` paths.
+`tests/interaction/controllers/` paths. Public-path cleanup also requires the
+formal Interaction facade identity/type-hint checks and clean-process evidence
+that `imagent.controllers` is absent and unimportable.

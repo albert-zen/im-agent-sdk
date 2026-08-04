@@ -37,7 +37,6 @@ from imagent.contracts import (
     UserInputRequest,
     UserInputResponse,
 )
-from imagent.controllers import MarkdownRequestPresenter
 from imagent.events import EventStreamReset
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence.memory import (
@@ -45,6 +44,7 @@ from imagent.gateway.persistence.memory import (
     InMemoryProjectionRouteRepository,
     InMemoryRequestCorrelationRepository,
 )
+from imagent.interaction.controllers import MarkdownRequestPresenter
 from imagent.testing import FakeChannelAdapter
 
 

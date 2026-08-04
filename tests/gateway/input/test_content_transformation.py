@@ -18,7 +18,6 @@ from imagent.contracts import (
     TextContent,
     derive_client_message_id,
 )
-from imagent.controllers import SlashController
 from imagent.diagnostics import InboundContentTransformFailureCode
 from imagent.gateway import (
     GatewayExtensions,
@@ -35,6 +34,7 @@ from imagent.gateway.input.content_transformation import (
 )
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
+from imagent.interaction.controllers import SlashController
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

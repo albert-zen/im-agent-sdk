@@ -42,7 +42,6 @@ from imagent.contracts import (
     TurnReplyCorrelation,
     TurnReplyCorrelationPolicy,
 )
-from imagent.controllers import ControllerActions
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import DeliveryCoordinator, DeliveryCoordinatorConfig
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
@@ -52,6 +51,7 @@ from imagent.gateway.persistence.memory import (
 )
 from imagent.gateway.presentation import OutboundPresentationContext
 from imagent.gateway.projection import derive_projection_delivery_id
+from imagent.interaction.controllers import ControllerActions
 from imagent.projection_runtime import TurnAcceptanceBufferOverflow
 from imagent.projections import (
     ProjectionWorkerState,

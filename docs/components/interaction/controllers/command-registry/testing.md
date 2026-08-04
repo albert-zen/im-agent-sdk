@@ -43,7 +43,11 @@ Required scenarios:
 - presentation/delivery failure after an effect cannot invoke the handler a
   second time;
 - omission of the registry/controller preserves existing ordinary input and
-  common-command behavior counterexamples remain explicit.
+  common-command behavior counterexamples remain explicit;
+- a clean process/import-order check proves the historical
+  `imagent.controllers` package is absent and unimportable while every
+  `imagent.interaction.controllers` registry export retains exact identity and
+  runtime type hints.
 
 The implementation slice adds
 `tests/interaction/controllers/test_registry.py`, focused Gateway claim/replay

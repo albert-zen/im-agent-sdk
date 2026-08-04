@@ -14,7 +14,6 @@ from imagent.contracts import (
     ProjectMode,
     TextContent,
 )
-from imagent.controllers import register_common_commands
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.interaction.controllers import (
@@ -26,6 +25,7 @@ from imagent.interaction.controllers import (
     CommandRegistryLimits,
     CommandResult,
     ControllerActions,
+    register_common_commands,
 )
 from imagent.interaction.messages import InboundMessage
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter

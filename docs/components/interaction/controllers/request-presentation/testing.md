@@ -22,8 +22,10 @@ Required scenarios:
   request state;
 - reconnect without authoritative pending-request replay never reconstructs a
   request from Gateway correlation;
-- mechanical moves preserve exact public object identity and leave no second
-  implementation.
+- mechanical moves preserve exact formal-facade object identity and runtime
+  type hints and leave no second implementation;
+- a clean process cannot discover or import `imagent.controllers` before or
+  after importing the formal Interaction facade.
 
 Focused validation currently includes:
 
@@ -34,9 +36,9 @@ PYTHONPATH=src python -m unittest \
   tests.test_gateway_operations -v
 ```
 
-The physical extraction places focused rendering/security and exact-owner
-identity coverage in
-`tests/interaction/controllers/test_request_presentation.py`. Request routing,
-delivery authorization, and reconnect cases remain with their
-Gateway/Application owners. Both the owning Interaction import and the finite
-`imagent.controllers` facade must resolve to the same public objects.
+The physical extraction places focused rendering/security, exact-owner identity,
+runtime-hint, and historical-path import-order coverage in
+`tests/interaction/controllers/test_request_presentation.py` and the Controller
+contract suite. Request routing, delivery authorization, and reconnect cases
+remain with their Gateway/Application owners. Only the owning Interaction
+facade is a supported import surface.
