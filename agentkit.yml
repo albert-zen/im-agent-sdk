@@ -247,10 +247,12 @@ components:
       - src/imagent/request_projection_runtime.py
       - src/imagent/projections.py
       - src/imagent/gateway/projection/__init__.py
+      - src/imagent/gateway/projection/checkpoints.py
       - src/imagent/gateway/projection/recovery.py
       - tests/test_event_fanout.py
       - tests/test_projection_hardening.py
       - tests/test_projection_routing.py
+      - tests/gateway/projection/test_checkpoints.py
       - tests/gateway/projection/test_recovery.py
     docs:
       - docs/components/gateway/projection/README.md

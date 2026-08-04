@@ -47,10 +47,12 @@ routes scan only bounded authoritative pages toward their opaque boundary;
 missing/expired boundaries become explicit degraded recovery, not a full
 archive scan.
 
-Current logic is split between `projections.py` and `projection_routes.py`
-alongside routing and delivery orchestration. The target is
-`gateway/projection/checkpoints.py`; persistence continues to own the passive
-route record and its atomic repository implementation.
+Stable delivery-ID derivation lives in `gateway/projection/checkpoints.py`.
+The `imagent.gateway.projection` facade re-exports the exact owner function;
+`imagent.projections` does not retain a compatibility symbol. Checkpoint CAS,
+route interaction, and delivery orchestration remain split between
+`projections.py` and `projection_routes.py`. Persistence continues to own the
+passive route record and its atomic repository implementation.
 
 - [ADR 0007](../../../../decisions/0007-projection-lifecycle-and-delivery-boundaries.md)
 - [ADR 0015](../../../../decisions/0015-typed-extension-seams-and-composition.md)

@@ -566,13 +566,13 @@ components:
     outputs: [advanced or conflicting checkpoint]
     public_contracts: [derive_projection_delivery_id]
     public_exports:
-      current: [imagent.projections:derive_projection_delivery_id]
+      current: [imagent.gateway.projection:derive_projection_delivery_id]
       target: [imagent.gateway.projection:derive_projection_delivery_id]
-    dependencies: [gateway.persistence.repository-contracts, gateway.delivery.coordination]
+    dependencies: [interaction.messages, applications.application-contract, gateway.persistence.repository-contracts, gateway.delivery.coordination]
     state_recovery: Completed idempotency converges lagging CAS during authoritative recovery; in_flight never advances.
-    current_code: [src/imagent/projections.py, src/imagent/projection_routes.py]
+    current_code: [src/imagent/gateway/projection/checkpoints.py, src/imagent/projections.py, src/imagent/projection_routes.py]
     target_code: [src/imagent/gateway/projection/checkpoints.py]
-    current_tests: [tests/test_projection_hardening.py, tests/test_projection_routing.py, tests/test_storage.py]
+    current_tests: [tests/gateway/projection/test_checkpoints.py, tests/test_projection_hardening.py, tests/test_projection_routing.py, tests/test_storage.py]
     target_tests: [tests/gateway/projection/test_checkpoints.py]
     authoritative_docs: [docs/components/gateway/projection/checkpoints/design.md, docs/components/gateway/projection/checkpoints/testing.md, docs/components/gateway/persistence/state-contracts/design.md]
     adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -1396,6 +1396,9 @@ structural_status:
     - path: src/imagent/gateway/input/__init__.py
       owner: gateway.input.failure-presentation
       rationale: Gateway input facade re-exports exact I1 and I2 public contracts from their focused implementations without retaining historical modules.
+    - path: src/imagent/gateway/projection/__init__.py
+      owner: gateway.projection.recovery
+      rationale: Gateway projection facade re-exports exact public contracts from focused checkpoint and recovery leaves without implementing either leaf.
     - path: src/imagent/interaction/controllers/__init__.py
       owner: interaction.controllers.controller-contract
       rationale: Target Interaction Controller facade; each public symbol delegates to its owning leaf and no implementation lives here.

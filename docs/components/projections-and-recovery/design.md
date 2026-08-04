@@ -47,6 +47,12 @@ The focused recovery implementation now lives in
 absent; the remaining aggregate runtime files retain only their documented
 observation, routing, and request-correlation responsibilities.
 
+The stable completion delivery-ID derivation now lives in
+`gateway/projection/checkpoints.py` and is exactly re-exported through
+`imagent.gateway.projection`. The historical `imagent.projections` symbol is
+absent; its remaining module retains the documented projection values and
+delivery orchestration, including checkpoint compare-and-swap sequencing.
+
 Typed interactive requests share route selection and per-route delivery
 serialization with message projection, but they do not advance transcript
 checkpoints. A Request Presenter produces one stable outbound delivery per

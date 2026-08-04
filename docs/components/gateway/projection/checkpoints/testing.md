@@ -17,6 +17,10 @@ Checkpoint conformance must prove:
 - opaque item IDs are never ordered to infer advancement from duplicate live
   observations.
 
-Current evidence: `tests/test_projection_hardening.py`,
-`tests/test_projection_routing.py`, and `tests/test_storage.py`. The target
-mirrored suite is `tests/gateway/projection/test_checkpoints.py`.
+Focused derivation/ownership evidence is
+`tests/gateway/projection/test_checkpoints.py`; it proves stable output for
+the same stable identities, exact Gateway projection facade identity, and the
+absence of the historical `imagent.projections` symbol. Cross-leaf checkpoint
+evidence remains in `tests/test_projection_hardening.py`,
+`tests/test_projection_routing.py`, and `tests/test_storage.py` while their
+focused mechanical moves are pending.

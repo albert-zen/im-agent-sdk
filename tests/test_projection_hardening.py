@@ -50,11 +50,11 @@ from imagent.gateway.persistence.memory import (
     InMemoryProjectionRouteRepository,
 )
 from imagent.gateway.presentation import OutboundPresentationContext
+from imagent.gateway.projection import derive_projection_delivery_id
 from imagent.projection_runtime import TurnAcceptanceBufferOverflow
 from imagent.projections import (
     ProjectionWorkerState,
     derive_live_projection_delivery_id,
-    derive_projection_delivery_id,
     derive_projection_route_id,
     derive_turn_reply_correlation_id,
     immutable_projection_metadata,
