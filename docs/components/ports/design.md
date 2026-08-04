@@ -21,9 +21,14 @@ The remaining Ports surface owns:
   automatically;
 - `BindingRepository`, `ProjectionRouteRepository`, and
   `IdempotencyRepository` interfaces;
-- `DeliveryAuthorizer` and `DeliverySubmissionRepository` interfaces for
-  scoped proactive delivery, immutable route snapshots, and typed outcomes;
+- `DeliverySubmissionRepository` interface for immutable route snapshots and
+  typed outcomes;
 - callback aliases that have not yet moved to their owner-typed seam.
+
+The Gateway `gateway.delivery.proactive-authorization` leaf owns the
+`DeliveryAuthorizer` Port, `DeliveryPrincipal`, and principal validation.
+`adapters.py` keeps only an exact compatibility re-export for callers that
+still use the historical Ports surface.
 
 Interaction's Channel contract owns `MessageHandler`, the optional structural
 `ChannelStartupConfigurationValidator`, and the opaque `InboundAdmission`
@@ -94,9 +99,10 @@ longer defined beside the process-local implementation. The historical Ports
 module still owns the `BindingRepository` Protocol until its complete focused
 extraction; this mechanical split does not change that Protocol.
 
-`DeliveryAuthorizer.authenticate` converts an opaque untrusted credential into
-a trusted `DeliveryPrincipal`; the caller cannot declare its own effective
-scope. `DeliverySubmissionRepository.reserve_delivery_submission` is atomic
+`DeliveryAuthorizer.authenticate`, now owned by Gateway's proactive
+authorization leaf, converts an opaque untrusted credential into a trusted
+`DeliveryPrincipal`; the caller cannot declare its own effective scope.
+`DeliverySubmissionRepository.reserve_delivery_submission` is atomic
 and stores identity/snapshots/outcomes only. It is intentionally not a queue,
 content store, or retry scheduler. A bounded process-local implementation may
 raise the typed `DeliverySubmissionCapacityError` only for a new identity and

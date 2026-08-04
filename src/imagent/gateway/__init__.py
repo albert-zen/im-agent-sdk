@@ -7,11 +7,14 @@ import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from functools import partial
+from typing import TYPE_CHECKING
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from .delivery.proactive_authorization import DeliveryAuthorizer
 
 from ..adapters import (
     AgentApplicationAdapter,
-    DeliveryAuthorizer,
     DeliverySubmissionCapacityError,
     DeliverySubmissionConflict,
     IdempotencyClaimStatus,
@@ -1329,3 +1332,12 @@ def _contract_error(error: Exception) -> ContractError:
 
 def _operation_id(message: InboundMessage, operation_type: str) -> str:
     return f"imagent:operation:{message.message_id}:{operation_type}"
+
+
+def __getattr__(name: str) -> object:
+    if name == "DeliveryAuthorizer":
+        from .delivery.proactive_authorization import DeliveryAuthorizer
+
+        globals()[name] = DeliveryAuthorizer
+        return DeliveryAuthorizer
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

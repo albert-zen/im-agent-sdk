@@ -1,3 +1,11 @@
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..gateway.delivery.proactive_authorization import (
+        DeliveryPrincipal,
+        validate_delivery_principal,
+    )
+
 from ..applications.capabilities import (
     ApplicationCapabilities,
     EventSequenceScope,
@@ -92,7 +100,6 @@ from .delivery import (
     MAX_DELIVERY_SUBMISSION_DESTINATIONS,
     ConversationDeliveryTarget,
     DeliveryIntent,
-    DeliveryPrincipal,
     DeliveryReservation,
     DeliveryRouteSnapshot,
     DeliverySubmissionOrigin,
@@ -109,7 +116,6 @@ from .delivery import (
     derive_delivery_target_fingerprint,
     derive_destination_delivery_id,
     validate_delivery_intent,
-    validate_delivery_principal,
     validate_delivery_route_snapshot,
     validate_delivery_submission_destination_count,
     validate_delivery_submission_record,
@@ -382,3 +388,16 @@ __all__ = [
     "validate_thread_ref",
     "validate_turn_reply_correlation",
 ]
+
+
+def __getattr__(name: str) -> object:
+    if name in {"DeliveryPrincipal", "validate_delivery_principal"}:
+        from ..gateway.delivery.proactive_authorization import (
+            DeliveryPrincipal,
+            validate_delivery_principal,
+        )
+
+        value = DeliveryPrincipal if name == "DeliveryPrincipal" else validate_delivery_principal
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

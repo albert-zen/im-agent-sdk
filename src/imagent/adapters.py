@@ -3,7 +3,12 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime
 from enum import StrEnum
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from .gateway.delivery.proactive_authorization import (
+        DeliveryAuthorizer as DeliveryAuthorizer,
+    )
 
 from .applications.events import AgentEvent
 from .contracts import (
@@ -14,7 +19,6 @@ from .contracts import (
     ApplicationOperationResult,
     ApplicationSummary,
     ConversationBinding,
-    DeliveryPrincipal,
     DeliveryReservation,
     DeliverySubmissionRecord,
     DeliverySubmissionState,
@@ -234,10 +238,6 @@ class IdempotencyRepository(Protocol):
     ) -> None: ...
 
 
-class DeliveryAuthorizer(Protocol):
-    async def authenticate(self, credential: str) -> DeliveryPrincipal: ...
-
-
 class DeliverySubmissionRepository(Protocol):
     async def get_delivery_submission(
         self,
@@ -290,3 +290,14 @@ class RequestCorrelationRepository(Protocol):
         conversation_ref: ConversationRef | None = None,
         older_than: datetime | None = None,
     ) -> int: ...
+
+
+def __getattr__(name: str) -> object:
+    if name == "DeliveryAuthorizer":
+        from .gateway.delivery.proactive_authorization import (
+            DeliveryAuthorizer,
+        )
+
+        globals()[name] = DeliveryAuthorizer
+        return DeliveryAuthorizer
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

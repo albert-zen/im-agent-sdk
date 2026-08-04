@@ -401,7 +401,8 @@ and either:
 - a `ThreadRouteDeliveryTarget`, optionally narrowed to one route.
 
 A Thread target reuses the configured projection policy. It may therefore
-resolve to several destinations under `all_observers`. Gateway authenticates
+resolve to several destinations under `all_observers`. Gateway's
+proactive-authorization leaf authenticates
 an opaque credential into a `DeliveryPrincipal` and checks the requested
 Thread or explicit Conversation scope before route resolution.
 

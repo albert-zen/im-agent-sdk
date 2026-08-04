@@ -74,13 +74,6 @@ class DeliveryIntent:
 
 
 @dataclass(frozen=True, slots=True)
-class DeliveryPrincipal:
-    principal_id: str
-    allowed_threads: tuple[ThreadRef, ...] = ()
-    allowed_conversations: tuple[ConversationRef, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
 class DeliveryRouteSnapshot:
     conversation_ref: ConversationRef
     thread_ref: ThreadRef | None = None
@@ -184,18 +177,6 @@ def validate_delivery_intent(intent: DeliveryIntent) -> None:
             )
         else:
             raise ContractViolation(f"content[{index}] has an unsupported attachment source")
-
-
-def validate_delivery_principal(principal: DeliveryPrincipal) -> None:
-    require_identifier(principal.principal_id, "principal_id")
-    if len(set(principal.allowed_threads)) != len(principal.allowed_threads):
-        raise ContractViolation("allowed_threads must be unique")
-    if len(set(principal.allowed_conversations)) != len(principal.allowed_conversations):
-        raise ContractViolation("allowed_conversations must be unique")
-    for thread_ref in principal.allowed_threads:
-        validate_thread_ref(thread_ref)
-    for conversation_ref in principal.allowed_conversations:
-        _validate_conversation_ref(conversation_ref)
 
 
 def validate_delivery_route_snapshot(snapshot: DeliveryRouteSnapshot) -> None:

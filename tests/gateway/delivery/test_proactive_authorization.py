@@ -3,19 +3,35 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import unittest
+from typing import get_type_hints
 
 import imagent.adapters as adapter_facade
 import imagent.contracts as contract_facade
+import imagent.contracts.delivery as historical_delivery_contracts
+import imagent.gateway as gateway_facade
 import imagent.gateway.delivery as delivery_facade
 from imagent.gateway.delivery import proactive_authorization as authorization_owner
 
 
 class ProactiveAuthorizationOwnershipTests(unittest.TestCase):
     def test_facades_use_exact_owner_objects_and_old_symbols_are_absent(self) -> None:
+        self.assertEqual(
+            authorization_owner.DeliveryAuthorizer.__module__,
+            "imagent.gateway.delivery.proactive_authorization",
+        )
+        self.assertEqual(
+            authorization_owner.DeliveryPrincipal.__module__,
+            "imagent.gateway.delivery.proactive_authorization",
+        )
+        self.assertEqual(
+            authorization_owner.validate_delivery_principal.__module__,
+            "imagent.gateway.delivery.proactive_authorization",
+        )
         self.assertIs(
             delivery_facade.DeliveryAuthorizer,
             authorization_owner.DeliveryAuthorizer,
         )
+        self.assertIs(gateway_facade.DeliveryAuthorizer, authorization_owner.DeliveryAuthorizer)
         self.assertIs(adapter_facade.DeliveryAuthorizer, authorization_owner.DeliveryAuthorizer)
         self.assertIs(
             delivery_facade.DeliveryPrincipal,
@@ -34,7 +50,18 @@ class ProactiveAuthorizationOwnershipTests(unittest.TestCase):
             delivery_facade.ScopedDeliveryAuthorizer,
             authorization_owner.ScopedDeliveryAuthorizer,
         )
+        self.assertFalse(hasattr(historical_delivery_contracts, "DeliveryPrincipal"))
+        self.assertFalse(hasattr(historical_delivery_contracts, "validate_delivery_principal"))
         self.assertIsNone(importlib.util.find_spec("imagent.proactive_delivery"))
+
+    def test_public_principal_annotations_resolve_at_runtime(self) -> None:
+        hints = get_type_hints(authorization_owner.DeliveryPrincipal)
+
+        self.assertEqual(hints["allowed_threads"], tuple[contract_facade.ThreadRef, ...])
+        self.assertEqual(
+            hints["allowed_conversations"],
+            tuple[contract_facade.ConversationRef, ...],
+        )
 
 
 class ScopedDeliveryAuthorizerTests(unittest.IsolatedAsyncioTestCase):

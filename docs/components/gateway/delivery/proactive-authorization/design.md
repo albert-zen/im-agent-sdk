@@ -14,6 +14,11 @@ implementation, and fixed authorization failure. It does not own credential
 persistence, HTTP authentication policy, IM admission, Agent sandbox policy,
 route selection, or delivery execution.
 
+The contract and Port definitions physically live in this leaf. The historical
+`imagent.adapters` and `imagent.contracts` surfaces are compatibility facades
+that re-export these exact objects while their broader splits are pending;
+they do not retain a second definition or alternate authorization path.
+
 ## Reference registry
 
 The reference registry is explicit and instance-local. `issue` validates the
@@ -35,7 +40,9 @@ Channel/Application state.
 `DeliveryAuthorizer`, `DeliveryPrincipal`, `ScopedDeliveryAuthorizer`, and
 `validate_delivery_principal`. Existing formal `imagent.adapters` and
 `imagent.contracts` exports remain exact aliases while their broader Port and
-state-contract splits are pending; no second implementation is retained.
+state-contract splits are pending; no second implementation is retained. The
+Gateway authorizer is the only code that owns the reference registry and its
+fixed authorization failure.
 
 ## Authority
 

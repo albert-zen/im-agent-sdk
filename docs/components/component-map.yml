@@ -738,15 +738,15 @@ components:
     public_exports:
       current: [imagent.gateway.delivery:DeliveryAuthorizer, imagent.gateway.delivery:DeliveryPrincipal, imagent.gateway.delivery:ScopedDeliveryAuthorizer, imagent.gateway.delivery:validate_delivery_principal, imagent.adapters:DeliveryAuthorizer, imagent.contracts:DeliveryPrincipal, imagent.contracts:validate_delivery_principal]
       target: [imagent.gateway.delivery:DeliveryAuthorizer, imagent.gateway.delivery:DeliveryPrincipal, imagent.gateway.delivery:ScopedDeliveryAuthorizer, imagent.gateway.delivery:validate_delivery_principal]
-    dependencies: [applications.application-contract]
+    dependencies: [interaction.messages, interaction.operations, applications.application-contract]
     state_recovery: Reference credentials are process-local; consumers own credential storage and revocation recovery.
-    current_code: [src/imagent/adapters.py, src/imagent/contracts/delivery.py, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/proactive_authorization.py]
+    current_code: [src/imagent/adapters.py, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/proactive_authorization.py]
     target_code: [src/imagent/gateway/delivery/proactive_authorization.py]
     current_tests: [tests/gateway/delivery/test_proactive_authorization.py, tests/gateway/delivery/test_proactive_delivery.py]
     target_tests: [tests/gateway/delivery/test_proactive_authorization.py]
     authoritative_docs: [docs/components/gateway/delivery/proactive-authorization/design.md, docs/components/gateway/delivery/proactive-authorization/testing.md]
     adrs: [docs/decisions/0009-proactive-delivery-routing.md]
-    gaps: [formal Port and principal value definitions remain in their existing shared modules until their focused owner splits]
+    gaps: [imagent.adapters and imagent.contracts retain exact compatibility aliases while the broader Ports and state-contract facades converge; unrelated delivery values remain in contracts/delivery.py]
 
   gateway.delivery.proactive-delivery:
     id: gateway.delivery.proactive-delivery
@@ -1451,13 +1451,13 @@ structural_status:
       reason: Canonical events and interactive request/response/resolution values share one current schema document.
     src/imagent/adapters.py:
       owners: [interaction.channels.channel-contract, gateway.delivery.proactive-authorization, gateway.persistence.repository-contracts, applications.application-contract]
-      reason: Channel/admission, proactive authorization, repository, and Application Ports share one historical module.
+      reason: Channel/admission, the exact proactive-authorization compatibility Port, repository, and Application Ports share one historical module.
     src/imagent/contracts/model.py:
       owners: [interaction.messages, gateway.persistence.state-contracts, applications.application-contract, applications.requests]
       reason: The language-neutral model is semantically correct but physically crosses remaining target layers.
     src/imagent/contracts/delivery.py:
-      owners: [interaction.media, gateway.delivery.submissions, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.persistence.state-contracts]
-      reason: Media identity, proactive intent/authorization/results, and submission identity share one contract module.
+      owners: [interaction.media, gateway.delivery.submissions, gateway.delivery.proactive-delivery, gateway.persistence.state-contracts]
+      reason: Media identity, proactive intent/results, submission identity, and passive delivery state share one contract module after authorization moved to its Gateway leaf.
     src/imagent/contracts/errors.py:
       owners: [applications.application-contract, applications.requests]
       reason: Dispatched-input ambiguity and request lifecycle errors remain distinct Applications-owned values after common operation error projection moved to Interaction.
