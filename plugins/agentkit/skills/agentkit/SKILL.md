@@ -42,9 +42,11 @@ Always treat these as global authority:
 - `docs/ARCHITECTURE.md`
 - `docs/decisions/README.md`
 
-Then read the affected component's `design.md` and `testing.md` under
-`docs/components/`. Contracts also have `protocol.md`; native adapters have
-focused pages under their component's `adapters/` directory.
+Then read the affected authority's complete `design.md` and `testing.md`:
+runtime component leaves live under `docs/components/`, while repository
+support leaves live under `docs/engineering/`. Contracts also have
+`protocol.md`; native adapters have focused pages under their component's
+`adapters/` directory.
 
 `docs/README.md` maps common code paths to their docs and tests. `agentkit.yml`
 is the executable change-impact mapping.

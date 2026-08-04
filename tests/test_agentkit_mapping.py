@@ -190,7 +190,20 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/test_application_presentation.py": {"application-adapters-appserver"},
             "tests/test_t3_client.py": {"application-adapters-t3"},
             "tests/test_adapter_contracts.py": {"testing-and-conformance"},
-            "tests/test_package_independence.py": {"repository-maintainability"},
+            "tests/test_package_independence.py": {"release"},
+        }
+        for path, owners in expected.items():
+            with self.subTest(path=path):
+                self.assertEqual(_components_for(path), owners)
+
+    def test_engineering_leaf_docs_route_to_their_owner(self) -> None:
+        expected = {
+            "docs/engineering/README.md": {"repository-maintainability"},
+            "docs/engineering/testing-and-conformance/design.md": {"testing-and-conformance"},
+            "docs/engineering/schema-conformance/design.md": {"schema-conformance"},
+            "docs/engineering/repository-maintainability/design.md": {"repository-maintainability"},
+            "docs/engineering/agentkit/design.md": {"agentkit"},
+            "docs/engineering/release/design.md": {"release"},
         }
         for path, owners in expected.items():
             with self.subTest(path=path):
@@ -198,6 +211,9 @@ class AgentKitMappingTests(unittest.TestCase):
 
     def test_global_intent_changes_have_cross_component_impact(self) -> None:
         self.assertEqual(_components_for("docs/VISION.md"), PRODUCT_COMPONENTS)
+        self.assertTrue(
+            {"schema-conformance", "agentkit", "release"} <= _components_for("docs/ARCHITECTURE.md")
+        )
         self.assertEqual(
             _components_for("docs/migrations/imcodex-followup-blockers.md"),
             {

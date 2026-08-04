@@ -68,7 +68,8 @@ Start design/maintenance work from:
 - [Vision](docs/VISION.md);
 - [Architecture](docs/ARCHITECTURE.md);
 - [accepted decisions](docs/decisions/README.md);
-- the affected component under `docs/components/`.
+- the affected runtime component under `docs/components/`; or
+- the affected repository-support leaf under `docs/engineering/`.
 
 ## Development
 

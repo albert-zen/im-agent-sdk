@@ -366,6 +366,8 @@ IM admission. Attachments cannot grant shared-filesystem trust.
 - [accepted ADRs](decisions/README.md): reviewed cross-component decisions.
 - `components/<layer>/<leaf>/`: local design, testing, and focused supporting
   documents where needed.
+- `engineering/<leaf>/`: repository-support design and testing for conformance,
+  schemas, maintainability, AgentKit, and release mechanics.
 - `components/component-map.yml`: machine-readable ownership, current/target
   paths, exports, tests, ADRs, and structural gaps.
 - [Reuse](REUSE.md): provenance and transfer constraints.

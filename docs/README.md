@@ -11,6 +11,8 @@ Start with:
 4. The approved [three-layer component tree](components/README.md) and its
    machine-readable [component map](components/component-map.yml).
 5. The affected component's design and testing documents below.
+6. [Engineering support](engineering/README.md) for conformance, schema,
+   maintainability, AgentKit, and release mechanics.
 
 `REUSE.md` owns source provenance and extraction rules. `ROADMAP.md` contains
 future or unresolved work and is not authority for current runtime behavior.
@@ -46,9 +48,11 @@ separates SDK ownership work from the later IMCodex consumer migration.
 | `channels/**` | [Interaction Channel subtree](components/interaction/channels/README.md), affected leaf design/testing docs, and applicable native adapter page | Channel contract, ingress, outbound-delivery, and native seam tests |
 | `applications/**` | [Applications navigation](components/applications/README.md), the affected common leaf design/testing page, then the applicable native adapter page | adapter contract, native client, event, recovery tests |
 | `diagnostics.py` and diagnostic providers | [diagnostics design](components/diagnostics/design.md), [testing](components/diagnostics/testing.md) | redaction, bounded-cardinality, reconnect/overflow, and aggregate health tests |
-| `testing/**` | [conformance design](components/testing-and-conformance/design.md), [testing](components/testing-and-conformance/testing.md) | adapter contract kit tests |
-| `schemas/v1/**`, `scripts/validate_schemas.py` | [contracts protocol](components/contracts/protocol.md), [repository testing](components/repository-maintainability/testing.md) | schema validator and contract tests |
-| AgentKit, CI, root guidance, docs navigation | [repository maintainability design](components/repository-maintainability/design.md), [testing](components/repository-maintainability/testing.md) | AgentKit doctor/check and mapping tests |
+| `testing/**` | [conformance design](engineering/testing-and-conformance/design.md), [testing](engineering/testing-and-conformance/testing.md) | adapter contract kit tests |
+| `schemas/v1/**`, `scripts/validate_schemas.py` | [schema-conformance design](engineering/schema-conformance/design.md), [testing](engineering/schema-conformance/testing.md), and [contracts protocol](components/contracts/protocol.md) | schema validator and contract tests |
+| AgentKit lifecycle and routing | [AgentKit design](engineering/agentkit/design.md), [testing](engineering/agentkit/testing.md) | AgentKit doctor/check and review guidance |
+| CI, root guidance, docs navigation, and maintainability budgets | [repository maintainability design](engineering/repository-maintainability/design.md), [testing](engineering/repository-maintainability/testing.md) | mapping, link, inventory, and maintainability checks |
+| `pyproject.toml`, package facades, `py.typed`, wheels, clean install | [release design](engineering/release/design.md), [testing](engineering/release/testing.md) | build and isolated wheel smoke |
 
 Use `python scripts/agentkit.py orient --path <path>` for the executable
 version of this routing. `agentkit.yml` intentionally maps global Vision,

@@ -1,33 +1,11 @@
-# Testing and conformance testing
+# Transitional testing and conformance testing navigation
 
-The contract kit tests itself against fake adapters, then runs against Codex,
-Zen, T3, and the available Channel seam.
+Use the authoritative focused pages:
 
-Run:
+- [design](../../engineering/testing-and-conformance/design.md) for ownership,
+  conformance thresholds, fixture boundaries, and extension evidence;
+- [testing](../../engineering/testing-and-conformance/testing.md) for focused
+  commands, the evidence matrix, adapter additions, and full gates.
 
-```sh
-PYTHONPATH=src python -m unittest tests.test_adapter_contracts -v
-```
-
-The full suite remains the acceptance check:
-
-```sh
-PYTHONPATH=src python -m unittest discover -s tests -v
-python -m compileall -q src tests scripts
-python scripts/validate_schemas.py
-ruff check src tests scripts
-ruff format --check src tests scripts
-pyright src tests scripts
-```
-
-When adding a new adapter:
-
-1. document native source of truth and capability limits;
-2. pass the common contract kit without false fallback claims;
-3. add focused native mapping/recovery tests;
-4. add a second-integration proof before generalizing new semantics.
-
-When adding an ADR 0015 seam, also run its stage owner tests and one valid
-counterexample with the extension absent. Replay tests distinguish I1
-pre-dispatch re-entry, A1 authoritative recovery, O1 idempotent suppression,
-and non-durable O2 observation.
+The former commands and adapter obligations have moved there intact. This
+page is a compatibility navigation stub, not an additional test authority.
