@@ -1362,7 +1362,7 @@ components:
     state_recovery: Durable config is tracked; .agentkit runtime receipts/logs remain ignored.
     current_code: [.agents/plugins/marketplace.json, agentkit.yml, plugins/agentkit/.codex-plugin/plugin.json, plugins/agentkit/hooks.json, plugins/agentkit/skills/agentkit/SKILL.md, scripts/agentkit, scripts/agentkit.cmd, scripts/agentkit.py]
     target_code: [.agents/plugins/marketplace.json, agentkit.yml, plugins/agentkit/.codex-plugin/plugin.json, plugins/agentkit/hooks.json, plugins/agentkit/skills/agentkit/SKILL.md, scripts/agentkit, scripts/agentkit.cmd, scripts/agentkit.py]
-    current_tests: [tests/test_agentkit_mapping.py]
+    current_tests: [tests/engineering/test_agentkit.py]
     target_tests: [tests/engineering/test_agentkit.py]
     authoritative_docs: [docs/engineering/agentkit/design.md, docs/engineering/agentkit/testing.md, plugins/agentkit/skills/agentkit/SKILL.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md]

@@ -660,7 +660,7 @@ components:
       - scripts/agentkit
       - scripts/agentkit.cmd
       - scripts/agentkit.py
-      - tests/test_agentkit_mapping.py
+      - tests/engineering/test_agentkit.py
     docs:
       - docs/engineering/agentkit/design.md
       - docs/engineering/agentkit/testing.md

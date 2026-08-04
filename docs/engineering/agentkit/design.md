@@ -45,6 +45,14 @@ mappings, or empty compatibility files to hide these limitations. Mapping may
 split one documentation responsibility into stable subcomponents when a code
 path should read only its applicable adapter page.
 
+## Executable test owner
+
+The complete AgentKit routing and component-map test mirror lives in
+`tests/engineering/test_agentkit.py`. The historical root module
+`tests/test_agentkit_mapping.py` is intentionally absent; it is not a
+compatibility facade and must not be recreated as an import shim. Release and
+package-independence tests remain owned by the release leaf.
+
 ## Lifecycle
 
 Substantial architecture, public-contract, state-model, cross-component,
