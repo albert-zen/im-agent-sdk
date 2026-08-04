@@ -15,8 +15,9 @@ This leaf owns:
   `GatewayOperationFailed`;
 - aggregate field, discriminant, identity, and postcondition validation;
 - typed dispatch and finite per-Conversation execution serialization;
-- delegation to the binding, projection-route, request-correlation, and
-  Application-operation owners through explicit typed methods or ports.
+- delegation to the binding, projection-route, and request-correlation owners
+  through explicit typed methods or ports. `ApplicationOperation` remains a
+  separate closed contract and is not a Gateway aggregate variant.
 
 The composition implementation is the private
 `_GatewayOperationExecutor`. It is not an accepted public contract and is not
@@ -75,11 +76,14 @@ a general durable operation log.
 ## Dependency boundary
 
 Gateway operations call explicit typed owner methods or ports for binding,
-projection-route, request-correlation, and Application operations. They do not
-receive a generic repository/context object and do not perform owner mutation
-or concrete validation. The projection-route implementation and policy remain
-in their next focused leaf; this owner invokes its typed route port and does
-not create a second route authority or observation worker. Interaction
+projection-route, and request-correlation. They do not dispatch
+`ApplicationOperation`, receive a generic repository/context object, or perform
+owner mutation or concrete validation. Root binding delegates may query
+Application truth through their existing typed root methods; that is binding
+composition, not Gateway aggregate dispatch. The projection-route
+implementation and policy remain in their next focused leaf; this owner
+invokes its typed route port and does not create a second route authority or
+observation worker. Interaction
 Controllers depend on exact public typed actions, never on this leaf's
 implementation or Gateway context.
 
