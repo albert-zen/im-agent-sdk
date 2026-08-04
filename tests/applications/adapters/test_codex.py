@@ -14,6 +14,7 @@ from imagent.applications.adapters.codex import (
 )
 from imagent.contracts import (
     AgentInput,
+    ApplicationInputDispatch,
     ApplicationInputOutcomeUnknown,
     AttachmentContent,
     CreateThread,
@@ -38,6 +39,7 @@ class _InputClient:
         self.local_image_epoch = local_image_epoch
         self.notification_handlers = []
         self.read_calls: list[tuple[str, bool]] = []
+        self.trace: list[str] = []
         self.started: list[dict[str, object]] = []
         self.created_threads: list[dict[str, object]] = []
         self.steered: list[dict[str, object]] = []
@@ -82,6 +84,7 @@ class _InputClient:
         *,
         include_turns: bool = False,
     ) -> dict[str, object]:
+        self.trace.append("read")
         self.read_calls.append((thread_id, include_turns))
         turns = (
             [{"id": self.active_turn_id, "status": "inProgress"}]
@@ -102,6 +105,7 @@ class _InputClient:
         text: str | None = None,
         **kwargs,
     ) -> dict[str, object]:
+        self.trace.append("start")
         self.started.append({"thread_id": thread_id, "text": text, **kwargs})
         return {"turn": {"id": "turn-started"}}
 
@@ -112,6 +116,7 @@ class _InputClient:
         text: str | None = None,
         **kwargs,
     ) -> dict[str, object]:
+        self.trace.append("steer")
         self.steered.append({"thread_id": thread_id, "turn_id": turn_id, "text": text, **kwargs})
         return {"turnId": turn_id}
 
@@ -352,6 +357,64 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
             TurnReplyCorrelationPolicy.PRESERVE_EXISTING,
         )
 
+    async def test_codex_steer_fence_precedes_exactly_one_native_steer(self) -> None:
+        client = _InputClient(active_turn_id="turn-active")
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            cwd="/repo",
+        )
+        dispatches: list[ApplicationInputDispatch] = []
+
+        async def before_dispatch(dispatch: ApplicationInputDispatch) -> None:
+            client.trace.append("fence")
+            dispatches.append(dispatch)
+
+        await adapter.send_input(
+            ThreadRef("codex-main", "thread-1"),
+            AgentInput(
+                client_message_id="message-fenced-steer",
+                content=(TextContent("continue"),),
+            ),
+            before_dispatch=before_dispatch,
+        )
+
+        self.assertEqual(client.trace, ["read", "fence", "steer"])
+        self.assertEqual(len(client.steered), 1)
+        self.assertEqual(client.started, [])
+        self.assertEqual(len(dispatches), 1)
+        self.assertIs(dispatches[0].disposition, InputDisposition.STEERED)
+        self.assertIs(
+            dispatches[0].correlation_policy,
+            TurnReplyCorrelationPolicy.PRESERVE_EXISTING,
+        )
+        self.assertEqual(dispatches[0].expected_turn_id, "turn-active")
+
+    async def test_codex_fence_failure_prevents_native_steer(self) -> None:
+        client = _InputClient(active_turn_id="turn-active")
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            cwd="/repo",
+        )
+
+        async def reject_dispatch(dispatch: ApplicationInputDispatch) -> None:
+            del dispatch
+            raise RuntimeError("fence rejected")
+
+        with self.assertRaisesRegex(RuntimeError, "fence rejected"):
+            await adapter.send_input(
+                ThreadRef("codex-main", "thread-1"),
+                AgentInput(
+                    client_message_id="message-rejected-steer",
+                    content=(TextContent("continue"),),
+                ),
+                before_dispatch=reject_dispatch,
+            )
+
+        self.assertEqual(client.steered, [])
+        self.assertEqual(client.started, [])
+
     async def test_active_turn_steering_can_be_disabled_by_deployment(self) -> None:
         client = _InputClient(active_turn_id="turn-active")
         adapter = CodexApplicationAdapter(
@@ -360,6 +423,11 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
             cwd="/repo",
             steer_active_turn=False,
         )
+        dispatches: list[ApplicationInputDispatch] = []
+
+        async def before_dispatch(dispatch: ApplicationInputDispatch) -> None:
+            client.trace.append("fence")
+            dispatches.append(dispatch)
 
         await adapter.send_input(
             ThreadRef("codex-main", "thread-1"),
@@ -367,11 +435,20 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
                 client_message_id="message-default-start",
                 content=(TextContent("continue"),),
             ),
+            before_dispatch=before_dispatch,
         )
 
+        self.assertEqual(client.trace, ["fence", "start"])
         self.assertEqual(client.read_calls, [])
         self.assertEqual(client.steered, [])
         self.assertEqual(len(client.started), 1)
+        self.assertEqual(len(dispatches), 1)
+        self.assertIs(dispatches[0].disposition, InputDisposition.STARTED)
+        self.assertIs(
+            dispatches[0].correlation_policy,
+            TurnReplyCorrelationPolicy.CREATE_NEW,
+        )
+        self.assertIsNone(dispatches[0].expected_turn_id)
 
     async def test_explicit_start_new_turn_bypasses_active_turn_discovery(self) -> None:
         client = _InputClient(active_turn_id="turn-active")

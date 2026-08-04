@@ -1576,4 +1576,4 @@ structural_status:
       reason: Pure binding, route, and Turn-correlation conversion shares the file with merge_projection_route, whose endpoint-conflict and checkpoint-preservation mutation policy belongs to the SQLite transaction owner.
     src/imagent/applications/adapters/appserver/_base.py:
       owners: [applications.adapters.codex, applications.adapters.zen]
-      reason: Private shared App Server application base and ordered native event normalization remain one implementation used by both concrete adapter leaves; no public aggregate facade is exposed.
+      reason: Private shared App Server base owns typed start/input preparation, verified local-image epochs, the common STARTED/CREATE_NEW fence with no expected Turn ID, native turn/start, and common ordered normalization; Codex alone owns steer enablement, active-Turn selection, STEERED/PRESERVE_EXISTING classification with the active Turn ID, and turn/steer, while Zen remains start-only. No public aggregate facade is exposed.

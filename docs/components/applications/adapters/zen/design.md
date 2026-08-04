@@ -31,7 +31,12 @@ The current formal export is `ZenApplicationAdapter` from the lazy
 preserves the same object identity and lazy import behavior. The private
 shared App Server base is an explicitly mapped two-owner split candidate under
 `imagent.applications.adapters.appserver._base`; it is not a public aggregate
-adapter API.
+adapter API. Its input path is truthful start-only behavior: the shared base
+owns typed text/image preparation, verified local-image epochs, the common
+typed pre-dispatch fence, `STARTED`/`CREATE_NEW` classification with no expected
+Turn ID, and native `turn/start`. It has no Codex steer configuration,
+active-Turn read, `STEERED`/`PRESERVE_EXISTING` classification, or native
+`turn/steer`.
 
 ## Dependencies, state, and recovery
 
@@ -39,10 +44,10 @@ Zen depends on Interaction messages/operations/media, common Applications
 contract/capabilities/events/operations/requests, four direct App Server
 leaves (client, mapping, requests, and diagnostics), and optional artifact
 materialization. Transport remains transitive through the App Server client.
-`prefer_active_turn` remains a new native start until Zen
-proves an equivalent steer mutation. A dispatched start with lost response is
-unknown, not an automatic retry. History is native recovery authority;
-connection reset and observation/materialization failure are explicit gaps.
+`prefer_active_turn` remains a new native start because Zen has no steer
+policy. A dispatched start with lost response is unknown, not an automatic
+retry. History is native recovery authority; connection reset and
+observation/materialization failure are explicit gaps.
 
 ## Current, target, and structural gap
 

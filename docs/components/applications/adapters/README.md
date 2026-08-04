@@ -63,6 +63,11 @@ The App Server transport, client, mapping, request, and diagnostics leaves are
 physically at their target paths. Codex and Zen have separate concrete modules
 with one explicitly mapped private two-owner base under the App Server subtree;
 no aggregate `imagent.applications.adapters.appserver` facade is introduced.
+The private base shares typed start/input preparation, the common
+`STARTED`/`CREATE_NEW` fence with no expected Turn ID, and common native
+normalization; Codex owns steer selection, active-Turn discovery,
+`STEERED`/`PRESERVE_EXISTING` classification with the active Turn ID, and
+`turn/steer`, while Zen is start-only.
 T3 remains reserved for its later one-issue/one-PR mechanical slice.
 
 The cross-adapter overview remains available as [transition design

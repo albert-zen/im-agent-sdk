@@ -11,19 +11,32 @@ from imagent.applications import ZenApplicationAdapter
 from imagent.applications.adapters.zen import ZenApplicationAdapter as ZenApplicationAdapterOwner
 from imagent.contracts import (
     AgentInput,
+    ApplicationInputDispatch,
     AttachmentContent,
     CreateThread,
+    InputDisposition,
     LocalPath,
+    TextContent,
     ThreadCreated,
     ThreadRef,
+    TurnReplyCorrelationPolicy,
 )
 
 
 class _ZenInputClient:
-    def __init__(self, *, local_image_epoch: int | None = 7) -> None:
+    def __init__(
+        self,
+        *,
+        active_turn_id: str | None = None,
+        local_image_epoch: int | None = 7,
+    ) -> None:
+        self.active_turn_id = active_turn_id
         self.local_image_epoch = local_image_epoch
+        self.read_calls: list[tuple[str, bool]] = []
+        self.trace: list[str] = []
         self.created_threads: list[dict[str, object]] = []
         self.started: list[dict[str, object]] = []
+        self.steered: list[dict[str, object]] = []
 
     def add_notification_handler(self, handler) -> None:
         del handler
@@ -53,8 +66,20 @@ class _ZenInputClient:
         *,
         include_turns: bool = False,
     ) -> dict[str, object]:
-        del thread_id, include_turns
-        return {"thread": {"id": "thread-1", "status": {"type": "idle"}}}
+        self.trace.append("read")
+        self.read_calls.append((thread_id, include_turns))
+        turns = (
+            [{"id": self.active_turn_id, "status": "inProgress"}]
+            if self.active_turn_id is not None
+            else []
+        )
+        return {
+            "thread": {
+                "id": thread_id,
+                "status": {"type": "active" if turns else "idle"},
+                "turns": turns if include_turns else None,
+            }
+        }
 
     async def resume_thread(self, **params: object) -> dict[str, object]:
         del params
@@ -70,8 +95,20 @@ class _ZenInputClient:
         text: str | None = None,
         **kwargs: object,
     ) -> dict[str, object]:
+        self.trace.append("start")
         self.started.append({"thread_id": thread_id, "text": text, **kwargs})
         return {"turn": {"id": "turn-started"}}
+
+    async def steer_turn(
+        self,
+        thread_id: str,
+        turn_id: str,
+        text: str | None = None,
+        **kwargs: object,
+    ) -> dict[str, object]:
+        self.trace.append("steer")
+        self.steered.append({"thread_id": thread_id, "turn_id": turn_id, "text": text, **kwargs})
+        raise AssertionError("Zen must not steer")
 
 
 class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
@@ -81,6 +118,91 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
             "imagent.applications.adapters.zen",
         )
         self.assertIs(ZenApplicationAdapter, ZenApplicationAdapterOwner)
+
+    def test_shared_base_contains_no_codex_steer_policy_or_dispatch(self) -> None:
+        base_path = (
+            Path(__file__).resolve().parents[3]
+            / "src/imagent/applications/adapters/appserver/_base.py"
+        )
+        source = base_path.read_text()
+        for forbidden in (
+            "steer_active_turn",
+            "_steer_active_turn",
+            "steer_turn",
+            "turn/steer",
+            "_read_active_turn_id",
+            "PRESERVE_EXISTING",
+            "InputDisposition.STEERED",
+        ):
+            self.assertNotIn(forbidden, source)
+        self.assertIn("before_dispatch", source)
+        self.assertIn("InputDisposition.STARTED", source)
+        self.assertIn("TurnReplyCorrelationPolicy.CREATE_NEW", source)
+
+    async def test_prefer_active_turn_is_fenced_start_without_read_or_steer(self) -> None:
+        client = _ZenInputClient(active_turn_id="turn-active")
+        adapter = ZenApplicationAdapter(
+            application_instance_id="zen-main",
+            client=client,
+            cwd="/repo",
+        )
+        dispatches: list[ApplicationInputDispatch] = []
+
+        async def before_dispatch(dispatch: ApplicationInputDispatch) -> None:
+            client.trace.append("fence")
+            dispatches.append(dispatch)
+
+        accepted = await adapter.send_input(
+            ThreadRef("zen-main", "thread-1"),
+            AgentInput(
+                client_message_id="message-zen-start",
+                content=(TextContent("begin"),),
+            ),
+            before_dispatch=before_dispatch,
+        )
+
+        self.assertEqual(client.trace, ["fence", "start"])
+        self.assertEqual(client.read_calls, [])
+        self.assertEqual(client.steered, [])
+        self.assertEqual(len(client.started), 1)
+        self.assertEqual(len(dispatches), 1)
+        self.assertIs(dispatches[0].disposition, InputDisposition.STARTED)
+        self.assertIs(
+            dispatches[0].correlation_policy,
+            TurnReplyCorrelationPolicy.CREATE_NEW,
+        )
+        self.assertIsNone(dispatches[0].expected_turn_id)
+        self.assertIs(accepted.disposition, InputDisposition.STARTED)
+        self.assertIs(
+            accepted.correlation_policy,
+            TurnReplyCorrelationPolicy.CREATE_NEW,
+        )
+
+    async def test_fence_failure_prevents_zen_native_start(self) -> None:
+        client = _ZenInputClient(active_turn_id="turn-active")
+        adapter = ZenApplicationAdapter(
+            application_instance_id="zen-main",
+            client=client,
+            cwd="/repo",
+        )
+
+        async def reject_dispatch(dispatch: ApplicationInputDispatch) -> None:
+            del dispatch
+            raise RuntimeError("fence rejected")
+
+        with self.assertRaisesRegex(RuntimeError, "fence rejected"):
+            await adapter.send_input(
+                ThreadRef("zen-main", "thread-1"),
+                AgentInput(
+                    client_message_id="message-zen-rejected",
+                    content=(TextContent("begin"),),
+                ),
+                before_dispatch=reject_dispatch,
+            )
+
+        self.assertEqual(client.read_calls, [])
+        self.assertEqual(client.steered, [])
+        self.assertEqual(client.started, [])
 
     async def test_thread_creation_forwards_an_isolated_deployment_profile(self) -> None:
         class MutatingClient(_ZenInputClient):

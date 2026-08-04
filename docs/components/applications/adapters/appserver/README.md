@@ -50,7 +50,13 @@ implementation is split into
 `src/imagent/applications/adapters/codex.py` and
 `src/imagent/applications/adapters/zen.py`. Their private common base lives at
 `src/imagent/applications/adapters/appserver/_base.py` as an explicitly mapped
-two-owner split candidate; it is not an aggregate facade.
+two-owner split candidate; it is not an aggregate facade. The base owns typed
+App Server input preparation, verified local-image epochs, the common typed
+fence, `STARTED`/`CREATE_NEW` classification with no expected Turn ID,
+native `turn/start`, and common event/resource normalization. Codex alone
+owns steer enablement, active-Turn selection, `STEERED`/
+`PRESERVE_EXISTING` classification with the active Turn ID, and native
+`turn/steer`; Zen never inherits those positions.
 The mapping leaf now lives at
 `src/imagent/applications/adapters/appserver/mapping.py`; the remaining target
 leaves are reserved for their own focused mechanical slices. App Server

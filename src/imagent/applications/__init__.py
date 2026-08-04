@@ -128,7 +128,6 @@ __all__ = [
     "validate_thread_ref",
 ]
 
-_APPSERVER_EXPORTS = frozenset({"CodexApplicationAdapter", "ZenApplicationAdapter"})
 _ARTIFACT_EXPORTS = frozenset(
     {
         "AppServerArtifactCandidate",

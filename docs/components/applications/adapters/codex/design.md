@@ -33,7 +33,12 @@ The current formal export is `CodexApplicationAdapter` from the lazy
 preserves object identity and lazy cold-import behavior. The private shared
 App Server base is an explicitly mapped two-owner split candidate under
 `imagent.applications.adapters.appserver._base`; it is not a public aggregate
-adapter API.
+adapter API. That base owns typed text/image preparation, verified local-image
+epochs, the common typed pre-dispatch fence, `STARTED`/`CREATE_NEW` classification with
+no expected Turn ID, and native `turn/start` dispatch shared by both leaves. It
+does not own `steer_active_turn`, active-Turn selection, `STEERED`/
+`PRESERVE_EXISTING` classification, or native `turn/steer`. Those
+Codex-only positions live in this leaf.
 
 ## Dependencies, state, and recovery
 
@@ -41,9 +46,12 @@ Codex depends on Interaction messages/operations/media, common Applications
 contract/capabilities/events/operations/requests, four direct App Server
 leaves (client, mapping, requests, and diagnostics), and the two presentation
 leaves. Transport remains behind the App Server client rather than becoming a
-direct adapter dependency. A candidate active-turn read never
-authorizes fallback start. The typed pre-dispatch fence runs exactly once;
-after native dispatch, missing acceptance is unknown. Native history is the
+direct adapter dependency. This leaf owns `steer_active_turn`, the
+authoritative active-Turn read, `STEERED`/`PRESERVE_EXISTING` classification
+with the active Turn ID, and native `turn/steer` dispatch. A candidate
+active-turn read never authorizes fallback start. The common typed
+pre-dispatch fence runs exactly once immediately before native mutation;
+missing acceptance after native dispatch is unknown. Native history is the
 recovery authority. App Server queue reset or presentation failure becomes an
 explicit observation gap, not silent continuation or a second subscriber.
 

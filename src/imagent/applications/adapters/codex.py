@@ -1,12 +1,26 @@
 from __future__ import annotations
 
+import inspect
 import uuid
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Protocol, cast
 
+from ...contracts.errors import ApplicationInputOutcomeUnknown
 from ...interaction.messages import MessageRole
-from ..contract import AgentMessage, ThreadRef
+from ..contract import (
+    AcceptedTurn,
+    AgentInput,
+    AgentMessage,
+    ApplicationInputDispatch,
+    InputContinuationPreference,
+    InputDisposition,
+    ThreadRef,
+    ThreadStatus,
+    TurnReplyCorrelationPolicy,
+    TurnStatus,
+)
 from ..events import AgentEventType
 from ..presentation import (
     ApplicationPresentationLimits,
@@ -21,10 +35,39 @@ from ..presentation.artifact_materialization import (
     AppServerArtifactMaterializationLimits,
     AppServerArtifactMaterializer,
 )
-from .appserver._base import AppServerClient, _AppServerApplicationAdapter
+from .appserver._base import (
+    AppServerClient,
+    _AppServerApplicationAdapter,
+    _PreparedAppServerInput,
+)
+from .appserver.mapping import (
+    native_object as _native_object,
+)
+from .appserver.mapping import (
+    native_turn_id as _native_turn_id,
+)
+from .appserver.mapping import (
+    optional_string as _optional_string,
+)
+from .appserver.mapping import (
+    thread_status as _thread_status,
+)
+from .appserver.mapping import (
+    turn_status as _turn_status,
+)
 from .appserver.requests import map_appserver_request
 
 __all__ = ["CodexApplicationAdapter"]
+
+
+class _CodexSteerClient(Protocol):
+    def steer_turn(
+        self,
+        thread_id: str,
+        turn_id: str,
+        text: str | None = None,
+        **kwargs: object,
+    ) -> Awaitable[Mapping[str, object]] | Mapping[str, object]: ...
 
 
 class CodexApplicationAdapter(_AppServerApplicationAdapter):
@@ -45,6 +88,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
             AppServerArtifactMaterializationLimits()
         ),
     ) -> None:
+        self._steer_active_turn = steer_active_turn
         self._live_activity_presenter = live_activity_presenter
         self._presentation_limits = presentation_limits
         self._seen_live_activity_ids: dict[tuple[str, str], None] = {}
@@ -57,7 +101,6 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
             shared_filesystem_root=shared_filesystem_root,
             server_request_mapper=map_appserver_request,
             event_buffer_max_pending=event_buffer_max_pending,
-            steer_active_turn=steer_active_turn,
             thread_start_options=thread_start_options,
             presentation_runtime=(
                 ApplicationPresentationRuntime(presentation_limits)
@@ -67,6 +110,121 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
             artifact_materializer=artifact_materializer,
             artifact_materialization_limits=artifact_materialization_limits,
         )
+
+    async def send_input(
+        self,
+        thread_ref: ThreadRef,
+        message: AgentInput,
+        *,
+        continuation: InputContinuationPreference = (
+            InputContinuationPreference.PREFER_ACTIVE_TURN
+        ),
+        before_dispatch: Callable[[ApplicationInputDispatch], Awaitable[None]] | None = None,
+    ) -> AcceptedTurn:
+        self._require_own_thread(thread_ref)
+        prepared = self._prepare_input(message)
+        if not isinstance(continuation, InputContinuationPreference):
+            raise ValueError("unknown input continuation preference")
+        active_turn_id = None
+        if (
+            self._steer_active_turn
+            and continuation is InputContinuationPreference.PREFER_ACTIVE_TURN
+        ):
+            active_turn_id = await self._read_active_turn_id(thread_ref.native_thread_id)
+        if active_turn_id is None:
+            return await self._start_prepared_input(
+                thread_ref,
+                message,
+                prepared,
+                before_dispatch,
+            )
+        expected_local_image_epoch = (
+            await self._verified_local_image_epoch() if prepared.input_items is not None else None
+        )
+        steer_client = self._steer_client()
+        if before_dispatch is not None:
+            await before_dispatch(
+                ApplicationInputDispatch(
+                    thread_ref=thread_ref,
+                    client_message_id=message.client_message_id,
+                    disposition=InputDisposition.STEERED,
+                    correlation_policy=TurnReplyCorrelationPolicy.PRESERVE_EXISTING,
+                    expected_turn_id=active_turn_id,
+                )
+            )
+        result = await self._steer_input(
+            steer_client,
+            thread_id=thread_ref.native_thread_id,
+            turn_id=active_turn_id,
+            prepared=prepared,
+            expected_local_image_epoch=expected_local_image_epoch,
+        )
+        turn_id = _native_turn_id(result)
+        if not turn_id:
+            cause = RuntimeError("turn/steer did not return a turn id")
+            raise ApplicationInputOutcomeUnknown(
+                "turn/steer was accepted but its native Turn identity is unknown",
+                cause,
+            ) from cause
+        return AcceptedTurn(
+            thread_ref=thread_ref,
+            turn_id=turn_id,
+            client_message_id=message.client_message_id,
+            disposition=InputDisposition.STEERED,
+            correlation_policy=TurnReplyCorrelationPolicy.PRESERVE_EXISTING,
+        )
+
+    async def _read_active_turn_id(self, thread_id: str) -> str | None:
+        result = await self._client.read_thread(thread_id, include_turns=True)
+        thread = _native_object(result, "thread")
+        turns = thread.get("turns")
+        if not isinstance(turns, list):
+            raise RuntimeError("active-Turn steering requires an authoritative native turn list")
+        for turn in reversed(turns):
+            if (
+                not isinstance(turn, Mapping)
+                or _turn_status(turn.get("status")) is not TurnStatus.RUNNING
+            ):
+                continue
+            turn_id = _optional_string(turn.get("id") or turn.get("turnId"))
+            if turn_id is None:
+                raise RuntimeError("active native Turn did not contain an id")
+            return turn_id
+        status_value = thread.get("status")
+        if isinstance(status_value, Mapping):
+            status_value = status_value.get("type") or status_value.get("status")
+        if _thread_status(status_value) is ThreadStatus.RUNNING:
+            raise RuntimeError("native thread is active but did not expose an active Turn identity")
+        return None
+
+    def _steer_client(self) -> _CodexSteerClient:
+        steer_turn = getattr(self._client, "steer_turn", None)
+        if not callable(steer_turn):
+            raise RuntimeError("configured App Server client does not support turn/steer")
+        return cast(_CodexSteerClient, self._client)
+
+    async def _steer_input(
+        self,
+        steer_client: _CodexSteerClient,
+        *,
+        thread_id: str,
+        turn_id: str,
+        prepared: _PreparedAppServerInput,
+        expected_local_image_epoch: int | None,
+    ) -> Mapping[str, object]:
+        native_text, kwargs = self._input_arguments(
+            prepared,
+            expected_local_image_epoch,
+        )
+        result = steer_client.steer_turn(
+            thread_id,
+            turn_id,
+            native_text,
+            **kwargs,
+        )
+        if not inspect.isawaitable(result):
+            raise RuntimeError("configured App Server turn/steer did not return an awaitable")
+        return await cast(Awaitable[Mapping[str, object]], result)
 
     async def _handle_notification(self, notification: dict) -> None:
         method = str(notification.get("method") or "")
