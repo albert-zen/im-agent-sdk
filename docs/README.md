@@ -13,6 +13,8 @@ Start with:
 5. The affected component's design and testing documents below.
 6. [Engineering support](engineering/README.md) for conformance, schema,
    maintainability, AgentKit, and release mechanics.
+7. The neutral [reference consumer onboarding](onboarding/README.md) for a
+   runnable composition of the public contracts.
 
 `REUSE.md` owns source provenance and extraction rules. `ROADMAP.md` contains
 future or unresolved work and is not authority for current runtime behavior.
@@ -47,6 +49,7 @@ separates SDK ownership work from the later IMCodex consumer migration.
 | `controllers/**` | [Controller subtree](components/interaction/controllers/README.md) and the affected leaf design/testing docs | Controller contract, registry, common-command, or request-presentation focused tests, including formal-facade identity and absent historical-path import-order evidence |
 | `channels/**` | [Interaction Channel subtree](components/interaction/channels/README.md), affected leaf design/testing docs, and applicable native adapter page | Channel contract, ingress, outbound-delivery, and native seam tests |
 | `applications/**` | [Applications navigation](components/applications/README.md), the affected common leaf, then the precise [adapter subtree](components/applications/adapters/README.md) leaf | adapter contract, native client, event, recovery tests |
+| `examples/reference_consumer/**` or `docs/onboarding/**` | [Reference consumer onboarding](onboarding/README.md), then the affected Interaction, Gateway, and Applications leaf | `tests/gateway/test_reference_consumer.py`, module smoke, and the full repository gates |
 | `diagnostics.py` and diagnostic providers | [diagnostics design](components/diagnostics/design.md), [testing](components/diagnostics/testing.md) | redaction, bounded-cardinality, reconnect/overflow, and aggregate health tests |
 | `interaction/testing/**` and the `imagent.testing` facade | [conformance design](engineering/testing-and-conformance/design.md), [testing](engineering/testing-and-conformance/testing.md) | `tests/conformance/test_adapter_contracts.py`, package/import-order checks |
 | `schemas/v1/**`, `scripts/validate_schemas.py` | [schema-conformance design](engineering/schema-conformance/design.md), [testing](engineering/schema-conformance/testing.md), and [contracts protocol](components/contracts/protocol.md) | schema validator, focused schema-conformance tests, and runtime contract tests |

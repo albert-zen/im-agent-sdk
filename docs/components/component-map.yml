@@ -416,8 +416,8 @@ components:
     state_recovery: Frozen construction values only; no runtime state or locator lookup.
     current_code: [src/imagent/gateway/composition.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/composition.py]
-    current_tests: [tests/gateway/test_package_root.py, tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py]
-    target_tests: [tests/gateway/test_composition.py, tests/gateway/test_package_root.py]
+    current_tests: [tests/gateway/test_package_root.py, tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py, tests/gateway/test_reference_consumer.py]
+    target_tests: [tests/gateway/test_composition.py, tests/gateway/test_package_root.py, tests/gateway/test_reference_consumer.py]
     authoritative_docs: [docs/components/gateway/composition/design.md, docs/components/gateway/composition/testing.md, docs/components/gateway/design.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
     gaps: [the Gateway package root still combines its composition facade and runtime orchestration]
