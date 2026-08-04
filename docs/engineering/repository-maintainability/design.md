@@ -64,6 +64,21 @@ Any change to module layout, component docs, global intent paths, or CI updates
 the component map, applicable AgentKit routing, human navigation, mapping tests,
 and routing smoke evidence in the same slice.
 
+## Executable test owner
+
+The complete repository-maintainability test mirror lives in
+`tests/engineering/test_repository_maintainability.py`. It contains the
+component-map and documentation-link coverage that historically lived in the
+two root test modules, with the same assertions and discovery behavior. The
+historical root paths are intentionally absent; they are not compatibility
+facades and must not be recreated as import shims.
+
+`tests/test_agentkit_mapping.py` remains the AgentKit routing owner, and
+release/package tests remain with the release leaf. The move changes only the
+physical test owner and its repository-root calculation; component-map rules,
+architecture policy, path ownership, link-check behavior, and AgentKit
+behavior remain unchanged.
+
 ## Maintainability budget policy
 
 Budgets are named responsibility review triggers, not generic file-size goals.

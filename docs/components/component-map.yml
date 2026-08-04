@@ -1340,7 +1340,7 @@ components:
     state_recovery: Stateless repository checks; generated AgentKit task state is ignored.
     current_code: [.github/workflows/ci.yml, scripts/check_doc_links.py, scripts/validate_component_map.py]
     target_code: [.github/workflows/ci.yml, scripts/check_doc_links.py, scripts/validate_component_map.py]
-    current_tests: [tests/test_component_map.py, tests/test_documentation_links.py]
+    current_tests: [tests/engineering/test_repository_maintainability.py]
     target_tests: [tests/engineering/test_repository_maintainability.py]
     authoritative_docs: [docs/engineering/repository-maintainability/design.md, docs/engineering/repository-maintainability/testing.md, docs/architecture/dependency-rules.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md]

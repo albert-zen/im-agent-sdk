@@ -2,6 +2,22 @@
 
 ## Required evidence
 
+Run the focused repository-maintainability mirror both through its module name
+and through focused unittest discovery:
+
+```sh
+PYTHONPATH=src uv run python -m unittest tests.engineering.test_repository_maintainability -v
+PYTHONPATH=src uv run python -m unittest discover -s tests/engineering -p 'test_repository_maintainability.py' -v
+```
+
+Both commands must discover the same complete test mirror. The focused module
+must prove that the component-map and documentation-link test bodies remain
+present, that exactly one engineering mirror owns them, and that the two
+historical root paths are absent. Importing the new module must not recreate
+either deleted path or alter the behavior of the scripts it exercises.
+On this slice, each focused invocation reports 28 tests: 22 component-map
+checks and 6 documentation-link checks.
+
 Run the repository-level checks from a clean, dependency-complete checkout:
 
 ```sh

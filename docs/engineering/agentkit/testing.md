@@ -19,7 +19,7 @@ component-map validation before AgentKit is delegated to. Run the mapping tests
 when changing `agentkit.yml`, the launcher, the component map, or routing docs:
 
 ```sh
-PYTHONPATH=src uv run python -m unittest tests.test_agentkit_mapping tests.test_component_map -v
+PYTHONPATH=src uv run python -m unittest tests.test_agentkit_mapping tests.engineering.test_repository_maintainability -v
 ```
 
 ## Lifecycle evidence
