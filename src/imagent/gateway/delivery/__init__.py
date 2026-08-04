@@ -30,6 +30,7 @@ from .proactive_authorization import (
     ScopedDeliveryAuthorizer,
     validate_delivery_principal,
 )
+from .proactive_ingress import ProactiveDeliveryJsonHandler
 from .submissions import (
     DeliverySubmissionOrigin,
     derive_delivery_payload_fingerprint,
@@ -59,6 +60,7 @@ __all__ = [
     "DestinationDeliveryResult",
     "PlannedDeliverySegment",
     "ProactiveDeliveryResult",
+    "ProactiveDeliveryJsonHandler",
     "ProactiveDeliveryService",
     "ScopedDeliveryAuthorizer",
     "ThreadRouteDeliveryTarget",

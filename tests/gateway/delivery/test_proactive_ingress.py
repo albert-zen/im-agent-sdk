@@ -29,11 +29,13 @@ from imagent.contracts import (
     ThreadRef,
     derive_delivery_submission_id,
 )
-from imagent.delivery_ingress import ProactiveDeliveryJsonHandler
 from imagent.gateway import GatewayRepositories, ImAgentGateway
-from imagent.gateway.delivery import ScopedDeliveryAuthorizer
+from imagent.gateway.delivery import ProactiveDeliveryJsonHandler, ScopedDeliveryAuthorizer
 from imagent.gateway.delivery.proactive import (
     InMemoryDeliverySubmissionRepository,
+)
+from imagent.gateway.delivery.proactive_ingress import (
+    ProactiveDeliveryJsonHandler as OwnerProactiveDeliveryJsonHandler,
 )
 from imagent.projections import InMemoryProjectionRouteRepository
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
@@ -124,6 +126,11 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
             delivery_authorizer=self.authorizer,
             projection_policy=ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
         )
+
+    def test_gateway_facade_uses_exact_owner_and_old_module_is_absent(self) -> None:
+        self.assertIs(ProactiveDeliveryJsonHandler, OwnerProactiveDeliveryJsonHandler)
+        with self.assertRaises(ModuleNotFoundError):
+            __import__("imagent.delivery_ingress")
 
     async def test_inline_artifacts_are_staged_sent_and_removed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
