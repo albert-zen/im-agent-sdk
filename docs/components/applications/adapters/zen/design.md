@@ -26,10 +26,12 @@ input outcomes, canonical `AgentEvent` values, and bounded artifact facts when
 configured. Native request and capability gaps fail explicitly.
 
 The current formal export is `ZenApplicationAdapter` from the lazy
-`imagent.applications` facade, implemented in the shared
-`src/imagent/applications/appserver.py`. The target exact export is
-`imagent.applications.adapters.zen:ZenApplicationAdapter`; the top facade must
-preserve the same object identity and lazy import behavior.
+`imagent.applications` facade, implemented at the exact target
+`imagent.applications.adapters.zen:ZenApplicationAdapter`; the top facade
+preserves the same object identity and lazy import behavior. The private
+shared App Server base is an explicitly mapped two-owner split candidate under
+`imagent.applications.adapters.appserver._base`; it is not a public aggregate
+adapter API.
 
 ## Dependencies, state, and recovery
 
@@ -44,15 +46,16 @@ connection reset and observation/materialization failure are explicit gaps.
 
 ## Current, target, and structural gap
 
-Current code is co-located with Codex in
-`src/imagent/applications/appserver.py`. Current evidence is in
-`tests/applications/adapters/appserver/test_client.py`, `test_appserver_input.py`,
+Current code is `src/imagent/applications/adapters/zen.py` plus the explicitly
+mapped private shared base
+`src/imagent/applications/adapters/appserver/_base.py`. Adapter-owned evidence
+is in `tests/applications/adapters/test_zen.py`,
+`tests/applications/adapters/appserver/test_client.py`,
 `tests/applications/adapters/appserver/test_requests.py`, the artifact
 presentation suite, and
 `tests/test_gateway_vertical_slice.py` for distinct Zen/Codex behavior. The
-target is `src/imagent/applications/adapters/zen.py` with focused tests at
-`tests/applications/adapters/test_zen.py`. The exact gap is the mechanical
-Codex/Zen split without inheriting Codex-only semantics.
+retained `tests/test_appserver_input.py` remains affected cross-component
+evidence. Zen owns the concrete facade and has no dependency on Codex.
 
 ## Authority
 

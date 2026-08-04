@@ -86,7 +86,11 @@ internal helpers are now owned by
 `src/imagent/applications/adapters/appserver/diagnostics.py`,
 protocol/resource mapping is owned by
 `src/imagent/applications/adapters/appserver/mapping.py`, and framing/closure is owned by
-`src/imagent/applications/adapters/appserver/transport.py`. They support
+`src/imagent/applications/adapters/appserver/transport.py`. The concrete
+Codex and Zen Application owners are
+`src/imagent/applications/adapters/codex.py` and
+`src/imagent/applications/adapters/zen.py`; their private shared base is
+explicitly mapped to both owners and exposes no aggregate facade. They support
 spawned stdio, Unix-socket, and TCP WebSocket endpoints without importing
 product backends or configuration. Consumer supervision, branding, commands,
 and product policy were not promoted to Core.

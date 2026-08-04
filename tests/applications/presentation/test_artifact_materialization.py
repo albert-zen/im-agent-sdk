@@ -212,7 +212,8 @@ class ApplicationArtifactFacadeTests(unittest.TestCase):
                 "import imagent.applications.presentation as presentation; "
                 "from imagent.applications import AppServerArtifactCandidate as top; "
                 "assert top is presentation.AppServerArtifactCandidate; "
-                "assert 'imagent.applications.appserver' not in sys.modules; "
+                "assert 'imagent.applications.adapters.codex' not in sys.modules; "
+                "assert 'imagent.applications.adapters.zen' not in sys.modules; "
                 "assert 'imagent.applications.adapters.appserver.client' not in sys.modules; "
                 "assert 'imagent.applications.appserver_artifacts' not in sys.modules",
             ],

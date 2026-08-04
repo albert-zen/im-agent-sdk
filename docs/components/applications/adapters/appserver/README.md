@@ -45,9 +45,12 @@ The transport leaf now lives at
 `src/imagent/applications/adapters/appserver/transport.py`. The client leaf
 now lives at `src/imagent/applications/adapters/appserver/client/**`; the
 request leaf is co-located at
-`src/imagent/applications/adapters/appserver/requests.py`. The remaining
-current file is `appserver.py`, whose shared Codex/Zen portions are reserved
-for the combined split slice.
+`src/imagent/applications/adapters/appserver/requests.py`. The shared Codex/Zen
+implementation is split into
+`src/imagent/applications/adapters/codex.py` and
+`src/imagent/applications/adapters/zen.py`. Their private common base lives at
+`src/imagent/applications/adapters/appserver/_base.py` as an explicitly mapped
+two-owner split candidate; it is not an aggregate facade.
 The mapping leaf now lives at
 `src/imagent/applications/adapters/appserver/mapping.py`; the remaining target
 leaves are reserved for their own focused mechanical slices. App Server
