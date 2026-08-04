@@ -46,8 +46,8 @@ grow together:
   routes, request correlations, and delivery submissions;
 - immutable `GatewayLimits` holds every bounded capacity, recovery page/item
   limit, retry delay, and correlation retention value, including the positive
-  finite in-memory delivery-submission record bound and active Conversation
-  serialization-key bound (both 4096 by default);
+  finite in-memory idempotency and delivery-submission record bounds plus the
+  active Conversation serialization-key bound (all 4096 by default);
 - immutable `GatewayExtensions` holds the optional Controller, Request
   Presenter, I1 inbound-content transformer, I2 inbound-failure presenter, and
   O1 destination-presentation policy and is the only group later Gateway-owned
@@ -85,8 +85,10 @@ Channel startup validation remain on their owning concrete adapters.
 1. A Channel verifies native identity and access policy.
 2. Before media preparation it requests a fenced durable admission lease from
    Gateway using the stable Conversation/message identity.
-3. A duplicate receives no lease and stops. An admitted Channel prepares media
-   and hands one verified `InboundMessage` through the lease.
+3. A duplicate receives no lease and stops. A full default process-local
+   idempotency repository rejects only a new identity explicitly at this same
+   boundary, before media preparation. An admitted Channel prepares media and
+   hands one verified `InboundMessage` through the lease.
 4. An optional Controller may consume the input through typed actions.
 5. An optional I1 `InboundContentTransformer` may replace only unconsumed
    typed content. Gateway awaits it under the configured finite lifetime and
@@ -222,6 +224,14 @@ not converted to either success or permission to retry. A failed terminal
 idempotency write likewise leaves the protected claim sticky across restart.
 Ordinary `in_flight` leases remain reclaimable, including outbound projection
 claims whose durable submission record can safely converge a retried worker.
+The default process-local idempotency repository has the positive
+`GatewayLimits.idempotency_max_records` bound. At capacity it checks an
+existing stable identity first, preserving completed replay, active/protected
+joins, and owner-fenced refresh/protect/complete/release transitions. Only a
+new identity raises `IdempotencyCapacityError` before Channel media,
+Application dispatch, delivery planning, or Channel work. It never evicts
+completed or ambiguous evidence to create space; injected repositories and
+SQLite retain their separate configured/durable behavior.
 ADR 0015 adds one explicit opt-in exception to ordinary pre-dispatch release:
 when an I2 inbound-failure presenter is configured, Gateway completes a
 `pre_acceptance` claim before attempting the stable error delivery. That

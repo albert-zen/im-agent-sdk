@@ -33,9 +33,11 @@ after the Interaction Channel facade became authoritative.
 Gateway's `gateway.persistence.repository-contracts` leaf owns the complete
 Gateway repository Port/conflict family: binding, projection-route,
 idempotency, request-correlation, and delivery-submission Protocols, plus
-their claim, checkpoint, route, correlation, submission, and capacity
-conflicts. `adapters.py` keeps only exact compatibility aliases for callers
-that still use the historical Ports surface.
+their claim, checkpoint, route, correlation, submission, and explicit capacity
+conflicts. `adapters.py` keeps only its pre-existing exact compatibility
+aliases for callers that still use the historical Ports surface; new capacity
+outcomes are exposed from `imagent.gateway.persistence` without expanding the
+retiring facade.
 
 The Gateway `gateway.delivery.proactive-authorization` leaf owns the
 `DeliveryAuthorizer` Port, `DeliveryPrincipal`, and principal validation.
@@ -142,6 +144,13 @@ reclaimable lease from work that may already have changed a remote system.
 Implementations must never age the protected state back into permission to
 retry. A caller that supplies an owner token on acquisition must reuse it as a
 fencing token for every later state mutation.
+
+The process-local idempotency implementation may raise the typed
+`IdempotencyCapacityError` only for an absent stable claim identity before any
+repository mutation. At the bound, an existing completed claim still replays,
+an active/protected claim still joins, and owner-fenced transitions remain
+available. Capacity never authorizes eviction, retry, or an external side
+effect; durable implementations retain their own documented storage policy.
 
 The Interaction-owned `InboundAdmissionHandler` carries only stable
 Conversation/message identity.

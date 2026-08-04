@@ -17,7 +17,11 @@
 - repositories, limits, and extensions are immutable and typed;
 - missing optional dependencies preserve documented defaults and missing
   extensions preserve behavior exactly;
-- invalid finite capacities fail during construction before startup or I/O;
+- invalid finite capacities, including the default in-memory idempotency record
+  bound, fail during construction before startup or I/O;
+- the default in-memory idempotency repository receives the configured bound,
+  rejects a new identity explicitly before media/planning/Channel work, and
+  leaves an injected repository unwrapped and unconfigured;
 - the graph contains one Channel admission path and one Application observer
   per Thread, with no locator, generic hook, transcript, spool, or runtime;
 - the historical `imagent.gateway_composition` internal module cannot be

@@ -43,6 +43,7 @@ _MOVED_NAMES = (
     "RequestCorrelationRepository",
     "DeliverySubmissionRepository",
     "IdempotencyClaimStatus",
+    "IdempotencyCapacityError",
     "ProjectionCheckpointConflict",
     "ProjectionRouteConflict",
     "RequestCorrelationConflict",
@@ -50,6 +51,8 @@ _MOVED_NAMES = (
     "DeliverySubmissionConflict",
     "DeliverySubmissionCapacityError",
 )
+
+_ADAPTER_FACADE_NAMES = tuple(name for name in _MOVED_NAMES if name != "IdempotencyCapacityError")
 
 _METHOD_SIGNATURES = {
     (
@@ -348,7 +351,10 @@ class RepositoryContractOwnershipTests(unittest.TestCase):
                 value = getattr(owner, name)
                 self.assertEqual(value.__module__, owner.__name__)
                 self.assertIs(getattr(persistence_facade, name), value)
-                self.assertIs(getattr(adapters_facade, name), value)
+                if name in _ADAPTER_FACADE_NAMES:
+                    self.assertIs(getattr(adapters_facade, name), value)
+                else:
+                    self.assertFalse(hasattr(adapters_facade, name))
 
     def test_adapters_has_no_repository_contract_class_definitions(self) -> None:
         repository_root = Path(__file__).resolve().parents[3]
@@ -384,6 +390,7 @@ class RepositoryContractOwnershipTests(unittest.TestCase):
 import typing
 
 import imagent.adapters as adapters
+import imagent.gateway.persistence as persistence
 from imagent.applications.requests import RequestRef
 from imagent.gateway.persistence import repository_contracts as owner
 
@@ -402,6 +409,8 @@ names = (
     "DeliverySubmissionCapacityError",
 )
 assert all(getattr(adapters, name) is getattr(owner, name) for name in names)
+assert not hasattr(adapters, "IdempotencyCapacityError")
+assert persistence.IdempotencyCapacityError is owner.IdempotencyCapacityError
 assert typing.get_type_hints(
     owner.RequestCorrelationRepository.transition_request_correlations,
 )["request_ref"] is RequestRef

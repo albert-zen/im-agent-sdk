@@ -60,8 +60,15 @@ class GatewayLimits:
     delivery_outcome_observer_max_concurrency: int = 16
     delivery_submission_max_records: int = 4096
     conversation_serialization_max_active_keys: int = 4096
+    idempotency_max_records: int = 4096
 
     def __post_init__(self) -> None:
+        if (
+            not isinstance(self.idempotency_max_records, int)
+            or isinstance(self.idempotency_max_records, bool)
+            or self.idempotency_max_records < 1
+        ):
+            raise ValueError("idempotency_max_records must be a positive integer")
         if (
             not isinstance(self.delivery_submission_max_records, int)
             or isinstance(self.delivery_submission_max_records, bool)

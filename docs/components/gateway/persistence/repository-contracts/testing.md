@@ -4,8 +4,9 @@ Repository-contract tests and implementation conformance must prove:
 
 - the owner module is importable in a clean process and every moved name has
   one implementation owner;
-- `imagent.adapters` and `imagent.gateway.persistence` expose the exact same
-  objects as `gateway.persistence.repository_contracts`;
+- `imagent.gateway.persistence` exposes each exact owner object, while
+  `imagent.adapters` preserves exact identity only for its pre-existing
+  compatibility aliases and does not grow a new idempotency-capacity alias;
 - moved Protocol method signatures, annotations, defaults, and runtime
   `typing.get_type_hints` remain exact;
 - enum values and every conflict/capacity exception preserve identity and
@@ -17,6 +18,9 @@ Repository-contract tests and implementation conformance must prove:
   implementation and fake;
 - conflict and acquisition outcomes contain no message content, credentials,
   callback, retry work, or native Application state;
+- process-local idempotency capacity failure is a distinct exact exception for
+  an absent stable identity, occurs before mutation, and does not turn into an
+  in-flight/retry outcome or alter existing replay/fencing behavior;
 - expected revisions, owner tokens, stable identities, and checkpoint values
   remain explicit rather than inferred from text or timestamps.
 - memory and SQLite accept every forward or same-state request-correlation

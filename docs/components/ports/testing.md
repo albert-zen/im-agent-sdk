@@ -60,6 +60,12 @@ typed capacity failure from conflict, reject before mutation, and retain
 existing replay/state updates at the boundary. Authorization fakes must not
 infer scope from caller Metadata.
 
+Idempotency Port coverage must likewise distinguish a process-local typed
+capacity failure for a new stable identity from the existing acquisition
+statuses. It must reject before mutation or external work while preserving
+completed replay, active/protected joins, and owner-fenced transitions at the
+bound.
+
 An ADR 0015 Port must additionally prove its exact stage position, immutable
 identity fields, bounded input/output, absent-provider compatibility, and
 stage-specific replay/failure rule. Contract suites must reject a generic

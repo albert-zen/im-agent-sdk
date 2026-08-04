@@ -225,6 +225,17 @@ eviction would authorize a duplicate send. Restart still begins empty by the
 declared non-durable contract. SQLite has no new SDK quota, retention cleanup,
 or schema change.
 
+The separate process-local idempotency repository likewise retains at most its
+configured positive stable `(scope, key)` record count. It checks an existing
+claim before its capacity check, so a completed replay, an active/protected
+join, and all owner-fenced transitions remain available at the bound. Only a
+new identity raises `IdempotencyCapacityError` before mutation. Completed and
+ambiguous claim evidence is retained for the process lifetime; eviction or
+terminal cleanup would reauthorize a native or Channel side effect. Gateway
+injects this bound only into its default in-memory repository through
+`GatewayLimits`; a supplied repository and SQLite's durable retention behavior
+remain unchanged.
+
 ## Change obligations
 
 Changes to `gateway/persistence/repository_contracts.py`,

@@ -12,6 +12,11 @@
   `GatewayLimits` record bound; invalid configuration fails during construction,
   capacity failure precedes Channel work and releases any outer idempotency
   claim, while an injected repository is unchanged;
+- default idempotency persistence receives its finite positive `GatewayLimits`
+  record bound; a new identity fails explicitly before inbound media/native
+  dispatch or outbound planning/Channel work, while an existing stable identity
+  retains replay/join and owner-fenced transitions at the bound without
+  eviction or retry permission;
 - Conversation serialization receives its finite positive `GatewayLimits`
   active-key bound, retains no completed key, permits same-key waiters at
   capacity, rejects a new key before side effects, and releases cancelled

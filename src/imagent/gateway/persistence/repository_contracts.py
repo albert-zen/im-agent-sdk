@@ -32,6 +32,10 @@ class IdempotencyClaimStatus(StrEnum):
     IN_FLIGHT = "in_flight"
 
 
+class IdempotencyCapacityError(RuntimeError):
+    """A new process-local idempotency identity exceeded its finite record bound."""
+
+
 class ProjectionCheckpointConflict(RuntimeError):
     """The stored route checkpoint no longer matches the caller's expectation."""
 
@@ -239,6 +243,7 @@ __all__ = [
     "DeliverySubmissionCapacityError",
     "DeliverySubmissionConflict",
     "DeliverySubmissionRepository",
+    "IdempotencyCapacityError",
     "IdempotencyClaimStatus",
     "IdempotencyRepository",
     "ProjectionCheckpointConflict",

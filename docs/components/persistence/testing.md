@@ -64,6 +64,11 @@ Required scenarios:
   exactly the configured number of distinct roots under concurrency, preserves
   existing replay/CAS at the bound, and never evicts terminal or ambiguous
   evidence; a new process starts empty and SQLite remains unchanged;
+- process-local idempotency capacity validates positive configuration, admits
+  exactly the configured number of stable claim identities under concurrency,
+  preserves completed replay, active/protected joins, and owner-fenced
+  transitions at the bound, and never evicts terminal or ambiguous evidence;
+  a new process starts empty and SQLite remains unchanged;
 - SDK-controlled origin and principal namespaces prevent external identities
   from colliding with Gateway-internal projection submissions;
 - rejected, in-flight, partial, and unknown proactive states remain sticky

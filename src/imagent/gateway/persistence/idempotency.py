@@ -2,15 +2,22 @@ from __future__ import annotations
 
 import asyncio
 
-from .repository_contracts import IdempotencyClaimStatus
+from .repository_contracts import IdempotencyCapacityError, IdempotencyClaimStatus
 
 
 class InMemoryIdempotencyRepository:
     """Process-local stable claim state for tests and ephemeral deployments."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, max_records: int = 4096) -> None:
+        if not isinstance(max_records, int) or isinstance(max_records, bool) or max_records < 1:
+            raise ValueError("max_records must be a positive integer")
+        self._max_records = max_records
         self._records: dict[tuple[str, str], tuple[str, str | None]] = {}
         self._lock = asyncio.Lock()
+
+    @property
+    def max_records(self) -> int:
+        return self._max_records
 
     async def claim(
         self,
@@ -27,6 +34,8 @@ class InMemoryIdempotencyRepository:
                 return IdempotencyClaimStatus.ALREADY_COMPLETED
             if status in {"in_flight", "side_effect_started"}:
                 return IdempotencyClaimStatus.IN_FLIGHT
+            if len(self._records) >= self._max_records:
+                raise IdempotencyCapacityError("in-memory idempotency record capacity exceeded")
             self._records[record] = ("in_flight", owner_token)
             return IdempotencyClaimStatus.ACQUIRED
 
