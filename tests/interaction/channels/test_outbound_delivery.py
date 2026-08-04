@@ -18,6 +18,7 @@ from imagent.interaction.channels.outbound_delivery import (
     OutboundMessage,
     PermanentArtifactDeliveryError,
     _artifact_item_receipts,
+    _native_delivery_receipt,
     _to_native_artifact,
     _to_native_outbound,
     deliver_artifact_batch,
@@ -177,6 +178,97 @@ class ChannelOutboundTextTests(unittest.TestCase):
             },
         )
         self.assertEqual(tuple(item.attachment_id for item in native.artifacts), ("attachment-1",))
+
+    def test_native_result_receipt_assembly_has_one_outbound_owner(self) -> None:
+        from imagent.interaction.channels.adapters import runtime
+
+        self.assertFalse(hasattr(runtime, "_native_delivery_receipt"))
+        message = PublicOutboundMessage(
+            delivery_id="delivery-1",
+            conversation_ref=ConversationRef("qq-main", "group:1"),
+            content=(
+                TextContent("result"),
+                AttachmentContent(
+                    attachment_id="first",
+                    media_type="image/png",
+                    source=LocalPath("/staged/first.png"),
+                    size_bytes=3,
+                ),
+                AttachmentContent(
+                    attachment_id="second",
+                    media_type="application/pdf",
+                    source=LocalPath("/staged/second.pdf"),
+                    size_bytes=4,
+                ),
+            ),
+            created_at=datetime.now(UTC),
+        )
+        native = OutboundMessage(
+            channel_id="qq",
+            conversation_id="group:1",
+            message_type="text",
+            text="result",
+            metadata={
+                "artifact_receipts": [
+                    {
+                        "attachment_id": "second",
+                        "status": "delivered",
+                        "platform_message_id": "native-2",
+                    },
+                    {
+                        "attachment_id": "first",
+                        "status": "failed",
+                        "error": "unsupported",
+                    },
+                ]
+            },
+        )
+
+        expected_items = (
+            (1, "first", DeliveryItemStatus.REJECTED, None, "unsupported"),
+            (2, "second", DeliveryItemStatus.ACCEPTED, "native-2", None),
+        )
+        cases = (
+            (object(), None, "platform call succeeded; native message ID was not returned"),
+            (
+                NativeDeliveryResult(),
+                None,
+                "platform call succeeded; native message ID was not returned",
+            ),
+            (
+                NativeDeliveryResult(("native-1",)),
+                "native-1",
+                "platform accepted one native message",
+            ),
+            (
+                NativeDeliveryResult(("native-1", "native-2")),
+                None,
+                "platform accepted 2 native messages",
+            ),
+        )
+        for result, native_message_id, detail in cases:
+            with self.subTest(result=result):
+                receipt = _native_delivery_receipt(
+                    result=result,
+                    native_message=native,
+                    message=message,
+                )
+                self.assertEqual(receipt.status, "accepted_by_platform")
+                self.assertEqual(receipt.native_message_id, native_message_id)
+                self.assertEqual(receipt.detail, detail)
+                self.assertEqual(
+                    tuple(
+                        (
+                            item.content_index,
+                            item.attachment_id,
+                            item.status,
+                            item.native_message_id,
+                            item.detail,
+                        )
+                        for item in receipt.items
+                    ),
+                    expected_items,
+                )
 
     def test_native_artifact_receipts_are_sorted_and_ignore_unknown_entries(self) -> None:
         receipts = _artifact_item_receipts(

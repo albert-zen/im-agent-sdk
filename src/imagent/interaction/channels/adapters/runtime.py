@@ -12,7 +12,6 @@ from typing import Protocol
 from ....contracts import (
     ChannelCapabilities,
     DeliveryReceipt,
-    DeliveryReceiptStatus,
     DeliverySupportLevel,
 )
 from ...media import AttachmentContent, AttachmentSourceKind, LocalPath
@@ -220,33 +219,10 @@ class NativeTransportChannelAdapter:
         if not native_message.text.strip() and not native_message.artifacts:
             raise ValueError("outbound messages require text or at least one attachment")
         result = await native.send_message(native_message)
-        native_message_ids = (
-            result.native_message_ids if isinstance(result, NativeDeliveryResult) else ()
-        )
-        native_message_id = native_message_ids[0] if len(native_message_ids) == 1 else None
-        detail = (
-            "platform call succeeded; native message ID was not returned"
-            if not native_message_ids
-            else (
-                "platform accepted one native message"
-                if native_message_id is not None
-                else f"platform accepted {len(native_message_ids)} native messages"
-            )
-        )
-        item_indexes = {
-            item.attachment_id: index
-            for index, item in enumerate(message.content)
-            if isinstance(item, AttachmentContent)
-        }
-        item_receipts = _outbound_delivery._artifact_item_receipts(
-            native_message.metadata,
-            item_indexes=item_indexes,
-        )
-        return DeliveryReceipt(
-            status=DeliveryReceiptStatus.ACCEPTED_BY_PLATFORM,
-            native_message_id=native_message_id,
-            detail=detail,
-            items=item_receipts,
+        return _outbound_delivery._native_delivery_receipt(
+            result=result,
+            native_message=native_message,
+            message=message,
         )
 
 

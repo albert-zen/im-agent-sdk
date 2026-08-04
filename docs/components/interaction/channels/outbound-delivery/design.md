@@ -45,8 +45,17 @@ stable delivery ID, and reply correlation; it filters the reserved native
 metadata keys before adding the authoritative delivery/reply values. It
 delegates each attachment to `_to_native_artifact`, performs no provider API
 call, and does not assemble public receipts. `NativeTransportChannelAdapter`
-invokes this leaf-owned conversion and retains only the final Channel receipt
-assembly around the native result.
+invokes this leaf-owned conversion before the native call; result normalization
+is handled by `_native_delivery_receipt` after the call returns.
+
+The private `_native_delivery_receipt` helper owns the post-attempt conversion
+from one generic native result plus its mutable native metadata into the public
+`DeliveryReceipt`. It preserves the existing `NativeDeliveryResult` type-check
+fallback, zero/one/multiple native-message-ID selection and detail text, maps
+recognized artifact metadata through the stable public content indexes, and
+returns the same accepted/per-item evidence without inventing retryable or
+unknown acceptance. It performs no native call or provider response mapping;
+the adapter invokes it only after the native send returns.
 
 ## Submission and receipts
 
@@ -94,7 +103,8 @@ clients remain adapter-owned.
 Leaf-internal `OutboundArtifact`, mutable native `OutboundMessage`, and
 `NativeDeliveryResult` DTOs carry data between common outbound helpers and
 provider adapters before normalization into public receipts. Both public
-Message-to-native DTO conversions are owned here; the native runtime only
-invokes them and assembles the final public receipt. These DTOs are not
+Message-to-native DTO conversions and final native-result receipt normalization
+are owned here; the native runtime only invokes them around the native call.
+These DTOs are not
 top-level exports, do not duplicate the public Message contract, and hold no
 retry, checkpoint, or persistence authority.
