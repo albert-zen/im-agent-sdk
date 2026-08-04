@@ -10,9 +10,8 @@ from .adapters import (
     RequestCorrelationRepository,
 )
 from .applications.capabilities import SupportLevel
+from .applications.events import AgentEvent, AgentEventType
 from .contracts import (
-    AgentEvent,
-    AgentEventType,
     InteractiveRequest,
     RequestRef,
     RequestResolutionStatus,

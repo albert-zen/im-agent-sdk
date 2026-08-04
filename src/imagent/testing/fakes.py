@@ -16,11 +16,15 @@ from imagent.applications.capabilities import (
     ThreadCapabilities,
     ThreadDeletionCapability,
 )
+from imagent.applications.events import (
+    AgentEvent,
+    AgentEventType,
+    CursorExpired,
+    EventBroadcaster,
+)
 from imagent.contracts import (
     AcceptedTurn,
     ActivateNativeThread,
-    AgentEvent,
-    AgentEventType,
     AgentInput,
     AgentMessage,
     ApplicationInputDispatch,
@@ -87,7 +91,6 @@ from imagent.contracts import (
     validate_application_operation_result,
     validate_request_response,
 )
-from imagent.events import CursorExpired, EventBroadcaster
 from imagent.interaction.messages import (
     InboundMessage,
     MessageRole,

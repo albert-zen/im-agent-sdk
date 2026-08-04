@@ -313,40 +313,6 @@ class RequestRouteCorrelation:
     expires_at: datetime | None = None
 
 
-class AgentEventType(StrEnum):
-    MESSAGE_CREATED = "message.created"
-    MESSAGE_DELTA = "message.delta"
-    MESSAGE_COMPLETED = "message.completed"
-    THREAD_CREATED = "thread.created"
-    THREAD_UPDATED = "thread.updated"
-    THREAD_DELETED = "thread.deleted"
-    TURN_STARTED = "turn.started"
-    TURN_COMPLETED = "turn.completed"
-    TURN_FAILED = "turn.failed"
-    TURN_INTERRUPTED = "turn.interrupted"
-    STATUS_CHANGED = "status.changed"
-    REQUEST_OPENED = "request.opened"
-    REQUEST_RESOLVED = "request.resolved"
-    BINDING_CHANGED = "binding.changed"
-
-
-@dataclass(frozen=True, slots=True)
-class AgentEvent:
-    event_id: str
-    application_instance_id: str
-    type: AgentEventType
-    data: Metadata
-    created_at: datetime
-    project_ref: ProjectRef | None = None
-    thread_ref: ThreadRef | None = None
-    turn_id: str | None = None
-    sequence: int | None = None
-    sequence_epoch: str | None = None
-    cursor: str | None = None
-    request: InteractiveRequest | None = None
-    request_resolution: RequestResolution | None = None
-
-
 @dataclass(frozen=True, slots=True)
 class ConversationBinding:
     conversation_ref: ConversationRef

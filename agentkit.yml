@@ -525,6 +525,7 @@ components:
     description: Typed Application contract, capability, event, operation, request, and adapter-owned A1 presentation boundaries.
     code:
       - src/imagent/applications/capabilities.py
+      - src/imagent/applications/events.py
       - tests/applications/**
     docs:
       - docs/components/applications/README.md

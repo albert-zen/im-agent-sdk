@@ -8,8 +8,8 @@ from enum import StrEnum
 
 from ...adapters import AgentApplicationAdapter
 from ...applications.capabilities import SupportLevel
+from ...applications.events import AgentEvent
 from ...contracts import (
-    AgentEvent,
     ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,

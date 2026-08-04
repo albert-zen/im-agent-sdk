@@ -13,10 +13,9 @@ from imagent.applications.capabilities import (
     ThreadDeletionCapability,
     validate_application_capabilities,
 )
+from imagent.applications.events import AgentEvent, AgentEventType, validate_agent_event
 from imagent.contracts import (
     ActivateNativeThread,
-    AgentEvent,
-    AgentEventType,
     AgentInput,
     ApplicationInputDispatch,
     ApplicationOperationFailed,
@@ -45,7 +44,6 @@ from imagent.contracts import (
     TurnCatchupRead,
     TurnReplyCorrelationPolicy,
     derive_client_message_id,
-    validate_agent_event,
     validate_application_operation_result,
     validate_thread_ref,
 )

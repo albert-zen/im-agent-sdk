@@ -5,9 +5,9 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
+from .applications.events import AgentEvent
 from .contracts import (
     AcceptedTurn,
-    AgentEvent,
     AgentInput,
     ApplicationInputDispatch,
     ApplicationOperation,

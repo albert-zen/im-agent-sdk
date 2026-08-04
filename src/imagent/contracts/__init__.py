@@ -9,6 +9,7 @@ from ..applications.capabilities import (
     ThreadDeletionCapability,
     validate_application_capabilities,
 )
+from ..applications.events import AgentEvent, AgentEventType, validate_agent_event
 from ..interaction.channels import (
     ChannelCapabilities,
     DeliveryItemReceipt,
@@ -90,8 +91,6 @@ from .errors import (
 )
 from .model import (
     AcceptedTurn,
-    AgentEvent,
-    AgentEventType,
     AgentInput,
     AgentMessage,
     ApplicationInputDispatch,
@@ -193,7 +192,6 @@ from .request_validation import (
 )
 from .validators import (
     derive_client_message_id,
-    validate_agent_event,
     validate_application_operation,
     validate_application_operation_result,
     validate_binding,

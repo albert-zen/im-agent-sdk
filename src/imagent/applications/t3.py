@@ -15,8 +15,6 @@ from typing import Protocol
 from ..contracts import (
     AcceptedTurn,
     ActivateNativeThread,
-    AgentEvent,
-    AgentEventType,
     AgentInput,
     AgentMessage,
     ApplicationInputDispatch,
@@ -65,7 +63,6 @@ from ..contracts import (
     validate_application_operation_result,
 )
 from ..diagnostics import ApplicationDiagnosticFacts
-from ..events import EventBroadcaster, EventStreamGap, EventStreamReset
 from ..interaction.media import (
     AttachmentContent,
     AttachmentSourceKind,
@@ -83,6 +80,13 @@ from .capabilities import (
     SupportLevel,
     ThreadCapabilities,
     ThreadDeletionCapability,
+)
+from .events import (
+    AgentEvent,
+    AgentEventType,
+    EventBroadcaster,
+    EventStreamGap,
+    EventStreamReset,
 )
 from .presentation import (
     ApplicationPresentationCapacityError,
