@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
+from ...applications.capabilities import ProjectMode, ThreadDeletionCapability
 from ...contracts import (
     ApplicationOperationFailed,
     ApplicationRef,
@@ -29,7 +30,6 @@ from ...contracts import (
     ListProjects,
     ListThreads,
     ObserveThread,
-    ProjectMode,
     ProjectsListed,
     ProjectSummary,
     RequestRef,
@@ -38,7 +38,6 @@ from ...contracts import (
     SelectApplication,
     ThreadCreated,
     ThreadDeleted,
-    ThreadDeletionCapability,
     ThreadDeletionMode,
     ThreadHistoryRead,
     ThreadObserved,

@@ -9,6 +9,7 @@ from .adapters import (
     RequestCorrelationConflict,
     RequestCorrelationRepository,
 )
+from .applications.capabilities import SupportLevel
 from .contracts import (
     AgentEvent,
     AgentEventType,
@@ -16,7 +17,6 @@ from .contracts import (
     RequestRef,
     RequestResolutionStatus,
     RequestRouteState,
-    SupportLevel,
     ThreadProjectionRoute,
     ThreadRef,
     validate_interactive_request,

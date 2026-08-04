@@ -17,7 +17,6 @@ from ..contracts import (
     AgentEventType,
     AgentInput,
     AgentMessage,
-    ApplicationCapabilities,
     ApplicationInputDispatch,
     ApplicationInputOutcomeUnknown,
     ApplicationOperation,
@@ -27,7 +26,6 @@ from ..contracts import (
     ApplicationSummary,
     CreateThread,
     DeleteThread,
-    EventSequenceScope,
     GetProject,
     GetThread,
     GetThreadHistory,
@@ -41,14 +39,8 @@ from ..contracts import (
     ListThreads,
     NativeThreadActivated,
     Page,
-    ProjectCapabilities,
-    ProjectMode,
     RespondRequest,
-    RuntimeCapabilities,
-    SupportLevel,
-    ThreadCapabilities,
     ThreadCreated,
-    ThreadDeletionCapability,
     ThreadHistory,
     ThreadHistoryRead,
     ThreadRead,
@@ -144,6 +136,16 @@ from .appserver_request_runtime import (
     ServerRequestMapper,
 )
 from .appserver_requests import map_appserver_request, map_zen_appserver_request
+from .capabilities import (
+    ApplicationCapabilities,
+    EventSequenceScope,
+    ProjectCapabilities,
+    ProjectMode,
+    RuntimeCapabilities,
+    SupportLevel,
+    ThreadCapabilities,
+    ThreadDeletionCapability,
+)
 from .presentation import (
     ApplicationPresentationLimits,
     ApplicationPresentationRuntime,

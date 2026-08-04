@@ -64,7 +64,6 @@ from imagent.contracts import (
     UserInputResponseShape,
     derive_client_message_id,
     validate_agent_event,
-    validate_application_capabilities,
     validate_application_operation,
     validate_application_operation_result,
     validate_binding,
@@ -103,27 +102,6 @@ def capabilities(mode: ProjectMode) -> ApplicationCapabilities:
             interactive_requests=SupportLevel.NATIVE,
         ),
     )
-
-
-class CapabilityTests(unittest.TestCase):
-    def test_accepts_managed_flat_and_fixed_project_modes(self) -> None:
-        for mode in ProjectMode:
-            with self.subTest(mode=mode):
-                validate_application_capabilities(capabilities(mode))
-
-    def test_rejects_project_operations_in_flat_mode(self) -> None:
-        invalid = capabilities(ProjectMode.FLAT)
-        invalid = ApplicationCapabilities(
-            projects=ProjectCapabilities(
-                mode=ProjectMode.FLAT,
-                discovery=SupportLevel.NATIVE,
-                reading=SupportLevel.UNSUPPORTED,
-            ),
-            threads=invalid.threads,
-            runtime=invalid.runtime,
-        )
-        with self.assertRaisesRegex(ContractViolation, "flat project mode"):
-            validate_application_capabilities(invalid)
 
 
 class ReferenceAndBindingTests(unittest.TestCase):

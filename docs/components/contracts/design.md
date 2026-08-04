@@ -3,9 +3,11 @@
 > Migration note: focused Interaction authority now lives in
 > [messages](../interaction/messages/design.md) and
 > [operations](../interaction/operations/design.md), with attachment source
-> and trust authority in [media](../interaction/media/design.md). This broad
-> document remains current evidence for contract leaves and the canonical
-> `AgentMessage` dependency that have not yet been physically split.
+> and trust authority in [media](../interaction/media/design.md). Application
+> capability authority now lives in
+> [Applications capabilities](../applications/capabilities/design.md). This
+> broad document remains current evidence for contract leaves and the
+> canonical `AgentMessage` dependency that have not yet been physically split.
 
 ## Purpose
 

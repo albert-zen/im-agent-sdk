@@ -6,6 +6,16 @@ from dataclasses import replace
 from datetime import UTC, datetime
 
 from imagent.adapters import ApplicationInputDispatchHandler
+from imagent.applications.capabilities import (
+    ApplicationCapabilities,
+    EventSequenceScope,
+    ProjectCapabilities,
+    ProjectMode,
+    RuntimeCapabilities,
+    SupportLevel,
+    ThreadCapabilities,
+    ThreadDeletionCapability,
+)
 from imagent.contracts import (
     AcceptedTurn,
     ActivateNativeThread,
@@ -13,7 +23,6 @@ from imagent.contracts import (
     AgentEventType,
     AgentInput,
     AgentMessage,
-    ApplicationCapabilities,
     ApplicationInputDispatch,
     ApplicationOperation,
     ApplicationOperationFailed,
@@ -27,7 +36,6 @@ from imagent.contracts import (
     DeliveryReceipt,
     DeliveryReceiptStatus,
     DeliverySupportLevel,
-    EventSequenceScope,
     GetProject,
     GetThread,
     GetThreadHistory,
@@ -40,8 +48,6 @@ from imagent.contracts import (
     ListThreads,
     NativeThreadActivated,
     Page,
-    ProjectCapabilities,
-    ProjectMode,
     ProjectRead,
     ProjectRef,
     ProjectsListed,
@@ -56,12 +62,8 @@ from imagent.contracts import (
     RequestResponse,
     RequestStaleError,
     RespondRequest,
-    RuntimeCapabilities,
-    SupportLevel,
-    ThreadCapabilities,
     ThreadCreated,
     ThreadDeleted,
-    ThreadDeletionCapability,
     ThreadDeletionMode,
     ThreadHistory,
     ThreadHistoryRead,

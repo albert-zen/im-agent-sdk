@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from typing import TYPE_CHECKING
 
 from ..interaction.messages import ConversationRef
 from ..interaction.operations import ContractViolation, require_identifier
@@ -9,11 +10,7 @@ from ._validation import validate_thread_ref
 from .model import (
     AgentEvent,
     AgentEventType,
-    ApplicationCapabilities,
     ConversationBinding,
-    EventSequenceScope,
-    ProjectMode,
-    SupportLevel,
     ThreadProjectionRoute,
     TurnReplyCorrelation,
 )
@@ -68,43 +65,16 @@ from .request_validation import (
     validate_request_resolution,
 )
 
-
-def validate_application_capabilities(capabilities: ApplicationCapabilities) -> None:
-    if len(set(capabilities.attachment_sources)) != len(capabilities.attachment_sources):
-        raise ContractViolation("application attachment source capabilities must be unique")
-    runtime = capabilities.runtime
-    if (
-        runtime.pending_request_snapshot is not SupportLevel.UNSUPPORTED
-        and runtime.interactive_requests is SupportLevel.UNSUPPORTED
-    ):
-        raise ContractViolation("pending request snapshot requires interactive request support")
-    if (
-        runtime.gap_detection is not SupportLevel.UNSUPPORTED
-        and runtime.event_sequence_scope is EventSequenceScope.NONE
-    ):
-        raise ContractViolation("gap detection requires a declared event sequence scope")
-    projects = capabilities.projects
-    project_operations = (
-        projects.discovery,
-        projects.reading,
-        projects.creation,
-        projects.deletion,
-    )
-    if projects.mode is ProjectMode.MANAGED:
-        if projects.discovery is SupportLevel.UNSUPPORTED:
-            raise ContractViolation("managed project mode requires project discovery")
-        if projects.reading is SupportLevel.UNSUPPORTED:
-            raise ContractViolation("managed project mode requires project reads")
-    elif any(level is not SupportLevel.UNSUPPORTED for level in project_operations):
-        raise ContractViolation(
-            f"{projects.mode.value} project mode cannot advertise project operations"
-        )
+if TYPE_CHECKING:
+    from ..applications.capabilities import ApplicationCapabilities
 
 
 def validate_agent_event(
     event: AgentEvent,
     capabilities: ApplicationCapabilities,
 ) -> None:
+    from ..applications.capabilities import EventSequenceScope, SupportLevel
+
     require_identifier(event.event_id, "event_id")
     require_identifier(event.application_instance_id, "application_instance_id")
     if event.thread_ref is not None:
@@ -157,6 +127,8 @@ def validate_binding(
     binding: ConversationBinding,
     capabilities: ApplicationCapabilities | None = None,
 ) -> None:
+    from ..applications.capabilities import ProjectMode
+
     require_identifier(binding.conversation_ref.channel_instance_id, "channel_instance_id")
     require_identifier(binding.conversation_ref.native_conversation_id, "native_conversation_id")
     if binding.revision < 0:

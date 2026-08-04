@@ -7,6 +7,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from imagent.adapters import AgentApplicationAdapter
+from imagent.applications.capabilities import (
+    ProjectMode,
+    SupportLevel,
+    ThreadDeletionCapability,
+    validate_application_capabilities,
+)
 from imagent.contracts import (
     ActivateNativeThread,
     AgentEvent,
@@ -27,13 +33,10 @@ from imagent.contracts import (
     ListProjects,
     ListThreads,
     NativeThreadActivated,
-    ProjectMode,
     ProjectRead,
     ProjectsListed,
-    SupportLevel,
     ThreadCreated,
     ThreadDeleted,
-    ThreadDeletionCapability,
     ThreadDeletionMode,
     ThreadHistoryRead,
     ThreadRead,
@@ -43,7 +46,6 @@ from imagent.contracts import (
     TurnReplyCorrelationPolicy,
     derive_client_message_id,
     validate_agent_event,
-    validate_application_capabilities,
     validate_application_operation_result,
     validate_thread_ref,
 )

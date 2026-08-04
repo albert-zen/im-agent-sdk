@@ -1,19 +1,22 @@
 # Application capabilities testing
 
-Current coverage lives in `tests/test_contracts.py` and
-`tests/test_adapter_contracts.py`; target focused coverage is
-`tests/applications/test_capabilities.py`.
+Focused ownership coverage lives in `tests/applications/test_capabilities.py`;
+`tests/test_adapter_contracts.py` retains the cross-adapter conformance
+evidence.
 
 Tests validate every enum/discriminant, project mode and Thread deletion
 declaration, attachment-source support, replay/order/request/runtime claims,
-and rejection of inconsistent capability combinations. Adapter conformance
+rejection of inconsistent capability combinations, and that importing the
+capability owner does not initialize concrete adapters while existing lazy
+facade exports retain exact object identity. Adapter conformance
 must prove a capability maps to real native behavior or an explicit
 unsupported result—never a hidden fallback or product policy.
 
 Run:
 
 ```sh
-PYTHONPATH=src uv run python -m unittest tests.test_contracts tests.test_adapter_contracts -v
+PYTHONPATH=src uv run python -m unittest tests.applications.test_capabilities -v
+PYTHONPATH=src uv run python -m unittest discover -s tests -p "test_adapter_contracts.py" -v
 uv run python scripts/validate_schemas.py
 ```
 

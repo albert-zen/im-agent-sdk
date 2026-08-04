@@ -17,6 +17,7 @@ from ..adapters import (
     IdempotencyClaimStatus,
     RequestCorrelationConflict,
 )
+from ..applications.capabilities import ProjectMode
 from ..contracts import (
     AgentInput,
     ApplicationOperation,
@@ -41,7 +42,6 @@ from ..contracts import (
     ObserveThread,
     ProactiveDeliveryResult,
     ProjectionPolicy,
-    ProjectMode,
     ProjectRead,
     RequestDuplicateError,
     RequestResolvedError,

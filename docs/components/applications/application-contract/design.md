@@ -42,10 +42,11 @@ dispatched, timeout, cancellation, disconnect, or lost response is
 `ApplicationInputOutcomeUnknown` unless native truth proves otherwise; it
 never reopens Gateway retry permission.
 
-Managed, flat, and fixed Project shapes are explicit. Binding a returned
-`ThreadSummary` is a separate Gateway mutation and cannot activate a native
-Thread. An adapter must not silently invent steer/queue behavior when a native
-Application supports only a started Turn.
+Managed, flat, and fixed Project shapes are explicit through the capability
+leaf's `ProjectMode`. Binding a returned `ThreadSummary` is a separate Gateway
+mutation and cannot activate a native Thread. An adapter must not silently
+invent steer/queue behavior when a native Application supports only a started
+Turn.
 
 ## Current and target structure
 
@@ -59,7 +60,10 @@ The target is `src/imagent/applications/contract.py` with
 `tests/applications/test_contract.py`; shared JSON Schemas remain
 language-neutral documents. The current common Application Protocol sharing
 `adapters.py` with Channel and repository Ports is the declared structural
-gap. No compatibility implementation or semantics is added by this
+gap. Until that focused move, the current `imagent.applications` facade uses a
+closed, named lazy re-export set so capability imports do not initialize a
+concrete adapter; it remains a finite exact facade, not a registry or service
+locator. No compatibility implementation or semantics is added by this
 documentation slice.
 
 ## Authority
