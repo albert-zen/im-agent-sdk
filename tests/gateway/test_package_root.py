@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import unittest
 from pathlib import Path
 from subprocess import run
@@ -18,6 +19,7 @@ from imagent.gateway.admission import ClaimedInbound as AdmissionClaimedInbound
 from imagent.gateway.admission import (
     InboundAdmissionService as AdmissionInboundAdmissionService,
 )
+from imagent.gateway.input import InboundContentTransformer as InputInboundContentTransformer
 from imagent.gateway_composition import (
     GatewayExtensions as CompositionGatewayExtensions,
 )
@@ -62,6 +64,12 @@ class GatewayPackageRootTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("ModuleNotFoundError", result.stderr)
         self.assertIn("imagent.inbound_admission", result.stderr)
+
+    def test_inbound_content_transformer_facades_preserve_exact_object_identity(self) -> None:
+        self.assertIs(gateway_package.InboundContentTransformer, InputInboundContentTransformer)
+
+    def test_historical_inbound_content_module_is_absent(self) -> None:
+        self.assertIsNone(importlib.util.find_spec("imagent.inbound_content"))
 
 
 if __name__ == "__main__":

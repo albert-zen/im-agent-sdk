@@ -177,7 +177,8 @@ components:
       - docs/decisions/0013-bounded-application-event-admission.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/gateway/admission.py
-      - src/imagent/inbound_content.py
+      - src/imagent/gateway/input/__init__.py
+      - src/imagent/gateway/input/content_transformation.py
       - src/imagent/inbound_failures.py
       - src/imagent/gateway/__init__.py
       - src/imagent/gateway_composition.py
@@ -187,7 +188,7 @@ components:
       - tests/test_gateway_operations.py
       - tests/test_gateway_vertical_slice.py
       - tests/gateway/test_admission.py
-      - tests/test_inbound_content_transformer.py
+      - tests/gateway/input/test_content_transformation.py
       - tests/test_inbound_failure_presenter.py
     docs:
       - docs/components/gateway/README.md

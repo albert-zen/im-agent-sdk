@@ -1,0 +1,1 @@
+"""Focused Gateway input tests."""

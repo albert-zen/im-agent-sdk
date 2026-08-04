@@ -478,17 +478,17 @@ components:
     outputs: [bounded non-empty content tuple]
     public_contracts: [InboundContentTransformer]
     public_exports:
-      current: [imagent.inbound_content:InboundContentTransformer]
+      current: [imagent.gateway.input:InboundContentTransformer]
       target: [imagent.gateway.input:InboundContentTransformer]
     dependencies: [interaction.messages, interaction.media, gateway.admission, gateway.diagnostics]
     state_recovery: Pre-dispatch result is not persisted and may be reinvoked after safe reclaim/restart.
-    current_code: [src/imagent/inbound_content.py, src/imagent/gateway/__init__.py, src/imagent/diagnostics.py]
+    current_code: [src/imagent/gateway/input/__init__.py, src/imagent/gateway/input/content_transformation.py, src/imagent/gateway/__init__.py, src/imagent/diagnostics.py]
     target_code: [src/imagent/gateway/input/content_transformation.py]
-    current_tests: [tests/test_inbound_content_transformer.py]
+    current_tests: [tests/gateway/input/test_content_transformation.py]
     target_tests: [tests/gateway/input/test_content_transformation.py]
     authoritative_docs: [docs/components/gateway/input/content-transformation/design.md, docs/components/gateway/input/content-transformation/testing.md, docs/components/gateway/design.md, docs/components/gateway/testing.md]
     adrs: [docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [implementation and bounded runtime remain in inbound_content.py while orchestration and shared diagnostic facts remain split across Gateway and diagnostics]
+    gaps: [orchestration and shared diagnostic facts remain split across Gateway and diagnostics]
 
   gateway.input.dispatch:
     id: gateway.input.dispatch
