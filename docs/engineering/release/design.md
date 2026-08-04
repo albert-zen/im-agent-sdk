@@ -22,6 +22,14 @@ implementations, a native runtime, a second package facade, or product
 configuration. A public symbol has one implementation owner; a facade may
 re-export it but must not retain a duplicate.
 
+## Executable test owner
+
+The complete package-independence and release-boundary test mirror lives in
+`tests/engineering/test_release.py`. The historical root module
+`tests/test_package_independence.py` is intentionally absent; it is not a
+compatibility facade and must not be recreated as an import shim. The move
+changes only the physical test owner and its repository-root calculation.
+
 ## Install boundary
 
 The base package must import without optional native integrations. Optional

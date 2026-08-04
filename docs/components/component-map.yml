@@ -1384,7 +1384,7 @@ components:
     state_recovery: Stateless packaging; build must not import optional native dependencies in the base install.
     current_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/contracts/__init__.py, src/imagent/py.typed]
     target_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/contracts/__init__.py, src/imagent/py.typed]
-    current_tests: [tests/test_package_independence.py]
+    current_tests: [tests/engineering/test_release.py]
     target_tests: [tests/engineering/test_release.py]
     authoritative_docs: [docs/engineering/release/design.md, docs/engineering/release/testing.md, README.md, docs/REUSE.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md]

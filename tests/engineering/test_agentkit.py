@@ -204,7 +204,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/conformance/test_adapter_contracts.py": {"testing-and-conformance"},
             "tests/engineering/test_schema_conformance.py": {"schema-conformance"},
             "tests/engineering/test_repository_maintainability.py": {"repository-maintainability"},
-            "tests/test_package_independence.py": {"release"},
+            "tests/engineering/test_release.py": {"release"},
         }
         for path, owners in expected.items():
             with self.subTest(path=path):

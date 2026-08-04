@@ -1,5 +1,20 @@
 # Release testing
 
+## Focused release mirror
+
+Run the complete release test mirror both through its module name and through
+focused unittest discovery:
+
+```sh
+PYTHONPATH=src uv run python -m unittest tests.engineering.test_release -v
+PYTHONPATH=src uv run python -m unittest discover -s tests/engineering -p 'test_release.py' -v
+```
+
+Both commands must discover the same complete suite. The historical
+`tests/test_package_independence.py` path is absent, with no compatibility or
+import shim; wheel build/install behavior, public exports, and dependency
+boundary semantics remain unchanged.
+
 ## Build and install checks
 
 Validate the package from a clean dependency-complete environment:
