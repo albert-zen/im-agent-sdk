@@ -27,13 +27,13 @@ from imagent.gateway import (
     ImAgentGateway,
     InboundContentTransformer,
 )
-from imagent.gateway.persistence.memory import InMemoryBindingRepository
-from imagent.inbound_content import (
+from imagent.gateway.input.content_transformation import (
     InboundContentTransformationCapacityError,
     InboundContentTransformationError,
     InboundContentTransformationTimeout,
     transform_inbound_content,
 )
+from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.storage import InMemoryIdempotencyRepository
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 

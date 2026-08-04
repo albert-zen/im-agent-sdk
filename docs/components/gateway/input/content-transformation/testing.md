@@ -1,7 +1,6 @@
 # Gateway inbound content transformation testing
 
-Current focused evidence is `tests/test_inbound_content_transformer.py`; the
-target mirrored suite is
+Focused evidence is
 `tests/gateway/input/test_content_transformation.py`.
 
 Tests must prove:
@@ -22,5 +21,5 @@ Tests must prove:
 Run:
 
 ```sh
-PYTHONPATH=src uv run python -m unittest tests.test_inbound_content_transformer -v
+PYTHONPATH=src uv run python -m unittest tests.gateway.input.test_content_transformation -v
 ```

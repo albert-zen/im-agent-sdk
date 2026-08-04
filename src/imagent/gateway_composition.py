@@ -10,8 +10,8 @@ from .adapters import (
     RequestCorrelationRepository,
 )
 from .gateway.delivery.outcome_observation import DeliveryOutcomeObserver
+from .gateway.input import InboundContentTransformer
 from .gateway.presentation import OutboundPresentationPolicy
-from .inbound_content import InboundContentTransformer
 from .inbound_failures import InboundFailurePresenter
 from .interaction.controllers import InboundController, RequestPresenter
 

@@ -78,8 +78,6 @@ from ..gateway_startup import (
     GatewayNotRunning,
     GatewayStartupAdmission,
 )
-from ..inbound_content import InboundContentTransformer as InboundContentTransformer
-from ..inbound_content import InboundContentTransformRuntime
 from ..inbound_failures import InboundFailurePhase as InboundFailurePhase
 from ..inbound_failures import InboundFailurePresentationRuntime, handle_claimed_inbound
 from ..inbound_failures import InboundFailurePresenter as InboundFailurePresenter
@@ -122,6 +120,8 @@ from .delivery.outcome_observation import (
 )
 from .delivery.planning import DeliveryPlanningError
 from .delivery.proactive import ProactiveDeliveryService
+from .input import InboundContentTransformer as InboundContentTransformer
+from .input.content_transformation import InboundContentTransformRuntime
 from .persistence import BindingConflict
 from .persistence.memory import (
     InMemoryDeliverySubmissionRepository,
