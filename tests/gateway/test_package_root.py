@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import unittest
+from importlib import import_module
 from pathlib import Path
 from subprocess import run
 from sys import executable
@@ -14,12 +15,20 @@ from imagent.gateway import (
     GatewayRepositories,
     ImAgentGateway,
     InboundAdmissionService,
+    InboundFailurePhase,
+    InboundFailurePresenter,
 )
 from imagent.gateway.admission import ClaimedInbound as AdmissionClaimedInbound
 from imagent.gateway.admission import (
     InboundAdmissionService as AdmissionInboundAdmissionService,
 )
 from imagent.gateway.input import InboundContentTransformer as InputInboundContentTransformer
+from imagent.gateway.input import (
+    InboundFailurePhase as InputInboundFailurePhase,
+)
+from imagent.gateway.input import (
+    InboundFailurePresenter as InputInboundFailurePresenter,
+)
 from imagent.gateway_composition import (
     GatewayExtensions as CompositionGatewayExtensions,
 )
@@ -70,6 +79,14 @@ class GatewayPackageRootTests(unittest.TestCase):
 
     def test_historical_inbound_content_module_is_absent(self) -> None:
         self.assertIsNone(importlib.util.find_spec("imagent.inbound_content"))
+
+    def test_inbound_failure_exports_preserve_exact_object_identity(self) -> None:
+        self.assertIs(InboundFailurePhase, InputInboundFailurePhase)
+        self.assertIs(InboundFailurePresenter, InputInboundFailurePresenter)
+
+    def test_historical_inbound_failure_module_is_absent(self) -> None:
+        with self.assertRaises(ModuleNotFoundError):
+            import_module("imagent.inbound_failures")
 
 
 if __name__ == "__main__":

@@ -11,8 +11,8 @@ from .adapters import (
 )
 from .gateway.delivery.outcome_observation import DeliveryOutcomeObserver
 from .gateway.input import InboundContentTransformer
+from .gateway.input.failure_presentation import InboundFailurePresenter
 from .gateway.presentation import OutboundPresentationPolicy
-from .inbound_failures import InboundFailurePresenter
 from .interaction.controllers import InboundController, RequestPresenter
 
 

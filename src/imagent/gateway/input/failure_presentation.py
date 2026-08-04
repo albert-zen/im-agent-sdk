@@ -8,23 +8,23 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
-from .adapters import IdempotencyRepository
-from .contracts import (
+from ...adapters import IdempotencyRepository
+from ...contracts import (
     ApplicationInputOutcomeUnknown,
 )
-from .diagnostics import (
+from ...diagnostics import (
     InboundFailurePresentationFailureCode,
     InboundFailurePresenterDiagnosticFacts,
 )
-from .gateway.admission import ClaimedInbound
-from .interaction.messages import (
+from ...interaction.messages import (
     ConversationRef,
     InboundMessage,
     OutboundMessage,
     TextContent,
     TextFormat,
 )
-from .projection_runtime import InputPostAcceptanceError
+from ...projection_runtime import InputPostAcceptanceError
+from ..admission import ClaimedInbound
 
 
 class InboundFailurePhase(StrEnum):

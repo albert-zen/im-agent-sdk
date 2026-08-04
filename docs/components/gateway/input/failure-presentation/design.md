@@ -25,10 +25,10 @@ arbitrary metadata, changed identity, and unsupported output fail before
 Channel effects. Valid output uses the common Coordinator and outbound
 idempotency path.
 
-Public contracts currently live in `imagent.inbound_failures` and target
-`imagent.gateway.input`. Current code is `src/imagent/inbound_failures.py` plus
-Gateway orchestration and shared diagnostics; target code is
-`src/imagent/gateway/input/failure_presentation.py`.
+Public I2 contracts are exposed by `imagent.gateway.input`; the established
+`imagent.gateway` facade re-exports the exact same objects. Implementation is
+`src/imagent/gateway/input/failure_presentation.py`, with Gateway orchestration
+and shared diagnostics remaining in their existing owners.
 
 ## Claim and replay rules
 

@@ -1,8 +1,7 @@
 # Gateway inbound failure presentation testing
 
-Current focused evidence is `tests/test_inbound_failure_presenter.py`, with
-durable restart evidence in `tests/test_storage.py`. The target mirrored suite
-is `tests/gateway/input/test_failure_presentation.py`; persistence integration
+Focused evidence is `tests/gateway/input/test_failure_presentation.py`, with
+durable restart evidence in `tests/test_storage.py`; persistence integration
 stays with the SQLite owner.
 
 Tests must prove:
@@ -25,5 +24,5 @@ Tests must prove:
 Run:
 
 ```sh
-PYTHONPATH=src uv run python -m unittest tests.test_inbound_failure_presenter tests.test_storage -v
+PYTHONPATH=src uv run python -m unittest tests.gateway.input.test_failure_presentation tests.test_storage -v
 ```
