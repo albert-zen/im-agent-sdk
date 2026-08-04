@@ -14,9 +14,7 @@ from ..ingress_media import (
     MAX_IMAGE_COUNT,
     FileMediaMaterializer,
     ImageMediaMaterializer,
-    MaterializedImage,
     MediaDownloadError,
-    MediaResult,
 )
 
 _TRUSTED_MEDIA_HOSTS = frozenset(
@@ -44,11 +42,6 @@ class QQFileReference:
     url: str = field(repr=False)
     filename: str = ""
     content_type: str = ""
-
-
-# Backwards-compatible internal names while staging is now channel-neutral.
-QQMaterializedImage = MaterializedImage
-QQMediaResult = MediaResult
 
 
 def parse_qq_image_references(value: object) -> tuple[QQImageReference, ...]:

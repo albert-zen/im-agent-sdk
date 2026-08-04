@@ -33,12 +33,17 @@ Required scenarios:
   admission authority; and
 - QQ, Telegram, Feishu, and Weixin counterexamples all use the same ordering.
 
-The adapter-base parity tests also prove that the inherited access and inbound
+The ingress middleware and adapter-base parity tests also prove that the inherited access and inbound
 dispatch methods preserve virtual access/report/diagnostic calls and their
 denial-before-handoff order, while admitted options and middleware handoff
 delegate to this leaf without a second limiter or admission path. Native
 diagnostic emission remains covered by the adapter diagnostics suite and is
 intentionally not moved into ingress.
+
+The clean-process ownership evidence imports `_InboundMiddleware` from this
+leaf, proves the runtime wrapper has no duplicate transaction or normalization
+helpers, and verifies that route-context recording remains bounded and occurs
+at the same point before public message normalization.
 
 Focused policy evidence lives in
 `tests/interaction/channels/test_ingress.py`: configuration parsing,

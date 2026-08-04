@@ -25,7 +25,7 @@ from ...applications.requests import (
 from ...applications.requests import (
     validate_request_response_shape as _validate_request_response_shape,
 )
-from ...interaction.channels import DeliveryReceipt, validate_delivery_receipt
+from ...interaction.channels.contract import DeliveryReceipt, validate_delivery_receipt
 from ...interaction.messages import ConversationRef
 from ...interaction.operations import ContractViolation, require_identifier
 

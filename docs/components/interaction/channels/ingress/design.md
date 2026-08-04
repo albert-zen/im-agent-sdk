@@ -50,9 +50,8 @@ identity coercion; the explicit reply override and native reply fallback; the
 selected `channel_id`, `input_error`, and `trace_id` metadata; and
 `_parse_datetime` ISO/`Z` parsing with its current fallback behavior. It does
 not update route context, retrieve or decrypt provider media, or acknowledge
-a provider. Runtime retains only route-context updates before invoking this
-helper; provider-native work remains in the adapters. The ingress-owned
-admission transaction is the separate boundary described below.
+a provider. The ingress-owned admission transaction is the separate boundary
+described below.
 
 The private `_InboundAdmissionTransaction` owns the provider-neutral
 transaction after access policy: it retains only the bounded transient
@@ -62,9 +61,12 @@ public message or releases only a confirmed pre-handoff failure. It preserves
 the no-lease key discard, transfer fence before `InboundAdmission.deliver`,
 release-failure note, original-error precedence, and failure key discard. The
 stage callables are narrow ingress-specific Protocols; they are invoked for
-one transaction and are not a generic middleware or hook chain. Runtime keeps
-bounded route-context updates and supplies the normalizer; concrete provider
-authentication, retrieval/decryption, and acknowledgement remain in adapters.
+one transaction and are not a generic middleware or hook chain. The
+ingress-owned `_InboundMiddleware` composes that transaction and calls the
+adapter's typed route-context recorder immediately before public normalization.
+The Base adapter retains the bounded route-context state; runtime only
+constructs this ingress composition object. Concrete provider authentication,
+retrieval/decryption, and acknowledgement remain in adapters.
 
 `BaseChannelAdapter` preserves its existing access and dispatch method surface
 as a thin delegator to this leaf. Its `dispatch_inbound` method still invokes
@@ -97,11 +99,12 @@ shared value before admission and media work.
 
 The obsolete provider-native access module is not a compatibility facade:
 access policy is an internal owning-leaf contract, so repository callers use
-the Interaction path directly. Runtime still owns bounded route-context
-updates, while it invokes the ingress-owned admission transaction and complete
-content/identity/time/metadata envelope helper. Platform-specific
-authentication, retrieval/decryption, and acknowledgement remain under
-adapters.
+the Interaction path directly. The Base adapter owns bounded route-context
+updates and the ingress middleware invokes that typed recorder while composing
+the admission transaction and complete content/identity/time/metadata
+envelope helper. Runtime retains only native lifecycle/factory composition.
+Platform-specific authentication, retrieval/decryption, and acknowledgement
+remain under adapters.
 
 `ingress_security.py` owns the private Windows staging-path DACL helper. On
 Windows it resolves the current process user SID and replaces each staged file

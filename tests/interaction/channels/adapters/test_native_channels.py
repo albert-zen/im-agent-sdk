@@ -24,7 +24,10 @@ from imagent.interaction.channels import (
     DeliverySupportLevel,
     InboundAdmission,
 )
-from imagent.interaction.channels.adapters.base import BaseChannelAdapter
+from imagent.interaction.channels.adapters.base import (
+    BaseChannelAdapter,
+    ChannelRouteContext,
+)
 from imagent.interaction.channels.adapters.diagnostics import (
     NativeChannelDiagnosticSnapshot,
     NativeChannelDiagnosticState,
@@ -54,6 +57,17 @@ from imagent.interaction.diagnostics import (
     QueueDiagnosticName,
 )
 from imagent.testing import verify_channel_adapter
+
+
+class _RouteContextRecorder:
+    def __init__(self) -> None:
+        self.context: ChannelRouteContext | None = None
+
+    def _record_route_context(self, inbound: InboundMessage) -> None:
+        self.context = ChannelRouteContext(
+            admitted_user_id=inbound.user_id,
+            last_inbound_message_id=inbound.message_id,
+        )
 
 
 class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
@@ -372,7 +386,7 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
                     sent_at=None,
                     trace_id=None,
                 )
-                await self.middleware.handle_inbound(self, inbound)
+                await self.middleware.handle_inbound(_RouteContextRecorder(), inbound)
 
             async def stop(self) -> None:
                 return None
@@ -461,15 +475,16 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
             native_factory=Native,
         )
         await adapter.start(ignore, admit)
+        route_context = _RouteContextRecorder()
         try:
             await captured.handle_inbound(
-                adapter,
+                route_context,
                 inbound,
                 prepare_inbound=prepare,
                 pending_attachment_count=1,
             )
             await captured.handle_inbound(
-                adapter,
+                route_context,
                 inbound,
                 prepare_inbound=prepare,
                 pending_attachment_count=1,
@@ -527,10 +542,11 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
             native_factory=Native,
         )
         await adapter.start(ignore, admit)
+        route_context = _RouteContextRecorder()
         try:
             with self.assertRaisesRegex(RuntimeError, "media download failed"):
                 await captured.handle_inbound(
-                    adapter,
+                    route_context,
                     InboundMessage(
                         channel_id="qq",
                         conversation_id="c2c:user-1",
@@ -591,10 +607,11 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
             native_factory=Native,
         )
         await adapter.start(ignore, admit)
+        route_context = _RouteContextRecorder()
         try:
             with self.assertRaises(RuntimeError) as raised:
                 await captured.handle_inbound(
-                    adapter,
+                    route_context,
                     InboundMessage(
                         channel_id="qq",
                         conversation_id="c2c:user-1",
@@ -654,10 +671,11 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
             native_factory=Native,
         )
         await adapter.start(ignore, admit)
+        route_context = _RouteContextRecorder()
         try:
             with self.assertRaisesRegex(RuntimeError, "gateway processing failed"):
                 await captured.handle_inbound(
-                    adapter,
+                    route_context,
                     InboundMessage(
                         channel_id="qq",
                         conversation_id="c2c:user-1",

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from typing import cast
 
 from imagent.interaction.channels import InboundAdmission
-from imagent.interaction.channels.adapters.runtime import _InboundMiddleware
+from imagent.interaction.channels.adapters.base import ChannelRouteContext
 from imagent.interaction.channels.ingress import (
     _TRANSIENT_ADMISSION_LIMIT,
     ACCESS_DENIAL_REPORT_LIMIT,
@@ -17,6 +17,7 @@ from imagent.interaction.channels.ingress import (
     InboundMessage,
     _AccessDenialLimiter,
     _InboundAdmissionTransaction,
+    _InboundMiddleware,
     _normalize_inbound_message,
     _parse_datetime,
     dispatch_inbound,
@@ -231,15 +232,26 @@ class InboundNormalizationTests(unittest.TestCase):
             ),
         )
 
-    def test_runtime_keeps_text_then_attachment_order_and_route_context(self) -> None:
+    def test_ingress_keeps_text_then_attachment_order_and_records_route_context(self) -> None:
         async def ignore(_message) -> None:
             return None
+
+        class RouteRecorder:
+            def __init__(self) -> None:
+                self.context: ChannelRouteContext | None = None
+
+            def _record_route_context(self, inbound: InboundMessage) -> None:
+                self.context = ChannelRouteContext(
+                    admitted_user_id=inbound.user_id,
+                    last_inbound_message_id=inbound.message_id,
+                )
 
         middleware = _InboundMiddleware(
             channel_instance_id="qq-main",
             on_message=ignore,
             on_admission=None,
         )
+        adapter = RouteRecorder()
         inbound = InboundMessage(
             channel_id="qq",
             conversation_id="c2c:user-1",
@@ -259,6 +271,7 @@ class InboundNormalizationTests(unittest.TestCase):
         )
 
         message = middleware._normalize_inbound(
+            adapter,
             inbound,
             reply_to_message_id=None,
         )
@@ -285,13 +298,9 @@ class InboundNormalizationTests(unittest.TestCase):
                 reply_to_message_id=None,
             ),
         )
-        self.assertEqual(
-            getattr(
-                middleware.get_route_context("qq", "c2c:user-1"),
-                "last_inbound_message_id",
-            ),
-            "native-message-2",
-        )
+        self.assertIsNotNone(adapter.context)
+        assert adapter.context is not None
+        self.assertEqual(adapter.context.last_inbound_message_id, "native-message-2")
 
     def test_datetime_parser_preserves_iso_and_current_time_fallback(self) -> None:
         self.assertEqual(
@@ -356,7 +365,11 @@ class InboundAdmissionTransactionTests(unittest.IsolatedAsyncioTestCase):
         async def prepare(message: InboundMessage) -> InboundMessage:
             return message
 
-        adapter = object()
+        class Adapter:
+            def _record_route_context(self, inbound: InboundMessage) -> None:
+                del inbound
+
+        adapter = Adapter()
         inbound = self._native("handoff-options")
         await dispatch_inbound(
             adapter=adapter,

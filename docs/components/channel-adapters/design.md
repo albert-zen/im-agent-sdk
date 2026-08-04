@@ -134,8 +134,9 @@ Channel adapter; they are not Agent event replay cursors.
 The SDK owns the reusable QQ, Telegram, Feishu, and Weixin native transports,
 the focused Interaction ingress/outbound helpers, and one common
 `channel_from_config` seam. The common native wrapper and factory live in the
-Interaction adapter leaf; `imagent.channels` is their stable formal adapter
-facade rather than another runtime implementation. Protocol dependencies
+Interaction adapter leaf; its runtime module is composition only and
+`imagent.channels` is their stable formal adapter facade rather than another
+runtime implementation. Protocol dependencies
 remain optional extras; importing Contracts, Ports, Gateway, or either adapter
 facade does not import them.
 

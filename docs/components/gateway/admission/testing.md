@@ -2,7 +2,8 @@
 
 Focused evidence is `tests/gateway/test_admission.py`; package-root export
 evidence is `tests/gateway/test_package_root.py`; native Channel integration
-and preparation ordering remain in `tests/test_native_channels.py`.
+and preparation ordering remain in
+`tests/interaction/channels/adapters/test_native_channels.py`.
 
 Tests must cover:
 
@@ -22,5 +23,5 @@ Tests must cover:
 Run:
 
 ```sh
-PYTHONPATH=src uv run python -m unittest tests.gateway.test_admission tests.test_native_channels -v
+PYTHONPATH=src uv run python -m unittest tests.gateway.test_admission tests.interaction.channels.adapters.test_native_channels -v
 ```

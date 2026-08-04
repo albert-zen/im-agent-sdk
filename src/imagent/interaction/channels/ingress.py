@@ -206,30 +206,38 @@ class _InboundNormalizer(Protocol):
     ) -> InteractionInboundMessage: ...
 
 
+class _InboundRouteContextAdapter(Protocol):
+    def _record_route_context(self, inbound: InboundMessage) -> None: ...
+
+
 class _InboundHandoffMiddleware(Protocol):
     async def handle_inbound(
         self,
-        adapter: object,
+        adapter: _InboundRouteContextAdapter,
         inbound: InboundMessage,
-        **options: object,
+        *,
+        reply_to_message_id: str | None = None,
+        prepare_inbound: _InboundPreparation | None = None,
+        pending_attachment_count: int = 0,
     ) -> None: ...
 
 
 async def dispatch_inbound(
     *,
-    adapter: object,
+    adapter: _InboundRouteContextAdapter,
     middleware: _InboundHandoffMiddleware,
     inbound: InboundMessage,
     reply_to_message_id: str | None = None,
     prepare_inbound: _InboundPreparation | None = None,
     pending_attachment_count: int = 0,
 ) -> None:
-    dispatch_options: dict[str, object] = {"reply_to_message_id": reply_to_message_id}
-    if prepare_inbound is not None:
-        dispatch_options["prepare_inbound"] = prepare_inbound
-    if pending_attachment_count:
-        dispatch_options["pending_attachment_count"] = pending_attachment_count
-    await middleware.handle_inbound(adapter, inbound, **dispatch_options)
+    await middleware.handle_inbound(
+        adapter,
+        inbound,
+        reply_to_message_id=reply_to_message_id,
+        prepare_inbound=prepare_inbound,
+        pending_attachment_count=pending_attachment_count,
+    )
 
 
 class _InboundAdmissionTransaction:
@@ -304,6 +312,67 @@ class _InboundAdmissionTransaction:
             async with self._admission_lock:
                 self._admitted_inbound.discard(admission_key)
             raise
+
+
+class _InboundMiddleware:
+    """Compose one native callback with the provider-neutral ingress leaf."""
+
+    def __init__(
+        self,
+        *,
+        channel_instance_id: str,
+        on_message: MessageHandler,
+        on_admission: InboundAdmissionHandler | None,
+    ) -> None:
+        self._inbound_transaction = _InboundAdmissionTransaction(
+            channel_instance_id=channel_instance_id,
+            on_message=on_message,
+            on_admission=on_admission,
+        )
+        self._channel_instance_id = channel_instance_id
+
+    async def handle_inbound(
+        self,
+        adapter: _InboundRouteContextAdapter,
+        inbound: InboundMessage,
+        *,
+        reply_to_message_id: str | None = None,
+        prepare_inbound: _InboundPreparation | None = None,
+        pending_attachment_count: int = 0,
+    ) -> None:
+        del pending_attachment_count
+
+        def normalize_inbound(
+            inbound: InboundMessage,
+            *,
+            reply_to_message_id: str | None,
+        ) -> InteractionInboundMessage:
+            return self._normalize_inbound(
+                adapter,
+                inbound,
+                reply_to_message_id=reply_to_message_id,
+            )
+
+        await self._inbound_transaction.run(
+            inbound,
+            normalize_inbound=normalize_inbound,
+            prepare_inbound=prepare_inbound,
+            reply_to_message_id=reply_to_message_id,
+        )
+
+    def _normalize_inbound(
+        self,
+        adapter: _InboundRouteContextAdapter,
+        inbound: InboundMessage,
+        *,
+        reply_to_message_id: str | None,
+    ) -> InteractionInboundMessage:
+        adapter._record_route_context(inbound)
+        return _normalize_inbound_message(
+            channel_instance_id=self._channel_instance_id,
+            inbound=inbound,
+            reply_to_message_id=reply_to_message_id,
+        )
 
 
 def _normalize_inbound_message(

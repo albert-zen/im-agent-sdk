@@ -23,11 +23,13 @@ authentication/signatures, API encoding/escaping, credentials, native
 upload/download/decryption/acknowledgement, URL rules, QR/token state, rate
 limit/response mapping, and diagnostic worker facts.
 
-`runtime.py` owns the common native-transport wrapper and `channel_from_config`
-factory inside this leaf. The provider-neutral admission-handoff transaction
-and complete inbound content/identity/time/selected-metadata normalization
-belong to Interaction ingress; runtime invokes that leaf-owned transaction
-with its normalizer after retaining bounded route-context updates. Public
+`runtime.py` owns only the common native-transport wrapper and
+`channel_from_config` factory inside this leaf. The provider-neutral
+admission-handoff transaction, ingress middleware, and complete inbound
+content/identity/time/selected-metadata normalization belong to Interaction
+ingress; runtime constructs that leaf-owned middleware around the native
+factory. The Base adapter retains bounded route-context state and records it
+through the typed ingress boundary. Public
 `OutboundMessage` and `AttachmentContent` conversion to
 leaf-internal outbound DTOs belongs to outbound-delivery; the runtime invokes
 those leaf-owned conversions around the native call while retaining only
@@ -70,7 +72,7 @@ Channel facade. All four providers import `BaseChannelAdapter` and
 `imagent.channels.native.base` path is removed without a compatibility shim.
 `BaseChannelAdapter` retains the exact native adapter method surface as a thin
 delegator to ingress and outbound delivery. It owns only native lifecycle,
-startup validation, route-context state, and diagnostic state/facts. Its
+startup validation, bounded route-context state, and diagnostic state/facts. Its
 `dispatch_inbound` method preserves virtual access/report/diagnostic calls and
 their old order before delegating admitted handoff options to ingress. Its
 outbound method preserves virtual route-user resolution and lazy conversation

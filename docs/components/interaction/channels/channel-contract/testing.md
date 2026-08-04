@@ -23,6 +23,9 @@ Required evidence:
 - `imagent.interaction.channels` is the sole formal Channel contract facade;
   its exported values are exact owner objects and its `__all__` contains no
   historical facade implementation;
+- the canonical `interaction.channels.contract` owner has the same finite
+  export set, and clean-process `inspect.signature`/`typing.get_type_hints`
+  resolve through the owner without importing a historical implementation;
 - the enumerated Channel/admission names are absent and unimportable from
   `imagent.adapters`, and the capability/receipt names are absent and
   unimportable from `imagent.contracts`, without disturbing unrelated facade
@@ -31,8 +34,8 @@ Required evidence:
   `NativeTransportChannelAdapter` and `channel_from_config`.
 
 Focused evidence currently lives in `tests/conformance/test_adapter_contracts.py`,
-`tests/test_native_channels.py`, Channel-specific suites, Gateway admission
-tests, schema validation, and Pyright. Exact sole-facade ownership, retired
+`tests/interaction/channels/adapters/test_native_channels.py`, Channel-specific
+suites, Gateway admission tests, schema validation, and Pyright. Exact sole-facade ownership, retired
 historical imports, and `imagent.channels` adapter identity live in
 `tests/interaction/channels/test_contract.py`; native Channel suites and
 planner tests provide behavioral parity. Gateway operation tests enter through

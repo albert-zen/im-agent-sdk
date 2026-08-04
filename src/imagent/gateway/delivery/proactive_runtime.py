@@ -8,7 +8,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 from ...applications.contract import ThreadRef
-from ...interaction.channels import (
+from ...interaction.channels.contract import (
     ChannelAdapter,
     DeliveryItemReceipt,
     DeliveryItemStatus,

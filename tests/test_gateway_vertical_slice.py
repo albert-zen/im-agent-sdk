@@ -54,6 +54,9 @@ class NativeQQChannel:
     async def stop(self) -> None:
         return None
 
+    def _record_route_context(self, inbound) -> None:
+        self.last_route_context = (inbound.user_id, inbound.message_id)
+
     async def send_message(self, message) -> NativeDeliveryResult:
         self.sent.append(message)
         self.delivered.set()

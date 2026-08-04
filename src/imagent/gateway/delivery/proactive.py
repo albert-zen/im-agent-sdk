@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import TypeAlias
 
 from ...applications.contract import ThreadRef, validate_thread_ref
-from ...interaction.channels import DeliveryReceipt
+from ...interaction.channels.contract import DeliveryReceipt
 from ...interaction.media import (
     AttachmentContent,
     AttachmentHandle,
