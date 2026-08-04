@@ -28,8 +28,8 @@ attempt best-effort and cannot change the receipt or retry decision.
 Submission persistence stores identity, fingerprints, route snapshots,
 receipts, bounded errors, and timestamps only. It stores no content, artifact
 bytes/path lifetime, durable work item, credential, or Agent transcript. The
-process-local repository remains co-located in this module as an explicit
-`gateway.persistence.memory` split candidate.
+process-local repository lives in its `gateway.persistence.memory` owner;
+proactive orchestration depends only on the repository contract.
 
 ## Ingress boundary
 

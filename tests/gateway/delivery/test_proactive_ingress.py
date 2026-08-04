@@ -31,12 +31,10 @@ from imagent.contracts import (
 )
 from imagent.gateway import GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import ProactiveDeliveryJsonHandler, ScopedDeliveryAuthorizer
-from imagent.gateway.delivery.proactive import (
-    InMemoryDeliverySubmissionRepository,
-)
 from imagent.gateway.delivery.proactive_ingress import (
     ProactiveDeliveryJsonHandler as OwnerProactiveDeliveryJsonHandler,
 )
+from imagent.gateway.persistence.memory import InMemoryDeliverySubmissionRepository
 from imagent.projections import InMemoryProjectionRouteRepository
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 

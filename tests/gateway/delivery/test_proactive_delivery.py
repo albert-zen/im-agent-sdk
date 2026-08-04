@@ -48,9 +48,9 @@ from imagent.gateway.delivery import (
 from imagent.gateway.delivery import proactive as proactive_owner
 from imagent.gateway.delivery.proactive import (
     DeliveryRouteError,
-    InMemoryDeliverySubmissionRepository,
 )
 from imagent.gateway.delivery.proactive_authorization import DeliveryAuthorizationError
+from imagent.gateway.persistence.memory import InMemoryDeliverySubmissionRepository
 from imagent.projections import InMemoryProjectionRouteRepository
 from imagent.storage import SQLiteGatewayState
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter

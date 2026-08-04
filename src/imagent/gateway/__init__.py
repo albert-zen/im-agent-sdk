@@ -125,10 +125,8 @@ from .delivery.outcome_observation import (
     DeliveryOutcomeObserverRuntime,
 )
 from .delivery.planning import DeliveryPlanningError
-from .delivery.proactive import (
-    InMemoryDeliverySubmissionRepository,
-    ProactiveDeliveryService,
-)
+from .delivery.proactive import ProactiveDeliveryService
+from .persistence.memory import InMemoryDeliverySubmissionRepository
 from .presentation import (
     OutboundPresentationContext,
     OutboundPresentationRuntime,
