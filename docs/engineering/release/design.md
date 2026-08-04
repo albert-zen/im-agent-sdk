@@ -57,11 +57,17 @@ objects and never hide a duplicate or lazy compatibility implementation. The
  aliases in `imagent.contracts`, and the package-root `events` module are
  formal explicit facades over `imagent.applications.events`, not implementation
  owners.
-The finite `imagent.applications` package-root lazy resolver is not a
-compatibility shim: it has a bounded set of named exports, resolves each name
-to its exact implementation-module identity, and declares those names under
-`TYPE_CHECKING`. A cold `import imagent.applications` loads neither Gateway nor
-concrete optional dependencies.
+The finite top-level `imagent` lazy resolver is not a compatibility shim. Its
+only lazy module names are `adapters`, `contracts`, `delivery_coordination`,
+`delivery_planning`, `diagnostics`, `events`, and `projections`. It declares
+those names under `TYPE_CHECKING`, resolves each to its exact canonical module
+object, and caches that object on the package root, preserving identity for
+later access. A cold `import imagent` loads neither Gateway nor optional native
+dependencies; resolving a delivery module is an explicit later access, not an
+import-time side effect. The separate finite `imagent.applications`
+package-root lazy resolver follows the same non-compatibility rule for its own
+bounded application exports. A cold `import imagent.applications` likewise
+loads neither Gateway nor concrete optional dependencies.
 The `imagent.diagnostics` transition facade likewise re-exports the exact
 canonical `imagent.interaction.diagnostics`,
 `imagent.interaction.channels.diagnostics`, and

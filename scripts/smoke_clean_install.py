@@ -107,6 +107,47 @@ CHANNEL_FACADE_CHECK = (
     "assert all(not hasattr(contracts_facade, name) and name not in contracts_facade.__all__ "
     "for name in retired_contract); "
 )
+_PACKAGE_ROOT_FACADE_FINGERPRINT_CHILD = r"""
+import importlib
+import sys
+import typing
+
+import imagent
+
+owner_modules = {
+    "adapters": "imagent.adapters",
+    "contracts": "imagent.contracts",
+    "delivery_coordination": "imagent.gateway.delivery.coordination",
+    "delivery_planning": "imagent.gateway.delivery.planning",
+    "diagnostics": "imagent.diagnostics",
+    "events": "imagent.events",
+    "projections": "imagent.projections",
+}
+assert imagent.__all__ == list(owner_modules)
+assert typing.get_type_hints(imagent.__getattr__) == {"name": str, "return": object}
+assert all(name not in imagent.__dict__ for name in owner_modules)
+assert not any(
+    name == "imagent.gateway" or name.startswith("imagent.gateway.")
+    for name in sys.modules
+)
+assert not any(
+    name in sys.modules
+    for name in ("websockets", "PIL", "Crypto", "lark_oapi", "lark")
+)
+assert not hasattr(imagent, "unsupported_root_export")
+
+for name, module_name in owner_modules.items():
+    first = getattr(imagent, name)
+    owner = importlib.import_module(module_name)
+    assert first is owner
+    assert getattr(imagent, name) is owner
+    assert imagent.__dict__[name] is owner
+"""
+PACKAGE_ROOT_FACADE_CHECK = (
+    "import subprocess, sys; "
+    f"subprocess.run([sys.executable, '-c', {_PACKAGE_ROOT_FACADE_FINGERPRINT_CHILD!r}], "
+    "check=True); "
+)
 _APPLICATION_IMPORT_ISOLATION_CHILD = (
     "import sys; import imagent.applications; "
     "assert not any(name == 'imagent.gateway' or name.startswith('imagent.gateway.') "
@@ -258,7 +299,8 @@ for first_import in (
 CASES = {
     "base": (
         "",
-        APPLICATION_IMPORT_ISOLATION_CHECK
+        PACKAGE_ROOT_FACADE_CHECK
+        + APPLICATION_IMPORT_ISOLATION_CHECK
         + APPLICATION_FACADE_CHECK
         + BINDING_IMPORT_ORDER_CHECK
         + (
