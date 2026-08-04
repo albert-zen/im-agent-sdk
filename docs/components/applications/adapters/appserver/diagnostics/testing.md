@@ -2,7 +2,8 @@
 
 ## Current evidence
 
-App Server diagnostic facts are covered by `tests/test_appserver_client.py`,
+App Server diagnostic facts are covered by
+`tests/applications/adapters/appserver/test_client.py`,
 `tests/test_appserver_transport.py`, and `tests/test_diagnostics.py`
 (`DiagnosticsSurfaceTests`). The evidence includes
 ready/reconnecting/disconnected epochs, independent notification and
@@ -27,7 +28,7 @@ with the retained cross-component evidence:
 ```sh
 PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.test_diagnostics -v
 uv run python -m unittest tests.test_diagnostics -v
-uv run python -m unittest tests.test_appserver_client -v
+PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.test_client -v
 uv run python -m unittest tests.test_appserver_transport -v
 ```
 

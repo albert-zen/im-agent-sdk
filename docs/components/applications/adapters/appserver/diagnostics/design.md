@@ -50,7 +50,7 @@ The App Server diagnostic fact, summary, and runtime helpers now co-locate at
 `src/imagent/applications/adapters/appserver/diagnostics.py`.
 `src/imagent/diagnostics.py` remains the shared diagnostic contract and
 aggregate vocabulary; it is not moved or reclassified as an App Server leaf.
-Current evidence is `tests/test_appserver_client.py`,
+Current evidence is `tests/applications/adapters/appserver/test_client.py`,
 `tests/test_appserver_transport.py`, and `tests/test_diagnostics.py`; the target suite is
 `tests/applications/adapters/appserver/test_diagnostics.py`. The gap is to
 preserve the common diagnostic contract and keep Applications independent of

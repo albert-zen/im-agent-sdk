@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from imagent.applications import CodexApplicationAdapter, ZenApplicationAdapter
-from imagent.applications.appserver_client import AppServerError
+from imagent.applications.adapters.appserver.client import AppServerError
 from imagent.contracts import (
     AgentInput,
     ApplicationInputOutcomeUnknown,

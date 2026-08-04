@@ -1,17 +1,57 @@
 from __future__ import annotations
 
+import importlib.util
 import unittest
 
+import imagent.applications as applications_facade
+import imagent.applications.adapters.appserver.client as client_facade
 from imagent import __version__
 from imagent.applications import codex_app_server_client
-from imagent.applications.appserver_client.client import AppServerClient
-from imagent.applications.appserver_client.retry import RetryBackoff
-from imagent.applications.appserver_client.supervisor import AppServerSupervisor
-from imagent.applications.appserver_client.target import (
+from imagent.applications.adapters.appserver.client.client import AppServerClient
+from imagent.applications.adapters.appserver.client.handoff import (
+    APP_SERVER_DISPATCH_POSITION_KEY,
+    AppServerDispatchPosition,
+    AppServerResponse,
+)
+from imagent.applications.adapters.appserver.client.retry import RetryBackoff
+from imagent.applications.adapters.appserver.client.supervisor import AppServerSupervisor
+from imagent.applications.adapters.appserver.client.target import (
     AppServerTargetConfigError,
     parse_app_server_target,
     resolve_app_server_target,
 )
+from imagent.applications.adapters.appserver.transport import AppServerError
+
+
+class AppServerClientFacadeTests(unittest.TestCase):
+    def test_target_facade_has_exact_public_names_and_owner_identity(self) -> None:
+        names = [
+            "AppServerClient",
+            "AppServerDispatchPosition",
+            "AppServerError",
+            "AppServerResponse",
+            "AppServerSupervisor",
+            "APP_SERVER_DISPATCH_POSITION_KEY",
+            "codex_app_server_client",
+        ]
+        self.assertEqual(client_facade.__all__, names)
+        owners = {
+            "AppServerClient": AppServerClient,
+            "AppServerDispatchPosition": AppServerDispatchPosition,
+            "AppServerError": AppServerError,
+            "AppServerResponse": AppServerResponse,
+            "AppServerSupervisor": AppServerSupervisor,
+            "APP_SERVER_DISPATCH_POSITION_KEY": APP_SERVER_DISPATCH_POSITION_KEY,
+            "codex_app_server_client": codex_app_server_client,
+        }
+        for name, owner in owners.items():
+            with self.subTest(name=name):
+                self.assertIs(getattr(client_facade, name), owner)
+        self.assertIs(
+            applications_facade.codex_app_server_client,
+            client_facade.codex_app_server_client,
+        )
+        self.assertIsNone(importlib.util.find_spec("imagent.applications.appserver_client"))
 
 
 class AppServerClientTests(unittest.IsolatedAsyncioTestCase):

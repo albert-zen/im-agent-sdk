@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 import unittest
 
+from imagent.applications.adapters.appserver.client import AppServerError as FacadeAppServerError
 from imagent.applications.adapters.appserver.transport import (
     AppServerError,
     StdioAppServerTransport,
 )
-from imagent.applications.appserver_client import AppServerError as FacadeAppServerError
 
 
 class _FakeStdin:

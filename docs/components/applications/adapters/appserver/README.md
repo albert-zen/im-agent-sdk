@@ -42,9 +42,9 @@ reset stales request handles instead of fabricating recoverability.
 ## Current and target code
 
 The transport leaf now lives at
-`src/imagent/applications/adapters/appserver/transport.py`. The remaining
-current files are `src/imagent/applications/appserver_client/**`,
-`appserver_requests.py`,
+`src/imagent/applications/adapters/appserver/transport.py`. The client leaf
+now lives at `src/imagent/applications/adapters/appserver/client/**`; the
+remaining current files are `appserver_requests.py`,
 `appserver_request_runtime.py`, and the App Server portions of `appserver.py`.
 The mapping leaf now lives at
 `src/imagent/applications/adapters/appserver/mapping.py`; the remaining target

@@ -149,7 +149,7 @@ silently disclose an absolute host path.
 ## Current client ownership
 
 The SDK owns the reusable JSON-RPC client, target model, bounded retry, and
-supervisor under `applications/appserver_client/`; stable redacted diagnostic
+supervisor under `applications/adapters/appserver/client/`; stable redacted diagnostic
 facts and internal App Server diagnostic helpers are owned by
 `applications/adapters/appserver/diagnostics.py`; protocol/resource mapping is owned by
 `applications/adapters/appserver/mapping.py`, while stdio/WebSocket framing is

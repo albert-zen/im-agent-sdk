@@ -50,7 +50,7 @@ explicit observation gap, not silent continuation or a second subscriber.
 Current code is the shared `src/imagent/applications/appserver.py`; it contains
 the common App Server base plus `ZenApplicationAdapter`, so Codex and Zen are
 declared split candidates rather than duplicate implementations. Current
-evidence is in `tests/test_appserver_client.py`,
+evidence is in `tests/applications/adapters/appserver/test_client.py`,
 `test_appserver_input.py`,
 `tests/applications/adapters/appserver/test_mapping.py`,
 `test_appserver_requests.py`, and the two Applications presentation suites.

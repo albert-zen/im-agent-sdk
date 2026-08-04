@@ -2,9 +2,10 @@
 
 ## Current evidence
 
-The current client evidence remains in `tests/test_appserver_client.py`
-(`AppServerClientTests`) and the client/lifecycle portions of
-`tests/test_appserver_transport.py`. It covers:
+The focused client evidence now lives in
+`tests/applications/adapters/appserver/test_client.py`
+(`AppServerClientTests`); the client/lifecycle portions of
+`tests/test_appserver_transport.py` remain cross-component evidence. It covers:
 
 - stdio and external WebSocket composition, target parsing, supervisor child
   lifecycle, and local-image capability verification;
@@ -19,10 +20,10 @@ do not stand up Gateway or introduce a second subscription.
 
 ## Target evidence
 
-The future mirrored suite is
-`tests/applications/adapters/appserver/test_client.py`. It must preserve
-the current assertions and add no alternate client implementation. Transport
-framing remains in the sibling transport suite. Client tests must continue to
+The target suite is
+`tests/applications/adapters/appserver/test_client.py`. It preserves the
+current assertions and adds no alternate client implementation. Transport
+framing remains in the sibling transport suite. Client tests continue to
 prove that a later response cannot widen its immutable admission fence, that
 the fence resets with the connection epoch, and that an ambiguous native
 mutation is not retry permission.
@@ -32,7 +33,7 @@ mutation is not retry permission.
 Run the focused current suites with:
 
 ```sh
-uv run python -m unittest tests.test_appserver_client -v
+PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.test_client -v
 uv run python -m unittest tests.test_appserver_transport -v
 ```
 

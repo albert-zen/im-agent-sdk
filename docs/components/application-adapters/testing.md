@@ -112,7 +112,7 @@ Run:
 
 ```sh
 uv run python -m unittest discover -s tests -p "test_adapter_contracts.py" -v
-uv run python -m unittest discover -s tests -p "test_appserver_client.py" -v
+PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.test_client -v
 uv run python -m unittest discover -s tests -p "test_appserver_transport.py" -v
 uv run python -m unittest discover -s tests -p "test_appserver_requests.py" -v
 uv run python -m unittest discover -s tests -p "test_gateway_vertical_slice.py" -v

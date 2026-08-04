@@ -4,7 +4,7 @@
 
 Codex behavior is currently covered by the App Server suites:
 
-- `tests/test_appserver_client.py` and `tests/test_appserver_transport.py` for
+- `tests/applications/adapters/appserver/test_client.py` and `tests/test_appserver_transport.py` for
   client composition, epochs, lanes, and fences;
 - `tests/test_appserver_input.py` for start/steer policy, pre-dispatch races,
   local-image epochs, replacement, and unsupported files;
@@ -26,7 +26,7 @@ existing integration/vertical tests remain affected evidence until the test
 tree is mechanically mirrored. Run the current focused set with:
 
 ```sh
-uv run python -m unittest tests.test_appserver_client -v
+PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.test_client -v
 uv run python -m unittest tests.test_appserver_input -v
 PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.test_mapping -v
 uv run python -m unittest tests.test_appserver_requests -v
