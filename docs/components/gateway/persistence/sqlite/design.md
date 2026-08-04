@@ -30,12 +30,11 @@ checkpoint compare-and-swap, create-only Turn correlations, request-wide
 expected-state-fenced transitions, immutable delivery reservation identity, and expected
 destination state are preserved atomically.
 
-Current Gateway callers provide forward-only expected-state sets for their
-accepted request-correlation paths. The SQLite repository verifies those
-supplied current states atomically across every destination, but has no
-independent monotonic target-state guard: a direct caller that expected
-`resolved` could set the target back to `open`. This is a recorded behavior
-gap, not durable request truth or an authorization to change native state.
+The SQLite repository verifies caller-supplied current states atomically
+across every destination and independently rejects a target below any current
+state in the accepted request-correlation graph. A compare-and-swap input
+therefore cannot revive response authority or regress terminal bridge
+evidence.
 
 Idempotency rows contain a stable scope/key, state, owner token, and timestamp.
 An absent row is acquired. A stale `in_flight` row may atomically replace its

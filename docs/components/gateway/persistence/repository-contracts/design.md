@@ -41,6 +41,22 @@ revision/owner fencing, create-only correlations, and checkpoint compare-and-
 swap. Storage failures and conflicts remain visible to Gateway; the contract
 does not manufacture recovery or native side-effect authority.
 
+Request-correlation transitions combine two independent guards. The caller's
+`expected_states` remains the atomic compare-and-swap fence, while the
+repository also enforces the accepted monotonic state graph:
+
+```text
+open      -> responded | stale | resolved
+responded -> stale | resolved
+stale     -> resolved
+resolved  -> (terminal)
+```
+
+Repeating the current state is idempotent. Naming a current state in
+`expected_states` never authorizes a backward target, so a direct repository
+caller cannot revive bridge response authority after it became stale or
+resolved.
+
 ## Structure
 
 ```text

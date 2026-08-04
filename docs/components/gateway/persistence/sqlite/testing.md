@@ -44,7 +44,6 @@ add malformed-row conformance before this leaf can require universal explicit
 decode failure.
 
 Current Gateway callers cover only their accepted forward request-state paths.
-SQLite does not independently reject a target such as `resolved` to `open`
-when that source state is supplied in `expected_states`; a focused behavior
-slice must add the monotonic target guard and its direct repository
-conformance coverage before this leaf can claim it.
+Direct SQLite repository conformance also rejects a target such as `resolved`
+to `open` even when that source state is supplied in `expected_states`, and
+proves rollback leaves the request-wide state unchanged.

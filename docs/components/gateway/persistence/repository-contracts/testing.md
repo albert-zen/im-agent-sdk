@@ -11,6 +11,11 @@ Repository-contract tests and implementation conformance must prove:
   callback, retry work, or native Application state;
 - expected revisions, owner tokens, stable identities, and checkpoint values
   remain explicit rather than inferred from text or timestamps.
+- memory and SQLite accept every forward or same-state request-correlation
+  edge, reject every backward edge even when the current state appears in
+  `expected_states`, and leave every destination unchanged on conflict;
+- request-wide transition compare-and-swap and late-destination inheritance
+  remain atomic across the same epoch-scoped request identity.
 
 For the binding extraction run:
 

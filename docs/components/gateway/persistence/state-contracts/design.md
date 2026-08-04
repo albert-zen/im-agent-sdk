@@ -47,10 +47,9 @@ retargeting the same Thread/Turn is not. A request correlation stores only the
 Application-scoped request identity, response-shape validation facts,
 destination, and bridge routing state. Its `open`, `responded`, `resolved`, and
 `stale` states never replace native request truth. The passive value validates
-one declared state, not a transition graph. Current Gateway callers supply
-forward-only expected-state sets for their accepted paths; the repository Port
-does not independently reject a backward target state when a caller supplies
-that current state as expected.
+one declared state; the repository contract separately enforces the monotonic
+transition graph and uses caller-supplied expected states only as an atomic
+compare-and-swap fence.
 
 A delivery submission contains an SDK-controlled origin/principal identity,
 target and payload fingerprints, the complete immutable destination snapshot
