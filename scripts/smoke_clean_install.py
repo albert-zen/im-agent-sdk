@@ -204,10 +204,10 @@ import typing
 
 check_code = r"""
 import inspect
+import importlib.util
 import typing
 
 import imagent.contracts as contracts_facade
-import imagent.contracts.operations as historical_operations
 import imagent.contracts.validators as validators_owner
 import imagent.gateway as gateway_facade
 import imagent.gateway.routing as routing_facade
@@ -228,8 +228,9 @@ for name in binding_names:
     assert getattr(gateway_facade, name) is owner
     assert inspect.signature(getattr(contracts_facade, name)) == inspect.signature(owner)
     assert owner.__module__ == "imagent.gateway.routing.bindings"
-    assert not hasattr(historical_operations, name)
     assert not hasattr(validators_owner, name)
+
+assert importlib.util.find_spec("imagent.contracts.operations") is None
 
 binding_hints = typing.get_type_hints(binding_owner.ConversationBound)
 facade_hints = typing.get_type_hints(contracts_facade.ConversationBound)
@@ -271,15 +272,12 @@ assert (
     typing.get_type_hints(contracts_facade.validate_gateway_operation_result)
     == typing.get_type_hints(operations_owner.validate_gateway_operation_result)
 )
-assert not hasattr(historical_operations, "RequestRef")
-assert not hasattr(historical_operations, "RequestResponse")
 assert not hasattr(routing_facade, "GatewayOperationExecutor")
 assert not hasattr(gateway_facade, "GatewayOperationExecutor")
 """
 for first_import in (
     "import imagent.gateway.routing.operations\n",
     "import imagent.gateway.routing.bindings\n",
-    "import imagent.contracts.operations\n",
     "import imagent.contracts.validators\n",
     "import imagent.contracts\n",
     "import imagent.gateway.routing\n",
@@ -301,10 +299,10 @@ import subprocess
 import sys
 
 check_code = r"""
+import importlib.util
 import typing
 
 import imagent.contracts as contracts_facade
-import imagent.contracts.operations as historical_operations
 import imagent.contracts.validators as historical_validators
 import imagent.gateway as gateway_facade
 import imagent.gateway.persistence as persistence_facade
@@ -321,12 +319,13 @@ for name in projection_route_owner.__all__:
     owner = getattr(projection_route_owner, name)
     assert getattr(routing_facade, name) is owner
     assert owner.__module__ == "imagent.gateway.routing.projection_routes"
-for module in (contracts_facade, historical_operations, historical_validators):
+for module in (contracts_facade, historical_validators):
     for name in ("ObserveThread", "ThreadObserved"):
         assert not hasattr(module, name)
         assert name not in getattr(module, "__all__", ())
 assert not hasattr(persistence_facade, "ProjectionPolicy")
 assert "ProjectionPolicy" not in persistence_facade.__all__
+assert importlib.util.find_spec("imagent.contracts.operations") is None
 for module_name in (
     "imagent.contracts",
     "imagent.contracts.operations",
@@ -353,7 +352,6 @@ assert root_hints["return"] is projection_route_owner.ThreadObserved
 for first_import in (
     "import imagent.gateway.routing.projection_routes\n",
     "import imagent.gateway.routing.operations\n",
-    "import imagent.contracts.operations\n",
     "import imagent.contracts.validators\n",
     "import imagent.contracts\n",
     "import imagent.gateway.routing\n",
@@ -371,6 +369,76 @@ for first_import in (
             f"stdout={completed.stdout}\nstderr={completed.stderr}"
         )
 '''
+REQUEST_CORRELATION_IMPORT_ORDER_CHECK = r'''
+import importlib.util
+import subprocess
+import sys
+
+check_code = r"""
+import importlib.util
+import typing
+
+import imagent.contracts as contracts_facade
+import imagent.contracts.validators as historical_validators
+import imagent.gateway as gateway_facade
+import imagent.gateway.projection as projection_facade
+import imagent.gateway.projection.request_correlation as request_owner
+import imagent.gateway.routing.operations as operations_owner
+
+assert request_owner.__all__ == [
+    "InteractiveRequestProjection",
+    "RequestResponseRouted",
+    "RespondToRequest",
+]
+for name in request_owner.__all__:
+    owner = getattr(request_owner, name)
+    assert getattr(projection_facade, name) is owner
+    assert owner.__module__ == "imagent.gateway.projection.request_correlation"
+assert importlib.util.find_spec("imagent.contracts.operations") is None
+for name in ("RespondToRequest", "RequestResponseRouted"):
+    assert getattr(operations_owner, name) is getattr(request_owner, name)
+    for module in (contracts_facade, historical_validators):
+        assert not hasattr(module, name)
+        assert name not in getattr(module, "__all__", ())
+for module_name in (
+    "imagent.contracts",
+    "imagent.contracts.operations",
+    "imagent.contracts.validators",
+):
+    for name in ("RespondToRequest", "RequestResponseRouted"):
+        try:
+            exec(f"from {module_name} import {name}")
+        except ImportError:
+            pass
+        else:
+            raise AssertionError(f"historical {module_name}.{name} import unexpectedly succeeded")
+assert importlib.util.find_spec("imagent.request_projection_runtime") is None
+root_hints = typing.get_type_hints(gateway_facade.ImAgentGateway._route_request_response)
+assert root_hints["operation"] is request_owner.RespondToRequest
+assert root_hints["return"] is request_owner.RequestResponseRouted
+assert not hasattr(gateway_facade.ImAgentGateway, "_respond_to_request")
+"""
+for first_import in (
+    "import imagent.gateway.projection.request_correlation\n",
+    "import imagent.gateway.projection\n",
+    "import imagent.gateway.routing.operations\n",
+    "import imagent.contracts.validators\n",
+    "import imagent.contracts\n",
+    "import imagent.interaction.controllers\n",
+    "import imagent.gateway\n",
+):
+    completed = subprocess.run(
+        [sys.executable, "-c", first_import + check_code],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode:
+        raise AssertionError(
+            f"request-correlation import-order smoke failed: {first_import!r}\n"
+            f"stdout={completed.stdout}\nstderr={completed.stderr}"
+        )
+'''
 CASES = {
     "base": (
         "",
@@ -379,6 +447,7 @@ CASES = {
         + APPLICATION_FACADE_CHECK
         + BINDING_IMPORT_ORDER_CHECK
         + PROJECTION_ROUTE_IMPORT_ORDER_CHECK
+        + REQUEST_CORRELATION_IMPORT_ORDER_CHECK
         + (
             "import asyncio, importlib, importlib.util, typing, imagent; "
             "import imagent.events as event_facade; "

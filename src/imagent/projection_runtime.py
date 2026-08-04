@@ -16,9 +16,7 @@ from .applications.contract import (
     AgentMessage,
     ApplicationInputDispatch,
     InputContinuationPreference,
-    InputDisposition,
     ThreadRef,
-    TurnReplyCorrelationPolicy,
 )
 from .applications.events import (
     AgentEvent,
@@ -36,9 +34,9 @@ from .gateway.persistence.repository_contracts import (
 from .gateway.persistence.state_contracts import (
     ConversationBinding,
     ThreadProjectionRoute,
-    TurnReplyCorrelation,
 )
 from .gateway.projection.recovery import ProjectionRecoveryUnavailable
+from .gateway.projection.request_correlation import InteractiveRequestProjection
 from .gateway.routing.projection_routes import (
     ProjectionPolicy,
     _ProjectionRouteAuthority,
@@ -55,9 +53,7 @@ from .projections import (
     ProjectionWorkerHealth,
     ProjectionWorkerState,
     RetryableDeliveryError,
-    derive_turn_reply_correlation_id,
 )
-from .request_projection_runtime import InteractiveRequestProjection
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +149,6 @@ class ThreadProjectionRuntime:
             raise ValueError("request_correlation_retention_seconds must be positive")
         self._applications = applications
         self._projections = projections
-        self._request_correlations = request_correlations
         self._projection_policy = projection_policy
         self._route_authority = _ProjectionRouteAuthority(
             bindings=bindings,
@@ -179,14 +174,21 @@ class ThreadProjectionRuntime:
         self._buffered_event_overflows: set[ThreadRef] = set()
         self._delivery_ready = asyncio.Event()
         self._health: dict[ThreadRef, ProjectionWorkerHealth] = {}
-        self._routes = ProjectionRouteCoordinator(
+        self._request_projection = InteractiveRequestProjection(
+            applications=applications,
             projections=projections,
-            request_correlations=request_correlations,
+            correlations=request_correlations,
             request_presenter=request_presenter,
             execute_application=execute_application,
             active_routes=self._active_routes,
-            deliver_outbound=deliver_outbound,
             deliver_request_outbound=deliver_request_outbound,
+        )
+        self._routes = ProjectionRouteCoordinator(
+            projections=projections,
+            execute_application=execute_application,
+            active_routes=self._active_routes,
+            deliver_outbound=deliver_outbound,
+            deliver_request_once=self._request_projection.deliver_request_once,
             wait_for_acceptance=self._wait_for_acceptance,
             record_gap=self._record_gap,
             record_delivery_failure=self._record_delivery_failure,
@@ -197,22 +199,18 @@ class ThreadProjectionRuntime:
             projection_item_limit=projection_item_limit,
             request_delivery_max_pending=request_delivery_max_pending,
         )
-        self._request_projection = InteractiveRequestProjection(
-            applications=applications,
-            correlations=request_correlations,
-            active_routes=self._active_routes,
-            deliver_request=self._routes.deliver_request_to_routes,
-            cancel_request=self._routes.cancel_request_deliveries,
-        )
         self._stopping = False
 
     async def cleanup_stale_correlations(self) -> None:
-        await self._projections.delete_turn_reply_correlations(
-            older_than=datetime.now(UTC) - self._turn_correlation_retention
+        now = datetime.now(UTC)
+        await self._request_projection.cleanup_correlations(
+            turn_older_than=now - self._turn_correlation_retention,
+            request_older_than=now - self._request_correlation_retention,
         )
-        await self._request_projection.cleanup_older_than(
-            datetime.now(UTC) - self._request_correlation_retention
-        )
+
+    @property
+    def request_projection(self) -> InteractiveRequestProjection:
+        return self._request_projection
 
     async def restore(self) -> None:
         self._stopping = False
@@ -245,7 +243,10 @@ class ThreadProjectionRuntime:
         self,
         restart_open_refs: frozenset[RequestRef],
     ) -> None:
-        await self._request_projection.reconcile_pending_requests(restart_open_refs)
+        await self._request_projection.reconcile_pending_requests(
+            restart_open_refs,
+            deliver_request=self._routes.deliver_request_to_routes,
+        )
 
     async def stop(self) -> None:
         self._stopping = True
@@ -416,36 +417,14 @@ class ThreadProjectionRuntime:
             nonlocal authorized_dispatch
             if authorized_dispatch is not None:
                 raise InputDispatchRejected("Application input dispatch was declared twice")
-            if dispatch.thread_ref != thread_ref:
-                raise InputDispatchRejected("Application input dispatch belongs to another Thread")
-            if dispatch.client_message_id != agent_input.client_message_id:
-                raise InputDispatchRejected(
-                    "Application input dispatch client_message_id does not match input"
+            try:
+                await self._request_projection.authorize_input_dispatch(
+                    dispatch,
+                    thread_ref=thread_ref,
+                    client_message_id=agent_input.client_message_id,
                 )
-            if dispatch.disposition is InputDisposition.STARTED:
-                if (
-                    dispatch.correlation_policy is not TurnReplyCorrelationPolicy.CREATE_NEW
-                    or dispatch.expected_turn_id is not None
-                ):
-                    raise InputDispatchRejected("started input must create a new Turn correlation")
-            elif dispatch.disposition is InputDisposition.STEERED:
-                if (
-                    dispatch.correlation_policy is not TurnReplyCorrelationPolicy.PRESERVE_EXISTING
-                    or not dispatch.expected_turn_id
-                ):
-                    raise InputDispatchRejected(
-                        "steered input must preserve an expected Turn correlation"
-                    )
-                existing = await self._projections.get_turn_reply_correlation(
-                    thread_ref,
-                    dispatch.expected_turn_id,
-                )
-                if existing is None:
-                    raise InputDispatchRejected(
-                        "cannot steer a Turn without an existing reply correlation"
-                    )
-            else:
-                raise InputDispatchRejected("unknown Application input disposition")
+            except ValueError as error:
+                raise InputDispatchRejected(str(error)) from error
             if before_application_send is not None:
                 await before_application_send()
             authorized_dispatch = dispatch
@@ -457,46 +436,16 @@ class ThreadProjectionRuntime:
                 continuation=InputContinuationPreference.PREFER_ACTIVE_TURN,
                 before_dispatch=authorize_dispatch,
             )
-            if accepted.thread_ref != thread_ref:
-                raise ValueError("AcceptedTurn belongs to a different Thread")
-            if accepted.client_message_id != agent_input.client_message_id:
-                raise ValueError("AcceptedTurn client_message_id does not match input")
             if authorized_dispatch is None:
                 raise RuntimeError("Application accepted input without declaring dispatch")
-            if (
-                accepted.disposition is not authorized_dispatch.disposition
-                or accepted.correlation_policy is not authorized_dispatch.correlation_policy
-            ):
-                raise RuntimeError(
-                    "AcceptedTurn disposition does not match the authorized dispatch"
-                )
-            if accepted.disposition is InputDisposition.STARTED:
-                await self._projections.put_turn_reply_correlation(
-                    TurnReplyCorrelation(
-                        correlation_id=derive_turn_reply_correlation_id(
-                            thread_ref,
-                            accepted.turn_id,
-                        ),
-                        thread_ref=thread_ref,
-                        turn_id=accepted.turn_id,
-                        client_message_id=accepted.client_message_id,
-                        conversation_ref=conversation_ref,
-                        reply_to_message_id=reply_to_message_id,
-                        created_at=datetime.now(UTC),
-                    )
-                )
-            else:
-                expected_turn_id = authorized_dispatch.expected_turn_id
-                if accepted.turn_id != expected_turn_id:
-                    raise RuntimeError("native steer accepted a different Turn than was authorized")
-                preserved = await self._projections.get_turn_reply_correlation(
-                    thread_ref,
-                    accepted.turn_id,
-                )
-                if preserved is None:
-                    raise RuntimeError(
-                        "authorized steer reply correlation disappeared after dispatch"
-                    )
+            await self._request_projection.correlate_accepted_turn(
+                accepted,
+                authorized_dispatch,
+                thread_ref=thread_ref,
+                client_message_id=agent_input.client_message_id,
+                conversation_ref=conversation_ref,
+                reply_to_message_id=reply_to_message_id,
+            )
         except BaseException as exc:
             primary_error = exc
         finally:
@@ -609,13 +558,9 @@ class ThreadProjectionRuntime:
         )
         if self._projection_policy is ProjectionPolicy.REMEMBERED_LAST_RECIPIENT:
             for removed in refreshed.removed_routes:
-                await self._projections.delete_turn_reply_correlations(
-                    thread_ref=thread_ref,
-                    conversation_ref=removed.conversation_ref,
-                )
-                await self._request_correlations.delete_request_correlations(
-                    thread_ref=thread_ref,
-                    conversation_ref=removed.conversation_ref,
+                await self._request_projection.delete_destination(
+                    thread_ref,
+                    removed.conversation_ref,
                 )
             await self._routes.forget_routes(refreshed.removed_routes)
         return refreshed.route, refreshed.created
@@ -794,6 +739,7 @@ class ThreadProjectionRuntime:
                             await self._request_projection.reconcile_application_after_event_gap(
                                 application,
                                 thread_ref,
+                                deliver_request=self._routes.deliver_request_to_routes,
                             )
                         )
                         self._update_health(
@@ -935,7 +881,11 @@ class ThreadProjectionRuntime:
                 await self._apply_event(event)
 
     async def _apply_event(self, event: AgentEvent) -> None:
-        await self._request_projection.handle_event(event)
+        await self._request_projection.handle_event(
+            event,
+            deliver_request=self._routes.deliver_request_to_routes,
+            cancel_request=self._routes.cancel_request_deliveries,
+        )
         thread_ref = event.thread_ref
         if thread_ref is None:
             return
@@ -963,15 +913,14 @@ class ThreadProjectionRuntime:
             }
             and event.turn_id is not None
         ):
-            await self._projections.delete_turn_reply_correlation(
+            await self._request_projection.delete_terminal_turn(
                 thread_ref,
                 event.turn_id,
             )
         if event.type is AgentEventType.THREAD_DELETED:
             routes = await self._projections.list_projection_routes(thread_ref)
             await self._projections.delete_projection_routes(thread_ref)
-            await self._projections.delete_turn_reply_correlations(thread_ref=thread_ref)
-            await self._request_correlations.delete_request_correlations(thread_ref=thread_ref)
+            await self._request_projection.delete_thread(thread_ref)
             await self._routes.forget_routes(routes)
 
     async def _active_routes(

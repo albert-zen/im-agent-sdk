@@ -11,13 +11,13 @@ from imagent.applications.adapters.appserver.requests import (
 )
 from imagent.applications.contract import ThreadRef
 from imagent.applications.requests import ApprovalResponse
-from imagent.contracts import RequestResponseRouted, RespondToRequest
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,
     InMemoryRequestCorrelationRepository,
 )
+from imagent.gateway.projection import RequestResponseRouted, RespondToRequest
 from imagent.gateway.routing import ObserveThread, ProjectionPolicy
 from imagent.interaction.controllers import MarkdownRequestPresenter
 from imagent.interaction.messages import ConversationRef

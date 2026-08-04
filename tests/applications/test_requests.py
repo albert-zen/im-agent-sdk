@@ -84,14 +84,12 @@ class ApplicationRequestTests(unittest.TestCase):
     def test_historical_contract_modules_no_longer_define_request_contract(self) -> None:
         with self.assertRaises(ModuleNotFoundError):
             import_module("imagent.contracts.errors")
-        historical_operations = import_module("imagent.contracts.operations")
+        with self.assertRaises(ModuleNotFoundError):
+            import_module("imagent.contracts.operations")
         with self.assertRaises(ModuleNotFoundError):
             import_module("imagent.contracts.model")
         with self.assertRaises(ModuleNotFoundError):
             import_module("imagent.contracts.request_validation")
-        for name in ("ApprovalResponse", "UserInputResponse", "RequestResponse"):
-            with self.subTest(module="operations", name=name):
-                self.assertFalse(hasattr(historical_operations, name))
         self.assertTrue(hasattr(RequestRouteCorrelation, "__dataclass_fields__"))
 
     def test_request_annotations_and_gateway_route_annotations_resolve(self) -> None:

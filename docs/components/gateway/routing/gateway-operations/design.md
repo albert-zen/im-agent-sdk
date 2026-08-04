@@ -85,8 +85,8 @@ a general durable operation log.
 Gateway operations call explicit typed owner methods or ports for binding,
 projection-route, and request-correlation. The closed aggregate union imports
 the exact projection-route operation/result values from
-`gateway.routing.projection_routes` and the still-pending request values from
-their request-correlation owner; it does not define a second union or preserve
+`gateway.routing.projection_routes` and the exact request values from
+`gateway.projection.request_correlation`; it does not define a second union or preserve
 the moved route values in `imagent.contracts`. They do not dispatch
 `ApplicationOperation`, receive a generic repository/context object, or perform
 owner mutation or concrete validation. Gateway composition queries

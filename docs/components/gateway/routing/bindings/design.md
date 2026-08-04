@@ -100,5 +100,5 @@ union, Gateway aggregate execution, Conversation locks, foreground route
 preparation, or recovery. Aggregate Gateway validators call the exact
 binding-owner validators, and composition calls the runtime's typed methods.
 No new routing behavior is introduced, and the stable `imagent.contracts`
-facade preserves public object identity without retaining retired binding
-names in `contracts.operations`.
+facade preserves public object identity. The retired `contracts.operations`
+module is absent rather than retaining compatibility names.

@@ -54,17 +54,9 @@ class ApplicationOperationTests(unittest.TestCase):
                 self.assertNotIn(name, applications.__all__)
 
     def test_historical_contract_modules_no_longer_define_application_operations(self) -> None:
-        historical_operations = import_module("imagent.contracts.operations")
+        with self.assertRaises(ModuleNotFoundError):
+            import_module("imagent.contracts.operations")
         historical_validators = import_module("imagent.contracts.validators")
-        for name in (
-            "ApplicationOperation",
-            "ApplicationOperationFailed",
-            "ApplicationOperationResult",
-            "ApplicationOperationType",
-            "ThreadDeletionMode",
-        ):
-            with self.subTest(name=name):
-                self.assertFalse(hasattr(historical_operations, name))
         self.assertFalse(hasattr(historical_validators, "validate_application_operation"))
         self.assertFalse(hasattr(historical_validators, "validate_application_operation_result"))
 

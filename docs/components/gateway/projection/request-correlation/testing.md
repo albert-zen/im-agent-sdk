@@ -23,8 +23,11 @@ Request-correlation conformance must prove:
   otherwise records truthful degraded/stale state without manufacturing a
   pending request.
 
-Focused policy evidence lives in
-`tests/gateway/projection/test_request_correlation.py`. Durable SQLite evidence
-lives in `tests/gateway/persistence/test_sqlite.py`; broader integration
-coverage remains in `tests/test_appserver_requests.py` and
-`tests/test_projection_hardening.py`.
+Focused contract, validation, runtime, Turn-correlation, request-delivery,
+request-response, transition, and thread-scoped pending-snapshot evidence lives
+in `tests/gateway/projection/test_request_correlation.py`. It also proves exact
+public identity in clean processes and the absence of the historical runtime
+and `imagent.contracts` attributes. Durable SQLite, restart, generic recovery,
+and real Application/Gateway integration evidence remains in
+`tests/gateway/persistence/test_sqlite.py`, `tests/test_appserver_requests.py`,
+`tests/test_gateway_operations.py`, and `tests/test_projection_hardening.py`.

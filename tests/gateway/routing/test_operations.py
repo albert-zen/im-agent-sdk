@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import inspect
 import os
 import subprocess
@@ -13,9 +14,10 @@ from typing import get_args, get_type_hints
 from unittest.mock import patch
 
 import imagent.contracts as contracts_facade
-import imagent.contracts.operations as pending_operations
 import imagent.contracts.validators as pending_validators
 import imagent.gateway as gateway_facade
+import imagent.gateway.projection as projection_facade
+import imagent.gateway.projection.request_correlation as request_owner
 import imagent.gateway.routing as routing_facade
 import imagent.gateway.routing.operations as operations_owner
 import imagent.gateway.routing.projection_routes as projection_routes_owner
@@ -33,13 +35,12 @@ from imagent.contracts import (
     GatewayOperationFailed,
     GatewayOperationResult,
     ListApplications,
-    RequestResponseRouted,
-    RespondToRequest,
     SelectApplication,
     validate_gateway_operation_result,
 )
 from imagent.gateway.concurrency import KeyedLockCapacityError
 from imagent.gateway.persistence import ConversationBinding, ThreadProjectionRoute
+from imagent.gateway.projection import RequestResponseRouted, RespondToRequest
 from imagent.gateway.routing import ObserveThread, ThreadObserved
 from imagent.interaction.operations import OperationErrorCode, operation_error
 
@@ -48,16 +49,17 @@ ROOT = Path(__file__).resolve().parents[3]
 _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     """
     import inspect
+    import importlib.util
     import typing
 
     import imagent.contracts as contracts_facade
-    import imagent.contracts.operations as pending_operations
     import imagent.contracts.validators as pending_validators
     import imagent.gateway as gateway_facade
+    import imagent.gateway.projection as projection_facade
+    import imagent.gateway.projection.request_correlation as request_owner
     import imagent.gateway.routing as routing_facade
     import imagent.gateway.routing.operations as operations_owner
     import imagent.gateway.routing.projection_routes as projection_routes_owner
-    from imagent.applications.operations import ApplicationOperationFailed
     import imagent.interaction.controllers as controllers_facade
 
     aggregate_value_names = (
@@ -98,16 +100,15 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
         assert getattr(routing_facade, name) is getattr(projection_routes_owner, name)
         assert getattr(operations_owner, name) is getattr(projection_routes_owner, name)
         assert not hasattr(contracts_facade, name)
-        assert not hasattr(pending_operations, name)
         assert not hasattr(pending_validators, name)
 
     for name in ("RespondToRequest", "RequestResponseRouted"):
-        assert getattr(contracts_facade, name) is getattr(pending_operations, name)
-        assert getattr(operations_owner, name) is getattr(pending_operations, name)
+        assert getattr(projection_facade, name) is getattr(request_owner, name)
+        assert getattr(operations_owner, name) is getattr(request_owner, name)
+        assert not hasattr(contracts_facade, name)
         assert not hasattr(pending_validators, name)
 
-    assert not hasattr(pending_operations, "RequestRef")
-    assert not hasattr(pending_operations, "RequestResponse")
+    assert importlib.util.find_spec("imagent.contracts.operations") is None
     for name in (
         "GatewayOperationType",
         "GatewayOperation",
@@ -119,7 +120,6 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
         "validate_gateway_operation",
         "validate_gateway_operation_result",
     ):
-        assert not hasattr(pending_operations, name)
         assert not hasattr(pending_validators, name)
     assert not hasattr(routing_facade, "GatewayOperationExecutor")
     assert not hasattr(gateway_facade, "GatewayOperationExecutor")
@@ -152,20 +152,8 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
             "return": projection_routes_owner.ThreadObserved,
         },
         "_route_request_response": {
-            "operation": contracts_facade.RespondToRequest,
-            "return": contracts_facade.RequestResponseRouted,
-        },
-        "_respond_to_request": {
-            "operation": contracts_facade.RespondToRequest,
-            "return": contracts_facade.RequestResponseRouted,
-        },
-        "_converge_native_request_failure": {
-            "operation": contracts_facade.RespondToRequest,
-            "result": ApplicationOperationFailed,
-            "return": type(None),
-        },
-        "_transition_request_state": {
-            "operation": contracts_facade.RespondToRequest,
+            "operation": request_owner.RespondToRequest,
+            "return": request_owner.RequestResponseRouted,
         },
     }
     for method_name, expected in root_delegate_hints.items():
@@ -186,10 +174,11 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
 
 _IMPORT_ORDERS = {
     "canonical owner first": "import imagent.gateway.routing.operations\n",
+    "request owner first": "import imagent.gateway.projection.request_correlation\n",
+    "projection facade first": "import imagent.gateway.projection\n",
     "projection-route owner first": "import imagent.gateway.routing.projection_routes\n",
     "controllers first": "import imagent.interaction.controllers\n",
     "gateway first": "import imagent.gateway\n",
-    "contracts.operations first": "import imagent.contracts.operations\n",
     "validators first": "import imagent.contracts.validators\n",
     "imagent.contracts first": "import imagent.contracts\n",
     "routing first": "import imagent.gateway.routing\n",
@@ -395,11 +384,16 @@ class GatewayOperationsOwnerTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIs(getattr(contracts_facade, name), owner)
                 self.assertIs(getattr(routing_facade, name), owner)
                 self.assertIs(getattr(gateway_facade, name), owner)
-        self.assertFalse(hasattr(pending_operations, "RequestRef"))
-        self.assertFalse(hasattr(pending_operations, "RequestResponse"))
+        for name in ("RespondToRequest", "RequestResponseRouted"):
+            with self.subTest(request_name=name):
+                owner = getattr(request_owner, name)
+                self.assertIs(getattr(projection_facade, name), owner)
+                self.assertIs(getattr(operations_owner, name), owner)
+                self.assertFalse(hasattr(contracts_facade, name))
+                self.assertFalse(hasattr(pending_validators, name))
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts.operations"))
         for name in _HISTORICAL_AGGREGATE_NAMES:
             with self.subTest(historical_name=name):
-                self.assertFalse(hasattr(pending_operations, name))
                 self.assertFalse(hasattr(pending_validators, name))
         self.assertFalse(hasattr(routing_facade, "GatewayOperationExecutor"))
         self.assertFalse(hasattr(gateway_facade, "GatewayOperationExecutor"))
@@ -430,7 +424,9 @@ class GatewayOperationsOwnerTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn(public_name, protocol.__dict__)
                 self.assertTrue(callable(getattr(protocol, private_name)))
         self.assertIn("execute_gateway", root_class.__dict__)
-        self.assertIn("_respond_to_request", root_class.__dict__)
+        self.assertNotIn("_respond_to_request", root_class.__dict__)
+        self.assertNotIn("_converge_native_request_failure", root_class.__dict__)
+        self.assertNotIn("_transition_request_state", root_class.__dict__)
 
     def test_clean_process_import_orders_preserve_identities_signatures_and_hints(self) -> None:
         environment = os.environ.copy()
@@ -631,9 +627,9 @@ class GatewayOperationsOwnerTests(unittest.IsolatedAsyncioTestCase):
             request_ref=respond.request_ref,
         )
         with patch.object(
-            pending_validators,
+            request_owner,
             "_validate_respond_operation_result",
-            wraps=pending_validators._validate_respond_operation_result,
+            wraps=request_owner._validate_respond_operation_result,
         ) as response_validator:
             validate_gateway_operation_result(respond, routed)
         response_validator.assert_called_once_with(respond, routed)
