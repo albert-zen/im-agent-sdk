@@ -24,7 +24,7 @@ later IMCodex consumer migration. It is not a claim that Issue #9 is complete.
 This section is the repository's authoritative source-provenance record for
 the copied implementation. The transferred destination families are
 `src/imagent/interaction/channels/` and
-`src/imagent/applications/appserver_client/`; the detailed tables below record
+`src/imagent/applications/adapters/appserver/`; the detailed tables below record
 the source paths, exclusions, modifications, and test proof. This provenance
 record is not a replacement for a repository license.
 
@@ -53,7 +53,7 @@ boundaries in this owner-side move. `interaction/channels/ingress_media.py`
 keeps image and generic
 file staging together because both use the same cross-process lock, quota,
 secure-create, cleanup, and cancellation machinery.
-`appserver_client/client.py` keeps one connection-epoch JSON-RPC state machine;
+`adapters/appserver/client/client.py` keeps one connection-epoch JSON-RPC state machine;
 splitting its request, notification, reconnect, and pending-future state during
 the ownership transfer would change failure behavior. AgentKit budgets are set
 just above these baselines so future growth forces a fresh extraction review;
@@ -114,16 +114,16 @@ distribution.
 ## Codex App Server client modules
 
 Reusable protocol/client code lives below
-`src/imagent/applications/appserver_client/`.
+`src/imagent/applications/adapters/appserver/`.
 
 | IMCodex source | SDK destination/decision | Ownership and modification |
 |---|---|---|
-| `app_server_target.py` | `target.py` | transfer endpoint/ownership model; remove IMCodex env-name wording |
-| `appserver/retry.py` | `retry.py` | transfer transport retry primitive |
+| `app_server_target.py` | `adapters/appserver/client/target.py` | transfer endpoint/ownership model; remove IMCodex env-name wording |
+| `appserver/retry.py` | `adapters/appserver/client/retry.py` | transfer transport retry primitive |
 | `appserver/protocol_map.py` | `adapters/appserver/mapping.py` | transfer protocol notification/request classification |
 | `appserver/diagnostics.py` | `adapters/appserver/diagnostics.py` | transfer App Server diagnostic facts and internal debug helpers |
-| `appserver/client.py` | `client.py` | transfer JSON-RPC, stdio/WebSocket, queue, reconnect, and request dispatch |
-| `appserver/supervisor.py` | `supervisor.py` | transfer spawned-stdio/external endpoint lifecycle; remove product telemetry |
+| `appserver/client.py` | `adapters/appserver/client/client.py` | transfer JSON-RPC, stdio/WebSocket, queue, reconnect, and request dispatch |
+| `appserver/supervisor.py` | `adapters/appserver/client/supervisor.py` | transfer spawned-stdio/external endpoint lifecycle; remove product telemetry |
 
 `appserver/backend*.py`, `settings_backend.py`, `thread_backend.py`,
 `thread_dynamic_tools.py`, and `schema_drift.py` do not transfer in this PR.

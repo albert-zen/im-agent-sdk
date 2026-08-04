@@ -30,8 +30,8 @@ from .contract import (
 )
 
 if TYPE_CHECKING:
+    from .adapters.appserver.client import codex_app_server_client
     from .appserver import CodexApplicationAdapter, ZenApplicationAdapter
-    from .appserver_client import codex_app_server_client
     from .presentation import (
         ApplicationArtifactMaterialization,
         ApplicationArtifactMaterializationCancelled,
@@ -181,7 +181,7 @@ def __getattr__(name: str) -> object:
     elif name in _T3_CLIENT_EXPORTS:
         module = import_module("imagent.applications.t3_client")
     elif name == "codex_app_server_client":
-        module = import_module("imagent.applications.appserver_client")
+        module = import_module("imagent.applications.adapters.appserver.client")
     else:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     value = getattr(module, name)

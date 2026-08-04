@@ -4,7 +4,7 @@
 
 Zen is covered by the shared App Server suites and vertical evidence:
 
-- `tests/test_appserver_client.py` and `tests/test_appserver_input.py` prove
+- `tests/applications/adapters/appserver/test_client.py` and `tests/test_appserver_input.py` prove
   native start, profile/options, connection reset, and no Codex steer policy;
 - `tests/test_appserver_requests.py` proves command-approval mapping and
   explicit unsupported request methods;

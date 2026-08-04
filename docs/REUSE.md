@@ -81,7 +81,7 @@ Issue #9 can close.
 
 Reusable target, retry, JSON-RPC client, and supervisor modules were
 transferred from the same pinned IMCodex commit into
-`src/imagent/applications/appserver_client/`; App Server diagnostic facts and
+`src/imagent/applications/adapters/appserver/client/`; App Server diagnostic facts and
 internal helpers are now owned by
 `src/imagent/applications/adapters/appserver/diagnostics.py`,
 protocol/resource mapping is owned by

@@ -114,7 +114,7 @@ class ComponentMapTests(unittest.TestCase):
         component_map = copy.deepcopy(load_component_map())
         component = component_map["components"]["applications.adapters.appserver.client"]
         component["public_exports"]["current"].remove(
-            "imagent.applications.appserver_client:AppServerClient"
+            "imagent.applications.adapters.appserver.client:AppServerClient"
         )
 
         with self.assertRaisesRegex(ComponentMapError, "unmapped __all__ public exports"):

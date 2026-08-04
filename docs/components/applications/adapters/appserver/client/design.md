@@ -25,13 +25,13 @@ JSON result and an immutable `AppServerDispatchPosition`; ordinary failures
 are `AppServerError`. Notification and server-request handlers receive the
 client's internal JSON mapping at the adapter boundary only.
 
-The current formal exports are `AppServerClient`, `AppServerDispatchPosition`,
-`AppServerError`, `AppServerResponse`, `AppServerSupervisor`,
-`APP_SERVER_DISPATCH_POSITION_KEY`, and `codex_app_server_client` through the
-historical `imagent.applications.appserver_client` facade, with the factory
-also exposed by `imagent.applications`. The target package exposes the exact
-same objects from `imagent.applications.adapters.appserver.client`; no second
-client or compatibility implementation is planned.
+The exact target facade exports `AppServerClient`,
+`AppServerDispatchPosition`, `AppServerError`, `AppServerResponse`,
+`AppServerSupervisor`, `APP_SERVER_DISPATCH_POSITION_KEY`, and
+`codex_app_server_client` from `imagent.applications.adapters.appserver.client`.
+The lazy `imagent.applications` facade exposes the same factory object. The
+historical `imagent.applications.appserver_client` package is removed; no
+second client or compatibility implementation is present.
 
 ## Dependencies, state, and recovery
 
@@ -47,18 +47,13 @@ does not make an unknown native mutation safe to redeliver.
 
 ## Current, target, and structural gap
 
-Current implementation is split across:
-
-- `src/imagent/applications/appserver_client/__init__.py`
-- `client.py`, `handoff.py`, `retry.py`, `supervisor.py`, and `target.py`
-
-The target is `src/imagent/applications/adapters/appserver/client/`, with the
-finite owner facade at its package boundary. Existing evidence is
-`tests/test_appserver_client.py` and the client-facing portions of
-`tests/test_appserver_transport.py`; the target focused suite is
-`tests/applications/adapters/appserver/test_client.py`. The current `client.py`
-is a large cohesive dispatch implementation and must be split only in a later
-mechanical slice that preserves the ordering/recovery state machine.
+The implementation now lives in
+`src/imagent/applications/adapters/appserver/client/`, with the finite owner
+facade at its package boundary. Direct evidence is
+`tests/applications/adapters/appserver/test_client.py`; the client-facing
+portions of `tests/test_appserver_transport.py` remain cross-component
+evidence. The current `client.py` is a large cohesive dispatch implementation
+and remains unchanged in this physical move.
 
 ## Authority
 

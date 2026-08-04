@@ -86,7 +86,11 @@ class AppServerDiagnosticsTests(unittest.TestCase):
             "imagent.applications.appserver_client.runtime_diagnostics",
         ):
             with self.subTest(module_name=module_name):
-                self.assertIsNone(importlib.util.find_spec(module_name))
+                try:
+                    spec = importlib.util.find_spec(module_name)
+                except ModuleNotFoundError:
+                    spec = None
+                self.assertIsNone(spec)
 
 
 if __name__ == "__main__":

@@ -24,7 +24,7 @@ from imagent.applications import (
     ZenApplicationAdapter,
     presentation,
 )
-from imagent.applications.appserver_client import AppServerClient as NativeAppServerClient
+from imagent.applications.adapters.appserver.client import AppServerClient as NativeAppServerClient
 from imagent.applications.presentation import artifact_materialization
 from imagent.applications.presentation.artifact_materialization import (
     AppServerArtifactMaterializationRuntime,
@@ -213,7 +213,7 @@ class ApplicationArtifactFacadeTests(unittest.TestCase):
                 "from imagent.applications import AppServerArtifactCandidate as top; "
                 "assert top is presentation.AppServerArtifactCandidate; "
                 "assert 'imagent.applications.appserver' not in sys.modules; "
-                "assert 'imagent.applications.appserver_client' not in sys.modules; "
+                "assert 'imagent.applications.adapters.appserver.client' not in sys.modules; "
                 "assert 'imagent.applications.appserver_artifacts' not in sys.modules",
             ],
             check=False,

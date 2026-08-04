@@ -5,7 +5,8 @@
 `tests/applications/adapters/appserver/test_transport.py` is the current
 authoritative direct transport suite. It tests the stdio send/receive framing
 and closed-stream translation. The broader client lifecycle evidence remains
-in `tests/test_appserver_client.py` and `tests/test_appserver_transport.py`;
+in `tests/applications/adapters/appserver/test_client.py` and
+`tests/test_appserver_transport.py`;
 queue policy and connection reset behavior remain owned by the client leaf.
 
 The tests assert decoded JSON values and typed closure; they do not inspect a

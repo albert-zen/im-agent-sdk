@@ -7,19 +7,19 @@ import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
-from ...contracts import ApplicationInputOutcomeUnknown
-from ...diagnostics import (
+from .....contracts import ApplicationInputOutcomeUnknown
+from .....diagnostics import (
     ConnectionDiagnosticFacts,
     QueueDiagnosticName,
 )
-from ..adapters.appserver.diagnostics import (
+from ..diagnostics import (
     AppServerDiagnosticState,
     emit_event,
     mark_appserver_health,
     summarize_text,
     summarize_transport_message,
 )
-from ..adapters.appserver.transport import (
+from ..transport import (
     AppServerError,
     AppServerTransport,
     StdioAppServerTransport,

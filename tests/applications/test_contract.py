@@ -292,7 +292,7 @@ assert {
     name for name in sys.modules if name == 'imagent.gateway' or name.startswith('imagent.gateway.')
 } == gateway_modules_before
 assert 'imagent.applications.appserver' not in sys.modules
-assert 'imagent.applications.appserver_client' not in sys.modules
+assert 'imagent.applications.adapters.appserver.client' not in sys.modules
 assert 'imagent.applications.t3' not in sys.modules
 assert 'imagent.applications.t3_client' not in sys.modules
 """
