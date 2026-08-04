@@ -2,18 +2,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .adapters import (
+from ..adapters import (
     BindingRepository,
     DeliverySubmissionRepository,
     IdempotencyRepository,
     ProjectionRouteRepository,
     RequestCorrelationRepository,
 )
-from .gateway.delivery.outcome_observation import DeliveryOutcomeObserver
-from .gateway.input import InboundContentTransformer
-from .gateway.input.failure_presentation import InboundFailurePresenter
-from .gateway.presentation import OutboundPresentationPolicy
-from .interaction.controllers import InboundController, RequestPresenter
+from ..interaction.controllers import InboundController, RequestPresenter
+from .delivery.outcome_observation import DeliveryOutcomeObserver
+from .input import InboundContentTransformer
+from .input.failure_presentation import InboundFailurePresenter
+from .presentation import OutboundPresentationPolicy
 
 
 @dataclass(frozen=True, slots=True)

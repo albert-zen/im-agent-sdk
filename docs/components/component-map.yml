@@ -346,17 +346,17 @@ components:
     outputs: [ImAgentGateway composition]
     public_contracts: [GatewayRepositories, GatewayLimits, GatewayExtensions]
     public_exports:
-      current: [imagent.gateway_composition:GatewayRepositories, imagent.gateway_composition:GatewayLimits, imagent.gateway_composition:GatewayExtensions]
+      current: [imagent.gateway.composition:GatewayRepositories, imagent.gateway.composition:GatewayLimits, imagent.gateway.composition:GatewayExtensions]
       target: [imagent.gateway.composition:GatewayRepositories, imagent.gateway.composition:GatewayLimits, imagent.gateway.composition:GatewayExtensions]
     dependencies: [interaction.controllers.controller-contract, interaction.controllers.request-presentation, interaction.channels.channel-contract, applications.application-contract, gateway.admission, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.projection.observation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.memory, gateway.persistence.idempotency]
     state_recovery: Frozen construction values only; no runtime state or locator lookup.
-    current_code: [src/imagent/gateway_composition.py, src/imagent/gateway/__init__.py]
+    current_code: [src/imagent/gateway/composition.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/composition.py]
     current_tests: [tests/gateway/test_package_root.py, tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py]
     target_tests: [tests/gateway/test_composition.py, tests/gateway/test_package_root.py]
     authoritative_docs: [docs/components/gateway/composition/design.md, docs/components/gateway/composition/testing.md, docs/components/gateway/design.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [the Gateway package root still combines composition and runtime orchestration]
+    gaps: [the Gateway package root still combines its composition facade and runtime orchestration]
 
   gateway.lifecycle:
     id: gateway.lifecycle
@@ -1459,7 +1459,7 @@ structural_status:
       reason: BaseChannelAdapter combines lifecycle/startup validation, ingress access, outbound send validation, and native diagnostic state.
     src/imagent/gateway/__init__.py:
       owners: [gateway.composition, gateway.lifecycle, gateway.admission, gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.content-transformation, gateway.input.dispatch, gateway.input.failure-presentation, gateway.projection.observation, gateway.projection.request-correlation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.diagnostics]
-      reason: The current composition root also sequences admission, input, observation, request routing, presentation, delivery, and diagnostics leaf behavior.
+      reason: The package facade re-exports composition values while the same module still sequences admission, input, observation, request routing, presentation, delivery, and diagnostics leaf behavior.
     src/imagent/gateway/delivery/__init__.py:
       owners: [gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation]
       reason: The intentional Gateway delivery package facade re-exports exact public values from focused delivery leaves without implementing any leaf.

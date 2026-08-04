@@ -181,7 +181,7 @@ components:
       - src/imagent/gateway/input/content_transformation.py
       - src/imagent/gateway/input/failure_presentation.py
       - src/imagent/gateway/__init__.py
-      - src/imagent/gateway_composition.py
+      - src/imagent/gateway/composition.py
       - src/imagent/gateway_startup.py
       - src/imagent/cli/**
       - tests/gateway/test_package_root.py

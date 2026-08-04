@@ -160,6 +160,24 @@ class ComponentMapTests(unittest.TestCase):
         component_map = load_component_map()
         components = component_map["components"]
 
+        composition = components["gateway.composition"]
+        self.assertEqual(
+            composition["public_exports"]["current"],
+            [
+                "imagent.gateway.composition:GatewayRepositories",
+                "imagent.gateway.composition:GatewayLimits",
+                "imagent.gateway.composition:GatewayExtensions",
+            ],
+        )
+        self.assertEqual(
+            composition["current_code"],
+            [
+                "src/imagent/gateway/composition.py",
+                "src/imagent/gateway/__init__.py",
+            ],
+        )
+        self.assertNotIn("src/imagent/gateway_composition.py", composition["current_code"])
+
         controller_action_edges = {
             "applications.operations",
             "gateway.routing.gateway-operations",

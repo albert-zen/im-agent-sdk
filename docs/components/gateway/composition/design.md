@@ -26,9 +26,10 @@ contracts and the specific Gateway admission, input, projection, presentation,
 delivery, persistence, and diagnostics leaves that consume the values.
 
 The formal public contracts are `GatewayRepositories`, `GatewayLimits`, and
-`GatewayExtensions`. They currently live in `imagent.gateway_composition` and
-move to `imagent.gateway.composition`; the stable `imagent.gateway` facade may
-re-export the exact same objects, but there must never be two implementations.
+`GatewayExtensions`. Their single implementation lives in
+`imagent.gateway.composition`; the stable `imagent.gateway` facade re-exports
+the exact same objects. The removed `imagent.gateway_composition` internal
+module has no compatibility shim, so there can never be two implementations.
 
 ## Bounds and absence
 
@@ -55,13 +56,14 @@ dependencies. Reconstructing an equivalent composition must not create a
 second Application subscription, Channel admission path, transcript, Agent
 runtime, content spool, or outbox.
 
-## Current and target structure
+## Current structure and remaining split
 
-Current implementation is split between `src/imagent/gateway_composition.py`
-and construction in `src/imagent/gateway/__init__.py`. The target owner is
-`src/imagent/gateway/composition.py`. This documentation slice changes no code;
-the package root remains an explained split candidate until the focused
-mechanical move leaves one implementation and exact facade identities.
+`src/imagent/gateway/composition.py` is the current and sole owner of the
+three composition values. `src/imagent/gateway/__init__.py` imports those exact
+objects for the stable package facade and still contains `ImAgentGateway`
+runtime orchestration. Separating that remaining package-root facade/runtime
+combination is a later mechanical slice; it does not duplicate the composition
+values or alter their grouped constructor API.
 
 ## Authority
 
