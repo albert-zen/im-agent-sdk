@@ -16,6 +16,11 @@ The tests must preserve exact native response payload choices, scoped request
 IDs, first-writer resolution, and explicit unsupported behavior. A reset must
 not pretend that a pending snapshot exists.
 
+They also prove the mapping handoff: a valid unknown server request receives
+method-not-found without opening a request, while malformed supported requests
+receive the fixed redacted invalid-params response before any request event or
+pending state is created.
+
 ## Target evidence and verification
 
 Run the leaf and retained integration evidence:

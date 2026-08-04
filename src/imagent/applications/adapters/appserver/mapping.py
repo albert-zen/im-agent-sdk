@@ -1,47 +1,90 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import cast
 
 from ...contract import ThreadStatus, TurnStatus
 
+MAX_NATIVE_TEXT_CHARACTERS = 16_384
+MAX_NATIVE_COLLECTION_ITEMS = 256
+MAX_NATIVE_MAPPING_KEYS = 64
+MAX_NATIVE_MAPPING_KEY_CHARACTERS = 128
+MAX_NATIVE_NESTING = 16
+MAX_NATIVE_TOTAL_VALUES = 4_096
+MAX_NATIVE_CONTENT_PARTS = 64
+MAX_NATIVE_ID_CHARACTERS = 512
+APP_SERVER_MAPPING_ERROR_MESSAGE = "invalid App Server native mapping"
+
+_DISPATCH_POSITION_KEY = "imagent_dispatch_position"
+
+
+class AppServerMappingError(ValueError):
+    """A native App Server fact cannot safely become an internal fact."""
+
+    def __init__(self) -> None:
+        super().__init__(APP_SERVER_MAPPING_ERROR_MESSAGE)
+
+
+@dataclass(slots=True)
+class _NormalizationBudget:
+    total_values: int = 0
+
+    def visit(self) -> None:
+        self.total_values += 1
+        if self.total_values > MAX_NATIVE_TOTAL_VALUES:
+            raise AppServerMappingError
+
+
+def native_mapping(value: object) -> dict[str, object]:
+    """Validate and copy one finite native JSON object."""
+
+    budget = _NormalizationBudget()
+    if not isinstance(value, Mapping):
+        raise AppServerMappingError
+    return _normalize_mapping(value, budget=budget, depth=1)
+
 
 def native_object(result: Mapping[str, object], key: str) -> Mapping[str, object]:
-    value = result.get(key)
+    value = native_mapping(result).get(key)
     if not isinstance(value, Mapping):
-        raise RuntimeError(f"application result did not contain {key}")
+        raise AppServerMappingError
     return value
 
 
 def native_turn_id(result: Mapping[str, object]) -> str | None:
-    turn = result.get("turn")
-    if isinstance(turn, Mapping):
-        return optional_string(turn.get("id") or turn.get("turnId"))
-    return optional_string(result.get("turnId"))
+    normalized = native_mapping(result)
+    turn = normalized.get("turn")
+    return _consistent_identity(
+        _identity_from(normalized, "turnId"),
+        _identity_from(turn, "id", "turnId") if isinstance(turn, Mapping) else None,
+    )
 
 
 def native_list(
     result: Mapping[str, object],
     *keys: str,
 ) -> tuple[Mapping[str, object], ...]:
+    normalized = native_mapping(result)
     for key in keys:
-        value = result.get(key)
+        value = normalized.get(key)
         if isinstance(value, list):
             return tuple(item for item in value if isinstance(item, Mapping))
-    raise RuntimeError("application result did not contain a thread list")
+    raise AppServerMappingError
 
 
 def optional_string(value: object) -> str | None:
-    text = str(value or "").strip()
-    return text or None
+    if value is None:
+        return None
+    return _native_text(value).strip() or None
 
 
 def thread_status(value: object) -> ThreadStatus:
-    if isinstance(value, Mapping):
-        value = value.get("type") or value.get("status")
-    normalized = str(value or "").replace("-", "_").casefold()
+    normalized = _status_text(value)
     return {
         "idle": ThreadStatus.IDLE,
         "notloaded": ThreadStatus.IDLE,
@@ -58,9 +101,7 @@ def thread_status(value: object) -> ThreadStatus:
 
 
 def turn_status(value: object) -> TurnStatus:
-    if isinstance(value, Mapping):
-        value = value.get("type") or value.get("status")
-    normalized = str(value or "").replace("-", "_").casefold()
+    normalized = _status_text(value)
     return {
         "idle": TurnStatus.IDLE,
         "running": TurnStatus.RUNNING,
@@ -78,11 +119,12 @@ def turn_status(value: object) -> TurnStatus:
 
 
 def turn_list(payload: Mapping[str, object]) -> tuple[Mapping[str, object], ...]:
+    normalized = native_mapping(payload)
     for key in ("turns", "data"):
-        value = payload.get(key)
+        value = normalized.get(key)
         if isinstance(value, list):
             return tuple(item for item in value if isinstance(item, Mapping))
-    thread = payload.get("thread")
+    thread = normalized.get("thread")
     if isinstance(thread, Mapping):
         turns = thread.get("turns")
         if isinstance(turns, list):
@@ -91,23 +133,41 @@ def turn_list(payload: Mapping[str, object]) -> tuple[Mapping[str, object], ...]
 
 
 def turn_items(turn: Mapping[str, object]) -> tuple[Mapping[str, object], ...]:
-    items = turn.get("items")
+    items = native_mapping(turn).get("items")
     if not isinstance(items, list):
         return ()
     return tuple(item for item in items if isinstance(item, Mapping))
 
 
+def thread_id(thread: Mapping[str, object]) -> str:
+    value = _identity_from(native_mapping(thread), "id", "threadId")
+    if value is None:
+        raise AppServerMappingError
+    return value
+
+
 def turn_id(turn: Mapping[str, object]) -> str:
-    value = str(turn.get("id") or turn.get("turnId") or "")
-    if not value:
-        raise RuntimeError("native turn did not contain an id")
+    value = _identity_from(native_mapping(turn), "id", "turnId")
+    if value is None:
+        raise AppServerMappingError
+    return value
+
+
+def item_id(item: Mapping[str, object]) -> str:
+    value = _identity_from(_native_item_mapping(item), "id", "itemId")
+    if value is None:
+        raise AppServerMappingError
     return value
 
 
 def normalized_item_type(item: Mapping[str, object]) -> str:
-    return (
-        str(item.get("type") or item.get("kind") or "").replace("_", "").replace("-", "").casefold()
-    )
+    normalized = _native_item_mapping(item)
+    value = normalized.get("type")
+    if value is None:
+        value = normalized.get("kind")
+    if not isinstance(value, str):
+        return ""
+    return _native_text(value).replace("_", "").replace("-", "").casefold()
 
 
 def is_agent_item(item: Mapping[str, object]) -> bool:
@@ -116,30 +176,78 @@ def is_agent_item(item: Mapping[str, object]) -> bool:
 
 
 def item_text(item: Mapping[str, object]) -> str:
-    text = item.get("text")
+    normalized = _native_item_mapping(item)
+    text = normalized.get("text")
     if isinstance(text, str):
-        return text.strip()
-    content = item.get("content")
+        return _native_text(text).strip()
+    if text is not None:
+        raise AppServerMappingError
+    content = normalized.get("content")
     if isinstance(content, str):
-        return content.strip()
-    if isinstance(content, list):
-        return "\n".join(
-            str(part.get("text") or "")
-            for part in content
-            if isinstance(part, Mapping) and part.get("text")
-        ).strip()
-    return ""
+        return _native_text(content).strip()
+    if content is None:
+        return ""
+    if not isinstance(content, list):
+        raise AppServerMappingError
+    parts: list[str] = []
+    total = 0
+    for part in content:
+        if not isinstance(part, Mapping):
+            continue
+        value = part.get("text")
+        if value is None:
+            continue
+        text_part = _native_text(value)
+        total += len(text_part)
+        if parts:
+            total += 1
+        if total > MAX_NATIVE_TEXT_CHARACTERS:
+            raise AppServerMappingError
+        parts.append(text_part)
+    return "\n".join(parts).strip()
+
+
+def _native_item_mapping(item: Mapping[str, object]) -> dict[str, object]:
+    _validate_content_aggregation(item.get("content"))
+    return native_mapping(item)
+
+
+def _validate_content_aggregation(value: object) -> None:
+    """Reject an overlarge native content list before its generic JSON copy."""
+
+    if value is None or isinstance(value, str):
+        return
+    if not isinstance(value, list) or len(value) > MAX_NATIVE_CONTENT_PARTS:
+        raise AppServerMappingError
+    total = 0
+    has_part = False
+    for part in value:
+        if not isinstance(part, Mapping):
+            continue
+        text = part.get("text")
+        if text is None:
+            continue
+        text_part = _native_text(text)
+        if has_part:
+            total += 1
+        total += len(text_part)
+        if total > MAX_NATIVE_TEXT_CHARACTERS:
+            raise AppServerMappingError
+        has_part = True
 
 
 def turn_error(turn: Mapping[str, object]) -> str | None:
-    error = turn.get("error")
+    error = native_mapping(turn).get("error")
     if isinstance(error, Mapping):
         return optional_string(error.get("message") or error.get("error"))
     return optional_string(error)
 
 
 def turn_updated_at(turn: Mapping[str, object]) -> datetime | None:
-    value = turn.get("updatedAt") or turn.get("completedAt") or turn.get("createdAt")
+    normalized = native_mapping(turn)
+    value = (
+        normalized.get("updatedAt") or normalized.get("completedAt") or normalized.get("createdAt")
+    )
     return parse_optional_datetime(value)
 
 
@@ -151,7 +259,7 @@ def parse_optional_datetime(value: object) -> datetime | None:
     if not isinstance(value, str) or not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return datetime.fromisoformat(_native_text(value).replace("Z", "+00:00"))
     except ValueError:
         return None
 
@@ -174,17 +282,20 @@ def is_unsupported_method_error(error: Exception) -> bool:
     )
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class AppServerEvent:
     direction: str
     method: str
     category: str
     kind: str
-    payload: dict[str, Any]
-    thread_id: str = ""
-    turn_id: str = ""
-    item_id: str = ""
-    request_id: str | None = None
+    payload: dict[str, object]
+    thread_id: str | None = None
+    turn_id: str | None = None
+    item_id: str | None = None
+    event_id: str | None = None
+    request_id: str | int | None = None
+    transport_request_id: str | int | None = None
+    connection_epoch: int | None = None
     process_id: str | None = None
     watch_id: str | None = None
 
@@ -285,35 +396,349 @@ _CATEGORY_PREFIXES = (
 )
 
 _SYSTEM_METHODS = {"configWarning", "deprecationNotice", "error"}
+_THREAD_REQUIRED_EVENT_METHODS = frozenset(
+    {
+        "item/agentMessage/delta",
+        "item/completed",
+        "turn/completed",
+        "turn/plan/updated",
+        "turn/diff/updated",
+        "thread/status/changed",
+        "thread/compacted",
+        "model/rerouted",
+    }
+)
+_TURN_REQUIRED_EVENT_METHODS = frozenset({"item/completed", "turn/completed"})
+_ITEM_REQUIRED_EVENT_METHODS = frozenset({"item/completed"})
 
 
-def normalize_appserver_message(message: dict[str, Any]) -> AppServerEvent:
-    method = str(message.get("method", ""))
-    payload = message.get("params", {})
-    if not isinstance(payload, dict):
-        payload = {}
-    item_value = payload.get("item")
-    item: dict[str, Any] = item_value if isinstance(item_value, dict) else {}
-    turn_value = payload.get("turn")
-    turn: dict[str, Any] = turn_value if isinstance(turn_value, dict) else {}
-    direction = "server_request" if method and "id" in message else "notification"
-    request_id = payload.get("requestId") or payload.get("_request_id")
-    if request_id is None and direction == "server_request":
-        request_id = message.get("id")
-    item_id = payload.get("itemId") or item.get("id")
+def normalize_appserver_message(message: Mapping[str, object]) -> AppServerEvent:
+    normalized_message = _normalize_appserver_message_root(message)
+    method = normalized_message.get("method")
+    if not isinstance(method, str) or not method:
+        raise AppServerMappingError
+    method = _native_text(method)
+    if not method.strip():
+        raise AppServerMappingError
+    payload_value = normalized_message.get("params", {})
+    if not isinstance(payload_value, Mapping):
+        raise AppServerMappingError
+    payload = dict(payload_value)
+    if any(key in payload for key in ("_connection_epoch", "_transport_request_id", "_request_id")):
+        raise AppServerMappingError
+    message_epoch = _connection_epoch(normalized_message.get("_connection_epoch"))
+    connection_epoch = message_epoch
+    direction = "server_request" if "id" in normalized_message else "notification"
+    transport_request_id: str | int | None = None
+    request_id: str | int | None = None
+    payload_request_id: str | int | None = None
+    if "requestId" in payload:
+        payload_request_id = _transport_request_id(payload.get("requestId"))
+    if direction == "server_request":
+        transport_request_id = _transport_request_id(normalized_message.get("id"))
+        if payload_request_id is not None and payload_request_id != transport_request_id:
+            raise AppServerMappingError
+        request_id = transport_request_id
+
+    thread = payload.get("thread")
+    item = payload.get("item")
+    turn = payload.get("turn")
+    if thread is not None and not isinstance(thread, Mapping):
+        thread = None
+    if item is not None and not isinstance(item, Mapping):
+        item = None
+    if turn is not None and not isinstance(turn, Mapping):
+        turn = None
+    thread_id = _consistent_identity(
+        _identity_from(payload, "threadId"),
+        _identity_from(thread, "id", "threadId") if thread is not None else None,
+    )
+    turn_id = _consistent_identity(
+        _identity_from(payload, "turnId"),
+        _identity_from(turn, "id", "turnId") if turn is not None else None,
+    )
+    item_id = _consistent_identity(
+        _identity_from(payload, "itemId"),
+        _identity_from(item, "id", "itemId") if item is not None else None,
+    )
+    event_id = _identity_from(payload, "eventId", "event_id")
+    if method == "serverRequest/resolved":
+        request_id = _transport_request_id(payload_request_id)
+    elif request_id is None:
+        request_id = payload_request_id
+
+    _validate_event_identity(
+        method=method,
+        direction=direction,
+        payload=payload,
+        thread_id=thread_id,
+        turn_id=turn_id,
+        item_id=item_id,
+        request_id=request_id,
+        transport_request_id=transport_request_id,
+        connection_epoch=connection_epoch,
+    )
     return AppServerEvent(
         direction=direction,
         method=method,
         category=_categorize_method(method),
         kind=_EVENT_KINDS.get(method, "unknown"),
         payload=payload,
-        thread_id=str(payload.get("threadId", "") or ""),
-        turn_id=str(payload.get("turnId") or turn.get("id") or ""),
-        item_id=str(item_id or ""),
-        request_id=str(request_id) if request_id is not None else None,
-        process_id=_string_or_none(payload.get("processId")),
-        watch_id=_string_or_none(payload.get("watchId")),
+        thread_id=thread_id,
+        turn_id=turn_id,
+        item_id=item_id,
+        event_id=event_id,
+        request_id=request_id,
+        transport_request_id=transport_request_id,
+        connection_epoch=connection_epoch,
+        process_id=optional_string(payload.get("processId")),
+        watch_id=optional_string(payload.get("watchId")),
     )
+
+
+def derive_appserver_event_id(
+    application_instance_id: str,
+    *,
+    event_type: str,
+    thread_id: str | None = None,
+    turn_id: str | None = None,
+    item_id: str | None = None,
+    request_id: str | int | None = None,
+    connection_epoch: int | None = None,
+) -> str:
+    """Create a bounded canonical event identity from validated native IDs."""
+
+    _required_identity(application_instance_id)
+    _native_text(event_type)
+    for identity in (thread_id, turn_id, item_id):
+        if identity is not None:
+            _required_identity(identity)
+    if request_id is not None:
+        _transport_request_id(request_id)
+    if connection_epoch is not None:
+        _connection_epoch(connection_epoch)
+    encoded = json.dumps(
+        [
+            application_instance_id,
+            event_type,
+            thread_id,
+            turn_id,
+            item_id,
+            request_id,
+            connection_epoch,
+        ],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return f"appserver:sha256:{hashlib.sha256(encoded.encode()).hexdigest()}"
+
+
+def _normalize_appserver_message_root(message: Mapping[str, object]) -> dict[str, object]:
+    budget = _NormalizationBudget()
+    return _normalize_mapping(
+        cast(Mapping[object, object], message),
+        budget=budget,
+        depth=1,
+        ignored_keys=frozenset({_DISPATCH_POSITION_KEY}),
+    )
+
+
+def _normalize_native_value(
+    value: object,
+    *,
+    budget: _NormalizationBudget,
+    depth: int,
+    item_context: bool = False,
+) -> object:
+    if isinstance(value, str):
+        budget.visit()
+        return _native_text(value)
+    if value is None or isinstance(value, (bool, int)):
+        budget.visit()
+        return value
+    if isinstance(value, float):
+        budget.visit()
+        if not math.isfinite(value):
+            raise AppServerMappingError
+        return value
+    if isinstance(value, Mapping):
+        return _normalize_mapping(
+            value,
+            budget=budget,
+            depth=depth + 1,
+            item_context=item_context,
+        )
+    if isinstance(value, list):
+        return _normalize_list(
+            value,
+            budget=budget,
+            depth=depth + 1,
+            item_context=item_context,
+        )
+    raise AppServerMappingError
+
+
+def _normalize_mapping(
+    value: Mapping[object, object],
+    *,
+    budget: _NormalizationBudget,
+    depth: int,
+    ignored_keys: frozenset[str] = frozenset(),
+    item_context: bool = False,
+) -> dict[str, object]:
+    budget.visit()
+    if depth > MAX_NATIVE_NESTING:
+        raise AppServerMappingError
+    key_count = 0
+    for key in value:
+        if not isinstance(key, str) or not key or len(key) > MAX_NATIVE_MAPPING_KEY_CHARACTERS:
+            raise AppServerMappingError
+        if key in ignored_keys:
+            continue
+        key_count += 1
+        if key_count > MAX_NATIVE_MAPPING_KEYS:
+            raise AppServerMappingError
+    if item_context:
+        _validate_content_aggregation(value.get("content"))
+    normalized: dict[str, object] = {}
+    for key, item in value.items():
+        if key in ignored_keys:
+            continue
+        if not isinstance(key, str):
+            raise AppServerMappingError
+        if key == "items" and isinstance(item, list):
+            normalized[key] = _normalize_list(
+                item,
+                budget=budget,
+                depth=depth + 1,
+                item_context=True,
+            )
+            continue
+        normalized[key] = _normalize_native_value(
+            item,
+            budget=budget,
+            depth=depth,
+            item_context=key == "item",
+        )
+    return normalized
+
+
+def _normalize_list(
+    value: list[object],
+    *,
+    budget: _NormalizationBudget,
+    depth: int,
+    item_context: bool = False,
+) -> list[object]:
+    budget.visit()
+    if depth > MAX_NATIVE_NESTING or len(value) > MAX_NATIVE_COLLECTION_ITEMS:
+        raise AppServerMappingError
+    return [
+        _normalize_native_value(
+            item,
+            budget=budget,
+            depth=depth,
+            item_context=item_context,
+        )
+        for item in value
+    ]
+
+
+def _native_text(value: object) -> str:
+    if not isinstance(value, str) or len(value) > MAX_NATIVE_TEXT_CHARACTERS:
+        raise AppServerMappingError
+    return value
+
+
+def _required_identity(value: object) -> str:
+    if not isinstance(value, str) or not value.strip() or len(value) > MAX_NATIVE_ID_CHARACTERS:
+        raise AppServerMappingError
+    return value
+
+
+def _identity_from(
+    mapping: Mapping[str, object] | None,
+    *keys: str,
+) -> str | None:
+    if mapping is None:
+        return None
+    identity: str | None = None
+    for key in keys:
+        if key in mapping and mapping[key] is not None:
+            candidate = _required_identity(mapping[key])
+            identity = _consistent_identity(identity, candidate)
+    return identity
+
+
+def _consistent_identity(*identities: str | None) -> str | None:
+    """Return one exact native identity, rejecting conflicting aliases."""
+
+    identity: str | None = None
+    for candidate in identities:
+        if candidate is None:
+            continue
+        if identity is not None and candidate != identity:
+            raise AppServerMappingError
+        identity = candidate
+    return identity
+
+
+def _transport_request_id(value: object) -> str | int:
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        raise AppServerMappingError
+    if isinstance(value, str):
+        return _required_identity(value)
+    if len(str(value)) > MAX_NATIVE_ID_CHARACTERS:
+        raise AppServerMappingError
+    return value
+
+
+def _connection_epoch(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise AppServerMappingError
+    return value
+
+
+def _status_text(value: object) -> str:
+    if isinstance(value, Mapping):
+        normalized = native_mapping(value)
+        value = normalized.get("type") or normalized.get("status")
+    if not isinstance(value, str):
+        return ""
+    return _native_text(value).replace("-", "_").casefold()
+
+
+def _validate_event_identity(
+    *,
+    method: str,
+    direction: str,
+    payload: Mapping[str, object],
+    thread_id: str | None,
+    turn_id: str | None,
+    item_id: str | None,
+    request_id: str | int | None,
+    transport_request_id: str | int | None,
+    connection_epoch: int | None,
+) -> None:
+    if method in _THREAD_REQUIRED_EVENT_METHODS and thread_id is None:
+        raise AppServerMappingError
+    if method in _TURN_REQUIRED_EVENT_METHODS and turn_id is None:
+        raise AppServerMappingError
+    if method in _ITEM_REQUIRED_EVENT_METHODS:
+        if item_id is None or not isinstance(payload.get("item"), Mapping):
+            raise AppServerMappingError
+    if method == "serverRequest/resolved" and request_id is None:
+        raise AppServerMappingError
+    if direction == "server_request" and method in SUPPORTED_SERVER_REQUEST_METHODS:
+        if (
+            thread_id is None
+            or turn_id is None
+            or transport_request_id is None
+            or connection_epoch is None
+        ):
+            raise AppServerMappingError
 
 
 def _categorize_method(method: str) -> str:
@@ -323,9 +748,3 @@ def _categorize_method(method: str) -> str:
         if method.startswith(prefix):
             return category
     return "unknown"
-
-
-def _string_or_none(value: Any) -> str | None:
-    if value is None:
-        return None
-    return str(value)

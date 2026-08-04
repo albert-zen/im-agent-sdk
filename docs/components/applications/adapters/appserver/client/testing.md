@@ -15,6 +15,9 @@ The focused client evidence now lives in
 - bounded request timeout/retry and explicit connection errors;
 - notification and server-request lane capacity, reset, and handler failure;
 - immutable dispatch-position ordering across both lanes and response fences;
+- dispatch preserves an exact 64-key native `params` mapping for both lanes,
+  rejects the 65th key in mapping, and keeps client connection context outside
+  that native payload;
 - connection-epoch reset, stale transport-bound calls, and reconnect behavior;
 - oversized transport input reaches no response or callback dispatch, resets
   the poisoned connection, and permits only a fresh later connection/epoch;

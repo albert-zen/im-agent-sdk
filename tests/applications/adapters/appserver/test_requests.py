@@ -9,6 +9,7 @@ from imagent.applications import (
     CodexApplicationAdapter,
     ZenApplicationAdapter,
 )
+from imagent.applications.adapters.appserver.mapping import APP_SERVER_MAPPING_ERROR_MESSAGE
 from imagent.applications.adapters.appserver.requests import (
     build_appserver_response,
     derive_appserver_request_ref,
@@ -384,9 +385,7 @@ class InteractiveClient:
                 await result
 
     async def emit_notification(self, notification: dict) -> None:
-        params = notification.setdefault("params", {})
-        if isinstance(params, dict):
-            params.setdefault("_connection_epoch", self.connection_epoch)
+        notification.setdefault("_connection_epoch", self.connection_epoch)
         for handler in self.notification_handlers:
             result = handler(notification)
             if asyncio.iscoroutine(result):
@@ -643,25 +642,87 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(event.request.questions[0].secret)
         self.assertEqual(self.client.errors, [])
 
-    async def test_unsupported_method_uses_method_not_found_error(self) -> None:
+    async def test_unsupported_method_without_params_uses_method_not_found_error(self) -> None:
+        opened = asyncio.create_task(anext(self.events))
+        await asyncio.sleep(0)
         await self.client.emit_request(
-            _server_request(
-                method="item/unknown/request",
-                params={},
-            )
+            {
+                "id": 7,
+                "method": "item/unknown/request",
+                "_connection_epoch": 3,
+            }
         )
+        await asyncio.sleep(0)
+        self.assertFalse(opened.done())
+        opened.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await opened
         self.assertEqual(self.client.errors[0][1], -32601)
+        self.assertEqual(self.adapter._request_runtime.pending_count, 0)
 
     async def test_malformed_known_request_uses_invalid_params_error(
         self,
     ) -> None:
+        opened = asyncio.create_task(anext(self.events))
+        await asyncio.sleep(0)
         await self.client.emit_request(
             _server_request(
                 method="item/tool/requestUserInput",
                 params={"questions": []},
             )
         )
-        self.assertEqual(self.client.errors[0][1], -32602)
+        await asyncio.sleep(0)
+        self.assertFalse(opened.done())
+        opened.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await opened
+        self.assertEqual(
+            self.client.errors,
+            [(7, -32602, APP_SERVER_MAPPING_ERROR_MESSAGE, 3)],
+        )
+        self.assertEqual(self.adapter._request_runtime.pending_count, 0)
+
+    async def test_invalid_native_request_identity_rejects_before_request_open(self) -> None:
+        opened = asyncio.create_task(anext(self.events))
+        await asyncio.sleep(0)
+        malformed = _server_request(
+            method="item/fileChange/requestApproval",
+            params={"reason": "must not become a request"},
+        )
+        malformed["params"]["threadId"] = ""
+        await self.client.emit_request(malformed)
+        await asyncio.sleep(0)
+        self.assertFalse(opened.done())
+        opened.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await opened
+        self.assertEqual(
+            self.client.errors,
+            [(7, -32602, APP_SERVER_MAPPING_ERROR_MESSAGE, 3)],
+        )
+        self.assertEqual(self.adapter._request_runtime.pending_count, 0)
+
+    async def test_conflicting_native_request_item_alias_rejects_before_request_open(self) -> None:
+        opened = asyncio.create_task(anext(self.events))
+        await asyncio.sleep(0)
+        malformed = _server_request(
+            method="item/fileChange/requestApproval",
+            params={
+                "reason": "must not become a request",
+                "item": {"id": "item-conflicts-with-outer-alias"},
+            },
+        )
+        await self.client.emit_request(malformed)
+        await asyncio.sleep(0)
+        self.assertFalse(opened.done())
+        opened.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await opened
+        self.assertEqual(
+            self.client.errors,
+            [(7, -32602, APP_SERVER_MAPPING_ERROR_MESSAGE, 3)],
+        )
+        self.assertEqual(self.adapter._request_runtime.pending_count, 0)
 
     async def test_late_old_epoch_resolution_cannot_resolve_reused_id(
         self,
@@ -704,9 +765,9 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
         await self.client.emit_notification(
             {
                 "method": "serverRequest/resolved",
+                "_connection_epoch": 3,
                 "params": {
                     "requestId": 7,
-                    "_connection_epoch": 3,
                 },
             }
         )
@@ -876,12 +937,11 @@ def _server_request(
     return {
         "id": transport_request_id,
         "method": method,
+        "_connection_epoch": connection_epoch,
         "params": {
             "threadId": "thread-1",
             "turnId": "turn-1",
             "itemId": "item-1",
-            "_transport_request_id": transport_request_id,
-            "_connection_epoch": connection_epoch,
             **params,
         },
     }

@@ -10,12 +10,16 @@ distinct fact/identity domains, timeout/cancellation/overrun/capacity behavior,
 and redacted bounded diagnostics. Invocation must use the existing ordered
 adapter path, never a socket read task or second subscription.
 
-Codex cases prove stable native event identity where available, ordered
-`message.created`, finite live dedupe, no authoritative-history replay, and no
-completion-checkpoint advance. T3 cases prove identical stable association in
-polling, catch-up, and history; a replay-safe presenter may be invoked again,
-while polling failure produces an explicit recoverable gap without erasing
-accepted input correlation. Both adapters prove that absence changes nothing.
+Codex cases prove required stable native event identity before a configured
+presenter can run, ordered `message.created`, finite live dedupe, no
+authoritative-history replay, and no completion-checkpoint advance. A missing
+native event ID creates the fixed mapping gap rather than a UUID/text/time/raw
+payload substitute; the absent presenter preserves prior invisibility. T3
+cases prove identical stable association in polling, catch-up, and history; a
+replay-safe presenter may be reinvoked after a finite process-local dedupe
+window expires, while polling failure produces an explicit recoverable gap
+without erasing accepted input correlation. Both adapters prove that absence
+changes nothing.
 
 The focused owner suite also proves that the package facade re-exports the
 exact live-activity objects and that the old monolithic module is absent.

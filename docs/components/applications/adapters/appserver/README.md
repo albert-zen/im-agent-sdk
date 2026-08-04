@@ -31,9 +31,14 @@ serializes JSON-RPC calls, admits notification and server-request callbacks
 through independent finite lanes, attaches an immutable
 `AppServerDispatchPosition` fence to admitted callbacks/responses, and resets
 transport-bound handles on a new connection epoch. Mapping is stateless and
-fails closed when required native identity is absent. Requests map only
-evidenced Codex/Zen server requests and validate typed response shape before
-native writeback. Diagnostics are read-only, bounded, and redacted.
+validates bounded native text, collections, keys, content aggregation, and
+method-required stable identities before copying facts into the adapter path.
+Aliases for one identity must agree exactly. It fails closed with fixed
+redacted errors; a bad notification produces an explicit recovery gap and a
+bad server request cannot open typed request state.
+Requests map only evidenced Codex/Zen server requests and validate typed
+response shape before native writeback. Diagnostics are read-only, bounded,
+and redacted.
 
 No leaf owns Gateway request correlation, IM delivery, persistence, product
 approval/command policy, raw native event exposure, durable spool/outbox,

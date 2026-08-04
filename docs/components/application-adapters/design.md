@@ -79,7 +79,13 @@ History contains all completed Agent messages in a Turn. Application-native
 message phases remain namespaced Metadata until common reuse is proven.
 
 Metadata intended for outbound projection contains only bounded non-secret
-scalar presentation facts. Current App Server keys are `phase`,
+scalar presentation facts. Before an App Server resource, history item,
+notification, or server request can create those facts, its single mapping
+owner validates finite native text/collections/keys/content aggregation and
+the method-required stable identity. The owner copies only validated values;
+oversize or malformed input cannot be truncated into a different identity or
+reach canonical events, history, request mapping, or A1 consumer code. Current
+App Server keys are `phase`,
 `native_application`, the fixed `native_method`/`kind`, and the fixed
 `live_only` marker; current T3 keys are
 `kind`, `native_application`, `source`, and `streaming`. Thread/Turn/item IDs

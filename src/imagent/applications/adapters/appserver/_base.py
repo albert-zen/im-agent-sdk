@@ -96,10 +96,22 @@ from ...presentation.artifact_materialization import (
 )
 from ...requests import InteractiveRequest
 from .mapping import (
+    AppServerEvent as _AppServerEvent,
+)
+from .mapping import (
+    AppServerMappingError as _AppServerMappingError,
+)
+from .mapping import (
+    derive_appserver_event_id as _derive_appserver_event_id,
+)
+from .mapping import (
     is_agent_item as _is_agent_item,
 )
 from .mapping import (
     is_unsupported_method_error as _is_unsupported_method_error,
+)
+from .mapping import (
+    item_id as _item_id,
 )
 from .mapping import (
     item_text as _item_text,
@@ -108,10 +120,16 @@ from .mapping import (
     native_list as _native_list,
 )
 from .mapping import (
+    native_mapping as _native_mapping,
+)
+from .mapping import (
     native_object as _native_object,
 )
 from .mapping import (
     native_turn_id as _native_turn_id,
+)
+from .mapping import (
+    normalize_appserver_message as _normalize_appserver_message,
 )
 from .mapping import (
     normalized_item_type as _normalized_item_type,
@@ -121,6 +139,9 @@ from .mapping import (
 )
 from .mapping import (
     parse_datetime as _parse_datetime,
+)
+from .mapping import (
+    thread_id as _thread_id,
 )
 from .mapping import (
     thread_status as _thread_status,
@@ -357,10 +378,12 @@ class _AppServerApplicationAdapter:
     ) -> ApplicationOperationResult:
         completed_at = datetime.now(UTC)
         if isinstance(operation, ListThreads):
-            result = await self._client.list_threads(
-                sortKey="updated_at",
-                cursor=operation.cursor,
-                searchTerm=operation.query,
+            result = _native_mapping(
+                await self._client.list_threads(
+                    sortKey="updated_at",
+                    cursor=operation.cursor,
+                    searchTerm=operation.query,
+                )
             )
             threads = tuple(
                 self._thread_summary(item) for item in _native_list(result, "data", "threads")
@@ -430,7 +453,7 @@ class _AppServerApplicationAdapter:
                 message
                 for item in _turn_items(turn)
                 if _is_agent_item(item)
-                and str(item.get("phase") or "").casefold() == "commentary"
+                and (_optional_string(item.get("phase")) or "").casefold() == "commentary"
                 and (message := self._item_message(thread_ref, item)) is not None
             )
             return TurnCatchupRead(
@@ -544,10 +567,11 @@ class _AppServerApplicationAdapter:
                         raise
                     break
                 if not isinstance(result, Mapping):
-                    raise RuntimeError("thread/turns/list returned an invalid result")
-                turns = _turn_list(result)
+                    raise _AppServerMappingError
+                normalized_result = _native_mapping(result)
+                turns = _turn_list(normalized_result)
                 next_cursor = _optional_string(
-                    result.get("nextCursor") or result.get("next_cursor")
+                    normalized_result.get("nextCursor") or normalized_result.get("next_cursor")
                 )
                 if page_number == page:
                     return tuple(reversed(turns)), next_cursor is not None
@@ -610,6 +634,7 @@ class _AppServerApplicationAdapter:
                 had_compaction = True
             message = self._item_message(thread_ref, item)
             if self._artifact_materializer is not None and "user" not in item_type:
+                _item_id(item)
                 facts = self._artifact_completed_item_facts(
                     item,
                     thread_ref=thread_ref,
@@ -803,12 +828,7 @@ class _AppServerApplicationAdapter:
         text = _item_text(item)
         if not text:
             return None
-        item_id = str(item.get("id") or item.get("itemId") or "")
-        if not item_id:
-            digest = hashlib.sha256(
-                (f"{thread_ref.native_thread_id}\x1f{role.value}\x1f{text}").encode()
-            ).hexdigest()
-            item_id = f"imagent:appserver-item:{digest}"
+        item_id = _item_id(item)
         return AgentMessage(
             agent_item_id=item_id,
             thread_ref=thread_ref,
@@ -816,7 +836,7 @@ class _AppServerApplicationAdapter:
             content=(TextContent(text, TextFormat.MARKDOWN),),
             created_at=_parse_datetime(item.get("createdAt") or item.get("updatedAt")),
             metadata={
-                "phase": str(item.get("phase") or ""),
+                "phase": _optional_string(item.get("phase")) or "",
                 "native_application": self._summary.kind,
             },
         )
@@ -868,7 +888,13 @@ class _AppServerApplicationAdapter:
             expected_local_image_epoch=expected_local_image_epoch,
         )
 
-        turn_id = _native_turn_id(result)
+        try:
+            turn_id = _native_turn_id(result)
+        except _AppServerMappingError as cause:
+            raise ApplicationInputOutcomeUnknown(
+                "turn/start was accepted but its native Turn identity is unknown",
+                cause,
+            ) from cause
         if not turn_id:
             cause = RuntimeError("turn/start did not return a turn id")
             raise ApplicationInputOutcomeUnknown(
@@ -976,54 +1002,53 @@ class _AppServerApplicationAdapter:
         )
 
     async def _handle_notification(self, notification: dict) -> None:
-        method = str(notification.get("method") or "")
-        params = notification.get("params")
-        if not isinstance(params, dict):
-            return
+        try:
+            event = _normalize_appserver_message(notification)
+            await self._handle_mapped_notification(event)
+        except _AppServerMappingError:
+            self._events.fail_all(
+                lambda: EventStreamReset("application_native_mapping_failed"),
+                discard_pending=False,
+            )
+
+    async def _handle_mapped_notification(self, event: _AppServerEvent) -> None:
+        method = event.method
+        params = event.payload
         if method == "serverRequest/resolved":
-            await self._request_runtime.handle_resolution_notification(params)
+            await self._request_runtime.handle_resolution_notification(event)
             return
-        thread_id = str(params.get("threadId") or "")
-        if not thread_id:
+        thread_id = event.thread_id
+        if thread_id is None:
             return
-        turn = params.get("turn")
-        turn_id = str(
-            params.get("turnId") or (turn.get("id") if isinstance(turn, dict) else "") or ""
-        )
+        turn_id = event.turn_id
         thread_ref = self._thread_ref(thread_id)
         if method == "item/agentMessage/delta":
             self._emit(
                 thread_id,
                 AgentEventType.MESSAGE_DELTA,
-                {"delta": str(params.get("delta") or "")},
-                event_id=(
-                    str(params.get("eventId") or params.get("event_id") or "")
-                    or f"{self._application_instance_id}:live:{uuid.uuid4()}"
-                ),
+                {"delta": _optional_string(params.get("delta")) or ""},
+                event_id=(event.event_id or f"{self._application_instance_id}:live:{uuid.uuid4()}"),
                 thread_ref=thread_ref,
-                turn_id=turn_id or None,
+                turn_id=turn_id,
             )
             return
         if method == "item/completed":
             item = params.get("item")
-            if not isinstance(item, dict):
-                return
-            item_type = str(item.get("type") or "").replace("_", "").casefold()
+            if not isinstance(item, Mapping) or turn_id is None or event.item_id is None:
+                raise _AppServerMappingError
+            item_type = _normalized_item_type(item)
             message: AgentMessage | None = None
             if item_type == "agentmessage":
-                text = str(item.get("text") or "")
+                text = _item_text(item)
                 if text:
-                    item_id = str(item.get("id") or params.get("itemId") or "")
-                    if not item_id:
-                        item_id = f"live-{uuid.uuid4()}"
                     message = AgentMessage(
-                        agent_item_id=item_id,
+                        agent_item_id=event.item_id,
                         thread_ref=thread_ref,
                         role=MessageRole.ASSISTANT,
                         content=(TextContent(text, TextFormat.MARKDOWN),),
                         created_at=datetime.now(UTC),
                         metadata={
-                            "phase": str(item.get("phase") or ""),
+                            "phase": _optional_string(item.get("phase")) or "",
                             "native_method": method,
                         },
                     )
@@ -1053,34 +1078,41 @@ class _AppServerApplicationAdapter:
                 self._remember_live_artifact_identity(identity)
             if message is None:
                 return
-            item_id = message.agent_item_id
             self._emit(
                 thread_id,
                 AgentEventType.MESSAGE_COMPLETED,
                 {"message": message},
-                event_id=(
-                    f"{self._application_instance_id}:thread:{thread_id}:"
-                    f"message:{item_id}:completed"
+                event_id=_derive_appserver_event_id(
+                    self._application_instance_id,
+                    event_type=AgentEventType.MESSAGE_COMPLETED.value,
+                    thread_id=thread_id,
+                    turn_id=turn_id,
+                    item_id=message.agent_item_id,
                 ),
                 thread_ref=thread_ref,
-                turn_id=turn_id or None,
+                turn_id=turn_id,
             )
             return
         if method == "turn/completed":
-            status = str(
-                params.get("status") or (turn.get("status") if isinstance(turn, dict) else "") or ""
-            ).casefold()
+            if turn_id is None:
+                raise _AppServerMappingError
+            turn = params.get("turn")
+            status_value = params.get("status")
+            if status_value is None and isinstance(turn, Mapping):
+                status_value = turn.get("status")
+            if isinstance(status_value, Mapping):
+                status_value = status_value.get("type") or status_value.get("status")
+            status = (_optional_string(status_value) or "").casefold()
             event_type = {
                 "failed": AgentEventType.TURN_FAILED,
                 "interrupted": AgentEventType.TURN_INTERRUPTED,
             }.get(status, AgentEventType.TURN_COMPLETED)
-            terminal_id = turn_id
             if self._artifact_materializer is not None:
                 try:
                     terminal_status = AppServerTurnTerminalStatus(
                         status if status in {"failed", "interrupted"} else "completed"
                     )
-                    identity = (thread_id, terminal_id, f"terminal:{terminal_status.value}")
+                    identity = (thread_id, turn_id, f"terminal:{terminal_status.value}")
                     if identity in self._seen_live_artifact_identities:
                         runtime = self._artifact_materialization_runtime
                         if runtime is not None:
@@ -1089,7 +1121,7 @@ class _AppServerApplicationAdapter:
                     terminal_message = await self._materialize_turn_terminal(
                         self._artifact_turn_terminal_facts(
                             thread_ref=thread_ref,
-                            turn_id=terminal_id,
+                            turn_id=turn_id,
                             authoritative=False,
                             status=terminal_status,
                         ),
@@ -1103,24 +1135,29 @@ class _AppServerApplicationAdapter:
                         thread_id,
                         AgentEventType.MESSAGE_COMPLETED,
                         {"message": terminal_message},
-                        event_id=(
-                            f"{self._application_instance_id}:thread:{thread_id}:"
-                            f"message:{terminal_message.agent_item_id}:completed"
+                        event_id=_derive_appserver_event_id(
+                            self._application_instance_id,
+                            event_type=AgentEventType.MESSAGE_COMPLETED.value,
+                            thread_id=thread_id,
+                            turn_id=turn_id,
+                            item_id=terminal_message.agent_item_id,
                         ),
                         thread_ref=thread_ref,
-                        turn_id=turn_id or None,
+                        turn_id=turn_id,
                     )
                 self._remember_live_artifact_identity(identity)
             self._emit(
                 thread_id,
                 event_type,
                 {"status": status or "completed"},
-                event_id=(
-                    f"{self._application_instance_id}:thread:{thread_id}:"
-                    f"turn:{terminal_id}:{event_type.value}"
+                event_id=_derive_appserver_event_id(
+                    self._application_instance_id,
+                    event_type=event_type.value,
+                    thread_id=thread_id,
+                    turn_id=turn_id,
                 ),
                 thread_ref=thread_ref,
-                turn_id=turn_id or None,
+                turn_id=turn_id,
             )
 
     def _remember_live_artifact_identity(self, identity: tuple[str, str, str]) -> None:
@@ -1153,9 +1190,7 @@ class _AppServerApplicationAdapter:
         self._events.publish(thread_id, event)
 
     def _thread_summary(self, thread: Mapping[str, object]) -> ThreadSummary:
-        thread_id = str(thread.get("id") or thread.get("threadId") or "")
-        if not thread_id:
-            raise RuntimeError("application did not return a thread id")
+        thread_id = _thread_id(thread)
         status_value = thread.get("status")
         if isinstance(status_value, Mapping):
             status_value = status_value.get("type") or status_value.get("status")
@@ -1166,8 +1201,8 @@ class _AppServerApplicationAdapter:
                 thread.get("name") or thread.get("title") or thread.get("preview")
             ),
             metadata={
-                "cwd": str(thread.get("cwd") or self._cwd),
-                "preview": str(thread.get("preview") or ""),
+                "cwd": _optional_string(thread.get("cwd")) or self._cwd,
+                "preview": _optional_string(thread.get("preview")) or "",
             },
         )
 

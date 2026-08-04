@@ -1156,10 +1156,7 @@ class AppServerClient:
                     connection_epoch=epoch,
                     sequence=dispatch_sequence,
                 )
-                message = {
-                    **message,
-                    APP_SERVER_DISPATCH_POSITION_KEY: dispatch_position,
-                }
+                message[APP_SERVER_DISPATCH_POSITION_KEY] = dispatch_position
                 if self._uses_server_request_lane(message):
                     self._enqueue_dispatch_message(
                         server_request_queue,
@@ -1348,24 +1345,13 @@ class AppServerClient:
 
     async def _dispatch(self, message: JsonDict, epoch: int) -> None:
         if "id" in message and "method" in message:
-            request_id = str(message["id"])
-            params = message.get("params")
-            if isinstance(params, dict):
-                request_params = dict(params)
-            elif params is None:
-                request_params = {}
-            else:
-                request_params = {"_raw_params": params}
+            params = message.get("params", {})
             enriched = {
                 "id": message["id"],
                 "method": message["method"],
+                "_connection_epoch": epoch,
                 APP_SERVER_DISPATCH_POSITION_KEY: message.get(APP_SERVER_DISPATCH_POSITION_KEY),
-                "params": {
-                    **request_params,
-                    "_request_id": request_id,
-                    "_transport_request_id": message["id"],
-                    "_connection_epoch": epoch,
-                },
+                "params": params,
             }
             for handler in list(self._server_request_handlers):
                 result = handler(enriched)
@@ -1374,13 +1360,10 @@ class AppServerClient:
             return
         if "method" in message:
             params = message.get("params", {})
-            notification_params = (
-                dict(params) if isinstance(params, dict) else {"_raw_params": params}
-            )
-            notification_params["_connection_epoch"] = epoch
             notification = {
                 "method": message["method"],
-                "params": notification_params,
+                "_connection_epoch": epoch,
+                "params": params,
                 APP_SERVER_DISPATCH_POSITION_KEY: message.get(APP_SERVER_DISPATCH_POSITION_KEY),
             }
             for handler in list(self._notification_handlers):
@@ -1670,7 +1653,8 @@ class AppServerClient:
             return
         # Native pages default to descending order; the canonical thread payload
         # is chronological and existing reconciliation scans it from the end.
-        thread["turns"] = list(reversed(turns))
+        turns.reverse()
+        thread["turns"] = turns
 
     async def _drain_process_stderr(self, process: Any) -> None:
         stderr = getattr(process, "stderr", None)
@@ -1722,4 +1706,4 @@ class AppServerClient:
         turns = thread.get("turns")
         if not isinstance(turns, list) or len(turns) <= _MAX_RECENT_THREAD_TURNS:
             return
-        thread["turns"] = turns[-_MAX_RECENT_THREAD_TURNS:]
+        del turns[:-_MAX_RECENT_THREAD_TURNS]

@@ -32,6 +32,18 @@ from ...requests import (
     derive_request_response_shape,
     validate_request_response,
 )
+from .mapping import (
+    APP_SERVER_MAPPING_ERROR_MESSAGE,
+    MAX_NATIVE_ID_CHARACTERS,
+    SUPPORTED_SERVER_REQUEST_METHODS,
+    AppServerEvent,
+    AppServerMappingError,
+    derive_appserver_event_id,
+    normalize_appserver_message,
+)
+from .mapping import (
+    optional_string as _native_optional_string,
+)
 
 COMMAND_APPROVAL = "item/commandExecution/requestApproval"
 FILE_APPROVAL = "item/fileChange/requestApproval"
@@ -60,23 +72,21 @@ class PendingAppServerRequest:
 
 def map_appserver_request(
     application_ref: ApplicationRef,
-    message: Mapping[str, object],
+    message: AppServerEvent | Mapping[str, object],
 ) -> PendingAppServerRequest:
-    method = str(message.get("method") or "")
-    params = message.get("params")
-    if not isinstance(params, Mapping):
-        raise ValueError("App Server request params must be an object")
-    transport_request_id = params.get("_transport_request_id")
-    if isinstance(transport_request_id, bool) or not isinstance(
-        transport_request_id,
-        (str, int),
-    ):
-        raise ValueError("App Server request is missing its transport request ID")
-    epoch = params.get("_connection_epoch")
-    if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 1:
-        raise ValueError("App Server request is missing its connection epoch")
-    thread_id = _required_string(params, "threadId")
-    turn_id = _required_string(params, "turnId")
+    event = _as_appserver_event(message)
+    method = event.method
+    if method not in SUPPORTED_SERVER_REQUEST_METHODS:
+        raise UnsupportedAppServerRequest(
+            f"unsupported App Server request method: {method or '<missing>'}"
+        )
+    params = event.payload
+    transport_request_id = event.transport_request_id
+    epoch = event.connection_epoch
+    thread_id = event.thread_id
+    turn_id = event.turn_id
+    if transport_request_id is None or epoch is None or thread_id is None or turn_id is None:
+        raise AppServerMappingError
     request_ref = derive_appserver_request_ref(
         application_ref,
         connection_epoch=epoch,
@@ -129,16 +139,24 @@ def map_appserver_request(
 
 def map_zen_appserver_request(
     application_ref: ApplicationRef,
-    message: Mapping[str, object],
+    message: AppServerEvent | Mapping[str, object],
 ) -> PendingAppServerRequest:
     """Map only the interactive request surface evidenced by native Zen."""
 
-    method = str(message.get("method") or "")
-    if method != COMMAND_APPROVAL:
+    event = _as_appserver_event(message)
+    if event.method != COMMAND_APPROVAL:
         raise UnsupportedAppServerRequest(
-            f"unsupported Zen App Server request method: {method or '<missing>'}"
+            f"unsupported Zen App Server request method: {event.method or '<missing>'}"
         )
-    return map_appserver_request(application_ref, message)
+    return map_appserver_request(application_ref, event)
+
+
+def _as_appserver_event(
+    message: AppServerEvent | Mapping[str, object],
+) -> AppServerEvent:
+    if isinstance(message, AppServerEvent):
+        return message
+    return normalize_appserver_message(message)
 
 
 def build_appserver_response(
@@ -344,7 +362,7 @@ def _user_input(
     for native_question in native_questions:
         if not isinstance(native_question, Mapping):
             raise ValueError("App Server user input question must be an object")
-        question_id = _required_string(native_question, "id")
+        question_id = _required_request_identity(native_question.get("id"))
         native_options = native_question.get("options")
         options = native_options if isinstance(native_options, list) else []
         _require_collection_limit(
@@ -414,7 +432,7 @@ def _approval_choices(
             sort_keys=True,
         )
         choice_id = (
-            decision
+            _required_request_identity(decision)
             if isinstance(decision, str)
             else f"native:sha256:{hashlib.sha256(canonical.encode()).hexdigest()}"
         )
@@ -456,11 +474,15 @@ def _required_string(value: Mapping[str, object], key: str) -> str:
     return result
 
 
+def _required_request_identity(value: object) -> str:
+    result = value
+    if not isinstance(result, str) or not result.strip() or len(result) > MAX_NATIVE_ID_CHARACTERS:
+        raise AppServerMappingError
+    return result
+
+
 def _optional_string(value: object) -> str | None:
-    if value is None:
-        return None
-    result = str(value)
-    return result if result else None
+    return _native_optional_string(value)
 
 
 def _approval_prompt(
@@ -510,7 +532,7 @@ def _require_collection_limit(
 
 
 ServerRequestMapper = Callable[
-    [ApplicationRef, Mapping[str, object]],
+    [ApplicationRef, AppServerEvent],
     PendingAppServerRequest,
 ]
 PublishEvent = Callable[[str, AgentEvent], None]
@@ -643,12 +665,17 @@ class AppServerRequestRuntime:
         if mapper is None:
             raise RuntimeError("native interactive requests are not configured")
         try:
-            pending = mapper(self._application_ref, message)
+            event = normalize_appserver_message(message)
+            pending = mapper(self._application_ref, event)
         except UnsupportedAppServerRequest as error:
             await self._reject(message, error, code=-32601)
             return
-        except ValueError as error:
-            await self._reject(message, error, code=-32602)
+        except (AppServerMappingError, ValueError):
+            await self._reject(
+                message,
+                AppServerMappingError(),
+                code=-32602,
+            )
             return
         request_ref = pending.request.request_ref
         self._pending[request_ref] = pending
@@ -657,9 +684,12 @@ class AppServerRequestRuntime:
             pending.request.thread_ref,
             pending.request.turn_id,
             AgentEventType.REQUEST_OPENED,
-            event_id=(
-                f"{self._application_ref.application_instance_id}:request:"
-                f"{request_ref.native_request_id}:opened"
+            event_id=self._request_event_id(
+                event_identity="request_opened",
+                thread_ref=pending.request.thread_ref,
+                turn_id=pending.request.turn_id,
+                transport_request_id=pending.transport_request_id,
+                connection_epoch=pending.connection_epoch,
             ),
             request=pending.request,
         )
@@ -680,20 +710,12 @@ class AppServerRequestRuntime:
 
     async def handle_resolution_notification(
         self,
-        params: Mapping[str, object],
+        event: AppServerEvent,
     ) -> None:
-        transport_request_id = params.get("requestId")
-        if isinstance(transport_request_id, bool) or not isinstance(
-            transport_request_id,
-            (str, int),
-        ):
+        transport_request_id = event.request_id
+        if transport_request_id is None:
             return
-        notification_epoch = params.get("_connection_epoch")
-        if isinstance(notification_epoch, bool) or not isinstance(
-            notification_epoch,
-            int,
-        ):
-            notification_epoch = None
+        notification_epoch = event.connection_epoch
         candidates = tuple(
             pending
             for pending in (
@@ -712,6 +734,7 @@ class AppServerRequestRuntime:
             request_ref = pending.request.request_ref
             thread_ref = pending.request.thread_ref
             turn_id = pending.request.turn_id
+            resolution_epoch = pending.connection_epoch
         else:
             if notification_epoch is None or notification_epoch < 1:
                 logger.warning(
@@ -719,13 +742,13 @@ class AppServerRequestRuntime:
                     transport_request_id,
                 )
                 return
+            resolution_epoch = notification_epoch
             request_ref = derive_appserver_request_ref(
                 self._application_ref,
                 connection_epoch=notification_epoch,
                 transport_request_id=transport_request_id,
             )
-            thread_id = str(params.get("threadId") or "")
-            if not thread_id:
+            if event.thread_id is None:
                 logger.warning(
                     "Ignoring App Server request resolution without pending or Thread scope for %s",
                     request_ref,
@@ -733,9 +756,9 @@ class AppServerRequestRuntime:
                 return
             thread_ref = ThreadRef(
                 application_instance_id=(self._application_ref.application_instance_id),
-                native_thread_id=thread_id,
+                native_thread_id=event.thread_id,
             )
-            turn_id = str(params.get("turnId") or "") or None
+            turn_id = event.turn_id
         if pending is not None:
             self._remember_outcome(pending, "resolved")
         resolution = RequestResolution(
@@ -747,9 +770,12 @@ class AppServerRequestRuntime:
             thread_ref,
             turn_id,
             AgentEventType.REQUEST_RESOLVED,
-            event_id=(
-                f"{self._application_ref.application_instance_id}:request:"
-                f"{request_ref.native_request_id}:resolved"
+            event_id=self._request_event_id(
+                event_identity="request_resolved",
+                thread_ref=thread_ref,
+                turn_id=turn_id,
+                transport_request_id=transport_request_id,
+                connection_epoch=resolution_epoch,
             ),
             resolution=resolution,
         )
@@ -761,17 +787,14 @@ class AppServerRequestRuntime:
         *,
         code: int,
     ) -> None:
-        params = message.get("params")
-        if not isinstance(params, Mapping):
-            raise error
-        request_id = params.get("_transport_request_id")
-        epoch = params.get("_connection_epoch")
+        request_id = message.get("id")
+        epoch = message.get("_connection_epoch")
         if isinstance(request_id, bool) or not isinstance(
             request_id,
             (str, int),
         ):
             raise error
-        if isinstance(epoch, bool) or not isinstance(epoch, int):
+        if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 1:
             raise error
         reply_error = getattr(
             self._client,
@@ -780,7 +803,7 @@ class AppServerRequestRuntime:
         result = reply_error(
             request_id,
             code=code,
-            message=str(error),
+            message=(APP_SERVER_MAPPING_ERROR_MESSAGE if code == -32602 else str(error)),
             expected_connection_epoch=epoch,
         )
         if inspect.isawaitable(result):
@@ -801,9 +824,12 @@ class AppServerRequestRuntime:
             pending.request.thread_ref,
             pending.request.turn_id,
             AgentEventType.REQUEST_RESOLVED,
-            event_id=(
-                f"{self._application_ref.application_instance_id}:request:"
-                f"{request_ref.native_request_id}:stale"
+            event_id=self._request_event_id(
+                event_identity="request_stale",
+                thread_ref=pending.request.thread_ref,
+                turn_id=pending.request.turn_id,
+                transport_request_id=pending.transport_request_id,
+                connection_epoch=pending.connection_epoch,
             ),
             resolution=resolution,
         )
@@ -848,11 +874,32 @@ class AppServerRequestRuntime:
             pending.request.thread_ref,
             pending.request.turn_id,
             AgentEventType.REQUEST_RESOLVED,
-            event_id=(
-                f"{self._application_ref.application_instance_id}:request:"
-                f"{request_ref.native_request_id}:retention-stale"
+            event_id=self._request_event_id(
+                event_identity="request_retention_stale",
+                thread_ref=pending.request.thread_ref,
+                turn_id=pending.request.turn_id,
+                transport_request_id=pending.transport_request_id,
+                connection_epoch=pending.connection_epoch,
             ),
             resolution=resolution,
+        )
+
+    def _request_event_id(
+        self,
+        *,
+        event_identity: str,
+        thread_ref: ThreadRef,
+        turn_id: str | None,
+        transport_request_id: str | int,
+        connection_epoch: int,
+    ) -> str:
+        return derive_appserver_event_id(
+            self._application_ref.application_instance_id,
+            event_type=event_identity,
+            thread_id=thread_ref.native_thread_id,
+            turn_id=turn_id,
+            request_id=transport_request_id,
+            connection_epoch=connection_epoch,
         )
 
     def _publish(

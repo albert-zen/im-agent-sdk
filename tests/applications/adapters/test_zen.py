@@ -16,9 +16,11 @@ from imagent.applications.contract import (
     ThreadRef,
     TurnReplyCorrelationPolicy,
 )
+from imagent.applications.events import EventStreamReset
 from imagent.applications.operations import CreateThread, ThreadCreated
 from imagent.interaction.media import AttachmentContent, LocalPath
 from imagent.interaction.messages import TextContent
+from tests.applications.adapters._appserver_fakes import NativeZenClient
 
 
 class _ZenInputClient:
@@ -332,6 +334,30 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
                 cwd="/repo",
                 steer_active_turn=True,
             )
+
+    async def test_invalid_native_turn_identity_stops_before_event_dispatch(self) -> None:
+        native = NativeZenClient()
+        adapter = ZenApplicationAdapter(
+            application_instance_id="zen-main",
+            client=native,
+            cwd="/repo",
+        )
+        events = adapter.subscribe_thread(ThreadRef("zen-main", "thread-1"))
+        try:
+            await native._notify(
+                {
+                    "method": "turn/completed",
+                    "params": {
+                        "threadId": "thread-1",
+                        "turn": {"id": "", "status": "completed"},
+                    },
+                }
+            )
+            with self.assertRaises(EventStreamReset) as raised:
+                await anext(events)
+            self.assertEqual(raised.exception.gap_code, "application_native_mapping_failed")
+        finally:
+            await cast(Any, events).aclose()
 
 
 if __name__ == "__main__":

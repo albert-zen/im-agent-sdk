@@ -1376,14 +1376,14 @@ components:
       current: []
       target: []
     dependencies: [interaction.messages, applications.application-contract, applications.capabilities, applications.events]
-    state_recovery: Pure mapping with no replay state; generic text/collection bounds and strict identity enforcement are not yet complete.
+    state_recovery: Pure finite mapping with no replay state; native text, collections, mapping keys, content aggregation, and method-required stable identities are validated before copying or canonical dispatch. A malformed notification produces a fixed explicit recovery gap; malformed resource/history/request facts fail closed.
     current_code: [src/imagent/applications/adapters/appserver/mapping.py]
     target_code: [src/imagent/applications/adapters/appserver/mapping.py]
     current_tests: [tests/applications/adapters/appserver/test_mapping.py, tests/test_appserver_input.py]
     target_tests: [tests/applications/adapters/appserver/test_mapping.py]
     authoritative_docs: [docs/components/applications/adapters/appserver/mapping/design.md, docs/components/applications/adapters/appserver/mapping/testing.md]
     adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [generic native text/collection bounds and strict event identity validation are still missing]
+    gaps: []
 
   applications.adapters.appserver.requests:
     id: applications.adapters.appserver.requests
@@ -1397,7 +1397,7 @@ components:
     public_exports:
       current: [imagent.applications.adapters.appserver.requests:PendingAppServerRequest, imagent.applications.adapters.appserver.requests:AppServerRequestRuntime]
       target: [imagent.applications.adapters.appserver.requests:PendingAppServerRequest, imagent.applications.adapters.appserver.requests:AppServerRequestRuntime]
-    dependencies: [applications.application-contract, applications.events, applications.operations, applications.requests, applications.adapters.appserver.client]
+    dependencies: [applications.application-contract, applications.events, applications.operations, applications.requests, applications.adapters.appserver.client, applications.adapters.appserver.mapping]
     state_recovery: Transport reset stales handles when no authoritative pending snapshot exists; terminal cache is bounded.
     current_code: [src/imagent/applications/adapters/appserver/requests.py]
     target_code: [src/imagent/applications/adapters/appserver/requests.py]

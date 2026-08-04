@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import inspect
-import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -41,16 +40,22 @@ from .appserver._base import (
     _PreparedAppServerInput,
 )
 from .appserver.mapping import (
+    AppServerEvent as _AppServerEvent,
+)
+from .appserver.mapping import (
+    AppServerMappingError as _AppServerMappingError,
+)
+from .appserver.mapping import (
     native_object as _native_object,
 )
 from .appserver.mapping import (
     native_turn_id as _native_turn_id,
 )
 from .appserver.mapping import (
-    optional_string as _optional_string,
+    thread_status as _thread_status,
 )
 from .appserver.mapping import (
-    thread_status as _thread_status,
+    turn_id as _turn_id,
 )
 from .appserver.mapping import (
     turn_status as _turn_status,
@@ -159,7 +164,13 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
             prepared=prepared,
             expected_local_image_epoch=expected_local_image_epoch,
         )
-        turn_id = _native_turn_id(result)
+        try:
+            turn_id = _native_turn_id(result)
+        except _AppServerMappingError as cause:
+            raise ApplicationInputOutcomeUnknown(
+                "turn/steer was accepted but its native Turn identity is unknown",
+                cause,
+            ) from cause
         if not turn_id:
             cause = RuntimeError("turn/steer did not return a turn id")
             raise ApplicationInputOutcomeUnknown(
@@ -186,10 +197,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
                 or _turn_status(turn.get("status")) is not TurnStatus.RUNNING
             ):
                 continue
-            turn_id = _optional_string(turn.get("id") or turn.get("turnId"))
-            if turn_id is None:
-                raise RuntimeError("active native Turn did not contain an id")
-            return turn_id
+            return _turn_id(turn)
         status_value = thread.get("status")
         if isinstance(status_value, Mapping):
             status_value = status_value.get("type") or status_value.get("status")
@@ -226,28 +234,26 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
             raise RuntimeError("configured App Server turn/steer did not return an awaitable")
         return await cast(Awaitable[Mapping[str, object]], result)
 
-    async def _handle_notification(self, notification: dict) -> None:
-        method = str(notification.get("method") or "")
-        params = notification.get("params")
-        if method == "serverRequest/resolved" or not isinstance(params, dict):
-            await super()._handle_notification(notification)
-            return
-        thread_id = str(params.get("threadId") or "")
-        if not thread_id:
-            await super()._handle_notification(notification)
-            return
-        turn = params.get("turn")
-        turn_id = str(
-            params.get("turnId") or (turn.get("id") if isinstance(turn, dict) else "") or ""
-        )
-        facts = _codex_live_activity_facts(
-            self._thread_ref(thread_id),
-            turn_id=turn_id or None,
-            method=method,
-            params=params,
-        )
+    async def _handle_mapped_notification(self, event: _AppServerEvent) -> None:
+        method = event.method
+        thread_id = event.thread_id
         live_activity_presenter = self._live_activity_presenter
-        if live_activity_presenter is not None and facts is not None:
+        classification = _CODEX_LIVE_METHODS.get(method)
+        if (
+            live_activity_presenter is not None
+            and classification is not None
+            and thread_id is not None
+        ):
+            if event.event_id is None:
+                raise _AppServerMappingError
+            facts = _codex_live_activity_facts(
+                self._thread_ref(thread_id),
+                turn_id=event.turn_id,
+                event_id=event.event_id,
+                method=method,
+                params=event.payload,
+            )
+            assert facts is not None
             identity = (thread_id, facts.event_id)
             if identity in self._seen_live_activity_ids:
                 return
@@ -281,10 +287,10 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
                     {"message": message},
                     event_id=facts.event_id,
                     thread_ref=thread_ref,
-                    turn_id=turn_id or None,
+                    turn_id=event.turn_id,
                 )
             return
-        await super()._handle_notification(notification)
+        await super()._handle_mapped_notification(event)
 
 
 _CODEX_LIVE_METHODS = {
@@ -315,6 +321,7 @@ def _codex_live_activity_facts(
     thread_ref: ThreadRef,
     *,
     turn_id: str | None,
+    event_id: str,
     method: str,
     params: Mapping[str, object],
 ) -> CodexLiveActivityFacts | None:
@@ -322,9 +329,6 @@ def _codex_live_activity_facts(
     if classification is None:
         return None
     native_method, kind = classification
-    event_id = str(params.get("eventId") or params.get("event_id") or "")
-    if not event_id:
-        event_id = f"imagent:appserver-live:{uuid.uuid4()}"
     summary: str | None = None
     changed_file_count: int | None = None
     plan: tuple[CodexPlanStep, ...] = ()
