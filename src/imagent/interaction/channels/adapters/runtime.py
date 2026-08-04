@@ -7,7 +7,6 @@ import time
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Protocol
 
 from ....contracts import (
@@ -28,9 +27,6 @@ from .. import InboundAdmissionHandler, MessageHandler
 from .. import outbound_delivery as _outbound_delivery
 from ..outbound_delivery import (
     NativeDeliveryResult,
-)
-from ..outbound_delivery import (
-    OutboundArtifact as NativeOutboundArtifact,
 )
 from ..outbound_delivery import (
     OutboundMessage as NativeOutboundMessage,
@@ -456,7 +452,9 @@ class _InboundMiddleware:
 def _to_native_outbound(*, channel_id: str, message: OutboundMessage):
     text_parts = [item.text for item in message.content if isinstance(item, TextContent)]
     artifacts = [
-        _to_native_artifact(item) for item in message.content if isinstance(item, AttachmentContent)
+        _outbound_delivery._to_native_artifact(item)
+        for item in message.content
+        if isinstance(item, AttachmentContent)
     ]
     markdown = any(
         isinstance(item, TextContent) and item.format is TextFormat.MARKDOWN
@@ -480,33 +478,6 @@ def _to_native_outbound(*, channel_id: str, message: OutboundMessage):
         text="\n".join(text_parts),
         metadata=metadata,
         artifacts=artifacts,
-    )
-
-
-def _to_native_artifact(attachment: AttachmentContent) -> NativeOutboundArtifact:
-    source = attachment.source
-    if not isinstance(source, LocalPath):
-        raise ValueError("SDK-owned native Channels require outbound attachments to use LocalPath")
-    if attachment.size_bytes is None or attachment.size_bytes < 0:
-        raise ValueError("outbound LocalPath attachments require a non-negative size_bytes")
-    path = Path(source.path)
-    filename = str(attachment.filename or path.name).strip()
-    if not filename:
-        raise ValueError("outbound attachments require a filename")
-    declared_kind = str(attachment.metadata.get("kind") or "").casefold()
-    kind = (
-        "image"
-        if declared_kind == "image" or attachment.media_type.startswith("image/")
-        else "file"
-    )
-    return NativeOutboundArtifact(
-        kind=kind,
-        local_path=source.path,
-        content_type=attachment.media_type,
-        filename=filename,
-        size_bytes=attachment.size_bytes,
-        sha256=str(attachment.metadata.get("sha256") or ""),
-        attachment_id=attachment.attachment_id,
     )
 
 

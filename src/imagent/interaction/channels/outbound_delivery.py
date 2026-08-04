@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from ..media import AttachmentContent, LocalPath
 from .contract import DeliveryItemReceipt, DeliveryItemStatus
 
 
@@ -34,6 +35,33 @@ class PermanentArtifactDeliveryError(RuntimeError):
 class ArtifactDeliveryReceipt:
     platform_message_id: str = ""
     delivery_identity: str = ""
+
+
+def _to_native_artifact(attachment: AttachmentContent) -> OutboundArtifact:
+    source = attachment.source
+    if not isinstance(source, LocalPath):
+        raise ValueError("SDK-owned native Channels require outbound attachments to use LocalPath")
+    if attachment.size_bytes is None or attachment.size_bytes < 0:
+        raise ValueError("outbound LocalPath attachments require a non-negative size_bytes")
+    path = Path(source.path)
+    filename = str(attachment.filename or path.name).strip()
+    if not filename:
+        raise ValueError("outbound attachments require a filename")
+    declared_kind = str(attachment.metadata.get("kind") or "").casefold()
+    kind = (
+        "image"
+        if declared_kind == "image" or attachment.media_type.startswith("image/")
+        else "file"
+    )
+    return OutboundArtifact(
+        kind=kind,
+        local_path=source.path,
+        content_type=attachment.media_type,
+        filename=filename,
+        size_bytes=attachment.size_bytes,
+        sha256=str(attachment.metadata.get("sha256") or ""),
+        attachment_id=attachment.attachment_id,
+    )
 
 
 def _artifact_item_receipts(

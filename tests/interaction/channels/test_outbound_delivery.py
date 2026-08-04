@@ -17,11 +17,13 @@ from imagent.interaction.channels.outbound_delivery import (
     OutboundMessage,
     PermanentArtifactDeliveryError,
     _artifact_item_receipts,
+    _to_native_artifact,
     deliver_artifact_batch,
     read_managed_artifact,
     split_text,
     stable_artifact_identity,
 )
+from imagent.interaction.media import AttachmentContent, LocalPath, RemoteUrl
 
 
 class ChannelOutboundTextTests(unittest.TestCase):
@@ -50,6 +52,73 @@ class ChannelOutboundTextTests(unittest.TestCase):
         from imagent.interaction.channels.adapters import runtime
 
         self.assertFalse(hasattr(runtime, "_artifact_item_receipts"))
+
+    def test_native_artifact_conversion_has_one_outbound_owner(self) -> None:
+        from imagent.interaction.channels.adapters import runtime
+
+        self.assertFalse(hasattr(runtime, "_to_native_artifact"))
+        artifact = _to_native_artifact(
+            AttachmentContent(
+                attachment_id="attachment-1",
+                media_type="image/png",
+                source=LocalPath("/staged/preview.png"),
+                size_bytes=7,
+                metadata={"sha256": "digest"},
+            )
+        )
+
+        self.assertEqual(
+            (
+                artifact.kind,
+                artifact.local_path,
+                artifact.content_type,
+                artifact.filename,
+                artifact.size_bytes,
+                artifact.sha256,
+                artifact.attachment_id,
+            ),
+            (
+                "image",
+                "/staged/preview.png",
+                "image/png",
+                "preview.png",
+                7,
+                "digest",
+                "attachment-1",
+            ),
+        )
+        for source in (RemoteUrl("https://media.example/preview.png"),):
+            with self.subTest(source=source):
+                with self.assertRaisesRegex(ValueError, "LocalPath"):
+                    _to_native_artifact(
+                        AttachmentContent(
+                            attachment_id="attachment-2",
+                            media_type="image/png",
+                            source=source,
+                            size_bytes=7,
+                        )
+                    )
+        for size_bytes in (None, -1):
+            with self.subTest(size_bytes=size_bytes):
+                with self.assertRaisesRegex(ValueError, "non-negative"):
+                    _to_native_artifact(
+                        AttachmentContent(
+                            attachment_id="attachment-3",
+                            media_type="application/octet-stream",
+                            source=LocalPath("/staged/data.bin"),
+                            size_bytes=size_bytes,
+                        )
+                    )
+        with self.assertRaisesRegex(ValueError, "filename"):
+            _to_native_artifact(
+                AttachmentContent(
+                    attachment_id="attachment-4",
+                    media_type="text/plain",
+                    source=LocalPath("/staged/data.txt"),
+                    filename="   ",
+                    size_bytes=4,
+                )
+            )
 
     def test_native_artifact_receipts_are_sorted_and_ignore_unknown_entries(self) -> None:
         receipts = _artifact_item_receipts(
