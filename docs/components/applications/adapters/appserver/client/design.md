@@ -19,11 +19,15 @@ typed consumer position; its native payload never crosses to Gateway.
 
 ## Typed boundary and public facade
 
-Inputs are configured target/supervisor values and bounded JSON-RPC method and
-parameter mappings. Outputs are `AppServerResponse` values carrying a decoded
-JSON result and an immutable `AppServerDispatchPosition`; ordinary failures
-are `AppServerError`. Notification and server-request handlers receive the
-client's internal JSON mapping at the adapter boundary only.
+Inputs are configured target/supervisor values, one positive non-boolean
+inbound-frame byte limit, and bounded JSON-RPC method and parameter mappings.
+The public factory and client default that limit to the transport-owned finite
+64 MiB value and pass the same validated value to every connection
+constructor; they do not define another framing rule. Outputs are
+`AppServerResponse` values carrying a decoded JSON result and an immutable
+`AppServerDispatchPosition`; ordinary failures are `AppServerError`.
+Notification and server-request handlers receive the client's internal JSON
+mapping at the adapter boundary only.
 
 The exact target facade exports `AppServerClient`,
 `AppServerDispatchPosition`, `AppServerError`, `AppServerResponse`,
@@ -41,9 +45,11 @@ outcome type for honest post-dispatch classification, but it does not import
 Gateway. Notification and server-request queues are independent and finite.
 Connection reset increments the epoch, invalidates transport-bound pending
 calls and request handles, and is reported to the concrete adapter for an
-explicit observation gap. The dispatch position is wire-admission order, not
-an Application event sequence or replay cursor. Bounded retry/supervision
-does not make an unknown native mutation safe to redeliver.
+explicit observation gap. A transport oversize error enters this same reset;
+the client never dispatches the rejected frame or asks the poisoned transport
+for a suffix. The dispatch position is wire-admission order, not an Application
+event sequence or replay cursor. Bounded retry/supervision does not make an
+unknown native mutation safe to redeliver.
 
 ## Current, target, and structural gap
 

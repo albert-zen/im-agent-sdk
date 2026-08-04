@@ -1273,9 +1273,9 @@ components:
     id: applications.adapters.appserver.client
     parent: applications.adapters.appserver
     purpose: Own reusable App Server JSON-RPC calls, bounded dispatch lanes, targets, retry, and supervision.
-    owns: [AppServerClient, target parsing, supervisor, response admission fence]
-    does_not_own: [Application resource mapping, product launcher/config, Gateway recovery]
-    inputs: [typed JSON-RPC method/params and configured target]
+    owns: [AppServerClient, target parsing, supervisor, transport construction, response admission fence]
+    does_not_own: [inbound frame measurement or poison policy, Application resource mapping, product launcher/config, Gateway recovery]
+    inputs: [typed JSON-RPC method/params, configured target, one inbound frame byte limit]
     outputs: [typed response plus immutable dispatch position]
     public_contracts: [AppServerClient, AppServerDispatchPosition, AppServerError, AppServerResponse, AppServerSupervisor, APP_SERVER_DISPATCH_POSITION_KEY, codex_app_server_client]
     public_exports:
@@ -1294,24 +1294,24 @@ components:
   applications.adapters.appserver.transport:
     id: applications.adapters.appserver.transport
     parent: applications.adapters.appserver
-    purpose: Frame JSON over stdio/WebSocket and translate connection closure without policy.
-    owns: [AppServerTransport, StdioAppServerTransport, WebSocketAppServerTransport]
+    purpose: Frame JSON within one finite byte bound over stdio/WebSocket, poison oversize connections, and translate connection closure.
+    owns: [AppServerTransport, StdioAppServerTransport, WebSocketAppServerTransport, inbound frame byte measurement, oversize poison state]
     does_not_own: [JSON-RPC dispatch, resource mapping, reconnect policy]
-    inputs: [JSON values and configured I/O endpoint]
-    outputs: [JSON values or typed transport closure]
+    inputs: [JSON values, configured I/O endpoint, positive inbound frame byte limit]
+    outputs: [JSON values, typed transport closure, or fixed redacted oversize failure]
     public_contracts: [AppServerTransport]
     public_exports:
       current: [imagent.applications.adapters.appserver.transport:AppServerTransport]
       target: [imagent.applications.adapters.appserver.transport:AppServerTransport]
     dependencies: []
-    state_recovery: Transport lifecycle is per connection; no replay or cursor semantics are claimed, and current inbound frame buffering still lacks an SDK-owned finite size bound.
+    state_recovery: Transport lifecycle is per connection; an oversized frame clears buffered bytes and poisons that instance until client-owned reset, with no replay or cursor semantics claimed.
     current_code: [src/imagent/applications/adapters/appserver/__init__.py, src/imagent/applications/adapters/appserver/transport.py]
     target_code: [src/imagent/applications/adapters/appserver/__init__.py, src/imagent/applications/adapters/appserver/transport.py]
     current_tests: [tests/applications/adapters/appserver/test_transport.py]
     target_tests: [tests/applications/adapters/appserver/test_transport.py]
     authoritative_docs: [docs/components/applications/adapters/appserver/transport/design.md, docs/components/applications/adapters/appserver/transport/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md]
-    gaps: [stdio and supplied WebSocket receives still need an explicit frame-size bound and oversized-frame tests; those capacity/security changes are outside this mechanical move]
+    gaps: []
 
   applications.adapters.appserver.mapping:
     id: applications.adapters.appserver.mapping

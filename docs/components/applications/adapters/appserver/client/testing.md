@@ -9,10 +9,15 @@ The focused client evidence now lives in
 
 - stdio and external WebSocket composition, target parsing, supervisor child
   lifecycle, and local-image capability verification;
+- one transport-owned frame limit is validated by the factory/client and
+  forwarded unchanged to stdio, supplied/custom WebSocket wrappers, and the
+  default TCP/Unix WebSocket connector `max_size`;
 - bounded request timeout/retry and explicit connection errors;
 - notification and server-request lane capacity, reset, and handler failure;
 - immutable dispatch-position ordering across both lanes and response fences;
 - connection-epoch reset, stale transport-bound calls, and reconnect behavior;
+- oversized transport input reaches no response or callback dispatch, resets
+  the poisoned connection, and permits only a fresh later connection/epoch;
 - bounded diagnostic facts without endpoint/path/native-payload leakage.
 
 The test fixtures exercise the typed client and transport seams directly; they

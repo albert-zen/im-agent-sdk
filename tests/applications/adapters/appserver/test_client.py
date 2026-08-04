@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import importlib.util
+import os
 import unittest
+from types import SimpleNamespace
+from typing import Any, cast
+from unittest.mock import AsyncMock, patch
 
 import imagent.applications as applications_facade
 import imagent.applications.adapters.appserver.client as client_facade
@@ -21,6 +26,21 @@ from imagent.applications.adapters.appserver.client.target import (
     resolve_app_server_target,
 )
 from imagent.applications.adapters.appserver.transport import AppServerError
+
+
+class _BlockingWebSocket:
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def send(self, _data: str) -> None:
+        return None
+
+    async def recv(self) -> str:
+        await asyncio.Future()
+        raise AssertionError("unreachable")
+
+    async def close(self) -> None:
+        self.closed = True
 
 
 class AppServerClientFacadeTests(unittest.TestCase):
@@ -55,6 +75,97 @@ class AppServerClientFacadeTests(unittest.TestCase):
 
 
 class AppServerClientTests(unittest.IsolatedAsyncioTestCase):
+    def test_inbound_frame_limit_flows_through_public_factory(self) -> None:
+        default_client = codex_app_server_client(endpoint="stdio://")
+        configured_client = codex_app_server_client(
+            endpoint="stdio://",
+            max_inbound_frame_bytes=123,
+        )
+
+        self.assertEqual(default_client._max_inbound_frame_bytes, 64 * 1024 * 1024)
+        self.assertEqual(configured_client._max_inbound_frame_bytes, 123)
+        for invalid in (0, -1, True, False, 1.0, "1", None):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex(ValueError, "must be a positive integer"):
+                    codex_app_server_client(
+                        endpoint="stdio://",
+                        max_inbound_frame_bytes=cast(int, invalid),
+                    )
+
+    async def test_default_tcp_websocket_receives_configured_protocol_limit(self) -> None:
+        connection = object()
+        connect = AsyncMock(return_value=connection)
+        supervisor = AppServerSupervisor(app_server_url="ws://127.0.0.1:8765")
+
+        with patch(
+            "imagent.applications.adapters.appserver.client.supervisor._websocket_module",
+            return_value=SimpleNamespace(connect=connect),
+        ):
+            actual = await supervisor.connect_external(max_inbound_frame_bytes=123)
+
+        self.assertIs(actual, connection)
+        connect.assert_awaited_once_with(
+            "ws://127.0.0.1:8765",
+            max_size=123,
+            open_timeout=3.0,
+        )
+
+    @unittest.skipIf(os.name == "nt", "Unix-domain WebSockets are unsupported on Windows")
+    async def test_default_unix_websocket_receives_configured_protocol_limit(self) -> None:
+        connection = object()
+        unix_connect = AsyncMock(return_value=connection)
+        supervisor = AppServerSupervisor(app_server_url="unix:///tmp/im-agent-sdk-test.sock")
+
+        with patch(
+            "imagent.applications.adapters.appserver.client.supervisor._websocket_module",
+            return_value=SimpleNamespace(unix_connect=unix_connect),
+        ):
+            actual = await supervisor.connect_external(max_inbound_frame_bytes=456)
+
+        self.assertIs(actual, connection)
+        unix_connect.assert_awaited_once_with(
+            "/tmp/im-agent-sdk-test.sock",
+            uri="ws://localhost/",
+            compression=None,
+            max_size=456,
+            open_timeout=3.0,
+        )
+
+    async def test_supplied_websocket_is_rechecked_by_transport_wrapper(self) -> None:
+        websocket = _BlockingWebSocket()
+        factory_calls: list[tuple[str, dict[str, Any]]] = []
+
+        async def websocket_factory(url: str, **kwargs: Any) -> _BlockingWebSocket:
+            factory_calls.append((url, kwargs))
+            return websocket
+
+        client = AppServerClient(
+            supervisor=AppServerSupervisor(
+                app_server_url="ws://127.0.0.1:8765",
+                websocket_factory=websocket_factory,
+            ),
+            client_info={"name": "test", "title": "Test", "version": "0"},
+            max_inbound_frame_bytes=789,
+        )
+        try:
+            await client.connect()
+
+            self.assertEqual(factory_calls, [("ws://127.0.0.1:8765", {})])
+            transport = cast(Any, client._transport)
+            self.assertIsNotNone(transport)
+            self.assertEqual(transport._max_inbound_frame_bytes, 789)
+        finally:
+            await client.close()
+        self.assertTrue(websocket.closed)
+
+    async def test_supervisor_rejects_invalid_frame_limit_before_connecting(self) -> None:
+        supervisor = AppServerSupervisor(app_server_url="stdio://")
+
+        for invalid in (0, True):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex(ValueError, "must be a positive integer"):
+                    await supervisor.connect_external(max_inbound_frame_bytes=cast(int, invalid))
+
     def test_stdio_composition_does_not_load_websocket_transport(self) -> None:
         client = codex_app_server_client(endpoint="stdio://")
 

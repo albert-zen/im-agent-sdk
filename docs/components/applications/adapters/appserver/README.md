@@ -23,8 +23,10 @@ Server transport does not make their native capabilities interchangeable.
 
 ## Boundaries
 
-The transport receives and emits JSON values and translates closure; it does
-not decide retry, resource identity, request policy, or recovery. The client
+The transport receives and emits JSON values, enforces the one configured
+finite inbound-frame byte bound before decode, poisons oversized connections,
+and translates closure; it does not decide retry, resource identity, request
+policy, or recovery. The client
 serializes JSON-RPC calls, admits notification and server-request callbacks
 through independent finite lanes, attaches an immutable
 `AppServerDispatchPosition` fence to admitted callbacks/responses, and resets
