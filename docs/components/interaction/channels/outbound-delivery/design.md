@@ -41,6 +41,15 @@ identity. Per-item receipts map every attempted attachment to its stable
 `attachment_id`; an accepted prefix is never overwritten by a later failure.
 Ambiguous native outcomes do not authorize hidden resend.
 
+The private `_artifact_item_receipts` helper is the sole shared conversion from
+one native attempt's artifact receipt metadata to typed `DeliveryItemReceipt`
+values. It uses the runtime-provided attachment-ID/content-index mapping,
+ignores malformed or unrecognized metadata entries, returns items in content
+order, and preserves only the native attempt's accepted/rejected evidence. It
+does not infer retry/unknown outcomes or durable acceptance. The helper belongs
+to this leaf; `NativeTransportChannelAdapter` only invokes it while assembling
+the public `DeliveryReceipt`.
+
 Only explicitly trusted/materialized sources are submitted. The built-in
 native adapters accept trusted `LocalPath`; unsupported `RemoteUrl` or
 `AttachmentHandle` values fail rather than being fetched/dropped. Artifact

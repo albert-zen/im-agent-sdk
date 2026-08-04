@@ -15,6 +15,9 @@ Required scenarios:
   verify declared byte count and optional SHA-256;
 - accepted/rejected/retryable/partial/unknown and per-item evidence is truthful
   and validates against source content;
+- native artifact receipt metadata maps recognized stable attachment IDs to
+  sorted typed per-content item receipts, while malformed or unknown entries
+  are ignored without inventing retry/unknown evidence;
 - retryable/unknown receipts contain no invented acceptance identity;
 - a later segment/item failure preserves an already accepted prefix;
 - cancellation/shutdown join native work before temporary artifacts may be
@@ -35,4 +38,6 @@ behavior, and mapping-to-`OutboundArtifact` coercion without promoting these
 leaf-internal DTOs to public contracts. They also prove the historical
 `imagent.channels.native.artifacts` module is absent, stable attachment
 identity ignores temporary path changes, and artifact recovery state remains
-bounded to the current native-message attempt.
+bounded to the current native-message attempt. The same focused suite covers
+`_artifact_item_receipts` ownership and its stable-ID/content-index ordering
+without moving the final Channel receipt assembly out of the adapter runtime.
