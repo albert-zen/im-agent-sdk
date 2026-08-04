@@ -4,8 +4,9 @@ import asyncio
 import unittest
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
-from imagent.adapters import DeliverySubmissionConflict
+from imagent.adapters import DeliverySubmissionCapacityError, DeliverySubmissionConflict
 from imagent.contracts import (
     ConversationRef,
     DeliveryRouteSnapshot,
@@ -41,9 +42,34 @@ def _submission() -> DeliverySubmissionRecord:
     )
 
 
+def _different_submission(
+    record: DeliverySubmissionRecord, suffix: str
+) -> DeliverySubmissionRecord:
+    return replace(
+        record,
+        submission_id=f"submission-{suffix}",
+        delivery_id=f"delivery-{suffix}",
+        destinations=(
+            replace(
+                record.destinations[0],
+                delivery_id=f"destination-{suffix}",
+                snapshot=DeliveryRouteSnapshot(
+                    ConversationRef("channel", f"conversation-{suffix}")
+                ),
+            ),
+        ),
+    )
+
+
 class InMemoryDeliverySubmissionRepositoryTests(unittest.IsolatedAsyncioTestCase):
     def test_delivery_orchestration_no_longer_owns_memory_repository(self) -> None:
         self.assertFalse(hasattr(proactive_owner, "InMemoryDeliverySubmissionRepository"))
+
+    def test_record_capacity_must_be_a_positive_integer(self) -> None:
+        for invalid in (0, -1, True, cast(int, 1.5)):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex(ValueError, "positive integer"):
+                    InMemoryDeliverySubmissionRepository(max_records=invalid)
 
     async def test_concurrent_identical_reservation_has_one_winner(self) -> None:
         repository = InMemoryDeliverySubmissionRepository()
@@ -135,6 +161,69 @@ class InMemoryDeliverySubmissionRepositoryTests(unittest.IsolatedAsyncioTestCase
             await repository.reserve_delivery_submission(invalid)
 
         self.assertIsNone(await repository.get_delivery_submission(invalid.submission_id))
+
+    async def test_capacity_retains_every_state_and_preserves_existing_replay(self) -> None:
+        for state in (
+            DeliverySubmissionState.IN_FLIGHT,
+            DeliverySubmissionState.ACCEPTED,
+            DeliverySubmissionState.REJECTED,
+            DeliverySubmissionState.PARTIAL,
+            DeliverySubmissionState.RETRYABLE,
+            DeliverySubmissionState.UNKNOWN,
+        ):
+            with self.subTest(state=state):
+                repository = InMemoryDeliverySubmissionRepository(max_records=1)
+                record = _submission()
+                await repository.reserve_delivery_submission(record)
+                if state is not DeliverySubmissionState.IN_FLIGHT:
+                    destination = replace(
+                        record.destinations[0],
+                        state=state,
+                        updated_at=record.updated_at + timedelta(seconds=1),
+                    )
+                    stored = await repository.update_delivery_destination(
+                        record.submission_id,
+                        destination.delivery_id,
+                        expected_state=DeliverySubmissionState.IN_FLIGHT,
+                        destination=destination,
+                    )
+                else:
+                    stored = record
+
+                replay = await repository.reserve_delivery_submission(record)
+                self.assertFalse(replay.acquired)
+                self.assertEqual(replay.record, stored)
+                with self.assertRaises(DeliverySubmissionCapacityError):
+                    await repository.reserve_delivery_submission(
+                        _different_submission(record, "new")
+                    )
+                self.assertIsNone(await repository.get_delivery_submission("submission-new"))
+
+    async def test_last_slot_is_atomic_and_a_fresh_repository_starts_empty(self) -> None:
+        repository = InMemoryDeliverySubmissionRepository(max_records=2)
+        record = _submission()
+        await repository.reserve_delivery_submission(record)
+        contenders = (
+            _different_submission(record, "a"),
+            _different_submission(record, "b"),
+        )
+
+        results = await asyncio.gather(
+            *(repository.reserve_delivery_submission(item) for item in contenders),
+            return_exceptions=True,
+        )
+
+        self.assertEqual(
+            sum(isinstance(result, DeliverySubmissionCapacityError) for result in results),
+            1,
+        )
+        self.assertEqual(
+            sum(getattr(result, "acquired", False) is True for result in results),
+            1,
+        )
+        fresh = InMemoryDeliverySubmissionRepository(max_records=1)
+        restarted = await fresh.reserve_delivery_submission(contenders[0])
+        self.assertTrue(restarted.acquired)
 
 
 if __name__ == "__main__":

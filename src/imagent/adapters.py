@@ -74,6 +74,10 @@ class DeliverySubmissionConflict(RuntimeError):
     """A stable delivery ID was reused for a different immutable submission."""
 
 
+class DeliverySubmissionCapacityError(RuntimeError):
+    """A new process-local delivery identity exceeded its finite record bound."""
+
+
 class AgentApplicationAdapter(Protocol):
     @property
     def summary(self) -> ApplicationSummary: ...

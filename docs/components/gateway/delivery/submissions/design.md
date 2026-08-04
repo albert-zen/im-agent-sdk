@@ -37,6 +37,13 @@ and `unknown` are terminal evidence for that attempt. Only an explicit
 `retryable` receipt authorizes a later attempt; an ambiguous native outcome is
 never silently resent.
 
+Process-local repository capacity is a repository-contract failure distinct
+from identity conflict. It is evaluated atomically only for a new root after
+identical replay has been checked. Capacity never deletes a stored submission;
+Gateway knows the failure preceded Channel work and releases its separate
+outbound claim. The durable SQLite implementation has no SDK-imposed record
+quota and is unchanged.
+
 ## Persistence and recovery
 
 The SQLite implementation shares the single `SQLiteGatewayState` connection

@@ -42,15 +42,23 @@ inline bytes, local paths, credentials, or a replayable work item.
 
 ## State and recovery
 
-Restart discards all process-local state. The current repository has no finite
-record-capacity or retention setting and Gateway uses it by default when a
-submission repository is absent. That pre-existing gap violates the target
-finite-capacity rule and requires a separate behavior/configuration slice; this
-mechanical extraction does not disguise caller-created growth as a bound.
-Gateway therefore uses this implementation only when
-non-durable bridge state is an explicit deployment choice; SQLite remains the
-durable implementation. An `in_flight` or `unknown` outcome is never silently
-converted into permission to resend within one process.
+Restart discards all process-local state. The delivery-submission repository
+requires a positive finite `max_records`; Gateway supplies the immutable
+`GatewayLimits.delivery_submission_max_records` value when it composes the
+default. Both construction paths default to 4096 root records. Once that many
+distinct root identities exist, a new reservation
+raises `DeliverySubmissionCapacityError` under the repository lock before any
+mutation or Channel side effect. Existing identities can still replay and
+update their destination state at capacity.
+
+Records are retained for the complete process lifetime. The repository does
+not evict even terminal records: deleting accepted/rejected/partial/unknown
+evidence would let the same stable delivery ID acquire again and could resend
+a native side effect. `in_flight`, `retryable`, and `unknown` ambiguity is
+therefore never silently discarded. This explicit fail-closed policy is the
+only safe finite process-local contract without adding a second tombstone or
+durable job store. Deployments that must accept a long-lived stream use the
+durable SQLite repository and their own storage operations policy.
 
 ## Structure
 

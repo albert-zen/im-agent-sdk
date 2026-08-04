@@ -29,7 +29,7 @@ from imagent.contracts import (
     ThreadRef,
     derive_delivery_submission_id,
 )
-from imagent.gateway import GatewayRepositories, ImAgentGateway
+from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import ProactiveDeliveryJsonHandler, ScopedDeliveryAuthorizer
 from imagent.gateway.delivery.proactive_ingress import (
     ProactiveDeliveryJsonHandler as OwnerProactiveDeliveryJsonHandler,
@@ -187,6 +187,53 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
             assert isinstance(second_artifact, AttachmentContent)
             self.assertEqual(second_artifact.attachment_id, "artifact-2")
             self.assertEqual(list(staging_root.glob("**/*")), [])
+
+    async def test_capacity_exhaustion_is_a_bounded_service_response(self) -> None:
+        gateway = ImAgentGateway(
+            channels=[self.channel],
+            applications=[
+                FakeAgentApplicationAdapter(
+                    application_instance_id="application",
+                    project_mode=ProjectMode.FLAT,
+                )
+            ],
+            repositories=GatewayRepositories(
+                bindings=InMemoryBindingRepository(),
+                projections=self.routes,
+            ),
+            limits=GatewayLimits(delivery_submission_max_records=1),
+            delivery_authorizer=self.authorizer,
+            projection_policy=ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            handler = ProactiveDeliveryJsonHandler(
+                gateway,
+                staging_root=Path(directory, "ingress"),
+            )
+            payload = {
+                "target": {
+                    "kind": "threadRoutes",
+                    "applicationInstanceId": "application",
+                    "nativeThreadId": "thread-1",
+                },
+                "content": [{"type": "text", "text": "bounded"}],
+            }
+            first = await handler.handle(
+                {**payload, "deliveryId": "capacity-first"},
+                credential=self.credential,
+            )
+            rejected = await handler.handle(
+                {**payload, "deliveryId": "capacity-second"},
+                credential=self.credential,
+            )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(rejected.status_code, 503)
+        error = rejected.body["error"]
+        self.assertIsInstance(error, dict)
+        assert isinstance(error, dict)
+        self.assertEqual(error["code"], "delivery_capacity_exhausted")
+        self.assertEqual(len(self.channel.sent), 1)
 
     async def test_cancelled_ingress_joins_send_before_cleanup_and_records_unknown(self) -> None:
         channel = _BlockingReadingChannel()

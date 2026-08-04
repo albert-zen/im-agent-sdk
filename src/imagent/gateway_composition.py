@@ -58,6 +58,15 @@ class GatewayLimits:
     delivery_outcome_observer_max_items: int = 256
     delivery_outcome_observer_max_text_characters: int = 65_536
     delivery_outcome_observer_max_concurrency: int = 16
+    delivery_submission_max_records: int = 4096
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.delivery_submission_max_records, int)
+            or isinstance(self.delivery_submission_max_records, bool)
+            or self.delivery_submission_max_records < 1
+        ):
+            raise ValueError("delivery_submission_max_records must be a positive integer")
 
 
 @dataclass(frozen=True, slots=True)

@@ -12,14 +12,20 @@ Focused delivery-submission tests prove:
   expected prior state;
 - successful updates preserve every other immutable field and validate the
   complete record;
+- `max_records` is positive and finite; at the boundary, identical replay and
+  destination CAS still work while the next distinct identity fails before
+  mutation;
+- concurrent distinct reservations at the final slot have exactly one winner,
+  with no eviction of terminal, retryable, in-flight, or unknown evidence;
 - no content, artifact bytes/path, credential, callback, or retry work item is
   introduced;
 - imports use the persistence owner and proactive delivery behavior remains
   unchanged.
 
-Finite record capacity remains a separate explicit follow-up gap. Its behavior
-slice must cover default Gateway composition without weakening the completed
-memory/SQLite reservation identity parity.
+Gateway composition tests additionally prove the stable default, invalid-limit
+construction rejection, explicit limit wiring, and that an injected repository
+is not wrapped or reconfigured by the default-only limit. A fresh process-local
+repository starts empty; SQLite behavior and schema remain unchanged.
 
 Run:
 

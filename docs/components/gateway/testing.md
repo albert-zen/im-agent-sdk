@@ -8,6 +8,10 @@
 - repository, limit, and extension composition groups are immutable, typed,
   and preserve all former defaults while the removed flat keywords fail
   explicitly;
+- default delivery-submission persistence receives the finite positive
+  `GatewayLimits` record bound; invalid configuration fails during construction,
+  capacity failure precedes Channel work and releases any outer idempotency
+  claim, while an injected repository is unchanged;
 - grouping does not change binding, idempotency, projection recovery,
   request-correlation, Controller/Presenter, Coordinator, proactive-delivery,
   startup, or shutdown identity and ordering;
@@ -92,6 +96,8 @@
 - route snapshots remain pinned across route movement and restart;
 - concurrent reuse of one delivery ID sends once, while mismatched reuse is a
   conflict;
+- concurrent new delivery IDs at the last default-memory record slot have one
+  winner and one explicit capacity failure without evicting replay evidence;
 - an external principal named like the Gateway-internal principal still has a
   distinct SDK-controlled submission namespace;
 - Thread-targeted results redact resolved Conversation IDs and aggregate or

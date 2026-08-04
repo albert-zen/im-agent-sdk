@@ -23,6 +23,12 @@ movement uses the stored snapshot, while a first-reservation race whose
 contenders resolved different routes fails instead of adopting the winner's
 unrelated destination.
 
+Memory capacity tests distinguish `DeliverySubmissionCapacityError` from an
+identity conflict, retain stored records at the boundary, and prove concurrent
+admission is lock-atomic. Proactive/internal delivery tests prove capacity is a
+known pre-side-effect failure, including outer-claim release and the bounded
+JSON ingress response. SQLite parity tests must remain unchanged.
+
 Run:
 
 ```sh

@@ -99,6 +99,7 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(limits.startup_buffer_max_pending, 256)
         self.assertEqual(limits.subscription_retry_initial_seconds, 0.05)
         self.assertEqual(limits.turn_correlation_retention_seconds, 7 * 24 * 60 * 60)
+        self.assertEqual(limits.delivery_submission_max_records, 4096)
         self.assertEqual(limits.inbound_content_transform_timeout_seconds, 30.0)
         self.assertEqual(limits.inbound_content_transform_max_items, 64)
         self.assertEqual(limits.inbound_content_transform_max_concurrency, 16)
@@ -122,6 +123,29 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(extensions.delivery_outcome_observer)
         with self.assertRaises(FrozenInstanceError):
             limits.baseline_history_limit = 4  # type: ignore[misc]
+
+        for invalid in (0, -1, True, cast(int, 1.5)):
+            with self.subTest(invalid_delivery_submission_max_records=invalid):
+                with self.assertRaisesRegex(ValueError, "positive integer"):
+                    GatewayLimits(delivery_submission_max_records=invalid)
+
+    def test_gateway_limits_preserve_existing_positional_layout(self) -> None:
+        limits = GatewayLimits(
+            3,
+            10,
+            5,
+            10,
+            20,
+            256,
+            256,
+            256,
+            0.125,
+            3.0,
+        )
+
+        self.assertEqual(limits.subscription_retry_initial_seconds, 0.125)
+        self.assertEqual(limits.subscription_retry_max_seconds, 3.0)
+        self.assertEqual(limits.delivery_submission_max_records, 4096)
 
     def test_flat_gateway_repository_constructor_is_removed(self) -> None:
         with self.assertRaisesRegex(TypeError, "bindings"):
