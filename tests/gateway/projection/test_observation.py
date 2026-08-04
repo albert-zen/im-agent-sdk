@@ -10,14 +10,9 @@ from typing import cast
 from imagent.applications import CodexApplicationAdapter
 from imagent.applications.capabilities import ProjectMode, SupportLevel
 from imagent.applications.contract import (
-    AcceptedTurn,
-    AgentInput,
-    ApplicationInputDispatchHandler,
     ApplicationRef,
-    InputContinuationPreference,
     ThreadRef,
 )
-from imagent.applications.events import AgentEvent, AgentEventType
 from imagent.applications.operations import GetThreadHistory
 from imagent.contracts import (
     BindConversationToThread,
@@ -26,6 +21,7 @@ from imagent.contracts import (
     GatewayOperationFailed,
 )
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway.input.dispatch import TurnAcceptanceOrderingGate
 from imagent.gateway.persistence import (
     ConversationBinding,
     IdempotencyClaimStatus,
@@ -618,17 +614,7 @@ class GatewayThreadObservationCapacityTests(unittest.IsolatedAsyncioTestCase):
             await cancelled
         self._assert_worker_entries_released(runtime, first)
 
-        runtime._pending_turn_acceptances[first] = 1
-        runtime._acceptance_ready[first] = asyncio.Event()
-        runtime._buffered_events[first] = []
-        runtime._buffered_event_overflows.add(first)
-        runtime._event_locks[first] = asyncio.Lock()
         await runtime.restore()
-        self.assertNotIn(first, runtime._pending_turn_acceptances)
-        self.assertNotIn(first, runtime._acceptance_ready)
-        self.assertNotIn(first, runtime._buffered_events)
-        self.assertNotIn(first, runtime._buffered_event_overflows)
-        self.assertNotIn(first, runtime._event_locks)
 
         async def complete_worker(
             thread_ref: ThreadRef,
@@ -643,71 +629,6 @@ class GatewayThreadObservationCapacityTests(unittest.IsolatedAsyncioTestCase):
         runtime._project_thread = complete_worker
         await runtime._ensure_projection(second)
         await self._wait_for_worker_release(runtime, second)
-
-    async def test_worker_terminal_preserves_pending_acceptance_until_correlation_finishes(
-        self,
-    ) -> None:
-        application = _BlockingAcceptanceApplication()
-        thread = await application.create_thread()
-        runtime = self._runtime(
-            max_active_threads=1,
-            applications={application.summary.ref.application_instance_id: application},
-        )
-
-        async def wait_forever() -> None:
-            await asyncio.Event().wait()
-
-        worker = asyncio.create_task(wait_forever())
-        runtime._tasks[thread.ref] = worker
-        runtime._ready[thread.ref] = asyncio.Event()
-        worker.add_done_callback(lambda completed: runtime._finish_task(thread.ref, completed))
-        self._seed_worker_entries(runtime, thread.ref)
-
-        accepting = asyncio.create_task(
-            runtime.send_input(
-                application,
-                thread.ref,
-                AgentInput(client_message_id="pending-acceptance", content=(TextContent("run"),)),
-                conversation_ref=ConversationRef("fake-channel", "acceptance"),
-                reply_to_message_id="reply-1",
-            )
-        )
-        await application.acceptance_started.wait()
-        buffered_event = AgentEvent(
-            event_id="pending-acceptance-event",
-            application_instance_id=thread.ref.application_instance_id,
-            type=AgentEventType.STATUS_CHANGED,
-            data={},
-            created_at=datetime.now(UTC),
-            thread_ref=thread.ref,
-        )
-        await runtime._handle_event(buffered_event)
-        self.assertEqual(runtime._buffered_events[thread.ref], [buffered_event])
-        acceptance_waiter = asyncio.create_task(runtime._wait_for_acceptance(thread.ref))
-        await asyncio.sleep(0)
-
-        worker.cancel()
-        await asyncio.gather(worker, return_exceptions=True)
-        await asyncio.sleep(0)
-        self.assertNotIn(thread.ref, runtime._tasks)
-        self.assertIsNone(runtime.get_health(thread.ref))
-        self.assertIn(thread.ref, runtime._acceptance_ready)
-        self.assertIn(thread.ref, runtime._event_locks)
-        self.assertEqual(runtime._buffered_events[thread.ref], [buffered_event])
-        self.assertFalse(acceptance_waiter.done())
-
-        application.release_acceptance.set()
-        accepted = await accepting
-        correlation = await runtime._projections.get_turn_reply_correlation(
-            thread.ref,
-            accepted.turn_id,
-        )
-        self.assertIsNotNone(correlation)
-        await acceptance_waiter
-        self.assertNotIn(thread.ref, runtime._pending_turn_acceptances)
-        self.assertNotIn(thread.ref, runtime._acceptance_ready)
-        self.assertNotIn(thread.ref, runtime._buffered_events)
-        self.assertNotIn(thread.ref, runtime._event_locks)
 
     @staticmethod
     def _runtime(
@@ -731,6 +652,7 @@ class GatewayThreadObservationCapacityTests(unittest.IsolatedAsyncioTestCase):
             execute_application=execute_application,  # type: ignore[arg-type]
             deliver_outbound=deliver_outbound,  # type: ignore[arg-type]
             deliver_request_outbound=deliver_outbound,  # type: ignore[arg-type]
+            acceptance_gate=TurnAcceptanceOrderingGate(max_pending=256),
             max_active_threads=max_active_threads,
         )
 
@@ -740,7 +662,6 @@ class GatewayThreadObservationCapacityTests(unittest.IsolatedAsyncioTestCase):
             thread_ref=thread_ref,
             state=ProjectionWorkerState.RUNNING,
         )
-        runtime._event_locks[thread_ref] = asyncio.Lock()
 
     @staticmethod
     async def _wait_for_worker_release(
@@ -758,7 +679,6 @@ class GatewayThreadObservationCapacityTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         self.assertNotIn(thread_ref, runtime._tasks)
         self.assertNotIn(thread_ref, runtime._health)
-        self.assertNotIn(thread_ref, runtime._event_locks)
 
 
 class _CapacityRecordingApplication(FakeAgentApplicationAdapter):
@@ -775,32 +695,6 @@ class _CapacityRecordingApplication(FakeAgentApplicationAdapter):
         if isinstance(operation, GetThreadHistory):
             self.history_threads.append(operation.thread_ref)
         return await super().execute(operation)
-
-
-class _BlockingAcceptanceApplication(FakeAgentApplicationAdapter):
-    def __init__(self) -> None:
-        super().__init__(project_mode=ProjectMode.FLAT)
-        self.acceptance_started = asyncio.Event()
-        self.release_acceptance = asyncio.Event()
-
-    async def send_input(
-        self,
-        thread_ref: ThreadRef,
-        message: AgentInput,
-        *,
-        continuation: InputContinuationPreference = (
-            InputContinuationPreference.PREFER_ACTIVE_TURN
-        ),
-        before_dispatch: ApplicationInputDispatchHandler | None = None,
-    ) -> AcceptedTurn:
-        self.acceptance_started.set()
-        await self.release_acceptance.wait()
-        return await super().send_input(
-            thread_ref,
-            message,
-            continuation=continuation,
-            before_dispatch=before_dispatch,
-        )
 
 
 def _observe(

@@ -40,7 +40,7 @@ Protect these historical and known failure modes:
   an admission retains its identity across task turnover before ensure;
 - terminal, cancelled, and start-failed workers leaking an active slot or
   health across a foreground switch, stop, or restart, while worker terminal
-  during accepted input preserves the correlation fence, event lock, and buffer
+  during accepted input preserves the acceptance-ordering gate, event lock, and buffer
   until the final input owner drains it and the established restore boundary
   clears process-local acceptance tracking;
 - first observation or restart scanning/delivering an unbounded archive;
@@ -70,8 +70,12 @@ Protect these historical and known failure modes:
 - an unbounded subscriber queue hiding slow-delivery memory pressure;
 - one slow subscriber overflow stopping a healthy subscriber or unrelated
   Thread;
-- a Turn-acceptance buffer overflow releasing accepted inbound idempotency or
-  failing to enter bounded authoritative recovery;
+- a Turn-acceptance buffer overflow changing an inbound claim phase, releasing
+  an already-accepted input, or failing to enter bounded authoritative
+  recovery;
+- a failed/cancelled ordered-event drain silently discarding its FIFO without a
+  stable ordering gap, keeping accepted input non-terminal, or leaving a
+  terminal-worker recovery cancellation marker behind;
 - an event gap pretending a transient interactive request is recoverable when
   no native pending snapshot exists;
 - a clean subscription end, generic observation failure, or App Server reset

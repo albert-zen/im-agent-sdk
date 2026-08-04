@@ -18,7 +18,6 @@ import imagent.contracts as contracts_facade
 from ..applications.capabilities import ProjectMode
 from ..applications.contract import (
     AgentApplicationAdapter,
-    AgentInput,
     ApplicationSummary,
     ThreadRef,
 )
@@ -94,6 +93,7 @@ from .diagnostics import (
 )
 from .input import InboundContentTransformer as InboundContentTransformer
 from .input.content_transformation import InboundContentTransformRuntime
+from .input.dispatch import InputDispatchRuntime, TurnAcceptanceOrderingGate
 from .input.failure_presentation import InboundFailurePhase as InboundFailurePhase
 from .input.failure_presentation import InboundFailurePresentationRuntime, handle_claimed_inbound
 from .input.failure_presentation import InboundFailurePresenter as InboundFailurePresenter
@@ -246,6 +246,9 @@ class ImAgentGateway:
             max_pending=limits.startup_buffer_max_pending
         )
         projection_repository = repositories.projections or InMemoryProjectionRouteRepository()
+        self._turn_acceptance_gate = TurnAcceptanceOrderingGate(
+            max_pending=limits.turn_acceptance_event_max_pending,
+        )
         self._projection_runtime = ThreadProjectionRuntime(
             applications=self._applications,
             bindings=repositories.bindings,
@@ -265,7 +268,7 @@ class ImAgentGateway:
             catchup_limit=limits.catchup_limit,
             projection_item_limit=limits.projection_item_limit,
             request_delivery_max_pending=limits.request_delivery_max_pending,
-            turn_acceptance_event_max_pending=limits.turn_acceptance_event_max_pending,
+            acceptance_gate=self._turn_acceptance_gate,
             max_active_threads=limits.projection_max_active_threads,
             subscription_retry_initial_seconds=limits.subscription_retry_initial_seconds,
             subscription_retry_max_seconds=limits.subscription_retry_max_seconds,
@@ -273,6 +276,11 @@ class ImAgentGateway:
             request_correlation_retention_seconds=(limits.request_correlation_retention_seconds),
         )
         self._request_projection = self._projection_runtime.request_projection
+        self._input_dispatch = InputDispatchRuntime(
+            correlator=self._request_projection,
+            acceptance_gate=self._turn_acceptance_gate,
+            event_applier=self._projection_runtime,
+        )
         from .routing.operations import _GatewayOperationExecutor
 
         self._gateway_operations = _GatewayOperationExecutor(
@@ -929,22 +937,11 @@ class ImAgentGateway:
                 message.conversation_ref,
                 thread_was_created=thread_was_created,
             )
-            from ..contracts.validators import derive_client_message_id
-
-            client_message_id = derive_client_message_id(
-                message.conversation_ref,
-                message.message_id,
-            )
-            await self._projection_runtime.send_input(
+            await self._input_dispatch.dispatch(
                 application,
                 thread_ref,
-                AgentInput(
-                    client_message_id=client_message_id,
-                    content=content,
-                    sender=message.sender,
-                ),
-                conversation_ref=message.conversation_ref,
-                reply_to_message_id=message.message_id,
+                message,
+                content=content,
                 before_application_send=before_application_send,
             )
 

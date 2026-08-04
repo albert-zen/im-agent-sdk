@@ -35,6 +35,7 @@ from imagent.contracts import (
     GatewayOperationFailed,
 )
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway.input.dispatch import TurnAcceptanceBufferOverflow
 from imagent.gateway.persistence import (
     ConversationBinding,
     InMemoryIdempotencyRepository,
@@ -62,7 +63,6 @@ from imagent.interaction.messages import (
     OutboundMessage,
     TextContent,
 )
-from imagent.projection_runtime import TurnAcceptanceBufferOverflow
 from imagent.projections import (
     ProjectionWorkerState,
     derive_live_projection_delivery_id,
@@ -818,11 +818,15 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             ),
         )
 
-        async def fail_drain(thread_ref: ThreadRef) -> None:
-            del thread_ref
+        async def fail_drain(
+            thread_ref: ThreadRef,
+            *,
+            event_applier: object,
+        ) -> None:
+            del thread_ref, event_applier
             raise RuntimeError("simulated buffered-event drain failure")
 
-        gateway._projection_runtime._drain_buffered_events = fail_drain
+        gateway._turn_acceptance_gate._drain_buffered_events = fail_drain
         await gateway.start()
         inbound = _inbound(conversation, "post-accept-drain")
         try:
@@ -1011,11 +1015,15 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             ),
         )
 
-        async def fail_drain(thread_ref: ThreadRef) -> None:
-            del thread_ref
+        async def fail_drain(
+            thread_ref: ThreadRef,
+            *,
+            event_applier: object,
+        ) -> None:
+            del thread_ref, event_applier
             raise RuntimeError("secondary drain failure")
 
-        gateway._projection_runtime._drain_buffered_events = fail_drain
+        gateway._turn_acceptance_gate._drain_buffered_events = fail_drain
         await gateway.start()
         try:
             with self.assertRaisesRegex(RuntimeError, "simulated correlation failure") as raised:

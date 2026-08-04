@@ -14,7 +14,6 @@ from typing import get_args, get_type_hints
 from unittest.mock import patch
 
 import imagent.contracts as contracts_facade
-import imagent.contracts.validators as pending_validators
 import imagent.gateway as gateway_facade
 import imagent.gateway.projection as projection_facade
 import imagent.gateway.projection.request_correlation as request_owner
@@ -53,7 +52,6 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     import typing
 
     import imagent.contracts as contracts_facade
-    import imagent.contracts.validators as pending_validators
     import imagent.gateway as gateway_facade
     import imagent.gateway.projection as projection_facade
     import imagent.gateway.projection.request_correlation as request_owner
@@ -100,27 +98,14 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
         assert getattr(routing_facade, name) is getattr(projection_routes_owner, name)
         assert getattr(operations_owner, name) is getattr(projection_routes_owner, name)
         assert not hasattr(contracts_facade, name)
-        assert not hasattr(pending_validators, name)
 
     for name in ("RespondToRequest", "RequestResponseRouted"):
         assert getattr(projection_facade, name) is getattr(request_owner, name)
         assert getattr(operations_owner, name) is getattr(request_owner, name)
         assert not hasattr(contracts_facade, name)
-        assert not hasattr(pending_validators, name)
 
     assert importlib.util.find_spec("imagent.contracts.operations") is None
-    for name in (
-        "GatewayOperationType",
-        "GatewayOperation",
-        "GatewayOperationResult",
-        "GatewayOperationFailed",
-        "ListApplications",
-        "SelectApplication",
-        "ApplicationsListed",
-        "validate_gateway_operation",
-        "validate_gateway_operation_result",
-    ):
-        assert not hasattr(pending_validators, name)
+    assert importlib.util.find_spec("imagent.contracts.validators") is None
     assert not hasattr(routing_facade, "GatewayOperationExecutor")
     assert not hasattr(gateway_facade, "GatewayOperationExecutor")
     for public_name, private_name in (
@@ -179,7 +164,6 @@ _IMPORT_ORDERS = {
     "projection-route owner first": "import imagent.gateway.routing.projection_routes\n",
     "controllers first": "import imagent.interaction.controllers\n",
     "gateway first": "import imagent.gateway\n",
-    "validators first": "import imagent.contracts.validators\n",
     "imagent.contracts first": "import imagent.contracts\n",
     "routing first": "import imagent.gateway.routing\n",
 }
@@ -192,18 +176,6 @@ _GATEWAY_DELEGATE_NAMES = (
     ("clear_conversation_thread", "_clear_conversation_thread"),
     ("observe_thread", "_observe_thread"),
     ("respond_to_request", "_route_request_response"),
-)
-
-_HISTORICAL_AGGREGATE_NAMES = (
-    "GatewayOperationType",
-    "GatewayOperation",
-    "GatewayOperationResult",
-    "GatewayOperationFailed",
-    "ListApplications",
-    "SelectApplication",
-    "ApplicationsListed",
-    "validate_gateway_operation",
-    "validate_gateway_operation_result",
 )
 
 
@@ -390,11 +362,8 @@ class GatewayOperationsOwnerTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIs(getattr(projection_facade, name), owner)
                 self.assertIs(getattr(operations_owner, name), owner)
                 self.assertFalse(hasattr(contracts_facade, name))
-                self.assertFalse(hasattr(pending_validators, name))
         self.assertIsNone(importlib.util.find_spec("imagent.contracts.operations"))
-        for name in _HISTORICAL_AGGREGATE_NAMES:
-            with self.subTest(historical_name=name):
-                self.assertFalse(hasattr(pending_validators, name))
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts.validators"))
         self.assertFalse(hasattr(routing_facade, "GatewayOperationExecutor"))
         self.assertFalse(hasattr(gateway_facade, "GatewayOperationExecutor"))
         self.assertNotIn("GatewayOperationExecutor", operations_owner.__all__)

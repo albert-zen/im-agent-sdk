@@ -72,34 +72,43 @@ are not inside that destination catch; a transient failure restarts only the
 affected Thread's same worker and converges through authoritative recovery.
 
 Accepted IM input may have live output queued before its Turn reply correlation
-is durable. The worker holds only a finite per-Thread acceptance buffer until
-the correlation is recorded. Its overflow keeps the accepted inbound claim
-terminal, records an explicit gap, and recovers from authoritative history;
-it never creates permission to dispatch the input again.
+is durable. The input-dispatch leaf owns the finite per-Thread
+acceptance-ordering gate and buffer. The worker forwards the normalized event
+once through that typed gate until correlation is recorded; it does not own or duplicate the
+buffer. Overflow or a mid-drain ordered-event application failure records an
+explicit gap and recovers from authoritative history; it never creates
+permission to dispatch the input again, a second concurrent worker, or an
+inbound-claim transition. A known pre-native-side-effect-fence dispatch failure still
+releases its matching claim; only the native side-effect fence/unknown outcome
+or a valid `AcceptedTurn` determines that claim's non-redelivery status.
 
 Subscription/recovery exceptions remain inside the supervised worker and keep
 its existing slot while bounded backoff and authoritative recovery run. A
 terminal return, cancellation, or start task failure removes worker-owned
 health and releases its identity once no admission lease remains. A caller
 cancelled while waiting for a same-Thread starter does not cancel or release
-that shared worker. If input acceptance is pending, its correlation fence,
-ready event, event lock, and buffered events are acceptance-owned: terminal
-worker cleanup must not clear or signal them. The final `send_input` owner
-persists or validates the correlation, signals the fence, drains the ordered
-buffer, then removes those entries. Gateway stop/rollback applies the same
-split worker cleanup; the established `restore()` boundary clears all
-process-local acceptance tracking before durable routes and checkpoints rebuild
+that shared worker. If input acceptance is pending, its dispatch-owned
+acceptance-ordering gate, ready event, event lock, and buffered events must not
+be cleared or signalled by terminal worker cleanup. On every final
+pending-dispatch exit, the dispatcher performs any required correlation work,
+signals the ordering gate, drains the ordered buffer, then removes those
+entries. Gateway stop/rollback
+applies the same split worker cleanup; the established `restore()` boundary
+invokes the dispatch-owned reset before durable routes and checkpoints rebuild
 their existing recovery authority.
 
 ## Current structure and authority
 
-The current worker and input-acceptance ordering share
-`projection_runtime.py` and the Gateway package root. Recovery-specific
-attempt state, error classification, retry inputs, authoritative
-reconciliation, and request-snapshot coordination are delegated to the
-canonical private supervisor in `gateway/projection/recovery.py`; observation
-retains the sole task/subscription loop and normalized event consumption. The
-remaining observation target is `gateway/projection/observation.py`.
+The current worker and some recovery supervision share `projection_runtime.py`
+and the Gateway package root. Dispatch acceptance ordering lives in
+`gateway/input/dispatch.py`; the runtime consumes its narrow typed gate rather
+than owning that state. Recovery-specific attempt state, error classification,
+retry inputs, authoritative reconciliation, and request-snapshot coordination
+are delegated to the canonical private supervisor in
+`gateway/projection/recovery.py`. Observation retains the sole
+task/subscription loop and normalized event consumption; neither split permits
+a duplicate worker or second subscriber. The observation target remains
+`gateway/projection/observation.py`.
 
 - [ADR 0004](../../../../decisions/0004-event-fanout-and-recovery.md)
 - [ADR 0007](../../../../decisions/0007-projection-lifecycle-and-delivery-boundaries.md)

@@ -208,7 +208,6 @@ import importlib.util
 import typing
 
 import imagent.contracts as contracts_facade
-import imagent.contracts.validators as validators_owner
 import imagent.gateway as gateway_facade
 import imagent.gateway.routing as routing_facade
 import imagent.gateway.routing.operations as operations_owner
@@ -228,9 +227,9 @@ for name in binding_names:
     assert getattr(gateway_facade, name) is owner
     assert inspect.signature(getattr(contracts_facade, name)) == inspect.signature(owner)
     assert owner.__module__ == "imagent.gateway.routing.bindings"
-    assert not hasattr(validators_owner, name)
 
 assert importlib.util.find_spec("imagent.contracts.operations") is None
+assert importlib.util.find_spec("imagent.contracts.validators") is None
 
 binding_hints = typing.get_type_hints(binding_owner.ConversationBound)
 facade_hints = typing.get_type_hints(contracts_facade.ConversationBound)
@@ -278,7 +277,6 @@ assert not hasattr(gateway_facade, "GatewayOperationExecutor")
 for first_import in (
     "import imagent.gateway.routing.operations\n",
     "import imagent.gateway.routing.bindings\n",
-    "import imagent.contracts.validators\n",
     "import imagent.contracts\n",
     "import imagent.gateway.routing\n",
 ):
@@ -303,7 +301,6 @@ import importlib.util
 import typing
 
 import imagent.contracts as contracts_facade
-import imagent.contracts.validators as historical_validators
 import imagent.gateway as gateway_facade
 import imagent.gateway.persistence as persistence_facade
 import imagent.gateway.routing as routing_facade
@@ -319,13 +316,14 @@ for name in projection_route_owner.__all__:
     owner = getattr(projection_route_owner, name)
     assert getattr(routing_facade, name) is owner
     assert owner.__module__ == "imagent.gateway.routing.projection_routes"
-for module in (contracts_facade, historical_validators):
+for module in (contracts_facade,):
     for name in ("ObserveThread", "ThreadObserved"):
         assert not hasattr(module, name)
         assert name not in getattr(module, "__all__", ())
 assert not hasattr(persistence_facade, "ProjectionPolicy")
 assert "ProjectionPolicy" not in persistence_facade.__all__
 assert importlib.util.find_spec("imagent.contracts.operations") is None
+assert importlib.util.find_spec("imagent.contracts.validators") is None
 for module_name in (
     "imagent.contracts",
     "imagent.contracts.operations",
@@ -352,7 +350,6 @@ assert root_hints["return"] is projection_route_owner.ThreadObserved
 for first_import in (
     "import imagent.gateway.routing.projection_routes\n",
     "import imagent.gateway.routing.operations\n",
-    "import imagent.contracts.validators\n",
     "import imagent.contracts\n",
     "import imagent.gateway.routing\n",
     "import imagent.gateway\n",
@@ -379,7 +376,6 @@ import importlib.util
 import typing
 
 import imagent.contracts as contracts_facade
-import imagent.contracts.validators as historical_validators
 import imagent.gateway as gateway_facade
 import imagent.gateway.projection as projection_facade
 import imagent.gateway.projection.request_correlation as request_owner
@@ -395,9 +391,10 @@ for name in request_owner.__all__:
     assert getattr(projection_facade, name) is owner
     assert owner.__module__ == "imagent.gateway.projection.request_correlation"
 assert importlib.util.find_spec("imagent.contracts.operations") is None
+assert importlib.util.find_spec("imagent.contracts.validators") is None
 for name in ("RespondToRequest", "RequestResponseRouted"):
     assert getattr(operations_owner, name) is getattr(request_owner, name)
-    for module in (contracts_facade, historical_validators):
+    for module in (contracts_facade,):
         assert not hasattr(module, name)
         assert name not in getattr(module, "__all__", ())
 for module_name in (
@@ -422,7 +419,6 @@ for first_import in (
     "import imagent.gateway.projection.request_correlation\n",
     "import imagent.gateway.projection\n",
     "import imagent.gateway.routing.operations\n",
-    "import imagent.contracts.validators\n",
     "import imagent.contracts\n",
     "import imagent.interaction.controllers\n",
     "import imagent.gateway\n",

@@ -15,7 +15,10 @@ and optional classified failure presentation independent:
   optional terminal error delivery without retry authority.
 
 The ordered path is Controller handling, optional I1 after Controller decline,
-binding/Thread preparation through their owning leaves, then native dispatch.
-I2 wraps the owned claimed-input outcome and applies phase-specific claim
-rules. These leaves do not create another Channel admission path, Application
-subscription, transcript, runtime, spool, or outbox.
+Gateway-owned Conversation serialization and binding/Thread preparation through
+their owning leaves, then canonical native dispatch. Dispatch owns only stable
+input identity, the typed native side-effect pre-dispatch fence, the distinct
+acceptance-ordering gate, and accepted-Turn correlation; it does not create another Conversation
+registry. I2 wraps the owned claimed-input outcome and applies phase-specific
+claim rules. These leaves do not create another Channel admission path,
+Application subscription, transcript, runtime, spool, or outbox.

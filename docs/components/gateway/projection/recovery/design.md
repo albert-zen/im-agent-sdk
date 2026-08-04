@@ -46,8 +46,17 @@ subscription, including when the destination reports a safe retry hint.
 Recovery never consumes that hint. Correlation-repository reads,
 delivery-idempotency or submission infrastructure, and checkpoint repository
 CAS remain outside that destination boundary: their failures propagate to the
-existing affected-Thread supervisor for authoritative convergence. One
-Thread's gap cannot cross another Thread's acceptance-order boundary.
+existing affected-Thread supervisor for authoritative convergence.
+
+One Thread's gap cannot cross another Thread's dispatch-owned acceptance-order
+boundary. Recovery observes a gate overflow or failed ordered drain as a typed
+external `EventStreamGap` injected into that same supervisor; it neither drains
+the gate nor redispatches the accepted input. The supervisor alone classifies
+the gap, schedules capped backoff, and requires authoritative reconciliation.
+A live worker catches the targeted cancellation and continues as that same
+worker; without a live worker, the newly started worker consumes the marker
+before recovery. Both paths clear a terminal marker rather than leaving stale
+recovery state.
 
 Completed messages reconcile through their stable Application item IDs and
 route-scoped idempotency. This leaf supplies only bounded ordered authoritative

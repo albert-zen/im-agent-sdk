@@ -12,9 +12,9 @@ Observation conformance must prove:
 - cancellation of a same-Thread waiter leaves the shared worker and its slot
   intact; terminal, cancelled, and start-failed workers release worker-owned
   capacity and health entries; a worker terminal during pending acceptance must
-  retain the fence, lock, and buffer until the final input owner persists the
-  correlation and drains it; the established restore boundary clears all
-  process-local acceptance tracking before route/checkpoint recovery;
+  retain the dispatch-owned acceptance-ordering gate, lock, and buffer until the final dispatcher
+  performs required correlation work and drains it; the established restore
+  boundary invokes the dispatch-owned reset before route/checkpoint recovery;
 - every live subscriber has an independent finite queue, and a slow or
   overflowed subscriber neither steals from nor blocks another subscriber or
   an Application socket/read callback;
@@ -32,7 +32,9 @@ Observation conformance must prove:
   identity, never enters authoritative recovery, and never advances a
   checkpoint; and
 - a buffered event accepted before Turn-correlation persistence stays bounded;
-  overflow preserves terminal inbound state and enters recovery.
+  overflow enters recovery without changing claim phase: known pre-native-fence
+  failure still releases, while native-side-effect-fence-unknown or accepted input remains
+  non-redeliverable.
 
 Current evidence: `tests/gateway/projection/test_observation.py`,
 `tests/test_projection_hardening.py`, and `tests/test_projection_routing.py`.

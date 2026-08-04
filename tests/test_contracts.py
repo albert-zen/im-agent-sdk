@@ -59,10 +59,10 @@ from imagent.contracts import (
     BindConversationToThread,
     ConversationBound,
     GatewayOperationType,
-    derive_client_message_id,
     validate_gateway_operation,
     validate_gateway_operation_result,
 )
+from imagent.gateway.input import derive_client_message_id
 from imagent.gateway.persistence import (
     ConversationBinding,
     ThreadProjectionRoute,

@@ -96,8 +96,8 @@ redacted failure before subscription, reconciliation/checkpoint, or delivery
 effects. An admission retains the identity across task turnover until its
 caller completes. Worker health and capacity are process-local and disappear
 when a worker terminates or is cancelled, unless a short-lived admission lease
-still protects that identity. An accepted-input correlation fence, event lock,
-and buffer are instead retained until the final input owner safely resolves
+still protects that identity. A dispatch-owned acceptance-ordering gate, event
+lock, and buffer are instead retained until the final input owner safely resolves
 the correlation and drains the buffer; the established restore boundary clears
 that process-local acceptance tracking before recovery. Supervised recovery
 remains inside the same worker and retains the slot; durable routes and
@@ -191,6 +191,12 @@ If reply-correlation persistence or buffered-event draining fails after an
 failure so Gateway can keep the inbound key terminal while still exposing the
 projection degradation. Only a failure known to occur before acceptance may
 authorize automatic input redelivery.
+When a typed ordered-event applier fails or is cancelled mid-drain, the
+dispatch-owned gate reports the stable per-Thread ordering gap to the existing
+authoritative recovery path before it releases its FIFO state. A live worker
+recovers through its existing task; a terminal worker records the gap and
+starts recovery without retaining a stale cancellation marker. Neither path
+creates permission for native input redelivery.
 Dispatch with an unknown acceptance outcome is reported separately by the
 Application Port and keeps the side-effect-started claim non-expiring. The
 claim is protected through the adapter's typed hook immediately before the
@@ -220,9 +226,11 @@ supervisor retry loop as subscription failure.
 This bootstrap barrier is ordering isolation, not a second content queue: live
 events remain in the bounded Application subscription. Events consumed while
 one or more inputs await `AcceptedTurn` are held in a separately bounded
-per-Thread buffer so reply correlation is recorded first. Its overflow keeps
-accepted input terminal, records an explicit gap, and enters authoritative
-recovery.
+per-Thread buffer so reply correlation is recorded first. Its overflow records
+an explicit gap and enters authoritative recovery; it does not itself change
+an inbound claim phase. A known pre-native-side-effect-fence failure may still
+release, while an unknown native outcome or a valid accepted input remains non-redeliverable by
+the separate dispatch-side-effect rules.
 
 ## Recovery
 

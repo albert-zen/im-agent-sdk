@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import ForwardRef, get_type_hints
 
 import imagent.contracts as contracts_facade
-import imagent.contracts.validators as historical_validators
 import imagent.gateway as gateway_facade
 import imagent.gateway.persistence as persistence_facade
 import imagent.gateway.routing as routing_facade
@@ -34,7 +33,6 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     import typing
 
     import imagent.contracts as contracts_facade
-    import imagent.contracts.validators as historical_validators
     import imagent.gateway as gateway_facade
     import imagent.gateway.persistence as persistence_facade
     import imagent.gateway.routing as routing_facade
@@ -44,13 +42,14 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     for name in ("ObserveThread", "ProjectionPolicy", "ThreadObserved"):
         assert getattr(routing_facade, name) is getattr(owner, name)
         assert getattr(owner, name).__module__ == "imagent.gateway.routing.projection_routes"
-    for module in (contracts_facade, historical_validators):
+    for module in (contracts_facade,):
         for name in ("ObserveThread", "ThreadObserved"):
             assert not hasattr(module, name)
             assert name not in getattr(module, "__all__", ())
     assert not hasattr(persistence_facade, "ProjectionPolicy")
     assert "ProjectionPolicy" not in persistence_facade.__all__
     assert importlib.util.find_spec("imagent.contracts.operations") is None
+    assert importlib.util.find_spec("imagent.contracts.validators") is None
     try:
         from imagent.contracts import ObserveThread
     except ImportError:
@@ -68,7 +67,6 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
 _IMPORT_ORDERS = {
     "projection-route owner first": "import imagent.gateway.routing.projection_routes\n",
     "routing facade first": "import imagent.gateway.routing\n",
-    "historical validators first": "import imagent.contracts.validators\n",
     "gateway root first": "import imagent.gateway\n",
 }
 
@@ -84,15 +82,13 @@ class ProjectionRouteContractOwnershipTests(unittest.TestCase):
                 value = getattr(owner, name)
                 self.assertIs(getattr(routing_facade, name), value)
                 self.assertEqual(value.__module__, owner.__name__)
-        for module in (
-            contracts_facade,
-            historical_validators,
-        ):
+        for module in (contracts_facade,):
             for name in ("ObserveThread", "ThreadObserved"):
                 with self.subTest(module=module.__name__, name=name):
                     self.assertFalse(hasattr(module, name))
                     self.assertNotIn(name, getattr(module, "__all__", ()))
         self.assertIsNone(importlib.util.find_spec("imagent.contracts.operations"))
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts.validators"))
         self.assertFalse(hasattr(persistence_facade, "ProjectionPolicy"))
         self.assertFalse(hasattr(state_contract_owner, "ProjectionPolicy"))
         self.assertNotIn("ProjectionPolicy", persistence_facade.__all__)

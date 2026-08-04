@@ -9,21 +9,18 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .applications.contract import (
-    AcceptedTurn,
     AgentApplicationAdapter,
-    AgentInput,
     AgentMessage,
-    ApplicationInputDispatch,
-    InputContinuationPreference,
     ThreadRef,
 )
 from .applications.events import (
     AgentEvent,
     AgentEventType,
-    EventBufferOverflow,
+    EventStreamGap,
 )
 from .applications.operations import ApplicationOperation, ApplicationOperationResult
 from .applications.requests import RequestRef
+from .gateway.input.dispatch import TurnAcceptanceOrderingGate
 from .gateway.persistence.repository_contracts import (
     BindingRepository,
     ProjectionRouteRepository,
@@ -33,7 +30,11 @@ from .gateway.persistence.state_contracts import (
     ConversationBinding,
     ThreadProjectionRoute,
 )
-from .gateway.projection.recovery import _RecoveryHealthSnapshot, _RecoverySupervisor
+from .gateway.projection.recovery import (
+    _RecoveryAttempt,
+    _RecoveryHealthSnapshot,
+    _RecoverySupervisor,
+)
 from .gateway.projection.request_correlation import InteractiveRequestProjection
 from .gateway.routing.projection_routes import (
     ProjectionPolicy,
@@ -58,27 +59,6 @@ ExecuteApplication = Callable[
     [ApplicationOperation],
     Awaitable[ApplicationOperationResult],
 ]
-
-
-class InputPostAcceptanceError(RuntimeError):
-    """Bridge post-processing failed after the Application accepted input."""
-
-    def __init__(self, accepted_turn: AcceptedTurn, cause: BaseException) -> None:
-        super().__init__(
-            "Agent input was accepted before bridge post-processing failed: "
-            f"{accepted_turn.turn_id}"
-        )
-        self.accepted_turn = accepted_turn
-        self.cause = cause
-
-
-class TurnAcceptanceBufferOverflow(EventBufferOverflow):
-    def __init__(self, *, max_pending: int) -> None:
-        super().__init__("turn_acceptance_buffer_overflow", max_pending=max_pending)
-
-
-class InputDispatchRejected(RuntimeError):
-    """Application input was rejected by a bridge invariant before dispatch."""
 
 
 class ProjectionWorkerCapacityError(RuntimeError):
@@ -111,15 +91,13 @@ class ThreadProjectionRuntime:
         catchup_limit: int = 10,
         projection_item_limit: int = 20,
         request_delivery_max_pending: int = 256,
-        turn_acceptance_event_max_pending: int = 256,
+        acceptance_gate: TurnAcceptanceOrderingGate,
         max_active_threads: int = 4096,
         subscription_retry_initial_seconds: float = 0.05,
         subscription_retry_max_seconds: float = 2.0,
         turn_correlation_retention_seconds: float = 7 * 24 * 60 * 60,
         request_correlation_retention_seconds: float = 7 * 24 * 60 * 60,
     ) -> None:
-        if turn_acceptance_event_max_pending < 1:
-            raise ValueError("turn_acceptance_event_max_pending must be positive")
         if (
             not isinstance(max_active_threads, int)
             or isinstance(max_active_threads, bool)
@@ -142,19 +120,15 @@ class ThreadProjectionRuntime:
         self._request_correlation_retention = timedelta(
             seconds=request_correlation_retention_seconds
         )
-        self._turn_acceptance_event_max_pending = turn_acceptance_event_max_pending
+        self._acceptance_gate = acceptance_gate
         self._max_active_threads = max_active_threads
         self._tasks: dict[ThreadRef, asyncio.Task[None]] = {}
         self._ready: dict[ThreadRef, asyncio.Event] = {}
         self._pending_starts: dict[ThreadRef, _ProjectionStartReservation] = {}
         self._prepared_foreground_starts: dict[str, list[_ProjectionStartReservation]] = {}
-        self._event_locks: dict[ThreadRef, asyncio.Lock] = {}
-        self._pending_turn_acceptances: dict[ThreadRef, int] = {}
-        self._acceptance_ready: dict[ThreadRef, asyncio.Event] = {}
-        self._buffered_events: dict[ThreadRef, list[AgentEvent]] = {}
-        self._buffered_event_overflows: set[ThreadRef] = set()
         self._delivery_ready = asyncio.Event()
         self._health: dict[ThreadRef, ProjectionWorkerHealth] = {}
+        self._ordering_recovery_gaps: dict[ThreadRef, EventStreamGap] = {}
         self._request_projection = InteractiveRequestProjection(
             applications=applications,
             projections=projections,
@@ -169,7 +143,7 @@ class ThreadProjectionRuntime:
             active_routes=self._active_routes,
             deliver_outbound=deliver_outbound,
             deliver_request_once=self._request_projection.deliver_request_once,
-            wait_for_acceptance=self._wait_for_acceptance,
+            wait_for_acceptance=self._acceptance_gate.wait_for_acceptance,
             record_delivery_failure=self._record_delivery_failure,
             request_delivery_max_pending=request_delivery_max_pending,
         )
@@ -209,11 +183,8 @@ class ThreadProjectionRuntime:
         self._stopping = False
         self._delivery_ready.clear()
         self._routes.reset()
-        self._pending_turn_acceptances.clear()
-        self._acceptance_ready.clear()
-        self._buffered_events.clear()
-        self._buffered_event_overflows.clear()
-        self._event_locks.clear()
+        self._acceptance_gate.reset()
+        self._ordering_recovery_gaps.clear()
         restored_routes = await self._route_authority.active_persisted_routes()
         for route in restored_routes:
             await self._routes.begin_bootstrap(route.route_id)
@@ -386,94 +357,6 @@ class ThreadProjectionRuntime:
             if needs_reconcile:
                 self._routes.complete_bootstrap(route_id)
             self._release_projection_start(thread_ref, reservation)
-
-    async def send_input(
-        self,
-        application: AgentApplicationAdapter,
-        thread_ref: ThreadRef,
-        agent_input: AgentInput,
-        *,
-        conversation_ref: ConversationRef,
-        reply_to_message_id: str,
-        before_application_send: Callable[[], Awaitable[None]] | None = None,
-    ) -> AcceptedTurn:
-        if self._pending_turn_acceptances.get(thread_ref, 0) == 0:
-            self._acceptance_ready[thread_ref] = asyncio.Event()
-        self._pending_turn_acceptances[thread_ref] = (
-            self._pending_turn_acceptances.get(thread_ref, 0) + 1
-        )
-        accepted: AcceptedTurn | None = None
-        authorized_dispatch: ApplicationInputDispatch | None = None
-        primary_error: BaseException | None = None
-
-        async def authorize_dispatch(dispatch: ApplicationInputDispatch) -> None:
-            nonlocal authorized_dispatch
-            if authorized_dispatch is not None:
-                raise InputDispatchRejected("Application input dispatch was declared twice")
-            try:
-                await self._request_projection.authorize_input_dispatch(
-                    dispatch,
-                    thread_ref=thread_ref,
-                    client_message_id=agent_input.client_message_id,
-                )
-            except ValueError as error:
-                raise InputDispatchRejected(str(error)) from error
-            if before_application_send is not None:
-                await before_application_send()
-            authorized_dispatch = dispatch
-
-        try:
-            accepted = await application.send_input(
-                thread_ref,
-                agent_input,
-                continuation=InputContinuationPreference.PREFER_ACTIVE_TURN,
-                before_dispatch=authorize_dispatch,
-            )
-            if authorized_dispatch is None:
-                raise RuntimeError("Application accepted input without declaring dispatch")
-            await self._request_projection.correlate_accepted_turn(
-                accepted,
-                authorized_dispatch,
-                thread_ref=thread_ref,
-                client_message_id=agent_input.client_message_id,
-                conversation_ref=conversation_ref,
-                reply_to_message_id=reply_to_message_id,
-            )
-        except BaseException as exc:
-            primary_error = exc
-        finally:
-            remaining = self._pending_turn_acceptances.get(thread_ref, 1) - 1
-            if remaining > 0:
-                self._pending_turn_acceptances[thread_ref] = remaining
-            else:
-                self._pending_turn_acceptances.pop(thread_ref, None)
-                ready = self._acceptance_ready.pop(thread_ref, None)
-                if ready is not None:
-                    ready.set()
-                try:
-                    await self._drain_buffered_events(thread_ref)
-                except BaseException as drain_error:
-                    if primary_error is None:
-                        primary_error = drain_error
-                    else:
-                        primary_error.add_note(
-                            "Buffered-event draining also failed after input handling: "
-                            f"{drain_error!r}"
-                        )
-                        logger.exception(
-                            "Buffered-event draining failed while preserving the primary "
-                            "input error",
-                            exc_info=drain_error,
-                        )
-                finally:
-                    self._clear_acceptance_runtime_entries(thread_ref)
-        if primary_error is not None:
-            if accepted is not None:
-                raise InputPostAcceptanceError(accepted, primary_error) from primary_error
-            raise primary_error
-        if accepted is None:
-            raise RuntimeError("Application input completed without an AcceptedTurn")
-        return accepted
 
     async def handle_binding_change(
         self,
@@ -655,6 +538,7 @@ class ThreadProjectionRuntime:
         if self._tasks.get(thread_ref) is not task:
             return
         self._tasks.pop(thread_ref, None)
+        self._ordering_recovery_gaps.pop(thread_ref, None)
         ready = self._ready.pop(thread_ref, None)
         if ready is not None:
             ready.set()
@@ -669,22 +553,12 @@ class ThreadProjectionRuntime:
             )
 
     def _clear_all_worker_runtime_entries(self) -> None:
-        for thread_ref in set(self._health) | set(self._event_locks):
+        for thread_ref in set(self._health):
             self._clear_worker_runtime_entries(thread_ref)
 
     def _clear_worker_runtime_entries(self, thread_ref: ThreadRef) -> None:
         self._health.pop(thread_ref, None)
-        if self._pending_turn_acceptances.get(thread_ref, 0) == 0:
-            self._event_locks.pop(thread_ref, None)
-
-    def _clear_acceptance_runtime_entries(self, thread_ref: ThreadRef) -> None:
-        if self._pending_turn_acceptances.get(thread_ref, 0) > 0:
-            return
-        self._acceptance_ready.pop(thread_ref, None)
-        self._buffered_events.pop(thread_ref, None)
-        self._buffered_event_overflows.discard(thread_ref)
-        if thread_ref not in self._tasks:
-            self._event_locks.pop(thread_ref, None)
+        self._acceptance_gate.worker_finished(thread_ref)
 
     async def _project_thread(
         self,
@@ -705,6 +579,17 @@ class ThreadProjectionRuntime:
                 if not await self._observation_required(thread_ref):
                     return
                 application = self._application(thread_ref.application_instance_id)
+                ordering_gap = self._ordering_recovery_gaps.pop(thread_ref, None)
+                if ordering_gap is not None:
+                    if not await self._recover_after_failure(
+                        thread_ref,
+                        recovery_attempt,
+                        ordering_gap,
+                        application=application,
+                        ready=ready,
+                    ):
+                        return
+                    continue
                 await self._recovery.prepare_reconciliation(
                     recovery_attempt,
                     thread_ref,
@@ -743,44 +628,27 @@ class ThreadProjectionRuntime:
                         return
                 raise RuntimeError("Application Thread subscription ended")
             except asyncio.CancelledError:
-                raise
+                ordering_gap = self._ordering_recovery_gaps.pop(thread_ref, None)
+                if ordering_gap is None or self._stopping:
+                    raise
+                if not await self._recover_after_failure(
+                    thread_ref,
+                    recovery_attempt,
+                    ordering_gap,
+                    application=application,
+                    ready=ready,
+                ):
+                    return
+                continue
             except Exception as error:
-                ready.set()
-                current_health = self._health.get(thread_ref)
-                failure = self._recovery.record_failure(
+                if not await self._recover_after_failure(
+                    thread_ref,
                     recovery_attempt,
                     error,
                     application=application,
-                    current_health=(
-                        _RecoveryHealthSnapshot(
-                            event_overflow_count=current_health.event_overflow_count,
-                            last_subscription_error=current_health.last_subscription_error,
-                            last_recovery_error=current_health.last_recovery_error,
-                            last_gap=current_health.last_gap,
-                            last_event_gap=current_health.last_event_gap,
-                            last_event_overflow=current_health.last_event_overflow,
-                        )
-                        if current_health is not None
-                        else None
-                    ),
-                )
-                self._update_health(
-                    thread_ref,
-                    state=ProjectionWorkerState.RETRYING,
-                    restart_count=failure.restart_count,
-                    event_overflow_count=failure.event_overflow_count,
-                    last_subscription_error=failure.last_subscription_error,
-                    last_recovery_error=failure.last_recovery_error,
-                    last_gap=failure.last_gap,
-                    last_event_gap=failure.last_event_gap,
-                    last_event_overflow=failure.last_event_overflow,
-                    interactive_request_recovery_degraded=(
-                        failure.interactive_request_recovery_degraded
-                    ),
-                )
-                if self._stopping:
+                    ready=ready,
+                ):
                     return
-                await asyncio.sleep(failure.retry_delay_seconds)
             finally:
                 ready.set()
                 if events is not None:
@@ -800,41 +668,92 @@ class ThreadProjectionRuntime:
                         )
         ready.set()
 
+    async def _recover_after_failure(
+        self,
+        thread_ref: ThreadRef,
+        recovery_attempt: _RecoveryAttempt,
+        error: Exception,
+        *,
+        application: AgentApplicationAdapter | None,
+        ready: asyncio.Event,
+    ) -> bool:
+        """Delegate every recovery classification and backoff to the supervisor."""
+
+        ready.set()
+        current_health = self._health.get(thread_ref)
+        failure = self._recovery.record_failure(
+            recovery_attempt,
+            error,
+            application=application,
+            current_health=(
+                _RecoveryHealthSnapshot(
+                    event_overflow_count=current_health.event_overflow_count,
+                    last_subscription_error=current_health.last_subscription_error,
+                    last_recovery_error=current_health.last_recovery_error,
+                    last_gap=current_health.last_gap,
+                    last_event_gap=current_health.last_event_gap,
+                    last_event_overflow=current_health.last_event_overflow,
+                )
+                if current_health is not None
+                else None
+            ),
+        )
+        self._update_health(
+            thread_ref,
+            state=ProjectionWorkerState.RETRYING,
+            restart_count=failure.restart_count,
+            event_overflow_count=failure.event_overflow_count,
+            last_subscription_error=failure.last_subscription_error,
+            last_recovery_error=failure.last_recovery_error,
+            last_gap=failure.last_gap,
+            last_event_gap=failure.last_event_gap,
+            last_event_overflow=failure.last_event_overflow,
+            interactive_request_recovery_degraded=(failure.interactive_request_recovery_degraded),
+        )
+        if self._stopping:
+            return False
+        await asyncio.sleep(failure.retry_delay_seconds)
+        return True
+
     async def _observation_required(self, thread_ref: ThreadRef) -> bool:
         return bool(await self._active_routes(thread_ref))
 
     async def _handle_event(self, event: AgentEvent) -> None:
-        thread_ref = event.thread_ref
-        if thread_ref is None:
-            return
-        lock = self._event_locks.setdefault(thread_ref, asyncio.Lock())
-        async with lock:
-            if self._pending_turn_acceptances.get(thread_ref, 0) > 0:
-                buffered = self._buffered_events.setdefault(thread_ref, [])
-                if len(buffered) >= self._turn_acceptance_event_max_pending:
-                    buffered.clear()
-                    self._buffered_event_overflows.add(thread_ref)
-                    raise TurnAcceptanceBufferOverflow(
-                        max_pending=self._turn_acceptance_event_max_pending
-                    )
-                buffered.append(event)
-                return
-            await self._apply_event(event)
+        await self._acceptance_gate.handle_event(
+            event,
+            event_applier=self,
+        )
 
-    async def _drain_buffered_events(self, thread_ref: ThreadRef) -> None:
-        lock = self._event_locks.setdefault(thread_ref, asyncio.Lock())
-        async with lock:
-            if self._pending_turn_acceptances.get(thread_ref, 0) > 0:
-                return
-            if thread_ref in self._buffered_event_overflows:
-                self._buffered_event_overflows.remove(thread_ref)
-                self._buffered_events.pop(thread_ref, None)
-                raise TurnAcceptanceBufferOverflow(
-                    max_pending=self._turn_acceptance_event_max_pending
-                )
-            events = self._buffered_events.pop(thread_ref, [])
-            for event in events:
-                await self._apply_event(event)
+    async def apply_ordered_event(self, event: AgentEvent) -> None:
+        """Implement the dispatch-owned typed ordered-event applier contract."""
+
+        await self._apply_event(event)
+
+    async def recover_ordering_gap(self, thread_ref: ThreadRef, *, gap_code: str) -> None:
+        """Inject a typed external gap into this Thread's one-worker recovery loop."""
+
+        self._discard_finished_tasks()
+        gap = EventStreamGap(
+            gap_code,
+            f"Gateway input acceptance ordering lost continuity: {gap_code}",
+        )
+        self._ordering_recovery_gaps[thread_ref] = gap
+        task = self._tasks.get(thread_ref)
+        if task is not None and not task.done():
+            task.cancel()
+            return
+        try:
+            await self._ensure_projection(
+                thread_ref,
+                reconcile_existing=True,
+                require_checkpoint=True,
+            )
+        finally:
+            if self._ordering_recovery_gaps.get(thread_ref) is gap:
+                self._ordering_recovery_gaps.pop(thread_ref, None)
+
+    def has_observing_worker(self, thread_ref: ThreadRef) -> bool:
+        return thread_ref in self._tasks
 
     async def _apply_event(self, event: AgentEvent) -> None:
         await self._request_projection.handle_event(
@@ -907,11 +826,6 @@ class ThreadProjectionRuntime:
             route.route_id,
             error,
         )
-
-    async def _wait_for_acceptance(self, thread_ref: ThreadRef) -> None:
-        ready = self._acceptance_ready.get(thread_ref)
-        if ready is not None:
-            await ready.wait()
 
     def _record_gap(
         self,
