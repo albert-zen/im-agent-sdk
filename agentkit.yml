@@ -363,7 +363,6 @@ components:
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/interaction/controllers/**
       - tests/interaction/controllers/**
-      - tests/test_slash_controller.py
     docs:
       - docs/components/interaction/controllers/README.md
       - docs/components/interaction/controllers/controller-contract/design.md
