@@ -548,7 +548,7 @@ def _outbound(
     route: ThreadProjectionRoute,
     projected: ProjectedAgentMessage,
 ) -> OutboundMessage:
-    from imagent.projections import derive_projection_delivery_id
+    from imagent.gateway.projection import derive_projection_delivery_id
 
     return OutboundMessage(
         delivery_id=derive_projection_delivery_id(

@@ -48,10 +48,10 @@ from imagent.gateway.presentation import (
     OutboundPresentationContext,
     ProjectionPresentationOrigin,
 )
+from imagent.gateway.projection import derive_projection_delivery_id
 from imagent.projections import (
     ProjectedAgentMessage,
     deliver_projected_message,
-    derive_projection_delivery_id,
     derive_projection_route_id,
 )
 from imagent.storage import InMemoryIdempotencyRepository
