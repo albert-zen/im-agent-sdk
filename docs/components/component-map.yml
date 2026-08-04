@@ -855,7 +855,7 @@ components:
     id: gateway.delivery.proactive-authorization
     parent: gateway.delivery
     purpose: Define and enforce the explicit capability boundary for proactive delivery destinations.
-    owns: [DeliveryAuthorizer, DeliveryPrincipal, ScopedDeliveryAuthorizer, credential-to-scope authentication]
+    owns: [DeliveryAuthorizer, DeliveryPrincipal, ScopedDeliveryAuthorizer, bounded opaque-credential registry capacity, credential-to-scope authentication]
     does_not_own: [credential persistence, IM admission, Agent sandbox policy, delivery execution]
     inputs: [opaque credential, stable Thread and Conversation scopes]
     outputs: [validated DeliveryPrincipal]
@@ -864,7 +864,7 @@ components:
       current: [imagent.gateway.delivery:DeliveryAuthorizer, imagent.gateway.delivery:DeliveryPrincipal, imagent.gateway.delivery:ScopedDeliveryAuthorizer, imagent.gateway.delivery:validate_delivery_principal, imagent.adapters:DeliveryAuthorizer, imagent.contracts:DeliveryPrincipal, imagent.contracts:validate_delivery_principal]
       target: [imagent.gateway.delivery:DeliveryAuthorizer, imagent.gateway.delivery:DeliveryPrincipal, imagent.gateway.delivery:ScopedDeliveryAuthorizer, imagent.gateway.delivery:validate_delivery_principal]
     dependencies: [interaction.messages, interaction.operations, applications.application-contract]
-    state_recovery: Reference credentials are process-local; consumers own credential storage and revocation recovery.
+    state_recovery: Reference credentials and their finite opaque-credential registry reset per process; consumers own credential storage and revocation recovery.
     current_code: [src/imagent/adapters.py, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/proactive_authorization.py]
     target_code: [src/imagent/gateway/delivery/proactive_authorization.py]
     current_tests: [tests/gateway/delivery/test_proactive_authorization.py, tests/gateway/delivery/test_proactive_delivery.py]

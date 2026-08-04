@@ -21,15 +21,31 @@ they do not retain a second definition or alternate authorization path.
 
 ## Reference registry
 
-The reference registry is explicit and instance-local. `issue` validates the
-principal, accepts either a caller-provided non-empty opaque credential or a
-cryptographically random token when none/empty is supplied, rejects values
-over 4096 characters, and fails duplicate registration. An async lock
-serializes issue, revoke, and authenticate. `revoke` is idempotent and
-`authenticate` returns only the registered immutable principal or a fixed
-authorization error.
+The reference registry is explicit, instance-local, and bounded.
+`ScopedDeliveryAuthorizer(*, max_principals: int = 4096)` accepts only a
+positive non-`bool` integer capacity. The capacity identity is the opaque
+credential string already used as the sole `_principals` key; it is not a
+principal ID, scope, target, content, or time value.
 
-Registry contents are process-local by design. Production consumers own
+`issue` validates the principal, accepts either a caller-provided non-empty
+opaque credential or a cryptographically random token when none/empty is
+supplied, rejects values over 4096 characters, and fails duplicate
+registration. Its duplicate lookup, capacity check, and insertion share the
+same async lock as `revoke` and `authenticate`. Duplicate detection has
+priority at capacity: reissuing a registered credential keeps the fixed
+duplicate error, while a distinct credential at capacity fails before mutation
+with the fixed redacted `ValueError("delivery credential registry capacity is exhausted")`.
+
+Capacity never prevents existing access or exact removal: `authenticate` and
+`revoke` continue to operate for a registered credential while the registry is
+full, and a successful revoke releases only that credential's slot. A task
+cancelled while waiting for the lock has not entered the mutation and leaves
+no partial registration. `revoke` remains idempotent and `authenticate`
+returns only the registered immutable principal or a fixed authorization
+error.
+
+Registry contents and their finite capacity are process-local by design; a
+fresh process starts with an empty registry. Production consumers own
 credential issuance, storage, rotation, revocation recovery, and any external
 identity provider. The SDK does not persist secrets or infer credentials from
 Channel/Application state.
