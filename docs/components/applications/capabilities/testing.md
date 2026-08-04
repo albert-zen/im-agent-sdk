@@ -1,7 +1,7 @@
 # Application capabilities testing
 
 Focused ownership coverage lives in `tests/applications/test_capabilities.py`;
-`tests/test_adapter_contracts.py` retains the cross-adapter conformance
+`tests/conformance/test_adapter_contracts.py` retains the cross-adapter conformance
 evidence.
 
 Tests validate every enum/discriminant, project mode and Thread deletion
@@ -16,7 +16,7 @@ Run:
 
 ```sh
 PYTHONPATH=src uv run python -m unittest tests.applications.test_capabilities -v
-PYTHONPATH=src uv run python -m unittest discover -s tests -p "test_adapter_contracts.py" -v
+PYTHONPATH=src uv run python -m unittest tests.conformance.test_adapter_contracts -v
 uv run python scripts/validate_schemas.py
 ```
 

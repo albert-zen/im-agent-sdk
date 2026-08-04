@@ -137,7 +137,10 @@ class AgentKitMappingTests(unittest.TestCase):
             },
             "src/imagent/applications/appserver_requests.py": {"application-adapters-appserver"},
             "src/imagent/applications/t3.py": {"application-adapters-t3"},
-            "src/imagent/testing/contracts.py": {"testing-and-conformance"},
+            "src/imagent/interaction/testing/__init__.py": {"testing-and-conformance"},
+            "src/imagent/interaction/testing/contracts.py": {"testing-and-conformance"},
+            "src/imagent/interaction/testing/fakes.py": {"testing-and-conformance"},
+            "src/imagent/testing/__init__.py": {"testing-and-conformance"},
         }
         for path, owners in expected.items():
             with self.subTest(path=path):
@@ -189,7 +192,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/test_appserver_transport.py": {"application-adapters-appserver"},
             "tests/applications/presentation/test_live_activity.py": {"applications-common"},
             "tests/test_t3_client.py": {"application-adapters-t3"},
-            "tests/test_adapter_contracts.py": {"testing-and-conformance"},
+            "tests/conformance/test_adapter_contracts.py": {"testing-and-conformance"},
             "tests/test_package_independence.py": {"release"},
         }
         for path, owners in expected.items():

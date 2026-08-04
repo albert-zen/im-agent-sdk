@@ -22,8 +22,8 @@ from imagent.diagnostics import (
 )
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
+from imagent.interaction.testing.fakes import FakeAgentApplicationAdapter
 from imagent.projections import ProjectionWorkerHealth, ProjectionWorkerState
-from imagent.testing.fakes import FakeAgentApplicationAdapter
 
 
 class _UnusedT3Client:

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 import unittest
 from datetime import UTC, datetime
 
-from test_gateway_vertical_slice import NativeT3Client, NativeZenClient
-
+import imagent.interaction.testing as testing_owner
+import imagent.testing as testing_facade
 from imagent.adapters import ChannelStartupConfigurationValidator
 from imagent.applications import (
     CodexApplicationAdapter,
@@ -23,6 +25,47 @@ from imagent.testing import (
     verify_application_adapter,
     verify_channel_adapter,
 )
+from tests.test_gateway_vertical_slice import NativeT3Client, NativeZenClient
+
+
+class TestingPackageBoundaryTests(unittest.TestCase):
+    def test_owner_and_compatibility_facade_export_exact_objects(self) -> None:
+        expected = {name: getattr(testing_owner, name) for name in testing_owner.__all__}
+        self.assertEqual(tuple(testing_facade.__all__), tuple(testing_owner.__all__))
+        for name, owner_object in expected.items():
+            with self.subTest(name=name):
+                self.assertIs(getattr(testing_facade, name), owner_object)
+
+    def test_import_orders_do_not_recreate_historical_modules(self) -> None:
+        import_orders = (
+            "from imagent.interaction.testing import ContractCheck; "
+            "from imagent.testing import ContractCheck as FacadeContractCheck; "
+            "assert ContractCheck is FacadeContractCheck;",
+            "from imagent.testing import ContractCheck; "
+            "from imagent.interaction.testing import ContractCheck as OwnerContractCheck; "
+            "assert ContractCheck is OwnerContractCheck;",
+        )
+        for import_order in import_orders:
+            with self.subTest(import_order=import_order):
+                completed = subprocess.run(
+                    [
+                        sys.executable,
+                        "-c",
+                        (
+                            "import sys; "
+                            f"{import_order} "
+                            "assert 'imagent.testing.contracts' not in sys.modules; "
+                            "assert 'imagent.testing.fakes' not in sys.modules; "
+                            "from importlib.util import find_spec; "
+                            "assert find_spec('imagent.testing.contracts') is None; "
+                            "assert find_spec('imagent.testing.fakes') is None"
+                        ),
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
 
 
 class ChannelAdapterContractKitTests(unittest.IsolatedAsyncioTestCase):

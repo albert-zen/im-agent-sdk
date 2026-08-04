@@ -1,6 +1,6 @@
 # Application contract testing
 
-The current test owner is `tests/test_adapter_contracts.py`; the target focused
+The current test owner is `tests/conformance/test_adapter_contracts.py`; the target focused
 owner is `tests/applications/test_contract.py`. Mechanical migration must keep
 the language-neutral schemas and exact public facade identity aligned.
 
@@ -21,7 +21,7 @@ adds Gateway/product-command authority.
 Run the focused suite with:
 
 ```sh
-PYTHONPATH=src uv run python -m unittest tests.test_adapter_contracts -v
+PYTHONPATH=src uv run python -m unittest tests.conformance.test_adapter_contracts -v
 ```
 
 Changes to this public Port also require every affected native adapter,

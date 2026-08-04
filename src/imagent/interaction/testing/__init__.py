@@ -1,15 +1,13 @@
-"""Finite compatibility facade for the Interaction conformance kit."""
+"""Bounded adapter contract checks and representative conformance fakes."""
 
-from imagent.interaction.testing import (
+from .contracts import (
     ContractCheck,
     ContractReport,
-    FakeAgentApplicationAdapter,
-    FakeChannelAdapter,
-    make_capabilities,
     sample_conversation,
     verify_application_adapter,
     verify_channel_adapter,
 )
+from .fakes import FakeAgentApplicationAdapter, FakeChannelAdapter, make_capabilities
 
 __all__ = [
     "ContractCheck",

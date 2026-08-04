@@ -28,6 +28,12 @@ Controller contracts, registry, common commands, and request presentation now
 reside under Interaction. The historical `imagent.controllers` package is a
 finite exact-object public facade, not a second implementation.
 
+The adapter conformance implementation is physically mirrored at
+`src/imagent/interaction/testing/**`; its repository authority remains the
+[engineering testing-and-conformance leaf](../../engineering/testing-and-conformance/design.md).
+The mirror does not add a runtime dependency or change Interaction contract
+semantics.
+
 See the exhaustive [component map](../component-map.yml) for current and target
 code paths, tests, exports, dependencies, accepted decisions, and declared
 split candidates. The map, rather than current filenames, defines ownership

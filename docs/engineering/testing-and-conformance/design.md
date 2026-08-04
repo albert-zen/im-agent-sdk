@@ -22,11 +22,24 @@ This leaf owns:
 It does not own production runtime behavior, native clients, product test
 policy, deployment fixtures, or an adapter's native resource authority.
 
+The implementation mirror is `src/imagent/interaction/testing/`: `contracts.py`
+owns the reusable checks and `fakes.py` owns the existing bounded representative
+adapters. This physical location aligns the kit with the Interaction contract
+package without moving conformance authority into the runtime layer. The
+historical `imagent.testing` package is retained only as a finite exact public
+facade that re-exports those objects; it contains no implementation modules or
+compatibility behavior beyond those named exports.
+
 ## Dependencies
 
 The kit depends on public Contracts, Ports, and event fan-out primitives.
 Product code never depends on the test kit. Fakes model contract behavior only
 and must not exceed the semantics of real adapters.
+
+Consumers should import the owner package as `imagent.interaction.testing`.
+`imagent.testing` remains available for existing callers, but
+`imagent.testing.contracts` and `imagent.testing.fakes` are not second module
+locations and must not be recreated as shims.
 
 ## Conformance boundary
 

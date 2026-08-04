@@ -576,8 +576,10 @@ components:
       - docs/decisions/0011-durable-inbound-admission-before-media.md
       - docs/decisions/0013-bounded-application-event-admission.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
-      - src/imagent/testing/**
-      - tests/test_adapter_contracts.py
+      - src/imagent/interaction/testing/**
+      - src/imagent/testing/__init__.py
+      - tests/conformance/__init__.py
+      - tests/conformance/test_adapter_contracts.py
     docs:
       - docs/engineering/testing-and-conformance/design.md
       - docs/engineering/testing-and-conformance/testing.md

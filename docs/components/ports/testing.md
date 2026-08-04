@@ -6,7 +6,7 @@ adapter conformance suites.
 Run:
 
 ```sh
-PYTHONPATH=src:tests python -m unittest tests.test_adapter_contracts -v
+PYTHONPATH=src:tests python -m unittest tests.conformance.test_adapter_contracts -v
 pyright src tests
 ```
 
