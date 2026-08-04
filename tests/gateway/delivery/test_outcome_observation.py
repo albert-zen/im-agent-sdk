@@ -39,6 +39,7 @@ from imagent.gateway.delivery import outcome_observation as outcome_observation_
 from imagent.gateway.delivery.outcome_observation import (
     DeliveryOutcomeObserverRuntime,
 )
+from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryDeliverySubmissionRepository,
@@ -54,7 +55,6 @@ from imagent.projections import (
     deliver_projected_message,
     derive_projection_route_id,
 )
-from imagent.storage import InMemoryIdempotencyRepository
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

@@ -24,6 +24,7 @@ from imagent.contracts import (
 )
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway import presentation as presentation_owner
+from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,
@@ -44,7 +45,6 @@ from imagent.projections import (
     deliver_projected_message,
     derive_projection_route_id,
 )
-from imagent.storage import InMemoryIdempotencyRepository
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

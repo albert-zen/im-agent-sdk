@@ -21,10 +21,11 @@ Run:
 
 ```sh
 PYTHONPATH=src python -m unittest \
-  tests.test_storage \
+  tests.gateway.persistence.test_idempotency \
   tests.gateway.test_admission -v
 ```
 
-The later mechanical move adds
-`tests/gateway/persistence/test_idempotency.py` without changing the common
-repository Port or SQLite behavior.
+Focused process-local claim evidence lives in
+`tests/gateway/persistence/test_idempotency.py`. SQLite restart/reclaim
+evidence remains with its transaction owner in `tests/test_storage.py`; the
+move does not change the common repository Port or SQLite behavior.

@@ -53,6 +53,7 @@ from imagent.controllers import MarkdownRequestPresenter, SlashController
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.admission import inbound_idempotency_identity
 from imagent.gateway.delivery import DeliveryCoordinator, DeliveryCoordinatorConfig
+from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,
@@ -62,7 +63,7 @@ from imagent.projections import (
     derive_projection_route_id,
 )
 from imagent.request_correlations import InMemoryRequestCorrelationRepository
-from imagent.storage import InMemoryIdempotencyRepository, SQLiteGatewayState
+from imagent.storage import SQLiteGatewayState
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

@@ -45,6 +45,7 @@ from imagent.contracts import (
 from imagent.controllers import ControllerActions
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import DeliveryCoordinator, DeliveryCoordinatorConfig
+from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,
@@ -59,7 +60,7 @@ from imagent.projections import (
     derive_turn_reply_correlation_id,
     immutable_projection_metadata,
 )
-from imagent.storage import InMemoryIdempotencyRepository, SQLiteGatewayState
+from imagent.storage import SQLiteGatewayState
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 
