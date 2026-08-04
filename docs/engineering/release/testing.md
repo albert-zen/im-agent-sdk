@@ -59,6 +59,10 @@ The same base fingerprint proves that the permanent finite
 `imagent.contracts:ConversationBinding` delegate is the exact Gateway
 persistence owner value used by the Controller `get_binding` return hint, not
 a compatibility copy.
+Every one of the six cases also resolves the installed `imagent-send` console
+entry point to `imagent.interaction.client_tools.send:main`, imports that
+canonical owner without loading Gateway or Applications implementations, and
+proves `imagent.cli` is physically absent.
 
 ## Required repository evidence
 

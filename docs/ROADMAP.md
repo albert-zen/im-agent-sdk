@@ -29,8 +29,9 @@ approval remain consumer/Application policy.
 
 The SDK owner-side implementation now provides scoped Gateway delivery,
 immutable route snapshots, SQLite/in-memory outcomes, per-artifact receipts,
-bounded inline staging, and a loopback-only reference CLI. Agent tools do not
-receive bot secrets, persistence access, or resolved native Conversation IDs.
+bounded inline staging, and an Interaction-owned loopback-only reference CLI.
+Agent tools do not receive bot secrets, persistence access, or resolved native
+Conversation IDs.
 
 Remaining downstream evidence is to mount the handler in a real consumer and
 exercise the one-command path against its configured Channels. Artifact upload

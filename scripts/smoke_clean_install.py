@@ -161,6 +161,42 @@ APPLICATION_IMPORT_ISOLATION_CHECK = (
     f"subprocess.run([sys.executable, '-c', {_APPLICATION_IMPORT_ISOLATION_CHILD!r}], "
     "check=True); "
 )
+CLIENT_TOOLS_CHECK = r"""
+import importlib
+import importlib.metadata
+import importlib.util
+import sys
+
+assert importlib.util.find_spec("imagent.cli") is None
+try:
+    importlib.import_module("imagent.cli")
+except ModuleNotFoundError:
+    pass
+else:
+    raise AssertionError("historical imagent.cli package is importable")
+
+entries = [
+    entry
+    for entry in importlib.metadata.entry_points(group="console_scripts")
+    if entry.name == "imagent-send"
+]
+assert len(entries) == 1
+entry = entries[0]
+assert entry.value == "imagent.interaction.client_tools.send:main"
+main = entry.load()
+from imagent.interaction.client_tools.send import main as owner_main
+
+assert main is owner_main
+assert main.__module__ == "imagent.interaction.client_tools.send"
+assert not any(
+    name == "imagent.gateway" or name.startswith("imagent.gateway.")
+    for name in sys.modules
+)
+assert not any(
+    name == "imagent.applications" or name.startswith("imagent.applications.")
+    for name in sys.modules
+)
+"""
 APPLICATION_FACADE_CHECK = f"""
 import imagent.adapters as adapters_facade
 import imagent.contracts as contracts_facade
@@ -726,7 +762,7 @@ CASES = {
 
 def _case_source(code: str) -> str:
     """Build one executable, multiline source string for a clean-wheel case."""
-    return "\n".join((DIAGNOSTICS_FACADE_CHECK, CHANNEL_FACADE_CHECK, code))
+    return "\n".join((CLIENT_TOOLS_CHECK, DIAGNOSTICS_FACADE_CHECK, CHANNEL_FACADE_CHECK, code))
 
 
 def main() -> int:

@@ -20,6 +20,7 @@ interaction
 ├── operations
 ├── media
 ├── diagnostics
+├── client-tools
 ├── controllers
 │   ├── controller-contract
 │   ├── command-registry
@@ -51,7 +52,8 @@ See the [Interaction navigation](interaction/README.md) and the authoritative
 leaf docs for [messages](interaction/messages/design.md),
 [operations](interaction/operations/design.md), and
 [media](interaction/media/design.md), and
-[dependency-neutral diagnostics](interaction/diagnostics/design.md), plus the
+[dependency-neutral diagnostics](interaction/diagnostics/design.md), the
+[stateless client-tools leaf](interaction/client-tools/design.md), plus the
 [Controller subtree](interaction/controllers/README.md) and
 [Channel subtree](interaction/channels/README.md).
 

@@ -45,8 +45,8 @@ components; they are not moved merely because they consume typed media.
 decoded-byte bounds, declared-size equality, invalid base64, private-directory
 confinement, SDK-controlled filenames, stable digest metadata, and source
 order. Gateway ingress tests continue to own authorization-before-decode,
-synchronous send/cancellation join, cleanup, route/result mapping, and CLI
-loopback policy.
+synchronous send/cancellation join, cleanup, and route/result mapping. The
+client-tools suite owns local artifact encoding and loopback policy.
 
 Native Channel and Application suites remain responsible for their provider
 media I/O and materialization behavior. During the mechanical move, shared

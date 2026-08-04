@@ -29,6 +29,8 @@ records only bridge identity/evidence needed for safe convergence.
   `proactive_runtime.py` remains the runtime owner. Passive submission state
   stays in `gateway.persistence.state_contracts` without a reverse dependency.
 
-JSON/CLI proactive ingress remains mapped to its current authoritative
-documents until its focused move. Delivery owns no native encoding, durable
-job, content storage, route policy, or checkpoint authority.
+JSON proactive ingress remains Gateway-owned. The optional `imagent-send`
+client is owned by the Interaction [client-tools leaf](../../interaction/client-tools/design.md).
+Delivery owns no local client argument/file encoding or response presentation,
+native encoding, durable job, content storage, route policy, or checkpoint
+authority.

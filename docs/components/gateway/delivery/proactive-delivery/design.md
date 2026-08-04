@@ -68,10 +68,11 @@ proactive orchestration depends only on the repository contract.
 
 ## Ingress boundary
 
-The transport-neutral JSON handler now lives with its Gateway proactive-
-delivery owner in `gateway.delivery.proactive_ingress`; the reference CLI
-remains a separate client for a later focused move. The handler imports the
-bounded encoded-artifact staging mechanics from `interaction.media`, but
+The transport-neutral JSON handler lives with its Gateway proactive-delivery
+owner in `gateway.delivery.proactive_ingress`. The separate reference client
+lives in the Interaction [client-tools leaf](../../../interaction/client-tools/design.md).
+The handler imports the bounded encoded-artifact staging mechanics from
+`interaction.media`, but
 continues to own JSON parsing, authorization-before-decode, the synchronous
 attempt lifetime, cancellation join, cleanup, delivery, and result mapping.
 Caller-supplied server paths remain unsupported. The staging helper cannot
@@ -122,7 +123,7 @@ This ownership slice moves only the typed proactive vocabulary and
 `DeliverySubmissionOrigin`, `DeliverySubmissionState`, submission records and
 reservations, `_canonical_metadata`, `_validate_conversation_ref`, the four
 submission identity helpers, authorization, JSON ingress, planning,
-coordination, O2, CLI, and persistence in their accepted owners. The
+coordination, O2, client tools, and persistence in their accepted owners. The
 `gateway.persistence.state_contracts` dependency is one-way: proactive delivery
 may consume passive state/helpers, but the state leaf never imports delivery
 orchestration.

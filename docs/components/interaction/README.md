@@ -15,6 +15,9 @@ does not own Gateway orchestration or native Agent truth.
   boundaries; see [testing](media/testing.md).
 - [Diagnostics](diagnostics/design.md) — dependency-neutral immutable
   connection/queue facts; see [testing](diagnostics/testing.md).
+- [Client tools](client-tools/design.md) — stateless local argument,
+  credential, loopback endpoint, artifact-encoding, and response-presentation
+  helpers; see [testing](client-tools/testing.md).
 - [Controllers](controllers/README.md) — optional typed Controller contract,
   explicit bounded command composition, common commands, and request
   presentation.
@@ -31,6 +34,11 @@ reside under Interaction. `imagent.interaction.controllers` is their sole
 formal public facade. The historical `imagent.controllers` package is absent
 and intentionally unimportable; no compatibility implementation or alias
 remains.
+
+The optional `imagent-send` command resides under
+`imagent.interaction.client_tools`. It is a client of consumer-hosted Gateway
+ingress, not Gateway orchestration or an Application runtime. The historical
+`imagent.cli` package is absent without a compatibility shim.
 
 The adapter conformance implementation is physically mirrored at
 `src/imagent/interaction/testing/**`; its repository authority remains the

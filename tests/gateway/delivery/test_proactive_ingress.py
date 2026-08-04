@@ -11,7 +11,6 @@ from unittest.mock import patch
 
 from imagent.applications.capabilities import ProjectMode
 from imagent.applications.contract import ThreadRef
-from imagent.cli.send import main as send_main
 from imagent.contracts import DeliveryPrincipal
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import (
@@ -710,67 +709,3 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
         assert isinstance(destinations, list)
         self.assertTrue(destinations[0]["replayed"])
         self.assertEqual(len(self.channel.sent), 1)
-
-
-class DeliveryCliTests(unittest.TestCase):
-    def test_reference_cli_posts_inline_artifact_to_loopback(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            credential_path = root / "credential"
-            credential_path.write_text("scoped-token\n", encoding="utf-8")
-            artifact_path = root / "result.txt"
-            artifact_path.write_text("result", encoding="utf-8")
-
-            class Response:
-                status_code = 200
-
-                @staticmethod
-                def json():
-                    return {"deliveryId": "delivery-cli", "state": "accepted"}
-
-            with patch("imagent.cli.send.httpx.Client") as client_factory:
-                client = client_factory.return_value.__enter__.return_value
-                client.post.return_value = Response()
-                exit_code = send_main(
-                    [
-                        "--endpoint",
-                        "http://127.0.0.1:8080/deliver",
-                        "--credential-file",
-                        str(credential_path),
-                        "--delivery-id",
-                        "delivery-cli",
-                        "--application",
-                        "application",
-                        "--thread",
-                        "thread-1",
-                        "--text",
-                        "done",
-                        "--artifact",
-                        str(artifact_path),
-                    ]
-                )
-
-            self.assertEqual(exit_code, 0)
-            client_factory.assert_called_once_with(trust_env=False)
-            request = client.post.call_args.kwargs
-            self.assertEqual(request["headers"]["Authorization"], "Bearer scoped-token")
-            self.assertEqual(request["json"]["target"]["kind"], "threadRoutes")
-            self.assertEqual(request["json"]["content"][1]["filename"], "result.txt")
-
-    def test_reference_cli_rejects_remote_endpoint(self) -> None:
-        exit_code = send_main(
-            [
-                "--endpoint",
-                "https://example.com/deliver",
-                "--credential-stdin",
-                "--delivery-id",
-                "delivery-cli",
-                "--application",
-                "application",
-                "--thread",
-                "thread-1",
-                "--text",
-                "done",
-            ]
-        )
-        self.assertEqual(exit_code, 2)

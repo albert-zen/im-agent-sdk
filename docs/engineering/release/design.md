@@ -38,6 +38,11 @@ silently import them or require a consumer package. The wheel contains the
 typed SDK package and its marker; it does not contain transcripts, credentials,
 bridge state, delivery jobs, or consumer configuration.
 
+The `imagent-send` console metadata resolves directly to the Interaction-owned
+`imagent.interaction.client_tools.send:main` implementation. Packaging does
+not own that behavior and must not preserve or synthesize the historical
+`imagent.cli` package.
+
 Release checks consume the three runtime layers' public exports and the
 language-neutral schemas. They do not redefine those contracts. Package
 metadata, source provenance, and any compatibility claim remain explicit and

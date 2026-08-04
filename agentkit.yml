@@ -109,6 +109,32 @@ components:
       - artifact
       - local-path
 
+  interaction-client-tools:
+    description: Stateless local reference clients for consumer-hosted SDK ingress surfaces.
+    code:
+      - docs/VISION.md
+      - docs/ARCHITECTURE.md
+      - docs/decisions/README.md
+      - docs/decisions/0002-design-authority-and-control-boundaries.md
+      - docs/decisions/0003-attachment-sources-and-trust.md
+      - docs/decisions/0006-core-admission-and-policy-ownership.md
+      - docs/decisions/0009-proactive-delivery-routing.md
+      - src/imagent/interaction/client_tools/**
+      - tests/interaction/client_tools/**
+    docs:
+      - docs/components/interaction/README.md
+      - docs/components/interaction/client-tools/design.md
+      - docs/components/interaction/client-tools/testing.md
+    required_docs:
+      - design
+      - testing
+    keywords:
+      - client
+      - cli
+      - loopback
+      - credential
+      - artifact
+
   delivery-planning-and-coordination:
     description: Pure capability-driven delivery planning plus bounded in-process destination coordination.
     code:
@@ -186,7 +212,6 @@ components:
       - src/imagent/gateway/routing/bindings.py
       - src/imagent/gateway/routing/operations.py
       - src/imagent/gateway/routing/projection_routes.py
-      - src/imagent/cli/**
       - examples/reference_consumer/gateway.py
       - examples/reference_consumer/main.py
       - tests/gateway/test_lifecycle.py
