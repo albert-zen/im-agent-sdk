@@ -49,7 +49,11 @@ documented Gateway persistence/delivery export. The historical `imagent.adapters
 likewise retains only its unrelated Application/Gateway,
 proactive-authorization, and passive-state names. The focused Interaction
 Channel facade and `imagent.channels` adapter facade re-export exact owner
-objects and never hide a duplicate or lazy compatibility implementation.
+objects and never hide a duplicate or lazy compatibility implementation. The
+Application event surface follows the same rule: `imagent.events`, the event
+aliases in `imagent.contracts`, and the package-root `events` module are
+formal explicit facades over `imagent.applications.events`, not implementation
+owners.
 
 ## Version and publication boundary
 

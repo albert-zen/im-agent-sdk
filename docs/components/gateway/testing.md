@@ -147,7 +147,8 @@ Run:
 ```sh
 uv run python -m unittest discover -s tests -p "test_gateway*.py" -v
 uv run python -m unittest discover -s tests -p "test_projection*.py" -v
-uv run python -m unittest discover -s tests -p "test_event_fanout.py" -v
+uv run python -m unittest tests.gateway.projection.test_observation -v
+uv run python -m unittest tests.gateway.test_lifecycle -v
 uv run python -m unittest tests.gateway.delivery.test_proactive_delivery tests.gateway.delivery.test_proactive_ingress -v
 ```
 

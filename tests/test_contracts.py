@@ -11,11 +11,10 @@ from jsonschema import ValidationError
 from jsonschema.validators import validator_for
 from referencing import Registry, Resource
 
+from imagent.applications.events import AgentEvent, AgentEventType, validate_agent_event
 from imagent.contracts import (
     MAX_INTERACTIVE_REQUEST_CHOICES,
     MAX_INTERACTIVE_REQUEST_QUESTIONS,
-    AgentEvent,
-    AgentEventType,
     ApplicationCapabilities,
     ApplicationOperationFailed,
     ApplicationOperationType,
@@ -52,7 +51,6 @@ from imagent.contracts import (
     UserInputResponse,
     UserInputResponseShape,
     derive_client_message_id,
-    validate_agent_event,
     validate_application_operation,
     validate_application_operation_result,
     validate_gateway_operation,

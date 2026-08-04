@@ -81,9 +81,10 @@ Protect these historical and known failure modes:
 - restart/reconnect manufacturing pending requests without a native snapshot.
 
 These cases are covered by `test_projection_hardening.py`,
-`test_projection_routing.py`, `test_event_fanout.py`,
-`gateway/projection/test_recovery.py`, `gateway/projection/test_checkpoints.py`,
-and `test_storage.py`. Gateway vertical slices additionally prove that Zen App
+`test_projection_routing.py`, `gateway/projection/test_observation.py`,
+`gateway/test_lifecycle.py`, `gateway/projection/test_recovery.py`,
+`gateway/projection/test_checkpoints.py`, and `test_storage.py`. Gateway
+vertical slices additionally prove that Zen App
 Server and T3 `AcceptedTurn` identities reach a reply-capable QQ projection;
 the flat/no-reply fake Channel profile proves that reply context remains
 optional and destination-safe. Native rendering details stay adapter tests.
@@ -101,7 +102,8 @@ Run:
 
 ```sh
 uv run python -m unittest discover -s tests -p "test_projection*.py" -v
-uv run python -m unittest discover -s tests -p "test_event_fanout.py" -v
+uv run python -m unittest tests.gateway.projection.test_observation -v
+uv run python -m unittest tests.gateway.test_lifecycle -v
 uv run python -m unittest tests.gateway.projection.test_recovery -v
 uv run python -m unittest tests.gateway.projection.test_checkpoints -v
 ```

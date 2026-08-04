@@ -21,6 +21,6 @@ Observation conformance must prove:
 - a buffered event accepted before Turn-correlation persistence stays bounded;
   overflow preserves terminal inbound state and enters recovery.
 
-Current evidence: `tests/test_event_fanout.py`,
+Current evidence: `tests/gateway/projection/test_observation.py`,
 `tests/test_projection_hardening.py`, and `tests/test_projection_routing.py`.
 The target mirrored suite is `tests/gateway/projection/test_observation.py`.

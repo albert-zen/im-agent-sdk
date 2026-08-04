@@ -30,10 +30,16 @@ AgentMessage, history, Thread, request, or Gateway truth. Stable event/item
 identities and any sequence/cursor fields describe only native guarantees; text
 and time do not establish identity.
 
-The implementation is `imagent.applications.events`, in
-`src/imagent/applications/events.py`. `imagent.contracts` and `imagent.events`
-remain exact public facades for the v1 values; neither contains a second event
-implementation.
+The sole implementation owner is `imagent.applications.events`, in
+`src/imagent/applications/events.py`. The stable formal facades are explicit
+re-exports only: `imagent.events` exposes the complete event surface,
+`imagent.contracts` exposes its documented `AgentEvent`, `AgentEventType`, and
+`validate_agent_event` aliases, and the package root exposes the `events`
+facade module. Each facade imports the exact owner objects eagerly and keeps
+the same signatures; no facade defines a duplicate, uses lazy `__getattr__`,
+or remains a current/target implementation owner. Ordinary internal imports
+use `imagent.applications.events`; facade imports are reserved for identity
+and clean-install evidence.
 
 ## State, recovery, and structure
 
@@ -45,11 +51,13 @@ subscribing then reconciling authoritative history/catch-up. The SDK never
 persists event bodies to bridge the gap.
 
 The implementation is `schemas/v1/events.schema.json` plus
-`src/imagent/applications/events.py`. Focused owner evidence is
-`tests/applications/test_events.py`; adapter and Gateway integration coverage
-remains alongside those consumers. The schema and event semantics are
-unchanged by this mechanical move, and the event module contains no duplicate
-AgentMessage or resource model.
+`src/imagent/applications/events.py`. Focused owner and fan-out evidence is
+`tests/applications/test_events.py`; native adapter fan-out evidence is kept
+with the Codex adapter, and Gateway observation/lifecycle/recovery evidence is
+kept with its Gateway owners. The former root fan-out file is not an internal
+compatibility path. The schema and event semantics are unchanged by this
+mechanical consolidation, and the event module contains no duplicate
+`AgentMessage` or resource model.
 
 ## Authority
 
