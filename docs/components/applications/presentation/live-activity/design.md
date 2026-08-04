@@ -25,8 +25,8 @@ protocol envelope. A presenter returns `ApplicationTextPresentation` or
 Thread, Turn, role, metadata, attachments, destination, or recoverability.
 
 The leaf depends on Interaction messages and Application contract/event values.
-Current exports are from `imagent.applications`; target exports are from
-`imagent.applications.presentation`, implemented at
+Current exports are from `imagent.applications`; this slice makes the exact
+`imagent.applications.presentation` package facade authoritative, backed by
 `src/imagent/applications/presentation/live_activity.py`.
 
 ## State and recovery
@@ -46,13 +46,15 @@ native adapter behavior exactly.
 
 ## Current and target structure
 
-Current implementation is `src/imagent/applications/presentation.py` with
-diagnostic fact types in `src/imagent/diagnostics.py`. Current tests are
-`tests/test_application_presentation.py`, `tests/test_appserver_mapping.py`,
-and `tests/test_t3_client.py`; target tests are
-`tests/applications/presentation/test_live_activity.py`. The explicit gap is
-that Codex/T3 fact shapes share a runtime while remaining irreducibly separate
-typed positions.
+Before this slice, implementation was `src/imagent/applications/presentation.py`
+with diagnostic fact types in `src/imagent/diagnostics.py`. The moved owner is
+`src/imagent/applications/presentation/live_activity.py` and its finite facade
+is `src/imagent/applications/presentation/__init__.py`; diagnostic fact
+ownership remains in `src/imagent/diagnostics.py`. Focused evidence is
+`tests/applications/presentation/test_live_activity.py`; adapter integration
+tests remain in their historical suites. The explicit gap is that Codex/T3
+fact shapes share a runtime while remaining irreducibly separate typed
+positions, and artifact materialization remains a later leaf.
 
 ## Authority
 

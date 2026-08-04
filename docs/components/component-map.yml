@@ -1068,19 +1068,19 @@ components:
     does_not_own: [destination policy, attachments, raw payload/client, generic Application hook]
     inputs: [CodexLiveActivityFacts or T3ActivityFacts]
     outputs: [ApplicationTextPresentation or omission]
-    public_contracts: [CodexLiveActivityPresenter, T3ActivityPresenter, ApplicationTextPresentation, ApplicationPresentationCapacityError, ApplicationPresentationCancelled, ApplicationPresentationError, ApplicationPresentationFailed, ApplicationPresentationLimits, ApplicationPresentationTimeout, CodexLiveActivityFacts, CodexLiveActivityKind, CodexLiveActivityMethod, CodexPlanStep, T3ActivityFacts]
+    public_contracts: [CodexLiveActivityPresenter, T3ActivityPresenter, ApplicationTextPresentation, ApplicationPresentationCapacityError, ApplicationPresentationCancelled, ApplicationPresentationError, ApplicationPresentationFailed, ApplicationPresentationLimits, ApplicationPresentationRuntime, ApplicationPresentationTimeout, CodexLiveActivityFacts, CodexLiveActivityKind, CodexLiveActivityMethod, CodexPlanStep, T3ActivityFacts]
     public_exports:
-      current: [imagent.applications:CodexLiveActivityPresenter, imagent.applications:T3ActivityPresenter, imagent.applications:ApplicationTextPresentation, imagent.applications:ApplicationPresentationCapacityError, imagent.applications:ApplicationPresentationCancelled, imagent.applications:ApplicationPresentationError, imagent.applications:ApplicationPresentationFailed, imagent.applications:ApplicationPresentationLimits, imagent.applications:ApplicationPresentationTimeout, imagent.applications:CodexLiveActivityFacts, imagent.applications:CodexLiveActivityKind, imagent.applications:CodexLiveActivityMethod, imagent.applications:CodexPlanStep, imagent.applications:T3ActivityFacts]
-      target: [imagent.applications.presentation:CodexLiveActivityPresenter, imagent.applications.presentation:T3ActivityPresenter, imagent.applications.presentation:ApplicationTextPresentation, imagent.applications.presentation:ApplicationPresentationCapacityError, imagent.applications.presentation:ApplicationPresentationCancelled, imagent.applications.presentation:ApplicationPresentationError, imagent.applications.presentation:ApplicationPresentationFailed, imagent.applications.presentation:ApplicationPresentationLimits, imagent.applications.presentation:ApplicationPresentationTimeout, imagent.applications.presentation:CodexLiveActivityFacts, imagent.applications.presentation:CodexLiveActivityKind, imagent.applications.presentation:CodexLiveActivityMethod, imagent.applications.presentation:CodexPlanStep, imagent.applications.presentation:T3ActivityFacts]
+      current: [imagent.applications:CodexLiveActivityPresenter, imagent.applications:T3ActivityPresenter, imagent.applications:ApplicationTextPresentation, imagent.applications:ApplicationPresentationCapacityError, imagent.applications:ApplicationPresentationCancelled, imagent.applications:ApplicationPresentationError, imagent.applications:ApplicationPresentationFailed, imagent.applications:ApplicationPresentationLimits, imagent.applications:ApplicationPresentationTimeout, imagent.applications:CodexLiveActivityFacts, imagent.applications:CodexLiveActivityKind, imagent.applications:CodexLiveActivityMethod, imagent.applications:CodexPlanStep, imagent.applications:T3ActivityFacts, imagent.applications.presentation:ApplicationPresentationCancelled, imagent.applications.presentation:ApplicationPresentationCapacityError, imagent.applications.presentation:ApplicationPresentationError, imagent.applications.presentation:ApplicationPresentationFailed, imagent.applications.presentation:ApplicationPresentationLimits, imagent.applications.presentation:ApplicationPresentationRuntime, imagent.applications.presentation:ApplicationPresentationTimeout, imagent.applications.presentation:ApplicationTextPresentation, imagent.applications.presentation:CodexLiveActivityFacts, imagent.applications.presentation:CodexLiveActivityKind, imagent.applications.presentation:CodexLiveActivityMethod, imagent.applications.presentation:CodexLiveActivityPresenter, imagent.applications.presentation:CodexPlanStep, imagent.applications.presentation:T3ActivityFacts, imagent.applications.presentation:T3ActivityPresenter]
+      target: [imagent.applications.presentation:CodexLiveActivityPresenter, imagent.applications.presentation:T3ActivityPresenter, imagent.applications.presentation:ApplicationTextPresentation, imagent.applications.presentation:ApplicationPresentationCapacityError, imagent.applications.presentation:ApplicationPresentationCancelled, imagent.applications.presentation:ApplicationPresentationError, imagent.applications.presentation:ApplicationPresentationFailed, imagent.applications.presentation:ApplicationPresentationLimits, imagent.applications.presentation:ApplicationPresentationRuntime, imagent.applications.presentation:ApplicationPresentationTimeout, imagent.applications.presentation:CodexLiveActivityFacts, imagent.applications.presentation:CodexLiveActivityKind, imagent.applications.presentation:CodexLiveActivityMethod, imagent.applications.presentation:CodexPlanStep, imagent.applications.presentation:T3ActivityFacts]
     dependencies: [interaction.messages, applications.application-contract, applications.events]
     state_recovery: Codex output is live-only; T3 output is recoverable only because history reproduces the same stable association.
-    current_code: [src/imagent/applications/presentation.py, src/imagent/diagnostics.py]
+    current_code: [src/imagent/applications/presentation/__init__.py, src/imagent/applications/presentation/live_activity.py, src/imagent/diagnostics.py]
     target_code: [src/imagent/applications/presentation/live_activity.py]
-    current_tests: [tests/test_application_presentation.py, tests/test_appserver_mapping.py, tests/test_t3_client.py]
+    current_tests: [tests/applications/presentation/test_live_activity.py]
     target_tests: [tests/applications/presentation/test_live_activity.py]
     authoritative_docs: [docs/components/applications/presentation/live-activity/design.md, docs/components/applications/presentation/live-activity/testing.md]
     adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [Codex and T3 fact shapes share runtime but must remain distinct typed positions]
+    gaps: [Codex and T3 fact shapes share runtime but must remain distinct typed positions, artifact materialization remains at its historical Applications path until its focused move]
 
   applications.presentation.artifact-materialization:
     id: applications.presentation.artifact-materialization
@@ -1230,7 +1230,7 @@ components:
     state_recovery: Native history is authoritative; steer candidate read never authorizes fallback start; ambiguous dispatch is unknown.
     current_code: [src/imagent/applications/appserver.py]
     target_code: [src/imagent/applications/adapters/codex.py]
-    current_tests: [tests/test_appserver_client.py, tests/test_appserver_input.py, tests/test_appserver_mapping.py, tests/test_appserver_requests.py, tests/test_appserver_artifacts.py, tests/test_application_presentation.py]
+    current_tests: [tests/test_appserver_client.py, tests/test_appserver_input.py, tests/test_appserver_mapping.py, tests/test_appserver_requests.py, tests/test_appserver_artifacts.py, tests/applications/presentation/test_live_activity.py]
     target_tests: [tests/applications/adapters/test_codex.py]
     authoritative_docs: [docs/components/application-adapters/adapters/codex.md, docs/components/application-adapters/design.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -1274,7 +1274,7 @@ components:
     state_recovery: Stable native IDs/history recover activity; finite live cursor gaps fail explicitly; dispatch receipts deduplicate ambiguity.
     current_code: [src/imagent/applications/t3.py, src/imagent/applications/t3_client.py]
     target_code: [src/imagent/applications/adapters/t3.py]
-    current_tests: [tests/test_t3_client.py, tests/test_adapter_contracts.py, tests/test_gateway_vertical_slice.py]
+    current_tests: [tests/test_t3_client.py, tests/test_adapter_contracts.py, tests/test_gateway_vertical_slice.py, tests/applications/presentation/test_live_activity.py]
     target_tests: [tests/applications/adapters/test_t3.py]
     authoritative_docs: [docs/components/application-adapters/adapters/t3.md, docs/components/application-adapters/design.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -1404,6 +1404,9 @@ structural_status:
     - path: src/imagent/applications/__init__.py
       owner: applications.application-contract
       rationale: Current public Applications facade; its closed named lazy re-exports preserve exact identities without retaining old implementations or initializing concrete adapters for an unrelated capability import.
+    - path: src/imagent/applications/presentation/__init__.py
+      owner: applications.presentation.live-activity
+      rationale: Finite Applications presentation facade; it re-exports the live-activity leaf exactly and retains no runtime or compatibility implementation.
     - path: src/imagent/contracts/__init__.py
       owner: engineering.release
       rationale: Deliberate cross-layer public contract facade; every symbol delegates to its mapped owner and no implementation lives here.
