@@ -13,6 +13,7 @@ Gateway implementation or product Controller policy.
 | `applications.application-contract` | lifecycle, resource, input, history, and subscription boundary | [design](application-contract/design.md) | [testing](application-contract/testing.md) |
 | `applications.capabilities` | honest native support declarations | [design](capabilities/design.md) | [testing](capabilities/testing.md) |
 | `applications.events` | canonical events and bounded live fan-out | [design](events/design.md) | [testing](events/testing.md) |
+| `applications.diagnostics` | redacted Application and A1 diagnostic contracts | [design](diagnostics/design.md) | [testing](diagnostics/testing.md) |
 | `applications.operations` | shared native control intent/results | [design](operations/design.md) | [testing](operations/testing.md) |
 | `applications.requests` | typed interactive request/response facts | [design](requests/design.md) | [testing](requests/testing.md) |
 
@@ -22,6 +23,11 @@ The [presentation subtree](presentation/README.md) holds concrete A1
 adapter-owned positions. It is not a generic Application hook: facts are
 bounded and typed, raw native envelopes never cross it, and the adapter keeps
 native item/Turn/history authority.
+
+The common redacted Application diagnostic vocabulary is owned by the
+[diagnostics leaf](diagnostics/design.md). Presentation runtimes publish its
+fixed A1 fact types without moving mutable state or consumer observability
+policy into the common contract.
 
 The common adapter Protocol and its pre-dispatch callback are owned by the
 `applications.application-contract` leaf in

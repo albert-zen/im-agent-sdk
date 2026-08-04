@@ -31,9 +31,9 @@ side-effect-free, bounded, and free of consumer work on a provider socket
 callback.
 
 The `imagent.diagnostics` transition facade re-exports the exact Channel
-objects from this leaf while Application/Gateway diagnostics finish their own
-focused migrations. This is an explicit compatibility surface, not a second
-implementation.
+objects from this leaf while Gateway diagnostics finish #273; Application
+diagnostic objects are now owned by `imagent.applications.diagnostics`. This is
+an explicit compatibility surface, not a second implementation.
 
 ADR 0014 governs redaction, absence, provider failure, fixed failure codes,
 and bounded queue semantics. ADR 0015 does not turn this capability into a

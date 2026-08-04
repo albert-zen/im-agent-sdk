@@ -24,6 +24,7 @@ from imagent.applications import (
     ZenApplicationAdapter,
     presentation,
 )
+from imagent.applications.diagnostics import ApplicationPresentationFailureCode
 from imagent.applications.events import AgentEventType, EventStreamReset
 from imagent.applications.presentation import (
     ApplicationPresentationRuntime,
@@ -38,7 +39,6 @@ from imagent.contracts import (
     TextContent,
     ThreadRef,
 )
-from imagent.diagnostics import ApplicationPresentationFailureCode
 from imagent.gateway.persistence import ThreadProjectionRoute
 from imagent.gateway.persistence.memory import InMemoryProjectionRouteRepository
 from imagent.projections import (

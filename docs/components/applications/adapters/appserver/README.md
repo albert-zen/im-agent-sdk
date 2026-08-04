@@ -63,6 +63,8 @@ leaves are reserved for their own focused mechanical slices. App Server
 diagnostic facts and internal summaries now live at
 `src/imagent/applications/adapters/appserver/diagnostics.py`; common
 connection/queue values are owned by `src/imagent/interaction/diagnostics.py`,
-while `src/imagent/diagnostics.py` remains an explicit transition facade for
-not-yet-moved Application/Gateway values. No aggregate package facade is
-introduced.
+and Application diagnostic facts are owned by
+`src/imagent/applications/diagnostics.py`. The historical
+`src/imagent/diagnostics.py` remains an explicit mixed transition facade for
+the remaining Gateway values and exact Application re-exports. No aggregate
+package facade is introduced.

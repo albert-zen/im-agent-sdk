@@ -41,9 +41,11 @@ active-Turn read, `STEERED`/`PRESERVE_EXISTING` classification, or native
 ## Dependencies, state, and recovery
 
 Zen depends on Interaction messages/operations/media, common Applications
-contract/capabilities/events/operations/requests, four direct App Server
-leaves (client, mapping, requests, and diagnostics), and optional artifact
-materialization. Transport remains transitive through the App Server client.
+contract/capabilities/events/operations/requests, the direct canonical
+`applications.diagnostics` owner for Application diagnostic facts, four direct
+App Server leaves (client, mapping, requests, and the separate adapter
+diagnostics state owner), and optional artifact materialization. Transport
+remains transitive through the App Server client.
 `prefer_active_turn` remains a new native start because Zen has no steer
 policy. A dispatched start with lost response is unknown, not an automatic
 retry. History is native recovery authority; connection reset and

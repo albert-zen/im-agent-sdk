@@ -8,9 +8,9 @@ from types import SimpleNamespace
 from typing import cast
 
 from imagent.applications.adapters.t3 import T3ApplicationAdapter
+from imagent.applications.diagnostics import ApplicationDiagnosticFacts
 from imagent.contracts import ProjectMode, ThreadRef
 from imagent.diagnostics import (
-    ApplicationDiagnosticFacts,
     DiagnosticsSnapshot,
     collect_channel_diagnostics,
     summarize_projection_health,

@@ -17,7 +17,6 @@ from urllib.parse import quote
 
 import httpx
 
-from ...diagnostics import ApplicationDiagnosticFacts
 from ...interaction.media import (
     AttachmentContent,
     AttachmentSourceKind,
@@ -58,6 +57,7 @@ from ..contract import (
     TurnReplyCorrelationPolicy,
     TurnStatus,
 )
+from ..diagnostics import ApplicationDiagnosticFacts
 from ..events import (
     AgentEvent,
     AgentEventType,

@@ -43,10 +43,12 @@ Codex-only positions live in this leaf.
 ## Dependencies, state, and recovery
 
 Codex depends on Interaction messages/operations/media, common Applications
-contract/capabilities/events/operations/requests, four direct App Server
-leaves (client, mapping, requests, and diagnostics), and the two presentation
-leaves. Transport remains behind the App Server client rather than becoming a
-direct adapter dependency. This leaf owns `steer_active_turn`, the
+contract/capabilities/events/operations/requests, the direct canonical
+`applications.diagnostics` owner for Application diagnostic facts, four direct
+App Server leaves (client, mapping, requests, and the separate adapter
+diagnostics state owner), and the two presentation leaves. Transport remains
+behind the App Server client rather than becoming a direct adapter dependency.
+This leaf owns `steer_active_turn`, the
 authoritative active-Turn read, `STEERED`/`PRESERVE_EXISTING` classification
 with the active Turn ID, and native `turn/steer` dispatch. A candidate
 active-turn read never authorizes fallback start. The common typed

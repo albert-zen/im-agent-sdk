@@ -38,13 +38,13 @@ contracts but does not redefine them.
 ## Transition facade
 
 `imagent.diagnostics` remains an explicit stable transition facade while the
-Application and Gateway diagnostic definitions move in later issues #276 and
-#273. It imports and re-exports the exact five canonical objects from this
+Application definitions move in #276 and Gateway definitions move in #273. It
+imports and re-exports the exact five canonical objects from this
 leaf and the exact Channel objects from
 `imagent.interaction.channels.diagnostics`; it contains no duplicate
 definitions for those moved objects and no lazy `__getattr__`. The remaining
-Application/Gateway fact types and aggregation may stay in that facade until
-their focused ownership slices. The facade is not a second Interaction owner.
+Gateway fact types and aggregation may stay in that facade until #273. The
+facade is not a second Interaction owner.
 
 The accepted [ADR 0014](../../../decisions/0014-read-only-diagnostics-surface.md)
 and [ADR 0015](../../../decisions/0015-typed-extension-seams-and-composition.md)

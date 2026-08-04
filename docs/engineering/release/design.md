@@ -55,10 +55,11 @@ objects and never hide a duplicate or lazy compatibility implementation. The
  formal explicit facades over `imagent.applications.events`, not implementation
  owners.
 The `imagent.diagnostics` transition facade likewise re-exports the exact
-canonical `imagent.interaction.diagnostics` and
-`imagent.interaction.channels.diagnostics` objects while retaining only the
-not-yet-moved Application/Gateway definitions; it has no duplicate moved
-classes and no lazy `__getattr__`.
+canonical `imagent.interaction.diagnostics`,
+`imagent.interaction.channels.diagnostics`, and
+`imagent.applications.diagnostics` objects while retaining only the
+not-yet-moved Gateway definitions; it has no duplicate moved classes and no
+lazy `__getattr__`.
 
 ## Version and publication boundary
 
