@@ -8,9 +8,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
-from ...contracts import (
-    ApplicationInputOutcomeUnknown,
-)
+from ...applications.contract import ApplicationInputOutcomeUnknown
 from ...diagnostics import (
     InboundFailurePresentationFailureCode,
     InboundFailurePresenterDiagnosticFacts,

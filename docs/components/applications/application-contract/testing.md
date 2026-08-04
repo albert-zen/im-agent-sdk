@@ -5,6 +5,14 @@ conformance suite remains affected evidence in
 `tests/conformance/test_adapter_contracts.py`. The tests must keep the
 language-neutral schemas and exact public facade identity aligned.
 
+The focused contract suite also proves that `ApplicationInputOutcomeUnknown`
+has one exact class owner in `imagent.applications.contract`, is exposed by
+the finite `imagent.applications` facade and the explicit `imagent.contracts`
+facade as the same object, inherits directly from `RuntimeError`, preserves
+the `(message, cause)` constructor and `.cause`, and leaves
+`imagent.contracts.errors` absent after the historical implementation is
+retired.
+
 The focused ownership tests assert that every family member is one exact object
 across `imagent.applications`, `imagent.applications.contract`, and the
 temporary `imagent.contracts` facade. They also assert that
@@ -25,7 +33,8 @@ once immediately before mutation, and return only the disposition/correlation
 policy it actually performed.
 
 The suite distinguishes a known pre-dispatch rejection from a dispatched
-unknown outcome. It covers Codex native steer where supported and truthful
+unknown outcome using the canonical Applications exception. It covers Codex
+native steer where supported and truthful
 `started/create_new` behavior for Zen/T3, including correlation authorization
 and a post-acceptance mismatch that cannot retarget or retry native input.
 It also checks that subscriptions are Application-owned and that no contract

@@ -7,13 +7,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol, cast
 
-from ...contracts.errors import ApplicationInputOutcomeUnknown
 from ...interaction.messages import MessageRole
 from ..contract import (
     AcceptedTurn,
     AgentInput,
     AgentMessage,
     ApplicationInputDispatch,
+    ApplicationInputOutcomeUnknown,
     InputContinuationPreference,
     InputDisposition,
     ThreadRef,

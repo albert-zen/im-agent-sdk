@@ -17,7 +17,6 @@ from urllib.parse import quote
 
 import httpx
 
-from ...contracts.errors import ApplicationInputOutcomeUnknown
 from ...diagnostics import ApplicationDiagnosticFacts
 from ...interaction.media import (
     AttachmentContent,
@@ -42,6 +41,7 @@ from ..contract import (
     AgentInput,
     AgentMessage,
     ApplicationInputDispatch,
+    ApplicationInputOutcomeUnknown,
     ApplicationRef,
     ApplicationSummary,
     InputContinuationPreference,

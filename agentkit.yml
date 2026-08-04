@@ -19,7 +19,6 @@ components:
       - docs/ARCHITECTURE.md
       - docs/decisions/**
       # Source and schemas.
-      - src/imagent/contracts/errors.py
       - src/imagent/contracts/operations.py
       - src/imagent/contracts/validators.py
       - src/imagent/interaction/__init__.py

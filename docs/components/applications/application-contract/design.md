@@ -11,8 +11,8 @@ native Agent Application without claiming its truth. Consumer Controllers use
 typed `ControllerActions`; they do not depend directly on an adapter.
 It owns `AgentApplicationAdapter`, `ApplicationSummary`, typed input dispatch
 facts/results, the complete Project/Thread/Turn/resource/history model family,
-`AgentMessage`, `validate_thread_ref`, and the classification of a native
-input outcome as known or unknown.
+`AgentMessage`, `ApplicationInputOutcomeUnknown`, `validate_thread_ref`, and
+the classification of a native input outcome as known or unknown.
 
 It does not own Gateway admission, Conversation binding, projection routes,
 checkpoints, request-destination correlation, product commands, a native wire
@@ -26,8 +26,11 @@ typed operation results, an `AcceptedTurn`, and independent Thread event
 subscriptions. `send_input()` defaults to `prefer_active_turn`, invokes the
 typed pre-dispatch callback exactly once immediately before a native mutation,
 and reports the actual `started/create_new` or `steered/preserve_existing`
-result. `AgentMessage` is the immutable, strong-`ThreadRef`-scoped item shared
-by authoritative history and canonical live-event normalization.
+result. `ApplicationInputOutcomeUnknown` is the exact `RuntimeError` raised
+when a native input may have mutated after dispatch; its constructor remains
+`(message: str, cause: BaseException)` and stores the original cause on
+`.cause`. `AgentMessage` is the immutable, strong-`ThreadRef`-scoped item
+shared by authoritative history and canonical live-event normalization.
 
 The owner contracts/exports are the complete family listed below, plus
 `AgentApplicationAdapter` and `ApplicationInputDispatchHandler`, from
@@ -38,11 +41,14 @@ The owner contracts/exports are the complete family listed below, plus
 `TurnReplyCorrelationPolicy`, `ThreadStatus`, `ApplicationSummary`,
 `ProjectSummary`, `ThreadSummary`, `AgentInput`, `AgentMessage`, `TurnStatus`,
 `TurnCatchup`, `TurnHistoryEntry`, `ThreadHistory`, `ThreadSnapshot`,
-`AcceptedTurn`, `ApplicationInputDispatch`, and `validate_thread_ref`.
+`AcceptedTurn`, `ApplicationInputDispatch`, `ApplicationInputOutcomeUnknown`,
+and `validate_thread_ref`.
 
 The finite `imagent.applications` facade exposes those exact objects. The
-deliberate `imagent.contracts` facade may retain exact compatibility aliases,
-but it contains no second implementation. The historical `imagent.adapters`
+deliberate `imagent.contracts` facade retains the exact compatibility alias for
+`ApplicationInputOutcomeUnknown`, but it contains no second implementation.
+The historical `imagent.contracts.errors` module is retired after this move
+and is not an internal compatibility path. The historical `imagent.adapters`
 surface remains a temporary exact-object compatibility facade for the adapter
 Protocol and callback plus unrelated Gateway aliases owned elsewhere; its
 historical Channel/admission names were retired when the Interaction Channel
@@ -56,9 +62,11 @@ not depend on Gateway implementation. The events leaf consumes the owned
 `AgentMessage`; that dependency does not transfer item, history, or Thread
 authority to events. Native adapters declare only the replay/order facts
 that their Application actually supports. After a native input may have been
-dispatched, timeout, cancellation, disconnect, or lost response is
-`ApplicationInputOutcomeUnknown` unless native truth proves otherwise; it
-never reopens Gateway retry permission.
+dispatched, timeout, cancellation, disconnect, or lost response is the
+canonical `ApplicationInputOutcomeUnknown` unless native truth proves
+otherwise; it never reopens Gateway retry permission. Known pre-dispatch
+rejections remain their original exception types and do not use the unknown
+outcome wrapper.
 
 Managed, flat, and fixed Project shapes are explicit through the capability
 leaf's `ProjectMode`. Binding a returned `ThreadSummary` is a separate Gateway
@@ -73,9 +81,10 @@ focused ownership evidence in `tests/applications/test_contract.py`. Shared
 JSON Schemas remain cross-owner language-neutral documents; their Python
 reference values are not duplicated in the retired contracts model module or
 Interaction. `imagent.contracts` re-exports exact owner objects for temporary
-compatibility, while `imagent.applications` directly exposes the complete
-family and does not use a module-level lazy export to hide ownership or solve
-an import cycle. `src/imagent/adapters.py` retains only exact compatibility
+compatibility, including `ApplicationInputOutcomeUnknown`, while
+`imagent.applications` directly exposes the complete family and does not use a
+module-level lazy export to hide ownership or solve an import cycle.
+`src/imagent/adapters.py` retains only exact compatibility
 aliases for the Application Protocol and callback alongside unrelated Channel
 and Gateway aliases. The conformance suite remains affected evidence for all
 concrete adapters.

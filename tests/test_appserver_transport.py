@@ -18,8 +18,8 @@ from imagent.applications.adapters.appserver.client.supervisor import (
     AppServerSupervisor,
     MissingAppServerDependencyError,
 )
+from imagent.applications.contract import ApplicationInputOutcomeUnknown
 from imagent.contracts import (
-    ApplicationInputOutcomeUnknown,
     CreateThread,
     ThreadCreated,
 )
