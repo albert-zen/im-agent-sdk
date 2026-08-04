@@ -38,10 +38,10 @@ from imagent.contracts import (
     SelectApplication,
     validate_gateway_operation_result,
 )
+from imagent.gateway.concurrency import KeyedLockCapacityError
 from imagent.gateway.persistence import ConversationBinding, ThreadProjectionRoute
 from imagent.gateway.routing import ObserveThread, ThreadObserved
 from imagent.interaction.operations import OperationErrorCode, operation_error
-from imagent.keyed_locks import KeyedLockCapacityError
 
 ROOT = Path(__file__).resolve().parents[3]
 

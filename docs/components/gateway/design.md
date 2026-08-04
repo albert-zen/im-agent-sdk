@@ -438,6 +438,9 @@ instead of reopening the request.
 Request-scoped serialization uses a waiter-counted keyed lock that removes its
 entry after the last current/waiting caller exits; completed request IDs do not
 accumulate in Gateway memory.
+The key is the stable `RequestRef`, while the dependency-neutral
+`gateway.concurrency` leaf supplies only process-local entry, wait, and cleanup
+mechanics. It stores no request state and grants no response authority.
 
 At process start, Gateway snapshots only the pre-existing open bridge
 correlations, installs restored Thread subscriptions, and only then starts

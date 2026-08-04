@@ -22,3 +22,10 @@ Planning golden tests remain in `test_planning.py`. Projection, proactive,
 artifact-lifetime, O2, and Gateway vertical tests continue proving that every
 origin consumes this same Coordinator without changing idempotency,
 checkpoint, cleanup, or recovery behavior.
+
+The dependency-neutral registry's bound validation, equal-key join,
+independent progress, and owner/waiter cancellation cleanup live in
+`tests/gateway/test_concurrency.py`. Coordination tests retain destination-key,
+FIFO, admission, retry-delay, receipt, and worker-lifetime policy evidence.
+They also prove that blocked work at finite `max_pending` cannot create more
+active destination registry keys than the already-reserved pending capacity.

@@ -99,6 +99,13 @@ spool, outbox, persistence, or second execution path. Durable submission
 snapshots and accepted/retryable/rejected/unknown outcomes remain the sole
 restart and retry evidence.
 
+The handler consumes entry, capacity, wait, and cleanup mechanics from the
+dependency-neutral `gateway.concurrency` owner. Proactive delivery still owns
+the exact validated string key, finite limit, acquisition position before
+authorization/staging, fixed response mapping, and replay semantics. It does
+not share a registry instance or key namespace with routing, request, or
+Coordinator consumers.
+
 ## Public surface
 
 `imagent.gateway.delivery` is the finite target facade for the service and

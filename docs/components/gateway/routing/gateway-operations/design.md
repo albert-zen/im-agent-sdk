@@ -60,6 +60,12 @@ Application, binding, route, or Channel side effects with the stable retryable
 or waiter exits, including cancellation; an occupied or awaited entry is never
 evicted to manufacture capacity.
 
+The dependency-neutral entry, wait, capacity, and cleanup mechanics come from
+`gateway.concurrency`. This operation owner still selects the stable
+`ConversationRef`, configures the finite bound, chooses the side-effect
+boundary, and maps capacity failure into the typed Gateway result. The shared
+primitive does not interpret an operation or own Conversation policy.
+
 For claimed inbound input, capacity rejection is a known pre-acceptance
 failure after durable admission but before native dispatch. The existing I2
 rules remain authoritative: without I2 the owned claim is released and the
@@ -92,6 +98,10 @@ typed route port and does not create a second route authority or observation
 worker. Interaction
 Controllers depend on exact public typed actions, never on this leaf's
 implementation or Gateway context.
+
+The only shared runtime dependency is the internal
+`gateway.concurrency.KeyedLockRegistry` mechanics seam. It supplies no generic
+operation context, policy callback, retry authority, or durable identity.
 
 ## Physical owner and import boundary
 

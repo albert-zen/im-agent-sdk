@@ -16,6 +16,9 @@ Channel transport, Agent transcript, or second runtime.
 - [admission design](admission/design.md) and
   [testing](admission/testing.md) — fenced durable inbound identity acquired
   before Channel media work, without a legacy signature fallback.
+- [concurrency design](concurrency/design.md) and
+  [testing](concurrency/testing.md) — dependency-neutral waiter-safe keyed
+  serialization and optional active-key capacity mechanics.
 - [input](input/README.md) — independent content-transformation, dispatch, and
   failure-presentation leaves.
 - [routing](routing/README.md) — Conversation bindings, typed Gateway

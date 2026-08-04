@@ -117,7 +117,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "src/imagent/gateway/composition.py": {"gateway"},
             "src/imagent/gateway/input/content_transformation.py": {"gateway"},
             "src/imagent/gateway/input/failure_presentation.py": {"gateway"},
-            "src/imagent/keyed_locks.py": {"delivery-planning-and-coordination"},
+            "src/imagent/gateway/concurrency.py": {"gateway"},
             "src/imagent/gateway/delivery/coordination.py": {"delivery-planning-and-coordination"},
             "src/imagent/gateway/delivery/planning.py": {"delivery-planning-and-coordination"},
             "src/imagent/gateway/delivery/outcome_observation.py": {
@@ -195,6 +195,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/test_gateway_operations.py": {"gateway"},
             "tests/gateway/input/test_content_transformation.py": {"gateway"},
             "tests/gateway/input/test_failure_presentation.py": {"gateway"},
+            "tests/gateway/test_concurrency.py": {"gateway"},
             "tests/gateway/delivery/test_planning.py": {"delivery-planning-and-coordination"},
             "tests/gateway/delivery/test_coordination.py": {"delivery-planning-and-coordination"},
             "tests/gateway/delivery/test_outcome_observation.py": {

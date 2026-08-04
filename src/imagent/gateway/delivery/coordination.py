@@ -16,7 +16,7 @@ from ...interaction.channels.contract import (
 )
 from ...interaction.media import AttachmentContent
 from ...interaction.messages import ConversationRef, OutboundMessage
-from ...keyed_locks import KeyedLockRegistry
+from ..concurrency import KeyedLockRegistry
 from .planning import (
     DeliveryPlan,
     DeliveryPlanner,

@@ -41,6 +41,12 @@ Gateway operation conformance must prove:
   claim transition and can never authorize native input; and
 - product-only commands and generic extension hooks are absent.
 
+The mechanics-only bound, same-key join, independent-key progress, and exact
+cancellation cleanup are focused in `tests/gateway/test_concurrency.py`.
+Operation tests retain the behavior-specific evidence for `ConversationRef`
+key selection, the configured Gateway limit, failure mapping, and the exact
+pre-side-effect boundary; they do not duplicate the primitive implementation.
+
 Focused owner evidence is in `tests/gateway/routing/test_operations.py`.
 Integration evidence remains in `tests/test_gateway_operations.py` and
 `tests/test_gateway_vertical_slice.py`; the focused extraction must preserve

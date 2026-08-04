@@ -63,7 +63,6 @@ from ..interaction.operations import (
     OperationErrorCode,
     operation_error,
 )
-from ..keyed_locks import KeyedLockCapacityError, KeyedLockRegistry
 from ..projection_runtime import ProjectionWorkerCapacityError, ThreadProjectionRuntime
 from ..projections import ProjectionWorkerHealth, RetryableDeliveryError
 from .admission import (
@@ -73,6 +72,8 @@ from .admission import (
     start_channel_with_admission,
 )
 from .composition import GatewayExtensions, GatewayLimits, GatewayRepositories
+from .concurrency import KeyedLockCapacityError as _KeyedLockCapacityError
+from .concurrency import KeyedLockRegistry as _KeyedLockRegistry
 from .delivery.coordination import DeliveryCoordinator
 from .delivery.outcome_observation import (
     DeliveryOutcomeObserver as DeliveryOutcomeObserver,
@@ -235,7 +236,7 @@ class ImAgentGateway:
             if extensions.delivery_outcome_observer is not None
             else None
         )
-        self._request_locks = KeyedLockRegistry()
+        self._request_locks = _KeyedLockRegistry()
         self._outbound_deliveries: dict[
             tuple[str, str],
             asyncio.Task[IdempotencyClaimStatus],
@@ -1332,7 +1333,7 @@ class _LockedControllerActions(ControllerActions):
 def _contract_error(error: Exception) -> ContractError:
     if isinstance(error, BindingConflict):
         return operation_error(error, code=OperationErrorCode.CONFLICT)
-    if isinstance(error, (KeyedLockCapacityError, ProjectionWorkerCapacityError)):
+    if isinstance(error, (_KeyedLockCapacityError, ProjectionWorkerCapacityError)):
         return ContractError(
             code=OperationErrorCode.CAPACITY_EXHAUSTED.value,
             message=str(error),

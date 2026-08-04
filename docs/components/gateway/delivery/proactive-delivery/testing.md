@@ -48,6 +48,11 @@ focused process-local coordination cases additionally prove:
 - a reconstructed handler starts with empty coordination state while durable
   replay, route snapshots, and unknown/retry safety remain unchanged.
 
+Generic registry mechanics and historical-module absence are focused in
+`tests/gateway/test_concurrency.py`. The ingress suite continues to own the
+exact delivery-ID key, finite handler limit, pre-authorization/staging
+position, fixed 503 response, cleanup ordering, and durable replay boundary.
+
 Pure decoded-byte, path-confinement, digest, and staged-content construction
 cases live in `tests/interaction/test_media_staging.py`.
 

@@ -539,7 +539,7 @@ components:
     public_exports:
       current: [imagent.gateway.composition:GatewayRepositories, imagent.gateway.composition:GatewayLimits, imagent.gateway.composition:GatewayExtensions]
       target: [imagent.gateway.composition:GatewayRepositories, imagent.gateway.composition:GatewayLimits, imagent.gateway.composition:GatewayExtensions]
-    dependencies: [interaction.controllers.controller-contract, interaction.controllers.request-presentation, interaction.channels.channel-contract, applications.application-contract, gateway.admission, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.projection.observation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.routing.gateway-operations, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.memory, gateway.persistence.idempotency]
+    dependencies: [interaction.controllers.controller-contract, interaction.controllers.request-presentation, interaction.channels.channel-contract, applications.application-contract, gateway.concurrency, gateway.admission, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.projection.observation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.routing.gateway-operations, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.memory, gateway.persistence.idempotency]
     state_recovery: Frozen construction values only; no runtime state or locator lookup.
     current_code: [src/imagent/gateway/composition.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/composition.py]
@@ -548,6 +548,28 @@ components:
     authoritative_docs: [docs/components/gateway/composition/design.md, docs/components/gateway/composition/testing.md, docs/components/gateway/design.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
     gaps: [the Gateway package root still combines its composition facade and runtime orchestration]
+
+  gateway.concurrency:
+    id: gateway.concurrency
+    parent: gateway
+    purpose: Provide dependency-neutral process-local keyed serialization, optional active-key capacity, and waiter-safe cleanup mechanics.
+    owns: [KeyedLockRegistry mechanics, KeyedLockCapacityError, owner and waiter usage accounting, finite active-key admission, exact-entry cancellation cleanup]
+    does_not_own: [key selection or meaning, routing or delivery policy, configured consumer limits, retry or error presentation, persistence, durable replay authority, global registry]
+    inputs: [stable hashable caller key, optional positive non-boolean max_active_keys]
+    outputs: [exclusive async key lane or explicit KeyedLockCapacityError]
+    public_contracts: []
+    public_exports:
+      current: []
+      target: []
+    dependencies: []
+    state_recovery: Registry entries and counts are process-local and restart empty; an active equal key joins without splitting, no active entry is evicted, and only the final owner or waiter removes the exact entry.
+    current_code: [src/imagent/gateway/concurrency.py]
+    target_code: [src/imagent/gateway/concurrency.py]
+    current_tests: [tests/gateway/test_concurrency.py, tests/gateway/routing/test_operations.py, tests/gateway/delivery/test_coordination.py, tests/gateway/delivery/test_proactive_ingress.py, tests/test_gateway_operations.py]
+    target_tests: [tests/gateway/test_concurrency.py]
+    authoritative_docs: [docs/components/gateway/concurrency/design.md, docs/components/gateway/concurrency/testing.md, docs/components/gateway/routing/gateway-operations/design.md, docs/components/gateway/delivery/coordination/design.md, docs/components/gateway/delivery/proactive-delivery/design.md, docs/components/gateway/projection/request-correlation/design.md]
+    adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
+    gaps: []
 
   gateway.lifecycle:
     id: gateway.lifecycle
@@ -627,9 +649,9 @@ components:
     public_exports:
       current: [imagent.contracts:GatewayOperation, imagent.contracts:GatewayOperationResult, imagent.contracts:GatewayOperationFailed, imagent.contracts:GatewayOperationType, imagent.contracts:ListApplications, imagent.contracts:SelectApplication, imagent.contracts:ApplicationsListed, imagent.contracts:validate_gateway_operation, imagent.contracts:validate_gateway_operation_result, imagent.gateway.routing.operations:GatewayOperation, imagent.gateway.routing.operations:GatewayOperationResult, imagent.gateway.routing.operations:GatewayOperationFailed, imagent.gateway.routing.operations:GatewayOperationType, imagent.gateway.routing.operations:ListApplications, imagent.gateway.routing.operations:SelectApplication, imagent.gateway.routing.operations:ApplicationsListed, imagent.gateway.routing.operations:validate_gateway_operation, imagent.gateway.routing.operations:validate_gateway_operation_result, imagent.gateway:GatewayOperation, imagent.gateway:GatewayOperationResult, imagent.gateway:GatewayOperationFailed, imagent.gateway:GatewayOperationType, imagent.gateway:ListApplications, imagent.gateway:SelectApplication, imagent.gateway:ApplicationsListed, imagent.gateway:validate_gateway_operation, imagent.gateway:validate_gateway_operation_result, imagent.gateway.routing:GatewayOperation, imagent.gateway.routing:GatewayOperationResult, imagent.gateway.routing:GatewayOperationFailed, imagent.gateway.routing:GatewayOperationType, imagent.gateway.routing:ListApplications, imagent.gateway.routing:SelectApplication, imagent.gateway.routing:ApplicationsListed, imagent.gateway.routing:validate_gateway_operation, imagent.gateway.routing:validate_gateway_operation_result]
       target: [imagent.contracts:GatewayOperation, imagent.contracts:GatewayOperationResult, imagent.contracts:GatewayOperationFailed, imagent.contracts:GatewayOperationType, imagent.contracts:ListApplications, imagent.contracts:SelectApplication, imagent.contracts:ApplicationsListed, imagent.contracts:validate_gateway_operation, imagent.contracts:validate_gateway_operation_result, imagent.gateway.routing.operations:GatewayOperation, imagent.gateway.routing.operations:GatewayOperationResult, imagent.gateway.routing.operations:GatewayOperationFailed, imagent.gateway.routing.operations:GatewayOperationType, imagent.gateway.routing.operations:ListApplications, imagent.gateway.routing.operations:SelectApplication, imagent.gateway.routing.operations:ApplicationsListed, imagent.gateway.routing.operations:validate_gateway_operation, imagent.gateway.routing.operations:validate_gateway_operation_result, imagent.gateway.routing:GatewayOperation, imagent.gateway.routing:GatewayOperationResult, imagent.gateway.routing:GatewayOperationFailed, imagent.gateway.routing:GatewayOperationType, imagent.gateway.routing:ListApplications, imagent.gateway.routing:SelectApplication, imagent.gateway.routing:ApplicationsListed, imagent.gateway.routing:validate_gateway_operation, imagent.gateway.routing:validate_gateway_operation_result, imagent.gateway:GatewayOperation, imagent.gateway:GatewayOperationResult, imagent.gateway:GatewayOperationFailed, imagent.gateway:GatewayOperationType, imagent.gateway:ListApplications, imagent.gateway:SelectApplication, imagent.gateway:ApplicationsListed, imagent.gateway:validate_gateway_operation, imagent.gateway:validate_gateway_operation_result]
-    dependencies: [interaction.messages, interaction.operations, applications.application-contract, gateway.routing.bindings, gateway.routing.projection-routes, gateway.projection.request-correlation, gateway.persistence.state-contracts]
+    dependencies: [interaction.messages, interaction.operations, applications.application-contract, gateway.concurrency, gateway.routing.bindings, gateway.routing.projection-routes, gateway.projection.request-correlation, gateway.persistence.state-contracts]
     state_recovery: Stable operation IDs and delegated owner fences remain explicit at the aggregate boundary; finite keyed locks remove idle Conversation keys after ownership or cancellation without evicting active waiters, while unknown outcomes fail closed according to the delegated owner.
-    current_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/operations.py, src/imagent/gateway/routing/__init__.py, src/imagent/keyed_locks.py]
+    current_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/operations.py, src/imagent/gateway/routing/__init__.py]
     target_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/operations.py, src/imagent/gateway/routing/__init__.py]
     current_tests: [tests/gateway/routing/test_operations.py, tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py]
     target_tests: [tests/gateway/routing/test_operations.py, tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py]
@@ -693,7 +715,7 @@ components:
     public_exports:
       current: [imagent.contracts:derive_client_message_id]
       target: [imagent.gateway.input:derive_client_message_id]
-    dependencies: [interaction.operations, applications.application-contract, applications.operations, gateway.admission, gateway.projection.request-correlation]
+    dependencies: [interaction.operations, applications.application-contract, applications.operations, gateway.concurrency, gateway.admission, gateway.projection.request-correlation]
     state_recovery: Pre-dispatch failures release; outcome_unknown stays side_effect_started; accepted results are terminal for inbound idempotency.
     current_code: [src/imagent/contracts/validators.py, src/imagent/gateway/__init__.py, src/imagent/projection_runtime.py]
     target_code: [src/imagent/gateway/input/dispatch.py]
@@ -781,7 +803,7 @@ components:
     public_exports:
       current: [imagent.request_projection_runtime:InteractiveRequestProjection, imagent.contracts:RespondToRequest, imagent.contracts:RequestResponseRouted]
       target: [imagent.gateway.projection:InteractiveRequestProjection, imagent.gateway.projection:RespondToRequest, imagent.gateway.projection:RequestResponseRouted]
-    dependencies: [interaction.messages, interaction.operations, applications.application-contract, applications.capabilities, applications.requests, interaction.controllers.request-presentation, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
+    dependencies: [interaction.messages, interaction.operations, applications.application-contract, applications.capabilities, applications.requests, interaction.controllers.request-presentation, gateway.concurrency, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Correlations are minimal, bounded, persisted, monotonic, and reconciled only from native authoritative facts.
     current_code: [src/imagent/contracts/operations.py, src/imagent/contracts/validators.py, src/imagent/gateway/__init__.py, src/imagent/gateway/projection/request_correlation.py, src/imagent/request_projection_runtime.py, src/imagent/projection_routes.py]
     target_code: [src/imagent/gateway/projection/request_correlation.py]
@@ -869,15 +891,15 @@ components:
     public_exports:
       current: [imagent.gateway.delivery:DeliveryCoordinator, imagent.gateway.delivery:DeliveryCoordinatorConfig, imagent.gateway.delivery:DeliveryHandle]
       target: [imagent.gateway.delivery:DeliveryCoordinator, imagent.gateway.delivery:DeliveryCoordinatorConfig, imagent.gateway.delivery:DeliveryHandle]
-    dependencies: [interaction.messages, interaction.media, interaction.channels.channel-contract, interaction.channels.outbound-delivery, gateway.delivery.planning]
+    dependencies: [interaction.messages, interaction.media, interaction.channels.channel-contract, interaction.channels.outbound-delivery, gateway.concurrency, gateway.delivery.planning]
     state_recovery: Process-local lanes are cancelled/joined at stop; unknown outcomes never auto-retry.
-    current_code: [src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/coordination.py, src/imagent/keyed_locks.py, src/imagent/gateway/__init__.py]
+    current_code: [src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/coordination.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/delivery/coordination.py]
     current_tests: [tests/gateway/delivery/test_coordination.py, tests/gateway/delivery/test_outcome_observation.py, tests/test_gateway_vertical_slice.py]
     target_tests: [tests/gateway/delivery/test_coordination.py]
     authoritative_docs: [docs/components/gateway/delivery/coordination/design.md, docs/components/gateway/delivery/coordination/testing.md]
     adrs: [docs/decisions/0010-capability-driven-delivery-coordination.md]
-    gaps: [KeyedLockRegistry remains a shared utility used by coordination, Gateway request serialization, and proactive delivery ingress until a focused ownership split]
+    gaps: []
 
   gateway.delivery.submissions:
     id: gateway.delivery.submissions
@@ -935,9 +957,9 @@ components:
     public_exports:
       current: [imagent.gateway.delivery.proactive:DeliveryIntent, imagent.gateway.delivery.proactive:ConversationDeliveryTarget, imagent.gateway.delivery.proactive:DeliveryTarget, imagent.gateway.delivery.proactive:DeliveryTargetKind, imagent.gateway.delivery.proactive:DestinationDeliveryResult, imagent.gateway.delivery.proactive:ProactiveDeliveryResult, imagent.gateway.delivery.proactive:ThreadRouteDeliveryTarget, imagent.gateway.delivery.proactive:validate_delivery_intent, imagent.gateway.delivery:ProactiveDeliveryService, imagent.gateway.delivery:ProactiveDeliveryJsonHandler, imagent.gateway.delivery:DeliveryIntent, imagent.gateway.delivery:ConversationDeliveryTarget, imagent.gateway.delivery:DeliveryTarget, imagent.gateway.delivery:DeliveryTargetKind, imagent.gateway.delivery:DestinationDeliveryResult, imagent.gateway.delivery:ProactiveDeliveryResult, imagent.gateway.delivery:ThreadRouteDeliveryTarget, imagent.gateway.delivery:validate_delivery_intent]
       target: [imagent.gateway.delivery.proactive:DeliveryIntent, imagent.gateway.delivery.proactive:ConversationDeliveryTarget, imagent.gateway.delivery.proactive:DeliveryTarget, imagent.gateway.delivery.proactive:DeliveryTargetKind, imagent.gateway.delivery.proactive:DestinationDeliveryResult, imagent.gateway.delivery.proactive:ProactiveDeliveryResult, imagent.gateway.delivery.proactive:ThreadRouteDeliveryTarget, imagent.gateway.delivery.proactive:validate_delivery_intent, imagent.gateway.delivery:ProactiveDeliveryService, imagent.gateway.delivery:ProactiveDeliveryJsonHandler, imagent.gateway.delivery:DeliveryIntent, imagent.gateway.delivery:ConversationDeliveryTarget, imagent.gateway.delivery:DeliveryTarget, imagent.gateway.delivery:DeliveryTargetKind, imagent.gateway.delivery:DestinationDeliveryResult, imagent.gateway.delivery:ProactiveDeliveryResult, imagent.gateway.delivery:ThreadRouteDeliveryTarget, imagent.gateway.delivery:validate_delivery_intent]
-    dependencies: [interaction.messages, interaction.operations, interaction.media, interaction.channels.channel-contract, applications.application-contract, gateway.delivery.proactive-authorization, gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.outcome-observation, gateway.routing.projection-routes, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
+    dependencies: [interaction.messages, interaction.operations, interaction.media, interaction.channels.channel-contract, applications.application-contract, gateway.concurrency, gateway.delivery.proactive-authorization, gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.outcome-observation, gateway.routing.projection-routes, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Persist identity/snapshots/outcomes only; staged inline bytes live through one synchronous attempt and are removed after join, while active ingress delivery-ID keys are process-local and restart empty.
-    current_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/proactive.py, src/imagent/gateway/delivery/proactive_runtime.py, src/imagent/gateway/delivery/proactive_ingress.py, src/imagent/gateway/delivery/submissions.py, src/imagent/keyed_locks.py, src/imagent/cli/__init__.py, src/imagent/cli/send.py, src/imagent/gateway/__init__.py]
+    current_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/proactive.py, src/imagent/gateway/delivery/proactive_runtime.py, src/imagent/gateway/delivery/proactive_ingress.py, src/imagent/gateway/delivery/submissions.py, src/imagent/cli/__init__.py, src/imagent/cli/send.py, src/imagent/gateway/__init__.py]
     target_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/proactive.py, src/imagent/gateway/delivery/proactive_runtime.py, src/imagent/gateway/delivery/proactive_ingress.py]
     current_tests: [tests/gateway/delivery/test_proactive_runtime.py, tests/gateway/delivery/test_proactive_delivery.py, tests/gateway/delivery/test_proactive_ingress.py]
     target_tests: [tests/gateway/delivery/test_proactive_runtime.py, tests/gateway/delivery/test_proactive_delivery.py, tests/gateway/delivery/test_proactive_ingress.py]
@@ -1754,9 +1776,6 @@ structural_status:
     src/imagent/contracts/validators.py:
       owners: [gateway.input.dispatch, gateway.projection.request-correlation]
       reason: Pending request-correlation and input-dispatch specific validation remains here until those later focused owners move them; the aggregate Gateway validator is owned by gateway.routing.gateway-operations and delegates these exact branches.
-    src/imagent/keyed_locks.py:
-      owners: [gateway.routing.gateway-operations, gateway.delivery.coordination, gateway.delivery.proactive-delivery]
-      reason: The process-local keyed serialization primitive currently serves bounded Conversation operation serialization, ordered destination delivery, and proactive delivery-ID serialization without owning any of those policies.
     src/imagent/gateway/__init__.py:
       owners: [gateway.composition, gateway.lifecycle, gateway.admission, gateway.routing.projection-routes, gateway.input.content-transformation, gateway.input.dispatch, gateway.input.failure-presentation, gateway.projection.observation, gateway.projection.request-correlation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.diagnostics]
       reason: The package root re-exports composition values while the same module sequences admission, input, presentation, delivery, diagnostics, and lifecycle behavior, so it remains a multi-owner split candidate rather than a single-owner formal facade. Its finite lazy Gateway-operation resolver is documented with the routing formal facade. Gateway aggregate dispatch and Conversation serialization live in gateway.routing.gateway-operations; binding repository/CAS and same-target convergence live in gateway.routing.bindings; projection-route values live in gateway.routing.projection-routes. Private root delegates retain cross-owner sequencing, Application Project/Thread truth validation, projection and request-correlation behavior, and input dispatch. ApplicationOperation remains on the existing independent Gateway/ControllerActions path.

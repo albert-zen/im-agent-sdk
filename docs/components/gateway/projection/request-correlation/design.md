@@ -65,6 +65,14 @@ another response attempt, or resolved/stale state fails explicitly. One
 destination's delivery failure neither blocks another destination nor
 authorizes a response.
 
+Gateway selects the stable `RequestRef` and owns this request-response policy.
+It consumes only the waiter-safe process-local lock mechanics from
+`gateway.concurrency`; the primitive stores no request or correlation state and
+cannot authorize a response or retry. Request locking occurs only after the
+operation has entered the configured finite active-Conversation registry, so
+the number of simultaneously active request keys is bounded by that enclosing
+admission even though the inner mechanics registry has no separate limit.
+
 ## Restart and recovery
 
 Correlations are bounded durable bridge routing facts. They are reconciled

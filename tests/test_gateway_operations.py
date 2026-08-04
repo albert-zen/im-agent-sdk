@@ -42,6 +42,7 @@ from imagent.contracts import (
 )
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.admission import inbound_idempotency_identity
+from imagent.gateway.concurrency import KeyedLockCapacityError
 from imagent.gateway.delivery import DeliveryCoordinator, DeliveryCoordinatorConfig
 from imagent.gateway.persistence import (
     ConversationBinding,
@@ -67,7 +68,6 @@ from imagent.interaction.messages import (
     TextContent,
 )
 from imagent.interaction.operations import OperationErrorCode
-from imagent.keyed_locks import KeyedLockCapacityError
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 
@@ -367,6 +367,72 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(rejected, GatewayOperationFailed)
         bindings.release.set()
         self.assertNotIsInstance(await owner, GatewayOperationFailed)
+        self.assertEqual(gateway._conversation_locks.active_key_count, 0)
+
+    async def test_request_registry_is_enclosed_by_finite_conversation_admission(self) -> None:
+        gateway = ImAgentGateway(
+            channels=[],
+            applications=[self.application],
+            repositories=GatewayRepositories(bindings=self.bindings),
+            limits=GatewayLimits(conversation_serialization_max_active_keys=1),
+        )
+        first = RespondToRequest(
+            operation_id="request-admission-owner",
+            conversation_ref=ConversationRef("fake-channel", "request-owner"),
+            actor="owner",
+            request_ref=RequestRef(self.application.summary.ref, "request-owner"),
+            response=ApprovalResponse("accept"),
+            created_at=_now(),
+        )
+        distinct = RespondToRequest(
+            operation_id="request-admission-distinct",
+            conversation_ref=ConversationRef("fake-channel", "request-distinct"),
+            actor="distinct",
+            request_ref=RequestRef(self.application.summary.ref, "request-distinct"),
+            response=ApprovalResponse("accept"),
+            created_at=_now(),
+        )
+        entered = asyncio.Event()
+        release = asyncio.Event()
+
+        async def block_response(
+            operation: RespondToRequest,
+            *,
+            completed_at: datetime,
+        ) -> RequestResponseRouted:
+            entered.set()
+            await release.wait()
+            return RequestResponseRouted(
+                operation_id=operation.operation_id,
+                request_ref=operation.request_ref,
+                completed_at=completed_at,
+            )
+
+        with patch.object(gateway, "_respond_to_request", side_effect=block_response) as response:
+            owner = asyncio.create_task(gateway.execute_gateway(first))
+            await entered.wait()
+            self.assertEqual(gateway._conversation_locks.active_key_count, 1)
+            self.assertEqual(gateway._request_locks.active_key_count, 1)
+            assert gateway._conversation_locks.capacity is not None
+            self.assertLessEqual(
+                gateway._request_locks.active_key_count,
+                gateway._conversation_locks.capacity,
+            )
+
+            rejected = await gateway.execute_gateway(distinct)
+            self.assertIsInstance(rejected, GatewayOperationFailed)
+            assert isinstance(rejected, GatewayOperationFailed)
+            self.assertEqual(
+                rejected.error.code,
+                OperationErrorCode.CAPACITY_EXHAUSTED.value,
+            )
+            self.assertEqual(response.await_count, 1)
+            self.assertEqual(gateway._request_locks.active_key_count, 1)
+
+            release.set()
+            self.assertIsInstance(await owner, RequestResponseRouted)
+
+        self.assertEqual(gateway._request_locks.active_key_count, 0)
         self.assertEqual(gateway._conversation_locks.active_key_count, 0)
 
     async def test_inbound_capacity_rejection_preserves_i2_claim_rules(self) -> None:
