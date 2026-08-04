@@ -2,24 +2,41 @@
 
 ## Purpose and ownership
 
-`gateway.routing.gateway-operations` owns the closed, strongly typed set of
-Gateway control intents and their typed results. It validates and dispatches
-selection, observation, listing, and Conversation-scoped request-routing
-operations under the Gateway's bounded orchestration rules.
+`gateway.routing.gateway-operations` owns the shared Gateway discriminator and
+base, the closed aggregate operation/result unions, the Gateway-owned list and
+select values, aggregate failure values, aggregate validation, typed dispatch,
+and bounded Conversation serialization.
 
 This leaf owns:
 
-- `GatewayOperation` and `GatewayOperationResult` variants and validators;
-- stable operation identity and explicit unsupported/failure results;
-- per-Conversation execution serialization;
-- dispatch to the binding, projection-route, and request-correlation owners.
+- the shared `GatewayOperationType` and operation/result bases;
+- `GatewayOperation` and `GatewayOperationResult` aggregate unions;
+- `ListApplications`, `SelectApplication`, `ApplicationsListed`, and
+  `GatewayOperationFailed`;
+- aggregate field, discriminant, identity, and postcondition validation;
+- typed dispatch and finite per-Conversation execution serialization;
+- delegation to the binding, projection-route, and request-correlation owners
+  through explicit typed methods or ports. `ApplicationOperation` remains a
+  separate closed contract and is not a Gateway aggregate variant.
+
+The composition implementation is the private
+`_GatewayOperationExecutor`. It is not an accepted public contract and is not
+re-exported by `imagent.gateway.routing` or the Gateway package facade. Its
+constructor is used only by the Gateway root with the private, statically
+typed delegate port; consumers receive the existing `ControllerActions` and
+Gateway methods instead.
 
 It does not own slash syntax, product commands, permissions, presentation,
-native Application operation semantics, or native Application state. A
+native Application operation semantics, or native Application state. It also
+does not own binding values, binding repository/CAS or same-target authority;
+projection observation values, route policy or route persistence;
+request-response values, response validation, claim/transition fences,
+correlation persistence or replay; or generic persistence repositories. A
 Controller recognizes interaction grammar and invokes typed actions;
 `ControllerActions` is the public composition path. Application operations
-remain a separate closed contract and are delegated to the owning Application
-rather than reclassified as Gateway operations.
+remain a separate closed contract and enter through the existing
+`ImAgentGateway.execute_application` and `ControllerActions.execute_application`
+paths; the Gateway aggregate does not dispatch or call them.
 
 ## Contract and execution
 
@@ -50,23 +67,38 @@ exception is raised; with I2 the claim is completed before terminal error
 presentation. Presenter or Channel failure cannot reopen the input.
 
 Replay behavior is operation-specific rather than a generic `operation_id`
-deduplication guarantee. A mutation may converge after retry only where its
-typed postcondition and repository contract prove the complete requested state
-(for example, the same-target binding rule). Revisionless operations may write
-a new revision again. Unknown outcomes fail explicitly unless that operation's
-documented state comparison proves convergence; Gateway does not authorize a
-blind repeat or manufacture a general durable operation log.
+deduplication guarantee. Operations preserves the existing same-target and
+revisionless distinctions by dispatching to the binding, route, and request
+owners; it does not infer or implement their postconditions. Unknown outcomes
+fail explicitly unless the delegated owner documents a state comparison that
+proves convergence. Gateway does not authorize a blind repeat or manufacture
+a general durable operation log.
 
 ## Dependency boundary
 
-Gateway operations may call the binding and projection-route leaves and the
-minimal request-correlation transition API. Application operations cross only
-the public Application contract. Interaction Controllers depend on exact
-public typed actions, never on this leaf's implementation or Gateway context.
+Gateway operations call explicit typed owner methods or ports for binding,
+projection-route, and request-correlation. They do not dispatch
+`ApplicationOperation`, receive a generic repository/context object, or perform
+owner mutation or concrete validation. Root binding delegates may query
+Application truth through their existing typed root methods; that is binding
+composition, not Gateway aggregate dispatch. The projection-route
+implementation and policy remain in their next focused leaf; this owner
+invokes its typed route port and does not create a second route authority or
+observation worker. Interaction
+Controllers depend on exact public typed actions, never on this leaf's
+implementation or Gateway context.
 
-## Current structural gap
+## Physical owner and import boundary
 
-Gateway and Application operation variants currently share broad contract and
-validator modules, while execution remains in the Gateway package root. Later
-focused slices will separate the owner paths and update all imports without
-leaving two internal operation models.
+The canonical implementation is
+`src/imagent/gateway/routing/operations.py`. The Gateway package root composes
+that owner and retains only broader admission, input, presentation, delivery,
+diagnostics, and lifecycle orchestration. Application operation variants stay
+in `src/imagent/applications/operations.py`.
+
+`imagent.contracts` and `imagent.gateway.routing` remain finite exact public
+facades. Their import-order bootstrap may resolve a partially initialized
+binding leaf so the closed Gateway union is completed once both exact owners
+are loaded; it is a finite named facade mechanism, not a compatibility
+implementation, service locator, or second operation definition. All resolved
+public names retain owner identity, signatures, and runtime annotations.

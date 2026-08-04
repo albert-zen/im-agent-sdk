@@ -9,8 +9,9 @@ Parent: `gateway.projection`
 This leaf owns minimal bridge correlations that authorize an IM destination to
 reply to an accepted IM-originated Turn or an interactive native request. It
 owns Turn reply correlation, per-destination request-route correlation,
-request-wide state fencing, response-destination validation, and removal under
-terminal/retention cleanup.
+the typed `RespondToRequest` and `RequestResponseRouted` values, their
+response validation, request-wide claim/transition fences, correlation
+persistence, replay rules, and removal under terminal/retention cleanup.
 
 It does not own native request truth, prompt or answer transcript copies,
 approval policy, sender admission, native response execution, or Application
@@ -77,8 +78,11 @@ The process-local request-correlation repository implementation lives in
 `gateway/persistence/memory.py`. The pure request identity, destination
 selection, monotonic transition, and conflict policy helpers live in
 `gateway/projection/request_correlation.py`; persistence owns passive records
-and atomic storage, while this leaf owns the routing authority that consumes
-the Port. SQLite schema and SQL mutation now live only in
+and atomic storage, while this leaf owns the routing authority and typed
+response operation values that consume the Port. The Gateway operations
+aggregate delegates to this owner through explicit typed methods and does not
+own response validation, transition fences, correlation persistence, or
+replay. SQLite schema and SQL mutation now live only in
 `gateway/persistence/sqlite.py`; row conversion remains in the pure
 row-mapping leaf.
 

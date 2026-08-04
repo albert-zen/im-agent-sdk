@@ -19,14 +19,15 @@ framework.
 ## Ownership
 
 This component records the remaining cross-owner schema and facade surface; it
-does not own the Application model family. Its current mixed modules still
-contain the following Gateway bridge values:
+does not own the Application model family. The focused Gateway routing leaf
+now owns Gateway operation values and validators; this component retains the
+following cross-owner surface:
 
 - Conversation bindings, projection routes, and minimal Turn reply-correlation
   state;
-- Gateway operations and results;
-- the cross-owner language-neutral schema union and its remaining validators;
-- the deliberate `imagent.contracts` compatibility facade.
+- the cross-owner language-neutral schema union and any validators that still
+  belong to other leaves; and
+- the deliberate finite `imagent.contracts` public facade.
 
 Channel contract, admission, capability/profile, and delivery-receipt values
 are deliberately excluded from that historical facade. Their sole formal
@@ -69,9 +70,12 @@ capabilities require typed fields.
 
 ## Dependency direction
 
-Contracts import no Python runtime port, Gateway, Controller, persistence, or
-concrete adapter implementation. [Python Ports](../ports/design.md) depend on
-contract types. Every other runtime component may depend on Contracts.
+Contracts import no Python runtime port, Gateway orchestration, Controller,
+persistence, or concrete adapter implementation. The finite
+`imagent.contracts` facade resolves exact Gateway operation and binding owners
+without implementing them. [Python Ports](../ports/design.md) depend on
+contract types. Every other runtime component may depend on the public
+contract facade.
 
 ## Common-abstraction threshold
 

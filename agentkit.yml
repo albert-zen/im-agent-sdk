@@ -185,12 +185,14 @@ components:
       - src/imagent/gateway/lifecycle.py
       - src/imagent/gateway/routing/__init__.py
       - src/imagent/gateway/routing/bindings.py
+      - src/imagent/gateway/routing/operations.py
       - src/imagent/cli/**
       - examples/reference_consumer/gateway.py
       - examples/reference_consumer/main.py
       - tests/gateway/test_lifecycle.py
       - tests/gateway/test_package_root.py
       - tests/gateway/routing/test_bindings.py
+      - tests/gateway/routing/test_operations.py
       - tests/test_gateway_operations.py
       - tests/test_gateway_vertical_slice.py
       - tests/gateway/test_reference_consumer.py

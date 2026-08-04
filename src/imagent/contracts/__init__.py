@@ -14,24 +14,26 @@ if TYPE_CHECKING:
         ClearConversationThread,
         ConversationBound,
     )
-    from ..interaction.messages import ConversationRef
-    from .operations import (
+    from ..gateway.routing.operations import (
         ApplicationsListed,
         GatewayOperation,
         GatewayOperationFailed,
         GatewayOperationResult,
         GatewayOperationType,
         ListApplications,
+        SelectApplication,
+        validate_gateway_operation,
+        validate_gateway_operation_result,
+    )
+    from ..interaction.messages import ConversationRef
+    from .operations import (
         ObserveThread,
         RequestResponseRouted,
         RespondToRequest,
-        SelectApplication,
         ThreadObserved,
     )
     from .validators import (
         derive_client_message_id,
-        validate_gateway_operation,
-        validate_gateway_operation_result,
     )
 
 from ..applications.capabilities import (
@@ -177,18 +179,22 @@ _GATEWAY_OPERATION_EXPORTS = frozenset(
         "GatewayOperationResult",
         "GatewayOperationType",
         "ListApplications",
+        "SelectApplication",
+        "validate_gateway_operation",
+        "validate_gateway_operation_result",
+    }
+)
+_GATEWAY_PENDING_OPERATION_EXPORTS = frozenset(
+    {
         "ObserveThread",
         "RequestResponseRouted",
         "RespondToRequest",
-        "SelectApplication",
         "ThreadObserved",
     }
 )
 _GATEWAY_VALIDATOR_EXPORTS = frozenset(
     {
         "derive_client_message_id",
-        "validate_gateway_operation",
-        "validate_gateway_operation_result",
     }
 )
 
@@ -334,6 +340,8 @@ def __getattr__(name: str) -> object:
     if name in _BINDING_EXPORTS:
         module = import_module("..gateway.routing.bindings", __name__)
     elif name in _GATEWAY_OPERATION_EXPORTS:
+        module = import_module("..gateway.routing.operations", __name__)
+    elif name in _GATEWAY_PENDING_OPERATION_EXPORTS:
         module = import_module(".operations", __name__)
     elif name in _GATEWAY_VALIDATOR_EXPORTS:
         module = import_module(".validators", __name__)

@@ -16,11 +16,16 @@ operation, and observing a Thread never selects it for input.
   [testing](projection-routes/testing.md) — stable outbound destination edges
   and the three accepted projection policies.
 
-The binding contract slice now has its focused owner at
-`src/imagent/gateway/routing/bindings.py`, with the declared
-`imagent.gateway.routing` facade and exact historical `imagent.contracts`
-re-exports. Mutation, compare-and-swap, Conversation serialization, and route
-preparation remain in their existing persistence, projection, and Gateway
-orchestration owners. Gateway operations and projection routes remain pending
-later one-slice migrations recorded in the machine-readable
-[component map](../../component-map.yml).
+The binding contract slice has its focused owner at
+`src/imagent/gateway/routing/bindings.py`, and Gateway operation contracts,
+validation, dispatch, and bounded Conversation serialization have their
+focused owner at `src/imagent/gateway/routing/operations.py`. The declared
+`imagent.gateway.routing` facade and exact finite `imagent.contracts` facade
+re-export those owner objects. Binding repository mutation, optimistic
+compare-and-swap, and same-target convergence remain binding-owned; route
+policy and persistence remain projection-route-owned; and request response
+validation, transition fences, correlation persistence, and replay remain
+request-correlation-owned. Operations delegates through typed owner methods
+and owns neither generic repositories nor those concrete validators.
+Projection-route implementation remains the next one-slice migration recorded
+in the machine-readable [component map](../../component-map.yml).

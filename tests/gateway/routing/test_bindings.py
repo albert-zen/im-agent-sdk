@@ -45,6 +45,7 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     import imagent.contracts.validators as validators_owner
     import imagent.gateway as gateway_facade
     import imagent.gateway.routing as routing_facade
+    import imagent.gateway.routing.operations as operations_owner
     from imagent.gateway.persistence import ConversationBinding
     from imagent.gateway.routing import bindings as binding_owner
 
@@ -68,30 +69,31 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     facade_hints = typing.get_type_hints(contracts_facade.ConversationBound)
     assert binding_hints["binding"] is ConversationBinding
     assert facade_hints["binding"] is ConversationBinding
-    assert binding_hints["type"] is historical_operations.GatewayOperationType
-    assert facade_hints["type"] is historical_operations.GatewayOperationType
+    assert binding_hints["type"] is operations_owner.GatewayOperationType
+    assert facade_hints["type"] is operations_owner.GatewayOperationType
     assert typing.get_type_hints(contracts_facade.__getattr__)["return"] is object
     assert typing.get_args(contracts_facade.GatewayOperation)
     assert inspect.signature(contracts_facade.validate_gateway_operation) == inspect.signature(
-        validators_owner.validate_gateway_operation
+        operations_owner.validate_gateway_operation
     )
     assert (
         inspect.signature(contracts_facade.validate_gateway_operation_result)
-        == inspect.signature(validators_owner.validate_gateway_operation_result)
+        == inspect.signature(operations_owner.validate_gateway_operation_result)
     )
     assert (
         typing.get_type_hints(contracts_facade.validate_gateway_operation)
-        == typing.get_type_hints(validators_owner.validate_gateway_operation)
+        == typing.get_type_hints(operations_owner.validate_gateway_operation)
     )
     assert (
         typing.get_type_hints(contracts_facade.validate_gateway_operation_result)
-        == typing.get_type_hints(validators_owner.validate_gateway_operation_result)
+        == typing.get_type_hints(operations_owner.validate_gateway_operation_result)
     )
     """
 ).strip()
 
 _IMPORT_ORDERS = {
-    "canonical owner first": "import imagent.gateway.routing.bindings\n",
+    "canonical owner first": "import imagent.gateway.routing.operations\n",
+    "binding owner first": "import imagent.gateway.routing.bindings\n",
     "historical operations first": "import imagent.contracts.operations\n",
     "validators first": "import imagent.contracts.validators\n",
     "contracts facade first": "import imagent.contracts\n",
@@ -224,7 +226,7 @@ class BindingOwnerTests(unittest.TestCase):
         )
         object.__setattr__(result, "type", GatewayOperationType.CONVERSATION_BIND_THREAD)
         with patch.object(
-            historical_validators,
+            binding_owner,
             "_validate_binding_operation_result",
             wraps=binding_owner._validate_binding_operation_result,
         ) as owner_validator:
