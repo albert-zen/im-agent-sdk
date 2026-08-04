@@ -5,17 +5,16 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
-from ..contracts import (
+from .contract import ApplicationRef, ThreadRef
+from .requests import (
     MAX_INTERACTIVE_REQUEST_CHOICES,
     MAX_INTERACTIVE_REQUEST_QUESTIONS,
-    ApplicationRef,
     ApprovalRequest,
     ApprovalResponse,
     InteractiveRequest,
     RequestChoice,
     RequestRef,
     RequestResponse,
-    ThreadRef,
     UserInputQuestion,
     UserInputRequest,
     UserInputResponse,

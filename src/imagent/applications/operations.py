@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TypeAlias
 
 from ..interaction.messages import Content
 from ..interaction.operations import (
@@ -12,21 +12,7 @@ from ..interaction.operations import (
     OperationResultStatus,
     require_identifier,
 )
-from .requests import ApprovalResponse, UserInputResponse
-
-if TYPE_CHECKING:
-    from ..contracts.model import (
-        ApplicationRef,
-        Page,
-        ProjectRef,
-        ProjectSummary,
-        ThreadHistory,
-        ThreadRef,
-        ThreadStatus,
-        ThreadSummary,
-        TurnCatchup,
-    )
-    from .requests import RequestRef, RequestResponse
+from .requests import ApprovalResponse, UserInputResponse, validate_request_ref
 
 
 class ApplicationOperationType(StrEnum):
@@ -345,9 +331,6 @@ ApplicationOperationResult: TypeAlias = (
 def validate_application_operation(operation: ApplicationOperation) -> None:
     # Application operation validation delegates shared resource and request
     # invariants to their focused leaves without changing operation semantics.
-    from ..contracts._validation import validate_thread_ref
-    from .requests import validate_request_ref
-
     require_identifier(operation.operation_id, "operation_id")
     application_id = operation.application_ref.application_instance_id
     require_identifier(application_id, "application_instance_id")
@@ -529,7 +512,7 @@ def _validate_error(error: ContractError) -> None:
         raise ContractViolation("operation error message cannot be empty")
 
 
-from ..contracts.model import (  # noqa: E402
+from .contract import (  # noqa: E402
     ApplicationRef,
     Page,
     ProjectRef,
@@ -539,5 +522,6 @@ from ..contracts.model import (  # noqa: E402
     ThreadStatus,
     ThreadSummary,
     TurnCatchup,
+    validate_thread_ref,
 )
 from .requests import RequestRef, RequestResponse  # noqa: E402

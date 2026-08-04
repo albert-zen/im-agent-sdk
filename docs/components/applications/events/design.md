@@ -21,14 +21,14 @@ and route/checkpoint recovery.
 ## Inputs, outputs, and dependencies
 
 Normalized native events enter this leaf and each subscriber receives its own
-bounded Thread event stream. It depends on Interaction message and validation
-values plus the Applications capability declaration and request leaf, but
-never on Gateway. Its request annotations and validation delegate to
-`applications.requests`; resource annotations still delegate to the historical
-Application contract values. They do not make this leaf an owner of request or
-Application-resource semantics. Stable event/item identities and any
-sequence/cursor fields describe only native guarantees; text and time do not
-establish identity.
+bounded Thread event stream. It consumes Applications-owned `AgentMessage`
+values for canonical message payloads and their strong `ThreadRef` scope,
+alongside Interaction message and validation values, the Applications
+capability declaration, and the request leaf. It owns only the event envelope,
+ordering fields, validation, fan-out, and explicit gaps; it never owns
+AgentMessage, history, Thread, request, or Gateway truth. Stable event/item
+identities and any sequence/cursor fields describe only native guarantees; text
+and time do not establish identity.
 
 The implementation is `imagent.applications.events`, in
 `src/imagent/applications/events.py`. `imagent.contracts` and `imagent.events`
@@ -48,7 +48,8 @@ The implementation is `schemas/v1/events.schema.json` plus
 `src/imagent/applications/events.py`. Focused owner evidence is
 `tests/applications/test_events.py`; adapter and Gateway integration coverage
 remains alongside those consumers. The schema and event semantics are
-unchanged by this mechanical move.
+unchanged by this mechanical move, and the event module contains no duplicate
+AgentMessage or resource model.
 
 ## Authority
 

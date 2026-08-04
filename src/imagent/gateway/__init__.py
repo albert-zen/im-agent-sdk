@@ -14,9 +14,8 @@ if TYPE_CHECKING:
     from .delivery.proactive_authorization import DeliveryAuthorizer
 
 from ..applications.capabilities import ProjectMode
-from ..applications.contract import AgentApplicationAdapter
+from ..applications.contract import AgentApplicationAdapter, AgentInput, ThreadRef
 from ..contracts import (
-    AgentInput,
     ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,
@@ -48,7 +47,6 @@ from ..contracts import (
     ThreadCreated,
     ThreadObserved,
     ThreadRead,
-    ThreadRef,
     derive_client_message_id,
     validate_application_operation,
     validate_application_operation_result,

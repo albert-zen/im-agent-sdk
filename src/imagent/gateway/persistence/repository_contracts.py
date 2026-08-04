@@ -6,13 +6,13 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
+from ...applications.contract import ThreadRef
 from ...applications.requests import RequestRef
 from ...contracts import (
     ConversationBinding,
     RequestRouteCorrelation,
     RequestRouteState,
     ThreadProjectionRoute,
-    ThreadRef,
     TurnReplyCorrelation,
 )
 from ...contracts.delivery import (

@@ -5,13 +5,13 @@ from collections.abc import Iterable
 from dataclasses import replace
 from datetime import UTC, datetime
 
+from ...applications.contract import ThreadRef
 from ...applications.requests import RequestRef
 from ...contracts import (
     ConversationBinding,
     RequestRouteCorrelation,
     RequestRouteState,
     ThreadProjectionRoute,
-    ThreadRef,
     TurnReplyCorrelation,
     validate_binding,
     validate_projection_route,

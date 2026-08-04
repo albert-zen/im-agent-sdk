@@ -9,11 +9,15 @@ from dataclasses import dataclass
 from typing import Generic, TypeVar
 
 from ...applications.capabilities import ProjectMode, ThreadDeletionCapability
+from ...applications.contract import (
+    ApplicationRef,
+    ApplicationSummary,
+    ProjectSummary,
+    ThreadSummary,
+)
 from ...contracts import (
     ApplicationOperationFailed,
-    ApplicationRef,
     ApplicationsListed,
-    ApplicationSummary,
     ApprovalResponse,
     BindConversationToProject,
     BindConversationToThread,
@@ -31,7 +35,6 @@ from ...contracts import (
     ListThreads,
     ObserveThread,
     ProjectsListed,
-    ProjectSummary,
     RequestRef,
     RequestResponseRouted,
     RespondToRequest,
@@ -43,7 +46,6 @@ from ...contracts import (
     ThreadObserved,
     ThreadsListed,
     ThreadStatusRead,
-    ThreadSummary,
     TurnCatchupRead,
     UserInputResponse,
 )

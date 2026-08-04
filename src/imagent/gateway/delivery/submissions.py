@@ -7,6 +7,7 @@ import sqlite3
 from dataclasses import replace
 from typing import Protocol
 
+from ...applications.contract import ProjectRef, ThreadRef
 from ...contracts.delivery import (
     ConversationDeliveryTarget,
     DeliveryIntent,
@@ -22,7 +23,6 @@ from ...contracts.delivery import (
     validate_delivery_intent,
     validate_delivery_submission_record,
 )
-from ...contracts.model import ProjectRef, ThreadRef
 from ...interaction.channels import (
     DeliveryItemReceipt,
     DeliveryItemStatus,

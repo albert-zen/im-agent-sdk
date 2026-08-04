@@ -5,6 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TypeAlias
 
+from ..applications.contract import ApplicationRef, ApplicationSummary, ProjectRef, ThreadRef
 from ..applications.requests import (
     RequestRef as _RequestRef,
 )
@@ -14,12 +15,8 @@ from ..applications.requests import (
 from ..interaction.messages import ConversationRef
 from ..interaction.operations import ContractError, OperationResultStatus
 from .model import (
-    ApplicationRef,
-    ApplicationSummary,
     ConversationBinding,
-    ProjectRef,
     ThreadProjectionRoute,
-    ThreadRef,
 )
 
 

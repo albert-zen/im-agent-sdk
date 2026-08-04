@@ -3,7 +3,7 @@
 import hashlib
 import json
 
-from ...contracts import ThreadRef
+from ...applications.contract import ThreadRef
 from ...interaction.messages import ConversationRef
 
 

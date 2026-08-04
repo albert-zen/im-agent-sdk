@@ -20,6 +20,12 @@ Native IDs are opaque and scoped by one configured Application or Channel
 instance. A native Thread ID from one Application instance cannot be used with
 another.
 
+The Python reference owner for `ApplicationRef`, `ProjectRef`, `ThreadRef`,
+the Project/Thread/Turn summaries and statuses, input/history values, and
+`validate_thread_ref` is
+[`applications.application-contract`](../applications/application-contract/design.md).
+The `imagent.contracts` names remain exact compatibility aliases only.
+
 The full organization model is:
 
 ```text
@@ -100,6 +106,11 @@ AgentMessage {
   metadata
 }
 ```
+
+`AgentMessage` is an Applications-owned immutable item with strong
+`ThreadRef` scope. Interaction owns only the `Content`, `MessageRole`, and
+`Metadata` values that it composes; Events consumes the item while owning only
+the event envelope, ordering, fan-out, and gap semantics.
 
 Inbound native identity, an outbound delivery request, and an authoritative
 Agent item are deliberately different envelopes. A Channel returns native

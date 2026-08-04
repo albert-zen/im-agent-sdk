@@ -12,12 +12,18 @@ from imagent.applications.capabilities import (
     ThreadDeletionCapability,
     validate_application_capabilities,
 )
-from imagent.applications.contract import AgentApplicationAdapter
+from imagent.applications.contract import (
+    AgentApplicationAdapter,
+    AgentInput,
+    ApplicationInputDispatch,
+    InputContinuationPreference,
+    InputDisposition,
+    TurnReplyCorrelationPolicy,
+    validate_thread_ref,
+)
 from imagent.applications.events import AgentEvent, AgentEventType, validate_agent_event
 from imagent.contracts import (
     ActivateNativeThread,
-    AgentInput,
-    ApplicationInputDispatch,
     ApplicationOperationFailed,
     CreateThread,
     DeleteThread,
@@ -27,8 +33,6 @@ from imagent.contracts import (
     GetThreadHistory,
     GetThreadStatus,
     GetTurnCatchup,
-    InputContinuationPreference,
-    InputDisposition,
     ListProjects,
     ListThreads,
     NativeThreadActivated,
@@ -42,10 +46,8 @@ from imagent.contracts import (
     ThreadsListed,
     ThreadStatusRead,
     TurnCatchupRead,
-    TurnReplyCorrelationPolicy,
     derive_client_message_id,
     validate_application_operation_result,
-    validate_thread_ref,
 )
 from imagent.interaction.channels import ChannelAdapter
 from imagent.interaction.messages import InboundMessage, OutboundMessage, TextContent

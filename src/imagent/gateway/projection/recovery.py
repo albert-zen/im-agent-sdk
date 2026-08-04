@@ -7,7 +7,12 @@ from datetime import UTC, datetime
 from enum import StrEnum
 
 from ...applications.capabilities import SupportLevel
-from ...applications.contract import AgentApplicationAdapter
+from ...applications.contract import (
+    AgentApplicationAdapter,
+    ThreadHistory,
+    ThreadRef,
+    TurnCatchup,
+)
 from ...applications.events import AgentEvent
 from ...contracts import (
     ApplicationOperation,
@@ -15,11 +20,8 @@ from ...contracts import (
     ApplicationOperationResult,
     GetThreadHistory,
     GetTurnCatchup,
-    ThreadHistory,
     ThreadHistoryRead,
     ThreadProjectionRoute,
-    ThreadRef,
-    TurnCatchup,
     TurnCatchupRead,
 )
 from ...events import CursorExpired

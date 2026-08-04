@@ -3,12 +3,11 @@ from __future__ import annotations
 import asyncio
 import secrets
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
+from ...applications.contract import ThreadRef, validate_thread_ref
 from ...interaction.messages import ConversationRef
-
-if TYPE_CHECKING:
-    from ...contracts.model import ThreadRef
+from ...interaction.operations import ContractViolation, require_identifier
 
 
 class DeliveryAuthorizer(Protocol):
@@ -23,9 +22,6 @@ class DeliveryPrincipal:
 
 
 def validate_delivery_principal(principal: DeliveryPrincipal) -> None:
-    from ...contracts._validation import validate_thread_ref
-    from ...interaction.operations import ContractViolation, require_identifier
-
     require_identifier(principal.principal_id, "principal_id")
     if len(set(principal.allowed_threads)) != len(principal.allowed_threads):
         raise ContractViolation("allowed_threads must be unique")
@@ -79,13 +75,5 @@ class ScopedDeliveryAuthorizer:
 
 
 def _validate_conversation_ref(conversation_ref: ConversationRef) -> None:
-    from ...interaction.operations import require_identifier
-
     require_identifier(conversation_ref.channel_instance_id, "channel_instance_id")
     require_identifier(conversation_ref.native_conversation_id, "native_conversation_id")
-
-
-# Bind the historical Thread reference only after this Gateway owner is fully
-# defined, so runtime annotation inspection remains supported without an
-# import-time cycle through the contracts facade.
-from ...contracts.model import ThreadRef  # noqa: E402

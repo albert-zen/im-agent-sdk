@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import UTC, datetime
 
-from ..contracts import ThreadStatus, TurnStatus
+from .contract import ThreadStatus, TurnStatus
 
 
 def native_object(result: Mapping[str, object], key: str) -> Mapping[str, object]:

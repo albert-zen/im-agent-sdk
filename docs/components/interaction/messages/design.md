@@ -7,18 +7,18 @@ Parent: `interaction`
 ## Purpose
 
 This leaf defines the immutable, content-bearing envelopes exchanged at the
-IM bridge boundary. It keeps native inbound identity, outbound delivery
-request identity, and canonical Agent item identity distinct while preserving
+IM bridge boundary. It keeps native inbound identity and outbound delivery
+request identity distinct while preserving
 ordered typed content.
 
 ## Ownership
 
 This leaf owns:
 
-- `InboundMessage`, `OutboundMessage`, and `AgentMessage` envelopes;
+- `InboundMessage` and `OutboundMessage` envelopes;
 - `Content`, `TextContent`, `TextFormat`, and ordered content tuples;
 - `ConversationRef`, `MessageRole`, `Metadata`, and `TextLengthUnit` values;
-- the stable identity fields carried by each message kind.
+- the stable identity fields carried by each Interaction message kind.
 
 It does not own:
 
@@ -26,29 +26,31 @@ It does not own:
 - Conversation binding, admission, routing, checkpoint, or idempotency state;
 - native Channel encoding, delivery, receipt, or retry behavior;
 - Application Thread, Turn, transcript, request, or execution truth;
+- `AgentMessage`, which is an immutable, strong-`ThreadRef`-scoped
+  Applications item consumed by history and canonical live-event
+  normalization;
 - attachment source trust or byte lifetime, which belong to
   [`interaction.media`](../media/design.md).
 
-`AgentMessage` is the canonical content envelope used to project one
-Application-owned item. Carrying an opaque `ThreadRef` and `agentItemId` does
-not make this leaf a transcript or Thread authority.
+Applications compose the same `Content` values into their own `AgentMessage`
+contract; that item is not defined or exported by this Interaction leaf.
 
 ## Inputs and outputs
 
 Channel normalization supplies authenticated native message facts and ordered
 typed content to produce `InboundMessage`. Gateway delivery supplies a stable
 logical delivery identity and destination to produce `OutboundMessage`.
-Application adapters normalize authoritative native items into
-`AgentMessage`. Consumers receive frozen Python values or the equivalent
-language-neutral schema values.
+Applications compose the same `Content` values into their own `AgentMessage`
+contract; that item is not defined or exported by this Interaction leaf.
+Consumers receive frozen Python values or the equivalent language-neutral
+schema values.
 
-The three envelopes are not interchangeable:
+The two Interaction envelopes are not interchangeable:
 
 | Envelope | Stable identity | Meaning |
 |---|---|---|
 | `InboundMessage` | native Channel `messageId` within its configured Channel/Conversation scope | one normalized IM input |
 | `OutboundMessage` | Gateway `deliveryId` | one logical delivery request to a Conversation |
-| `AgentMessage` | Application `agentItemId` within its Thread scope | one canonical authoritative Agent item |
 
 Text, timestamps, reply IDs, and Metadata never define identity or
 deduplication. Content order is semantic and must survive normalization,
@@ -77,15 +79,14 @@ side effect belongs to this leaf.
 
 Message values are stateless and immutable. This leaf persists no message,
 transcript, replay cursor, or delivery job. Recovery and idempotency use stable
-Channel, Gateway, and Application identities owned by their respective
-components. Authoritative Agent history may reproduce the same
-`AgentMessage`; that reproduction must retain its stable item identity rather
-than deduplicate by content or time.
+Channel and Gateway identities owned by their respective components. The
+Applications contract owns authoritative Agent history and its stable
+`AgentMessage` identity.
 
 ## Current and target structure
 
 The dependency-safe mechanical phase moves `ConversationRef`, text/content
-values, `InboundMessage`, and `OutboundMessage` to the owning leaf first. The
+values, `InboundMessage`, and `OutboundMessage` to the owning leaf. The
 language-neutral message schema remains a cross-owner document and no schema
 shape changes.
 
@@ -96,13 +97,11 @@ src/imagent/interaction/messages.py
 tests/interaction/test_messages.py
 ```
 
-`AgentMessage` remains one implementation in the declared mixed
-`src/imagent/contracts/model.py` during this phase because its strongly typed
-`ThreadRef` is Applications-owned. Moving it early would create a target
-Interaction/Applications dependency cycle, weaken that field, or duplicate a
-resource contract. The Applications contract slice must separate the resource
-reference boundary before the final Agent envelope move; this is an explicit
-structural gap, not a compatibility implementation.
+`AgentMessage` is implemented by
+`src/imagent/applications/contract.py`, where its strong `ThreadRef` scope and
+history/live parity are authoritative. The schema remains intentionally split:
+Interaction owns content/media definitions while Applications owns the
+Agent-item definition that composes them.
 
 The deliberate `imagent.contracts` public facade re-exports exact owner
 objects throughout. Repository runtime imports use the extracted foundation,

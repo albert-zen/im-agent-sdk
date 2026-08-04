@@ -7,8 +7,8 @@ does not own Gateway orchestration or native Agent truth.
 
 ## Value leaves
 
-- [Messages](messages/design.md) — inbound, outbound, and canonical Agent
-  content envelopes; see [testing](messages/testing.md).
+- [Messages](messages/design.md) — inbound and outbound content envelopes; see
+  [testing](messages/testing.md).
 - [Operations](operations/design.md) — the common typed operation result,
   error, and validation vocabulary; see [testing](operations/testing.md).
 - [Media](media/design.md) — attachment sources and source/type/size/trust

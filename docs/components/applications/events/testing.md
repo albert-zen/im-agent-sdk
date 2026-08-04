@@ -10,6 +10,11 @@ publication does not await a consumer, and one finite queue overflow removes
 only that subscription and raises a typed gap. They also prove no synthetic
 cursor, transcript, or retained event log is introduced.
 
+Event tests must prove that canonical event payloads can consume the exact
+Applications-owned `AgentMessage` while keeping event envelope/order/fan-out
+ownership in `applications.events`; the event module must not define or export
+an Application model duplicate.
+
 Recovery/adapter scenarios must prove that gaps trigger native-authoritative
 replay/history reconciliation and that `message.completed` does not replace an
 explicit terminal Turn event. The tests also prove the owner import remains

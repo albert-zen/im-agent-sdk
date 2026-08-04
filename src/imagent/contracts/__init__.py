@@ -17,6 +17,29 @@ from ..applications.capabilities import (
     ThreadDeletionCapability,
     validate_application_capabilities,
 )
+from ..applications.contract import (
+    AcceptedTurn,
+    AgentInput,
+    AgentMessage,
+    ApplicationInputDispatch,
+    ApplicationRef,
+    ApplicationSummary,
+    InputContinuationPreference,
+    InputDisposition,
+    Page,
+    ProjectRef,
+    ProjectSummary,
+    ThreadHistory,
+    ThreadRef,
+    ThreadSnapshot,
+    ThreadStatus,
+    ThreadSummary,
+    TurnCatchup,
+    TurnHistoryEntry,
+    TurnReplyCorrelationPolicy,
+    TurnStatus,
+    validate_thread_ref,
+)
 from ..applications.events import AgentEvent, AgentEventType, validate_agent_event
 from ..applications.operations import (
     ActivateNativeThread,
@@ -122,9 +145,6 @@ from ..interaction.operations import (
     operation_error,
     require_identifier,
 )
-from ._validation import (
-    validate_thread_ref,
-)
 from .delivery import (
     MAX_DELIVERY_SUBMISSION_DESTINATIONS,
     DeliveryReservation,
@@ -141,32 +161,12 @@ from .errors import (
     ApplicationInputOutcomeUnknown as ApplicationInputOutcomeUnknown,
 )
 from .model import (
-    AcceptedTurn,
-    AgentInput,
-    AgentMessage,
-    ApplicationInputDispatch,
-    ApplicationRef,
-    ApplicationSummary,
     ConversationBinding,
-    InputContinuationPreference,
-    InputDisposition,
-    Page,
     ProjectionPolicy,
-    ProjectRef,
-    ProjectSummary,
     RequestRouteCorrelation,
     RequestRouteState,
-    ThreadHistory,
     ThreadProjectionRoute,
-    ThreadRef,
-    ThreadSnapshot,
-    ThreadStatus,
-    ThreadSummary,
-    TurnCatchup,
-    TurnHistoryEntry,
     TurnReplyCorrelation,
-    TurnReplyCorrelationPolicy,
-    TurnStatus,
 )
 from .operations import (
     ApplicationsListed,
