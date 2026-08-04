@@ -2,11 +2,27 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Literal, cast
+from datetime import UTC, datetime
+from typing import Literal, Protocol, cast
+
+from ..messages import (
+    Content,
+    ConversationRef,
+)
+from ..messages import (
+    InboundMessage as InteractionInboundMessage,
+)
 
 AccessMatch = Literal["any", "all"]
 _UNRESTRICTED = "*"
 _DENY_ALL = "none"
+
+
+class _InboundIdentitySource(Protocol):
+    channel_id: object
+    conversation_id: object
+    user_id: object
+    message_id: object
 
 
 def parse_id_set(value: object) -> frozenset[str]:
@@ -119,3 +135,42 @@ class InboundMessage:
     reply_to_message_id: str | None = None
     sent_at: str | None = None
     trace_id: str | None = None
+
+
+def _normalize_inbound_message(
+    *,
+    channel_instance_id: str,
+    inbound: object,
+    content: tuple[Content, ...],
+    reply_to_message_id: str | None,
+) -> InteractionInboundMessage:
+    native = cast(_InboundIdentitySource, inbound)
+    return InteractionInboundMessage(
+        message_id=str(native.message_id),
+        conversation_ref=ConversationRef(
+            channel_instance_id=channel_instance_id,
+            native_conversation_id=str(native.conversation_id),
+        ),
+        sender=str(native.user_id),
+        content=content,
+        created_at=_parse_datetime(getattr(native, "sent_at", None)),
+        reply_to=(
+            str(reply_to_message_id)
+            if reply_to_message_id is not None
+            else getattr(native, "reply_to_message_id", None)
+        ),
+        metadata={
+            "channel_id": str(native.channel_id),
+            "input_error": getattr(native, "input_error", None),
+            "trace_id": getattr(native, "trace_id", None),
+        },
+    )
+
+
+def _parse_datetime(value: object) -> datetime:
+    if isinstance(value, str) and value:
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+    return datetime.now(UTC)

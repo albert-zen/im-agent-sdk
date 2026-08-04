@@ -6,7 +6,6 @@ import inspect
 import time
 from collections.abc import Callable
 from dataclasses import replace
-from datetime import UTC, datetime
 from typing import Protocol
 
 from ....contracts import (
@@ -23,6 +22,7 @@ from ...messages import (
     TextFormat,
 )
 from .. import InboundAdmissionHandler, MessageHandler
+from .. import ingress as _ingress
 from .. import outbound_delivery as _outbound_delivery
 from ..outbound_delivery import (
     NativeDeliveryResult,
@@ -382,25 +382,11 @@ class _InboundMiddleware:
                     },
                 )
             )
-        return InboundMessage(
-            message_id=str(inbound.message_id),
-            conversation_ref=ConversationRef(
-                channel_instance_id=self._channel_instance_id,
-                native_conversation_id=str(inbound.conversation_id),
-            ),
-            sender=str(inbound.user_id),
+        return _ingress._normalize_inbound_message(
+            channel_instance_id=self._channel_instance_id,
+            inbound=inbound,
             content=tuple(content),
-            created_at=_parse_datetime(getattr(inbound, "sent_at", None)),
-            reply_to=(
-                str(reply_to_message_id)
-                if reply_to_message_id is not None
-                else getattr(inbound, "reply_to_message_id", None)
-            ),
-            metadata={
-                "channel_id": str(inbound.channel_id),
-                "input_error": getattr(inbound, "input_error", None),
-                "trace_id": getattr(inbound, "trace_id", None),
-            },
+            reply_to_message_id=reply_to_message_id,
         )
 
     def get_route_context(self, channel_id: str, conversation_id: str):
@@ -408,12 +394,3 @@ class _InboundMiddleware:
             (channel_id, conversation_id),
             ChannelRouteContext(),
         )
-
-
-def _parse_datetime(value: object) -> datetime:
-    if isinstance(value, str) and value:
-        try:
-            return datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except ValueError:
-            pass
-    return datetime.now(UTC)
