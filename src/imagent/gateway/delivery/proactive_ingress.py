@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
-from ...adapters import DeliverySubmissionConflict
+from ...adapters import DeliverySubmissionCapacityError, DeliverySubmissionConflict
 from ...contracts import (
     ConversationDeliveryTarget,
     DeliveryIntent,
@@ -108,6 +108,8 @@ class ProactiveDeliveryJsonHandler:
                 return _error_response(404, "delivery_route_unavailable", error)
             except DeliverySubmissionConflict as error:
                 return _error_response(409, "delivery_id_conflict", error)
+            except DeliverySubmissionCapacityError as error:
+                return _error_response(503, "delivery_capacity_exhausted", error)
             except (ContractViolation, ValueError, TypeError) as error:
                 return _error_response(400, "invalid_delivery_request", error)
             except OSError as error:

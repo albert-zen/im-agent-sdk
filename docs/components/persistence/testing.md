@@ -52,6 +52,10 @@ Required scenarios:
   snapshot map independent of tuple order, reject any changed snapshot after
   SQLite restart, and do not mistake mutable terminal outcome fields for a new
   identity;
+- process-local submission capacity validates positive configuration, admits
+  exactly the configured number of distinct roots under concurrency, preserves
+  existing replay/CAS at the bound, and never evicts terminal or ambiguous
+  evidence; a new process starts empty and SQLite remains unchanged;
 - SDK-controlled origin and principal namespaces prevent external identities
   from colliding with Gateway-internal projection submissions;
 - rejected, in-flight, partial, and unknown proactive states remain sticky

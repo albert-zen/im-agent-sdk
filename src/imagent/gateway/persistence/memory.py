@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 
-from ...adapters import DeliverySubmissionConflict
+from ...adapters import DeliverySubmissionCapacityError, DeliverySubmissionConflict
 from ...contracts import (
     DeliveryReservation,
     DeliverySubmissionRecord,
@@ -17,9 +17,16 @@ from .submission_identity import ensure_same_delivery_submission_reservation
 class InMemoryDeliverySubmissionRepository:
     """Process-local route snapshots and outcomes without message content."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, max_records: int = 4096) -> None:
+        if not isinstance(max_records, int) or isinstance(max_records, bool) or max_records < 1:
+            raise ValueError("max_records must be a positive integer")
+        self._max_records = max_records
         self._records: dict[str, DeliverySubmissionRecord] = {}
         self._lock = asyncio.Lock()
+
+    @property
+    def max_records(self) -> int:
+        return self._max_records
 
     async def get_delivery_submission(
         self,
@@ -38,6 +45,10 @@ class InMemoryDeliverySubmissionRepository:
             if existing is not None:
                 ensure_same_delivery_submission_reservation(existing, record)
                 return DeliveryReservation(acquired=False, record=existing)
+            if len(self._records) >= self._max_records:
+                raise DeliverySubmissionCapacityError(
+                    "in-memory delivery submission record capacity is exhausted"
+                )
             self._records[record.submission_id] = record
             return DeliveryReservation(acquired=True, record=record)
 

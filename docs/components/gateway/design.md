@@ -45,7 +45,8 @@ grow together:
 - immutable `GatewayRepositories` holds bindings, idempotency, projection
   routes, request correlations, and delivery submissions;
 - immutable `GatewayLimits` holds every bounded capacity, recovery page/item
-  limit, retry delay, and correlation retention value;
+  limit, retry delay, and correlation retention value, including the positive
+  finite in-memory delivery-submission record bound (4096 by default);
 - immutable `GatewayExtensions` holds the optional Controller, Request
   Presenter, I1 inbound-content transformer, I2 inbound-failure presenter, and
   O1 destination-presentation policy and is the only group later Gateway-owned
@@ -57,8 +58,10 @@ dependencies. Application A1 configuration and Channel startup validation do
 not enter `GatewayExtensions`. The groups are frozen typed construction values,
 not service locators: Gateway internals resolve their fields once, and no
 extension receives a group, repository, or Gateway reference. Repository-local
-in-memory defaults and every runtime default/lifecycle ordering remain the same
-as before this refactor. The prior parallel keyword constructor is removed once
+in-memory defaults are constructed from that exact limits group; an explicitly
+injected repository remains authoritative and is never wrapped or reconfigured.
+Every runtime default/lifecycle ordering otherwise remains the same as before
+this refactor. The prior parallel keyword constructor is removed once
 repository call sites migrate, so there is one public composition shape.
 
 ## Typed extension boundary
@@ -141,6 +144,10 @@ behaviorally identical to the existing delivery path.
    identity with the caller delivery ID, immutable route snapshots, and
    payload/authority fingerprints. The authorizer cannot select the origin
    namespace.
+   The default process-local repository admits only its configured finite
+   number of root records. At capacity it rejects a new identity before
+   mutation or Channel work, while existing replay/CAS remains available; it
+   never evicts idempotency evidence to manufacture capacity.
 6. Every destination uses the same pure planner and ordered/bounded
    Coordinator as projection and interactive-request presentation.
 7. Typed receipts preserve accepted, rejected, partial, and unknown outcomes.

@@ -10,7 +10,11 @@ from pathlib import Path
 
 import imagent.contracts as contract_facade
 import imagent.gateway.delivery as delivery_facade
-from imagent.adapters import DeliverySubmissionConflict, IdempotencyClaimStatus
+from imagent.adapters import (
+    DeliverySubmissionCapacityError,
+    DeliverySubmissionConflict,
+    IdempotencyClaimStatus,
+)
 from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AttachmentContent,
@@ -39,7 +43,7 @@ from imagent.contracts import (
     ThreadRouteDeliveryTarget,
     derive_delivery_submission_id,
 )
-from imagent.gateway import GatewayRepositories, ImAgentGateway
+from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import (
     DeliveryCoordinator,
     DeliveryCoordinatorConfig,
@@ -186,6 +190,11 @@ class _UncheckedReservationRepository:
         raise AssertionError("conflicting reservation must fail before destination update")
 
 
+class _FalseySubmissionRepository(InMemoryDeliverySubmissionRepository):
+    def __bool__(self) -> bool:
+        return False
+
+
 class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.thread_ref = ThreadRef("app", "thread")
@@ -216,6 +225,7 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
         policy: ProjectionPolicy = ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
         submissions=None,
         coordinator: DeliveryCoordinator | None = None,
+        limits: GatewayLimits = GatewayLimits(),
     ) -> ImAgentGateway:
         return ImAgentGateway(
             channels=[self.channel_a, self.channel_b],
@@ -233,6 +243,7 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
             delivery_authorizer=self.authorizer,
             projection_policy=policy,
             delivery_coordinator=coordinator,
+            limits=limits,
         )
 
     def intent(self, delivery_id: str = "delivery-1", text: str = "hello"):
@@ -542,6 +553,74 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(replay.state, DeliverySubmissionState.UNKNOWN)
         self.assertTrue(replay.destinations[0].replayed)
         self.assertEqual(len(self.channel_a.sent), 1)
+
+    async def test_default_memory_capacity_is_pre_side_effect_and_replay_safe(
+        self,
+    ) -> None:
+        await self.put_route(self.conversation_a, route_id="route-a")
+        gateway = ImAgentGateway(
+            channels=[self.channel_a, self.channel_b],
+            applications=[
+                FakeAgentApplicationAdapter(
+                    application_instance_id="app",
+                    project_mode=ProjectMode.FLAT,
+                )
+            ],
+            repositories=GatewayRepositories(
+                bindings=self.bindings,
+                projections=self.projections,
+            ),
+            limits=GatewayLimits(delivery_submission_max_records=1),
+            delivery_authorizer=self.authorizer,
+        )
+
+        first = await gateway.deliver_proactively(
+            self.intent("capacity-first"),
+            credential=self.thread_token,
+        )
+        replay = await gateway.deliver_proactively(
+            self.intent("capacity-first"),
+            credential=self.thread_token,
+        )
+        with self.assertRaises(DeliverySubmissionCapacityError):
+            await gateway.deliver_proactively(
+                self.intent("capacity-second"),
+                credential=self.thread_token,
+            )
+
+        self.assertEqual(first.state, DeliverySubmissionState.ACCEPTED)
+        self.assertTrue(replay.destinations[0].replayed)
+        self.assertEqual(len(self.channel_a.sent), 1)
+
+        internal = OutboundMessage(
+            delivery_id="internal-at-capacity",
+            conversation_ref=self.conversation_a,
+            content=(TextContent("internal"),),
+            created_at=datetime.now(UTC),
+        )
+        for _ in range(2):
+            with self.assertRaises(DeliverySubmissionCapacityError):
+                await gateway._deliver_outbound(internal)
+        self.assertEqual(len(self.channel_a.sent), 1)
+
+    async def test_explicit_submission_repository_ignores_default_limit(self) -> None:
+        await self.put_route(self.conversation_a, route_id="route-a")
+        submissions = _FalseySubmissionRepository(max_records=2)
+        gateway = self.gateway(
+            submissions=submissions,
+            limits=GatewayLimits(delivery_submission_max_records=1),
+        )
+
+        await gateway.deliver_proactively(
+            self.intent("custom-capacity-1"),
+            credential=self.thread_token,
+        )
+        await gateway.deliver_proactively(
+            self.intent("custom-capacity-2"),
+            credential=self.thread_token,
+        )
+
+        self.assertEqual(len(self.channel_a.sent), 2)
 
     async def test_retryable_outcome_resumes_same_pinned_submission(self) -> None:
         await self.put_route(self.conversation_a, route_id="route-a")

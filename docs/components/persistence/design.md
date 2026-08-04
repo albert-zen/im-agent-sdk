@@ -170,6 +170,14 @@ stable-ID reuse when that map differs, while ignoring mutable outcome and
 receipt fields during an identical replay. SQLite reconstructs the same map
 after restart; no additional identity column or schema migration is required.
 
+The process-local delivery repository retains at most its configured positive
+root-record count and never evicts within that process. New identities fail
+explicitly at capacity; existing replay and destination transitions remain
+available. Retaining terminal and ambiguous evidence is required because
+eviction would authorize a duplicate send. Restart still begins empty by the
+declared non-durable contract. SQLite has no new SDK quota, retention cleanup,
+or schema change.
+
 ## Change obligations
 
 Changes to `bindings.py` or `storage.py` require checking schema migration,

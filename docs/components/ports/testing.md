@@ -44,8 +44,10 @@ mutation, and return a result matching the authorized disposition/policy.
 
 Delivery Port coverage must include atomic concurrent reservation, identity
 conflict, immutable snapshots, per-destination compare-and-set updates, and
-restart persistence. Authorization fakes must not infer scope from caller
-Metadata.
+restart persistence. A bounded process-local implementation must distinguish
+typed capacity failure from conflict, reject before mutation, and retain
+existing replay/state updates at the boundary. Authorization fakes must not
+infer scope from caller Metadata.
 
 An ADR 0015 Port must additionally prove its exact stage position, immutable
 identity fields, bounded input/output, absent-provider compatibility, and

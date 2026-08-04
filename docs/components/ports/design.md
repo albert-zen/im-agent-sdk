@@ -93,7 +93,11 @@ selector.
 a trusted `DeliveryPrincipal`; the caller cannot declare its own effective
 scope. `DeliverySubmissionRepository.reserve_delivery_submission` is atomic
 and stores identity/snapshots/outcomes only. It is intentionally not a queue,
-content store, or retry scheduler.
+content store, or retry scheduler. A bounded process-local implementation may
+raise the typed `DeliverySubmissionCapacityError` only for a new identity and
+before mutation; identical replay remains available at capacity. Capacity is
+not permission to discard submission evidence. Durable implementations retain
+their deployment-owned storage policy.
 
 Application input failures must preserve their side-effect boundary. A
 definitive pre-dispatch rejection may be retried by the caller; once dispatch

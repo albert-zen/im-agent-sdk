@@ -12,6 +12,7 @@ from uuid import uuid4
 from ..adapters import (
     AgentApplicationAdapter,
     DeliveryAuthorizer,
+    DeliverySubmissionCapacityError,
     DeliverySubmissionConflict,
     IdempotencyClaimStatus,
     RequestCorrelationConflict,
@@ -249,11 +250,14 @@ class ImAgentGateway:
             turn_correlation_retention_seconds=limits.turn_correlation_retention_seconds,
             request_correlation_retention_seconds=(limits.request_correlation_retention_seconds),
         )
+        delivery_submissions = repositories.delivery_submissions
+        if delivery_submissions is None:
+            delivery_submissions = InMemoryDeliverySubmissionRepository(
+                max_records=limits.delivery_submission_max_records,
+            )
         self._delivery_service = ProactiveDeliveryService(
             channels=self._channels,
-            submissions=(
-                repositories.delivery_submissions or InMemoryDeliverySubmissionRepository()
-            ),
+            submissions=delivery_submissions,
             resolve_thread_routes=self._projection_runtime.active_routes,
             authorizer=delivery_authorizer,
             coordinator=self._delivery_coordinator,
@@ -1165,6 +1169,7 @@ class ImAgentGateway:
         except (
             ContractViolation,
             DeliveryPlanningError,
+            DeliverySubmissionCapacityError,
             DeliverySubmissionConflict,
         ):
             await self._idempotency.release(
