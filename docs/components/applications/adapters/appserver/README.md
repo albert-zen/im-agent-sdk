@@ -15,7 +15,7 @@ stream.
 | `transport` | stdio/WebSocket framing and close errors | [design](transport/design.md) | [testing](transport/testing.md) |
 | `mapping` | protocol classification and resource/item normalization | [design](mapping/design.md) | [testing](mapping/testing.md) |
 | `requests` | request values, response wire mapping, pending/terminal lifecycle | [design](requests/design.md) | [testing](requests/testing.md) |
-| `diagnostics` | bounded redacted connection/queue facts and summaries | [design](diagnostics/design.md) | [testing](diagnostics/testing.md) |
+| `diagnostics` | bounded redacted connection/queue facts plus internal summaries (not ADR-0014 facts) | [design](diagnostics/design.md) | [testing](diagnostics/testing.md) |
 
 Codex and Zen are separate concrete owners outside this shared protocol
 subtree: [Codex](../codex/design.md), [Zen](../zen/design.md). Sharing an App
@@ -45,9 +45,11 @@ The transport leaf now lives at
 `src/imagent/applications/adapters/appserver/transport.py`. The remaining
 current files are `src/imagent/applications/appserver_client/**`,
 `appserver_requests.py`,
-`appserver_request_runtime.py`, and the App Server portions of `appserver.py`,
-plus the historical diagnostic provider files listed in the component map.
+`appserver_request_runtime.py`, and the App Server portions of `appserver.py`.
 The mapping leaf now lives at
 `src/imagent/applications/adapters/appserver/mapping.py`; the remaining target
-leaves are reserved for their own focused mechanical slices. No aggregate
-package facade is introduced.
+leaves are reserved for their own focused mechanical slices. App Server
+diagnostic facts and internal summaries now live at
+`src/imagent/applications/adapters/appserver/diagnostics.py`; the shared
+`src/imagent/diagnostics.py` vocabulary remains in place. No aggregate package
+facade is introduced.

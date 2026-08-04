@@ -148,9 +148,10 @@ silently disclose an absolute host path.
 
 ## Current client ownership
 
-The SDK owns the reusable JSON-RPC client, target model, bounded retry,
-redacted diagnostics, and supervisor under `applications/appserver_client/`;
-protocol/resource mapping is owned by
+The SDK owns the reusable JSON-RPC client, target model, bounded retry, and
+supervisor under `applications/appserver_client/`; stable redacted diagnostic
+facts and internal App Server diagnostic helpers are owned by
+`applications/adapters/appserver/diagnostics.py`; protocol/resource mapping is owned by
 `applications/adapters/appserver/mapping.py`, while stdio/WebSocket framing is
 owned by `applications/adapters/appserver/transport.py`. Local paths are exposed only
 for stdio/Unix-socket transports or an explicitly verified shared filesystem.
@@ -159,6 +160,7 @@ The stable SDK diagnostic provider exposes only connection state/epoch,
 reconnect count, dispatch worker state, fixed notification/server-request
 queue facts, and bounded failure classification. Endpoint, local path,
 protocol payload, native resource IDs, and exception text remain excluded.
+Legacy debug summaries are internal and are not described as ADR-0014 facts.
 
 IMCodex-specific configuration loading, launcher behavior, branding, command
 surface, and product supervision remain consumer decisions. Its later

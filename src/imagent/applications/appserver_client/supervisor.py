@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
+from ..adapters.appserver.diagnostics import emit_event
 from .retry import RetryBackoff
-from .runtime_diagnostics import emit_event
 from .target import (
     SPAWNED_STDIO_CONNECTION_MODE,
     AppServerTarget,
