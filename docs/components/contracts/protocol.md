@@ -400,6 +400,14 @@ and either:
 - an explicit `ConversationDeliveryTarget`; or
 - a `ThreadRouteDeliveryTarget`, optionally narrowed to one route.
 
+The typed proactive vocabulary and validator remain temporarily defined in
+`contracts.delivery` for #216, but their public facade is
+`imagent.gateway.delivery`; the eight historical proactive names are not
+exported from `imagent.contracts`. The closed identity/fingerprint helpers
+belong only to `imagent.gateway.delivery.submissions`. `DeliverySubmissionOrigin`
+and the passive delivery state/record/reservation values remain available from
+`imagent.contracts`.
+
 A Thread target reuses the configured projection policy. It may therefore
 resolve to several destinations under `all_observers`. Gateway's
 proactive-authorization leaf authenticates

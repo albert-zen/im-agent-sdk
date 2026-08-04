@@ -26,13 +26,13 @@ from imagent.contracts import (
     TextContent,
     ThreadProjectionRoute,
     ThreadRef,
-    derive_delivery_submission_id,
 )
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import ProactiveDeliveryJsonHandler, ScopedDeliveryAuthorizer
 from imagent.gateway.delivery.proactive_ingress import (
     ProactiveDeliveryJsonHandler as OwnerProactiveDeliveryJsonHandler,
 )
+from imagent.gateway.delivery.submissions import derive_delivery_submission_id
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryDeliverySubmissionRepository,

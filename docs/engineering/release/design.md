@@ -41,7 +41,11 @@ bridge state, delivery jobs, or consumer configuration.
 Release checks consume the three runtime layers' public exports and the
 language-neutral schemas. They do not redefine those contracts. Package
 metadata, source provenance, and any compatibility claim remain explicit and
-reviewable.
+reviewable. The formal `imagent.contracts` facade deliberately omits the
+retired proactive vocabulary and closed submission-identity helper names;
+`DeliverySubmissionOrigin` remains a documented passive-state export. The
+Gateway delivery facades re-export the exact owner objects and never hide a
+duplicate or lazy compatibility implementation.
 
 ## Version and publication boundary
 

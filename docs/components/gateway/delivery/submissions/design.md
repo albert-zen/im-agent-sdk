@@ -13,6 +13,11 @@ The leaf consumes typed delivery contracts, repository transactions, and
 resolved route snapshots. Channel side effects remain in delivery
 coordination and Channel adapters. Target authorization and route resolution
 remain in the separate proactive-authorization and proactive-delivery leaves.
+The four stable identity/fingerprint helpers and private `_content_identity`
+are implemented only in this leaf. `_canonical_metadata` remains implemented
+by `contracts.delivery` and is imported one way for canonical payload/content
+identity; it is not duplicated or moved. `DeliverySubmissionOrigin` and all
+passive state, record, and reservation values remain in `contracts.delivery`.
 
 ## Identity and state
 
@@ -71,9 +76,11 @@ duplicate the repository or change submission transitions.
 
 `imagent.gateway.delivery` is the finite facade for
 `DeliverySubmissionOrigin` and the four stable identity/fingerprint helpers.
-The formal `imagent.contracts` exports remain exact object aliases while the
-broader delivery state-contract split is pending; there is still one
-implementation of every value.
+The four helpers are no longer exported by `imagent.contracts`; their exact
+owner is `imagent.gateway.delivery.submissions`. `DeliverySubmissionOrigin`
+does remain an exact `imagent.contracts` export, alongside the passive
+delivery state/record/reservation values in `contracts.delivery`. No reverse
+alias or duplicate implementation is retained.
 
 ## Authority
 

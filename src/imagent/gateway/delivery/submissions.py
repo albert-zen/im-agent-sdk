@@ -1,46 +1,153 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import sqlite3
 from dataclasses import replace
 from typing import Protocol
 
-from ...contracts import (
+from ...contracts.delivery import (
+    ConversationDeliveryTarget,
+    DeliveryIntent,
+    DeliveryReservation,
+    DeliveryRouteSnapshot,
+    DeliverySubmissionOrigin,
+    DeliverySubmissionRecord,
+    DeliverySubmissionState,
+    DeliveryTarget,
+    DestinationDeliveryRecord,
+    _canonical_metadata,
+    _validate_conversation_ref,
+    validate_delivery_intent,
+    validate_delivery_submission_record,
+)
+from ...contracts.model import ProjectRef, ThreadRef
+from ...interaction.channels import (
     DeliveryItemReceipt,
     DeliveryItemStatus,
     DeliveryReceipt,
     DeliveryReceiptStatus,
-    DeliveryReservation,
-    DeliveryRouteSnapshot,
     DeliverySegmentReceipt,
     DeliverySegmentStatus,
-    DeliverySubmissionOrigin,
-    DeliverySubmissionRecord,
-    DeliverySubmissionState,
-    DestinationDeliveryRecord,
-    ProjectRef,
-    ThreadRef,
-    validate_delivery_submission_record,
 )
-from ...contracts import (
-    derive_delivery_payload_fingerprint as derive_delivery_payload_fingerprint,
-)
-from ...contracts import (
-    derive_delivery_submission_id as derive_delivery_submission_id,
-)
-from ...contracts import (
-    derive_delivery_target_fingerprint as derive_delivery_target_fingerprint,
-)
-from ...contracts import (
-    derive_destination_delivery_id as derive_destination_delivery_id,
-)
-from ...interaction.messages import ConversationRef
+from ...interaction.media import LocalPath, RemoteUrl
+from ...interaction.messages import Content, ConversationRef, TextContent
+from ...interaction.operations import ContractViolation, require_identifier
 from ...sqlite_rows import decode_datetime, optional_text, required_text
 from ..persistence.repository_contracts import DeliverySubmissionConflict
 from ..persistence.submission_identity import (
     ensure_same_delivery_submission_reservation,
 )
+
+
+def derive_delivery_target_fingerprint(target: DeliveryTarget) -> str:
+    if isinstance(target, ConversationDeliveryTarget):
+        identity: object = [
+            target.kind.value,
+            target.conversation_ref.channel_instance_id,
+            target.conversation_ref.native_conversation_id,
+        ]
+    else:
+        identity = [
+            target.kind.value,
+            _thread_identity(target.thread_ref),
+            target.route_id,
+        ]
+    return _sha256_identity("target", identity)
+
+
+def derive_delivery_payload_fingerprint(intent: DeliveryIntent) -> str:
+    validate_delivery_intent(intent)
+    identity = {
+        "content": [_content_identity(item) for item in intent.content],
+        "reply_to": intent.reply_to,
+        "metadata": _canonical_metadata(intent.metadata),
+    }
+    return _sha256_identity("payload", identity)
+
+
+def derive_destination_delivery_id(
+    root_submission_id: str,
+    conversation_ref: ConversationRef,
+) -> str:
+    require_identifier(root_submission_id, "submission_id")
+    _validate_conversation_ref(conversation_ref)
+    return _sha256_identity(
+        "destination",
+        [
+            root_submission_id,
+            conversation_ref.channel_instance_id,
+            conversation_ref.native_conversation_id,
+        ],
+    )
+
+
+def derive_delivery_submission_id(
+    origin: DeliverySubmissionOrigin,
+    principal_id: str,
+    delivery_id: str,
+) -> str:
+    if not isinstance(origin, DeliverySubmissionOrigin):
+        raise ContractViolation("delivery submission origin is invalid")
+    require_identifier(principal_id, "principal_id")
+    require_identifier(delivery_id, "delivery_id")
+    return _sha256_identity(
+        "submission",
+        [origin.value, principal_id, delivery_id],
+    )
+
+
+def _content_identity(content: Content) -> object:
+    if isinstance(content, TextContent):
+        return {
+            "kind": "text",
+            "text": content.text,
+            "format": content.format.value,
+        }
+    source = content.source
+    if isinstance(source, LocalPath):
+        digest = content.metadata.get("sha256")
+        source_identity: object = (
+            {"kind": source.kind.value, "sha256": digest}
+            if isinstance(digest, str) and digest
+            else {"kind": source.kind.value, "path": source.path}
+        )
+    elif isinstance(source, RemoteUrl):
+        source_identity = {"kind": source.kind.value, "url": source.url}
+    else:
+        source_identity = {
+            "kind": source.kind.value,
+            "handle_id": source.handle_id,
+        }
+    return {
+        "kind": "attachment",
+        "attachment_id": content.attachment_id,
+        "media_type": content.media_type,
+        "source": source_identity,
+        "filename": content.filename,
+        "size_bytes": content.size_bytes,
+        "metadata": _canonical_metadata(content.metadata),
+    }
+
+
+def _sha256_identity(label: str, identity: object) -> str:
+    encoded = json.dumps(
+        identity,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    digest = hashlib.sha256(encoded.encode()).hexdigest()
+    return f"imagent:delivery-{label}:sha256:{digest}"
+
+
+def _thread_identity(thread_ref: ThreadRef) -> object:
+    return [
+        thread_ref.application_instance_id,
+        (thread_ref.project_ref.native_project_id if thread_ref.project_ref is not None else None),
+        thread_ref.native_thread_id,
+    ]
 
 
 class _SQLiteOwner(Protocol):

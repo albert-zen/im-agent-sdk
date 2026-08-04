@@ -15,8 +15,12 @@ The in-memory submission repository's atomic reservation/conflict/CAS cases
 live in `tests/gateway/persistence/test_memory.py`; this suite consumes that
 owner without reintroducing persistence inside delivery orchestration.
 
-Ownership tests additionally prove exact Gateway/contracts facade identity,
-absence of both historical implementation modules, and clean package imports.
+Ownership tests additionally prove exact Gateway/proactive facade identity,
+that the temporary vocabulary definitions remain single-owned by
+`contracts.delivery`, that the eight historical `imagent.contracts` proactive
+names are absent in a clean process, and that both historical implementation
+modules remain absent. They also prove that `DeliverySubmissionOrigin` stays
+available through the deliberate `imagent.contracts` passive-state facade.
 The mirrored Gateway JSON/CLI ingress suite continues to cover authorization-before-staging,
 cancellation join, cleanup, route/result mapping, and loopback CLI policy.
 Pure decoded-byte, path-confinement, digest, and staged-content construction
@@ -32,10 +36,11 @@ cycle-safe import orders, Protocol signatures, resolved `get_type_hints`, AST
 owner-set checks, and the existing behavior suite guard the mechanical nature
 of the split. The one-time migration review compared the moved definitions to
 their predecessor; durable tests do not depend on Git history being available
-in a shallow source checkout. No vocabulary or validator move is part of this
-predecessor. The clean-import test covers the current public graph; it does not
-authorize a reverse `contracts.delivery` compatibility import. Facade
-retirement and then #216 own those later checks.
+in a shallow source checkout. The vocabulary and validator definitions remain
+in `contracts.delivery` temporarily for #216; this slice only changes their
+public facade and internal import path. The clean-import test covers the
+current public graph and does not authorize a reverse `contracts.delivery`
+compatibility import. #216 owns the later definition move.
 
 Run:
 

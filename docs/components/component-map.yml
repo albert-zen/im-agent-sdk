@@ -718,9 +718,9 @@ components:
     outputs: [DeliverySubmissionRecord]
     public_contracts: [DeliverySubmissionOrigin, derive_delivery_payload_fingerprint, derive_delivery_submission_id, derive_delivery_target_fingerprint, derive_destination_delivery_id]
     public_exports:
-      current: [imagent.gateway.delivery:DeliverySubmissionOrigin, imagent.gateway.delivery:derive_delivery_payload_fingerprint, imagent.gateway.delivery:derive_delivery_submission_id, imagent.gateway.delivery:derive_delivery_target_fingerprint, imagent.gateway.delivery:derive_destination_delivery_id, imagent.contracts:DeliverySubmissionOrigin, imagent.contracts:derive_delivery_payload_fingerprint, imagent.contracts:derive_delivery_submission_id, imagent.contracts:derive_delivery_target_fingerprint, imagent.contracts:derive_destination_delivery_id]
+      current: [imagent.gateway.delivery:DeliverySubmissionOrigin, imagent.gateway.delivery:derive_delivery_payload_fingerprint, imagent.gateway.delivery:derive_delivery_submission_id, imagent.gateway.delivery:derive_delivery_target_fingerprint, imagent.gateway.delivery:derive_destination_delivery_id, imagent.contracts:DeliverySubmissionOrigin]
       target: [imagent.gateway.delivery:DeliverySubmissionOrigin, imagent.gateway.delivery:derive_delivery_payload_fingerprint, imagent.gateway.delivery:derive_delivery_submission_id, imagent.gateway.delivery:derive_delivery_target_fingerprint, imagent.gateway.delivery:derive_destination_delivery_id]
-    dependencies: [interaction.messages, interaction.channels.channel-contract, applications.application-contract, gateway.delivery.proactive-authorization, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
+    dependencies: [interaction.messages, interaction.media, interaction.operations, interaction.channels.channel-contract, applications.application-contract, gateway.delivery.proactive-authorization, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: In-flight/unknown remain ambiguous; immutable snapshots prevent route drift on retry.
     current_code: [schemas/v1/deliveries.schema.json, src/imagent/contracts/delivery.py, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/submissions.py]
     target_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/submissions.py]
@@ -728,7 +728,7 @@ components:
     target_tests: [tests/gateway/delivery/test_submissions.py]
     authoritative_docs: [docs/components/gateway/delivery/submissions/design.md, docs/components/gateway/delivery/submissions/testing.md]
     adrs: [docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
-    gaps: [contract values and proactive orchestration remain in their existing modules; SQLite row encoding remains co-located here until the focused persistence split]
+    gaps: [passive contract values remain in contracts/delivery until their focused state-contract split; SQLite row encoding remains co-located here until the focused persistence split]
 
   gateway.delivery.proactive-authorization:
     id: gateway.delivery.proactive-authorization
@@ -762,7 +762,7 @@ components:
     outputs: [ProactiveDeliveryResult]
     public_contracts: [ProactiveDeliveryService, ProactiveDeliveryJsonHandler, DeliveryIntent, ConversationDeliveryTarget, DeliveryTarget, DeliveryTargetKind, DestinationDeliveryResult, ProactiveDeliveryResult, ThreadRouteDeliveryTarget, validate_delivery_intent]
     public_exports:
-      current: [imagent.gateway.delivery:ProactiveDeliveryService, imagent.gateway.delivery:ProactiveDeliveryJsonHandler, imagent.gateway.delivery:DeliveryIntent, imagent.gateway.delivery:ConversationDeliveryTarget, imagent.gateway.delivery:DeliveryTarget, imagent.gateway.delivery:DeliveryTargetKind, imagent.gateway.delivery:DestinationDeliveryResult, imagent.gateway.delivery:ProactiveDeliveryResult, imagent.gateway.delivery:ThreadRouteDeliveryTarget, imagent.gateway.delivery:validate_delivery_intent, imagent.contracts:DeliveryIntent, imagent.contracts:ConversationDeliveryTarget, imagent.contracts:DeliveryTarget, imagent.contracts:DeliveryTargetKind, imagent.contracts:DestinationDeliveryResult, imagent.contracts:ProactiveDeliveryResult, imagent.contracts:ThreadRouteDeliveryTarget, imagent.contracts:validate_delivery_intent]
+      current: [imagent.gateway.delivery:ProactiveDeliveryService, imagent.gateway.delivery:ProactiveDeliveryJsonHandler, imagent.gateway.delivery:DeliveryIntent, imagent.gateway.delivery:ConversationDeliveryTarget, imagent.gateway.delivery:DeliveryTarget, imagent.gateway.delivery:DeliveryTargetKind, imagent.gateway.delivery:DestinationDeliveryResult, imagent.gateway.delivery:ProactiveDeliveryResult, imagent.gateway.delivery:ThreadRouteDeliveryTarget, imagent.gateway.delivery:validate_delivery_intent]
       target: [imagent.gateway.delivery:ProactiveDeliveryService, imagent.gateway.delivery:ProactiveDeliveryJsonHandler, imagent.gateway.delivery:DeliveryIntent, imagent.gateway.delivery:ConversationDeliveryTarget, imagent.gateway.delivery:DeliveryTarget, imagent.gateway.delivery:DeliveryTargetKind, imagent.gateway.delivery:DestinationDeliveryResult, imagent.gateway.delivery:ProactiveDeliveryResult, imagent.gateway.delivery:ThreadRouteDeliveryTarget, imagent.gateway.delivery:validate_delivery_intent]
     dependencies: [interaction.messages, interaction.operations, interaction.media, interaction.channels.channel-contract, applications.application-contract, gateway.delivery.proactive-authorization, gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.outcome-observation, gateway.routing.projection-routes, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Persist identity/snapshots/outcomes only; staged inline bytes live through one synchronous attempt and are removed after join.
@@ -772,7 +772,7 @@ components:
     target_tests: [tests/gateway/delivery/test_proactive_runtime.py, tests/gateway/delivery/test_proactive_delivery.py, tests/gateway/delivery/test_proactive_ingress.py]
     authoritative_docs: [docs/components/gateway/delivery/proactive-delivery/design.md, docs/components/gateway/delivery/proactive-delivery/testing.md]
     adrs: [docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
-    gaps: ["the same-leaf proactive.py contract seam and proactive_runtime.py orchestration owner are now explicit; an explicit public-facade convergence slice must remove historical imagent.contracts proactive exports before #216 moves vocabulary without reverse aliases; the reference CLI remains in historical files pending its focused Interaction client-tool split"]
+    gaps: ["the same-leaf proactive.py contract seam and proactive_runtime.py orchestration owner are now explicit; vocabulary definitions remain in contracts/delivery until #216 moves them without reverse aliases; the reference CLI remains in historical files pending its focused Interaction client-tool split"]
 
   gateway.delivery.outcome-observation:
     id: gateway.delivery.outcome-observation

@@ -9,15 +9,17 @@ from typing import Protocol
 from ...applications.requests import RequestRef
 from ...contracts import (
     ConversationBinding,
-    DeliveryReservation,
-    DeliverySubmissionRecord,
-    DeliverySubmissionState,
-    DestinationDeliveryRecord,
     RequestRouteCorrelation,
     RequestRouteState,
     ThreadProjectionRoute,
     ThreadRef,
     TurnReplyCorrelation,
+)
+from ...contracts.delivery import (
+    DeliveryReservation,
+    DeliverySubmissionRecord,
+    DeliverySubmissionState,
+    DestinationDeliveryRecord,
 )
 from ...interaction.messages import ConversationRef
 

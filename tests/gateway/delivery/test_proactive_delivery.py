@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import imagent.contracts as contract_facade
+import imagent.contracts.delivery as delivery_contracts
 import imagent.gateway as gateway_facade
 import imagent.gateway.delivery as delivery_facade
 from imagent.adapters import (
@@ -21,18 +22,13 @@ from imagent.contracts import (
     AttachmentContent,
     AttachmentSourceKind,
     ChannelCapabilities,
-    ConversationDeliveryTarget,
     ConversationRef,
-    DeliveryIntent,
     DeliveryItemReceipt,
     DeliveryItemStatus,
     DeliveryPrincipal,
     DeliveryReceipt,
     DeliveryReceiptStatus,
-    DeliveryReservation,
     DeliverySegmentStatus,
-    DeliverySubmissionOrigin,
-    DeliverySubmissionState,
     DeliverySupportLevel,
     LocalPath,
     OutboundMessage,
@@ -41,8 +37,11 @@ from imagent.contracts import (
     TextContent,
     ThreadProjectionRoute,
     ThreadRef,
-    ThreadRouteDeliveryTarget,
-    derive_delivery_submission_id,
+)
+from imagent.contracts.delivery import (
+    DeliveryReservation,
+    DeliverySubmissionOrigin,
+    DeliverySubmissionState,
 )
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import (
@@ -53,8 +52,14 @@ from imagent.gateway.delivery import (
 )
 from imagent.gateway.delivery import proactive as proactive_owner
 from imagent.gateway.delivery import proactive_runtime as runtime_owner
+from imagent.gateway.delivery.proactive import (
+    ConversationDeliveryTarget,
+    DeliveryIntent,
+    ThreadRouteDeliveryTarget,
+)
 from imagent.gateway.delivery.proactive_authorization import DeliveryAuthorizationError
 from imagent.gateway.delivery.proactive_runtime import DeliveryRouteError
+from imagent.gateway.delivery.submissions import derive_delivery_submission_id
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryDeliverySubmissionRepository,
@@ -81,7 +86,9 @@ class ProactiveDeliveryOwnershipTests(unittest.TestCase):
             with self.subTest(name=name):
                 owner = getattr(proactive_owner, name)
                 self.assertIs(getattr(delivery_facade, name), owner)
-                self.assertIs(getattr(contract_facade, name), owner)
+                self.assertIs(getattr(delivery_contracts, name), owner)
+                self.assertNotIn(name, contract_facade.__all__)
+                self.assertFalse(hasattr(contract_facade, name))
         self.assertIs(
             delivery_facade.ProactiveDeliveryService,
             runtime_owner.ProactiveDeliveryService,
