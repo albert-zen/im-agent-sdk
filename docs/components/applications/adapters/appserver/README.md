@@ -44,9 +44,10 @@ reset stales request handles instead of fabricating recoverability.
 The transport leaf now lives at
 `src/imagent/applications/adapters/appserver/transport.py`. The remaining
 current files are `src/imagent/applications/appserver_client/**`,
-`appserver_mapping.py`, `appserver_requests.py`,
+`appserver_requests.py`,
 `appserver_request_runtime.py`, and the App Server portions of `appserver.py`,
 plus the historical diagnostic provider files listed in the component map.
-The target package is `src/imagent/applications/adapters/appserver/` with one
-leaf owner per page. The remaining target leaves are reserved for their own
-focused mechanical slices; no aggregate package facade is introduced.
+The mapping leaf now lives at
+`src/imagent/applications/adapters/appserver/mapping.py`; the remaining target
+leaves are reserved for their own focused mechanical slices. No aggregate
+package facade is introduced.

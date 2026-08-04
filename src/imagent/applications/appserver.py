@@ -20,52 +20,52 @@ from ..interaction.media import (
 )
 from ..interaction.messages import MessageRole, TextContent, TextFormat
 from ..interaction.operations import operation_error
-from .appserver_mapping import (
+from .adapters.appserver.mapping import (
     is_agent_item as _is_agent_item,
 )
-from .appserver_mapping import (
+from .adapters.appserver.mapping import (
     is_unsupported_method_error as _is_unsupported_method_error,
 )
-from .appserver_mapping import (
+from .adapters.appserver.mapping import (
     item_text as _item_text,
 )
-from .appserver_mapping import (
+from .adapters.appserver.mapping import (
     native_list as _native_list,
 )
-from .appserver_mapping import (
+from .adapters.appserver.mapping import (
     native_object as _native_object,
 )
-from .appserver_mapping import (
+from .adapters.appserver.mapping import (
     native_turn_id as _native_turn_id,
 )
-from .appserver_mapping import (
+from .adapters.appserver.mapping import (
     normalized_item_type as _normalized_item_type,
 )
-from .appserver_mapping import (
+from .adapters.appserver.mapping import (
     optional_string as _optional_string,
 )
-from .appserver_mapping import (
+from .adapters.appserver.mapping import (
     parse_datetime as _parse_datetime,
 )
-from .appserver_mapping import (
+from .adapters.appserver.mapping import (
     thread_status as _thread_status,
 )
-from .appserver_mapping import (
+from .adapters.appserver.mapping import (
     turn_error as _turn_error,
 )
-from .appserver_mapping import (
+from .adapters.appserver.mapping import (
     turn_id as _turn_id,
 )
-from .appserver_mapping import (
+from .adapters.appserver.mapping import (
     turn_items as _turn_items,
 )
-from .appserver_mapping import (
+from .adapters.appserver.mapping import (
     turn_list as _turn_list,
 )
-from .appserver_mapping import (
+from .adapters.appserver.mapping import (
     turn_status as _turn_status,
 )
-from .appserver_mapping import (
+from .adapters.appserver.mapping import (
     turn_updated_at as _turn_updated_at,
 )
 from .appserver_request_runtime import (

@@ -459,14 +459,12 @@ components:
       - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/applications/__init__.py
       - src/imagent/applications/appserver.py
-      - src/imagent/applications/appserver_mapping.py
       - src/imagent/applications/appserver_request_runtime.py
       - src/imagent/applications/appserver_requests.py
       - src/imagent/applications/appserver_client/**
       - src/imagent/applications/adapters/appserver/**
       - tests/test_appserver_client.py
       - tests/test_appserver_input.py
-      - tests/test_appserver_mapping.py
       - tests/test_appserver_requests.py
       - tests/test_appserver_transport.py
       - tests/applications/adapters/__init__.py
@@ -759,10 +757,10 @@ maintainability:
       guidance: Keep native translation cohesive; split protocol clients or pure mapping helpers when a native adapter grows beyond one reviewable unit.
     - name: appserver-native-mapping
       paths:
-        - src/imagent/applications/appserver_mapping.py
-      max_lines: 225
-      max_functions: 22
-      max_classes: 1
+        - src/imagent/applications/adapters/appserver/mapping.py
+      max_lines: 360
+      max_functions: 25
+      max_classes: 2
       mode: warn
       guidance: Keep native response mapping stateless and independently testable; do not add transport, lifecycle, or consumer policy.
     - name: focused-bridge-modules

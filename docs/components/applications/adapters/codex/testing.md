@@ -8,7 +8,7 @@ Codex behavior is currently covered by the App Server suites:
   client composition, epochs, lanes, and fences;
 - `tests/test_appserver_input.py` for start/steer policy, pre-dispatch races,
   local-image epochs, replacement, and unsupported files;
-- `tests/test_appserver_mapping.py` for resource/item normalization;
+- `tests/applications/adapters/appserver/test_mapping.py` for resource/item normalization;
 - `tests/test_appserver_requests.py` for Codex request/response lifecycle;
 - `tests/applications/presentation/test_live_activity.py` and
   `test_artifact_materialization.py` for optional typed A1 positions;
@@ -28,7 +28,7 @@ tree is mechanically mirrored. Run the current focused set with:
 ```sh
 uv run python -m unittest tests.test_appserver_client -v
 uv run python -m unittest tests.test_appserver_input -v
-uv run python -m unittest tests.test_appserver_mapping -v
+PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.test_mapping -v
 uv run python -m unittest tests.test_appserver_requests -v
 ```
 
