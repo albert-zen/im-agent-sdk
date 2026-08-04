@@ -222,6 +222,10 @@ def validate_delivery_submission_record(record: DeliverySubmissionRecord) -> Non
     require_identifier(record.principal_id, "principal_id")
     require_identifier(record.target_fingerprint, "target_fingerprint")
     require_identifier(record.payload_fingerprint, "payload_fingerprint")
+    if record.created_at.tzinfo is None or record.updated_at.tzinfo is None:
+        raise ContractViolation("delivery submission times must include a timezone")
+    if record.updated_at < record.created_at:
+        raise ContractViolation("delivery submission update precedes creation")
     if not record.destinations:
         raise ContractViolation("delivery submission requires at least one destination")
     seen: set[str] = set()
@@ -230,6 +234,10 @@ def validate_delivery_submission_record(record: DeliverySubmissionRecord) -> Non
         if destination.delivery_id in seen:
             raise ContractViolation("destination delivery IDs must be unique")
         seen.add(destination.delivery_id)
+        if not isinstance(destination.state, DeliverySubmissionState):
+            raise ContractViolation("delivery destination state is invalid")
+        if destination.updated_at.tzinfo is None:
+            raise ContractViolation("delivery destination time must include a timezone")
         validate_delivery_route_snapshot(destination.snapshot)
         if destination.receipt is not None:
             validate_delivery_receipt(destination.receipt)

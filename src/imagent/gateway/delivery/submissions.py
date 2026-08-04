@@ -4,7 +4,6 @@ import asyncio
 import json
 import sqlite3
 from dataclasses import replace
-from datetime import datetime
 from typing import Protocol
 
 from ...adapters import DeliverySubmissionConflict
@@ -38,6 +37,7 @@ from ...contracts import (
     derive_destination_delivery_id as derive_destination_delivery_id,
 )
 from ...interaction.messages import ConversationRef
+from ...sqlite_rows import decode_datetime, optional_text, required_text
 from ..persistence.submission_identity import (
     ensure_same_delivery_submission_reservation,
 )
@@ -210,15 +210,15 @@ def _read_submission(
         (submission_id,),
     ).fetchall()
     record = DeliverySubmissionRecord(
-        submission_id=str(root["submission_id"]),
-        delivery_id=str(root["delivery_id"]),
-        origin=DeliverySubmissionOrigin(str(root["origin"])),
-        principal_id=str(root["principal_id"]),
-        target_fingerprint=str(root["target_fingerprint"]),
-        payload_fingerprint=str(root["payload_fingerprint"]),
+        submission_id=required_text(root["submission_id"], "submission_id"),
+        delivery_id=required_text(root["delivery_id"], "delivery_id"),
+        origin=DeliverySubmissionOrigin(required_text(root["origin"], "origin")),
+        principal_id=required_text(root["principal_id"], "principal_id"),
+        target_fingerprint=required_text(root["target_fingerprint"], "target_fingerprint"),
+        payload_fingerprint=required_text(root["payload_fingerprint"], "payload_fingerprint"),
         destinations=tuple(_destination_from_row(row) for row in rows),
-        created_at=datetime.fromisoformat(str(root["created_at"])),
-        updated_at=datetime.fromisoformat(str(root["updated_at"])),
+        created_at=decode_datetime(root["created_at"], "created_at"),
+        updated_at=decode_datetime(root["updated_at"], "updated_at"),
     )
     validate_delivery_submission_record(record)
     return record
@@ -317,40 +317,50 @@ def _write_destination(
 
 
 def _destination_from_row(row: sqlite3.Row) -> DestinationDeliveryRecord:
-    application_id = str(row["application_instance_id"])
-    project_id = str(row["project_id"])
-    thread_id = str(row["thread_id"])
-    thread_ref = (
-        ThreadRef(
+    application_id = _optional_route_scope_text(
+        row["application_instance_id"], "application_instance_id"
+    )
+    project_id = _optional_route_scope_text(row["project_id"], "project_id")
+    thread_id = _optional_route_scope_text(row["thread_id"], "thread_id")
+    route_id = _optional_route_scope_text(row["route_id"], "route_id")
+    has_thread_scope = any(
+        value is not None for value in (application_id, project_id, thread_id, route_id)
+    )
+    if has_thread_scope and (application_id is None or thread_id is None or route_id is None):
+        raise ValueError("delivery destination Thread route scope is incomplete")
+    thread_ref = None
+    if has_thread_scope:
+        if application_id is None or thread_id is None or route_id is None:
+            raise AssertionError("complete Thread route scope was not established")
+        thread_ref = ThreadRef(
             application_instance_id=application_id,
             native_thread_id=thread_id,
             project_ref=(ProjectRef(application_id, project_id) if project_id else None),
         )
-        if application_id and thread_id
-        else None
-    )
     return DestinationDeliveryRecord(
-        delivery_id=str(row["destination_delivery_id"]),
+        delivery_id=required_text(row["destination_delivery_id"], "destination_delivery_id"),
         snapshot=DeliveryRouteSnapshot(
             conversation_ref=ConversationRef(
-                channel_instance_id=str(row["channel_instance_id"]),
-                native_conversation_id=str(row["native_conversation_id"]),
+                channel_instance_id=required_text(
+                    row["channel_instance_id"], "channel_instance_id"
+                ),
+                native_conversation_id=required_text(
+                    row["native_conversation_id"], "native_conversation_id"
+                ),
             ),
             thread_ref=thread_ref,
-            route_id=(str(row["route_id"]) if row["route_id"] else None),
+            route_id=route_id,
             route_updated_at=(
-                datetime.fromisoformat(str(row["route_updated_at"]))
+                decode_datetime(row["route_updated_at"], "route_updated_at")
                 if row["route_updated_at"] is not None
                 else None
             ),
-            reply_to_message_id=(
-                str(row["reply_to_message_id"]) if row["reply_to_message_id"] is not None else None
-            ),
+            reply_to_message_id=optional_text(row["reply_to_message_id"], "reply_to_message_id"),
         ),
-        state=DeliverySubmissionState(str(row["state"])),
+        state=DeliverySubmissionState(required_text(row["state"], "state")),
         receipt=_decode_receipt(row["receipt_json"]),
-        error=(str(row["error"]) if row["error"] is not None else None),
-        updated_at=datetime.fromisoformat(str(row["updated_at"])),
+        error=optional_text(row["error"], "error"),
+        updated_at=decode_datetime(row["updated_at"], "updated_at"),
     )
 
 
@@ -395,37 +405,127 @@ def _encode_receipt(receipt: DeliveryReceipt | None) -> str | None:
 def _decode_receipt(value: object) -> DeliveryReceipt | None:
     if value is None:
         return None
-    payload = json.loads(str(value))
+    if not isinstance(value, str):
+        raise ValueError("receipt_json must be SQLite text")
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError as error:
+        raise ValueError("receipt_json must be valid JSON") from error
+    expected_keys = {
+        "status",
+        "native_message_id",
+        "detail",
+        "retry_after_seconds",
+        "items",
+        "segments",
+    }
+    if not isinstance(payload, dict) or set(payload) != expected_keys:
+        raise ValueError("delivery receipt is malformed")
+    items = payload["items"]
+    segments = payload["segments"]
+    if not isinstance(items, list) or not isinstance(segments, list):
+        raise ValueError("delivery receipt items and segments must be lists")
     return DeliveryReceipt(
-        status=DeliveryReceiptStatus(str(payload["status"])),
-        native_message_id=payload.get("native_message_id"),
-        detail=payload.get("detail"),
-        retry_after_seconds=payload.get("retry_after_seconds"),
-        items=tuple(
-            DeliveryItemReceipt(
-                content_index=int(item["content_index"]),
-                status=DeliveryItemStatus(str(item["status"])),
-                attachment_id=item.get("attachment_id"),
-                native_message_id=item.get("native_message_id"),
-                detail=item.get("detail"),
-            )
-            for item in payload.get("items", [])
+        status=DeliveryReceiptStatus(_json_required_text(payload["status"], "receipt.status")),
+        native_message_id=_json_optional_text(
+            payload["native_message_id"], "receipt.native_message_id"
         ),
-        segments=tuple(
-            DeliverySegmentReceipt(
-                segment_index=int(segment["segment_index"]),
-                delivery_id=str(segment["delivery_id"]),
-                source_content_indexes=tuple(
-                    int(index) for index in segment["source_content_indexes"]
-                ),
-                status=DeliverySegmentStatus(str(segment["status"])),
-                native_message_id=segment.get("native_message_id"),
-                detail=segment.get("detail"),
-                retry_after_seconds=segment.get("retry_after_seconds"),
-            )
-            for segment in payload.get("segments", [])
+        detail=_json_optional_text(payload["detail"], "receipt.detail"),
+        retry_after_seconds=_json_optional_number(
+            payload["retry_after_seconds"], "receipt.retry_after_seconds"
+        ),
+        items=tuple(_decode_item_receipt(item) for item in items),
+        segments=tuple(_decode_segment_receipt(segment) for segment in segments),
+    )
+
+
+def _decode_item_receipt(value: object) -> DeliveryItemReceipt:
+    expected_keys = {
+        "content_index",
+        "status",
+        "attachment_id",
+        "native_message_id",
+        "detail",
+    }
+    if not isinstance(value, dict) or set(value) != expected_keys:
+        raise ValueError("delivery item receipt is malformed")
+    return DeliveryItemReceipt(
+        content_index=_json_integer(value["content_index"], "receipt.item.content_index"),
+        status=DeliveryItemStatus(_json_required_text(value["status"], "receipt.item.status")),
+        attachment_id=_json_optional_text(value["attachment_id"], "receipt.item.attachment_id"),
+        native_message_id=_json_optional_text(
+            value["native_message_id"], "receipt.item.native_message_id"
+        ),
+        detail=_json_optional_text(value["detail"], "receipt.item.detail"),
+    )
+
+
+def _decode_segment_receipt(value: object) -> DeliverySegmentReceipt:
+    expected_keys = {
+        "segment_index",
+        "delivery_id",
+        "source_content_indexes",
+        "status",
+        "native_message_id",
+        "detail",
+        "retry_after_seconds",
+    }
+    if not isinstance(value, dict) or set(value) != expected_keys:
+        raise ValueError("delivery segment receipt is malformed")
+    indexes = value["source_content_indexes"]
+    if not isinstance(indexes, list):
+        raise ValueError("delivery segment source indexes must be a list")
+    return DeliverySegmentReceipt(
+        segment_index=_json_integer(value["segment_index"], "receipt.segment.segment_index"),
+        delivery_id=_json_required_text(value["delivery_id"], "receipt.segment.delivery_id"),
+        source_content_indexes=tuple(
+            _json_integer(index, "receipt.segment.source_content_index") for index in indexes
+        ),
+        status=DeliverySegmentStatus(
+            _json_required_text(value["status"], "receipt.segment.status")
+        ),
+        native_message_id=_json_optional_text(
+            value["native_message_id"], "receipt.segment.native_message_id"
+        ),
+        detail=_json_optional_text(value["detail"], "receipt.segment.detail"),
+        retry_after_seconds=_json_optional_number(
+            value["retry_after_seconds"], "receipt.segment.retry_after_seconds"
         ),
     )
+
+
+def _json_required_text(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{label} must be non-empty text")
+    return value
+
+
+def _json_optional_text(value: object, label: str) -> str | None:
+    if value is None:
+        return None
+    return _json_required_text(value, label)
+
+
+def _json_integer(value: object, label: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"{label} must be an integer")
+    return value
+
+
+def _json_optional_number(value: object, label: str) -> float | int | None:
+    if value is None:
+        return None
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        raise ValueError(f"{label} must be a number")
+    return value
+
+
+def _optional_route_scope_text(value: object, label: str) -> str | None:
+    """Decode the current NOT NULL empty-string sentinel for an absent route scope."""
+
+    if value == "":
+        return None
+    return optional_text(value, label)
 
 
 def _thread_storage_key(

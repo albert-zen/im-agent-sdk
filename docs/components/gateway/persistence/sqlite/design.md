@@ -56,6 +56,14 @@ legacy route upgrade adds explicit checkpoint fields and clears the old
 distinguished from durable reply context. Request-correlation and delivery-
 submission tables are additive.
 
+The SQLite owner is the only compatibility transformer. It supports the
+immediately preceding route shape, applies that documented non-authorizing
+upgrade once, and then exposes only current-schema rows to pure decoders.
+Malformed current rows are rejected at read time without migration-time repair
+or deletion. In particular, an absent binding Application cannot erase a
+present Project/Thread scope, and an incomplete route/delivery/request shape
+cannot acquire replay, reply, response, or resend authority.
+
 WAL mode and the single connection/lock are implementation details of the
 current adapter. Restart reconstructs typed bridge-state values from rows and
 preserves terminal/ambiguous evidence. Any schema change requires an explicit

@@ -67,7 +67,12 @@ Required scenarios:
 - rejected, in-flight, partial, and unknown proactive states remain sticky
   across restart;
 - route policy replacement remains deterministic;
-- storage rows cannot introduce cross-Application references.
+- storage rows cannot introduce cross-Application references;
+- malformed current SQLite binding, route/checkpoint, Turn/request, and
+  delivery/receipt rows fail explicitly without a repair, replay, retry, or
+  authority inference; and
+- the immediately supported legacy SQLite shape is upgraded by the SQLite
+  owner before mapping and valid upgraded rows survive restart.
 
 Run:
 

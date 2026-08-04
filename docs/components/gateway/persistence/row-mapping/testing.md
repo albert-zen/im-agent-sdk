@@ -24,9 +24,8 @@ Current coverage runs through the durable adapter:
 PYTHONPATH=src python -m unittest tests.test_storage -v
 ```
 
-Current adapter coverage does not prove all target validation: nullable
-binding scope can be silently collapsed and some decoded values bypass the
-complete validator. The mechanical extraction adds isolated round-trip tests
-in `tests/gateway/persistence/test_row_mapping.py` while retaining that known
-behavior. A separate behavior/migration slice must add malformed-row tests and
-close the validation gap before the target rejection claims become enforced.
+Focused durable-adapter coverage injects malformed current rows and proves
+that reads fail without mutating, repairing, replaying, or widening authority.
+It also opens the immediately supported legacy schema, proves that the SQLite
+owner performs its documented upgrade, and verifies that the resulting valid
+rows survive restart. The legacy fixture is never handed directly to a mapper.

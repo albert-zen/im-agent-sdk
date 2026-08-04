@@ -173,6 +173,12 @@ without losing bindings, routes, or idempotency records. Its legacy
 column for the latest inbound message and it cannot be distinguished safely
 from an explicit destination/topic default.
 
+That is the complete supported legacy transformation. It is owned by
+`SQLiteGatewayState` before pure row decoding. Once a database has the current
+schema, malformed bridge rows fail explicitly: persistence does not collapse a
+partial binding scope, infer an Application, repair JSON/enums/timestamps, or
+turn damaged receipt/request/checkpoint state into replay or retry authority.
+
 Adding request correlation storage is an additive SQLite migration. Existing
 databases retain bindings, routes, Turn correlations, and idempotency records.
 

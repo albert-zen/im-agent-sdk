@@ -793,13 +793,27 @@ class SQLiteGatewayState(
                     """,
                     (scope, key),
                 ).fetchone()
-                if row is None or str(row["status"]) == "completed":
+                if row is None:
+                    self._connection.rollback()
+                    raise RuntimeError("idempotency record disappeared during claim")
+                status = row["status"]
+                if not isinstance(status, str):
+                    self._connection.rollback()
+                    raise ValueError("idempotency status must be SQLite text")
+                if status == "completed":
                     self._connection.rollback()
                     return IdempotencyClaimStatus.ALREADY_COMPLETED
-                if str(row["status"]) == "side_effect_started":
+                if status == "side_effect_started":
                     self._connection.rollback()
                     return IdempotencyClaimStatus.IN_FLIGHT
-                updated_at = datetime.fromisoformat(str(row["updated_at"]))
+                if status != "in_flight":
+                    self._connection.rollback()
+                    raise ValueError("idempotency status is invalid")
+                try:
+                    updated_at = sqlite_rows.decode_datetime(row["updated_at"], "updated_at")
+                except ValueError:
+                    self._connection.rollback()
+                    raise
                 age = (now - updated_at).total_seconds()
                 if age < self._stale_claim_after_seconds:
                     self._connection.rollback()
