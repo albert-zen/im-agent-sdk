@@ -15,10 +15,8 @@ from imagent.contracts import (
     RequestRouteState,
     ThreadRef,
 )
-from imagent.request_correlations import (
-    InMemoryRequestCorrelationRepository,
-    derive_request_correlation_id,
-)
+from imagent.gateway.persistence.memory import InMemoryRequestCorrelationRepository
+from imagent.request_correlations import derive_request_correlation_id
 from imagent.storage import SQLiteGatewayState
 
 _ALLOWED_TARGETS = {

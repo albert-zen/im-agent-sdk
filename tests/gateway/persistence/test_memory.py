@@ -7,6 +7,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
+import imagent.request_correlations as historical_request_owner
 from imagent import projections as projection_semantics
 from imagent.adapters import DeliverySubmissionCapacityError, DeliverySubmissionConflict
 from imagent.contracts import (
@@ -28,6 +29,7 @@ from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryDeliverySubmissionRepository,
     InMemoryProjectionRouteRepository,
+    InMemoryRequestCorrelationRepository,
 )
 from imagent.interaction.operations import ContractViolation
 
@@ -158,6 +160,19 @@ class InMemoryProjectionRouteRepositoryOwnershipTests(unittest.IsolatedAsyncioTe
         repository = InMemoryProjectionRouteRepository()
         self.assertEqual(await repository.list_projection_routes(), ())
         self.assertEqual(await repository.list_turn_reply_correlations(), ())
+
+
+class InMemoryRequestCorrelationRepositoryOwnershipTests(unittest.IsolatedAsyncioTestCase):
+    def test_request_correlation_repository_has_one_memory_owner(self) -> None:
+        self.assertEqual(
+            InMemoryRequestCorrelationRepository.__module__,
+            "imagent.gateway.persistence.memory",
+        )
+        self.assertFalse(hasattr(historical_request_owner, "InMemoryRequestCorrelationRepository"))
+
+    async def test_fresh_repository_starts_without_request_correlations(self) -> None:
+        repository = InMemoryRequestCorrelationRepository()
+        self.assertEqual(await repository.list_request_correlations(), ())
 
 
 def _submission() -> DeliverySubmissionRecord:

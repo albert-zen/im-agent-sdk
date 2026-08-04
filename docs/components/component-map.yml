@@ -844,15 +844,15 @@ components:
     public_exports:
       current: []
       target: []
-    dependencies: [interaction.messages, applications.application-contract, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
+    dependencies: [interaction.messages, applications.application-contract, applications.requests, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Process-local state is intentionally non-durable and is rebuilt empty after restart.
     current_code: [src/imagent/request_correlations.py, src/imagent/gateway/persistence/memory.py]
     target_code: [src/imagent/gateway/persistence/memory.py]
-    current_tests: [tests/test_projection_routing.py, tests/test_storage.py, tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_submission_identity.py, tests/gateway/delivery/test_proactive_delivery.py]
-    target_tests: [tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_submission_identity.py]
+    current_tests: [tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_repository_contracts.py, tests/test_storage.py, tests/test_projection_routing.py]
+    target_tests: [tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_repository_contracts.py]
     authoritative_docs: [docs/components/gateway/persistence/memory/design.md, docs/components/gateway/persistence/memory/testing.md, docs/components/persistence/design.md, docs/components/persistence/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [request-correlation in-memory implementation remains colocated with its current semantic/SQLite module]
+    gaps: [request-correlation policy helpers, SQLite mixin, schema, and row conversion remain co-located in historical modules for later focused persistence slices]
 
   gateway.persistence.idempotency:
     id: gateway.persistence.idempotency
@@ -1498,7 +1498,7 @@ structural_status:
       reason: Projection values, delivery helper, and health types remain co-located after the in-memory repository moved to its persistence owner.
     src/imagent/request_correlations.py:
       owners: [gateway.projection.request-correlation, gateway.persistence.memory, gateway.persistence.sqlite, gateway.persistence.row-mapping]
-      reason: Correlation semantics, in-memory implementation, SQLite mixin, and row mapping share one module.
+      reason: The in-memory repository class moved to memory.py, while shared pure correlation helpers, SQLite mixin, and row mapping remain co-located here for later focused slices.
     src/imagent/gateway/delivery/submissions.py:
       owners: [gateway.delivery.submissions, gateway.persistence.sqlite, gateway.persistence.row-mapping]
       reason: Submission state transitions and their SQLite persistence/mapping are co-located.

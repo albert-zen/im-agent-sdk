@@ -73,12 +73,15 @@ snapshot, a transport reset invalidates stale response handles and leaves a
 truthful degraded request-recovery fact. `request.resolved` does not close the
 Turn.
 
-Current request projection and repository implementation share
-`request_projection_runtime.py`, `request_correlations.py`,
-`projection_routes.py`, contract-validation modules, and the Gateway root.
-This is an explained split candidate. The target policy module is
+The process-local request-correlation repository implementation now lives in
+`gateway/persistence/memory.py`. Request projection policy still shares
+`request_projection_runtime.py`, `projection_routes.py`, contract-validation
+modules, and the Gateway root; the SQLite mixin, schema, and row conversion
+remain in `request_correlations.py` until their own focused persistence
+slices. The target policy module is
 `gateway/projection/request_correlation.py`; persistence owns passive records
-and atomic storage.
+and atomic storage, while this leaf owns the routing authority that consumes
+the Port.
 
 - [ADR 0008](../../../../decisions/0008-interactive-request-routing.md)
 - [ADR 0012](../../../../decisions/0012-input-continuation-and-reply-correlation.md)
