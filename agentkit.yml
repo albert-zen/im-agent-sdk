@@ -468,6 +468,22 @@ components:
       - tests/test_appserver_requests.py
       - tests/test_appserver_transport.py
     docs:
+      - docs/components/applications/adapters/README.md
+      - docs/components/applications/adapters/appserver/README.md
+      - docs/components/applications/adapters/appserver/client/design.md
+      - docs/components/applications/adapters/appserver/client/testing.md
+      - docs/components/applications/adapters/appserver/transport/design.md
+      - docs/components/applications/adapters/appserver/transport/testing.md
+      - docs/components/applications/adapters/appserver/mapping/design.md
+      - docs/components/applications/adapters/appserver/mapping/testing.md
+      - docs/components/applications/adapters/appserver/requests/design.md
+      - docs/components/applications/adapters/appserver/requests/testing.md
+      - docs/components/applications/adapters/appserver/diagnostics/design.md
+      - docs/components/applications/adapters/appserver/diagnostics/testing.md
+      - docs/components/applications/adapters/codex/design.md
+      - docs/components/applications/adapters/codex/testing.md
+      - docs/components/applications/adapters/zen/design.md
+      - docs/components/applications/adapters/zen/testing.md
       - docs/components/application-adapters/design.md
       - docs/components/application-adapters/testing.md
       - docs/components/application-adapters/adapters/codex.md
@@ -506,6 +522,9 @@ components:
       - src/imagent/applications/t3_client.py
       - tests/test_t3_client.py
     docs:
+      - docs/components/applications/adapters/README.md
+      - docs/components/applications/adapters/t3/design.md
+      - docs/components/applications/adapters/t3/testing.md
       - docs/components/application-adapters/design.md
       - docs/components/application-adapters/testing.md
       - docs/components/application-adapters/adapters/t3.md

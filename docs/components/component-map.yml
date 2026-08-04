@@ -1122,9 +1122,9 @@ components:
     target_code: [src/imagent/applications/adapters/appserver/client/**]
     current_tests: [tests/test_appserver_client.py, tests/test_appserver_transport.py]
     target_tests: [tests/applications/adapters/appserver/test_client.py]
-    authoritative_docs: [docs/components/application-adapters/design.md, docs/components/application-adapters/adapters/codex.md]
+    authoritative_docs: [docs/components/applications/adapters/appserver/client/design.md, docs/components/applications/adapters/appserver/client/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0013-bounded-application-event-admission.md]
-    gaps: [client.py remains a large cohesive dispatch implementation requiring focused split review]
+    gaps: [authoritative leaf docs now exist; the physical target package and mirrored tests are not yet created, and client.py remains a large cohesive dispatch implementation requiring a focused mechanical split]
 
   applications.adapters.appserver.transport:
     id: applications.adapters.appserver.transport
@@ -1139,36 +1139,36 @@ components:
       current: [imagent.applications.appserver_client.transports:AppServerTransport]
       target: [imagent.applications.adapters.appserver.transport:AppServerTransport]
     dependencies: []
-    state_recovery: Transport lifecycle is per connection; no replay or cursor semantics are claimed.
+    state_recovery: Transport lifecycle is per connection; no replay or cursor semantics are claimed, and current inbound frame buffering still lacks an SDK-owned finite size bound.
     current_code: [src/imagent/applications/appserver_client/transports.py]
     target_code: [src/imagent/applications/adapters/appserver/transport.py]
     current_tests: [tests/test_appserver_transport.py]
     target_tests: [tests/applications/adapters/appserver/test_transport.py]
-    authoritative_docs: [docs/components/application-adapters/design.md, docs/engineering/repository-maintainability/design.md]
+    authoritative_docs: [docs/components/applications/adapters/appserver/transport/design.md, docs/components/applications/adapters/appserver/transport/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md]
-    gaps: [target leaf design/testing docs not yet created]
+    gaps: [authoritative leaf docs now exist; the physical target module and mirrored tests are not yet created; stdio and supplied WebSocket receives need an explicit frame-size bound and oversized-frame tests]
 
   applications.adapters.appserver.mapping:
     id: applications.adapters.appserver.mapping
     parent: applications.adapters.appserver
-    purpose: Normalize App Server resource/item/status/protocol shapes into bounded typed facts.
+    purpose: Normalize untrusted App Server resource/item/status/protocol shapes inside the concrete Application adapter.
     owns: [stateless response mapping, protocol classification, normalized native item helpers]
     does_not_own: [transport lifecycle, Gateway projection, product presentation]
     inputs: [untrusted native JSON values]
-    outputs: [validated normalized Application facts]
+    outputs: [normalized Application facts and internal classified native events]
     public_contracts: []
     public_exports:
       current: []
       target: []
     dependencies: [interaction.messages, applications.application-contract, applications.capabilities, applications.events]
-    state_recovery: Pure mapping; missing required stable identity fails closed.
+    state_recovery: Pure mapping with no replay state; generic text/collection bounds and strict identity enforcement are not yet complete.
     current_code: [src/imagent/applications/appserver_mapping.py, src/imagent/applications/appserver_client/protocol_map.py]
     target_code: [src/imagent/applications/adapters/appserver/mapping.py]
     current_tests: [tests/test_appserver_mapping.py, tests/test_appserver_input.py]
     target_tests: [tests/applications/adapters/appserver/test_mapping.py]
-    authoritative_docs: [docs/components/application-adapters/design.md, docs/components/application-adapters/testing.md]
+    authoritative_docs: [docs/components/applications/adapters/appserver/mapping/design.md, docs/components/applications/adapters/appserver/mapping/testing.md]
     adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [protocol classification and resource mapping are separate current files]
+    gaps: [authoritative leaf docs now exist; protocol classification and resource mapping remain separate current files; generic native text/collection bounds and strict event identity validation are still missing]
 
   applications.adapters.appserver.requests:
     id: applications.adapters.appserver.requests
@@ -1188,18 +1188,18 @@ components:
     target_code: [src/imagent/applications/adapters/appserver/requests.py]
     current_tests: [tests/test_appserver_requests.py]
     target_tests: [tests/applications/adapters/appserver/test_requests.py]
-    authoritative_docs: [docs/components/application-adapters/design.md, docs/components/application-adapters/adapters/codex.md, docs/components/application-adapters/adapters/zen.md]
+    authoritative_docs: [docs/components/applications/adapters/appserver/requests/design.md, docs/components/applications/adapters/appserver/requests/testing.md]
     adrs: [docs/decisions/0008-interactive-request-routing.md]
-    gaps: [target leaf design/testing docs not yet created]
+    gaps: [authoritative leaf docs now exist; the two request-owned current files and their mirrored target suite remain to be moved together]
 
   applications.adapters.appserver.diagnostics:
     id: applications.adapters.appserver.diagnostics
     parent: applications.adapters.appserver
-    purpose: Record redacted bounded App Server connection/queue facts and safe diagnostic summaries.
-    owns: [AppServerDiagnosticState, redaction/summarization, fixed health emission]
-    does_not_own: [endpoint export, exception text, native IDs, Gateway health policy]
-    inputs: [local transport/runtime transitions]
-    outputs: [ApplicationDiagnosticFacts-compatible bounded facts]
+    purpose: Record redacted bounded App Server connection/queue facts and maintain adapter-internal legacy debug summaries.
+    owns: [AppServerDiagnosticState, fixed fact-surface redaction, legacy debug summarization, fixed health emission]
+    does_not_own: [Gateway health policy, retry decisions, consumer presentation]
+    inputs: [local transport/runtime transitions and received native messages]
+    outputs: [ApplicationDiagnosticFacts-compatible bounded facts and internal debug mappings/logs]
     public_contracts: [AppServerDiagnosticState]
     public_exports:
       current: [imagent.applications.appserver_client.diagnostic_facts:AppServerDiagnosticState]
@@ -1208,11 +1208,11 @@ components:
     state_recovery: Process-lifetime counters and current connection epoch only; reads perform no I/O.
     current_code: [src/imagent/diagnostics.py, src/imagent/applications/appserver_client/diagnostic_facts.py, src/imagent/applications/appserver_client/diagnostics.py, src/imagent/applications/appserver_client/runtime_diagnostics.py]
     target_code: [src/imagent/applications/adapters/appserver/diagnostics.py]
-    current_tests: [tests/test_appserver_client.py, tests/test_diagnostics.py]
+    current_tests: [tests/test_appserver_client.py, tests/test_appserver_transport.py, tests/test_diagnostics.py]
     target_tests: [tests/applications/adapters/appserver/test_diagnostics.py]
-    authoritative_docs: [docs/components/diagnostics/design.md, docs/components/application-adapters/design.md]
+    authoritative_docs: [docs/components/applications/adapters/appserver/diagnostics/design.md, docs/components/applications/adapters/appserver/diagnostics/testing.md]
     adrs: [docs/decisions/0014-read-only-diagnostics-surface.md]
-    gaps: [diagnostic facts currently import the historical aggregate diagnostics module and must move without making the adapter depend on Gateway]
+    gaps: [authoritative leaf docs now exist; App Server diagnostic positions remain split across appserver_client files and the historical aggregate diagnostics module; legacy debug summaries still require focused bounds and redaction]
 
   applications.adapters.codex:
     id: applications.adapters.codex
@@ -1232,9 +1232,9 @@ components:
     target_code: [src/imagent/applications/adapters/codex.py]
     current_tests: [tests/test_appserver_client.py, tests/test_appserver_input.py, tests/test_appserver_mapping.py, tests/test_appserver_requests.py, tests/applications/presentation/test_artifact_materialization.py, tests/applications/presentation/test_live_activity.py]
     target_tests: [tests/applications/adapters/test_codex.py]
-    authoritative_docs: [docs/components/application-adapters/adapters/codex.md, docs/components/application-adapters/design.md]
+    authoritative_docs: [docs/components/applications/adapters/codex/design.md, docs/components/applications/adapters/codex/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [appserver.py combines common App Server base plus Codex and Zen adapters]
+    gaps: [authoritative leaf docs now exist; appserver.py still combines the common App Server base plus Codex and Zen and must be split mechanically without changing native ordering or outcome semantics]
 
   applications.adapters.zen:
     id: applications.adapters.zen
@@ -1254,9 +1254,9 @@ components:
     target_code: [src/imagent/applications/adapters/zen.py]
     current_tests: [tests/test_appserver_client.py, tests/test_appserver_input.py, tests/test_appserver_requests.py, tests/applications/presentation/test_artifact_materialization.py, tests/test_gateway_vertical_slice.py]
     target_tests: [tests/applications/adapters/test_zen.py]
-    authoritative_docs: [docs/components/application-adapters/adapters/zen.md, docs/components/application-adapters/design.md]
+    authoritative_docs: [docs/components/applications/adapters/zen/design.md, docs/components/applications/adapters/zen/testing.md]
     adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [Zen and Codex share one current adapter module and require a mechanical split]
+    gaps: [authoritative leaf docs now exist; Zen and Codex still share one current adapter module and require a mechanical split that does not inherit Codex-only semantics]
 
   applications.adapters.t3:
     id: applications.adapters.t3
@@ -1271,14 +1271,14 @@ components:
       current: [imagent.applications:T3ApplicationAdapter, imagent.applications:HttpT3Client, imagent.applications:T3ClientError]
       target: [imagent.applications.adapters.t3:T3ApplicationAdapter, imagent.applications.adapters.t3:HttpT3Client, imagent.applications.adapters.t3:T3ClientError]
     dependencies: [interaction.messages, interaction.operations, interaction.media, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, applications.presentation.live-activity]
-    state_recovery: Stable native IDs/history recover activity; finite live cursor gaps fail explicitly; dispatch receipts deduplicate ambiguity.
+    state_recovery: Stable native IDs/history recover activity and finite A1 presentation cursors fail gaps explicitly; poll/dedupe dictionaries still require finite retention bounds.
     current_code: [src/imagent/applications/t3.py, src/imagent/applications/t3_client.py]
     target_code: [src/imagent/applications/adapters/t3.py]
     current_tests: [tests/test_t3_client.py, tests/conformance/test_adapter_contracts.py, tests/test_gateway_vertical_slice.py, tests/applications/presentation/test_live_activity.py]
     target_tests: [tests/applications/adapters/test_t3.py]
-    authoritative_docs: [docs/components/application-adapters/adapters/t3.md, docs/components/application-adapters/design.md]
+    authoritative_docs: [docs/components/applications/adapters/t3/design.md, docs/components/applications/adapters/t3/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [t3.py mixes adapter orchestration, native mapping, polling state, and attachment encoding]
+    gaps: [authoritative leaf docs now exist; t3.py still mixes adapter orchestration, native mapping, polling state, presentation invocation, and attachment encoding; turn baseline, send-lock, seen-message, and terminal-turn retention are not capacity-bounded]
 
   engineering.testing-and-conformance:
     id: engineering.testing-and-conformance
