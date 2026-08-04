@@ -78,12 +78,6 @@ from ..gateway_startup import (
     GatewayNotRunning,
     GatewayStartupAdmission,
 )
-from ..inbound_admission import (
-    ClaimedInbound,
-    InboundAdmissionService,
-    inbound_idempotency_identity,
-    start_channel_with_admission,
-)
 from ..inbound_content import InboundContentTransformer as InboundContentTransformer
 from ..inbound_content import InboundContentTransformRuntime
 from ..inbound_failures import InboundFailurePhase as InboundFailurePhase
@@ -113,6 +107,12 @@ from ..projection_runtime import ThreadProjectionRuntime
 from ..projections import ProjectionWorkerHealth, RetryableDeliveryError
 from ..request_correlations import InMemoryRequestCorrelationRepository
 from ..storage import InMemoryIdempotencyRepository
+from .admission import (
+    ClaimedInbound,
+    InboundAdmissionService,
+    inbound_idempotency_identity,
+    start_channel_with_admission,
+)
 from .delivery.coordination import DeliveryCoordinator
 from .delivery.outcome_observation import (
     DeliveryOutcomeObserver as DeliveryOutcomeObserver,

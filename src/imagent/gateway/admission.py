@@ -5,17 +5,17 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from uuid import uuid4
 
-from .adapters import (
+from ..adapters import (
     IdempotencyClaimStatus,
     IdempotencyRepository,
 )
-from .interaction.channels import (
+from ..interaction.channels import (
     ChannelAdapter,
     InboundAdmission,
     InboundAdmissionHandler,
     MessageHandler,
 )
-from .interaction.messages import ConversationRef, InboundMessage
+from ..interaction.messages import ConversationRef, InboundMessage
 
 
 @dataclass(frozen=True, slots=True)

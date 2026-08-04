@@ -176,7 +176,7 @@ components:
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/decisions/0013-bounded-application-event-admission.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
-      - src/imagent/inbound_admission.py
+      - src/imagent/gateway/admission.py
       - src/imagent/inbound_content.py
       - src/imagent/inbound_failures.py
       - src/imagent/gateway/__init__.py
@@ -186,7 +186,7 @@ components:
       - tests/gateway/test_package_root.py
       - tests/test_gateway_operations.py
       - tests/test_gateway_vertical_slice.py
-      - tests/test_inbound_admission.py
+      - tests/gateway/test_admission.py
       - tests/test_inbound_content_transformer.py
       - tests/test_inbound_failure_presenter.py
     docs:

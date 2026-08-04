@@ -49,11 +49,12 @@ native input. Admission never persists content or creates a media spool.
 
 ## Structure and dependencies
 
-Current code is `src/imagent/inbound_admission.py` plus the live/startup gate in
-`src/imagent/gateway/__init__.py`. The target owner is
-`src/imagent/gateway/admission.py`. Public contracts move from
-`imagent.inbound_admission` to `imagent.gateway.admission`, with any stable
-facade re-export retaining exact identity.
+`src/imagent/gateway/admission.py` is the sole implementation owner. The
+live/startup gate in `src/imagent/gateway/__init__.py` composes that owner
+without duplicating admission behavior. `InboundAdmissionService` and
+`ClaimedInbound` are exported directly from `imagent.gateway.admission` and
+re-exported by `imagent.gateway` with exact object identity. The historical
+`imagent.inbound_admission` module is absent; it is not a compatibility shim.
 
 Dependencies are the Interaction Channel/message contracts and Gateway
 idempotency repository contract/implementation. No Application or concrete

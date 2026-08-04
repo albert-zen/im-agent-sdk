@@ -22,7 +22,7 @@ Run:
 ```sh
 PYTHONPATH=src python -m unittest \
   tests.test_storage \
-  tests.test_inbound_admission -v
+  tests.gateway.test_admission -v
 ```
 
 The later mechanical move adds

@@ -390,17 +390,17 @@ components:
     outputs: [one-shot InboundAdmission lease or duplicate rejection]
     public_contracts: [InboundAdmissionService, ClaimedInbound]
     public_exports:
-      current: [imagent.inbound_admission:InboundAdmissionService, imagent.inbound_admission:ClaimedInbound]
+      current: [imagent.gateway.admission:InboundAdmissionService, imagent.gateway.admission:ClaimedInbound]
       target: [imagent.gateway.admission:InboundAdmissionService, imagent.gateway.admission:ClaimedInbound]
     dependencies: [interaction.channels.channel-contract, interaction.messages, gateway.persistence.idempotency, gateway.persistence.repository-contracts]
     state_recovery: Fenced in_flight leases reclaim safely; side_effect_started never expires into retry authority.
-    current_code: [src/imagent/inbound_admission.py, src/imagent/gateway/__init__.py]
+    current_code: [src/imagent/gateway/admission.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/admission.py]
-    current_tests: [tests/test_inbound_admission.py, tests/test_native_channels.py]
-    target_tests: [tests/gateway/test_admission.py]
+    current_tests: [tests/gateway/test_admission.py, tests/gateway/test_package_root.py, tests/test_native_channels.py]
+    target_tests: [tests/gateway/test_admission.py, tests/gateway/test_package_root.py]
     authoritative_docs: [docs/components/gateway/admission/design.md, docs/components/gateway/admission/testing.md, docs/components/gateway/design.md, docs/components/persistence/design.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
-    gaps: [implementation remains split between inbound_admission.py and the Gateway package root, legacy Channel start-signature fallback remains until all supported Channels use pre-media admission directly]
+    gaps: [legacy Channel start-signature fallback remains until all supported Channels use pre-media admission directly]
 
   gateway.routing.bindings:
     id: gateway.routing.bindings
@@ -858,7 +858,7 @@ components:
     state_recovery: Process-local claims have no timed reclaim and restart empty; the separate durable SQLite owner may reclaim only stale in_flight, never protected state.
     current_code: [src/imagent/storage.py]
     target_code: [src/imagent/gateway/persistence/idempotency.py]
-    current_tests: [tests/test_storage.py, tests/test_inbound_admission.py]
+    current_tests: [tests/test_storage.py, tests/gateway/test_admission.py]
     target_tests: [tests/gateway/persistence/test_idempotency.py]
     authoritative_docs: [docs/components/gateway/persistence/idempotency/design.md, docs/components/gateway/persistence/idempotency/testing.md, docs/components/persistence/design.md, docs/components/persistence/testing.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0011-durable-inbound-admission-before-media.md]

@@ -16,7 +16,7 @@ from .diagnostics import (
     InboundFailurePresentationFailureCode,
     InboundFailurePresenterDiagnosticFacts,
 )
-from .inbound_admission import ClaimedInbound
+from .gateway.admission import ClaimedInbound
 from .interaction.messages import (
     ConversationRef,
     InboundMessage,
