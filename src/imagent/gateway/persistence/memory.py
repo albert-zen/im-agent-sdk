@@ -11,6 +11,7 @@ from ...contracts import (
     DestinationDeliveryRecord,
     validate_delivery_submission_record,
 )
+from .submission_identity import ensure_same_delivery_submission_reservation
 
 
 class InMemoryDeliverySubmissionRepository:
@@ -35,7 +36,7 @@ class InMemoryDeliverySubmissionRepository:
         async with self._lock:
             existing = self._records.get(record.submission_id)
             if existing is not None:
-                _ensure_same_submission(existing, record)
+                ensure_same_delivery_submission_reservation(existing, record)
                 return DeliveryReservation(acquired=False, record=existing)
             self._records[record.submission_id] = record
             return DeliveryReservation(acquired=True, record=record)
@@ -94,20 +95,3 @@ def _replace_destination(
         destinations=tuple(destinations),
         updated_at=max(record.updated_at, replacement.updated_at),
     )
-
-
-def _ensure_same_submission(
-    existing: DeliverySubmissionRecord,
-    replacement: DeliverySubmissionRecord,
-) -> None:
-    if (
-        existing.submission_id != replacement.submission_id
-        or existing.delivery_id != replacement.delivery_id
-        or existing.origin is not replacement.origin
-        or existing.principal_id != replacement.principal_id
-        or existing.target_fingerprint != replacement.target_fingerprint
-        or existing.payload_fingerprint != replacement.payload_fingerprint
-    ):
-        raise DeliverySubmissionConflict(
-            f"delivery ID belongs to a different submission: {existing.delivery_id}"
-        )

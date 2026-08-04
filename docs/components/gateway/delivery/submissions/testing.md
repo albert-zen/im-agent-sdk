@@ -13,6 +13,16 @@ until their later test-convergence slice because moving their surrounding
 orchestration fixtures here would mix proactive-delivery behavior into a
 mechanical ownership move.
 
+Reservation parity tests must prove that memory and SQLite both accept the
+same root plus the same order-independent destination snapshot set, while
+rejecting a changed destination ID or any changed snapshot field. The existing
+stored outcome may already be terminal and is deliberately excluded from
+reservation identity. A SQLite close/reopen must preserve the same comparison.
+The proactive suite must separately prove that a normal retry after route
+movement uses the stored snapshot, while a first-reservation race whose
+contenders resolved different routes fails instead of adopting the winner's
+unrelated destination.
+
 Run:
 
 ```sh

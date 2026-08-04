@@ -38,6 +38,9 @@ from ...contracts import (
     derive_destination_delivery_id as derive_destination_delivery_id,
 )
 from ...interaction.messages import ConversationRef
+from ..persistence.submission_identity import (
+    ensure_same_delivery_submission_reservation,
+)
 
 
 class _SQLiteOwner(Protocol):
@@ -68,7 +71,7 @@ class SQLiteDeliverySubmissionMixin:
             try:
                 existing = _read_submission(self._connection, record.submission_id)
                 if existing is not None:
-                    _ensure_same_identity(existing, record)
+                    ensure_same_delivery_submission_reservation(existing, record)
                     self._connection.commit()
                     return DeliveryReservation(acquired=False, record=existing)
                 _write_submission(self._connection, record)
@@ -423,22 +426,6 @@ def _decode_receipt(value: object) -> DeliveryReceipt | None:
             for segment in payload.get("segments", [])
         ),
     )
-
-
-def _ensure_same_identity(
-    existing: DeliverySubmissionRecord,
-    replacement: DeliverySubmissionRecord,
-) -> None:
-    if (
-        existing.delivery_id != replacement.delivery_id
-        or existing.origin is not replacement.origin
-        or existing.principal_id != replacement.principal_id
-        or existing.target_fingerprint != replacement.target_fingerprint
-        or existing.payload_fingerprint != replacement.payload_fingerprint
-    ):
-        raise DeliverySubmissionConflict(
-            f"delivery ID belongs to a different submission: {existing.delivery_id}"
-        )
 
 
 def _thread_storage_key(

@@ -43,6 +43,9 @@ from ...interaction.channels import ChannelAdapter
 from ...interaction.media import AttachmentContent, LocalPath
 from ...interaction.messages import OutboundMessage
 from ...interaction.operations import ContractViolation
+from ..persistence.submission_identity import (
+    ensure_same_delivery_submission_reservation,
+)
 from . import proactive_authorization as _proactive_authorization
 from .coordination import DeliveryCoordinator
 from .outcome_observation import (
@@ -219,7 +222,10 @@ class ProactiveDeliveryService:
             )
             reservation = await self._submissions.reserve_delivery_submission(rejected_record)
             if not reservation.acquired:
-                _ensure_same_submission(reservation.record, rejected_record)
+                ensure_same_delivery_submission_reservation(
+                    reservation.record,
+                    rejected_record,
+                )
             return _result_from_record(
                 reservation.record,
                 replayed=not reservation.acquired,
@@ -256,7 +262,7 @@ class ProactiveDeliveryService:
         )
         reservation = await self._submissions.reserve_delivery_submission(record)
         if not reservation.acquired:
-            _ensure_same_submission(reservation.record, record)
+            ensure_same_delivery_submission_reservation(reservation.record, record)
             return _result_from_record(
                 reservation.record,
                 replayed=True,
@@ -682,24 +688,6 @@ def _require_external_local_digests(intent: DeliveryIntent) -> None:
             raise ContractViolation(
                 "proactive LocalPath attachments require lowercase metadata.sha256"
             )
-
-
-def _ensure_same_submission(
-    existing: DeliverySubmissionRecord,
-    replacement: DeliverySubmissionRecord,
-) -> None:
-    if (
-        existing.submission_id != replacement.submission_id
-        or existing.delivery_id != replacement.delivery_id
-        or existing.origin is not replacement.origin
-    ):
-        raise DeliverySubmissionConflict("delivery submission identity changed")
-    _ensure_submission_identity(
-        existing,
-        principal_id=replacement.principal_id,
-        target_fingerprint=replacement.target_fingerprint,
-        payload_fingerprint=replacement.payload_fingerprint,
-    )
 
 
 def _ensure_submission_identity(

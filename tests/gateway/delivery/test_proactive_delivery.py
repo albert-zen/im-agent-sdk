@@ -24,6 +24,7 @@ from imagent.contracts import (
     DeliveryPrincipal,
     DeliveryReceipt,
     DeliveryReceiptStatus,
+    DeliveryReservation,
     DeliverySegmentStatus,
     DeliverySubmissionOrigin,
     DeliverySubmissionState,
@@ -127,6 +128,62 @@ class _OutcomeChannel(FakeChannelAdapter):
             items=self.receipt_items,
             retry_after_seconds=self.retry_after_seconds,
         )
+
+
+class _BarrierSubmissionRepository:
+    def __init__(self) -> None:
+        self.inner = InMemoryDeliverySubmissionRepository()
+        self.first_reservation = asyncio.Event()
+        self.release = asyncio.Event()
+        self.reservations = []
+
+    async def get_delivery_submission(self, submission_id):
+        return await self.inner.get_delivery_submission(submission_id)
+
+    async def reserve_delivery_submission(self, record) -> DeliveryReservation:
+        self.reservations.append(record)
+        if len(self.reservations) == 1:
+            self.first_reservation.set()
+            await self.release.wait()
+        else:
+            self.release.set()
+        return await self.inner.reserve_delivery_submission(record)
+
+    async def update_delivery_destination(
+        self,
+        submission_id,
+        destination_delivery_id,
+        *,
+        expected_state,
+        destination,
+    ):
+        return await self.inner.update_delivery_destination(
+            submission_id,
+            destination_delivery_id,
+            expected_state=expected_state,
+            destination=destination,
+        )
+
+
+class _UncheckedReservationRepository:
+    def __init__(self, existing) -> None:
+        self.existing = existing
+
+    async def get_delivery_submission(self, submission_id):
+        return None
+
+    async def reserve_delivery_submission(self, record) -> DeliveryReservation:
+        return DeliveryReservation(acquired=False, record=self.existing)
+
+    async def update_delivery_destination(
+        self,
+        submission_id,
+        destination_delivery_id,
+        *,
+        expected_state,
+        destination,
+    ):
+        raise AssertionError("conflicting reservation must fail before destination update")
 
 
 class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
@@ -311,6 +368,88 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(moved.destinations[0].route_id, "route-b")
         self.assertEqual(len(self.channel_a.sent), 1)
         self.assertEqual(len(self.channel_b.sent), 1)
+
+    async def test_initial_reservation_race_rejects_different_route_snapshots(
+        self,
+    ) -> None:
+        await self.projections.replace_thread_projection_routes(
+            ThreadProjectionRoute(
+                route_id="route-a",
+                thread_ref=self.thread_ref,
+                conversation_ref=self.conversation_a,
+                updated_at=datetime.now(UTC),
+            )
+        )
+        submissions = _BarrierSubmissionRepository()
+        gateway = self.gateway(submissions=submissions)
+        first = asyncio.create_task(
+            gateway.deliver_proactively(self.intent(), credential=self.thread_token)
+        )
+        await submissions.first_reservation.wait()
+
+        await self.projections.replace_thread_projection_routes(
+            ThreadProjectionRoute(
+                route_id="route-b",
+                thread_ref=self.thread_ref,
+                conversation_ref=self.conversation_b,
+                updated_at=datetime.now(UTC),
+            )
+        )
+        second = asyncio.create_task(
+            gateway.deliver_proactively(self.intent(), credential=self.thread_token)
+        )
+        results = await asyncio.gather(first, second, return_exceptions=True)
+
+        self.assertEqual(len(submissions.reservations), 2)
+        self.assertNotEqual(
+            submissions.reservations[0].destinations[0].snapshot,
+            submissions.reservations[1].destinations[0].snapshot,
+        )
+        self.assertEqual(
+            sum(isinstance(result, DeliverySubmissionConflict) for result in results),
+            1,
+        )
+        self.assertEqual(len(self.channel_a.sent) + len(self.channel_b.sent), 1)
+
+    async def test_non_acquired_reservation_is_verified_by_orchestration(self) -> None:
+        await self.projections.replace_thread_projection_routes(
+            ThreadProjectionRoute(
+                route_id="route-a",
+                thread_ref=self.thread_ref,
+                conversation_ref=self.conversation_a,
+                updated_at=datetime.now(UTC),
+            )
+        )
+        await self.gateway().deliver_proactively(
+            self.intent(),
+            credential=self.thread_token,
+        )
+        submission_id = derive_delivery_submission_id(
+            DeliverySubmissionOrigin.EXTERNAL,
+            "agent-task",
+            "delivery-1",
+        )
+        existing = await self.submissions.get_delivery_submission(submission_id)
+        self.assertIsNotNone(existing)
+        assert existing is not None
+
+        await self.projections.replace_thread_projection_routes(
+            ThreadProjectionRoute(
+                route_id="route-b",
+                thread_ref=self.thread_ref,
+                conversation_ref=self.conversation_b,
+                updated_at=datetime.now(UTC),
+            )
+        )
+        unchecked = _UncheckedReservationRepository(existing)
+
+        with self.assertRaisesRegex(DeliverySubmissionConflict, "snapshot set changed"):
+            await self.gateway(submissions=unchecked).deliver_proactively(
+                self.intent(),
+                credential=self.thread_token,
+            )
+        self.assertEqual(len(self.channel_a.sent), 1)
+        self.assertEqual(self.channel_b.sent, [])
 
     async def test_same_id_concurrency_sends_once_and_reports_in_flight(self) -> None:
         await self.put_route(self.conversation_a, route_id="route-a")

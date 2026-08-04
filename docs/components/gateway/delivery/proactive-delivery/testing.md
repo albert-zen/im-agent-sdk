@@ -6,6 +6,11 @@ suppression, payload/target conflicts, complete preflight, sticky unknown,
 retryable-only resumption and retry-after, partial multi-destination results,
 redaction, SQLite restart, and O2 integration.
 
+Route pinning includes both sides of the reservation race: a retry that finds
+an existing record must not re-resolve a moved route, while concurrent initial
+callers that resolved different snapshot sets must receive an explicit
+conflict rather than treating the winner's destination as their own replay.
+
 The in-memory submission repository's atomic reservation/conflict/CAS cases
 live in `tests/gateway/persistence/test_memory.py`; this suite consumes that
 owner without reintroducing persistence inside delivery orchestration.

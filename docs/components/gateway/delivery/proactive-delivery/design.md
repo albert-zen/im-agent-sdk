@@ -16,6 +16,13 @@ reservation pins the destination set and payload/target fingerprints; replay
 never follows a moved route. External and Gateway-internal identities are
 namespaced by fixed origin plus trusted principal.
 
+An existing stable submission is loaded before current route resolution, so a
+retry uses its authoritative pinned snapshots even if routing has moved. If
+two callers both observe no record and race after resolving different route
+snapshots, the repository's complete reservation-identity comparison permits
+only the first set and rejects the other; orchestration verifies the same rule
+on every non-acquired reservation result.
+
 ## Outcome and retry safety
 
 One destination is submitted as one logical Coordinator attempt even when it
