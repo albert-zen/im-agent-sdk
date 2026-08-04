@@ -737,10 +737,7 @@ class AppServerRequestRuntime:
             resolution_epoch = pending.connection_epoch
         else:
             if notification_epoch is None or notification_epoch < 1:
-                logger.warning(
-                    "Ignoring unscoped App Server request resolution for %r",
-                    transport_request_id,
-                )
+                logger.warning("Ignoring unscoped App Server request resolution")
                 return
             resolution_epoch = notification_epoch
             request_ref = derive_appserver_request_ref(
@@ -750,8 +747,7 @@ class AppServerRequestRuntime:
             )
             if event.thread_id is None:
                 logger.warning(
-                    "Ignoring App Server request resolution without pending or Thread scope for %s",
-                    request_ref,
+                    "Ignoring App Server request resolution without pending or Thread scope"
                 )
                 return
             thread_ref = ThreadRef(

@@ -15,7 +15,7 @@ stream.
 | `transport` | stdio/WebSocket framing and close errors | [design](transport/design.md) | [testing](transport/testing.md) |
 | `mapping` | protocol classification and resource/item normalization | [design](mapping/design.md) | [testing](mapping/testing.md) |
 | `requests` | request values, response wire mapping, pending/terminal lifecycle | [design](requests/design.md) | [testing](requests/testing.md) |
-| `diagnostics` | bounded redacted connection/queue facts plus internal summaries (not ADR-0014 facts) | [design](diagnostics/design.md) | [testing](diagnostics/testing.md) |
+| `diagnostics` | bounded redacted connection/queue facts plus fixed `appserver.debug.v1` internal summaries | [design](diagnostics/design.md) | [testing](diagnostics/testing.md) |
 
 Codex and Zen are separate concrete owners outside this shared protocol
 subtree: [Codex](../codex/design.md), [Zen](../zen/design.md). Sharing an App
@@ -38,7 +38,11 @@ redacted errors; a bad notification produces an explicit recovery gap and a
 bad server request cannot open typed request state.
 Requests map only evidenced Codex/Zen server requests and validate typed
 response shape before native writeback. Diagnostics are read-only, bounded,
-and redacted.
+and redacted. Their internal debug path has one fixed `appserver.debug.v1`
+vocabulary: it records only allowlisted categories, bounded type/count/length
+facts, and documented SHA-256 fingerprints. It never logs native IDs, native
+text, endpoints, paths, credentials, arbitrary payload keys, or arbitrary
+payload values.
 
 No leaf owns Gateway request correlation, IM delivery, persistence, product
 approval/command policy, raw native event exposure, durable spool/outbox,

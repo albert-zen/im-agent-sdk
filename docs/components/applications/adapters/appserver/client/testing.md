@@ -22,6 +22,9 @@ The focused client evidence now lives in
 - oversized transport input reaches no response or callback dispatch, resets
   the poisoned connection, and permits only a fresh later connection/epoch;
 - bounded diagnostic facts without endpoint/path/native-payload leakage.
+- protocol, stderr, reconnect, supervisor, and health logging have one fixed
+  bounded redacted `appserver.debug.v1` shape; arbitrary native or health
+  values are never forwarded unchanged.
 
 The test fixtures exercise the typed client and transport seams directly; they
 do not stand up Gateway or introduce a second subscription.

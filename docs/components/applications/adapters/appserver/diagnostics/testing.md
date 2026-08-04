@@ -12,10 +12,24 @@ server-request queue depth/overflow, fixed failure codes, and the bounded
 ADR-0014 `ConnectionDiagnosticFacts` surface. Epoch and queue overflow/reset
 evidence is primarily in the transport suite.
 
-The legacy debug-summary/logging helpers are not proven to have the same
-redaction boundary: current summaries may retain native identifiers and
-content-derived previews. Focused security tests are still required before
-those helpers may be described as bounded or safe.
+Focused security evidence in
+`tests/applications/adapters/appserver/test_diagnostics.py` proves the fixed
+`appserver.debug.v1` transport, text, event, and health record schemas. It
+checks exact limits and limit-plus-one collection behavior before sampling or
+sorting; validates that `max_preview_chars` is positive, non-boolean, and no
+greater than 256; and proves text previews are always absent. Nested response,
+payload, permission, question, change, event, and health inputs use sensitive
+sentinels for IDs, content, paths, commands, questions, endpoint/userinfo,
+and credentials; none may survive a returned summary or captured log record.
+The scalar-cap-plus-one, path-key, and overlong-key cases prove that no
+fingerprint is retained and no SHA helper runs after a capped or sensitive key
+or text. Samples otherwise use only deterministic SHA-256 key fingerprints
+and fixed structural type/count/length facts. Managed media, single and
+embedded Unix paths, Windows drive/UNC paths, and arbitrary-scheme endpoints
+or userinfo remain fail-closed redactions. Counter-cap-plus-one evidence fixes
+the health epoch/retry bound as well. Counting mapping and sequence fixtures
+prove that a structural summary consumes no fifth native item while taking its
+four-item sample.
 
 Application diagnostic identity is covered by
 `tests/applications/test_diagnostics.py`; the App Server mutable state remains
@@ -36,10 +50,11 @@ PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.t
 uv run python -m unittest tests.test_appserver_transport -v
 ```
 
-The physical move keeps diagnostic reads side-effect free and bounded, then
-requires every AGENTS gate, component-map/AgentKit check, and clean-wheel
-smoke. Legacy debug summaries remain outside the ADR-0014 fact guarantee;
-their security hardening is a later slice.
+The snapshot tests preserve the exact ADR-0014 typed fact values and prove
+reads remain side-effect-free; debug hardening may not alter epoch, counter,
+queue, state, or failure-code semantics. The physical owner remains unchanged
+and requires every AGENTS gate, component-map/AgentKit check, and clean-wheel
+smoke.
 
 ## Authority
 

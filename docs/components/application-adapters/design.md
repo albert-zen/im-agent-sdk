@@ -218,6 +218,13 @@ has a meaningful connection epoch and bounded dispatch queues, while T3's HTTP
 request/response transport has no equivalent long-lived connection. Exporters,
 health endpoints, polling, and operator presentation remain consumer policy.
 
+App Server's internal protocol/debug logging is a separate adapter-local
+security boundary. It uses its fixed `appserver.debug.v1` structural vocabulary
+and never widens the ADR-0014 fact surface: native IDs, text, paths, commands,
+questions, permissions, credentials, endpoints, and arbitrary payload values
+do not cross it. The client may retain only fixed categories, bounded counts
+and lengths, and documented SHA-256 fingerprints.
+
 The App Server client also exposes an adapter-only ordered admission fence
 across those two lanes. Earlier non-response frames are admitted before a
 later JSON-RPC response completes; callback payloads carry a public

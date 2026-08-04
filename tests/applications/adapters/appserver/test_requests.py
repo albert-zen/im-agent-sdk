@@ -762,15 +762,19 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
             second_event.request.request_ref,
         )
 
-        await self.client.emit_notification(
-            {
-                "method": "serverRequest/resolved",
-                "_connection_epoch": 3,
-                "params": {
-                    "requestId": 7,
-                },
-            }
-        )
+        with self.assertLogs(
+            "imagent.applications.adapters.appserver.requests", level="WARNING"
+        ) as logs:
+            await self.client.emit_notification(
+                {
+                    "method": "serverRequest/resolved",
+                    "_connection_epoch": 3,
+                    "params": {
+                        "requestId": "native-request-id-sentinel",
+                    },
+                }
+            )
+        self.assertNotIn("native-request-id-sentinel", "\n".join(logs.output))
         result = await self.adapter.execute(
             RespondRequest(
                 operation_id="respond-current-epoch",
