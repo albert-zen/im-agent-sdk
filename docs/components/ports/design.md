@@ -3,23 +3,32 @@
 ## Purpose
 
 `src/imagent/adapters.py` is the remaining compatibility facade for Python
-runtime seams that have not yet reached their target component owner. New and
-mechanically extracted contracts live under the owning Interaction, Gateway,
-or Applications component; the facade may re-export an exact object while
-callers migrate, but it does not retain a second implementation.
+runtime seams whose implementations now all live under their owning
+Interaction, Gateway, or Applications component. The facade re-exports exact
+objects while callers migrate, but it does not retain a second implementation.
+The common
+`AgentApplicationAdapter` Protocol and
+`ApplicationInputDispatchHandler` callback now live under
+`applications.application-contract`; this historical module only re-exports
+those exact objects for compatibility.
 
 ## Ownership
 
-The remaining Ports surface owns:
+The Applications contract owner owns:
 
 - `AgentApplicationAdapter` lifecycle, typed operation, input, and Thread
   subscription signatures;
+- `ApplicationInputDispatchHandler`, the typed pre-dispatch callback;
 - the common input continuation preference, typed pre-dispatch intent, and
   truthful started/steered acceptance result;
 - `ApplicationInputOutcomeUnknown`, which marks a dispatched native input
   whose acceptance result cannot be proven and therefore cannot be retried
-  automatically;
-- callback aliases that have not yet moved to their owner-typed seam.
+  automatically.
+
+The remaining Ports surface owns no runtime seam. It exposes only historical
+exact-object aliases for Channel, Application, and Gateway contracts that have
+already reached their component owners; removing those aliases is a separate
+public-facade cleanup.
 
 Gateway's `gateway.persistence.repository-contracts` leaf owns the complete
 Gateway repository Port/conflict family: binding, projection-route,
@@ -37,8 +46,7 @@ Interaction's Channel contract owns `MessageHandler`, the optional structural
 `ChannelStartupConfigurationValidator`, and the opaque `InboundAdmission`
 lease and handler used before Channel media preparation. `adapters.py`
 re-exports those exact objects plus the Interaction-owned `ChannelAdapter` for
-compatibility. The remaining Application Port stays here until its focused
-mechanical owner move. The historical
+compatibility. The historical
 `OperationHandler[GatewayOperation]` is removed: Channel lifecycle accepts
 messages/admission only, while Controllers invoke typed operations through
 `ControllerActions`.
@@ -120,7 +128,8 @@ has begun, cancellation, timeout, disconnect, or response loss is reported as
 `ApplicationInputOutcomeUnknown` unless the native protocol supplies a
 stronger idempotency guarantee.
 
-`AgentApplicationAdapter.send_input` defaults to `prefer_active_turn`. Every
+The Applications-owned `AgentApplicationAdapter.send_input` defaults to
+`prefer_active_turn`. Every
 implementation accepts that preference even if its evidenced native mapping
 can only return `started`. Immediately before mutation it calls the supplied
 dispatch hook with `started/create_new` or

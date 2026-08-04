@@ -5,7 +5,6 @@ from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import UTC, datetime
 
-from imagent.adapters import ApplicationInputDispatchHandler
 from imagent.applications.capabilities import (
     ApplicationCapabilities,
     EventSequenceScope,
@@ -16,6 +15,7 @@ from imagent.applications.capabilities import (
     ThreadCapabilities,
     ThreadDeletionCapability,
 )
+from imagent.applications.contract import ApplicationInputDispatchHandler
 from imagent.applications.events import (
     AgentEvent,
     AgentEventType,

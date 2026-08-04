@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
-from .adapters import AgentApplicationAdapter
+from .applications.contract import AgentApplicationAdapter
 from .contracts import (
     ApplicationOperation,
     ApplicationOperationResult,

@@ -6,13 +6,13 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from imagent.adapters import AgentApplicationAdapter
 from imagent.applications.capabilities import (
     ProjectMode,
     SupportLevel,
     ThreadDeletionCapability,
     validate_application_capabilities,
 )
+from imagent.applications.contract import AgentApplicationAdapter
 from imagent.applications.events import AgentEvent, AgentEventType, validate_agent_event
 from imagent.contracts import (
     ActivateNativeThread,

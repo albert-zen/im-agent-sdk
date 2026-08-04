@@ -26,11 +26,14 @@ subscriptions. `send_input()` defaults to `prefer_active_turn`, invokes the
 typed pre-dispatch callback exactly once immediately before a native mutation, and
 reports the actual `started/create_new` or `steered/preserve_existing` result.
 
-The present public contracts/exports are `AgentApplicationAdapter` from
-`imagent.adapters` and the `ApplicationSummary`, resource, history, input,
-and validation values from `imagent.contracts`. The target formal facade is
-`imagent.applications`, backed by `src/imagent/applications/contract.py`; it
-must re-export exact objects rather than retain a second implementation.
+The owner contracts/exports are `AgentApplicationAdapter` and
+`ApplicationInputDispatchHandler` from `src/imagent/applications/contract.py`.
+The finite `imagent.applications` facade exposes those exact objects. The
+historical `imagent.adapters` surface remains a temporary exact-object
+compatibility facade for these two names while it continues to serve
+Channel/Gateway aliases owned elsewhere. The `ApplicationSummary`, resource,
+history, input, and validation values remain in their existing contract
+owners; this slice does not move them or create a second Application contract.
 
 ## Dependency, state, and recovery boundary
 
@@ -50,21 +53,16 @@ Turn.
 
 ## Current and target structure
 
-Current code is split among `src/imagent/adapters.py`,
-`src/imagent/contracts/{_validation.py,errors.py,model.py,validators.py}`,
-`src/imagent/applications/__init__.py`, `src/imagent/diagnostics.py`, and the
-v1 common/history/messages/resources schemas. Current conformance evidence is
-`tests/conformance/test_adapter_contracts.py`.
-
-The target is `src/imagent/applications/contract.py` with
-`tests/applications/test_contract.py`; shared JSON Schemas remain
-language-neutral documents. The current common Application Protocol sharing
-`adapters.py` with Channel and repository Ports is the declared structural
-gap. Until that focused move, the current `imagent.applications` facade uses a
-closed, named lazy re-export set so capability imports do not initialize a
-concrete adapter; it remains a finite exact facade, not a registry or service
-locator. No compatibility implementation or semantics is added by this
-documentation slice.
+The owner implementation is `src/imagent/applications/contract.py` with
+focused ownership evidence in `tests/applications/test_contract.py`; shared
+JSON Schemas and the Application resource/model values remain in their
+existing owners. `src/imagent/adapters.py` retains only exact compatibility
+aliases for these Application names alongside Channel and Gateway aliases; it
+does not define a second Protocol or callback alias. The `imagent.applications`
+facade uses a closed, named lazy re-export set so importing the contract does
+not initialize a concrete adapter; it remains a finite exact facade, not a
+registry or service locator. The conformance suite remains affected evidence
+for all concrete adapters.
 
 ## Authority
 

@@ -13,10 +13,8 @@ from uuid import uuid4
 if TYPE_CHECKING:
     from .delivery.proactive_authorization import DeliveryAuthorizer
 
-from ..adapters import (
-    AgentApplicationAdapter,
-)
 from ..applications.capabilities import ProjectMode
+from ..applications.contract import AgentApplicationAdapter
 from ..contracts import (
     AgentInput,
     ApplicationOperation,
