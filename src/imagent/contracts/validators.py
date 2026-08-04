@@ -9,14 +9,26 @@ from ..applications.requests import (
     UserInputResponse,
     validate_request_ref,
 )
+from ..gateway.routing.bindings import (
+    BindConversationToProject as _BindConversationToProject,
+)
+from ..gateway.routing.bindings import (
+    BindConversationToThread as _BindConversationToThread,
+)
+from ..gateway.routing.bindings import (
+    ClearConversationThread as _ClearConversationThread,
+)
+from ..gateway.routing.bindings import (
+    ConversationBound as _ConversationBound,
+)
+from ..gateway.routing.bindings import (
+    _validate_binding_operation,
+    _validate_binding_operation_result,
+)
 from ..interaction.messages import ConversationRef
 from ..interaction.operations import ContractViolation, require_identifier
 from .operations import (
     ApplicationsListed,
-    BindConversationToProject,
-    BindConversationToThread,
-    ClearConversationThread,
-    ConversationBound,
     GatewayOperation,
     GatewayOperationFailed,
     GatewayOperationResult,
@@ -42,11 +54,11 @@ def validate_gateway_operation(operation: GatewayOperation) -> None:
             operation.application_ref.application_instance_id,
             "application_instance_id",
         )
-    if isinstance(operation, BindConversationToProject):
-        require_identifier(operation.project_ref.application_instance_id, "application_instance_id")
-        require_identifier(operation.project_ref.native_project_id, "native_project_id")
-    if isinstance(operation, BindConversationToThread):
-        validate_thread_ref(operation.thread_ref)
+    if isinstance(
+        operation,
+        (_BindConversationToProject, _BindConversationToThread, _ClearConversationThread),
+    ):
+        _validate_binding_operation(operation)
     if isinstance(operation, ObserveThread):
         validate_thread_ref(operation.thread_ref)
         if operation.reply_to_message_id is not None:
@@ -104,15 +116,16 @@ def validate_gateway_operation_result(
         if result.request_ref != operation.request_ref:
             raise ContractViolation("Gateway response routed a different request")
         return
+    if isinstance(
+        operation,
+        (_BindConversationToProject, _BindConversationToThread, _ClearConversationThread),
+    ):
+        _validate_binding_operation_result(operation, result)
+        return
     if not isinstance(
         operation,
-        (
-            SelectApplication,
-            BindConversationToProject,
-            BindConversationToThread,
-            ClearConversationThread,
-        ),
-    ) or not isinstance(result, ConversationBound):
+        (SelectApplication,),
+    ) or not isinstance(result, _ConversationBound):
         raise ContractViolation(f"{operation.type.value} must return ConversationBound")
     if result.binding.conversation_ref != operation.conversation_ref:
         raise ContractViolation("Gateway result belongs to a different Conversation")
@@ -124,18 +137,6 @@ def validate_gateway_operation_result(
             or result.binding.thread_ref is not None
         ):
             raise ContractViolation("application.select returned an incompatible binding")
-    elif isinstance(operation, BindConversationToProject):
-        if (
-            result.binding.project_ref != operation.project_ref
-            or result.binding.thread_ref is not None
-        ):
-            raise ContractViolation("conversation.bind_project returned an incompatible binding")
-    elif isinstance(operation, BindConversationToThread):
-        if result.binding.thread_ref != operation.thread_ref:
-            raise ContractViolation("conversation.bind_thread returned a different thread")
-    elif isinstance(operation, ClearConversationThread):
-        if result.binding.thread_ref is not None:
-            raise ContractViolation("conversation.clear_thread did not clear the thread")
 
 
 def _validate_error(error) -> None:

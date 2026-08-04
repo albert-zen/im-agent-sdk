@@ -20,10 +20,6 @@ from ..contracts import (
     ApplicationOperationFailed,
     ApplicationOperationResult,
     ApplicationsListed,
-    BindConversationToProject,
-    BindConversationToThread,
-    ClearConversationThread,
-    ConversationBound,
     CreateThread,
     GatewayOperation,
     GatewayOperationFailed,
@@ -139,6 +135,12 @@ from .presentation import (
 )
 from .presentation import (
     ProjectionPresentationOrigin as ProjectionPresentationOrigin,
+)
+from .routing.bindings import (
+    BindConversationToProject,
+    BindConversationToThread,
+    ClearConversationThread,
+    ConversationBound,
 )
 
 logger = logging.getLogger(__name__)

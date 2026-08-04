@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -54,10 +55,85 @@ CHANNEL_FACADE_CHECK = (
     "assert all(not hasattr(contracts_facade, name) and name not in contracts_facade.__all__ "
     "for name in retired_contract); "
 )
+BINDING_IMPORT_ORDER_CHECK = r'''
+import inspect
+import subprocess
+import sys
+import typing
+
+check_code = r"""
+import inspect
+import typing
+
+import imagent.contracts as contracts_facade
+import imagent.contracts.operations as historical_operations
+import imagent.contracts.validators as validators_owner
+import imagent.gateway as gateway_facade
+import imagent.gateway.routing as routing_facade
+from imagent.gateway.persistence import ConversationBinding
+from imagent.gateway.routing import bindings as binding_owner
+
+binding_names = (
+    "BindConversationToProject",
+    "BindConversationToThread",
+    "ClearConversationThread",
+    "ConversationBound",
+)
+for name in binding_names:
+    owner = getattr(binding_owner, name)
+    assert getattr(routing_facade, name) is owner
+    assert getattr(contracts_facade, name) is owner
+    assert getattr(gateway_facade, name) is owner
+    assert inspect.signature(getattr(contracts_facade, name)) == inspect.signature(owner)
+    assert owner.__module__ == "imagent.gateway.routing.bindings"
+    assert not hasattr(historical_operations, name)
+    assert not hasattr(validators_owner, name)
+
+binding_hints = typing.get_type_hints(binding_owner.ConversationBound)
+facade_hints = typing.get_type_hints(contracts_facade.ConversationBound)
+assert binding_hints["binding"] is ConversationBinding
+assert facade_hints["binding"] is ConversationBinding
+assert binding_hints["type"] is historical_operations.GatewayOperationType
+assert facade_hints["type"] is historical_operations.GatewayOperationType
+assert typing.get_type_hints(contracts_facade.__getattr__)["return"] is object
+assert typing.get_args(contracts_facade.GatewayOperation)
+assert inspect.signature(contracts_facade.validate_gateway_operation) == inspect.signature(
+    validators_owner.validate_gateway_operation
+)
+assert inspect.signature(contracts_facade.validate_gateway_operation_result) == inspect.signature(
+    validators_owner.validate_gateway_operation_result
+)
+assert typing.get_type_hints(contracts_facade.validate_gateway_operation) == typing.get_type_hints(
+    validators_owner.validate_gateway_operation
+)
+assert (
+    typing.get_type_hints(contracts_facade.validate_gateway_operation_result)
+    == typing.get_type_hints(validators_owner.validate_gateway_operation_result)
+)
+"""
+for first_import in (
+    "import imagent.gateway.routing.bindings\n",
+    "import imagent.contracts.operations\n",
+    "import imagent.contracts.validators\n",
+    "import imagent.contracts\n",
+    "import imagent.gateway.routing\n",
+):
+    completed = subprocess.run(
+        [sys.executable, "-c", first_import + check_code],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode:
+        raise AssertionError(
+            f"binding import-order smoke failed: {first_import!r}\n"
+            f"stdout={completed.stdout}\nstderr={completed.stderr}"
+        )
+'''
 CASES = {
     "base": (
         "",
-        "import asyncio, importlib, importlib.util, typing, imagent; "
+        BINDING_IMPORT_ORDER_CHECK + "import asyncio, importlib, importlib.util, typing, imagent; "
         "import imagent.events as event_facade; "
         "import imagent.applications.events as event_owner; "
         "from imagent.applications import "
@@ -322,6 +398,8 @@ def main() -> int:
     if len(wheels) != 1:
         raise SystemExit(f"expected exactly one SDK wheel in {DIST}, found {len(wheels)}")
     wheel = wheels[0].resolve()
+    clean_environment = os.environ.copy()
+    clean_environment.pop("PYTHONPATH", None)
 
     for name, (extra, code) in CASES.items():
         requirement = f"{wheel}[{extra}]" if extra else str(wheel)
@@ -341,6 +419,7 @@ def main() -> int:
                 DIAGNOSTICS_FACADE_CHECK + CHANNEL_FACADE_CHECK + code,
             ],
             cwd=ROOT,
+            env=clean_environment,
             check=True,
         )
         print(f"PASS clean-wheel {name}")

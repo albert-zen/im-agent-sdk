@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, ForwardRef, TypeAlias
 
-from ..applications.contract import ApplicationRef, ApplicationSummary, ProjectRef, ThreadRef
+from ..applications.contract import ApplicationRef, ApplicationSummary, ThreadRef
 from ..applications.requests import (
     RequestRef as _RequestRef,
 )
@@ -16,7 +16,7 @@ from ..interaction.messages import ConversationRef
 from ..interaction.operations import ContractError, OperationResultStatus
 
 if TYPE_CHECKING:
-    from ..gateway.persistence.state_contracts import ConversationBinding, ThreadProjectionRoute
+    from ..gateway.persistence.state_contracts import ThreadProjectionRoute
 
 
 class GatewayOperationType(StrEnum):
@@ -56,35 +56,6 @@ class SelectApplication(_GatewayOperation):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class BindConversationToProject(_GatewayOperation):
-    project_ref: ProjectRef
-    expected_revision: int | None = None
-    type: GatewayOperationType = field(
-        init=False,
-        default=GatewayOperationType.CONVERSATION_BIND_PROJECT,
-    )
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class BindConversationToThread(_GatewayOperation):
-    thread_ref: ThreadRef
-    expected_revision: int | None = None
-    type: GatewayOperationType = field(
-        init=False,
-        default=GatewayOperationType.CONVERSATION_BIND_THREAD,
-    )
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ClearConversationThread(_GatewayOperation):
-    expected_revision: int | None = None
-    type: GatewayOperationType = field(
-        init=False,
-        default=GatewayOperationType.CONVERSATION_CLEAR_THREAD,
-    )
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
 class ObserveThread(_GatewayOperation):
     thread_ref: ThreadRef
     reply_to_message_id: str | None = None
@@ -104,17 +75,6 @@ class RespondToRequest(_GatewayOperation):
     )
 
 
-GatewayOperation: TypeAlias = (
-    ListApplications
-    | SelectApplication
-    | BindConversationToProject
-    | BindConversationToThread
-    | ClearConversationThread
-    | ObserveThread
-    | RespondToRequest
-)
-
-
 @dataclass(frozen=True, slots=True, kw_only=True)
 class _GatewayOperationSucceeded:
     operation_id: str
@@ -132,12 +92,6 @@ class ApplicationsListed(_GatewayOperationSucceeded):
         init=False,
         default=GatewayOperationType.APPLICATION_LIST,
     )
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ConversationBound(_GatewayOperationSucceeded):
-    type: GatewayOperationType
-    binding: ConversationBinding
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -170,21 +124,34 @@ class GatewayOperationFailed:
     )
 
 
+# Bind binding-owned variants only after this historical aggregate has defined
+# the shared Gateway discriminator and operation bases. This preserves the
+# runtime union without a second binding contract or an import cycle.
+from ..gateway.routing.bindings import (  # noqa: E402, I001
+    BindConversationToProject as _BindConversationToProject,
+    BindConversationToThread as _BindConversationToThread,
+    ClearConversationThread as _ClearConversationThread,
+    ConversationBound as _ConversationBound,
+)
+
+GatewayOperation: TypeAlias = (
+    ListApplications
+    | SelectApplication
+    | _BindConversationToProject
+    | _BindConversationToThread
+    | _ClearConversationThread
+    | ObserveThread
+    | RespondToRequest
+)
+
 GatewayOperationResult: TypeAlias = (
     ApplicationsListed
-    | ConversationBound
+    | _ConversationBound
     | ThreadObserved
     | RequestResponseRouted
     | GatewayOperationFailed
 )
 
-# These two result fields point back into Gateway state while this historical
-# operation module is imported before the Gateway package root.  Preserve
-# runtime type-hint resolution without importing Gateway during that cycle.
-ConversationBound.__annotations__["binding"] = ForwardRef(
-    "ConversationBinding",
-    module="imagent.gateway.persistence.state_contracts",
-)
 ThreadObserved.__annotations__["route"] = ForwardRef(
     "ThreadProjectionRoute",
     module="imagent.gateway.persistence.state_contracts",

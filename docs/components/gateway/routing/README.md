@@ -16,8 +16,11 @@ operation, and observing a Thread never selects it for input.
   [testing](projection-routes/testing.md) — stable outbound destination edges
   and the three accepted projection policies.
 
-The current implementation still spreads these owners across contracts,
-projection modules, and the Gateway package root. The machine-readable
-[component map](../../component-map.yml) records those split candidates and
-their target paths; these leaf documents define the boundary before the later
-mechanical moves.
+The binding contract slice now has its focused owner at
+`src/imagent/gateway/routing/bindings.py`, with the declared
+`imagent.gateway.routing` facade and exact historical `imagent.contracts`
+re-exports. Mutation, compare-and-swap, Conversation serialization, and route
+preparation remain in their existing persistence, projection, and Gateway
+orchestration owners. Gateway operations and projection routes remain pending
+later one-slice migrations recorded in the machine-readable
+[component map](../../component-map.yml).
