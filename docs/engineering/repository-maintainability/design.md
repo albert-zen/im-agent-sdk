@@ -73,7 +73,7 @@ two root test modules, with the same assertions and discovery behavior. The
 historical root paths are intentionally absent; they are not compatibility
 facades and must not be recreated as import shims.
 
-`tests/test_agentkit_mapping.py` remains the AgentKit routing owner, and
+`tests/engineering/test_agentkit.py` is the AgentKit routing owner, and
 release/package tests remain with the release leaf. The move changes only the
 physical test owner and its repository-root calculation; component-map rules,
 architecture policy, path ownership, link-check behavior, and AgentKit

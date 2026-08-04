@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 CONFIG = yaml.safe_load((ROOT / "agentkit.yml").read_text(encoding="utf-8"))
 COMPONENTS = CONFIG["components"]
 
@@ -81,6 +81,15 @@ def _relative_files(root: Path, pattern: str = "*") -> set[str]:
 
 
 class AgentKitMappingTests(unittest.TestCase):
+    def test_agentkit_mirror_has_one_owner_and_no_historical_module(self) -> None:
+        expected = ROOT / "tests" / "engineering" / "test_agentkit.py"
+        self.assertTrue(expected.is_file())
+        self.assertFalse((ROOT / "tests" / "test_agentkit_mapping.py").exists())
+        self.assertEqual(
+            set((ROOT / "tests").rglob("test_agentkit.py")),
+            {expected},
+        )
+
     def test_representative_runtime_paths_have_precise_owners(self) -> None:
         expected = {
             "src/imagent/interaction/messages.py": {"contracts"},

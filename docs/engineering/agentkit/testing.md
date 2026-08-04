@@ -19,8 +19,14 @@ component-map validation before AgentKit is delegated to. Run the mapping tests
 when changing `agentkit.yml`, the launcher, the component map, or routing docs:
 
 ```sh
-PYTHONPATH=src uv run python -m unittest tests.test_agentkit_mapping tests.engineering.test_repository_maintainability -v
+PYTHONPATH=src uv run python -m unittest tests.engineering.test_agentkit tests.engineering.test_repository_maintainability -v
+PYTHONPATH=src uv run python -m unittest discover -s tests/engineering -p 'test_agentkit.py' -v
 ```
+
+Both focused invocations must discover the complete AgentKit mapping suite.
+The historical `tests/test_agentkit_mapping.py` path is absent, with no
+compatibility or import shim; the launcher and its component-map pre-gate
+semantics are unchanged.
 
 ## Lifecycle evidence
 
