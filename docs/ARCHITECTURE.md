@@ -313,6 +313,11 @@ contains no transcript or Turn truth.
 - Application event subscribers, Gateway startup admission, and per-Thread
   Turn-acceptance buffering have independently configurable finite limits;
   overflow is an explicit per-Thread gap that enters authoritative recovery.
+- The Gateway startup-admission FIFO and its explicit overflow/not-running
+  failures are implemented by the `gateway.lifecycle` leaf. The
+  `ImAgentGateway.start()`/`stop()` orchestration remains at the
+  `imagent.gateway` package root as an explicit physical migration gap; its
+  ordering is unchanged.
 - native pending-request snapshots reconcile request events after a gap when
   supported; otherwise worker health truthfully retains an interactive-request
   recovery degradation instead of manufacturing request state.

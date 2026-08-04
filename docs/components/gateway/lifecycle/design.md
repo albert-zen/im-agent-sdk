@@ -12,11 +12,15 @@ ordering and rollback, not native transport supervision or durable work.
 
 ## Ownership and flow
 
-This leaf owns `ImAgentGateway.start()`, `ImAgentGateway.stop()`, the
-`GatewayStartupAdmission` FIFO, and the `GatewayStartupOverflow` and
-`GatewayNotRunning` failures. It does not own Application/Channel internal
-reconnect loops, projection recovery policy, idempotency state, Controller
-product behavior, or a durable queue.
+This leaf owns the `GatewayStartupAdmission` FIFO and the
+`GatewayStartupOverflow` and `GatewayNotRunning` failures, implemented in
+`src/imagent/gateway/lifecycle.py`. `ImAgentGateway.start()` and
+`ImAgentGateway.stop()` remain the lifecycle behavior owned by this leaf, but
+their orchestration is still physically implemented at the `imagent.gateway`
+package root. That explicit package-root gap is retained in this slice so the
+formal facade and lifecycle ordering do not change. This leaf does not own
+Application/Channel internal reconnect loops, projection recovery policy,
+idempotency state, Controller product behavior, or a durable queue.
 
 Startup validates Controller registration, starts delivery support, opens the
 bounded inbound gate, cleans stale correlations, restores projection
@@ -48,10 +52,11 @@ contract methods and waits for bounded cleanup.
 ## Contracts and structure
 
 The stable public lifecycle contract is `ImAgentGateway`; startup helper types
-are internal implementation facts. Current code is split between
-`src/imagent/gateway/__init__.py` and `src/imagent/gateway_startup.py`. The
-target is `src/imagent/gateway/lifecycle.py`, with `imagent.gateway` remaining
-the formal facade. No move occurs in this slice.
+are internal implementation facts. `src/imagent/gateway/lifecycle.py` is the
+one helper implementation and `imagent.gateway` remains the formal facade.
+`ImAgentGateway.start()` and `ImAgentGateway.stop()` remain in
+`src/imagent/gateway/__init__.py` as the explicitly recorded physical
+orchestration gap; this slice does not move, redesign, or reorder them.
 
 Dependencies are `gateway.composition`, `gateway.admission`, and
 `gateway.projection.observation`, plus the lifecycle contracts of configured

@@ -3,7 +3,10 @@
 Current lifecycle evidence is spread across
 `tests/test_gateway_operations.py`, `tests/test_gateway_vertical_slice.py`,
 `tests/test_diagnostics.py`, and startup races in the inbound/projection suites.
-The target exact-owner suite is `tests/gateway/test_lifecycle.py`.
+The target exact-owner suite is `tests/gateway/test_lifecycle.py`. Until the
+package-root `ImAgentGateway.start()`/`stop()` orchestration gap is moved, the
+focused suite must also prove the lifecycle helper owner and exact facade
+identity without changing that orchestration.
 
 Tests must prove:
 
@@ -18,6 +21,9 @@ Tests must prove:
   preserves the primary failure when cleanup also fails;
 - normal stop closes projection and each bounded extension/delivery runtime and
   leaves no second Application subscription or Channel admission path.
+- `GatewayStartupAdmission`, `GatewayStartupOverflow`, and
+  `GatewayNotRunning` have one owner in `imagent.gateway.lifecycle`, while
+  importing the removed `imagent.gateway_startup` module fails explicitly.
 
 Run:
 

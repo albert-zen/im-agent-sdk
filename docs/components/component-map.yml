@@ -372,13 +372,13 @@ components:
       target: [imagent.gateway:ImAgentGateway]
     dependencies: [gateway.composition, gateway.admission, gateway.projection.observation]
     state_recovery: Bounded process-local FIFO; rollback closes admission before awaiting cleanup.
-    current_code: [src/imagent/gateway/__init__.py, src/imagent/gateway_startup.py]
+    current_code: [src/imagent/gateway/__init__.py, src/imagent/gateway/lifecycle.py]
     target_code: [src/imagent/gateway/lifecycle.py]
-    current_tests: [tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py, tests/test_diagnostics.py]
+    current_tests: [tests/gateway/test_lifecycle.py, tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py, tests/test_diagnostics.py]
     target_tests: [tests/gateway/test_lifecycle.py]
     authoritative_docs: [docs/components/gateway/lifecycle/design.md, docs/components/gateway/lifecycle/testing.md, docs/components/gateway/design.md, docs/components/gateway/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0013-bounded-application-event-admission.md]
-    gaps: [lifecycle logic is split between the Gateway package root and gateway_startup.py]
+    gaps: [GatewayStartupAdmission and its failures now have one lifecycle.py owner; ImAgentGateway start/stop orchestration remains at the Gateway package root until a later physical migration]
 
   gateway.admission:
     id: gateway.admission
