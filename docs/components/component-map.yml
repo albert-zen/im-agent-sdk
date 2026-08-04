@@ -794,9 +794,9 @@ components:
     target_code: [schemas/v1/bindings.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, schemas/v1/projections.schema.json, src/imagent/gateway/persistence/state_contracts.py]
     current_tests: [tests/test_contracts.py, tests/gateway/persistence/test_memory.py, tests/test_projection_routing.py, tests/test_storage.py]
     target_tests: [tests/gateway/persistence/test_state_contracts.py]
-    authoritative_docs: [docs/components/contracts/protocol.md, docs/components/persistence/design.md, docs/components/projections-and-recovery/design.md]
+    authoritative_docs: [docs/components/gateway/persistence/state-contracts/design.md, docs/components/gateway/persistence/state-contracts/testing.md, docs/components/contracts/protocol.md, docs/components/persistence/design.md, docs/components/projections-and-recovery/design.md]
     adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [passive bridge-state values currently share broad contracts/model.py and contracts/delivery.py modules]
+    gaps: [passive bridge-state values currently share broad contracts/model.py and contracts/delivery.py modules, delivery destinations and request questions/choice IDs lack explicit finite cardinality limits, request correlation values validate one declared state but do not define a monotonic transition graph]
 
   gateway.persistence.repository-contracts:
     id: gateway.persistence.repository-contracts
@@ -817,8 +817,8 @@ components:
     current_tests: [tests/gateway/persistence/test_memory.py, tests/test_storage.py, tests/test_adapter_contracts.py, tests/gateway/persistence/test_submission_identity.py]
     target_tests: [tests/gateway/persistence/test_repository_contracts.py, tests/gateway/persistence/test_submission_identity.py]
     authoritative_docs: [docs/components/gateway/persistence/repository-contracts/design.md, docs/components/gateway/persistence/repository-contracts/testing.md, docs/components/ports/design.md, docs/components/persistence/design.md]
-    adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
-    gaps: [adapters.py is the largest cross-layer Port split candidate]
+    adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
+    gaps: [adapters.py is the largest cross-layer Port split candidate, request-correlation transition Port fences only caller-supplied expected states and lacks an independent monotonic target-state guard]
 
   gateway.persistence.memory:
     id: gateway.persistence.memory
@@ -839,13 +839,13 @@ components:
     current_tests: [tests/test_projection_routing.py, tests/test_storage.py, tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_submission_identity.py, tests/gateway/delivery/test_proactive_delivery.py]
     target_tests: [tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_submission_identity.py]
     authoritative_docs: [docs/components/gateway/persistence/memory/design.md, docs/components/gateway/persistence/memory/testing.md, docs/components/persistence/design.md, docs/components/persistence/testing.md]
-    adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md]
-    gaps: [request-correlation in-memory implementation remains colocated with its current semantic/SQLite module]
+    adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
+    gaps: [request-correlation in-memory implementation remains colocated with its current semantic/SQLite module, current implementation fences only caller-supplied expected states and lacks an independent monotonic target-state guard]
 
   gateway.persistence.idempotency:
     id: gateway.persistence.idempotency
     parent: gateway.persistence
-    purpose: Implement fenced inbound/outbound claim acquisition, reclaim, protection, completion, and release.
+    purpose: Implement process-local fenced inbound/outbound claim acquisition, protection, completion, and release.
     owns: [in-memory idempotency implementation, owner-token fencing, side_effect_started state]
     does_not_own: [native idempotency guarantee, content, retry scheduler]
     inputs: [stable scoped idempotency key and owner token]
@@ -855,14 +855,14 @@ components:
       current: [imagent.storage:InMemoryIdempotencyRepository]
       target: [imagent.gateway.persistence:InMemoryIdempotencyRepository]
     dependencies: [gateway.persistence.repository-contracts]
-    state_recovery: Reclaim only stale in_flight; protected state never expires into permission to repeat side effects.
+    state_recovery: Process-local claims have no timed reclaim and restart empty; the separate durable SQLite owner may reclaim only stale in_flight, never protected state.
     current_code: [src/imagent/storage.py]
     target_code: [src/imagent/gateway/persistence/idempotency.py]
     current_tests: [tests/test_storage.py, tests/test_inbound_admission.py]
     target_tests: [tests/gateway/persistence/test_idempotency.py]
-    authoritative_docs: [docs/components/persistence/design.md, docs/components/persistence/testing.md]
-    adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
-    gaps: [storage.py combines in-memory idempotency and SQLite transaction owner]
+    authoritative_docs: [docs/components/gateway/persistence/idempotency/design.md, docs/components/gateway/persistence/idempotency/testing.md, docs/components/persistence/design.md, docs/components/persistence/testing.md]
+    adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
+    gaps: [storage.py combines in-memory idempotency and SQLite transaction owner, process-local claim records have no finite capacity bound]
 
   gateway.persistence.sqlite:
     id: gateway.persistence.sqlite
@@ -876,15 +876,15 @@ components:
     public_exports:
       current: [imagent.storage:SQLiteGatewayState]
       target: [imagent.gateway.persistence.sqlite:SQLiteGatewayState]
-    dependencies: [interaction.messages, applications.application-contract, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.row-mapping, gateway.persistence.idempotency]
+    dependencies: [interaction.messages, applications.application-contract, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.row-mapping]
     state_recovery: Additive schema migrations preserve bindings/routes/claims/correlations/submission evidence without content.
-    current_code: [src/imagent/storage.py, src/imagent/gateway/delivery/submissions.py, src/imagent/request_correlations.py]
+    current_code: [src/imagent/storage.py, src/imagent/sqlite_rows.py, src/imagent/gateway/delivery/submissions.py, src/imagent/request_correlations.py]
     target_code: [src/imagent/gateway/persistence/sqlite.py]
     current_tests: [tests/test_storage.py, tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_submission_identity.py]
     target_tests: [tests/gateway/persistence/test_sqlite.py, tests/gateway/persistence/test_submission_identity.py]
-    authoritative_docs: [docs/components/persistence/design.md, docs/components/persistence/testing.md]
-    adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md]
-    gaps: [three mixin files share one intentional transaction owner but also contain separable row mapping]
+    authoritative_docs: [docs/components/gateway/persistence/sqlite/design.md, docs/components/gateway/persistence/sqlite/testing.md, docs/components/persistence/design.md, docs/components/persistence/testing.md]
+    adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
+    gaps: [three mixin files share one intentional transaction owner but also contain separable row mapping, current request-correlation transition implementation fences only caller-supplied expected states and lacks an independent monotonic target-state guard, sqlite_rows.py colocates SQLite route mutation policy with pure row conversion]
 
   gateway.persistence.row-mapping:
     id: gateway.persistence.row-mapping
@@ -899,14 +899,14 @@ components:
       current: []
       target: []
     dependencies: [interaction.messages, applications.application-contract, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
-    state_recovery: Stateless pure mapping; invalid persisted shape fails explicitly.
+    state_recovery: Stateless pure mapping; complete explicit rejection of invalid persisted shape is a recorded target gap, not a current recovery guarantee.
     current_code: [src/imagent/sqlite_rows.py, src/imagent/gateway/delivery/submissions.py, src/imagent/request_correlations.py, src/imagent/storage.py]
     target_code: [src/imagent/gateway/persistence/row_mapping.py]
     current_tests: [tests/test_storage.py]
     target_tests: [tests/gateway/persistence/test_row_mapping.py]
-    authoritative_docs: [docs/components/persistence/design.md, docs/components/repository-maintainability/design.md]
-    adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md]
-    gaps: [delivery/request row helpers remain mixed into SQLite mixins]
+    authoritative_docs: [docs/components/gateway/persistence/row-mapping/design.md, docs/components/gateway/persistence/row-mapping/testing.md, docs/components/persistence/design.md, docs/components/repository-maintainability/design.md]
+    adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
+    gaps: [delivery/request row helpers remain mixed into SQLite mixins, current decoders can collapse malformed nullable binding scope and do not uniformly run complete state validators]
 
   gateway.diagnostics:
     id: gateway.diagnostics
@@ -1484,6 +1484,9 @@ structural_status:
     src/imagent/storage.py:
       owners: [gateway.persistence.idempotency, gateway.persistence.sqlite, gateway.persistence.row-mapping]
       reason: In-memory idempotency, the intentional all-repository SQLite transaction owner, and projection row mapping share one module.
+    src/imagent/sqlite_rows.py:
+      owners: [gateway.persistence.sqlite, gateway.persistence.row-mapping]
+      reason: Pure binding, route, and Turn-correlation conversion shares the file with merge_projection_route, whose endpoint-conflict and checkpoint-preservation mutation policy belongs to the SQLite transaction owner.
     src/imagent/applications/appserver.py:
       owners: [applications.adapters.codex, applications.adapters.zen]
       reason: Shared App Server base plus concrete Codex and Zen mappings require focused extraction without duplicating transport state.

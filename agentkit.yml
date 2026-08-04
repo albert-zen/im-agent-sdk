@@ -296,10 +296,18 @@ components:
       - tests/test_storage.py
     docs:
       - docs/components/gateway/persistence/README.md
+      - docs/components/gateway/persistence/idempotency/design.md
+      - docs/components/gateway/persistence/idempotency/testing.md
       - docs/components/gateway/persistence/memory/design.md
       - docs/components/gateway/persistence/memory/testing.md
       - docs/components/gateway/persistence/repository-contracts/design.md
       - docs/components/gateway/persistence/repository-contracts/testing.md
+      - docs/components/gateway/persistence/row-mapping/design.md
+      - docs/components/gateway/persistence/row-mapping/testing.md
+      - docs/components/gateway/persistence/sqlite/design.md
+      - docs/components/gateway/persistence/sqlite/testing.md
+      - docs/components/gateway/persistence/state-contracts/design.md
+      - docs/components/gateway/persistence/state-contracts/testing.md
       - docs/components/persistence/design.md
       - docs/components/persistence/testing.md
     required_docs:
