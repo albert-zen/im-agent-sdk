@@ -13,6 +13,10 @@ Required scenarios:
   retry authority;
 - caller-managed trusted-root reads reject escape/missing/non-file sources and
   verify declared byte count and optional SHA-256;
+- public `AttachmentContent` conversion accepts only explicit `LocalPath`
+  sources, preserves stable attachment metadata, derives a filename and
+  bounded native kind deterministically, and rejects invalid size or filename
+  inputs without reading bytes;
 - accepted/rejected/retryable/partial/unknown and per-item evidence is truthful
   and validates against source content;
 - native artifact receipt metadata maps recognized stable attachment IDs to
@@ -34,10 +38,12 @@ delivery planning/coordination/outcome, and vertical evidence remains with its
 current owner until later focused slices.
 
 Focused tests additionally lock native result defaults, mutable artifact-list
-behavior, and mapping-to-`OutboundArtifact` coercion without promoting these
+behavior, mapping-to-`OutboundArtifact` coercion, and
+`AttachmentContent`-to-`OutboundArtifact` conversion without promoting these
 leaf-internal DTOs to public contracts. They also prove the historical
 `imagent.channels.native.artifacts` module is absent, stable attachment
 identity ignores temporary path changes, and artifact recovery state remains
 bounded to the current native-message attempt. The same focused suite covers
 `_artifact_item_receipts` ownership and its stable-ID/content-index ordering
-without moving the final Channel receipt assembly out of the adapter runtime.
+plus `_to_native_artifact` ownership without moving native message conversion
+or final Channel receipt assembly out of the adapter runtime.

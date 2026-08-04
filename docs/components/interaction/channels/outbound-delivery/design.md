@@ -28,6 +28,17 @@ and optional SHA-256 before upload. The caller owns the bytes and the root's
 lifetime. This leaf does not create or retain a spool/outbox, enforce product
 quota, maintain a ledger, run a startup sweep, or perform crash cleanup.
 
+The private `_to_native_artifact` helper converts one public
+`AttachmentContent` into the leaf-internal `OutboundArtifact` DTO used by a
+native send. It accepts only `LocalPath` sources, requires a non-negative
+declared size and a non-empty filename (falling back to the staged path's
+basename), infers the bounded native kind from attachment metadata or media
+type, and preserves the stable attachment ID plus optional SHA-256. It does
+not read bytes or resolve a trusted root; `read_managed_artifact` remains the
+only shared byte-read helper. The native runtime invokes this helper while it
+continues to own native message-envelope conversion and final Channel receipt
+assembly.
+
 ## Submission and receipts
 
 The adapter advertises a profile that makes normal planner output valid. It may
@@ -73,6 +84,8 @@ clients remain adapter-owned.
 
 Leaf-internal `OutboundArtifact`, mutable native `OutboundMessage`, and
 `NativeDeliveryResult` DTOs carry data between common outbound helpers and
-provider adapters before normalization into public receipts. They are not
+provider adapters before normalization into public receipts. The artifact DTO
+conversion is owned here; the native runtime only invokes it as part of its
+remaining message-envelope and receipt assembly path. These DTOs are not
 top-level exports, do not duplicate the public Message contract, and hold no
 retry, checkpoint, or persistence authority.
