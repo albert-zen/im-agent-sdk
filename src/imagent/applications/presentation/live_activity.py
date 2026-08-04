@@ -8,12 +8,12 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
-from ..contracts import ThreadRef
-from ..diagnostics import (
+from ...contracts import ThreadRef
+from ...diagnostics import (
     ApplicationPresentationDiagnosticFacts,
     ApplicationPresentationFailureCode,
 )
-from ..interaction.messages import TextContent, TextFormat
+from ...interaction.messages import TextContent, TextFormat
 
 _IDENTITY_MAX_CHARACTERS = 512
 _KIND_MAX_CHARACTERS = 128

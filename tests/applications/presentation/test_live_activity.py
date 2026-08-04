@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import unittest
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, cast
 
+import imagent.applications as applications
 from imagent.adapters import IdempotencyClaimStatus
 from imagent.applications import (
     ApplicationPresentationCancelled,
@@ -20,8 +23,9 @@ from imagent.applications import (
     T3ActivityFacts,
     T3ApplicationAdapter,
     ZenApplicationAdapter,
+    presentation,
 )
-from imagent.applications.presentation import ApplicationPresentationRuntime
+from imagent.applications.presentation import ApplicationPresentationRuntime, live_activity
 from imagent.contracts import (
     AgentEventType,
     AgentInput,
@@ -203,6 +207,44 @@ class _BlockingT3Presenter(_T3Presenter):
 
 
 class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
+    def test_presentation_package_is_the_exact_finite_live_activity_facade(self) -> None:
+        expected_exports = {
+            "ApplicationPresentationCancelled",
+            "ApplicationPresentationCapacityError",
+            "ApplicationPresentationError",
+            "ApplicationPresentationFailed",
+            "ApplicationPresentationLimits",
+            "ApplicationPresentationRuntime",
+            "ApplicationPresentationTimeout",
+            "ApplicationTextPresentation",
+            "CodexLiveActivityFacts",
+            "CodexLiveActivityKind",
+            "CodexLiveActivityMethod",
+            "CodexLiveActivityPresenter",
+            "CodexPlanStep",
+            "T3ActivityFacts",
+            "T3ActivityPresenter",
+        }
+
+        self.assertEqual(set(presentation.__all__), expected_exports)
+        self.assertEqual(len(presentation.__all__), len(expected_exports))
+        for name in expected_exports:
+            self.assertIs(getattr(presentation, name), getattr(live_activity, name))
+
+        for name in expected_exports - {"ApplicationPresentationRuntime"}:
+            self.assertIs(getattr(applications, name), getattr(live_activity, name))
+
+        package_path = Path(presentation.__file__ or "")
+        self.assertEqual(package_path.name, "__init__.py")
+        legacy_module_path = package_path.parent.parent / "presentation.py"
+        self.assertFalse(legacy_module_path.exists())
+        self.assertFalse(hasattr(presentation, "ApplicationPresentationDiagnosticFacts"))
+        self.assertFalse(hasattr(presentation, "AppServerArtifactMaterializer"))
+        self.assertEqual(
+            importlib.import_module("imagent.applications.appserver_artifacts").__name__,
+            "imagent.applications.appserver_artifacts",
+        )
+
     async def test_codex_live_presentation_is_typed_ordered_and_live_only(self) -> None:
         client = _AppServerClient()
         presenter = _CodexPresenter()

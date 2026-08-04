@@ -127,7 +127,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "src/imagent/interaction/channels/adapters/runtime.py": {"channel-adapters"},
             "src/imagent/interaction/channels/adapters/qq.py": {"channel-adapters"},
             "src/imagent/applications/appserver.py": {"application-adapters-appserver"},
-            "src/imagent/applications/presentation.py": {"application-adapters-appserver"},
+            "src/imagent/applications/presentation/live_activity.py": {"applications-common"},
             "src/imagent/applications/appserver_mapping.py": {"application-adapters-appserver"},
             "src/imagent/applications/appserver_client/transports.py": {
                 "application-adapters-appserver"
@@ -187,7 +187,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/test_appserver_mapping.py": {"application-adapters-appserver"},
             "tests/test_appserver_requests.py": {"application-adapters-appserver"},
             "tests/test_appserver_transport.py": {"application-adapters-appserver"},
-            "tests/test_application_presentation.py": {"application-adapters-appserver"},
+            "tests/applications/presentation/test_live_activity.py": {"applications-common"},
             "tests/test_t3_client.py": {"application-adapters-t3"},
             "tests/test_adapter_contracts.py": {"testing-and-conformance"},
             "tests/test_package_independence.py": {"release"},
