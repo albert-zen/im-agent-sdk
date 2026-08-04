@@ -38,12 +38,12 @@ from imagent.applications.presentation import (
 )
 from imagent.gateway.persistence import ThreadProjectionRoute
 from imagent.gateway.persistence.memory import InMemoryProjectionRouteRepository
+from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.messages import ConversationRef, MessageRole, TextContent
 from imagent.projections import (
     ProjectedAgentMessage,
     deliver_projected_message,
     derive_live_projection_delivery_id,
-    derive_projection_route_id,
 )
 
 

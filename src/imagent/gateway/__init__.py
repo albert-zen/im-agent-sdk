@@ -119,7 +119,6 @@ from .persistence.repository_contracts import (
 from .persistence.state_contracts import (
     ConversationBinding,
     DeliverySubmissionState,
-    ProjectionPolicy,
     RequestRouteState,
 )
 from .presentation import (
@@ -132,6 +131,7 @@ from .presentation import (
 from .presentation import (
     ProjectionPresentationOrigin as ProjectionPresentationOrigin,
 )
+from .routing import projection_routes as _projection_routes
 from .routing.bindings import (
     BindConversationToProject,
     BindConversationToThread,
@@ -169,7 +169,9 @@ class ImAgentGateway:
         extensions: GatewayExtensions = GatewayExtensions(),
         delivery_authorizer: DeliveryAuthorizer | None = None,
         delivery_coordinator: DeliveryCoordinator | None = None,
-        projection_policy: ProjectionPolicy = ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
+        projection_policy: _projection_routes.ProjectionPolicy = (
+            _projection_routes.ProjectionPolicy.REMEMBERED_LAST_RECIPIENT
+        ),
     ) -> None:
         self._channels = {channel.channel_instance_id: channel for channel in channels}
         self._applications = {
@@ -597,7 +599,7 @@ class ImAgentGateway:
         if not isinstance(read, ThreadRead):
             raise RuntimeError("thread.get returned an incompatible result")
         previous = await self._bindings.get(operation.conversation_ref)
-        if self._projection_policy is ProjectionPolicy.FOREGROUND_ONLY:
+        if self._projection_policy is _projection_routes.ProjectionPolicy.FOREGROUND_ONLY:
             same_target = (
                 previous is not None
                 and previous.application_ref == application.summary.ref
@@ -727,11 +729,10 @@ class ImAgentGateway:
 
     async def _observe_thread(
         self,
-        operation: contracts_facade.ObserveThread,
+        operation: _projection_routes.ObserveThread,
         *,
         completed_at: datetime,
-    ) -> contracts_facade.ThreadObserved:
-        from ..contracts.operations import ThreadObserved
+    ) -> _projection_routes.ThreadObserved:
         from .routing.operations import _GatewayActionError
 
         application = self._require_application(operation.thread_ref.application_instance_id)
@@ -753,7 +754,7 @@ class ImAgentGateway:
             operation.conversation_ref,
             reply_to_message_id=operation.reply_to_message_id,
         )
-        return ThreadObserved(
+        return _projection_routes.ThreadObserved(
             operation_id=operation.operation_id,
             completed_at=completed_at,
             route=route,

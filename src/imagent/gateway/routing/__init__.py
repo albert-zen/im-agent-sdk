@@ -7,6 +7,7 @@ from .bindings import (
     ClearConversationThread,
     ConversationBound,
 )
+from .projection_routes import ObserveThread, ProjectionPolicy, ThreadObserved
 
 _operations._complete_gateway_union()
 
@@ -56,7 +57,10 @@ __all__ = [
     "GatewayOperationResult",
     "GatewayOperationType",
     "ListApplications",
+    "ObserveThread",
+    "ProjectionPolicy",
     "SelectApplication",
+    "ThreadObserved",
     "validate_gateway_operation",
     "validate_gateway_operation_result",
 ]

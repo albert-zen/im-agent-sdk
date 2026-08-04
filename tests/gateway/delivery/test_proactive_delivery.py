@@ -42,7 +42,6 @@ from imagent.gateway.persistence import (
     MAX_DELIVERY_SUBMISSION_DESTINATIONS,
     DeliveryReservation,
     DeliverySubmissionState,
-    ProjectionPolicy,
     ThreadProjectionRoute,
 )
 from imagent.gateway.persistence.memory import (
@@ -51,6 +50,7 @@ from imagent.gateway.persistence.memory import (
     InMemoryProjectionRouteRepository,
 )
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
+from imagent.gateway.routing import ProjectionPolicy
 from imagent.interaction.channels import (
     ChannelCapabilities,
     DeliveryItemReceipt,

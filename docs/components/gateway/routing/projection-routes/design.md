@@ -66,11 +66,27 @@ route a request-state authority. Proactive delivery pins an immutable resolved
 destination snapshot in its own owner rather than following later route
 movement.
 
-## Current structural gap
+## Physical boundary
 
-Route values, specific validation, repository coordination, projection
-delivery, and request projection currently share broad modules. The Gateway
-operations aggregate assembles these exact route-owned values and delegates
-through typed route methods; the later focused slice will move the route owner
-to its target module and leave delivery, checkpoints, request-correlation, and
-observation in their respective leaves.
+The canonical implementation is
+`src/imagent/gateway/routing/projection_routes.py`. It owns the exact
+`ObserveThread`, `ThreadObserved`, and `ProjectionPolicy` objects, the
+operation/result validators, stable route-ID derivation, active-route
+resolution, and checkpoint-preserving repository refresh/replacement. The
+route values resolve their `ThreadProjectionRoute` annotation directly from
+the passive-state owner; no temporal annotation replacement or duplicate
+operation union is used.
+
+The Gateway aggregate keeps Conversation serialization and Application Thread
+truth validation, then delegates the route mutation through its existing typed
+private method. The route authority returns route-refresh facts to that
+orchestration site, so remembered-route cleanup remains explicitly with the
+request/delivery coordinator owners. Observation workers, bootstrap barriers,
+checkpoint CAS, bounded recovery, request correlation, Channel delivery, and
+proactive snapshotting continue to consume the same route state and do not
+gain a second repository, subscription, runtime, or authority.
+
+`imagent.gateway.routing` is the finite public facade for the moved route
+operation values. The historical `imagent.contracts` facade and its internal
+operation/validator modules deliberately have no `ObserveThread` or
+`ThreadObserved` attribute or `__all__` entry.

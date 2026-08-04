@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
-from imagent.gateway.persistence import ProjectionPolicy
+from imagent.gateway.routing import ProjectionPolicy
 from imagent.interaction.messages import ConversationRef, OutboundMessage, TextContent
 
 from .gateway import ReferenceConsumer, build_reference_consumer

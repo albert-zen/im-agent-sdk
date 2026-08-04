@@ -27,12 +27,7 @@ if TYPE_CHECKING:
         validate_gateway_operation_result,
     )
     from ..interaction.messages import ConversationRef
-    from .operations import (
-        ObserveThread,
-        RequestResponseRouted,
-        RespondToRequest,
-        ThreadObserved,
-    )
+    from .operations import RequestResponseRouted, RespondToRequest
     from .validators import (
         derive_client_message_id,
     )
@@ -91,10 +86,8 @@ _GATEWAY_OPERATION_EXPORTS = frozenset(
 )
 _GATEWAY_PENDING_OPERATION_EXPORTS = frozenset(
     {
-        "ObserveThread",
         "RequestResponseRouted",
         "RespondToRequest",
-        "ThreadObserved",
     }
 )
 _GATEWAY_VALIDATOR_EXPORTS = frozenset(
@@ -138,7 +131,6 @@ __all__ = [
     "GatewayOperationResult",
     "GatewayOperationType",
     "ListApplications",
-    "ObserveThread",
     "OperationResultStatus",
     "OperationErrorCode",
     "RemoteUrl",
@@ -148,7 +140,6 @@ __all__ = [
     "TextContent",
     "TextFormat",
     "TextLengthUnit",
-    "ThreadObserved",
     "derive_client_message_id",
     "operation_error",
     "require_identifier",

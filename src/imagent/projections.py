@@ -84,29 +84,6 @@ class AuthoritativeProjectionSlice:
     gap: str | None = None
 
 
-def derive_projection_route_id(
-    thread_ref: ThreadRef,
-    conversation_ref: ConversationRef,
-) -> str:
-    identity = json.dumps(
-        [
-            thread_ref.application_instance_id,
-            (
-                thread_ref.project_ref.native_project_id
-                if thread_ref.project_ref is not None
-                else None
-            ),
-            thread_ref.native_thread_id,
-            conversation_ref.channel_instance_id,
-            conversation_ref.native_conversation_id,
-        ],
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
-    digest = hashlib.sha256(identity.encode()).hexdigest()
-    return f"imagent:projection:sha256:{digest}"
-
-
 def derive_live_projection_delivery_id(
     conversation_ref: ConversationRef,
     thread_ref: ThreadRef,
@@ -186,20 +163,6 @@ def immutable_projection_metadata(
             raise ValueError("AgentMessage projection metadata values must be bounded scalars")
         copied[key] = value
     return MappingProxyType(copied)
-
-
-async def get_projection_route(
-    repository: ProjectionRouteRepository,
-    route_id: str,
-) -> ThreadProjectionRoute | None:
-    return next(
-        (
-            route
-            for route in await repository.list_projection_routes()
-            if route.route_id == route_id
-        ),
-        None,
-    )
 
 
 async def deliver_projected_message(

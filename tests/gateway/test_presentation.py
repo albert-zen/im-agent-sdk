@@ -31,6 +31,7 @@ from imagent.gateway.presentation import (
     OutboundPresentationTimeout,
     ProjectionPresentationOrigin,
 )
+from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.media import AttachmentContent, AttachmentHandle
 from imagent.interaction.messages import (
     ConversationRef,
@@ -42,7 +43,6 @@ from imagent.projections import (
     ProjectedAgentMessage,
     RetryableDeliveryError,
     deliver_projected_message,
-    derive_projection_route_id,
 )
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 

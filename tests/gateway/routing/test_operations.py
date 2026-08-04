@@ -18,6 +18,7 @@ import imagent.contracts.validators as pending_validators
 import imagent.gateway as gateway_facade
 import imagent.gateway.routing as routing_facade
 import imagent.gateway.routing.operations as operations_owner
+import imagent.gateway.routing.projection_routes as projection_routes_owner
 from imagent.applications.contract import ApplicationRef, ApplicationSummary, ProjectRef, ThreadRef
 from imagent.applications.requests import ApprovalResponse, RequestRef
 from imagent.contracts import (
@@ -32,14 +33,13 @@ from imagent.contracts import (
     GatewayOperationFailed,
     GatewayOperationResult,
     ListApplications,
-    ObserveThread,
     RequestResponseRouted,
     RespondToRequest,
     SelectApplication,
-    ThreadObserved,
     validate_gateway_operation_result,
 )
 from imagent.gateway.persistence import ConversationBinding, ThreadProjectionRoute
+from imagent.gateway.routing import ObserveThread, ThreadObserved
 from imagent.interaction.operations import OperationErrorCode, operation_error
 from imagent.keyed_locks import KeyedLockCapacityError
 
@@ -56,6 +56,7 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     import imagent.gateway as gateway_facade
     import imagent.gateway.routing as routing_facade
     import imagent.gateway.routing.operations as operations_owner
+    import imagent.gateway.routing.projection_routes as projection_routes_owner
     from imagent.applications.operations import ApplicationOperationFailed
     import imagent.interaction.controllers as controllers_facade
 
@@ -93,7 +94,14 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
         assert gateway_facade.__dict__[name] is owner
         assert inspect.signature(getattr(contracts_facade, name)) == inspect.signature(owner)
 
-    for name in ("ObserveThread", "ThreadObserved", "RespondToRequest", "RequestResponseRouted"):
+    for name in ("ObserveThread", "ThreadObserved"):
+        assert getattr(routing_facade, name) is getattr(projection_routes_owner, name)
+        assert getattr(operations_owner, name) is getattr(projection_routes_owner, name)
+        assert not hasattr(contracts_facade, name)
+        assert not hasattr(pending_operations, name)
+        assert not hasattr(pending_validators, name)
+
+    for name in ("RespondToRequest", "RequestResponseRouted"):
         assert getattr(contracts_facade, name) is getattr(pending_operations, name)
         assert getattr(operations_owner, name) is getattr(pending_operations, name)
         assert not hasattr(pending_validators, name)
@@ -140,8 +148,8 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     assert typing.get_type_hints(gateway_facade.__getattr__)["return"] is object
     root_delegate_hints = {
         "_observe_thread": {
-            "operation": contracts_facade.ObserveThread,
-            "return": contracts_facade.ThreadObserved,
+            "operation": projection_routes_owner.ObserveThread,
+            "return": projection_routes_owner.ThreadObserved,
         },
         "_route_request_response": {
             "operation": contracts_facade.RespondToRequest,
@@ -170,7 +178,7 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
         contracts_facade.validate_gateway_operation_result
     ) == typing.get_type_hints(operations_owner.validate_gateway_operation_result)
     assert (
-        typing.get_type_hints(pending_operations.ThreadObserved)["route"].__name__
+        typing.get_type_hints(projection_routes_owner.ThreadObserved)["route"].__name__
         == "ThreadProjectionRoute"
     )
     """
@@ -178,6 +186,7 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
 
 _IMPORT_ORDERS = {
     "canonical owner first": "import imagent.gateway.routing.operations\n",
+    "projection-route owner first": "import imagent.gateway.routing.projection_routes\n",
     "controllers first": "import imagent.interaction.controllers\n",
     "gateway first": "import imagent.gateway\n",
     "contracts.operations first": "import imagent.contracts.operations\n",
@@ -583,7 +592,7 @@ class GatewayOperationsOwnerTests(unittest.IsolatedAsyncioTestCase):
                         contract_error=_contract_error,
                     )
 
-    def test_aggregate_result_validator_delegates_pending_owner_branches(self) -> None:
+    def test_aggregate_result_validator_delegates_exact_owner_branches(self) -> None:
         observe = ObserveThread(
             operation_id="observe",
             conversation_ref=self.conversation,
@@ -601,9 +610,9 @@ class GatewayOperationsOwnerTests(unittest.IsolatedAsyncioTestCase):
             ),
         )
         with patch.object(
-            pending_validators,
+            projection_routes_owner,
             "_validate_observe_operation_result",
-            wraps=pending_validators._validate_observe_operation_result,
+            wraps=projection_routes_owner._validate_observe_operation_result,
         ) as observe_validator:
             validate_gateway_operation_result(observe, observed)
         observe_validator.assert_called_once_with(observe, observed)

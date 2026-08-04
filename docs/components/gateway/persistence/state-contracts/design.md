@@ -17,8 +17,8 @@ This leaf owns:
 
 - `ConversationBinding` as one current Application/Project/Thread selection
   for a stable Conversation plus its optimistic revision;
-- `ProjectionPolicy` and `ThreadProjectionRoute`, including stable Thread and
-  Conversation endpoints, optional reply context, and one opaque checkpoint;
+- `ThreadProjectionRoute`, including stable Thread and Conversation endpoints,
+  optional reply context, and one opaque checkpoint;
 - create-only `TurnReplyCorrelation` and `RequestRouteCorrelation` values;
 - proactive-delivery reservation identity, immutable route snapshots,
   per-destination outcome evidence, and typed receipts; and
@@ -37,9 +37,9 @@ projection worker authority.
 
 A projection route is one stable Thread-to-Conversation edge. Its checkpoint
 is an opaque authoritative Agent item identity paired with its checkpoint
-time; neither the item ID nor the time is a bridge sequence number. Route
-policy names the accepted destination-selection semantics but the value does
-not execute that policy.
+time; neither the item ID nor the time is a bridge sequence number. The
+projection-route owner defines and executes the accepted destination-selection
+policy; this passive value neither imports nor executes it.
 
 A Turn reply correlation stores only the stable accepted Turn and its original
 IM reply destination. Repeated creation of the same immutable value is safe;

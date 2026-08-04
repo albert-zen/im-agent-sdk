@@ -33,12 +33,6 @@ if TYPE_CHECKING:
     from ...applications.capabilities import ApplicationCapabilities
 
 
-class ProjectionPolicy(StrEnum):
-    FOREGROUND_ONLY = "foreground_only"
-    REMEMBERED_LAST_RECIPIENT = "remembered_last_recipient"
-    ALL_OBSERVERS = "all_observers"
-
-
 class RequestRouteState(StrEnum):
     OPEN = "open"
     RESPONDED = "responded"
@@ -333,7 +327,6 @@ __all__ = [
     "DeliverySubmissionState",
     "DestinationDeliveryRecord",
     "MAX_DELIVERY_SUBMISSION_DESTINATIONS",
-    "ProjectionPolicy",
     "RequestRouteCorrelation",
     "RequestRouteState",
     "ThreadProjectionRoute",

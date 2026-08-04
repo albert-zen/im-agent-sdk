@@ -21,7 +21,7 @@ from imagent.applications.requests import (
     ApprovalResponseShape,
     RequestRef,
 )
-from imagent.contracts import ConversationBound, ThreadObserved
+from imagent.contracts import ConversationBound
 from imagent.gateway.persistence import state_contracts as owner
 from imagent.interaction.channels import DeliveryReceipt, DeliveryReceiptStatus
 from imagent.interaction.messages import ConversationRef
@@ -53,15 +53,10 @@ class StateContractOwnershipTests(unittest.TestCase):
             get_type_hints(ConversationBound)["binding"],
             owner.ConversationBinding,
         )
-        self.assertIs(
-            get_type_hints(ThreadObserved)["route"],
-            owner.ThreadProjectionRoute,
-        )
 
     def test_persistence_facade_reexports_exact_owner_objects(self) -> None:
         names = (
             "ConversationBinding",
-            "ProjectionPolicy",
             "ThreadProjectionRoute",
             "TurnReplyCorrelation",
             "RequestRouteState",
@@ -88,6 +83,8 @@ class StateContractOwnershipTests(unittest.TestCase):
             self.assertNotIn(name, contracts_facade.__all__)
         self.assertFalse(hasattr(persistence_facade, "DeliverySubmissionOrigin"))
         self.assertNotIn("DeliverySubmissionOrigin", persistence_facade.__all__)
+        self.assertFalse(hasattr(persistence_facade, "ProjectionPolicy"))
+        self.assertFalse(hasattr(owner, "ProjectionPolicy"))
 
     def test_retired_contract_modules_are_not_importable(self) -> None:
         for name in (

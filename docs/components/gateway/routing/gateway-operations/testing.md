@@ -7,8 +7,9 @@ Gateway operation conformance must prove:
   clean processes regardless of import order;
 - the Gateway-root finite resolver accepts only its nine aggregate
   operation/validator names, caches the exact focused-owner object after first
-  access, and rejects unknown names; all five root request/observation helper
-  annotations resolve to the exact public pending-operation values in a clean
+  access, and rejects unknown names; root observation helper annotations
+  resolve to the exact projection-route owner values and request helper
+  annotations resolve to the exact request-correlation owner values in a clean
   process, while request convergence constructs `RequestResponseRouted` and
   the locked route delegate returns that exact result;
 - the aggregate delegates binding mutations, projection observation, and

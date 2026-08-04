@@ -35,11 +35,16 @@ from .gateway.persistence.repository_contracts import (
 )
 from .gateway.persistence.state_contracts import (
     ConversationBinding,
-    ProjectionPolicy,
     ThreadProjectionRoute,
     TurnReplyCorrelation,
 )
 from .gateway.projection.recovery import ProjectionRecoveryUnavailable
+from .gateway.routing.projection_routes import (
+    ProjectionPolicy,
+    _ProjectionRouteAuthority,
+    derive_projection_route_id,
+    get_projection_route,
+)
 from .interaction.controllers import RequestPresenter
 from .interaction.messages import ConversationRef
 from .projection_routes import ProjectionRouteCoordinator
@@ -50,9 +55,7 @@ from .projections import (
     ProjectionWorkerHealth,
     ProjectionWorkerState,
     RetryableDeliveryError,
-    derive_projection_route_id,
     derive_turn_reply_correlation_id,
-    get_projection_route,
 )
 from .request_projection_runtime import InteractiveRequestProjection
 
@@ -149,10 +152,14 @@ class ThreadProjectionRuntime:
         if request_correlation_retention_seconds <= 0:
             raise ValueError("request_correlation_retention_seconds must be positive")
         self._applications = applications
-        self._bindings = bindings
         self._projections = projections
         self._request_correlations = request_correlations
         self._projection_policy = projection_policy
+        self._route_authority = _ProjectionRouteAuthority(
+            bindings=bindings,
+            projections=projections,
+            policy=projection_policy,
+        )
         self._subscription_retry_initial_seconds = subscription_retry_initial_seconds
         self._subscription_retry_max_seconds = subscription_retry_max_seconds
         self._turn_correlation_retention = timedelta(seconds=turn_correlation_retention_seconds)
@@ -216,14 +223,7 @@ class ThreadProjectionRuntime:
         self._buffered_events.clear()
         self._buffered_event_overflows.clear()
         self._event_locks.clear()
-        restored_routes = await self._projections.list_projection_routes()
-        if self._projection_policy is ProjectionPolicy.FOREGROUND_ONLY:
-            active_routes: list[ThreadProjectionRoute] = []
-            for route in restored_routes:
-                binding = await self._bindings.get(route.conversation_ref)
-                if binding is not None and binding.thread_ref == route.thread_ref:
-                    active_routes.append(route)
-            restored_routes = tuple(active_routes)
+        restored_routes = await self._route_authority.active_persisted_routes()
         for route in restored_routes:
             await self._routes.begin_bootstrap(route.route_id)
         for thread_ref in {route.thread_ref for route in restored_routes}:
@@ -602,46 +602,23 @@ class ThreadProjectionRuntime:
         *,
         reply_to_message_id: str | None,
     ) -> tuple[ThreadProjectionRoute, bool]:
-        existing = await self._projections.list_projection_routes(thread_ref)
-        current = next(
-            (route for route in existing if route.conversation_ref == conversation_ref),
-            None,
-        )
-        route = ThreadProjectionRoute(
-            route_id=derive_projection_route_id(thread_ref, conversation_ref),
-            thread_ref=thread_ref,
-            conversation_ref=conversation_ref,
-            reply_to_message_id=(
-                reply_to_message_id
-                if reply_to_message_id is not None
-                else current.reply_to_message_id
-                if current is not None
-                else None
-            ),
-            updated_at=datetime.now(UTC),
+        refreshed = await self._route_authority.refresh_route(
+            thread_ref,
+            conversation_ref,
+            reply_to_message_id=reply_to_message_id,
         )
         if self._projection_policy is ProjectionPolicy.REMEMBERED_LAST_RECIPIENT:
-            stored = await self._projections.replace_thread_projection_routes(route)
-            for removed in existing:
-                if removed.conversation_ref != stored.conversation_ref:
-                    await self._projections.delete_turn_reply_correlations(
-                        thread_ref=thread_ref,
-                        conversation_ref=removed.conversation_ref,
-                    )
-                    await self._request_correlations.delete_request_correlations(
-                        thread_ref=thread_ref,
-                        conversation_ref=removed.conversation_ref,
-                    )
-            await self._routes.forget_routes(
-                tuple(
-                    removed
-                    for removed in existing
-                    if removed.conversation_ref != stored.conversation_ref
+            for removed in refreshed.removed_routes:
+                await self._projections.delete_turn_reply_correlations(
+                    thread_ref=thread_ref,
+                    conversation_ref=removed.conversation_ref,
                 )
-            )
-        else:
-            stored = await self._projections.put_projection_route(route)
-        return stored, current is None
+                await self._request_correlations.delete_request_correlations(
+                    thread_ref=thread_ref,
+                    conversation_ref=removed.conversation_ref,
+                )
+            await self._routes.forget_routes(refreshed.removed_routes)
+        return refreshed.route, refreshed.created
 
     async def _stop_if_unobserved(self, thread_ref: ThreadRef) -> None:
         if await self._active_routes(thread_ref):
@@ -1001,23 +978,10 @@ class ThreadProjectionRuntime:
         self,
         thread_ref: ThreadRef | None,
     ) -> tuple[ThreadProjectionRoute, ...]:
-        if thread_ref is None:
-            return ()
-        routes = await self._projections.list_projection_routes(thread_ref)
-        if self._projection_policy is not ProjectionPolicy.FOREGROUND_ONLY:
-            return routes
-        active: list[ThreadProjectionRoute] = []
-        for route in routes:
-            binding = await self._bindings.get(route.conversation_ref)
-            if binding is not None and binding.thread_ref == thread_ref:
-                active.append(route)
-        return tuple(active)
+        return await self._route_authority.active_routes(thread_ref)
 
     async def _route_is_active(self, route: ThreadProjectionRoute) -> bool:
-        return any(
-            candidate.route_id == route.route_id
-            for candidate in await self._active_routes(route.thread_ref)
-        )
+        return await self._route_authority.route_is_active(route)
 
     def _record_delivery_failure(
         self,
