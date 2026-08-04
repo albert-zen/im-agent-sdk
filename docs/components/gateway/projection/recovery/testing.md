@@ -21,6 +21,9 @@ Recovery conformance must prove:
 - no-snapshot reconnect/restart leaves request recovery explicitly degraded
   and never manufactures pending requests from correlations.
 
-Current evidence: `tests/test_recovery.py`, `tests/test_projection_hardening.py`,
-and `tests/test_projection_routing.py`. The target mirrored suite is
-`tests/gateway/projection/test_recovery.py`.
+Focused recovery evidence is `tests/gateway/projection/test_recovery.py`.
+Cross-leaf evidence remains in `tests/test_projection_hardening.py` and
+`tests/test_projection_routing.py` while their focused mechanical moves are
+pending. The focused suite also proves that the Gateway projection facade
+re-exports the exact owner objects and that the historical
+`imagent.recovery` module is unavailable in a clean process.

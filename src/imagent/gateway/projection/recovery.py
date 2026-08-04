@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from .adapters import AgentApplicationAdapter
-from .contracts import (
+from ...adapters import AgentApplicationAdapter
+from ...contracts import (
     AgentEvent,
     ApplicationOperation,
     ApplicationOperationFailed,
@@ -22,9 +22,9 @@ from .contracts import (
     TurnCatchup,
     TurnCatchupRead,
 )
-from .events import CursorExpired
-from .interaction.messages import ConversationRef
-from .projections import (
+from ...events import CursorExpired
+from ...interaction.messages import ConversationRef
+from ...projections import (
     AuthoritativeProjectionSlice,
     ProjectedAgentMessage,
     derive_projection_route_id,

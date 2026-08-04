@@ -41,6 +41,12 @@ delivery decisions, checkpoint convergence, worker health, and authoritative
 recovery remain here; the mechanical repository move does not transfer any of
 those policies into persistence.
 
+The focused recovery implementation now lives in
+`gateway/projection/recovery.py`, with exact public values exposed through
+`imagent.gateway.projection`. The historical `imagent.recovery` module is
+absent; the remaining aggregate runtime files retain only their documented
+observation, routing, and request-correlation responsibilities.
+
 Typed interactive requests share route selection and per-route delivery
 serialization with message projection, but they do not advance transcript
 checkpoints. A Request Presenter produces one stable outbound delivery per

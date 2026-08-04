@@ -1,7 +1,8 @@
 # Gateway input dispatch testing
 
 Current evidence is in `tests/test_gateway_vertical_slice.py`,
-`tests/test_projection_hardening.py`, `tests/test_recovery.py`, and Application
+`tests/test_projection_hardening.py`,
+`tests/gateway/projection/test_recovery.py`, and Application
 adapter conformance. The target mirrored suite is
 `tests/gateway/input/test_dispatch.py`.
 
@@ -24,5 +25,5 @@ Tests must prove:
 Run:
 
 ```sh
-PYTHONPATH=src uv run python -m unittest tests.test_gateway_vertical_slice tests.test_projection_hardening tests.test_recovery -v
+PYTHONPATH=src uv run python -m unittest tests.test_gateway_vertical_slice tests.test_projection_hardening tests.gateway.projection.test_recovery -v
 ```

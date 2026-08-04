@@ -21,6 +21,7 @@ from .contracts import (
     ThreadRef,
     derive_request_response_shape,
 )
+from .gateway.projection.recovery import read_bounded_authoritative_projection
 from .interaction.controllers import RequestPresenter
 from .projections import (
     DeliverOutbound,
@@ -30,7 +31,6 @@ from .projections import (
     deliver_projected_message,
     get_projection_route,
 )
-from .recovery import read_bounded_authoritative_projection
 from .request_correlations import (
     derive_request_correlation_id,
     derive_request_delivery_id,

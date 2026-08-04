@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import importlib.util
 import inspect
 import unittest
-
-from test_gateway_vertical_slice import NativeZenClient
+from subprocess import run
+from sys import executable
 
 from imagent.applications import CodexApplicationAdapter
 from imagent.contracts import (
@@ -14,11 +15,40 @@ from imagent.contracts import (
     TextContent,
     ThreadRef,
 )
-from imagent.recovery import RecoveryMode, recover_thread
+from imagent.gateway.projection import (
+    ProjectionRecoveryUnavailable,
+    RecoveryMode,
+    ThreadRecovery,
+)
+from imagent.gateway.projection.recovery import recover_thread
 from imagent.testing import FakeAgentApplicationAdapter
+from tests.test_gateway_vertical_slice import NativeZenClient
 
 
 class ThreadRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    def test_projection_facade_preserves_exact_recovery_owner_objects(self) -> None:
+        from imagent.gateway.projection.recovery import (
+            ProjectionRecoveryUnavailable as OwnerProjectionRecoveryUnavailable,
+        )
+        from imagent.gateway.projection.recovery import RecoveryMode as OwnerRecoveryMode
+        from imagent.gateway.projection.recovery import ThreadRecovery as OwnerThreadRecovery
+
+        self.assertIs(ThreadRecovery, OwnerThreadRecovery)
+        self.assertIs(RecoveryMode, OwnerRecoveryMode)
+        self.assertIs(ProjectionRecoveryUnavailable, OwnerProjectionRecoveryUnavailable)
+
+    def test_historical_recovery_module_is_absent(self) -> None:
+        self.assertIsNone(importlib.util.find_spec("imagent.recovery"))
+        result = run(
+            [executable, "-c", "import imagent.recovery"],
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ModuleNotFoundError", result.stderr)
+        self.assertIn("imagent.recovery", result.stderr)
+
     async def test_thread_scoped_sequence_has_no_cross_thread_false_gap(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
         first_thread = await application.create_thread()
