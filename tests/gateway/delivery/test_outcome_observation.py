@@ -30,10 +30,6 @@ from imagent.gateway.persistence.memory import (
     InMemoryDeliverySubmissionRepository,
     InMemoryProjectionRouteRepository,
 )
-from imagent.gateway.presentation import (
-    OutboundPresentationContext,
-    ProjectionPresentationOrigin,
-)
 from imagent.gateway.projection import derive_projection_delivery_id
 from imagent.gateway.projection.checkpoints import _ProjectionCheckpointAuthority
 from imagent.gateway.routing.projection_routes import derive_projection_route_id
@@ -666,16 +662,13 @@ class DeliveryOutcomeObserverTests(unittest.IsolatedAsyncioTestCase):
 
         await gateway.start()
         try:
-            await gateway._deliver_outbound(
-                outbound,
-                OutboundPresentationContext(ProjectionPresentationOrigin.AUTHORITATIVE),
-            )
+            await gateway._deliver_projected_outbound(outbound, True)
             await _wait_until(lambda: len(observer.calls) == 1)
             recovered = await deliver_projected_message(
                 projections,
                 route,
                 projected,
-                deliver_outbound=gateway._deliver_outbound,
+                deliver_outbound=gateway._deliver_projected_outbound,
                 checkpoint_authority=_ProjectionCheckpointAuthority(
                     projections=projections,
                 ),
@@ -728,14 +721,14 @@ class DeliveryOutcomeObserverTests(unittest.IsolatedAsyncioTestCase):
         try:
             await gateway._deliver_outbound(message)
             await _wait_until(lambda: len(observer.calls) == 1)
-            await gateway._deliver_outbound(
+            await gateway._deliver_projected_outbound(
                 OutboundMessage(
                     delivery_id="suppressed",
                     conversation_ref=self.conversation,
                     content=(TextContent("hidden"),),
                     created_at=message.created_at,
                 ),
-                OutboundPresentationContext(ProjectionPresentationOrigin.AUTHORITATIVE),
+                True,
             )
             await asyncio.sleep(0)
         finally:

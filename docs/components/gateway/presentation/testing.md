@@ -5,6 +5,13 @@ prove per-destination transformation/suppression, immutable identity and
 attachment authority, bounded content/metadata, finite capacity/lifetime and
 cancellation, fixed redacted diagnostics, and unchanged absent behavior.
 
+They also prove that projection checkpointability is mapped once to the fixed
+O1 origin by the presentation owner, and that its post-claim result is a typed
+presented/suppressed/failed decision with no repository, owner token, or
+idempotency transition callback. Gateway/idempotency code consumes that result
+to complete suppression or release a pre-Channel failure; checkpoint code
+remains the authority for the subsequent CAS.
+
 Crash/recovery integration proves suppression completes idempotency before the
 checkpoint owner receives its CAS decision, completed recovery converges
 without reinvocation, a

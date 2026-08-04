@@ -10,9 +10,12 @@ per-`ConversationRef` FIFO lanes, conservative retry execution, cancellation
 and join, and aggregation of native segment receipts into one logical
 `DeliveryReceipt`.
 
-It does not own planning, native encoding or API calls, durable scheduling,
+It does not own O1 presentation invocation or decisions, outbound claim
+transitions, planning, native encoding or API calls, durable scheduling,
 content storage, idempotency/checkpoints, route selection, product retry
-appetite, or outcome observation.
+appetite, or outcome observation. It receives only the already-presented
+message selected by the O1/idempotency path; suppression and pre-Channel policy
+failure never enter Coordinator planning or execution.
 
 ## Execution invariants
 

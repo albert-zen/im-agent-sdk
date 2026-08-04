@@ -35,6 +35,19 @@ class OutboundPresentationContext:
             raise ValueError("outbound presentation origin must use the fixed vocabulary")
 
 
+def _projection_presentation_context(
+    *,
+    checkpointable: bool,
+) -> OutboundPresentationContext:
+    """Map one projection completion fact to the fixed O1 origin."""
+
+    return OutboundPresentationContext(
+        ProjectionPresentationOrigin.AUTHORITATIVE
+        if checkpointable
+        else ProjectionPresentationOrigin.LIVE_ONLY
+    )
+
+
 class OutboundPresentationPolicy(Protocol):
     """Replay-safe per-destination projection presentation policy."""
 
@@ -210,6 +223,45 @@ class OutboundPresentationRuntime:
     def _record_failure(self, code: OutboundPresentationFailureCode) -> None:
         self._failure_count += 1
         self._last_failure_code = code
+
+
+@dataclass(frozen=True, slots=True)
+class _PresentedClaimedOutbound:
+    message: OutboundMessage
+
+
+@dataclass(frozen=True, slots=True)
+class _SuppressedClaimedOutbound:
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class _FailedClaimedOutbound:
+    error: BaseException
+
+
+_ClaimedOutboundPresentationDecision = (
+    _PresentedClaimedOutbound | _SuppressedClaimedOutbound | _FailedClaimedOutbound
+)
+
+
+async def _decide_claimed_outbound_presentation(
+    message: OutboundMessage,
+    presentation_context: OutboundPresentationContext | None,
+    *,
+    runtime: OutboundPresentationRuntime | None,
+) -> _ClaimedOutboundPresentationDecision:
+    """Invoke O1 after claim acquisition without owning a claim transition."""
+
+    if presentation_context is None or runtime is None:
+        return _PresentedClaimedOutbound(message)
+    try:
+        presented = await runtime.present(message, presentation_context)
+    except BaseException as error:
+        return _FailedClaimedOutbound(error)
+    if presented is None:
+        return _SuppressedClaimedOutbound()
+    return _PresentedClaimedOutbound(presented)
 
 
 def validate_outbound_presentation(

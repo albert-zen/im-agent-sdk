@@ -105,11 +105,12 @@ idempotent and any different immutable value is a
 `TurnReplyCorrelationConflict`. SQLite uses no destination-replacing upsert.
 Neither state may copy message bodies, Turn status, or native execution state.
 
-ADR 0015 does not add a suppression table or policy payload. O1 uses the same
-stable outbound idempotency claim as delivery: it completes that claim before
-checkpoint compare-and-swap. An already-completed claim can therefore
-converge a lagging route boundary after restart without persisting content,
-visibility settings, or a second outcome authority.
+ADR 0015 does not add a suppression table or policy payload. O1 returns a
+typed suppression decision against the same stable outbound idempotency claim
+as delivery; the idempotency owner completes that claim before checkpoint
+compare-and-swap. An already-completed claim can therefore converge a lagging
+route boundary after restart without persisting content, visibility settings,
+or a second outcome authority.
 
 O2 adds no outcome-notification, callback, content, cleanup, spool, or outbox
 state. Durable delivery destinations and receipts remain the only bridge

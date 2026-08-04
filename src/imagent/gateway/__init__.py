@@ -125,6 +125,11 @@ from .persistence.state_contracts import (
 from .presentation import (
     OutboundPresentationContext,
     OutboundPresentationRuntime,
+    _decide_claimed_outbound_presentation,
+    _FailedClaimedOutbound,
+    _PresentedClaimedOutbound,
+    _projection_presentation_context,
+    _SuppressedClaimedOutbound,
 )
 from .presentation import (
     OutboundPresentationPolicy as OutboundPresentationPolicy,
@@ -255,7 +260,7 @@ class ImAgentGateway:
             request_presenter=extensions.request_presenter,
             projection_policy=projection_policy,
             execute_application=self.execute_application,
-            deliver_outbound=self._deliver_outbound,
+            deliver_outbound=self._deliver_projected_outbound,
             deliver_request_outbound=partial(
                 self._deliver_outbound,
                 cancellable=True,
@@ -1139,6 +1144,16 @@ class ImAgentGateway:
             if task.done():
                 self._finish_outbound_delivery(key, task)
 
+    async def _deliver_projected_outbound(
+        self,
+        message: OutboundMessage,
+        checkpointable: bool,
+    ) -> IdempotencyClaimStatus:
+        return await self._deliver_outbound(
+            message,
+            _projection_presentation_context(checkpointable=checkpointable),
+        )
+
     def _finish_outbound_delivery(
         self,
         key: tuple[str, str],
@@ -1162,36 +1177,31 @@ class ImAgentGateway:
         )
         if claim is not IdempotencyClaimStatus.ACQUIRED:
             return claim
-        if presentation_context is not None and self._outbound_presentation_runtime is not None:
-            try:
-                presented = await self._outbound_presentation_runtime.present(
-                    message,
-                    presentation_context,
-                )
-            except asyncio.CancelledError:
-                await self._idempotency.release(
-                    scope,
-                    message.delivery_id,
-                    owner_token=owner_token,
-                )
-                raise
-            except BaseException as error:
-                await self._idempotency.release(
-                    scope,
-                    message.delivery_id,
-                    owner_token=owner_token,
-                )
-                raise RetryableDeliveryError(
-                    "outbound presentation failed before Channel side effect"
-                ) from error
-            if presented is None:
-                await self._idempotency.complete(
-                    scope,
-                    message.delivery_id,
-                    owner_token=owner_token,
-                )
-                return IdempotencyClaimStatus.ACQUIRED
-            message = presented
+        presentation = await _decide_claimed_outbound_presentation(
+            message,
+            presentation_context,
+            runtime=self._outbound_presentation_runtime,
+        )
+        if isinstance(presentation, _FailedClaimedOutbound):
+            await self._idempotency.release(
+                scope,
+                message.delivery_id,
+                owner_token=owner_token,
+            )
+            if isinstance(presentation.error, asyncio.CancelledError):
+                raise presentation.error
+            raise RetryableDeliveryError(
+                "outbound presentation failed before Channel side effect"
+            ) from presentation.error
+        if isinstance(presentation, _SuppressedClaimedOutbound):
+            await self._idempotency.complete(
+                scope,
+                message.delivery_id,
+                owner_token=owner_token,
+            )
+            return IdempotencyClaimStatus.ACQUIRED
+        assert isinstance(presentation, _PresentedClaimedOutbound)
+        message = presentation.message
         try:
             result = await self._delivery_service.deliver_internal(message)
         except (

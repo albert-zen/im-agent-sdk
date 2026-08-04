@@ -29,3 +29,8 @@ independent progress, and owner/waiter cancellation cleanup live in
 FIFO, admission, retry-delay, receipt, and worker-lifetime policy evidence.
 They also prove that blocked work at finite `max_pending` cannot create more
 active destination registry keys than the already-reserved pending capacity.
+
+O1-focused integration additionally proves that Coordinator receives only a
+validated presented message: a suppression or pre-Channel policy failure is
+resolved by presentation plus the idempotency owner before planning, and never
+creates Coordinator work, a receipt, or a retry decision.

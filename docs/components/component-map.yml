@@ -167,31 +167,31 @@ architecture_lint:
     - from: src/imagent/gateway/projection/recovery.py
       to: src/imagent/projections.py
       symbol: AuthoritativeProjectionSlice
-      reason: Bounded recovery temporarily consumes the historical projected-slice value while physical observation-value relocation remains outside this checkpoint-authority slice.
+      reason: Bounded recovery consumes the historical observation slice value while its physical relocation remains separate from checkpoint decision/CAS ownership.
     - from: src/imagent/gateway/projection/recovery.py
       to: src/imagent/projections.py
       symbol: ProjectedAgentMessage
-      reason: Bounded recovery temporarily consumes the historical projected-message value while physical observation-value relocation remains outside this checkpoint-authority slice.
+      reason: Bounded recovery consumes the historical observation message value while its physical relocation remains separate from checkpoint decision/CAS ownership.
     - from: src/imagent/projection_routes.py
       to: src/imagent/projections.py
       symbol: DeliverOutbound
-      reason: Route coordination temporarily consumes the historical typed outbound Port while the checkpoint-authority slice removes only the former checkpoint decision.
+      reason: Route sequencing consumes the historical projection-delivery Port; it forwards a completed outcome to the injected checkpoint authority without making a checkpoint decision.
     - from: src/imagent/projection_routes.py
       to: src/imagent/projections.py
       symbol: DeliverRequestOutbound
-      reason: Route coordination temporarily consumes the historical typed request-delivery Port while the checkpoint-authority slice removes only the former checkpoint decision.
+      reason: Route sequencing consumes the historical typed request-delivery Port while projection/observation physical relocation remains separately scoped.
     - from: src/imagent/projection_routes.py
       to: src/imagent/projections.py
       symbol: ProjectedAgentMessage
-      reason: Route coordination temporarily consumes the historical projection value while the checkpoint-authority slice removes only the former checkpoint decision.
+      reason: Route sequencing consumes the historical observation value while projection/observation physical relocation remains separately scoped.
     - from: src/imagent/projection_routes.py
       to: src/imagent/projections.py
       symbol: RetryableDeliveryError
-      reason: Route coordination temporarily consumes the historical delivery failure type while the checkpoint-authority slice removes only the former checkpoint decision.
+      reason: Route sequencing consumes the historical delivery failure type for bounded recovery without acquiring checkpoint decision/CAS authority.
     - from: src/imagent/projection_routes.py
       to: src/imagent/projections.py
       symbol: deliver_projected_message
-      reason: Route coordination temporarily invokes the historical delivery helper, now with an injected checkpoint authority, until its remaining physical move is separately scoped.
+      reason: Route sequencing invokes the historical observation helper as a cross-owner consumer; that helper forwards typed delivery evidence to, but never implements, the injected checkpoint authority.
     - from: src/imagent/interaction/controllers/contract.py
       to: src/imagent/contracts/__init__.py
       reason: Controller action annotations use the declared finite contracts facade to resolve exact Gateway operation and ConversationBinding objects after clean package initialization, without importing Gateway orchestration from the Interaction contract module.
@@ -752,14 +752,14 @@ components:
     parent: gateway.projection
     purpose: Maintain one bounded Application observation worker per active Thread and isolate bounded subscriber failures.
     owns: [Thread worker lifecycle, active-Thread capacity, terminal runtime-entry cleanup, live fan-out consumption, bootstrap barrier]
-    does_not_own: [native subscription producer, transcript, second event journal]
+    does_not_own: [native subscription producer, transcript, second event journal, checkpoint decision/CAS]
     inputs: [Application Thread subscription]
     outputs: [ordered normalized events for active routes]
     public_contracts: [ThreadProjectionRuntime, ProjectionWorkerHealth]
     public_exports:
       current: [imagent.projection_runtime:ThreadProjectionRuntime, imagent.projections:ProjectionWorkerHealth]
       target: [imagent.gateway.projection:ThreadProjectionRuntime, imagent.gateway.projection:ProjectionWorkerHealth]
-    dependencies: [interaction.messages, interaction.controllers.request-presentation, applications.application-contract, applications.capabilities, applications.events, applications.requests, gateway.routing.projection-routes, gateway.projection.recovery, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
+    dependencies: [interaction.messages, interaction.controllers.request-presentation, applications.application-contract, applications.capabilities, applications.events, applications.requests, gateway.routing.projection-routes, gateway.projection.checkpoints, gateway.projection.recovery, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Active-worker capacity and per-Thread runtime entries are process-local; an in-flight same-Thread admission retains its identity across task turnover, bounded queue gaps retain the worker slot while supervised resubscription reconciles authoritatively, and terminal workers release it once no admission lease remains.
     current_code: [src/imagent/gateway/__init__.py, src/imagent/projection_runtime.py, src/imagent/projections.py]
     target_code: [src/imagent/gateway/projection/observation.py]
@@ -838,24 +838,24 @@ components:
   gateway.presentation:
     id: gateway.presentation
     parent: gateway
-    purpose: Apply O1 destination-specific bounded projection presentation after claim and before planning.
-    owns: [OutboundPresentationPolicy, presentation origin, suppression validation/runtime]
-    does_not_own: [Application-native normalization, request/product presentation, destination identity]
-    inputs: [routed immutable OutboundMessage and typed origin]
-    outputs: [validated replacement content or suppression]
+    purpose: Apply O1 destination-specific bounded projection presentation after claim and before planning, returning one typed post-claim decision.
+    owns: [OutboundPresentationPolicy, checkpointability-to-origin mapping, post-claim presented/suppressed/failed decision, suppression validation/runtime]
+    does_not_own: [Application-native normalization, request/product presentation, destination identity, idempotency claim/complete/release, checkpoint CAS]
+    inputs: [routed immutable OutboundMessage and checkpointable projection fact]
+    outputs: [typed presented replacement, suppression, or policy-failure decision]
     public_contracts: [OutboundPresentationPolicy, OutboundPresentationContext, ProjectionPresentationOrigin]
     public_exports:
       current: [imagent.gateway.presentation:OutboundPresentationPolicy, imagent.gateway.presentation:OutboundPresentationContext, imagent.gateway.presentation:ProjectionPresentationOrigin]
       target: [imagent.gateway.presentation:OutboundPresentationPolicy, imagent.gateway.presentation:OutboundPresentationContext, imagent.gateway.presentation:ProjectionPresentationOrigin]
-    dependencies: [interaction.messages, interaction.media, applications.application-contract, gateway.projection.checkpoints, gateway.persistence.idempotency, gateway.diagnostics]
-    state_recovery: Replay-safe suppression completes outbound idempotency before the checkpoint owner evaluates CAS; live-only never checkpoints.
-    current_code: [src/imagent/gateway/presentation.py, src/imagent/projections.py, src/imagent/gateway/__init__.py]
+    dependencies: [interaction.messages, interaction.media, gateway.diagnostics]
+    state_recovery: The idempotency owner completes a replay-safe suppression before the checkpoint owner evaluates CAS; failed/cancelled pre-Channel policy decisions release only that owner claim, and live-only never checkpoints.
+    current_code: [src/imagent/gateway/presentation.py]
     target_code: [src/imagent/gateway/presentation.py]
     current_tests: [tests/gateway/test_presentation.py, tests/test_projection_hardening.py]
     target_tests: [tests/gateway/test_presentation.py]
     authoritative_docs: [docs/components/gateway/presentation/design.md, docs/components/gateway/presentation/testing.md]
     adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [projection delivery sequencing remains in projections.py]
+    gaps: []
 
   gateway.delivery.planning:
     id: gateway.delivery.planning
@@ -1777,8 +1777,8 @@ structural_status:
       owners: [gateway.input.dispatch, gateway.projection.request-correlation]
       reason: Pending request-correlation and input-dispatch specific validation remains here until those later focused owners move them; the aggregate Gateway validator is owned by gateway.routing.gateway-operations and delegates these exact branches.
     src/imagent/gateway/__init__.py:
-      owners: [gateway.composition, gateway.lifecycle, gateway.admission, gateway.routing.projection-routes, gateway.input.content-transformation, gateway.input.dispatch, gateway.input.failure-presentation, gateway.projection.observation, gateway.projection.request-correlation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.diagnostics]
-      reason: The package root re-exports composition values while the same module sequences admission, input, presentation, delivery, diagnostics, and lifecycle behavior, so it remains a multi-owner split candidate rather than a single-owner formal facade. Its finite lazy Gateway-operation resolver is documented with the routing formal facade. Gateway aggregate dispatch and Conversation serialization live in gateway.routing.gateway-operations; binding repository/CAS and same-target convergence live in gateway.routing.bindings; projection-route values live in gateway.routing.projection-routes. Private root delegates retain cross-owner sequencing, Application Project/Thread truth validation, projection and request-correlation behavior, and input dispatch. ApplicationOperation remains on the existing independent Gateway/ControllerActions path.
+      owners: [gateway.composition, gateway.lifecycle, gateway.admission, gateway.routing.projection-routes, gateway.input.content-transformation, gateway.input.dispatch, gateway.input.failure-presentation, gateway.projection.observation, gateway.projection.request-correlation, gateway.delivery.coordination, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.diagnostics]
+      reason: The package root re-exports composition values while the same module sequences admission, input, delivery, diagnostics, and lifecycle behavior, so it remains a multi-owner split candidate rather than a single-owner formal facade. Its finite lazy Gateway-operation resolver is documented with the routing formal facade. Gateway aggregate dispatch and Conversation serialization live in gateway.routing.gateway-operations; binding repository/CAS and same-target convergence live in gateway.routing.bindings; projection-route values live in gateway.routing.projection-routes. The presentation owner returns a typed post-claim result; the root's existing idempotency branch consumes it without retaining O1 policy/origin logic. Private root delegates retain other cross-owner sequencing, Application Project/Thread truth validation, projection and request-correlation behavior, and input dispatch. ApplicationOperation remains on the existing independent Gateway/ControllerActions path.
     src/imagent/gateway/delivery/__init__.py:
       owners: [gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation]
       reason: The intentional Gateway delivery package facade re-exports exact public values from focused delivery leaves without implementing any leaf.
@@ -1791,9 +1791,6 @@ structural_status:
     src/imagent/projection_routes.py:
       owners: [gateway.projection.request-correlation, gateway.projection.recovery]
       reason: Per-route ordering coordinates request-correlation and bounded recovery after the injected checkpoint authority moved to gateway.projection.checkpoints and canonical route authority moved to gateway.routing.projection-routes.
-    src/imagent/projections.py:
-      owners: [gateway.projection.observation, gateway.presentation]
-      reason: Projection values, outbound-message construction, and health types remain co-located after canonical route identity moved to gateway.routing.projection-routes, checkpoint convergence moved to gateway.projection.checkpoints, and the in-memory repository moved to its persistence owner.
     src/imagent/gateway/delivery/submissions.py:
       owners: [gateway.delivery.submissions, gateway.delivery.proactive-delivery]
       reason: Delivery identity, canonical metadata, and planning-facing helpers remain in delivery; SQLite SQL and schema now have one owner in gateway.persistence.sqlite.

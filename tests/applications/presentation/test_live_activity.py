@@ -820,7 +820,7 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
         )
         delivered = []
 
-        async def deliver(outbound, _context):
+        async def deliver(outbound, _checkpointable):
             delivered.append(outbound)
             return IdempotencyClaimStatus.ACQUIRED
 
@@ -848,7 +848,7 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
         stored = (await repository.list_projection_routes(thread_ref))[0]
         self.assertEqual(stored.checkpoint_agent_item_id, "history-item-1")
 
-        async def already_completed(outbound, _context):
+        async def already_completed(outbound, _checkpointable):
             delivered.append(outbound)
             return IdempotencyClaimStatus.ALREADY_COMPLETED
 

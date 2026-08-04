@@ -63,15 +63,19 @@ ordered authoritative recovery supplied the evidence; a live duplicate does
 not guess a new boundary. A same-item repeat needs no CAS, and a competing or
 stale expected value remains the repository's explicit conflict.
 
-`imagent.projections` retains only projected-message construction, reply
-correlation lookup, and the call into the injected checkpoint authority after
-the existing delivery/O1 path returns its typed outcome.
+`imagent.projections` remains an observation-side cross-owner consumer: it
+retains projected-message construction, reply correlation lookup, and the call
+into the injected checkpoint authority after the existing delivery/O1 path
+returns its typed outcome. That forwarding does not make a checkpoint decision
+or perform a CAS.
 `projection_routes.py` retains route bootstrap, bounded recovery orchestration,
-and route ordering, but no checkpoint decision. O1 presentation still owns
-replacement/suppression and completes the existing outbound idempotency claim
-before this authority can advance a route. Recovery supplies bounded ordered
-evidence and does not call route persistence directly. Persistence continues
-to own the passive route record and atomic repository operations.
+and route ordering, but no checkpoint decision. O1 presentation returns a
+typed presented/suppressed/failed decision after a stable outbound claim
+exists; the idempotency owner completes a suppression before this authority
+can advance a route, or releases a failed/cancelled pre-Channel claim. Recovery
+supplies bounded ordered evidence and does not call route persistence directly.
+Persistence continues to own the passive route record and atomic repository
+operations.
 
 The finite `imagent.gateway.projection` facade remains exact re-exports only;
 it exposes the stable delivery-ID function and does not become a second

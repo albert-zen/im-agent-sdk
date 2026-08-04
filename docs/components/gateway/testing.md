@@ -68,12 +68,12 @@
   cancellation after the fence preserves `side_effect_started` across restart;
 - destination presentation is projection-only, receives a bounded typed
   authoritative/live-only origin, cannot change delivery, destination, reply,
-  time, or attachment authority, and transformed output is bounded and
-  revalidated before planning;
-- per-destination O1 decisions are independent; durable suppression completes
-  outbound idempotency before checkpoint CAS, completed recovery bypasses O1,
-  live-only suppression never checkpoints, and pre-side-effect failures
-  release only the matching owned claim;
+  time, or attachment authority, and its owner returns bounded revalidated
+  presented/suppressed/failed output before planning;
+- per-destination O1 decisions are independent; the idempotency owner completes
+  durable suppression before checkpoint CAS, completed recovery bypasses O1,
+  live-only suppression never checkpoints, and that owner releases only the
+  matching pre-side-effect failure claim;
 - a post-outcome observer runs once per logical attempt rather than per segment
   or internal retry, observes fixed typed receipt/error outcomes only after
   Coordinator cleanup and destination persistence, and cannot rewrite a

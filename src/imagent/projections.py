@@ -20,11 +20,10 @@ if TYPE_CHECKING:
         ProjectionRouteRepository,
     )
     from .gateway.persistence.state_contracts import ThreadProjectionRoute
-    from .gateway.presentation import OutboundPresentationContext
     from .gateway.projection.checkpoints import _ProjectionCheckpointAuthority
 
 DeliverOutbound = Callable[
-    [OutboundMessage, "OutboundPresentationContext"],
+    [OutboundMessage, bool],
     Awaitable["IdempotencyClaimStatus"],
 ]
 DeliverRequestOutbound = Callable[[OutboundMessage], Awaitable["IdempotencyClaimStatus"]]
@@ -176,11 +175,6 @@ async def deliver_projected_message(
     authoritative: bool,
 ) -> ThreadProjectionRoute:
     """Make one ordered route decision without adding retry/backpressure."""
-    from .gateway.presentation import (
-        OutboundPresentationContext,
-        ProjectionPresentationOrigin,
-    )
-
     agent_message = projected.message
     if projected.checkpoint:
         from .gateway.projection.checkpoints import derive_projection_delivery_id
@@ -220,13 +214,7 @@ async def deliver_projected_message(
             reply_to=reply_to,
             metadata=immutable_projection_metadata(agent_message.metadata),
         ),
-        OutboundPresentationContext(
-            origin=(
-                ProjectionPresentationOrigin.AUTHORITATIVE
-                if projected.checkpoint
-                else ProjectionPresentationOrigin.LIVE_ONLY
-            )
-        ),
+        projected.checkpoint,
     )
     return await checkpoint_authority.apply_delivery_outcome(
         route,
