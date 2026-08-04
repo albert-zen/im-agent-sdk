@@ -58,7 +58,9 @@ def _top_level_named_nodes(tree: ast.Module) -> dict[str, ast.AST]:
 class ProactiveRuntimeOwnershipTests(unittest.TestCase):
     def test_contract_seam_has_only_contract_vocabulary_and_validator(self) -> None:
         public_names = {name for name in vars(contract_seam) if not name.startswith("_")}
-        self.assertEqual(public_names, CONTRACT_NAMES)
+        self.assertEqual(set(contract_seam.__all__), CONTRACT_NAMES)
+        self.assertEqual(len(contract_seam.__all__), len(CONTRACT_NAMES))
+        self.assertTrue(CONTRACT_NAMES.issubset(public_names))
         self.assertTrue(RUNTIME_NAMES.isdisjoint(vars(contract_seam)))
 
         source = (REPOSITORY_ROOT / "src/imagent/gateway/delivery/proactive.py").read_text()
@@ -100,7 +102,7 @@ class ProactiveRuntimeOwnershipTests(unittest.TestCase):
         )
         for name in CONTRACT_NAMES:
             with self.subTest(contract=name):
-                self.assertIs(getattr(contract_seam, name), getattr(delivery_contracts, name))
+                self.assertFalse(hasattr(delivery_contracts, name))
                 self.assertIs(getattr(delivery_facade, name), getattr(contract_seam, name))
                 self.assertNotIn(name, contract_facade.__all__)
                 self.assertFalse(hasattr(contract_facade, name))
@@ -116,6 +118,18 @@ class ProactiveRuntimeOwnershipTests(unittest.TestCase):
         current_nodes = _top_level_named_nodes(ast.parse(current_source))
         self.assertEqual(set(current_nodes), RUNTIME_NAMES)
         self.assertTrue(CONTRACT_NAMES.isdisjoint(current_nodes))
+
+    def test_vocabulary_source_has_the_exact_finite_owner_set(self) -> None:
+        proactive_source = (
+            REPOSITORY_ROOT / "src/imagent/gateway/delivery/proactive.py"
+        ).read_text()
+        proactive_nodes = _top_level_named_nodes(ast.parse(proactive_source))
+        proactive_nodes.pop("__all__")
+        self.assertEqual(set(proactive_nodes), CONTRACT_NAMES)
+
+        historical_source = (REPOSITORY_ROOT / "src/imagent/contracts/delivery.py").read_text()
+        historical_nodes = _top_level_named_nodes(ast.parse(historical_source))
+        self.assertTrue(CONTRACT_NAMES.isdisjoint(historical_nodes))
 
     def test_runtime_signatures_and_type_hints_resolve(self) -> None:
         methods = (

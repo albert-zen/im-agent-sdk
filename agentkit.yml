@@ -127,6 +127,8 @@ components:
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/keyed_locks.py
+      # The delivery leaf includes the sole proactive vocabulary owner;
+      # contracts.delivery retains only passive submission state/helpers.
       - src/imagent/gateway/delivery/**
       - src/imagent/gateway/presentation.py
       - tests/gateway/delivery/**

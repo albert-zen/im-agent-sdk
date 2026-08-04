@@ -86,7 +86,7 @@ class ProactiveDeliveryOwnershipTests(unittest.TestCase):
             with self.subTest(name=name):
                 owner = getattr(proactive_owner, name)
                 self.assertIs(getattr(delivery_facade, name), owner)
-                self.assertIs(getattr(delivery_contracts, name), owner)
+                self.assertFalse(hasattr(delivery_contracts, name))
                 self.assertNotIn(name, contract_facade.__all__)
                 self.assertFalse(hasattr(contract_facade, name))
         self.assertIs(

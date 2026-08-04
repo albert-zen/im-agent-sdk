@@ -12,11 +12,13 @@ delivery runtime.
 
 This leaf has an intentional same-leaf physical split:
 
-- `proactive.py` is the low-dependency proactive contract seam. It exposes
-  the vocabulary and validator as exact aliases of their temporary
-  `contracts.delivery` definitions. This slice removes the historical
-  `imagent.contracts` proactive exports and rewires internal users to this
-  named Gateway seam before #216 moves the definitions and validation here.
+- `proactive.py` is the low-dependency proactive contract seam and the sole
+  implementation owner of the proactive vocabulary and validator. It imports
+  only the passive submission state and shared validation helpers that remain
+  in `contracts.delivery`; the historical module has no proactive definition
+  or compatibility alias. Its explicit finite `__all__` contains exactly the
+  eight owned vocabulary/validator names; support imports retained for runtime
+  type-hint resolution are not part of the public seam.
 - `proactive_runtime.py` owns `ResolveThreadRoutes`, `DeliveryRouteError`,
   `ProactiveDeliveryService`, and the private orchestration helpers used only
   by that service. It imports the contract seam and implementation Ports, but
@@ -87,12 +89,14 @@ the eight proactive vocabulary/validator names; callers use
 removal, not a reverse compatibility alias. The old
 `imagent.proactive_delivery` implementation path is removed.
 
-#216 must move only the typed proactive vocabulary and
-`validate_delivery_intent` into this seam. It must delete the temporary
-`contracts.delivery` definitions rather than add reverse compatibility
-aliases, and it must not move fingerprint/ID helpers, `_canonical_metadata`,
-submission/state records, authorization, JSON ingress, planning, coordination,
-O2, CLI, or persistence as part of that contract extraction.
+This ownership slice moves only the typed proactive vocabulary and
+`validate_delivery_intent` into this seam. It leaves
+`DeliverySubmissionOrigin`, `DeliverySubmissionState`, submission records and
+reservations, `_canonical_metadata`, `_validate_conversation_ref`, the four
+submission identity helpers, authorization, JSON ingress, planning,
+coordination, O2, CLI, and persistence in their accepted owners. The
+`contracts.delivery` dependency is one-way: proactive delivery may consume
+passive state/helpers, but contracts never imports Gateway.
 
 ## Authority
 

@@ -23,9 +23,10 @@ records only bridge identity/evidence needed for safe convergence.
 - [proactive delivery design](proactive-delivery/design.md) and
   [testing](proactive-delivery/testing.md) — authorized, route-pinned,
   idempotent delivery through the common bounded path. Its contract seam in
-  `proactive.py` and orchestration sibling in `proactive_runtime.py` are one
-  leaf; the next focused #216 slice may move the typed vocabulary into that
-  seam without making runtime depend on a reverse contract cycle.
+  `proactive.py` is the sole owner of the typed vocabulary and validator, and
+  its orchestration sibling in `proactive_runtime.py` remains the runtime
+  owner. Passive submission state stays in `contracts.delivery` without a
+  reverse dependency.
 
 JSON/CLI proactive ingress remains mapped to its current authoritative
 documents until its focused move. Delivery owns no native encoding, durable

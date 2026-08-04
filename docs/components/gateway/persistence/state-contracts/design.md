@@ -58,9 +58,11 @@ logical delivery to the originally resolved destinations across retries and
 restart. It contains no text, artifact bytes, arbitrary local path, callback,
 or replayable work body, so it is neither a content spool nor an outbox.
 `DeliverySubmissionOrigin` and these passive state/record/reservation values
-remain in `contracts.delivery` for the current rollout. The closed submission
-identity/fingerprint helpers are Gateway delivery behavior, not passive state;
-their sole implementation is `gateway.delivery.submissions`.
+remain in `contracts.delivery` for the current rollout. The proactive target,
+intent, result, and validator vocabulary is Gateway delivery behavior, not
+passive state. The closed submission identity/fingerprint helpers are also
+Gateway delivery behavior, not passive state; their sole implementation is
+`gateway.delivery.submissions`.
 
 Stable scalar identities and every persisted collection are validated against
 their declared limits and cross-reference rules before fingerprinting,

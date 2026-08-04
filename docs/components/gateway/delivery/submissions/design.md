@@ -9,8 +9,10 @@ typed per-destination state transitions. It persists identity, snapshots,
 receipts, bounded errors, and timestamps; it never persists message or
 artifact content and is not a durable job queue or retry scheduler.
 
-The leaf consumes typed delivery contracts, repository transactions, and
-resolved route snapshots. Channel side effects remain in delivery
+The leaf consumes the typed proactive vocabulary from
+`gateway.delivery.proactive`, passive submission contracts from
+`contracts.delivery`, repository transactions, and resolved route snapshots.
+Channel side effects remain in delivery
 coordination and Channel adapters. Target authorization and route resolution
 remain in the separate proactive-authorization and proactive-delivery leaves.
 The four stable identity/fingerprint helpers and private `_content_identity`
