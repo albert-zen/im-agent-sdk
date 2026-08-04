@@ -39,11 +39,13 @@ same owner and access still precedes admission/media work. Admission,
 media/restart, queue, and shutdown evidence remains in the native and vertical
 suites until those mechanics move in later focused slices.
 
-The same focused module covers the private ingress envelope helper and
-datetime parser: explicit reply overrides, native reply fallback, selected
-metadata, stable identity coercion, ordered content supplied by runtime, valid
-ISO/`Z` timestamps, and absent or malformed timestamp fallback. Runtime and
-provider suites continue proving that the helper is invoked without changing
+The same focused module covers the private ingress content/envelope helper and
+datetime parser: text-before-attachment ordering, source-message identity or
+stable attachment fallback, media type, optional filename, size, explicit
+untrusted `LocalPath`, fixed `kind` metadata, explicit reply overrides, native
+reply fallback, selected metadata, stable identity coercion, valid ISO/`Z`
+timestamps, and absent or malformed timestamp fallback. Runtime and provider
+suites continue proving that the helper is invoked without changing bounded
 route-context updates, admission handoff, native retrieval/decryption, or
 acknowledgement behavior.
 

@@ -52,3 +52,6 @@ wrapper use those exact owner objects, and the historical
 `imagent.channels.native.base` module is absent in a clean process. Existing
 native Channel, access-policy, diagnostics, ingress, outbound, and Gateway
 vertical tests remain the behavior-preservation suite for the mechanical move.
+Runtime parity also proves that route-context updates remain adapter-runtime
+state while complete inbound content and envelope normalization is delegated
+to the Interaction ingress owner.

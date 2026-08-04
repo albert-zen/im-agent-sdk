@@ -7,10 +7,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal, Protocol, cast
 
-from ..messages import (
-    Content,
-    ConversationRef,
-)
+from ..media import AttachmentContent, LocalPath
+from ..messages import ConversationRef, TextContent, TextFormat
 from ..messages import (
     InboundMessage as InteractionInboundMessage,
 )
@@ -229,9 +227,27 @@ def _normalize_inbound_message(
     *,
     channel_instance_id: str,
     inbound: InboundMessage,
-    content: tuple[Content, ...],
     reply_to_message_id: str | None,
 ) -> InteractionInboundMessage:
+    content: list[TextContent | AttachmentContent] = []
+    if str(inbound.text or ""):
+        content.append(TextContent(str(inbound.text), TextFormat.PLAIN))
+    for index, attachment in enumerate(getattr(inbound, "attachments", ())):
+        content.append(
+            AttachmentContent(
+                attachment_id=(
+                    str(getattr(attachment, "source_message_id", "") or "")
+                    or f"{inbound.message_id}:attachment:{index}"
+                ),
+                media_type=str(attachment.content_type),
+                filename=str(getattr(attachment, "filename", "") or "") or None,
+                size_bytes=int(attachment.size_bytes),
+                source=LocalPath(str(attachment.local_path)),
+                metadata={
+                    "kind": str(attachment.kind),
+                },
+            )
+        )
     return InteractionInboundMessage(
         message_id=str(inbound.message_id),
         conversation_ref=ConversationRef(
@@ -239,7 +255,7 @@ def _normalize_inbound_message(
             native_conversation_id=str(inbound.conversation_id),
         ),
         sender=str(inbound.user_id),
-        content=content,
+        content=tuple(content),
         created_at=_parse_datetime(getattr(inbound, "sent_at", None)),
         reply_to=(
             str(reply_to_message_id)
