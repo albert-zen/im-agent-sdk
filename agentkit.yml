@@ -246,11 +246,12 @@ components:
       - src/imagent/projection_runtime.py
       - src/imagent/request_projection_runtime.py
       - src/imagent/projections.py
-      - src/imagent/recovery.py
+      - src/imagent/gateway/projection/__init__.py
+      - src/imagent/gateway/projection/recovery.py
       - tests/test_event_fanout.py
       - tests/test_projection_hardening.py
       - tests/test_projection_routing.py
-      - tests/test_recovery.py
+      - tests/gateway/projection/test_recovery.py
     docs:
       - docs/components/gateway/projection/README.md
       - docs/components/gateway/projection/observation/design.md

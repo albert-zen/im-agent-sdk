@@ -8,7 +8,6 @@ from . import (
     diagnostics,
     events,
     projections,
-    recovery,
 )
 from .gateway.delivery import coordination as delivery_coordination
 from .gateway.delivery import planning as delivery_planning
@@ -21,5 +20,4 @@ __all__ = [
     "diagnostics",
     "events",
     "projections",
-    "recovery",
 ]

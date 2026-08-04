@@ -51,11 +51,17 @@ a prompt or open request from bridge state.
 
 ## Current structure and authority
 
-Recovery supervision is currently distributed across `recovery.py`,
-`projection_runtime.py`, `projection_routes.py`, and
-`request_projection_runtime.py`. The target is
-`gateway/projection/recovery.py`; the separate observation and request-
-correlation leaves retain their own stated ownership.
+The recovery mode/value definitions and bounded authoritative-read helpers live
+in `gateway/projection/recovery.py`. The
+`imagent.gateway.projection` facade re-exports `ThreadRecovery`,
+`RecoveryMode`, and `ProjectionRecoveryUnavailable` as the exact owner
+objects. The historical `imagent.recovery` module is absent; it is not a
+compatibility import path.
+
+Recovery supervision remains distributed across `projection_runtime.py`,
+`projection_routes.py`, and `request_projection_runtime.py`. Those separate
+observation, routing, and request-correlation responsibilities remain outside
+this mechanical move.
 
 - [ADR 0004](../../../../decisions/0004-event-fanout-and-recovery.md)
 - [ADR 0007](../../../../decisions/0007-projection-lifecycle-and-delivery-boundaries.md)

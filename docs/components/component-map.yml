@@ -506,7 +506,7 @@ components:
     state_recovery: Pre-dispatch failures release; outcome_unknown stays side_effect_started; accepted results are terminal for inbound idempotency.
     current_code: [src/imagent/contracts/validators.py, src/imagent/gateway/__init__.py, src/imagent/projection_runtime.py]
     target_code: [src/imagent/gateway/input/dispatch.py]
-    current_tests: [tests/test_gateway_vertical_slice.py, tests/test_projection_hardening.py, tests/test_recovery.py]
+    current_tests: [tests/test_gateway_vertical_slice.py, tests/test_projection_hardening.py, tests/gateway/projection/test_recovery.py]
     target_tests: [tests/gateway/input/test_dispatch.py]
     authoritative_docs: [docs/components/gateway/input/dispatch/design.md, docs/components/gateway/input/dispatch/testing.md, docs/components/gateway/design.md, docs/components/projections-and-recovery/design.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
@@ -610,13 +610,13 @@ components:
     outputs: [bounded AuthoritativeProjectionSlice or explicit degraded gap]
     public_contracts: [ThreadRecovery, RecoveryMode, ProjectionRecoveryUnavailable]
     public_exports:
-      current: [imagent.recovery:ThreadRecovery, imagent.recovery:RecoveryMode, imagent.recovery:ProjectionRecoveryUnavailable]
+      current: [imagent.gateway.projection:ThreadRecovery, imagent.gateway.projection:RecoveryMode, imagent.gateway.projection:ProjectionRecoveryUnavailable]
       target: [imagent.gateway.projection:ThreadRecovery, imagent.gateway.projection:RecoveryMode, imagent.gateway.projection:ProjectionRecoveryUnavailable]
     dependencies: [interaction.messages, applications.application-contract, applications.capabilities, applications.events, applications.operations, gateway.projection.checkpoints, gateway.persistence.state-contracts]
     state_recovery: Subscribe-before-history when replay is absent; missing checkpoints and bounded-scan exhaustion stay explicit.
-    current_code: [src/imagent/recovery.py, src/imagent/projection_runtime.py, src/imagent/projection_routes.py, src/imagent/request_projection_runtime.py]
+    current_code: [src/imagent/gateway/projection/__init__.py, src/imagent/gateway/projection/recovery.py, src/imagent/projection_runtime.py, src/imagent/projection_routes.py, src/imagent/request_projection_runtime.py]
     target_code: [src/imagent/gateway/projection/recovery.py]
-    current_tests: [tests/test_recovery.py, tests/test_projection_hardening.py, tests/test_projection_routing.py]
+    current_tests: [tests/gateway/projection/test_recovery.py, tests/test_projection_hardening.py, tests/test_projection_routing.py]
     target_tests: [tests/gateway/projection/test_recovery.py]
     authoritative_docs: [docs/components/gateway/projection/recovery/design.md, docs/components/gateway/projection/recovery/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0013-bounded-application-event-admission.md]
@@ -1356,10 +1356,10 @@ components:
     does_not_own: [runtime component behavior, compatibility implementations]
     inputs: [three-layer public exports and package metadata]
     outputs: [installable typed wheel]
-    public_contracts: [__version__, adapters, contracts, delivery_coordination, delivery_planning, diagnostics, events, projections, recovery]
+    public_contracts: [__version__, adapters, contracts, delivery_coordination, delivery_planning, diagnostics, events, projections]
     public_exports:
-      current: [imagent:__version__, imagent:adapters, imagent:contracts, imagent:delivery_coordination, imagent:delivery_planning, imagent:diagnostics, imagent:events, imagent:projections, imagent:recovery]
-      target: [imagent:__version__, imagent:adapters, imagent:contracts, imagent:delivery_coordination, imagent:delivery_planning, imagent:diagnostics, imagent:events, imagent:projections, imagent:recovery]
+      current: [imagent:__version__, imagent:adapters, imagent:contracts, imagent:delivery_coordination, imagent:delivery_planning, imagent:diagnostics, imagent:events, imagent:projections]
+      target: [imagent:__version__, imagent:adapters, imagent:contracts, imagent:delivery_coordination, imagent:delivery_planning, imagent:diagnostics, imagent:events, imagent:projections]
     dependencies: [interaction.messages, interaction.channels.channel-contract, gateway.composition, gateway.delivery.planning, gateway.delivery.coordination, gateway.projection.observation, gateway.projection.recovery, gateway.diagnostics, applications.application-contract, applications.events]
     state_recovery: Stateless packaging; build must not import optional native dependencies in the base install.
     current_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/contracts/__init__.py, src/imagent/py.typed]

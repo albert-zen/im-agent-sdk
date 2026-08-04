@@ -35,6 +35,7 @@ from .contracts import (
     TurnReplyCorrelationPolicy,
 )
 from .events import EventBufferOverflow, EventStreamGap
+from .gateway.projection.recovery import ProjectionRecoveryUnavailable
 from .interaction.controllers import RequestPresenter
 from .interaction.messages import ConversationRef
 from .projection_routes import ProjectionRouteCoordinator
@@ -49,7 +50,6 @@ from .projections import (
     derive_turn_reply_correlation_id,
     get_projection_route,
 )
-from .recovery import ProjectionRecoveryUnavailable
 from .request_projection_runtime import InteractiveRequestProjection
 
 logger = logging.getLogger(__name__)
