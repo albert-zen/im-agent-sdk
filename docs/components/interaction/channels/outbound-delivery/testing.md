@@ -20,6 +20,10 @@ Required scenarios:
 - public `OutboundMessage` conversion preserves native conversation/content
   order, Markdown selection, stable delivery/reply correlation, and only
   caller metadata outside the reserved native-owned keys;
+- generic native-result normalization preserves the non-result fallback,
+  zero/one/multiple native-message-ID selection and detail text, stable
+  content-index ordering, and public accepted/per-item evidence without
+  changing retryable or unknown semantics;
 - accepted/rejected/retryable/partial/unknown and per-item evidence is truthful
   and validates against source content;
 - native artifact receipt metadata maps recognized stable attachment IDs to
@@ -48,5 +52,7 @@ leaf-internal DTOs to public contracts. They also prove the historical
 identity ignores temporary path changes, and artifact recovery state remains
 bounded to the current native-message attempt. The same focused suite covers
 `_artifact_item_receipts` ownership and its stable-ID/content-index ordering
-plus `_to_native_artifact` and `_to_native_outbound` ownership without moving
-final Channel receipt assembly out of the adapter runtime.
+plus `_to_native_artifact`, `_to_native_outbound`, and
+`_native_delivery_receipt` ownership. Native adapter tests retain the same
+provider response mappings while proving the runtime only invokes the
+outbound-delivery receipt normalizer after the native call.

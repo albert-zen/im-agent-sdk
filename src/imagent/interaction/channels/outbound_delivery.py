@@ -15,7 +15,12 @@ from ..messages import (
     TextContent,
     TextFormat,
 )
-from .contract import DeliveryItemReceipt, DeliveryItemStatus
+from .contract import (
+    DeliveryItemReceipt,
+    DeliveryItemStatus,
+    DeliveryReceipt,
+    DeliveryReceiptStatus,
+)
 
 _NATIVE_OWNED_METADATA_KEYS = frozenset(
     {
@@ -163,6 +168,42 @@ def _to_native_outbound(
         text="\n".join(text_parts),
         metadata=metadata,
         artifacts=artifacts,
+    )
+
+
+def _native_delivery_receipt(
+    *,
+    result: object,
+    native_message: OutboundMessage,
+    message: PublicOutboundMessage,
+) -> DeliveryReceipt:
+    native_message_ids = (
+        result.native_message_ids if isinstance(result, NativeDeliveryResult) else ()
+    )
+    native_message_id = native_message_ids[0] if len(native_message_ids) == 1 else None
+    detail = (
+        "platform call succeeded; native message ID was not returned"
+        if not native_message_ids
+        else (
+            "platform accepted one native message"
+            if native_message_id is not None
+            else f"platform accepted {len(native_message_ids)} native messages"
+        )
+    )
+    item_indexes = {
+        item.attachment_id: index
+        for index, item in enumerate(message.content)
+        if isinstance(item, AttachmentContent)
+    }
+    item_receipts = _artifact_item_receipts(
+        native_message.metadata,
+        item_indexes=item_indexes,
+    )
+    return DeliveryReceipt(
+        status=DeliveryReceiptStatus.ACCEPTED_BY_PLATFORM,
+        native_message_id=native_message_id,
+        detail=detail,
+        items=item_receipts,
     )
 
 
