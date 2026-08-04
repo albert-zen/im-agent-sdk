@@ -9,12 +9,8 @@ from datetime import UTC, datetime
 from imagent.contracts import (
     AgentMessage,
     AttachmentContent,
-    ChannelCapabilities,
     ConversationRef,
     DeliveryPrincipal,
-    DeliveryReceipt,
-    DeliveryReceiptStatus,
-    DeliverySupportLevel,
     LocalPath,
     MessageRole,
     OutboundMessage,
@@ -49,6 +45,12 @@ from imagent.gateway.presentation import (
     ProjectionPresentationOrigin,
 )
 from imagent.gateway.projection import derive_projection_delivery_id
+from imagent.interaction.channels import (
+    ChannelCapabilities,
+    DeliveryReceipt,
+    DeliveryReceiptStatus,
+    DeliverySupportLevel,
+)
 from imagent.projections import (
     ProjectedAgentMessage,
     deliver_projected_message,

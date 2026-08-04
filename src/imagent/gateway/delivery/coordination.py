@@ -4,7 +4,8 @@ import asyncio
 import math
 from dataclasses import dataclass
 
-from ...contracts import (
+from ...interaction.channels import (
+    ChannelAdapter,
     DeliveryItemReceipt,
     DeliveryItemStatus,
     DeliveryReceipt,
@@ -13,7 +14,6 @@ from ...contracts import (
     DeliverySegmentStatus,
     validate_delivery_receipt_for_content,
 )
-from ...interaction.channels import ChannelAdapter
 from ...interaction.media import AttachmentContent
 from ...interaction.messages import ConversationRef, OutboundMessage
 from ...keyed_locks import KeyedLockRegistry

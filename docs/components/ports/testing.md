@@ -26,9 +26,10 @@ releases the lease, handoff transfers terminal ownership to Gateway, and the
 legacy message-only startup shape remains usable during migration. The modern
 shape accepts only message and admission callbacks; no Channel contract, fake,
 or native wrapper imports or stores `GatewayOperation`.
-The Interaction owner and `imagent.adapters` compatibility export must be the
-same `ChannelAdapter` Protocol object; the compatibility module must not retain
-a second class definition.
+The Interaction owner is the sole `ChannelAdapter` Protocol facade. Clean
+process checks prove the five retired Channel/admission names are absent from
+`imagent.adapters`; the module must not retain a second class definition or a
+lazy compatibility path.
 
 Startup-validation coverage checks structural capability detection, all four
 SDK native implementations, bounded explicit failures, configuration parity

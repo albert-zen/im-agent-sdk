@@ -26,9 +26,9 @@ The Applications contract owner owns:
   automatically.
 
 The remaining Ports surface owns no runtime seam. It exposes only historical
-exact-object aliases for Channel, Application, and Gateway contracts that have
-already reached their component owners; removing those aliases is a separate
-public-facade cleanup.
+exact-object aliases for Application and Gateway contracts that have already
+reached their component owners; the Channel/admission aliases were retired
+after the Interaction Channel facade became authoritative.
 
 Gateway's `gateway.persistence.repository-contracts` leaf owns the complete
 Gateway repository Port/conflict family: binding, projection-route,
@@ -42,14 +42,14 @@ The Gateway `gateway.delivery.proactive-authorization` leaf owns the
 `adapters.py` keeps only an exact compatibility re-export for callers that
 still use the historical Ports surface.
 
-Interaction's Channel contract owns `MessageHandler`, the optional structural
-`ChannelStartupConfigurationValidator`, and the opaque `InboundAdmission`
-lease and handler used before Channel media preparation. `adapters.py`
-re-exports those exact objects plus the Interaction-owned `ChannelAdapter` for
-compatibility. The historical
-`OperationHandler[GatewayOperation]` is removed: Channel lifecycle accepts
-messages/admission only, while Controllers invoke typed operations through
-`ControllerActions`.
+Interaction's Channel contract owns `ChannelAdapter`, `MessageHandler`, the
+optional structural `ChannelStartupConfigurationValidator`, and the opaque
+`InboundAdmission` lease and handler used before Channel media preparation.
+`imagent.interaction.channels` is the sole formal facade for those objects.
+The historical `imagent.adapters` facade no longer exports those five Channel
+names. The historical `OperationHandler[GatewayOperation]` is removed:
+Channel lifecycle accepts messages/admission only, while Controllers invoke
+typed operations through `ControllerActions`.
 
 It does not own:
 

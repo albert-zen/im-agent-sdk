@@ -34,8 +34,11 @@ those leaf-owned conversions around the native call while retaining only
 native send orchestration and the common transport factory. The
 factory is explicit composition, not global or import-time registration. The
 formal `imagent.channels` package remains a stable facade over those target-owned
-objects; the historical `imagent.channels.runtime` implementation path is not a
-second API or owner.
+objects and preserves their exact object identity; the historical
+`imagent.channels.runtime` implementation path is not a second API or owner.
+The Channel contract/admission/receipt facade remains
+`imagent.interaction.channels`; the historical `imagent.adapters` and
+`imagent.contracts` facades do not re-export those Channel names.
 Optional provider dependencies remain extras; importing Interaction contracts
 or the adapter facade does not import native SDKs. Every worker/queue/cache and
 reconnect delay is finite, failures are explicit, and no consumer work runs on
@@ -55,9 +58,10 @@ remains native Channel state, not Gateway persistence.
 The target `src/imagent/interaction/channels/adapters/` package contains the
 QQ, Telegram, Feishu/Lark, and Weixin provider modules plus the shared
 QQ/Telegram HTTP endpoint validator and the shared native adapter base.
-The validator remains adapter-internal: it validates provider configuration
-without opening a transport and is not part of the Channel facade. All four
-providers import `BaseChannelAdapter` and `ChannelRouteContext` from
+The provider endpoint validator remains adapter-internal: it validates
+provider configuration without opening a transport and is not part of the
+Channel facade. All four providers import `BaseChannelAdapter` and
+`ChannelRouteContext` from
 `src/imagent/interaction/channels/adapters/base.py`. The historical
 `imagent.channels.native.base` path is removed without a compatibility shim.
 The base still coordinates adapter-owned diagnostics with shared ingress access

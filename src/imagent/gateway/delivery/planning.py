@@ -5,7 +5,7 @@ import json
 import re
 from dataclasses import dataclass
 
-from ...contracts import (
+from ...interaction.channels import (
     DeliveryProfile,
     DeliverySupportLevel,
     ReplyReferenceScope,

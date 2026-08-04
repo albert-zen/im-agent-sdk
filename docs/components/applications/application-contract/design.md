@@ -44,8 +44,9 @@ The finite `imagent.applications` facade exposes those exact objects. The
 deliberate `imagent.contracts` facade may retain exact compatibility aliases,
 but it contains no second implementation. The historical `imagent.adapters`
 surface remains a temporary exact-object compatibility facade for the adapter
-Protocol and callback while it continues to serve Channel/Gateway aliases
-owned elsewhere.
+Protocol and callback plus unrelated Gateway aliases owned elsewhere; its
+historical Channel/admission names were retired when the Interaction Channel
+facade became authoritative.
 
 ## Dependency, state, and recovery boundary
 

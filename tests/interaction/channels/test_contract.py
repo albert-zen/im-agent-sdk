@@ -1,16 +1,45 @@
 from __future__ import annotations
 
 import inspect
+import subprocess
+import sys
 import unittest
 
 from imagent import adapters, contracts
+from imagent.channels import (
+    NativeTransportChannelAdapter,
+    channel_from_config,
+)
 from imagent.interaction import channels
-from imagent.interaction.channels.adapters import NativeTransportChannelAdapter
+from imagent.interaction.channels import contract as contract_owner
+from imagent.interaction.channels.adapters import runtime as runtime_owner
 from imagent.interaction.messages import TextContent
 from imagent.interaction.operations import ContractViolation
 
 
 class ChannelReceiptContractTests(unittest.TestCase):
+    RETIRED_ADAPTER_NAMES = (
+        "ChannelAdapter",
+        "ChannelStartupConfigurationValidator",
+        "MessageHandler",
+        "InboundAdmission",
+        "InboundAdmissionHandler",
+    )
+    RETIRED_CONTRACT_NAMES = (
+        "ChannelCapabilities",
+        "DeliveryProfile",
+        "DeliverySupportLevel",
+        "ReplyReferenceScope",
+        "DeliveryReceipt",
+        "DeliveryItemReceipt",
+        "DeliverySegmentReceipt",
+        "DeliveryItemStatus",
+        "DeliveryReceiptStatus",
+        "DeliverySegmentStatus",
+        "validate_delivery_receipt",
+        "validate_delivery_receipt_for_content",
+    )
+
     def test_channel_lifecycle_has_no_gateway_operation_callback(self) -> None:
         self.assertFalse(hasattr(adapters, "OperationHandler"))
         for owner in (channels.ChannelAdapter, NativeTransportChannelAdapter):
@@ -21,38 +50,55 @@ class ChannelReceiptContractTests(unittest.TestCase):
                     ("self", "on_message", "on_admission"),
                 )
 
-    def test_adapters_facade_reexports_exact_channel_contract_owners(self) -> None:
-        names = (
-            "ChannelAdapter",
-            "ChannelStartupConfigurationValidator",
-            "InboundAdmission",
-            "InboundAdmissionHandler",
-            "MessageHandler",
+    def test_interaction_facade_reexports_exact_contract_owner_objects(self) -> None:
+        self.assertEqual(
+            set(channels.__all__),
+            set(self.RETIRED_ADAPTER_NAMES + self.RETIRED_CONTRACT_NAMES),
         )
-
-        for name in names:
+        for name in channels.__all__:
             with self.subTest(name=name):
-                self.assertIs(getattr(adapters, name), getattr(channels, name))
+                self.assertIs(getattr(channels, name), getattr(contract_owner, name))
 
-    def test_contracts_facade_reexports_exact_channel_contract_owners(self) -> None:
-        names = (
-            "ChannelCapabilities",
-            "DeliveryItemReceipt",
-            "DeliveryItemStatus",
-            "DeliveryProfile",
-            "DeliveryReceipt",
-            "DeliveryReceiptStatus",
-            "DeliverySegmentReceipt",
-            "DeliverySegmentStatus",
-            "DeliverySupportLevel",
-            "ReplyReferenceScope",
-            "validate_delivery_receipt",
-            "validate_delivery_receipt_for_content",
+    def test_historical_facades_omit_only_retired_channel_names(self) -> None:
+        for name in self.RETIRED_ADAPTER_NAMES:
+            with self.subTest(name=name):
+                self.assertFalse(hasattr(adapters, name))
+                self.assertNotIn(name, getattr(adapters, "__all__", ()))
+        for name in self.RETIRED_CONTRACT_NAMES:
+            with self.subTest(name=name):
+                self.assertFalse(hasattr(contracts, name))
+                self.assertNotIn(name, contracts.__all__)
+
+        self.assertTrue(hasattr(adapters, "AgentApplicationAdapter"))
+        self.assertTrue(hasattr(contracts, "SupportLevel"))
+        self.assertTrue(hasattr(contracts, "DeliverySubmissionOrigin"))
+
+    def test_historical_facade_imports_fail_in_clean_process(self) -> None:
+        snippets = tuple(
+            f"import {module} as facade; from {module} import {name}"
+            for module, names in (
+                ("imagent.adapters", self.RETIRED_ADAPTER_NAMES),
+                ("imagent.contracts", self.RETIRED_CONTRACT_NAMES),
+            )
+            for name in names
         )
+        for snippet in snippets:
+            with self.subTest(snippet=snippet):
+                completed = subprocess.run(
+                    [sys.executable, "-c", snippet],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertNotEqual(completed.returncode, 0)
+                self.assertIn("ImportError", completed.stderr)
 
-        for name in names:
-            with self.subTest(name=name):
-                self.assertIs(getattr(contracts, name), getattr(channels, name))
+    def test_native_adapter_facade_reexports_exact_runtime_objects(self) -> None:
+        self.assertIs(
+            NativeTransportChannelAdapter,
+            runtime_owner.NativeTransportChannelAdapter,
+        )
+        self.assertIs(channel_from_config, runtime_owner.channel_from_config)
 
     def test_delivery_support_is_distinct_from_application_support(self) -> None:
         self.assertIsNot(channels.DeliverySupportLevel, contracts.SupportLevel)

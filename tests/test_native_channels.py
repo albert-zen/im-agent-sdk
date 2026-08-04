@@ -13,8 +13,6 @@ from imagent.channels import NativeTransportChannelAdapter, channel_from_config
 from imagent.contracts import (
     AttachmentContent,
     ConversationRef,
-    DeliveryItemStatus,
-    DeliverySupportLevel,
     LocalPath,
     OutboundMessage,
     RemoteUrl,
@@ -23,6 +21,8 @@ from imagent.contracts import (
 from imagent.diagnostics import ConnectionDiagnosticState, QueueDiagnosticName
 from imagent.interaction.channels import (
     ChannelStartupConfigurationValidator,
+    DeliveryItemStatus,
+    DeliverySupportLevel,
     InboundAdmission,
 )
 from imagent.interaction.channels.adapters.base import BaseChannelAdapter

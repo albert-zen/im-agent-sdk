@@ -12,14 +12,7 @@ from imagent.contracts import (
     AttachmentContent,
     AttachmentGrouping,
     AttachmentSourceKind,
-    ChannelCapabilities,
     ConversationRef,
-    DeliveryItemStatus,
-    DeliveryProfile,
-    DeliveryReceipt,
-    DeliveryReceiptStatus,
-    DeliverySegmentStatus,
-    DeliverySupportLevel,
     OutboundMessage,
     RemoteUrl,
     TextContent,
@@ -31,6 +24,15 @@ from imagent.gateway.delivery import (
     DeliveryPlanningError,
 )
 from imagent.gateway.delivery import coordination as coordination_owner
+from imagent.interaction.channels import (
+    ChannelCapabilities,
+    DeliveryItemStatus,
+    DeliveryProfile,
+    DeliveryReceipt,
+    DeliveryReceiptStatus,
+    DeliverySegmentStatus,
+    DeliverySupportLevel,
+)
 
 
 class DeliveryCoordinationFacadeTests(unittest.TestCase):

@@ -22,6 +22,13 @@ Every Channel adapter should prove:
 - native retryable/unknown receipt mapping when idempotency is absent;
 - reconnect state remains Channel-owned.
 
+Facade ownership tests additionally prove that all internal consumers import
+Channel contract/admission/receipt values from `imagent.interaction.channels`,
+that the exact retired names are absent from `imagent.adapters` and
+`imagent.contracts`, and that the retained `imagent.channels` adapter facade
+is exact-object identical to its Interaction runtime owner. Unrelated
+Application/Gateway/passive-state facade names remain available.
+
 The four SDK-owned native Channels additionally prove optional startup
 validation with both valid and invalid resolved settings. Preflight must be
 repeatable before and after a lifecycle, leave the live native slot empty, and

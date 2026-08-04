@@ -7,6 +7,31 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / "dist"
+CHANNEL_FACADE_CHECK = (
+    "import imagent.interaction.channels as channel_facade; "
+    "import imagent.interaction.channels.contract as channel_owner; "
+    "import imagent.channels as adapter_facade; "
+    "import imagent.interaction.channels.adapters.runtime as runtime_owner; "
+    "assert all(getattr(channel_facade, name) is getattr(channel_owner, name) "
+    "for name in channel_facade.__all__); "
+    "assert adapter_facade.NativeTransportChannelAdapter is "
+    "runtime_owner.NativeTransportChannelAdapter; "
+    "assert adapter_facade.channel_from_config is runtime_owner.channel_from_config; "
+    "retired_adapter = ('ChannelAdapter', 'ChannelStartupConfigurationValidator', "
+    "'MessageHandler', 'InboundAdmission', 'InboundAdmissionHandler'); "
+    "retired_contract = ('ChannelCapabilities', 'DeliveryProfile', "
+    "'DeliverySupportLevel', 'ReplyReferenceScope', 'DeliveryReceipt', "
+    "'DeliveryItemReceipt', 'DeliverySegmentReceipt', 'DeliveryItemStatus', "
+    "'DeliveryReceiptStatus', 'DeliverySegmentStatus', "
+    "'validate_delivery_receipt', 'validate_delivery_receipt_for_content'); "
+    "import imagent.adapters as adapters_facade; "
+    "import imagent.contracts as contracts_facade; "
+    "assert all(not hasattr(adapters_facade, name) and name not in "
+    "getattr(adapters_facade, '__all__', ()) "
+    "for name in retired_adapter); "
+    "assert all(not hasattr(contracts_facade, name) and name not in contracts_facade.__all__ "
+    "for name in retired_contract); "
+)
 CASES = {
     "base": (
         "",
@@ -210,7 +235,7 @@ def main() -> int:
                 requirement,
                 "python",
                 "-c",
-                code,
+                CHANNEL_FACADE_CHECK + code,
             ],
             cwd=ROOT,
             check=True,

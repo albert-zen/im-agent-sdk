@@ -13,13 +13,10 @@ from imagent.contracts import (
     AttachmentContent,
     AttachmentGrouping,
     AttachmentSourceKind,
-    ChannelCapabilities,
     ConversationRef,
     DeliveryPrincipal,
-    DeliveryReceipt,
     DeliverySubmissionOrigin,
     DeliverySubmissionState,
-    DeliverySupportLevel,
     LocalPath,
     ProjectionPolicy,
     ProjectMode,
@@ -37,6 +34,11 @@ from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryDeliverySubmissionRepository,
     InMemoryProjectionRouteRepository,
+)
+from imagent.interaction.channels import (
+    ChannelCapabilities,
+    DeliveryReceipt,
+    DeliverySupportLevel,
 )
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 

@@ -342,17 +342,17 @@ components:
     outputs: [DeliveryReceipt, lifecycle completion]
     public_contracts: [ChannelAdapter, ChannelCapabilities, DeliveryProfile, DeliverySupportLevel, ReplyReferenceScope, ChannelStartupConfigurationValidator, MessageHandler, InboundAdmission, InboundAdmissionHandler, DeliveryReceipt, DeliveryItemReceipt, DeliverySegmentReceipt, DeliveryItemStatus, DeliveryReceiptStatus, DeliverySegmentStatus, validate_delivery_receipt, validate_delivery_receipt_for_content]
     public_exports:
-      current: [imagent.adapters:ChannelAdapter, imagent.adapters:ChannelStartupConfigurationValidator, imagent.adapters:MessageHandler, imagent.adapters:InboundAdmission, imagent.adapters:InboundAdmissionHandler, imagent.interaction.channels:ChannelAdapter, imagent.interaction.channels:ChannelCapabilities, imagent.interaction.channels:DeliveryProfile, imagent.interaction.channels:DeliverySupportLevel, imagent.interaction.channels:ReplyReferenceScope, imagent.interaction.channels:ChannelStartupConfigurationValidator, imagent.interaction.channels:MessageHandler, imagent.interaction.channels:InboundAdmission, imagent.interaction.channels:InboundAdmissionHandler, imagent.interaction.channels:DeliveryReceipt, imagent.interaction.channels:DeliveryItemReceipt, imagent.interaction.channels:DeliverySegmentReceipt, imagent.interaction.channels:DeliveryItemStatus, imagent.interaction.channels:DeliveryReceiptStatus, imagent.interaction.channels:DeliverySegmentStatus, imagent.interaction.channels:validate_delivery_receipt, imagent.interaction.channels:validate_delivery_receipt_for_content, imagent.contracts:ChannelCapabilities, imagent.contracts:DeliveryProfile, imagent.contracts:DeliverySupportLevel, imagent.contracts:ReplyReferenceScope, imagent.contracts:DeliveryReceipt, imagent.contracts:DeliveryItemReceipt, imagent.contracts:DeliverySegmentReceipt, imagent.contracts:DeliveryItemStatus, imagent.contracts:DeliveryReceiptStatus, imagent.contracts:DeliverySegmentStatus, imagent.contracts:validate_delivery_receipt, imagent.contracts:validate_delivery_receipt_for_content]
+      current: [imagent.interaction.channels:ChannelAdapter, imagent.interaction.channels:ChannelCapabilities, imagent.interaction.channels:DeliveryProfile, imagent.interaction.channels:DeliverySupportLevel, imagent.interaction.channels:ReplyReferenceScope, imagent.interaction.channels:ChannelStartupConfigurationValidator, imagent.interaction.channels:MessageHandler, imagent.interaction.channels:InboundAdmission, imagent.interaction.channels:InboundAdmissionHandler, imagent.interaction.channels:DeliveryReceipt, imagent.interaction.channels:DeliveryItemReceipt, imagent.interaction.channels:DeliverySegmentReceipt, imagent.interaction.channels:DeliveryItemStatus, imagent.interaction.channels:DeliveryReceiptStatus, imagent.interaction.channels:DeliverySegmentStatus, imagent.interaction.channels:validate_delivery_receipt, imagent.interaction.channels:validate_delivery_receipt_for_content]
       target: [imagent.interaction.channels:ChannelAdapter, imagent.interaction.channels:ChannelCapabilities, imagent.interaction.channels:DeliveryProfile, imagent.interaction.channels:DeliverySupportLevel, imagent.interaction.channels:ReplyReferenceScope, imagent.interaction.channels:ChannelStartupConfigurationValidator, imagent.interaction.channels:MessageHandler, imagent.interaction.channels:InboundAdmission, imagent.interaction.channels:InboundAdmissionHandler, imagent.interaction.channels:DeliveryReceipt, imagent.interaction.channels:DeliveryItemReceipt, imagent.interaction.channels:DeliverySegmentReceipt, imagent.interaction.channels:DeliveryItemStatus, imagent.interaction.channels:DeliveryReceiptStatus, imagent.interaction.channels:DeliverySegmentStatus, imagent.interaction.channels:validate_delivery_receipt, imagent.interaction.channels:validate_delivery_receipt_for_content]
     dependencies: [interaction.messages, interaction.operations, interaction.media]
     state_recovery: Contract is stateless; native reconnect tokens remain adapter-owned.
-    current_code: [schemas/v1/capabilities.schema.json, schemas/v1/deliveries.schema.json, src/imagent/interaction/channels/__init__.py, src/imagent/interaction/channels/contract.py, src/imagent/adapters.py, src/imagent/channels/__init__.py, src/imagent/interaction/channels/adapters/runtime.py]
+    current_code: [schemas/v1/capabilities.schema.json, schemas/v1/deliveries.schema.json, src/imagent/interaction/channels/__init__.py, src/imagent/interaction/channels/contract.py, src/imagent/interaction/channels/adapters/runtime.py]
     target_code: [schemas/v1/capabilities.schema.json, schemas/v1/deliveries.schema.json, src/imagent/interaction/channels/__init__.py, src/imagent/interaction/channels/contract.py]
     current_tests: [tests/interaction/channels/test_contract.py, tests/conformance/test_adapter_contracts.py, tests/test_native_channels.py]
     target_tests: [tests/interaction/channels/test_contract.py]
     authoritative_docs: [docs/components/interaction/channels/channel-contract/design.md, docs/components/interaction/channels/channel-contract/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0010-capability-driven-delivery-coordination.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
-    gaps: [interaction/channels/adapters/runtime.py remains a split candidate]
+    gaps: [interaction/channels/adapters/runtime.py remains a split candidate; historical adapters/contracts Channel exports are retired without aliases]
 
   interaction.channels.ingress:
     id: interaction.channels.ingress
@@ -412,8 +412,8 @@ components:
       target: [imagent.channels:NativeTransportChannelAdapter, imagent.channels:channel_from_config, imagent.interaction.channels.adapters:NativeTransportChannelAdapter, imagent.interaction.channels.adapters:channel_from_config, imagent.interaction.channels.adapters:QQChannelAdapter, imagent.interaction.channels.adapters:QQ_QUOTE_ATTACHMENT_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_CONTENT_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_FILENAME_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_MESSAGE_TYPE, imagent.interaction.channels.adapters:QQ_QUOTE_REFERENCE_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_TRANSCRIPT_LIMIT]
     dependencies: [interaction.channels.channel-contract, interaction.channels.ingress, interaction.channels.outbound-delivery]
     state_recovery: Each adapter owns bounded native reconnect/cursor and process-local transport diagnostics.
-    current_code: [src/imagent/diagnostics.py, src/imagent/interaction/channels/adapters/__init__.py, src/imagent/interaction/channels/adapters/base.py, src/imagent/interaction/channels/adapters/runtime.py, src/imagent/interaction/channels/adapters/diagnostics.py, src/imagent/interaction/channels/adapters/endpoints.py, src/imagent/interaction/channels/adapters/qq.py, src/imagent/interaction/channels/adapters/qq_media.py, src/imagent/interaction/channels/adapters/qq_quote.py, src/imagent/interaction/channels/adapters/telegram.py, src/imagent/interaction/channels/adapters/feishu.py, src/imagent/interaction/channels/adapters/weixin.py, src/imagent/interaction/channels/adapters/weixin_ilink.py, src/imagent/interaction/channels/adapters/weixin_state.py]
-    target_code: [src/imagent/interaction/channels/adapters/**]
+    current_code: [src/imagent/channels/__init__.py, src/imagent/diagnostics.py, src/imagent/interaction/channels/adapters/__init__.py, src/imagent/interaction/channels/adapters/base.py, src/imagent/interaction/channels/adapters/runtime.py, src/imagent/interaction/channels/adapters/diagnostics.py, src/imagent/interaction/channels/adapters/endpoints.py, src/imagent/interaction/channels/adapters/qq.py, src/imagent/interaction/channels/adapters/qq_media.py, src/imagent/interaction/channels/adapters/qq_quote.py, src/imagent/interaction/channels/adapters/telegram.py, src/imagent/interaction/channels/adapters/feishu.py, src/imagent/interaction/channels/adapters/weixin.py, src/imagent/interaction/channels/adapters/weixin_ilink.py, src/imagent/interaction/channels/adapters/weixin_state.py]
+    target_code: [src/imagent/channels/__init__.py, src/imagent/interaction/channels/adapters/**]
     current_tests: [tests/interaction/channels/adapters/test_base_owner.py, tests/interaction/channels/adapters/test_diagnostics_owner.py, tests/interaction/channels/adapters/test_endpoints.py, tests/interaction/channels/adapters/test_runtime_facade.py, tests/interaction/channels/adapters/test_qq.py, tests/interaction/channels/adapters/test_qq_facade.py, tests/interaction/channels/adapters/test_telegram.py, tests/interaction/channels/adapters/test_feishu.py, tests/interaction/channels/adapters/test_weixin.py, tests/test_native_channels.py]
     target_tests: [tests/interaction/channels/adapters/**]
     authoritative_docs: [docs/components/interaction/channels/adapters/design.md, docs/components/interaction/channels/adapters/testing.md, docs/components/channel-adapters/adapters/qq.md, docs/components/channel-adapters/adapters/telegram.md, docs/components/channel-adapters/adapters/feishu.md, docs/components/channel-adapters/adapters/weixin.md]
@@ -902,7 +902,7 @@ components:
     target_tests: [tests/gateway/persistence/test_repository_contracts.py, tests/gateway/persistence/test_submission_identity.py]
     authoritative_docs: [docs/components/gateway/persistence/repository-contracts/design.md, docs/components/gateway/persistence/repository-contracts/testing.md, docs/components/ports/design.md, docs/components/persistence/design.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [imagent.adapters retains exact compatibility aliases for already-owned Application, Channel/admission, repository, and proactive-authorization contracts pending a separate public-facade cleanup]
+    gaps: [imagent.adapters retains exact compatibility aliases for already-owned Application, repository, and proactive-authorization contracts; historical Channel/admission aliases were retired in the Interaction facade cleanup]
 
   gateway.persistence.memory:
     id: gateway.persistence.memory
@@ -1034,7 +1034,7 @@ components:
     target_tests: [tests/applications/test_contract.py]
     authoritative_docs: [docs/components/applications/application-contract/design.md, docs/components/applications/application-contract/testing.md]
     adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [historical adapters.py remains a split candidate because Channel/admission and Gateway aliases still share the compatibility facade; imagent.contracts remains a deliberate exact-alias facade]
+    gaps: [historical adapters.py remains a split candidate because Application and Gateway aliases still share the compatibility facade; Channel/admission aliases are no longer exported]
 
   applications.capabilities:
     id: applications.capabilities
@@ -1490,8 +1490,8 @@ structural_status:
       owner: interaction.controllers.controller-contract
       rationale: Sole Interaction Controller facade; each public symbol delegates to its owning leaf and no implementation lives here.
     - path: src/imagent/channels/__init__.py
-      owner: interaction.channels.channel-contract
-      rationale: Current public Channel facade; it delegates to the adapters leaf and retains no transport implementation.
+      owner: interaction.channels.adapters
+      rationale: Sole public native-adapter facade; it delegates to the adapters runtime owner and retains no transport implementation or Channel contract values.
     - path: src/imagent/testing/__init__.py
       owner: engineering.testing-and-conformance
       rationale: Stable public conformance facade; implementation moves once and is not duplicated.
@@ -1518,8 +1518,8 @@ structural_status:
       owners: [applications.events, applications.requests]
       reason: Canonical events and interactive request/response/resolution values share one current schema document.
     src/imagent/adapters.py:
-      owners: [interaction.channels.channel-contract, gateway.delivery.proactive-authorization, gateway.persistence.repository-contracts, applications.application-contract]
-      reason: Channel/admission, the exact proactive-authorization compatibility Port, exact repository-contract aliases, and Application Ports share one historical facade module.
+      owners: [gateway.delivery.proactive-authorization, gateway.persistence.repository-contracts, applications.application-contract]
+      reason: The exact proactive-authorization compatibility Port, repository-contract aliases, and Application Ports share one historical facade module after the Channel/admission aliases were retired.
     src/imagent/contracts/delivery.py:
       owners: [interaction.media, gateway.delivery.submissions, gateway.persistence.state-contracts]
       reason: Media identity, submission identity, and passive delivery state share one contract module; proactive intent/results and validation now have their sole Gateway delivery owner.

@@ -20,14 +20,20 @@ Required evidence:
 - fakes and all native adapters satisfy the structural contract; and
 - Channel contract/runtime/fakes import no `GatewayOperation`, operation
   handler, Gateway implementation, or concrete adapter.
-- `imagent.interaction.channels.ChannelAdapter` owns the Protocol, while
-  `imagent.adapters.ChannelAdapter` preserves exact object identity without a
-  parallel definition.
+- `imagent.interaction.channels` is the sole formal Channel contract facade;
+  its exported values are exact owner objects and its `__all__` contains no
+  historical facade implementation;
+- the enumerated Channel/admission names are absent and unimportable from
+  `imagent.adapters`, and the capability/receipt names are absent and
+  unimportable from `imagent.contracts`, without disturbing unrelated facade
+  names; and
+- the separate `imagent.channels` adapter facade preserves exact identity for
+  `NativeTransportChannelAdapter` and `channel_from_config`.
 
 Focused evidence currently lives in `tests/conformance/test_adapter_contracts.py`,
 `tests/test_native_channels.py`, Channel-specific suites, Gateway admission
-tests, schema validation, and Pyright. Exact ownership identity for admission,
-startup validation, capability, and receipt contracts lives in
+tests, schema validation, and Pyright. Exact sole-facade ownership, retired
+historical imports, and `imagent.channels` adapter identity live in
 `tests/interaction/channels/test_contract.py`; native Channel suites and
 planner tests provide behavioral parity. Gateway operation tests enter through
 `ControllerActions` or the public typed Gateway execution surface rather than

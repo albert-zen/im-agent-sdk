@@ -27,9 +27,13 @@ uv run python scripts/smoke_clean_install.py
 
 The smoke script installs exactly one built wheel into six isolated environments:
 the base package and the provider-specific optional-extra cases listed by the
-script (`qq`, `telegram`, `feishu`, `weixin`, and `appserver`). The base case
-also verifies the formal `imagent.interaction.controllers` facade identities,
-runtime type hints, and clean-process absence/unimportability of
+script (`qq`, `telegram`, `feishu`, `weixin`, and `appserver`). All six cases
+exercise the retained `imagent.channels` adapter facade and exact owner
+identity; the base case additionally verifies the focused
+`imagent.interaction.channels` contract facade and clean-process absence of
+every retired `imagent.adapters`/`imagent.contracts` Channel name. The base
+case also verifies the formal `imagent.interaction.controllers` facade
+identities, runtime type hints, and clean-process absence/unimportability of
 `imagent.controllers`. Every case checks expected public imports, native
 dependency boundaries, and absence of the consumer package. A clean base
 install must not discover optional integration dependencies that were not
@@ -57,9 +61,11 @@ facade, that `imagent` imports without optional extras, and that `__version__`
 and `py.typed` remain available from the documented public package. Check the
 wheel in an isolated temporary environment rather than relying on the source
 checkout's import path. The six clean-install cases must also prove that the
-retired proactive vocabulary and four submission-identity helpers are absent
-from `imagent.contracts`, while `DeliverySubmissionOrigin` remains available,
-and that the Gateway facades expose exact owner identities.
+retired Channel names and the retired proactive vocabulary/four
+submission-identity helpers are absent from their historical facades, while
+`DeliverySubmissionOrigin` and all unrelated Application/Gateway/passive-state
+names remain available, and that the focused Channel and Gateway facades
+expose exact owner identities.
 
 ## Failure handling
 

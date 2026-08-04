@@ -30,6 +30,14 @@ PRODUCT_COMPONENTS = {
 # no parent application-adapters component: the Codex/Zen and T3 mappings both
 # need to notice public exports from the common package.
 SHARED_PATH_OWNERS = {
+    "src/imagent/adapters.py": {
+        "ports",
+        "channel-adapters",
+    },
+    "src/imagent/contracts/__init__.py": {
+        "release",
+        "channel-adapters",
+    },
     "src/imagent/applications/__init__.py": {
         "application-adapters-appserver",
         "application-adapters-t3",
@@ -95,7 +103,8 @@ class AgentKitMappingTests(unittest.TestCase):
             "src/imagent/interaction/messages.py": {"contracts"},
             "src/imagent/interaction/operations.py": {"contracts"},
             "src/imagent/contracts/operations.py": {"contracts"},
-            "src/imagent/adapters.py": {"ports"},
+            "src/imagent/adapters.py": {"ports", "channel-adapters"},
+            "src/imagent/contracts/__init__.py": {"release", "channel-adapters"},
             "src/imagent/interaction/media.py": {"attachments-and-media"},
             "src/imagent/gateway/__init__.py": {"gateway"},
             "src/imagent/gateway/composition.py": {"gateway"},

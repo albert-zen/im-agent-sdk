@@ -20,7 +20,6 @@ from imagent.contracts import (
     ConversationBound,
     ConversationRef,
     CreateThread,
-    DeliveryReceipt,
     GatewayOperationFailed,
     InboundMessage,
     ListApplications,
@@ -58,6 +57,7 @@ from imagent.gateway.persistence.memory import (
     InMemoryProjectionRouteRepository,
     InMemoryRequestCorrelationRepository,
 )
+from imagent.interaction.channels import DeliveryReceipt
 from imagent.interaction.controllers import MarkdownRequestPresenter, SlashController
 from imagent.keyed_locks import KeyedLockCapacityError
 from imagent.projections import (
