@@ -256,7 +256,7 @@ components:
     target_tests: [tests/interaction/test_diagnostics.py]
     authoritative_docs: [docs/components/interaction/diagnostics/design.md, docs/components/interaction/diagnostics/testing.md]
     adrs: [docs/decisions/0014-read-only-diagnostics-surface.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: ["imagent.diagnostics remains an explicit exact transition facade for these canonical objects"]
+    gaps: []
 
 
   interaction.controllers.controller-contract:
@@ -389,7 +389,7 @@ components:
     target_tests: [tests/interaction/channels/test_diagnostics.py]
     authoritative_docs: [docs/components/interaction/channels/diagnostics/design.md, docs/components/interaction/channels/diagnostics/testing.md]
     adrs: [docs/decisions/0014-read-only-diagnostics-surface.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [native adapter collection remains in interaction.channels.adapters; the top-level diagnostics facade is an explicit compatibility boundary]
+    gaps: [native adapter collection remains in interaction.channels.adapters]
 
   interaction.channels.ingress:
     id: interaction.channels.ingress
@@ -1335,7 +1335,7 @@ components:
     target_tests: [tests/applications/adapters/appserver/test_diagnostics.py]
     authoritative_docs: [docs/components/applications/adapters/appserver/diagnostics/design.md, docs/components/applications/adapters/appserver/diagnostics/testing.md]
     adrs: [docs/decisions/0014-read-only-diagnostics-surface.md]
-    gaps: [legacy debug summaries still require focused bounds and redaction; Gateway diagnostic aggregation now has its canonical Gateway owner]
+    gaps: [legacy debug summaries still require focused bounds and redaction]
 
   applications.adapters.codex:
     id: applications.adapters.codex
