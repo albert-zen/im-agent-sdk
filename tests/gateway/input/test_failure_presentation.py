@@ -30,8 +30,7 @@ from imagent.gateway import (
     InboundFailurePhase,
 )
 from imagent.gateway.admission import ClaimedInbound
-from imagent.gateway.persistence.memory import InMemoryBindingRepository
-from imagent.inbound_failures import (
+from imagent.gateway.input.failure_presentation import (
     InboundFailurePresentation,
     InboundFailurePresentationCapacityError,
     InboundFailurePresentationError,
@@ -39,6 +38,7 @@ from imagent.inbound_failures import (
     InboundFailurePresentationTimeout,
     handle_claimed_inbound,
 )
+from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.projection_runtime import InputPostAcceptanceError
 from imagent.storage import InMemoryIdempotencyRepository, SQLiteGatewayState
 from imagent.testing import FakeChannelAdapter

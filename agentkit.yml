@@ -179,7 +179,7 @@ components:
       - src/imagent/gateway/admission.py
       - src/imagent/gateway/input/__init__.py
       - src/imagent/gateway/input/content_transformation.py
-      - src/imagent/inbound_failures.py
+      - src/imagent/gateway/input/failure_presentation.py
       - src/imagent/gateway/__init__.py
       - src/imagent/gateway_composition.py
       - src/imagent/gateway_startup.py
@@ -189,7 +189,7 @@ components:
       - tests/test_gateway_vertical_slice.py
       - tests/gateway/test_admission.py
       - tests/gateway/input/test_content_transformation.py
-      - tests/test_inbound_failure_presenter.py
+      - tests/gateway/input/test_failure_presentation.py
     docs:
       - docs/components/gateway/README.md
       - docs/components/gateway/design.md

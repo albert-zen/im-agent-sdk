@@ -482,7 +482,7 @@ components:
       target: [imagent.gateway.input:InboundContentTransformer]
     dependencies: [interaction.messages, interaction.media, gateway.admission, gateway.diagnostics]
     state_recovery: Pre-dispatch result is not persisted and may be reinvoked after safe reclaim/restart.
-    current_code: [src/imagent/gateway/input/__init__.py, src/imagent/gateway/input/content_transformation.py, src/imagent/gateway/__init__.py, src/imagent/diagnostics.py]
+    current_code: [src/imagent/gateway/input/content_transformation.py, src/imagent/gateway/__init__.py, src/imagent/diagnostics.py]
     target_code: [src/imagent/gateway/input/content_transformation.py]
     current_tests: [tests/gateway/input/test_content_transformation.py]
     target_tests: [tests/gateway/input/test_content_transformation.py]
@@ -522,17 +522,17 @@ components:
     outputs: [validated text-only OutboundMessage]
     public_contracts: [InboundFailurePresenter, InboundFailurePhase]
     public_exports:
-      current: [imagent.inbound_failures:InboundFailurePresenter, imagent.inbound_failures:InboundFailurePhase]
+      current: [imagent.gateway.input:InboundFailurePresenter, imagent.gateway.input:InboundFailurePhase]
       target: [imagent.gateway.input:InboundFailurePresenter, imagent.gateway.input:InboundFailurePhase]
     dependencies: [interaction.messages, applications.application-contract, gateway.admission, gateway.input.dispatch, gateway.projection.observation, gateway.projection.recovery, gateway.delivery.coordination, gateway.persistence.repository-contracts, gateway.diagnostics]
     state_recovery: Configured pre_acceptance completes before presentation; unknown and post_acceptance never reopen input.
-    current_code: [src/imagent/inbound_failures.py, src/imagent/gateway/__init__.py, src/imagent/diagnostics.py]
-    target_code: [src/imagent/gateway/input/failure_presentation.py]
-    current_tests: [tests/test_inbound_failure_presenter.py, tests/test_storage.py]
+    current_code: [src/imagent/gateway/input/__init__.py, src/imagent/gateway/input/failure_presentation.py, src/imagent/gateway/__init__.py, src/imagent/diagnostics.py]
+    target_code: [src/imagent/gateway/input/__init__.py, src/imagent/gateway/input/failure_presentation.py]
+    current_tests: [tests/gateway/input/test_failure_presentation.py, tests/test_storage.py]
     target_tests: [tests/gateway/input/test_failure_presentation.py]
     authoritative_docs: [docs/components/gateway/input/failure-presentation/design.md, docs/components/gateway/input/failure-presentation/testing.md, docs/components/gateway/design.md, docs/components/persistence/design.md]
     adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [implementation and bounded runtime remain in inbound_failures.py while orchestration and shared diagnostic facts remain split across Gateway and diagnostics]
+    gaps: [Gateway orchestration and shared diagnostic facts remain split across their owning Gateway and diagnostics modules]
 
   gateway.projection.observation:
     id: gateway.projection.observation
@@ -1393,6 +1393,9 @@ structural_status:
     - path: src/imagent/gateway/persistence/__init__.py
       owner: gateway.persistence.repository-contracts
       rationale: Target Gateway persistence facade; repository contracts are exact re-exports and implementations remain in focused leaves.
+    - path: src/imagent/gateway/input/__init__.py
+      owner: gateway.input.failure-presentation
+      rationale: Gateway input facade re-exports exact I1 and I2 public contracts from their focused implementations without retaining historical modules.
     - path: src/imagent/interaction/controllers/__init__.py
       owner: interaction.controllers.controller-contract
       rationale: Target Interaction Controller facade; each public symbol delegates to its owning leaf and no implementation lives here.
