@@ -34,8 +34,9 @@ request-response values, response validation, claim/transition fences,
 correlation persistence or replay; or generic persistence repositories. A
 Controller recognizes interaction grammar and invokes typed actions;
 `ControllerActions` is the public composition path. Application operations
-remain a separate closed contract and are delegated to the owning Application
-rather than reclassified as Gateway operations.
+remain a separate closed contract and enter through the existing
+`ImAgentGateway.execute_application` and `ControllerActions.execute_application`
+paths; the Gateway aggregate does not dispatch or call them.
 
 ## Contract and execution
 
