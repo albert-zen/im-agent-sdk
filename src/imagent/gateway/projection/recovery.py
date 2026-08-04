@@ -13,7 +13,7 @@ from ...applications.contract import (
     ThreadRef,
     TurnCatchup,
 )
-from ...applications.events import AgentEvent
+from ...applications.events import AgentEvent, CursorExpired
 from ...contracts import (
     ApplicationOperation,
     ApplicationOperationFailed,
@@ -23,7 +23,6 @@ from ...contracts import (
     ThreadHistoryRead,
     TurnCatchupRead,
 )
-from ...events import CursorExpired
 from ...interaction.messages import ConversationRef
 from ...projections import (
     AuthoritativeProjectionSlice,

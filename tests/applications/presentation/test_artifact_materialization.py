@@ -25,13 +25,13 @@ from imagent.applications import (
     presentation,
 )
 from imagent.applications.adapters.appserver.client import AppServerClient as NativeAppServerClient
+from imagent.applications.events import AgentEventType, EventStreamReset
 from imagent.applications.presentation import artifact_materialization
 from imagent.applications.presentation.artifact_materialization import (
     AppServerArtifactMaterializationRuntime,
     appserver_completed_item_facts,
 )
 from imagent.contracts import (
-    AgentEventType,
     AgentMessage,
     ApplicationOperationFailed,
     ApplicationRef,
@@ -46,7 +46,6 @@ from imagent.contracts import (
     ThreadRef,
 )
 from imagent.diagnostics import ApplicationArtifactMaterializationFailureCode
-from imagent.events import EventStreamReset
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.interaction.channels import ChannelCapabilities, DeliverySupportLevel

@@ -15,10 +15,10 @@ from imagent.applications.adapters.appserver.requests import (
     map_appserver_request,
     map_zen_appserver_request,
 )
+from imagent.applications.events import AgentEventType, EventStreamReset
 from imagent.contracts import (
     MAX_INTERACTIVE_REQUEST_CHOICES,
     MAX_INTERACTIVE_REQUEST_QUESTIONS,
-    AgentEventType,
     ApplicationOperationFailed,
     ApplicationRef,
     ApprovalRequest,
@@ -33,7 +33,6 @@ from imagent.contracts import (
     UserInputRequest,
     UserInputResponse,
 )
-from imagent.events import EventStreamReset
 from imagent.interaction.controllers import MarkdownRequestPresenter
 
 

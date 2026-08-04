@@ -614,7 +614,7 @@ components:
     state_recovery: Bounded queue gaps terminate only one observation; worker resubscribes and reconciles authoritatively.
     current_code: [src/imagent/gateway/__init__.py, src/imagent/projection_runtime.py, src/imagent/projections.py]
     target_code: [src/imagent/gateway/projection/observation.py]
-    current_tests: [tests/test_event_fanout.py, tests/test_projection_hardening.py, tests/test_projection_routing.py]
+    current_tests: [tests/gateway/projection/test_observation.py, tests/test_projection_hardening.py, tests/test_projection_routing.py]
     target_tests: [tests/gateway/projection/test_observation.py]
     authoritative_docs: [docs/components/gateway/projection/observation/design.md, docs/components/gateway/projection/observation/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0013-bounded-application-event-admission.md]
@@ -1049,12 +1049,12 @@ components:
     public_contracts: [AgentEvent, AgentEventType, CursorExpired, EventBroadcaster, EventBufferOverflow, EventStreamGap, EventStreamOverflow, EventStreamReset, FanoutSubscription, validate_agent_event]
     public_exports:
       current: [imagent.applications.events:AgentEvent, imagent.applications.events:AgentEventType, imagent.applications.events:CursorExpired, imagent.applications.events:EventBroadcaster, imagent.applications.events:EventBufferOverflow, imagent.applications.events:EventStreamGap, imagent.applications.events:EventStreamOverflow, imagent.applications.events:EventStreamReset, imagent.applications.events:FanoutSubscription, imagent.applications.events:validate_agent_event, imagent.contracts:AgentEvent, imagent.contracts:AgentEventType, imagent.contracts:validate_agent_event, imagent.events:AgentEvent, imagent.events:AgentEventType, imagent.events:CursorExpired, imagent.events:EventBroadcaster, imagent.events:EventBufferOverflow, imagent.events:EventStreamGap, imagent.events:EventStreamOverflow, imagent.events:EventStreamReset, imagent.events:FanoutSubscription, imagent.events:validate_agent_event]
-      target: [imagent.applications.events:AgentEvent, imagent.applications.events:AgentEventType, imagent.applications.events:CursorExpired, imagent.applications.events:EventBroadcaster, imagent.applications.events:EventBufferOverflow, imagent.applications.events:EventStreamGap, imagent.applications.events:EventStreamOverflow, imagent.applications.events:EventStreamReset, imagent.applications.events:FanoutSubscription, imagent.applications.events:validate_agent_event]
+      target: [imagent.applications.events:AgentEvent, imagent.applications.events:AgentEventType, imagent.applications.events:CursorExpired, imagent.applications.events:EventBroadcaster, imagent.applications.events:EventBufferOverflow, imagent.applications.events:EventStreamGap, imagent.applications.events:EventStreamOverflow, imagent.applications.events:EventStreamReset, imagent.applications.events:FanoutSubscription, imagent.applications.events:validate_agent_event, imagent.contracts:AgentEvent, imagent.contracts:AgentEventType, imagent.contracts:validate_agent_event, imagent.events:AgentEvent, imagent.events:AgentEventType, imagent.events:CursorExpired, imagent.events:EventBroadcaster, imagent.events:EventBufferOverflow, imagent.events:EventStreamGap, imagent.events:EventStreamOverflow, imagent.events:EventStreamReset, imagent.events:FanoutSubscription, imagent.events:validate_agent_event]
     dependencies: [interaction.messages, interaction.operations, applications.capabilities, applications.requests]
     state_recovery: Queues are bounded/non-durable; gaps terminate the affected subscription and require authoritative recovery.
-    current_code: [schemas/v1/events.schema.json, src/imagent/applications/events.py, src/imagent/events.py]
+    current_code: [schemas/v1/events.schema.json, src/imagent/applications/events.py]
     target_code: [schemas/v1/events.schema.json, src/imagent/applications/events.py]
-    current_tests: [tests/applications/test_events.py, tests/test_event_fanout.py]
+    current_tests: [tests/applications/test_events.py]
     target_tests: [tests/applications/test_events.py]
     authoritative_docs: [docs/components/applications/events/design.md, docs/components/applications/events/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0013-bounded-application-event-admission.md]
@@ -1426,8 +1426,8 @@ components:
       target: [imagent:__version__, imagent:adapters, imagent:contracts, imagent:delivery_coordination, imagent:delivery_planning, imagent:diagnostics, imagent:events, imagent:projections]
     dependencies: [interaction.messages, interaction.channels.channel-contract, gateway.composition, gateway.delivery.planning, gateway.delivery.coordination, gateway.projection.observation, gateway.projection.recovery, gateway.diagnostics, applications.application-contract, applications.events]
     state_recovery: Stateless packaging; build must not import optional native dependencies in the base install.
-    current_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/contracts/__init__.py, src/imagent/py.typed]
-    target_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/contracts/__init__.py, src/imagent/py.typed]
+    current_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/contracts/__init__.py, src/imagent/events.py, src/imagent/py.typed]
+    target_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/contracts/__init__.py, src/imagent/events.py, src/imagent/py.typed]
     current_tests: [tests/engineering/test_release.py]
     target_tests: [tests/engineering/test_release.py]
     authoritative_docs: [docs/engineering/release/design.md, docs/engineering/release/testing.md, README.md, docs/REUSE.md]
@@ -1455,7 +1455,7 @@ structural_status:
       owner: engineering.release
       rationale: Deliberate cross-layer public contract facade; every symbol delegates to its mapped owner and no implementation lives here.
     - path: src/imagent/events.py
-      owner: applications.events
+      owner: engineering.release
       rationale: Stable public Application-event facade; every symbol is an exact re-export from the focused events owner and no implementation remains here.
     - path: src/imagent/gateway/persistence/__init__.py
       owner: gateway.persistence.repository-contracts

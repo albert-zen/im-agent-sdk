@@ -61,3 +61,7 @@ compatibility implementations.
 
 The exhaustive current/target code, tests, exports, dependency edges, and
 structural gaps are maintained in the [component map](../component-map.yml).
+The event implementation is only `src/imagent/applications/events.py`;
+`imagent.events`, `imagent.contracts`, and the package-root `events` module
+are stable explicit formal facades with exact owner identity. Internal tests
+use the owner path except for dedicated facade/clean-install assertions.

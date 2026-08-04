@@ -7,20 +7,21 @@ from subprocess import run
 from sys import executable
 
 from imagent.applications import CodexApplicationAdapter
+from imagent.applications.events import AgentEvent, AgentEventType
 from imagent.contracts import (
-    AgentEvent,
-    AgentEventType,
     AgentInput,
     ProjectMode,
     TextContent,
     ThreadRef,
 )
+from imagent.gateway.persistence.memory import InMemoryRequestCorrelationRepository
 from imagent.gateway.projection import (
     ProjectionRecoveryUnavailable,
     RecoveryMode,
     ThreadRecovery,
 )
 from imagent.gateway.projection.recovery import recover_thread
+from imagent.request_projection_runtime import InteractiveRequestProjection
 from imagent.testing import FakeAgentApplicationAdapter
 from tests.test_gateway_vertical_slice import NativeZenClient
 
@@ -168,6 +169,52 @@ class ThreadRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(recovery.catchup)
         finally:
             await _close(recovery.events)
+
+
+class RequestGapRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_pending_snapshot_recovery_is_scoped_to_overflowed_thread(self) -> None:
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        first_thread = await application.create_thread()
+        second_thread = await application.create_thread()
+        first_request = await application.open_approval_request(
+            first_thread.ref,
+            turn_id="turn-first",
+        )
+        await application.open_approval_request(
+            second_thread.ref,
+            turn_id="turn-second",
+        )
+        delivered = []
+
+        async def active_routes(thread_ref):
+            del thread_ref
+            return ()
+
+        async def deliver_request(routes, request) -> None:
+            del routes
+            delivered.append(request)
+
+        async def cancel_request(request_ref) -> None:
+            del request_ref
+
+        projection = InteractiveRequestProjection(
+            applications={"fake-agent": application},
+            correlations=InMemoryRequestCorrelationRepository(),
+            active_routes=active_routes,
+            deliver_request=deliver_request,
+            cancel_request=cancel_request,
+        )
+
+        degraded = await projection.reconcile_application_after_event_gap(
+            application,
+            first_thread.ref,
+        )
+
+        self.assertFalse(degraded)
+        self.assertEqual(
+            [request.request_ref for request in delivered],
+            [first_request.request_ref],
+        )
 
 
 async def _collect_turn(events, turn_id: str) -> tuple[AgentEvent, ...]:

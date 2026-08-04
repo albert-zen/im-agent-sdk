@@ -245,7 +245,6 @@ components:
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - docs/migrations/imcodex-followup-blockers.md
-      - src/imagent/events.py
       - src/imagent/projection_routes.py
       - src/imagent/projection_runtime.py
       - src/imagent/request_projection_runtime.py
@@ -253,7 +252,7 @@ components:
       - src/imagent/gateway/projection/__init__.py
       - src/imagent/gateway/projection/checkpoints.py
       - src/imagent/gateway/projection/recovery.py
-      - tests/test_event_fanout.py
+      - tests/gateway/projection/test_observation.py
       - tests/test_projection_hardening.py
       - tests/test_projection_routing.py
       - tests/gateway/projection/test_checkpoints.py
@@ -476,6 +475,7 @@ components:
       - tests/test_appserver_input.py
       - tests/applications/adapters/test_codex.py
       - tests/applications/adapters/test_zen.py
+      - tests/applications/adapters/_appserver_fakes.py
       - tests/test_appserver_requests.py
       - tests/test_appserver_transport.py
       - tests/applications/adapters/__init__.py
@@ -719,6 +719,7 @@ components:
       - scripts/smoke_clean_install.py
       - src/imagent/__init__.py
       - src/imagent/contracts/__init__.py
+      - src/imagent/events.py
       - src/imagent/py.typed
       - tests/engineering/test_release.py
     docs:

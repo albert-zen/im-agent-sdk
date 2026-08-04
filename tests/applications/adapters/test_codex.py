@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import inspect
 import tempfile
 import unittest
 from copy import deepcopy
@@ -12,8 +14,14 @@ from imagent.applications.adapters.appserver.client import AppServerError
 from imagent.applications.adapters.codex import (
     CodexApplicationAdapter as CodexApplicationAdapterOwner,
 )
+from imagent.applications.events import (
+    AgentEventType,
+    EventStreamOverflow,
+    EventStreamReset,
+)
 from imagent.contracts import (
     AgentInput,
+    AgentMessage,
     ApplicationInputDispatch,
     ApplicationInputOutcomeUnknown,
     AttachmentContent,
@@ -26,6 +34,7 @@ from imagent.contracts import (
     ThreadRef,
     TurnReplyCorrelationPolicy,
 )
+from tests.applications.adapters._appserver_fakes import NativeZenClient
 
 
 class _InputClient:
@@ -592,6 +601,155 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(raised.exception.cause, RuntimeError)
         self.assertEqual(len(client.started), 1)
         self.assertEqual(client.steered, [])
+
+
+class CodexEventFanoutTests(unittest.IsolatedAsyncioTestCase):
+    async def test_appserver_fans_out_multiple_messages_before_terminal_event(self) -> None:
+        native = NativeZenClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=native,
+            cwd="/repo",
+        )
+        thread_ref = ThreadRef("codex-main", "thread-1")
+        first = adapter.subscribe_thread(thread_ref)
+        second = adapter.subscribe_thread(thread_ref)
+
+        for item_id, phase in (("progress-1", "commentary"), ("answer-1", "final_answer")):
+            await asyncio.wait_for(
+                native._notify(
+                    {
+                        "method": "item/completed",
+                        "params": {
+                            "threadId": "thread-1",
+                            "turnId": "turn-1",
+                            "item": {
+                                "id": item_id,
+                                "type": "agentMessage",
+                                "phase": phase,
+                                "text": phase,
+                            },
+                        },
+                    }
+                ),
+                timeout=0.1,
+            )
+        await asyncio.wait_for(
+            native._notify(
+                {
+                    "method": "turn/completed",
+                    "params": {
+                        "threadId": "thread-1",
+                        "turn": {"id": "turn-1", "status": "completed"},
+                    },
+                }
+            ),
+            timeout=0.1,
+        )
+
+        first_events = [await anext(first) for _ in range(3)]
+        second_events = [await anext(second) for _ in range(3)]
+        self.assertEqual(
+            [event.event_id for event in first_events],
+            [event.event_id for event in second_events],
+        )
+        self.assertEqual(
+            [event.type for event in first_events],
+            [
+                AgentEventType.MESSAGE_COMPLETED,
+                AgentEventType.MESSAGE_COMPLETED,
+                AgentEventType.TURN_COMPLETED,
+            ],
+        )
+        self.assertTrue(all(event.sequence is None for event in first_events))
+        self.assertTrue(all(event.sequence_epoch is None for event in first_events))
+        self.assertTrue(all(event.cursor is None for event in first_events))
+        messages = [event.data["message"] for event in first_events[:2]]
+        self.assertTrue(all(isinstance(message, AgentMessage) for message in messages))
+        phases = [
+            message.metadata["phase"] for message in messages if isinstance(message, AgentMessage)
+        ]
+        self.assertEqual(phases, ["commentary", "final_answer"])
+        await _close(first)
+        await _close(second)
+
+    async def test_appserver_overflow_is_subscription_scoped(self) -> None:
+        native = NativeZenClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=native,
+            cwd="/repo",
+            event_buffer_max_pending=2,
+        )
+        thread_ref = ThreadRef("codex-main", "thread-1")
+        fast = adapter.subscribe_thread(thread_ref)
+        slow = adapter.subscribe_thread(thread_ref)
+
+        for index in range(3):
+            await native._notify(
+                {
+                    "method": "item/completed",
+                    "params": {
+                        "threadId": "thread-1",
+                        "turnId": "turn-1",
+                        "item": {
+                            "id": f"answer-{index}",
+                            "type": "agentMessage",
+                            "phase": "final_answer",
+                            "text": str(index),
+                        },
+                    },
+                }
+            )
+            message = (await anext(fast)).data["message"]
+            self.assertIsInstance(message, AgentMessage)
+            assert isinstance(message, AgentMessage)
+            self.assertEqual(message.agent_item_id, f"answer-{index}")
+
+        with self.assertRaises(EventStreamOverflow):
+            await anext(slow)
+        self.assertEqual(adapter._events.subscriber_count("thread-1"), 1)
+        await _close(fast)
+
+    async def test_appserver_connection_reset_becomes_application_event_gap(self) -> None:
+        native = NativeZenClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=native,
+            cwd="/repo",
+        )
+        events = adapter.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        await native._notify(
+            {
+                "method": "item/completed",
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "item": {
+                        "id": "lost-on-reset",
+                        "type": "agentMessage",
+                        "phase": "final_answer",
+                        "text": "recover from native history",
+                    },
+                },
+            }
+        )
+
+        await native.reset_connection()
+
+        completed = await anext(events)
+        self.assertEqual(completed.type, AgentEventType.MESSAGE_COMPLETED)
+        with self.assertRaises(EventStreamReset) as raised:
+            await anext(events)
+        self.assertEqual(raised.exception.gap_code, "application_event_connection_reset")
+
+
+async def _close(events) -> None:
+    close = getattr(events, "aclose", None)
+    if callable(close):
+        result = close()
+        if inspect.isawaitable(result):
+            await result
 
 
 if __name__ == "__main__":
