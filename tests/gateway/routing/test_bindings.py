@@ -28,7 +28,8 @@ from imagent.contracts import (
     validate_gateway_operation,
     validate_gateway_operation_result,
 )
-from imagent.gateway.persistence import ConversationBinding
+from imagent.gateway.persistence import BindingConflict, ConversationBinding
+from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.gateway.routing import bindings as binding_owner
 from imagent.interaction.messages import ConversationRef
 from imagent.interaction.operations import ContractViolation
@@ -98,6 +99,39 @@ _IMPORT_ORDERS = {
     "routing facade first": "import imagent.gateway.routing\n",
 }
 ROOT = Path(__file__).resolve().parents[3]
+
+
+class _FaultBindingRepository:
+    def __init__(self) -> None:
+        self.delegate = InMemoryBindingRepository()
+        self.put_failure: str | None = None
+        self.fail_get = False
+        self.put_calls = 0
+
+    async def get(self, conversation: ConversationRef) -> ConversationBinding | None:
+        if self.fail_get:
+            raise RuntimeError("binding verification unavailable")
+        return await self.delegate.get(conversation)
+
+    async def put(
+        self,
+        binding: ConversationBinding,
+        expected_revision: int | None = None,
+    ) -> ConversationBinding:
+        self.put_calls += 1
+        if self.put_failure == "before":
+            raise RuntimeError("binding write failed")
+        stored = await self.delegate.put(binding, expected_revision)
+        if self.put_failure == "after":
+            raise RuntimeError("binding write response was lost")
+        return stored
+
+    async def delete(
+        self,
+        conversation: ConversationRef,
+        expected_revision: int | None = None,
+    ) -> None:
+        await self.delegate.delete(conversation, expected_revision)
 
 
 class BindingOwnerTests(unittest.TestCase):
@@ -255,6 +289,255 @@ class BindingOwnerTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ContractViolation, "did not clear the thread"):
             validate_gateway_operation_result(operation, result)
+
+
+class BindingRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        self.repository = _FaultBindingRepository()
+        self.runtime = binding_owner._BindingRuntime(self.repository)
+        self.application = ApplicationRef("zen-local")
+        self.project = ProjectRef("zen-local", "project-1")
+        self.thread = ThreadRef("zen-local", "thread-1", self.project)
+        self.other_thread = ThreadRef("zen-local", "thread-2", self.project)
+        self.conversation = ConversationRef("qq-primary", "c2c:user-1")
+        self.other_conversation = ConversationRef("qq-primary", "c2c:user-2")
+
+    async def _bind_thread(
+        self,
+        conversation: ConversationRef,
+        thread: ThreadRef,
+        *,
+        expected_revision: int | None = 0,
+        converge_same_target: bool = True,
+    ) -> binding_owner._BindingChange:
+        prepared = await self.runtime.prepare_thread_binding(
+            conversation,
+            self.application,
+            thread,
+            expected_revision=expected_revision,
+            converge_same_target=converge_same_target,
+        )
+        return await self.runtime.commit_thread_binding(prepared)
+
+    async def test_one_current_binding_allows_two_conversations_on_one_thread(
+        self,
+    ) -> None:
+        first = await self._bind_thread(self.conversation, self.thread)
+        second = await self._bind_thread(self.other_conversation, self.thread)
+
+        self.assertIsNone(first.previous)
+        self.assertIsNone(second.previous)
+        self.assertEqual(first.binding.thread_ref, self.thread)
+        self.assertEqual(second.binding.thread_ref, self.thread)
+        self.assertEqual(
+            await self.runtime.current(self.conversation),
+            first.binding,
+        )
+        self.assertEqual(
+            await self.runtime.current(self.other_conversation),
+            second.binding,
+        )
+
+    async def test_runtime_forwards_cas_and_preserves_current_binding_on_conflict(
+        self,
+    ) -> None:
+        selected = await self.runtime.select_application(
+            self.conversation,
+            self.application,
+            expected_revision=0,
+        )
+
+        with self.assertRaisesRegex(BindingConflict, "expected revision 0"):
+            await self.runtime.bind_project(
+                self.conversation,
+                self.application,
+                self.project,
+                expected_revision=0,
+            )
+
+        self.assertEqual(
+            await self.runtime.current(self.conversation),
+            selected.binding,
+        )
+
+    async def test_project_thread_and_clear_mutations_return_transition_facts(
+        self,
+    ) -> None:
+        project = await self.runtime.bind_project(
+            self.conversation,
+            self.application,
+            self.project,
+            expected_revision=0,
+        )
+        thread = await self._bind_thread(
+            self.conversation,
+            self.thread,
+            expected_revision=project.binding.revision,
+        )
+        cleared = await self.runtime.clear_thread(
+            self.conversation,
+            expected_revision=thread.binding.revision,
+        )
+
+        self.assertIsNone(project.previous)
+        self.assertEqual(thread.previous, project.binding)
+        self.assertEqual(cleared.previous, thread.binding)
+        self.assertEqual(cleared.binding.application_ref, self.application)
+        self.assertEqual(cleared.binding.project_ref, self.project)
+        self.assertIsNone(cleared.binding.thread_ref)
+
+    async def test_same_target_converges_for_each_accepted_revision_guard(self) -> None:
+        initial = await self._bind_thread(self.conversation, self.thread)
+        initial_put_calls = self.repository.put_calls
+
+        for guard in (
+            None,
+            initial.binding.revision,
+            initial.binding.revision - 1,
+        ):
+            with self.subTest(expected_revision=guard):
+                prepared = await self.runtime.prepare_thread_binding(
+                    self.conversation,
+                    self.application,
+                    self.thread,
+                    expected_revision=guard,
+                    converge_same_target=True,
+                )
+                self.assertTrue(prepared.converge_without_write)
+                converged = await self.runtime.commit_thread_binding(prepared)
+                self.assertEqual(converged.binding, initial.binding)
+                self.assertEqual(self.repository.put_calls, initial_put_calls)
+
+        with self.assertRaisesRegex(BindingConflict, "same-target bind retry"):
+            await self.runtime.prepare_thread_binding(
+                self.conversation,
+                self.application,
+                self.thread,
+                expected_revision=initial.binding.revision + 2,
+                converge_same_target=True,
+            )
+        self.assertEqual(self.repository.put_calls, initial_put_calls)
+
+    async def test_revisionless_nonforeground_same_target_remains_a_write(self) -> None:
+        initial = await self._bind_thread(self.conversation, self.thread)
+        prepared = await self.runtime.prepare_thread_binding(
+            self.conversation,
+            self.application,
+            self.thread,
+            expected_revision=None,
+            converge_same_target=False,
+        )
+
+        self.assertFalse(prepared.converge_without_write)
+        repeated = await self.runtime.commit_thread_binding(prepared)
+
+        self.assertEqual(repeated.previous, initial.binding)
+        self.assertEqual(repeated.binding.thread_ref, self.thread)
+        self.assertEqual(repeated.binding.revision, initial.binding.revision + 1)
+
+    async def test_stale_retry_never_overwrites_a_later_different_target(self) -> None:
+        first = await self._bind_thread(self.conversation, self.thread)
+        later = await self._bind_thread(
+            self.conversation,
+            self.other_thread,
+            expected_revision=first.binding.revision,
+        )
+        stale = await self.runtime.prepare_thread_binding(
+            self.conversation,
+            self.application,
+            self.thread,
+            expected_revision=first.binding.revision - 1,
+            converge_same_target=True,
+        )
+
+        self.assertFalse(stale.converge_without_write)
+        with self.assertRaises(BindingConflict) as context:
+            await self.runtime.commit_thread_binding(stale)
+        self.assertFalse(
+            await self.runtime.binding_write_may_have_committed(
+                stale,
+                context.exception,
+            )
+        )
+        self.assertEqual(
+            await self.runtime.current(self.conversation),
+            later.binding,
+        )
+
+    async def test_unknown_write_outcome_requires_exact_target_verification(self) -> None:
+        prepared = await self.runtime.prepare_thread_binding(
+            self.conversation,
+            self.application,
+            self.thread,
+            expected_revision=0,
+            converge_same_target=True,
+        )
+        self.repository.put_failure = "after"
+
+        with self.assertRaisesRegex(RuntimeError, "response was lost") as context:
+            await self.runtime.commit_thread_binding(prepared)
+
+        self.repository.put_failure = None
+        self.assertTrue(
+            await self.runtime.binding_write_may_have_committed(
+                prepared,
+                context.exception,
+            )
+        )
+        current = await self.runtime.current(self.conversation)
+        self.assertIsNotNone(current)
+        assert current is not None
+        self.assertEqual(current.thread_ref, self.thread)
+
+    async def test_failed_write_does_not_produce_verified_binding_authority(self) -> None:
+        prepared = await self.runtime.prepare_thread_binding(
+            self.conversation,
+            self.application,
+            self.thread,
+            expected_revision=0,
+            converge_same_target=True,
+        )
+        self.repository.put_failure = "before"
+
+        with self.assertRaisesRegex(RuntimeError, "binding write failed") as context:
+            await self.runtime.commit_thread_binding(prepared)
+
+        self.repository.put_failure = None
+        self.assertFalse(
+            await self.runtime.binding_write_may_have_committed(
+                prepared,
+                context.exception,
+            )
+        )
+        self.assertIsNone(await self.runtime.current(self.conversation))
+
+    async def test_unverifiable_write_preserves_original_error_and_uncertainty(self) -> None:
+        prepared = await self.runtime.prepare_thread_binding(
+            self.conversation,
+            self.application,
+            self.thread,
+            expected_revision=0,
+            converge_same_target=True,
+        )
+        self.repository.put_failure = "after"
+
+        with self.assertRaisesRegex(RuntimeError, "response was lost") as context:
+            await self.runtime.commit_thread_binding(prepared)
+
+        self.repository.fail_get = True
+        self.assertTrue(
+            await self.runtime.binding_write_may_have_committed(
+                prepared,
+                context.exception,
+            )
+        )
+        self.assertEqual(
+            context.exception.__notes__,
+            [
+                "Binding outcome verification also failed; the prepared route remains "
+                "fenced: RuntimeError('binding verification unavailable')"
+            ],
+        )
 
 
 if __name__ == "__main__":

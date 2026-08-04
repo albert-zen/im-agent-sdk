@@ -137,6 +137,7 @@ from .routing.bindings import (
     BindConversationToThread,
     ClearConversationThread,
     ConversationBound,
+    _BindingRuntime,
 )
 
 logger = logging.getLogger(__name__)
@@ -178,7 +179,7 @@ class ImAgentGateway:
             application.summary.ref.application_instance_id: application
             for application in applications
         }
-        self._bindings = repositories.bindings
+        self._binding_runtime = _BindingRuntime(repositories.bindings)
         self._projection_policy = projection_policy
         idempotency = repositories.idempotency
         if idempotency is None:
@@ -481,7 +482,7 @@ class ImAgentGateway:
         self,
         conversation_ref: ConversationRef,
     ) -> ConversationBinding | None:
-        return await self._bindings.get(conversation_ref)
+        return await self._binding_runtime.current(conversation_ref)
 
     async def deliver_proactively(
         self,
@@ -523,20 +524,20 @@ class ImAgentGateway:
         completed_at: datetime,
     ) -> ConversationBound:
         self._require_application(operation.application_ref.application_instance_id)
-        previous = await self._bindings.get(operation.conversation_ref)
-        binding = await self._bindings.put(
-            ConversationBinding(
-                conversation_ref=operation.conversation_ref,
-                application_ref=operation.application_ref,
-            ),
+        change = await self._binding_runtime.select_application(
+            operation.conversation_ref,
+            operation.application_ref,
             expected_revision=operation.expected_revision,
         )
-        await self._projection_runtime.handle_binding_change(previous, binding)
+        await self._projection_runtime.handle_binding_change(
+            change.previous,
+            change.binding,
+        )
         return ConversationBound(
             operation_id=operation.operation_id,
             type=operation.type,
             completed_at=completed_at,
-            binding=binding,
+            binding=change.binding,
         )
 
     async def _bind_conversation_to_project(
@@ -560,21 +561,21 @@ class ImAgentGateway:
             raise _GatewayActionError(read.error)
         if not isinstance(read, ProjectRead):
             raise RuntimeError("project.get returned an incompatible result")
-        previous = await self._bindings.get(operation.conversation_ref)
-        binding = await self._bindings.put(
-            ConversationBinding(
-                conversation_ref=operation.conversation_ref,
-                application_ref=application.summary.ref,
-                project_ref=read.project.ref,
-            ),
+        change = await self._binding_runtime.bind_project(
+            operation.conversation_ref,
+            application.summary.ref,
+            read.project.ref,
             expected_revision=operation.expected_revision,
         )
-        await self._projection_runtime.handle_binding_change(previous, binding)
+        await self._projection_runtime.handle_binding_change(
+            change.previous,
+            change.binding,
+        )
         return ConversationBound(
             operation_id=operation.operation_id,
             type=operation.type,
             completed_at=completed_at,
-            binding=binding,
+            binding=change.binding,
         )
 
     async def _bind_conversation_to_thread(
@@ -598,24 +599,17 @@ class ImAgentGateway:
             raise _GatewayActionError(read.error)
         if not isinstance(read, ThreadRead):
             raise RuntimeError("thread.get returned an incompatible result")
-        previous = await self._bindings.get(operation.conversation_ref)
-        if self._projection_policy is _projection_routes.ProjectionPolicy.FOREGROUND_ONLY:
-            same_target = (
-                previous is not None
-                and previous.application_ref == application.summary.ref
-                and previous.project_ref == read.thread.ref.project_ref
-                and previous.thread_ref == read.thread.ref
-            )
-            if (
-                same_target
-                and previous is not None
-                and operation.expected_revision
-                not in {None, previous.revision, previous.revision - 1}
-            ):
-                raise BindingConflict(
-                    "same-target bind retry does not match the current "
-                    "or immediately preceding revision"
-                )
+        foreground_only = (
+            self._projection_policy is _projection_routes.ProjectionPolicy.FOREGROUND_ONLY
+        )
+        prepared_binding = await self._binding_runtime.prepare_thread_binding(
+            operation.conversation_ref,
+            application.summary.ref,
+            read.thread.ref,
+            expected_revision=operation.expected_revision,
+            converge_same_target=foreground_only,
+        )
+        if foreground_only:
             (
                 prepared_route,
                 route_was_created,
@@ -626,80 +620,59 @@ class ImAgentGateway:
             retain_prepared_barrier = False
             try:
                 require_checkpoint = not route_was_created
-                if same_target:
-                    assert previous is not None
+                if prepared_binding.converge_without_write:
+                    change = await self._binding_runtime.commit_thread_binding(prepared_binding)
                     retain_prepared_barrier = True
                     await self._projection_runtime.handle_binding_change(
                         None,
-                        previous,
+                        change.binding,
                         require_checkpoint=require_checkpoint,
                     )
                     return ConversationBound(
                         operation_id=operation.operation_id,
                         type=operation.type,
                         completed_at=completed_at,
-                        binding=previous,
+                        binding=change.binding,
                     )
-                desired_binding = ConversationBinding(
-                    conversation_ref=operation.conversation_ref,
-                    application_ref=application.summary.ref,
-                    project_ref=read.thread.ref.project_ref,
-                    thread_ref=read.thread.ref,
-                )
                 try:
-                    binding = await self._bindings.put(
-                        desired_binding,
-                        expected_revision=operation.expected_revision,
-                    )
+                    change = await self._binding_runtime.commit_thread_binding(prepared_binding)
                 except BaseException as error:
-                    retain_prepared_barrier = True
-                    try:
-                        current = await self._bindings.get(operation.conversation_ref)
-                    except BaseException as verification_error:
-                        error.add_note(
-                            "Binding outcome verification also failed; the prepared "
-                            f"route remains fenced: {verification_error!r}"
+                    retain_prepared_barrier = (
+                        await self._binding_runtime.binding_write_may_have_committed(
+                            prepared_binding,
+                            error,
                         )
-                    else:
-                        retain_prepared_barrier = (
-                            current is not None
-                            and current.application_ref == desired_binding.application_ref
-                            and current.project_ref == desired_binding.project_ref
-                            and current.thread_ref == desired_binding.thread_ref
-                        )
+                    )
                     raise
                 retain_prepared_barrier = True
                 await self._projection_runtime.handle_binding_change(
-                    previous,
-                    binding,
+                    change.previous,
+                    change.binding,
                     require_checkpoint=require_checkpoint,
                 )
                 return ConversationBound(
                     operation_id=operation.operation_id,
                     type=operation.type,
                     completed_at=completed_at,
-                    binding=binding,
+                    binding=change.binding,
                 )
             finally:
                 self._projection_runtime.complete_foreground_binding_route(
                     prepared_route.route_id,
                     complete_bootstrap=not retain_prepared_barrier,
                 )
-        binding = await self._bindings.put(
-            ConversationBinding(
-                conversation_ref=operation.conversation_ref,
-                application_ref=application.summary.ref,
-                project_ref=read.thread.ref.project_ref,
-                thread_ref=read.thread.ref,
-            ),
-            expected_revision=operation.expected_revision,
+        change = await self._binding_runtime.commit_thread_binding(
+            prepared_binding,
         )
-        await self._projection_runtime.handle_binding_change(previous, binding)
+        await self._projection_runtime.handle_binding_change(
+            change.previous,
+            change.binding,
+        )
         return ConversationBound(
             operation_id=operation.operation_id,
             type=operation.type,
             completed_at=completed_at,
-            binding=binding,
+            binding=change.binding,
         )
 
     async def _clear_conversation_thread(
@@ -708,23 +681,19 @@ class ImAgentGateway:
         *,
         completed_at: datetime,
     ) -> ConversationBound:
-        current = await self._bindings.get(operation.conversation_ref)
-        if current is None:
-            raise ValueError("Conversation has no binding")
-        binding = await self._bindings.put(
-            ConversationBinding(
-                conversation_ref=current.conversation_ref,
-                application_ref=current.application_ref,
-                project_ref=current.project_ref,
-            ),
+        change = await self._binding_runtime.clear_thread(
+            operation.conversation_ref,
             expected_revision=operation.expected_revision,
         )
-        await self._projection_runtime.handle_binding_change(current, binding)
+        await self._projection_runtime.handle_binding_change(
+            change.previous,
+            change.binding,
+        )
         return ConversationBound(
             operation_id=operation.operation_id,
             type=operation.type,
             completed_at=completed_at,
-            binding=binding,
+            binding=change.binding,
         )
 
     async def _observe_thread(
@@ -1013,7 +982,7 @@ class ImAgentGateway:
                 if self._inbound_content_transform_runtime is not None
                 else message.content
             )
-            binding = await self._bindings.get(message.conversation_ref)
+            binding = await self._binding_runtime.current(message.conversation_ref)
             application = self._bound_application(binding)
             if binding is None or binding.application_ref is None:
                 application = self._single_application_or_none()

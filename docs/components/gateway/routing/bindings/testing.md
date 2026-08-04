@@ -24,17 +24,21 @@ Gateway operation, persistence, routing, projection, and recovery owners:
 - product command grammar, CWD/profile policy, and consumer JSON state are
   absent from the binding implementation.
 
-The focused binding-leaf tests prove only typed operation/result shape,
-facade identity, field validation, and binding-result postconditions. They do
-not claim ownership of CAS, repository mutation, Conversation locks,
-foreground route authority, worker recovery, or fan-out.
+The focused binding-leaf tests prove typed operation/result shape, facade
+identity, field validation, binding-result postconditions, repository/CAS
+mutation, same-target convergence, the revisionless retry distinction, and
+verification after an unknown write outcome. They use a constructor-injected
+repository and assert that a failed or unverifiable write never produces
+verified binding authority. They do not claim ownership of Conversation
+locks, foreground route authority, worker recovery, or fan-out.
 
 Current integration evidence remains in `tests/test_gateway_operations.py`,
 `tests/test_projection_routing.py`, and
-`tests/gateway/persistence/test_memory.py`. The focused owner and facade
-coverage is mirrored in `tests/gateway/routing/test_bindings.py`; it proves
-that the routing facade and historical contracts facade expose the exact
-binding-owner objects and that the extracted validators preserve the existing
-messages and failure behavior. The integration suites continue to exercise
-the unchanged Gateway mutation, CAS, lock, route-preparation, and restart
-paths.
+`tests/gateway/persistence/test_memory.py`. Focused owner, runtime, and facade
+coverage lives in `tests/gateway/routing/test_bindings.py`; it proves that the
+routing facade and historical contracts facade expose the exact binding-owner
+objects, that the extracted validators preserve existing failures, and that
+the sole binding runtime preserves mutation and convergence semantics. The
+integration suites continue to exercise unchanged aggregate lock,
+route-preparation, recovery-fence, foreground-switch, fan-out, and restart
+paths across owners.

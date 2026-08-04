@@ -17,11 +17,13 @@ operation, and observing a Thread never selects it for input.
   and the three accepted projection policies.
 
 The binding contract slice has its focused owner at
-`src/imagent/gateway/routing/bindings.py`, Gateway operation contracts,
-validation, dispatch, and bounded Conversation serialization have their
-focused owner at `src/imagent/gateway/routing/operations.py`, and projection
-route values, policy, validation, identity, activation, and persistence have
-their focused owner at `src/imagent/gateway/routing/projection_routes.py`.
+`src/imagent/gateway/routing/bindings.py`, including its sole private
+repository/CAS and same-target convergence runtime. Gateway operation
+contracts, validation, dispatch, and bounded Conversation serialization have
+their focused owner at `src/imagent/gateway/routing/operations.py`, and
+projection route values, policy, validation, identity, activation, and
+persistence have their focused owner at
+`src/imagent/gateway/routing/projection_routes.py`.
 The declared `imagent.gateway.routing` facade re-exports the exact owner
 objects. `imagent.contracts` retains only the aggregate, binding, request, and
 Interaction contracts it still owns or deliberately exposes; it does not
