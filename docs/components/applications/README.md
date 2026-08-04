@@ -30,13 +30,20 @@ facade exposes those exact objects; the historical `imagent.adapters` module
 is only a temporary compatibility facade for them and for unrelated legacy
 Channel/Gateway aliases.
 
-## Native adapters
+## Adapters
 
-The current aggregate [Application adapter design](../application-adapters/design.md)
-and its [testing guide](../application-adapters/testing.md) remain authoritative
-transition evidence for native adapter implementation. The component map
-records their current and target paths until later focused mechanical slices
-create the `adapters/` subtree described by the architecture.
+The complete adapter block now has an authoritative [adapter navigation
+page](adapters/README.md), with an App Server parent page and design/testing
+pages for every App Server, Codex, Zen, and T3 leaf. Those pages record the
+real current implementation, exact target package, public contracts,
+dependencies, state/recovery semantics, tests, accepted decisions, and
+structural gap before physical reorganization.
+
+The older aggregate [Application adapter design](../application-adapters/design.md)
+and [testing guide](../application-adapters/testing.md) remain cross-adapter
+transition context. They do not replace the leaf ownership records in the
+adapter subtree. Native adapter code remains in its historical paths until
+later focused mechanical slices move it.
 
 ## Shared constraints
 

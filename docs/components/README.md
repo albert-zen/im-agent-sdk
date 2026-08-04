@@ -139,9 +139,12 @@ See the [Applications navigation](applications/README.md), the common leaf
 designs for [the Application contract](applications/application-contract/design.md),
 [capabilities](applications/capabilities/design.md), [events](applications/events/design.md),
 [operations](applications/operations/design.md), and [requests](applications/requests/design.md),
-and the [presentation subtree](applications/presentation/README.md). Native
-adapter pages remain the authority for Codex, Zen, T3, and App Server wire
-translation until their focused mechanical slices move them under this tree.
+the [presentation subtree](applications/presentation/README.md), and the
+complete [Applications adapter subtree](applications/adapters/README.md).
+The adapter subtree is the documentation authority for App Server client,
+transport, mapping, requests, diagnostics, Codex, Zen, and T3 boundaries;
+their current code remains in historical paths until focused mechanical
+slices move it.
 
 ## Engineering support
 
