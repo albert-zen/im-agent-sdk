@@ -208,7 +208,7 @@ or schema change.
 ## Change obligations
 
 Changes to `gateway/persistence/repository_contracts.py`,
-`gateway/persistence/memory.py`, or `storage.py` require checking schema
-migration, restart behavior, revision conflicts, idempotency semantics,
-projection route invariants, and the projections/recovery docs when checkpoint
-shape changes.
+`gateway/persistence/idempotency.py`, `gateway/persistence/memory.py`, or
+`storage.py` require checking schema migration, restart behavior, revision
+conflicts, idempotency semantics, projection route invariants, and the
+projections/recovery docs when checkpoint shape changes.

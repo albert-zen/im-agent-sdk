@@ -53,10 +53,11 @@ rendered errors, content, a callback, or work to replay.
 
 ## Structure
 
-`InMemoryIdempotencyRepository` currently remains in `storage.py` beside the
-SQLite transaction owner. A later mechanical extraction will move it to
-`gateway/persistence/idempotency.py` and update the single facade without
-duplicating behavior.
+The one implementation lives in `gateway/persistence/idempotency.py`.
+`imagent.gateway.persistence.InMemoryIdempotencyRepository` is its exact
+public re-export. `storage.py` remains the separate SQLite transaction owner
+and does not retain a compatibility implementation or export for the
+process-local repository.
 
 ## Authority
 

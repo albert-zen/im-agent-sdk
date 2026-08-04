@@ -16,6 +16,7 @@ from imagent.contracts import (
 )
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
 from imagent.gateway.admission import inbound_idempotency_identity
+from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.interaction.controllers import (
     CommandArgumentContract,
@@ -35,7 +36,6 @@ from imagent.interaction.controllers import (
     ControllerActions,
 )
 from imagent.interaction.messages import InboundMessage
-from imagent.storage import InMemoryIdempotencyRepository
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

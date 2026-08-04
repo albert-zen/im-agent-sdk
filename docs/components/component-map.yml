@@ -852,17 +852,17 @@ components:
     outputs: [acquired/completed/in-flight claim status]
     public_contracts: [InMemoryIdempotencyRepository]
     public_exports:
-      current: [imagent.storage:InMemoryIdempotencyRepository]
+      current: [imagent.gateway.persistence:InMemoryIdempotencyRepository]
       target: [imagent.gateway.persistence:InMemoryIdempotencyRepository]
     dependencies: [gateway.persistence.repository-contracts]
     state_recovery: Process-local claims have no timed reclaim and restart empty; the separate durable SQLite owner may reclaim only stale in_flight, never protected state.
-    current_code: [src/imagent/storage.py]
+    current_code: [src/imagent/gateway/persistence/idempotency.py]
     target_code: [src/imagent/gateway/persistence/idempotency.py]
-    current_tests: [tests/test_storage.py, tests/gateway/test_admission.py]
+    current_tests: [tests/gateway/persistence/test_idempotency.py]
     target_tests: [tests/gateway/persistence/test_idempotency.py]
     authoritative_docs: [docs/components/gateway/persistence/idempotency/design.md, docs/components/gateway/persistence/idempotency/testing.md, docs/components/persistence/design.md, docs/components/persistence/testing.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
-    gaps: [storage.py combines in-memory idempotency and SQLite transaction owner, process-local claim records have no finite capacity bound]
+    gaps: [process-local claim records have no finite capacity bound]
 
   gateway.persistence.sqlite:
     id: gateway.persistence.sqlite
@@ -1392,7 +1392,7 @@ structural_status:
       rationale: Current public Controller facade; registry/common/request exports move without retaining duplicate implementations.
     - path: src/imagent/gateway/persistence/__init__.py
       owner: gateway.persistence.repository-contracts
-      rationale: Target Gateway persistence facade; repository contracts are exact re-exports and implementations remain in focused leaves.
+      rationale: Gateway persistence facade; repository contracts and the idempotency reference implementation are exact re-exports from focused leaves.
     - path: src/imagent/gateway/input/__init__.py
       owner: gateway.input.failure-presentation
       rationale: Gateway input facade re-exports exact I1 and I2 public contracts from their focused implementations without retaining historical modules.
@@ -1488,8 +1488,8 @@ structural_status:
       owners: [gateway.delivery.submissions, gateway.persistence.sqlite, gateway.persistence.row-mapping]
       reason: Submission state transitions and their SQLite persistence/mapping are co-located.
     src/imagent/storage.py:
-      owners: [gateway.persistence.idempotency, gateway.persistence.sqlite, gateway.persistence.row-mapping]
-      reason: In-memory idempotency, the intentional all-repository SQLite transaction owner, and projection row mapping share one module.
+      owners: [gateway.persistence.sqlite, gateway.persistence.row-mapping]
+      reason: The intentional all-repository SQLite transaction owner and its projection row mapping share one module.
     src/imagent/sqlite_rows.py:
       owners: [gateway.persistence.sqlite, gateway.persistence.row-mapping]
       reason: Pure binding, route, and Turn-correlation conversion shares the file with merge_projection_route, whose endpoint-conflict and checkpoint-preservation mutation policy belongs to the SQLite transaction owner.
