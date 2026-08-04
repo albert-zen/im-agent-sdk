@@ -738,9 +738,7 @@ class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
             sum(isinstance(result, RequestResponseRouted) for result in results),
             1,
         )
-        failures = [
-            result for result in results if isinstance(result, GatewayOperationFailed)
-        ]
+        failures = [result for result in results if isinstance(result, GatewayOperationFailed)]
         self.assertEqual(len(failures), 1)
         self.assertEqual(
             failures[0].error.code,
