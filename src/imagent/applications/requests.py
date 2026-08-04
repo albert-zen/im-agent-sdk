@@ -339,7 +339,6 @@ from .contract import (  # noqa: E402
     validate_thread_ref,
 )
 
-
 __all__ = [
     "ApprovalRequest",
     "UserInputRequest",

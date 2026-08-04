@@ -3,15 +3,15 @@ from __future__ import annotations
 import unittest
 from datetime import UTC, datetime
 
-from imagent.contracts import (
+from imagent.applications.capabilities import ProjectMode
+from imagent.applications.operations import (
     ApplicationOperation,
     ApplicationOperationResult,
-    ConversationRef,
+    ListProjects,
+)
+from imagent.contracts import (
     GatewayOperation,
     GatewayOperationResult,
-    ListProjects,
-    ProjectMode,
-    TextContent,
 )
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence import ConversationBinding
@@ -27,7 +27,7 @@ from imagent.interaction.controllers import (
     ControllerActions,
     register_common_commands,
 )
-from imagent.interaction.messages import InboundMessage
+from imagent.interaction.messages import ConversationRef, InboundMessage, TextContent
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

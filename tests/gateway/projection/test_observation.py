@@ -6,18 +6,16 @@ from dataclasses import replace
 from datetime import UTC, datetime
 
 from imagent.applications import CodexApplicationAdapter
-from imagent.contracts import (
-    ApplicationRef,
-    ConversationRef,
-    InboundMessage,
-    ProjectMode,
-    SupportLevel,
-    TextContent,
-    ThreadRef,
-)
+from imagent.applications.capabilities import ProjectMode, SupportLevel
+from imagent.applications.contract import ApplicationRef, ThreadRef
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence import ConversationBinding, ProjectionPolicy
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
+from imagent.interaction.messages import (
+    ConversationRef,
+    InboundMessage,
+    TextContent,
+)
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 from tests.applications.adapters._appserver_fakes import NativeZenClient
 

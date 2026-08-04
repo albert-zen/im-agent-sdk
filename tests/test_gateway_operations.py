@@ -11,39 +11,35 @@ from typing import Any, cast
 from unittest.mock import patch
 
 from imagent.adapters import IdempotencyClaimStatus
-from imagent.contracts import (
+from imagent.applications.capabilities import ProjectMode, SupportLevel
+from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef
+from imagent.applications.operations import (
     ActivateNativeThread,
-    ApplicationRef,
-    ApprovalRequest,
-    ApprovalResponse,
-    BindConversationToThread,
-    ConversationBound,
-    ConversationRef,
     CreateThread,
-    GatewayOperationFailed,
-    InboundMessage,
-    ListApplications,
     ListProjects,
     ListThreads,
     NativeThreadActivated,
-    ObserveThread,
-    OperationErrorCode,
-    OutboundMessage,
-    ProjectMode,
-    ProjectRef,
     ProjectsListed,
+    ThreadCreated,
+    ThreadsListed,
+)
+from imagent.applications.requests import (
+    ApprovalRequest,
+    ApprovalResponse,
     RequestChoice,
     RequestRef,
+    UserInputQuestion,
+    UserInputResponse,
+)
+from imagent.contracts import (
+    BindConversationToThread,
+    ConversationBound,
+    GatewayOperationFailed,
+    ListApplications,
+    ObserveThread,
     RequestResponseRouted,
     RespondToRequest,
     SelectApplication,
-    SupportLevel,
-    TextContent,
-    ThreadCreated,
-    ThreadRef,
-    ThreadsListed,
-    UserInputQuestion,
-    UserInputResponse,
 )
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.admission import inbound_idempotency_identity
@@ -64,6 +60,13 @@ from imagent.gateway.persistence.memory import (
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.interaction.channels import DeliveryReceipt
 from imagent.interaction.controllers import MarkdownRequestPresenter, SlashController
+from imagent.interaction.messages import (
+    ConversationRef,
+    InboundMessage,
+    OutboundMessage,
+    TextContent,
+)
+from imagent.interaction.operations import OperationErrorCode
 from imagent.keyed_locks import KeyedLockCapacityError
 from imagent.projections import (
     derive_projection_route_id,

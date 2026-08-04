@@ -11,7 +11,9 @@ import imagent.contracts as contract_facade
 import imagent.gateway as gateway_facade
 import imagent.gateway.delivery as delivery_facade
 import imagent.gateway.persistence as historical_delivery_contracts
+from imagent.applications.contract import ThreadRef
 from imagent.gateway.delivery import proactive_authorization as authorization_owner
+from imagent.interaction.messages import ConversationRef
 
 
 class ProactiveAuthorizationOwnershipTests(unittest.TestCase):
@@ -58,10 +60,10 @@ class ProactiveAuthorizationOwnershipTests(unittest.TestCase):
     def test_public_principal_annotations_resolve_at_runtime(self) -> None:
         hints = get_type_hints(authorization_owner.DeliveryPrincipal)
 
-        self.assertEqual(hints["allowed_threads"], tuple[contract_facade.ThreadRef, ...])
+        self.assertEqual(hints["allowed_threads"], tuple[ThreadRef, ...])
         self.assertEqual(
             hints["allowed_conversations"],
-            tuple[contract_facade.ConversationRef, ...],
+            tuple[ConversationRef, ...],
         )
 
 

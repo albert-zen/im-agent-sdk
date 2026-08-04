@@ -9,17 +9,7 @@ from datetime import UTC, datetime
 
 import imagent.gateway as gateway_facade
 from imagent.adapters import IdempotencyClaimStatus
-from imagent.contracts import (
-    AgentInput,
-    AgentMessage,
-    AttachmentContent,
-    AttachmentHandle,
-    ConversationRef,
-    MessageRole,
-    OutboundMessage,
-    TextContent,
-    ThreadRef,
-)
+from imagent.applications.contract import AgentInput, AgentMessage, ThreadRef
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway import presentation as presentation_owner
 from imagent.gateway.persistence import (
@@ -40,6 +30,13 @@ from imagent.gateway.presentation import (
     OutboundPresentationRuntime,
     OutboundPresentationTimeout,
     ProjectionPresentationOrigin,
+)
+from imagent.interaction.media import AttachmentContent, AttachmentHandle
+from imagent.interaction.messages import (
+    ConversationRef,
+    MessageRole,
+    OutboundMessage,
+    TextContent,
 )
 from imagent.projections import (
     ProjectedAgentMessage,

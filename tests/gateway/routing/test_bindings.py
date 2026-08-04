@@ -16,24 +16,22 @@ import imagent.contracts.operations as historical_operations
 import imagent.contracts.validators as historical_validators
 import imagent.gateway as gateway_facade
 import imagent.gateway.routing as routing_facade
+from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef
 from imagent.contracts import (
-    ApplicationRef,
     ApplicationsListed,
     BindConversationToProject,
     BindConversationToThread,
     ClearConversationThread,
-    ContractViolation,
     ConversationBound,
-    ConversationRef,
     GatewayOperation,
     GatewayOperationType,
-    ProjectRef,
-    ThreadRef,
     validate_gateway_operation,
     validate_gateway_operation_result,
 )
 from imagent.gateway.persistence import ConversationBinding
 from imagent.gateway.routing import bindings as binding_owner
+from imagent.interaction.messages import ConversationRef
+from imagent.interaction.operations import ContractViolation
 
 _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     """

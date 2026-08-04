@@ -9,16 +9,11 @@ from sys import executable
 from typing import get_type_hints
 
 import imagent.interaction.controllers as controllers_facade
+from imagent.applications.operations import ApplicationOperation, ApplicationOperationResult
+from imagent.applications.requests import InteractiveRequest
 from imagent.contracts import (
-    ApplicationOperation,
-    ApplicationOperationResult,
-    ConversationRef,
     GatewayOperation,
     GatewayOperationResult,
-    InboundMessage,
-    InteractiveRequest,
-    OutboundMessage,
-    TextContent,
 )
 from imagent.gateway.persistence import ConversationBinding
 from imagent.interaction.controllers import (
@@ -29,6 +24,12 @@ from imagent.interaction.controllers import common as common_owner
 from imagent.interaction.controllers import contract as contract_owner
 from imagent.interaction.controllers import registry as registry_owner
 from imagent.interaction.controllers import request_presentation as request_owner
+from imagent.interaction.messages import (
+    ConversationRef,
+    InboundMessage,
+    OutboundMessage,
+    TextContent,
+)
 
 
 class ControllerContractOwnershipTests(unittest.TestCase):
@@ -161,7 +162,7 @@ class ControllerContractOwnershipTests(unittest.TestCase):
                 "import typing; "
                 "import imagent.interaction.controllers as facade; "
                 "import imagent.interaction.controllers.contract as owner; "
-                "from imagent.contracts import ApplicationOperation; "
+                "from imagent.applications.operations import ApplicationOperation; "
                 "assert facade.ControllerActions is owner.ControllerActions; "
                 "assert typing.get_type_hints("
                 "owner.CommandHandlerActions.execute_application"

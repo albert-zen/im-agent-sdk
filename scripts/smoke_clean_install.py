@@ -6,8 +6,21 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / "dist"
+
+
+def _retired_application_exports() -> tuple[str, ...]:
+    component_map = yaml.safe_load(
+        (ROOT / "docs" / "components" / "component-map.yml").read_text(encoding="utf-8")
+    )
+    transition = component_map["structural_status"]["retired_application_public_exports"]
+    return tuple(sorted(set(transition["current"]) - set(transition["target"])))
+
+
+_RETIRED_APPLICATION_EXPORTS = _retired_application_exports()
 DIAGNOSTICS_FACADE_CHECK = (
     "import subprocess, sys; "
     "import imagent.interaction.diagnostics as common_owner; "
@@ -94,6 +107,54 @@ CHANNEL_FACADE_CHECK = (
     "assert all(not hasattr(contracts_facade, name) and name not in contracts_facade.__all__ "
     "for name in retired_contract); "
 )
+_APPLICATION_IMPORT_ISOLATION_CHILD = (
+    "import sys; import imagent.applications; "
+    "assert not any(name == 'imagent.gateway' or name.startswith('imagent.gateway.') "
+    "for name in sys.modules); "
+    "assert not any(name.startswith('imagent.applications.adapters.') for name in sys.modules); "
+    "assert not any(name in sys.modules for name in "
+    "('websockets', 'PIL', 'Crypto', 'lark_oapi', 'lark'))"
+)
+APPLICATION_IMPORT_ISOLATION_CHECK = (
+    "import subprocess, sys; "
+    f"subprocess.run([sys.executable, '-c', {_APPLICATION_IMPORT_ISOLATION_CHILD!r}], "
+    "check=True); "
+)
+APPLICATION_FACADE_CHECK = f"""
+import imagent.adapters as adapters_facade
+import imagent.contracts as contracts_facade
+retired = {_RETIRED_APPLICATION_EXPORTS!r}
+retired_contract = tuple(
+    name.split(':', 1)[1]
+    for name in retired
+    if name.startswith('imagent.contracts:')
+)
+retired_adapter = tuple(
+    name.split(':', 1)[1]
+    for name in retired
+    if name.startswith('imagent.adapters:')
+)
+assert all(
+    not hasattr(contracts_facade, name) and name not in contracts_facade.__all__
+    for name in retired_contract
+)
+assert all(
+    not hasattr(adapters_facade, name)
+    and name not in getattr(adapters_facade, '__all__', ())
+    for name in retired_adapter
+)
+for module_name, names in (
+    (contracts_facade, retired_contract),
+    (adapters_facade, retired_adapter),
+):
+    for name in names:
+        try:
+            exec(f"from {{module_name.__name__}} import {{name}}")
+        except ImportError:
+            pass
+        else:
+            raise AssertionError(name)
+"""
 BINDING_IMPORT_ORDER_CHECK = r'''
 import inspect
 import subprocess
@@ -196,7 +257,10 @@ for first_import in (
 CASES = {
     "base": (
         "",
-        BINDING_IMPORT_ORDER_CHECK + "import asyncio, importlib, importlib.util, typing, imagent; "
+        APPLICATION_IMPORT_ISOLATION_CHECK
+        + APPLICATION_FACADE_CHECK
+        + BINDING_IMPORT_ORDER_CHECK
+        + "import asyncio, importlib, importlib.util, typing, imagent; "
         "import imagent.events as event_facade; "
         "import imagent.applications.events as event_owner; "
         "from imagent.applications import "
@@ -224,9 +288,11 @@ CASES = {
         "import imagent.interaction.controllers.contract as contract_owner; "
         "import imagent.interaction.controllers.registry as registry_owner; "
         "import imagent.interaction.controllers.request_presentation as request_owner; "
-        "from imagent.contracts import (ApplicationOperation, ApplicationOperationResult, "
-        "ConversationRef, GatewayOperation, GatewayOperationResult, "
-        "InboundMessage, OutboundMessage); "
+        "from imagent.applications.operations import "
+        "ApplicationOperation, ApplicationOperationResult; "
+        "from imagent.interaction.messages import "
+        "ConversationRef, InboundMessage, OutboundMessage; "
+        "from imagent.contracts import GatewayOperation, GatewayOperationResult; "
         "from imagent.gateway.persistence import ConversationBinding; "
         "import imagent.gateway.persistence as persistence_facade; "
         "import imagent.contracts as contracts_facade; "
@@ -332,11 +398,12 @@ CASES = {
         "from imagent.applications.contract import "
         "AgentApplicationAdapter as owner_adapter, "
         "ApplicationInputDispatchHandler as owner_dispatch_handler; "
-        "from imagent.adapters import "
-        "AgentApplicationAdapter as compat_adapter, "
-        "ApplicationInputDispatchHandler as compat_dispatch_handler; "
-        "assert top_adapter is owner_adapter is compat_adapter; "
-        "assert top_dispatch_handler is owner_dispatch_handler is compat_dispatch_handler; "
+        "assert top_adapter is owner_adapter; "
+        "assert top_dispatch_handler is owner_dispatch_handler; "
+        "for retired_name in ('AgentApplicationAdapter', 'ApplicationInputDispatchHandler'): "
+        "\n    try: exec(f'from imagent.adapters import {retired_name}')"
+        "\n    except ImportError: pass"
+        "\n    else: raise AssertionError(retired_name); "
         "assert owner_adapter.send_input.__module__ == "
         "'imagent.applications.contract'; "
         "assert top_codex is codex_owner; "

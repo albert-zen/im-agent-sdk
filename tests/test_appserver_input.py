@@ -5,13 +5,9 @@ import unittest
 from pathlib import Path
 
 from imagent.applications import CodexApplicationAdapter, ZenApplicationAdapter
-from imagent.contracts import (
-    AgentInput,
-    AttachmentContent,
-    LocalPath,
-    TextContent,
-    ThreadRef,
-)
+from imagent.applications.contract import AgentInput, ThreadRef
+from imagent.interaction.media import AttachmentContent, LocalPath
+from imagent.interaction.messages import TextContent
 
 
 class _InputClient:

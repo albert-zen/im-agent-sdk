@@ -19,10 +19,7 @@ from imagent.applications.adapters.appserver.client.supervisor import (
     MissingAppServerDependencyError,
 )
 from imagent.applications.contract import ApplicationInputOutcomeUnknown
-from imagent.contracts import (
-    CreateThread,
-    ThreadCreated,
-)
+from imagent.applications.operations import CreateThread, ThreadCreated
 from imagent.interaction.diagnostics import (
     ConnectionDiagnosticState,
     DiagnosticFailureCode,

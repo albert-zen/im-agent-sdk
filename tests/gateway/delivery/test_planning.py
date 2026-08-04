@@ -6,18 +6,6 @@ from datetime import UTC, datetime
 from typing import cast
 
 import imagent
-from imagent.contracts import (
-    AttachmentContent,
-    AttachmentGrouping,
-    AttachmentSourceKind,
-    ConversationRef,
-    LocalPath,
-    OutboundMessage,
-    RemoteUrl,
-    TextContent,
-    TextFormat,
-    TextLengthUnit,
-)
 from imagent.gateway.delivery import (
     DeliveryPlanner,
     DeliveryPlanningError,
@@ -29,6 +17,20 @@ from imagent.interaction.channels import (
     ReplyReferenceScope,
 )
 from imagent.interaction.channels.adapters import NativeTransportChannelAdapter
+from imagent.interaction.media import (
+    AttachmentContent,
+    AttachmentGrouping,
+    AttachmentSourceKind,
+    LocalPath,
+    RemoteUrl,
+)
+from imagent.interaction.messages import (
+    ConversationRef,
+    OutboundMessage,
+    TextContent,
+    TextFormat,
+    TextLengthUnit,
+)
 
 
 class DeliveryPlanningFacadeTests(unittest.TestCase):

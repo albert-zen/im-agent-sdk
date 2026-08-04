@@ -12,17 +12,9 @@ from imagent.adapters import (
     RequestCorrelationConflict,
     TurnReplyCorrelationConflict,
 )
-from imagent.contracts import (
-    AgentInput,
-    ApplicationRef,
-    ApprovalResponseShape,
-    ConversationRef,
-    ProjectMode,
-    ProjectRef,
-    RequestRef,
-    TextContent,
-    ThreadRef,
-)
+from imagent.applications.capabilities import ProjectMode
+from imagent.applications.contract import AgentInput, ApplicationRef, ProjectRef, ThreadRef
+from imagent.applications.requests import ApprovalResponseShape, RequestRef
 from imagent.gateway import GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import DeliverySubmissionOrigin
 from imagent.gateway.persistence import (
@@ -44,6 +36,7 @@ from imagent.gateway.persistence.memory import (
 )
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.gateway.projection.request_correlation import derive_request_correlation_id
+from imagent.interaction.messages import ConversationRef, TextContent
 from imagent.interaction.operations import ContractViolation
 from imagent.projections import (
     derive_projection_route_id,

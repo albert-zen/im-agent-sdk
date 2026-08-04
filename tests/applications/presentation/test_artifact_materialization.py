@@ -25,30 +25,28 @@ from imagent.applications import (
     presentation,
 )
 from imagent.applications.adapters.appserver.client import AppServerClient as NativeAppServerClient
+from imagent.applications.contract import (
+    AgentMessage,
+    ApplicationRef,
+    ThreadRef,
+)
 from imagent.applications.diagnostics import ApplicationArtifactMaterializationFailureCode
 from imagent.applications.events import AgentEventType, EventStreamReset
+from imagent.applications.operations import (
+    ApplicationOperationFailed,
+    GetThreadHistory,
+    ThreadHistoryRead,
+)
 from imagent.applications.presentation import artifact_materialization
 from imagent.applications.presentation.artifact_materialization import (
     AppServerArtifactMaterializationRuntime,
     appserver_completed_item_facts,
 )
-from imagent.contracts import (
-    AgentMessage,
-    ApplicationOperationFailed,
-    ApplicationRef,
-    AttachmentContent,
-    AttachmentSourceKind,
-    ConversationRef,
-    GetThreadHistory,
-    LocalPath,
-    OutboundMessage,
-    TextContent,
-    ThreadHistoryRead,
-    ThreadRef,
-)
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.interaction.channels import ChannelCapabilities, DeliverySupportLevel
+from imagent.interaction.media import AttachmentContent, AttachmentSourceKind, LocalPath
+from imagent.interaction.messages import ConversationRef, OutboundMessage, TextContent
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

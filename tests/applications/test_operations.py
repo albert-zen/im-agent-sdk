@@ -5,11 +5,9 @@ from datetime import UTC, datetime
 from importlib import import_module
 from typing import get_type_hints
 
-from imagent import contracts
 import imagent.applications as applications
-from imagent.applications import contract
-from imagent.applications import operations
-from imagent.applications import requests
+from imagent import contracts
+from imagent.applications import contract, operations, requests
 from imagent.interaction.operations import ContractError, ContractViolation
 
 

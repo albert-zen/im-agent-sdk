@@ -7,6 +7,7 @@ import unittest
 from typing import get_type_hints
 
 from imagent import adapters, contracts
+from imagent.applications.capabilities import SupportLevel
 from imagent.channels import (
     NativeTransportChannelAdapter,
     channel_from_config,
@@ -108,8 +109,8 @@ class ChannelReceiptContractTests(unittest.TestCase):
                 self.assertFalse(hasattr(contracts, name))
                 self.assertNotIn(name, contracts.__all__)
 
-        self.assertTrue(hasattr(adapters, "AgentApplicationAdapter"))
-        self.assertTrue(hasattr(contracts, "SupportLevel"))
+        self.assertFalse(hasattr(adapters, "AgentApplicationAdapter"))
+        self.assertFalse(hasattr(contracts, "SupportLevel"))
         self.assertFalse(hasattr(contracts, "DeliverySubmissionOrigin"))
 
     def test_historical_facade_imports_fail_in_clean_process(self) -> None:
@@ -140,7 +141,7 @@ class ChannelReceiptContractTests(unittest.TestCase):
         self.assertIs(channel_from_config, runtime_owner.channel_from_config)
 
     def test_delivery_support_is_distinct_from_application_support(self) -> None:
-        self.assertIsNot(channels.DeliverySupportLevel, contracts.SupportLevel)
+        self.assertIsNot(channels.DeliverySupportLevel, SupportLevel)
         self.assertEqual(
             tuple(level.value for level in channels.DeliverySupportLevel),
             ("native", "fallback", "unsupported"),
@@ -160,7 +161,7 @@ class ChannelReceiptContractTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ContractViolation, "DeliverySupportLevel"):
-            channels.ChannelCapabilities(markdown=contracts.SupportLevel.NATIVE)  # type: ignore[arg-type]
+            channels.ChannelCapabilities(markdown=SupportLevel.NATIVE)  # type: ignore[arg-type]
 
     def test_retryable_receipt_rejects_native_acceptance_identity(self) -> None:
         receipt = channels.DeliveryReceipt(

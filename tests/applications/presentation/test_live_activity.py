@@ -24,6 +24,11 @@ from imagent.applications import (
     ZenApplicationAdapter,
     presentation,
 )
+from imagent.applications.contract import (
+    AgentInput,
+    AgentMessage,
+    ThreadRef,
+)
 from imagent.applications.diagnostics import ApplicationPresentationFailureCode
 from imagent.applications.events import AgentEventType, EventStreamReset
 from imagent.applications.presentation import (
@@ -31,16 +36,9 @@ from imagent.applications.presentation import (
     artifact_materialization,
     live_activity,
 )
-from imagent.contracts import (
-    AgentInput,
-    AgentMessage,
-    ConversationRef,
-    MessageRole,
-    TextContent,
-    ThreadRef,
-)
 from imagent.gateway.persistence import ThreadProjectionRoute
 from imagent.gateway.persistence.memory import InMemoryProjectionRouteRepository
+from imagent.interaction.messages import ConversationRef, MessageRole, TextContent
 from imagent.projections import (
     ProjectedAgentMessage,
     deliver_projected_message,

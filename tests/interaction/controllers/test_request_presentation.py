@@ -6,14 +6,10 @@ from datetime import UTC, datetime
 from importlib.util import find_spec
 
 import imagent.interaction.controllers as controllers_facade
-from imagent.contracts import (
-    ApplicationRef,
-    ConversationRef,
-    InboundMessage,
+from imagent.applications.contract import ApplicationRef, ThreadRef
+from imagent.applications.requests import (
     RequestChoice,
     RequestRef,
-    TextContent,
-    ThreadRef,
     UserInputQuestion,
     UserInputRequest,
 )
@@ -23,6 +19,11 @@ from imagent.interaction.controllers import (
     RequestPresenter,
 )
 from imagent.interaction.controllers.common import parse_slash_command
+from imagent.interaction.messages import (
+    ConversationRef,
+    InboundMessage,
+    TextContent,
+)
 
 
 class RequestPresentationOwnershipTests(unittest.TestCase):

@@ -13,12 +13,12 @@ from imagent.applications import (
     ZenApplicationAdapter,
 )
 from imagent.applications.capabilities import ProjectMode
+from imagent.interaction.channels import ChannelStartupConfigurationValidator
 from imagent.interaction.messages import (
     ConversationRef,
     InboundMessage,
     TextContent,
 )
-from imagent.interaction.channels import ChannelStartupConfigurationValidator
 from imagent.testing import (
     FakeAgentApplicationAdapter,
     FakeChannelAdapter,

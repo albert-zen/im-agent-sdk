@@ -959,7 +959,7 @@ components:
     target_tests: [tests/gateway/persistence/test_repository_contracts.py, tests/gateway/persistence/test_submission_identity.py]
     authoritative_docs: [docs/components/gateway/persistence/repository-contracts/design.md, docs/components/gateway/persistence/repository-contracts/testing.md, docs/components/ports/design.md, docs/components/persistence/design.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [imagent.adapters retains exact compatibility aliases for already-owned Application, repository, and proactive-authorization contracts; historical Channel/admission aliases were retired in the Interaction facade cleanup]
+    gaps: [imagent.adapters retains only exact Gateway repository and proactive-authorization aliases; no Application aliases remain, and historical Channel/admission aliases were retired in the Interaction facade cleanup]
 
   gateway.persistence.memory:
     id: gateway.persistence.memory
@@ -1535,6 +1535,102 @@ components:
 
 structural_status:
   orphan_paths: []
+  # Public names removed by the Applications facade convergence. The
+  # current-to-target delta is intentionally explicit so tests can derive the
+  # complete negative import set rather than maintain a second hand list.
+  retired_application_public_exports:
+    current:
+      - imagent.adapters:AgentApplicationAdapter
+      - imagent.adapters:ApplicationInputDispatchHandler
+      - imagent.contracts:AcceptedTurn
+      - imagent.contracts:ActivateNativeThread
+      - imagent.contracts:AgentInput
+      - imagent.contracts:AgentMessage
+      - imagent.contracts:ApplicationCapabilities
+      - imagent.contracts:ApplicationInputDispatch
+      - imagent.contracts:ApplicationOperation
+      - imagent.contracts:ApplicationOperationFailed
+      - imagent.contracts:ApplicationOperationResult
+      - imagent.contracts:ApplicationOperationType
+      - imagent.contracts:ApplicationRef
+      - imagent.contracts:ApplicationSummary
+      - imagent.contracts:ApprovalRequest
+      - imagent.contracts:ApprovalResponse
+      - imagent.contracts:ApprovalResponseShape
+      - imagent.contracts:CreateThread
+      - imagent.contracts:DeleteThread
+      - imagent.contracts:EventSequenceScope
+      - imagent.contracts:GetProject
+      - imagent.contracts:GetThread
+      - imagent.contracts:GetThreadHistory
+      - imagent.contracts:GetThreadStatus
+      - imagent.contracts:GetTurnCatchup
+      - imagent.contracts:InputContinuationPreference
+      - imagent.contracts:InputDisposition
+      - imagent.contracts:InteractiveRequest
+      - imagent.contracts:InteractiveRequestKind
+      - imagent.contracts:InterruptTurn
+      - imagent.contracts:ListProjects
+      - imagent.contracts:ListThreads
+      - imagent.contracts:MAX_INTERACTIVE_REQUEST_CHOICES
+      - imagent.contracts:MAX_INTERACTIVE_REQUEST_QUESTIONS
+      - imagent.contracts:NativeThreadActivated
+      - imagent.contracts:Page
+      - imagent.contracts:ProjectCapabilities
+      - imagent.contracts:ProjectMode
+      - imagent.contracts:ProjectRead
+      - imagent.contracts:ProjectRef
+      - imagent.contracts:ProjectSummary
+      - imagent.contracts:ProjectsListed
+      - imagent.contracts:RequestChoice
+      - imagent.contracts:RequestDuplicateError
+      - imagent.contracts:RequestRef
+      - imagent.contracts:RequestResolution
+      - imagent.contracts:RequestResolutionStatus
+      - imagent.contracts:RequestResolvedError
+      - imagent.contracts:RequestResponded
+      - imagent.contracts:RequestResponse
+      - imagent.contracts:RequestResponseShape
+      - imagent.contracts:RequestStaleError
+      - imagent.contracts:RespondRequest
+      - imagent.contracts:RuntimeCapabilities
+      - imagent.contracts:SupportLevel
+      - imagent.contracts:ThreadCapabilities
+      - imagent.contracts:ThreadCreated
+      - imagent.contracts:ThreadDeleted
+      - imagent.contracts:ThreadDeletionCapability
+      - imagent.contracts:ThreadDeletionMode
+      - imagent.contracts:ThreadHistory
+      - imagent.contracts:ThreadHistoryRead
+      - imagent.contracts:ThreadRead
+      - imagent.contracts:ThreadRef
+      - imagent.contracts:ThreadSnapshot
+      - imagent.contracts:ThreadStatus
+      - imagent.contracts:ThreadStatusRead
+      - imagent.contracts:ThreadSummary
+      - imagent.contracts:ThreadsListed
+      - imagent.contracts:TurnCatchup
+      - imagent.contracts:TurnCatchupRead
+      - imagent.contracts:TurnHistoryEntry
+      - imagent.contracts:TurnInterrupted
+      - imagent.contracts:TurnReplyCorrelationPolicy
+      - imagent.contracts:TurnStatus
+      - imagent.contracts:UserInputQuestion
+      - imagent.contracts:UserInputQuestionShape
+      - imagent.contracts:UserInputRequest
+      - imagent.contracts:UserInputResponse
+      - imagent.contracts:UserInputResponseShape
+      - imagent.contracts:derive_request_response_shape
+      - imagent.contracts:validate_application_capabilities
+      - imagent.contracts:validate_application_operation
+      - imagent.contracts:validate_application_operation_result
+      - imagent.contracts:validate_interactive_request
+      - imagent.contracts:validate_request_ref
+      - imagent.contracts:validate_request_resolution
+      - imagent.contracts:validate_request_response
+      - imagent.contracts:validate_request_response_shape
+      - imagent.contracts:validate_thread_ref
+    target: []
   temporary_external_docs:
     - path: docs/migrations/issue-9-imcodex-owner-transfer.md
       disposition: Remove after downstream ownership evidence is recorded in GitHub issues/PRs.

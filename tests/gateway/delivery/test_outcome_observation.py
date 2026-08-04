@@ -6,17 +6,8 @@ import sys
 import unittest
 from datetime import UTC, datetime
 
-from imagent.contracts import (
-    AgentMessage,
-    AttachmentContent,
-    ConversationRef,
-    DeliveryPrincipal,
-    LocalPath,
-    MessageRole,
-    OutboundMessage,
-    TextContent,
-    ThreadRef,
-)
+from imagent.applications.contract import AgentMessage, ThreadRef
+from imagent.contracts import DeliveryPrincipal
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import (
     DeliveryCoordinator,
@@ -49,6 +40,13 @@ from imagent.interaction.channels import (
     DeliveryReceipt,
     DeliveryReceiptStatus,
     DeliverySupportLevel,
+)
+from imagent.interaction.media import AttachmentContent, LocalPath
+from imagent.interaction.messages import (
+    ConversationRef,
+    MessageRole,
+    OutboundMessage,
+    TextContent,
 )
 from imagent.projections import (
     ProjectedAgentMessage,

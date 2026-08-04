@@ -8,15 +8,6 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 import imagent
-from imagent.contracts import (
-    AttachmentContent,
-    AttachmentGrouping,
-    AttachmentSourceKind,
-    ConversationRef,
-    OutboundMessage,
-    RemoteUrl,
-    TextContent,
-)
 from imagent.gateway.delivery import (
     DeliveryCoordinator,
     DeliveryCoordinatorConfig,
@@ -32,6 +23,17 @@ from imagent.interaction.channels import (
     DeliveryReceiptStatus,
     DeliverySegmentStatus,
     DeliverySupportLevel,
+)
+from imagent.interaction.media import (
+    AttachmentContent,
+    AttachmentGrouping,
+    AttachmentSourceKind,
+    RemoteUrl,
+)
+from imagent.interaction.messages import (
+    ConversationRef,
+    OutboundMessage,
+    TextContent,
 )
 
 

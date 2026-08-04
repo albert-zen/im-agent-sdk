@@ -15,25 +15,25 @@ from imagent.applications.adapters.appserver.requests import (
     map_appserver_request,
     map_zen_appserver_request,
 )
+from imagent.applications.capabilities import SupportLevel
+from imagent.applications.contract import ApplicationRef, ThreadRef
 from imagent.applications.events import AgentEventType, EventStreamReset
-from imagent.contracts import (
-    MAX_INTERACTIVE_REQUEST_CHOICES,
-    MAX_INTERACTIVE_REQUEST_QUESTIONS,
+from imagent.applications.operations import (
     ApplicationOperationFailed,
-    ApplicationRef,
-    ApprovalRequest,
-    ApprovalResponse,
-    ConversationRef,
-    OperationErrorCode,
     RequestResponded,
     RespondRequest,
-    SupportLevel,
-    TextContent,
-    ThreadRef,
+)
+from imagent.applications.requests import (
+    MAX_INTERACTIVE_REQUEST_CHOICES,
+    MAX_INTERACTIVE_REQUEST_QUESTIONS,
+    ApprovalRequest,
+    ApprovalResponse,
     UserInputRequest,
     UserInputResponse,
 )
 from imagent.interaction.controllers import MarkdownRequestPresenter
+from imagent.interaction.messages import ConversationRef, TextContent
+from imagent.interaction.operations import OperationErrorCode
 
 
 class AppServerRequestMappingTests(unittest.TestCase):

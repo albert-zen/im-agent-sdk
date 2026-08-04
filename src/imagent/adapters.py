@@ -43,6 +43,7 @@ if TYPE_CHECKING:
         TurnReplyCorrelationConflict as TurnReplyCorrelationConflict,
     )
 
+
 def __getattr__(name: str) -> object:
     if name == "DeliveryAuthorizer":
         from .gateway.delivery.proactive_authorization import (

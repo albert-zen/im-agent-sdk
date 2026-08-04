@@ -7,13 +7,9 @@ from subprocess import run
 from sys import executable
 
 from imagent.applications import CodexApplicationAdapter
+from imagent.applications.capabilities import ProjectMode
+from imagent.applications.contract import AgentInput, ThreadRef
 from imagent.applications.events import AgentEvent, AgentEventType
-from imagent.contracts import (
-    AgentInput,
-    ProjectMode,
-    TextContent,
-    ThreadRef,
-)
 from imagent.gateway.persistence.memory import InMemoryRequestCorrelationRepository
 from imagent.gateway.projection import (
     ProjectionRecoveryUnavailable,
@@ -21,6 +17,7 @@ from imagent.gateway.projection import (
     ThreadRecovery,
 )
 from imagent.gateway.projection.recovery import recover_thread
+from imagent.interaction.messages import TextContent
 from imagent.request_projection_runtime import InteractiveRequestProjection
 from imagent.testing import FakeAgentApplicationAdapter
 from tests.test_gateway_vertical_slice import NativeZenClient

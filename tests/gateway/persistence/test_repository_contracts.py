@@ -13,12 +13,8 @@ from typing import get_type_hints
 
 import imagent.adapters as adapters_facade
 import imagent.gateway.persistence as persistence_facade
-from imagent.applications.requests import RequestRef
-from imagent.contracts import (
-    ApplicationRef,
-    ApprovalResponseShape,
-    ThreadRef,
-)
+from imagent.applications.contract import ApplicationRef, ThreadRef
+from imagent.applications.requests import ApprovalResponseShape, RequestRef
 from imagent.gateway.persistence import (
     ConversationBinding,
     DeliveryReservation,

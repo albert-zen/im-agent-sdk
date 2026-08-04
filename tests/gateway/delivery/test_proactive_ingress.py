@@ -8,18 +8,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
+from imagent.applications.capabilities import ProjectMode
+from imagent.applications.contract import ThreadRef
 from imagent.cli.send import main as send_main
-from imagent.contracts import (
-    AttachmentContent,
-    AttachmentGrouping,
-    AttachmentSourceKind,
-    ConversationRef,
-    DeliveryPrincipal,
-    LocalPath,
-    ProjectMode,
-    TextContent,
-    ThreadRef,
-)
+from imagent.contracts import DeliveryPrincipal
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import (
     DeliverySubmissionOrigin,
@@ -44,6 +36,16 @@ from imagent.interaction.channels import (
     ChannelCapabilities,
     DeliveryReceipt,
     DeliverySupportLevel,
+)
+from imagent.interaction.media import (
+    AttachmentContent,
+    AttachmentGrouping,
+    AttachmentSourceKind,
+    LocalPath,
+)
+from imagent.interaction.messages import (
+    ConversationRef,
+    TextContent,
 )
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 

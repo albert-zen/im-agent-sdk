@@ -526,7 +526,6 @@ from .contract import (  # noqa: E402
 )
 from .requests import RequestRef, RequestResponse  # noqa: E402
 
-
 __all__ = [
     "ApplicationOperation",
     "ApplicationOperationResult",
