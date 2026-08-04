@@ -8,6 +8,7 @@ from dataclasses import FrozenInstanceError, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
+from unittest.mock import patch
 
 from imagent.adapters import IdempotencyClaimStatus
 from imagent.contracts import (
@@ -678,6 +679,81 @@ class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
         )
+        self.assertEqual(self.gateway._request_locks.active_key_count, 0)
+
+    async def test_same_conversation_request_response_uses_private_fence_once(self) -> None:
+        request = await self.application.open_approval_request(
+            self.thread.ref,
+            turn_id="turn-private-response-fence",
+        )
+        await _wait_for_correlation_count(
+            self.correlations,
+            request.request_ref,
+            2,
+        )
+        operation_kwargs = {
+            "conversation_ref": self.conversation_a,
+            "actor": "user-a",
+            "request_ref": request.request_ref,
+            "response": ApprovalResponse("accept"),
+        }
+        with (
+            patch.object(
+                self.gateway,
+                "_route_request_response",
+                wraps=self.gateway._route_request_response,
+            ) as route_wrapper,
+            patch.object(
+                self.gateway._request_locks,
+                "hold",
+                wraps=self.gateway._request_locks.hold,
+            ) as request_lock,
+            patch.object(
+                self.application,
+                "respond_request",
+                wraps=self.application.respond_request,
+            ) as native_response,
+        ):
+            results = await asyncio.gather(
+                self.gateway.execute_gateway(
+                    RespondToRequest(
+                        operation_id="private-response-first",
+                        created_at=_now(),
+                        **operation_kwargs,
+                    )
+                ),
+                self.gateway.execute_gateway(
+                    RespondToRequest(
+                        operation_id="private-response-second",
+                        created_at=_now(),
+                        **operation_kwargs,
+                    )
+                ),
+            )
+
+        self.assertEqual(route_wrapper.call_count, 2)
+        self.assertEqual(request_lock.call_count, 2)
+        self.assertEqual(native_response.await_count, 1)
+        self.assertEqual(
+            sum(isinstance(result, RequestResponseRouted) for result in results),
+            1,
+        )
+        failures = [
+            result for result in results if isinstance(result, GatewayOperationFailed)
+        ]
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(
+            failures[0].error.code,
+            OperationErrorCode.REQUEST_DUPLICATE.value,
+        )
+        self.assertEqual(
+            self.application.request_responses[request.request_ref],
+            ApprovalResponse("accept"),
+        )
+        correlations = await self.correlations.list_request_correlations(
+            request_ref=request.request_ref
+        )
+        self.assertTrue(all(item.state is RequestRouteState.RESPONDED for item in correlations))
         self.assertEqual(self.gateway._request_locks.active_key_count, 0)
 
     async def test_transient_capacity_pressure_does_not_lose_open_request(self) -> None:

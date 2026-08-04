@@ -125,49 +125,49 @@ if TYPE_CHECKING:
 
 
 class _GatewayOperationDelegates(Protocol):
-    def list_applications(
+    def _list_applications(
         self,
         operation: ListApplications,
         *,
         completed_at: datetime,
     ) -> tuple[ApplicationSummary, ...]: ...
 
-    def select_application(
+    def _select_application(
         self,
         operation: SelectApplication,
         *,
         completed_at: datetime,
     ) -> Awaitable[ConversationBound]: ...
 
-    def bind_conversation_to_project(
+    def _bind_conversation_to_project(
         self,
         operation: BindConversationToProject,
         *,
         completed_at: datetime,
     ) -> Awaitable[ConversationBound]: ...
 
-    def bind_conversation_to_thread(
+    def _bind_conversation_to_thread(
         self,
         operation: BindConversationToThread,
         *,
         completed_at: datetime,
     ) -> Awaitable[ConversationBound]: ...
 
-    def clear_conversation_thread(
+    def _clear_conversation_thread(
         self,
         operation: ClearConversationThread,
         *,
         completed_at: datetime,
     ) -> Awaitable[ConversationBound]: ...
 
-    def observe_thread(
+    def _observe_thread(
         self,
         operation: ObserveThread,
         *,
         completed_at: datetime,
     ) -> Awaitable[ThreadObserved]: ...
 
-    def respond_to_request(
+    def _route_request_response(
         self,
         operation: RespondToRequest,
         *,
@@ -430,38 +430,38 @@ class _GatewayOperationExecutor:
             return ApplicationsListed(
                 operation_id=operation.operation_id,
                 completed_at=completed_at,
-                applications=self._delegates.list_applications(
+                applications=self._delegates._list_applications(
                     operation,
                     completed_at=completed_at,
                 ),
             )
         if isinstance(operation, SelectApplication):
-            return await self._delegates.select_application(
+            return await self._delegates._select_application(
                 operation,
                 completed_at=completed_at,
             )
         if isinstance(operation, BindConversationToProject):
-            return await self._delegates.bind_conversation_to_project(
+            return await self._delegates._bind_conversation_to_project(
                 operation,
                 completed_at=completed_at,
             )
         if isinstance(operation, BindConversationToThread):
-            return await self._delegates.bind_conversation_to_thread(
+            return await self._delegates._bind_conversation_to_thread(
                 operation,
                 completed_at=completed_at,
             )
         if isinstance(operation, ClearConversationThread):
-            return await self._delegates.clear_conversation_thread(
+            return await self._delegates._clear_conversation_thread(
                 operation,
                 completed_at=completed_at,
             )
         if isinstance(operation, ObserveThread):
-            return await self._delegates.observe_thread(
+            return await self._delegates._observe_thread(
                 operation,
                 completed_at=completed_at,
             )
         if isinstance(operation, RespondToRequest):
-            return await self._delegates.respond_to_request(
+            return await self._delegates._route_request_response(
                 operation,
                 completed_at=completed_at,
             )

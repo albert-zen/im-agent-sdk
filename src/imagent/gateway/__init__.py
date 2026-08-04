@@ -505,7 +505,7 @@ class ImAgentGateway:
     ) -> GatewayOperationResult:
         return await self._gateway_operations.execute_locked(operation)
 
-    def list_applications(
+    def _list_applications(
         self,
         operation: ListApplications,
         *,
@@ -514,7 +514,7 @@ class ImAgentGateway:
         del operation, completed_at
         return tuple(application.summary for application in self._applications.values())
 
-    async def select_application(
+    async def _select_application(
         self,
         operation: SelectApplication,
         *,
@@ -537,7 +537,7 @@ class ImAgentGateway:
             binding=binding,
         )
 
-    async def bind_conversation_to_project(
+    async def _bind_conversation_to_project(
         self,
         operation: BindConversationToProject,
         *,
@@ -573,7 +573,7 @@ class ImAgentGateway:
             binding=binding,
         )
 
-    async def bind_conversation_to_thread(
+    async def _bind_conversation_to_thread(
         self,
         operation: BindConversationToThread,
         *,
@@ -696,7 +696,7 @@ class ImAgentGateway:
             binding=binding,
         )
 
-    async def clear_conversation_thread(
+    async def _clear_conversation_thread(
         self,
         operation: ClearConversationThread,
         *,
@@ -721,7 +721,7 @@ class ImAgentGateway:
             binding=binding,
         )
 
-    async def observe_thread(
+    async def _observe_thread(
         self,
         operation: ObserveThread,
         *,
@@ -752,7 +752,7 @@ class ImAgentGateway:
             route=route,
         )
 
-    async def respond_to_request(
+    async def _route_request_response(
         self,
         operation: RespondToRequest,
         *,
