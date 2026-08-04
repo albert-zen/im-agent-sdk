@@ -393,7 +393,7 @@ components:
       target: []
     dependencies: [interaction.channels.channel-contract, interaction.messages, interaction.media]
     state_recovery: Native cursors and provider-local duplicate caches stay adapter-owned; the bounded admission-transaction dedupe is ingress-owned, while the durable claim stays Gateway-owned.
-    current_code: [src/imagent/interaction/channels/ingress.py, src/imagent/interaction/channels/ingress_media.py, src/imagent/interaction/channels/ingress_security.py, src/imagent/interaction/channels/adapters/base.py, src/imagent/interaction/channels/adapters/runtime.py]
+    current_code: [src/imagent/interaction/channels/ingress.py, src/imagent/interaction/channels/ingress_media.py, src/imagent/interaction/channels/ingress_security.py, src/imagent/interaction/channels/adapters/runtime.py]
     target_code: [src/imagent/interaction/channels/ingress.py, src/imagent/interaction/channels/ingress_media.py, src/imagent/interaction/channels/ingress_security.py]
     current_tests: [tests/interaction/channels/test_ingress.py, tests/interaction/channels/test_ingress_media_owner.py, tests/interaction/channels/test_ingress_security.py, tests/test_native_channels.py, tests/interaction/channels/adapters/test_qq.py, tests/interaction/channels/adapters/test_telegram.py, tests/interaction/channels/adapters/test_feishu.py, tests/interaction/channels/adapters/test_weixin.py]
     target_tests: [tests/interaction/channels/test_ingress.py, tests/interaction/channels/test_ingress_media_owner.py, tests/interaction/channels/test_ingress_security.py]
@@ -415,7 +415,7 @@ components:
       target: []
     dependencies: [interaction.channels.channel-contract, interaction.messages, interaction.media]
     state_recovery: Native acceptance identity is evidence; unknown outcomes never authorize hidden replay.
-    current_code: [src/imagent/interaction/channels/outbound_delivery.py, src/imagent/interaction/channels/adapters/base.py]
+    current_code: [src/imagent/interaction/channels/outbound_delivery.py]
     target_code: [src/imagent/interaction/channels/outbound_delivery.py]
     current_tests: [tests/interaction/channels/test_outbound_delivery.py, tests/test_native_channels.py, tests/interaction/channels/adapters/test_qq.py, tests/interaction/channels/adapters/test_telegram.py, tests/interaction/channels/adapters/test_feishu.py, tests/interaction/channels/adapters/test_weixin.py]
     target_tests: [tests/interaction/channels/test_outbound_delivery.py]
@@ -1557,9 +1557,6 @@ structural_status:
     src/imagent/interaction/channels/adapters/runtime.py:
       owners: [interaction.channels.channel-contract, interaction.channels.ingress, interaction.channels.adapters]
       reason: One wrapper currently combines public contract adaptation, ingress route-context updates and envelope invocation, native send orchestration, and native factory composition; content assembly and the provider-neutral admission-handoff transaction are ingress-owned.
-    src/imagent/interaction/channels/adapters/base.py:
-      owners: [interaction.channels.ingress, interaction.channels.outbound-delivery, interaction.channels.adapters]
-      reason: BaseChannelAdapter combines lifecycle/startup validation, ingress access, outbound send validation, and native diagnostic state.
     src/imagent/gateway/__init__.py:
       owners: [gateway.composition, gateway.lifecycle, gateway.admission, gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.content-transformation, gateway.input.dispatch, gateway.input.failure-presentation, gateway.projection.observation, gateway.projection.request-correlation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.diagnostics]
       reason: The package facade re-exports composition values while the same module still sequences admission, input, observation, request routing, presentation, delivery, and diagnostics leaf behavior.

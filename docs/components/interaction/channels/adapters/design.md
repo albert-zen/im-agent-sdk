@@ -15,10 +15,10 @@ Channel plugin runtime.
 ## Shared shape and native differences
 
 All built-ins implement the same Channel contract and call the shared
-ingress/delivery ordering and validation helpers. Shared leaves may cover
-access evaluation, media/file validation, bounded text/artifact mechanics,
-stable receipt correlation, and runtime lifecycle where two or more real
-Channels prove the semantics. Concrete adapters exclusively own provider
+ingress/delivery ordering and validation helpers. Shared leaves cover access
+evaluation, denial-report bounds, media/file validation, bounded
+text/artifact mechanics, stable receipt correlation, and runtime lifecycle
+where two or more real Channels prove the semantics. Concrete adapters exclusively own provider
 authentication/signatures, API encoding/escaping, credentials, native
 upload/download/decryption/acknowledgement, URL rules, QR/token state, rate
 limit/response mapping, and diagnostic worker facts.
@@ -68,11 +68,17 @@ Channel facade. All four providers import `BaseChannelAdapter` and
 `ChannelRouteContext` from
 `src/imagent/interaction/channels/adapters/base.py`. The historical
 `imagent.channels.native.base` path is removed without a compatibility shim.
-The base still coordinates adapter-owned diagnostics with shared ingress access
-and outbound validation, so it remains an explicit split candidate until those
-responsibilities move in later focused slices; this placement change does not
-alter lifecycle, policy, or delivery behavior. Shared media staging and Windows
-path security now live with Interaction ingress; the historical native helper
+`BaseChannelAdapter` retains the exact native adapter method surface as a thin
+delegator to ingress and outbound delivery. It owns only native lifecycle,
+startup validation, route-context state, and diagnostic state/facts. Its
+`dispatch_inbound` method preserves virtual access/report/diagnostic calls and
+their old order before delegating admitted handoff options to ingress. Its
+outbound method preserves virtual route-user resolution and lazy conversation
+fallback, then emits/raises only for the outbound leaf's explicit denial.
+Access-denial diagnostic emission remains in the adapter boundary under ADR
+0014, while the access decision, bounded report preparation, inbound handoff,
+and outbound enforcement live in the focused Interaction leaves. Shared media
+staging and Windows path security now live with Interaction ingress; the historical native helper
 package is absent.
 
 The adapters package exposes only the component-map-approved QQ adapter and

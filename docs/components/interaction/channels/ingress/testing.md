@@ -3,6 +3,8 @@
 Required scenarios:
 
 - authentication and allow/deny policy precede media/network/filesystem work;
+- access-denial report preparation remains bounded by the fixed report limit
+  and window, while suppression never permits the denied input to continue;
 - all native identity fields are stable, bounded, and normalized without text
   or timestamp idempotency fallbacks;
 - public inbound normalization preserves stable native message, Conversation,
@@ -30,6 +32,13 @@ Required scenarios:
 - restart redelivery and native cursor/fast-path behavior preserve the durable
   admission authority; and
 - QQ, Telegram, Feishu, and Weixin counterexamples all use the same ordering.
+
+The adapter-base parity tests also prove that the inherited access and inbound
+dispatch methods preserve virtual access/report/diagnostic calls and their
+denial-before-handoff order, while admitted options and middleware handoff
+delegate to this leaf without a second limiter or admission path. Native
+diagnostic emission remains covered by the adapter diagnostics suite and is
+intentionally not moved into ingress.
 
 Focused policy evidence lives in
 `tests/interaction/channels/test_ingress.py`: configuration parsing,

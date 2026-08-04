@@ -4,8 +4,9 @@
 
 Outbound delivery owns shared Channel-side execution after Gateway planning:
 source/trust and defensive contract validation, stable source-item/native
-attempt correlation, bounded text/artifact helpers proven across Channels, and
-normalization of adapter outcomes into truthful typed receipt evidence.
+attempt correlation, bounded text/artifact helpers proven across Channels,
+normalization of adapter outcomes into truthful typed receipt evidence, and the
+shared outbound access decision used before native encoding or submission.
 
 The shared artifact batch helper executes one ordered native-message attempt.
 It records per-artifact success or permanent failure, continues after a known
@@ -56,6 +57,17 @@ recognized artifact metadata through the stable public content indexes, and
 returns the same accepted/per-item evidence without inventing retryable or
 unknown acceptance. It performs no native call or provider response mapping;
 the adapter invokes it only after the native send returns.
+
+The private `ensure_outbound_allowed` helper evaluates the configured
+`ChannelAccessPolicy` using the most recent admitted route user when available,
+then the adapter's conversation-user fallback, and returns a bounded typed
+admitted/user-id decision. It performs no native call, does not mutate route
+context, and lets policy exceptions propagate without translating them into a
+synthetic denial. `BaseChannelAdapter.ensure_outbound_allowed` first resolves
+the user through its virtual `_last_inbound_user_id(message)` method and only
+then calls `_conversation_user_id` when that value is absent. It emits the
+existing adapter diagnostic event and raises the exact existing
+`PermissionError` only for the leaf's explicit not-admitted decision.
 
 ## Submission and receipts
 

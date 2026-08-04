@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import time
+from collections import deque
 from collections.abc import Awaitable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from threading import Lock
 from typing import Literal, Protocol, cast
 
 from ..media import AttachmentContent, LocalPath
@@ -18,6 +21,8 @@ AccessMatch = Literal["any", "all"]
 _UNRESTRICTED = "*"
 _DENY_ALL = "none"
 _TRANSIENT_ADMISSION_LIMIT = 16_384
+ACCESS_DENIAL_REPORT_LIMIT = 10
+ACCESS_DENIAL_REPORT_WINDOW_S = 60.0
 
 
 def parse_id_set(value: object) -> frozenset[str]:
@@ -107,6 +112,58 @@ class ChannelAccessPolicy:
         return any(matches) if self.access_match == "any" else all(matches)
 
 
+class _AccessDenialLimiter:
+    """Bound access-denial diagnostics without weakening the actual gate."""
+
+    def __init__(self) -> None:
+        self._reported_at: deque[float] = deque()
+        self._suppressed = 0
+        self._lock = Lock()
+
+    def note(self) -> int | None:
+        now = time.monotonic()
+        with self._lock:
+            cutoff = now - ACCESS_DENIAL_REPORT_WINDOW_S
+            while self._reported_at and self._reported_at[0] <= cutoff:
+                self._reported_at.popleft()
+            if len(self._reported_at) >= ACCESS_DENIAL_REPORT_LIMIT:
+                self._suppressed += 1
+                return None
+            self._reported_at.append(now)
+            suppressed = self._suppressed
+            self._suppressed = 0
+            return suppressed
+
+
+def inbound_allowed(*, access_policy: ChannelAccessPolicy, inbound: InboundMessage) -> bool:
+    return access_policy.allows(
+        user_id=inbound.user_id,
+        conversation_id=inbound.conversation_id,
+    )
+
+
+def inbound_access_ready() -> bool:
+    return True
+
+
+def access_policy_health(
+    *,
+    access_policy: ChannelAccessPolicy,
+    inbound_access_ready_value: bool,
+) -> dict[str, object]:
+    return {
+        "inbound_access_ready": inbound_access_ready_value,
+        "access_policy_mode": access_policy.mode,
+        "access_match": access_policy.access_match,
+        "allowed_user_count": len(access_policy.restricted_user_ids),
+        "allowed_conversation_count": len(access_policy.restricted_conversation_ids),
+    }
+
+
+def prepare_access_denial_report(limiter: _AccessDenialLimiter) -> int | None:
+    return limiter.note()
+
+
 @dataclass(frozen=True, slots=True)
 class InboundAttachment:
     kind: Literal["image", "file"]
@@ -147,6 +204,32 @@ class _InboundNormalizer(Protocol):
         *,
         reply_to_message_id: str | None,
     ) -> InteractionInboundMessage: ...
+
+
+class _InboundHandoffMiddleware(Protocol):
+    async def handle_inbound(
+        self,
+        adapter: object,
+        inbound: InboundMessage,
+        **options: object,
+    ) -> None: ...
+
+
+async def dispatch_inbound(
+    *,
+    adapter: object,
+    middleware: _InboundHandoffMiddleware,
+    inbound: InboundMessage,
+    reply_to_message_id: str | None = None,
+    prepare_inbound: _InboundPreparation | None = None,
+    pending_attachment_count: int = 0,
+) -> None:
+    dispatch_options: dict[str, object] = {"reply_to_message_id": reply_to_message_id}
+    if prepare_inbound is not None:
+        dispatch_options["prepare_inbound"] = prepare_inbound
+    if pending_attachment_count:
+        dispatch_options["pending_attachment_count"] = pending_attachment_count
+    await middleware.handle_inbound(adapter, inbound, **dispatch_options)
 
 
 class _InboundAdmissionTransaction:

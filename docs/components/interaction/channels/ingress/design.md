@@ -4,8 +4,9 @@
 
 Ingress turns one adapter-authenticated native event into one verified
 `InboundMessage`. It owns the shared ordering and helpers for configured access
-evaluation, stable account/Conversation/sender/message identity and public
-envelope normalization, a bounded process-local duplicate fast path, the
+evaluation, access-denial report preparation and bounded reporting, stable
+account/Conversation/sender/message identity and public envelope
+normalization, a bounded process-local duplicate fast path, the
 provider-neutral pre-media admission/handoff transaction, common media
 validation/staging, and explicit `AttachmentSource` values.
 
@@ -33,6 +34,9 @@ The required order is:
 Access and durable duplicate rejection precede network download, filesystem
 staging, parsing, and Agent mutation. A no-lease result removes the transient
 fast-path key so a future provider redelivery can reclaim an abandoned lease.
+Access-denial reporting is separately bounded to
+`ACCESS_DENIAL_REPORT_LIMIT` reports in
+`ACCESS_DENIAL_REPORT_WINDOW_S`; suppression never weakens the access gate.
 Provider acknowledgements/cursors remain adapter state and never replace SDK
 stable identity.
 
@@ -59,9 +63,21 @@ the no-lease key discard, transfer fence before `InboundAdmission.deliver`,
 release-failure note, original-error precedence, and failure key discard. The
 stage callables are narrow ingress-specific Protocols; they are invoked for
 one transaction and are not a generic middleware or hook chain. Runtime keeps
-bounded route-context updates and supplies the normalizer; the current
-BaseChannelAdapter access-policy invocation and concrete provider
+bounded route-context updates and supplies the normalizer; concrete provider
 authentication, retrieval/decryption, and acknowledgement remain in adapters.
+
+`BaseChannelAdapter` preserves its existing access and dispatch method surface
+as a thin delegator to this leaf. Its `dispatch_inbound` method still invokes
+the virtual `self.inbound_allowed(inbound)`,
+`self.prepare_access_denial_report()`, and
+`self.emit_access_denial(inbound, suppressed)` calls in their established
+order; only the admitted options construction and middleware handoff are
+delegated to the focused ingress helper. The inherited access-policy and
+bounded-report methods delegate their leaf-owned mechanics without creating a
+second policy or limiter path. Native diagnostic state and the
+`emit_access_denial` call remain adapter-owned because diagnostics are governed
+separately by ADR 0014; ingress supplies the access decision and bounded report
+value without moving diagnostic ownership.
 
 ## Capacity, trust, and recovery
 

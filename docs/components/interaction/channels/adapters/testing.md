@@ -49,7 +49,12 @@ behavioral conformance suite.
 
 Base ownership tests prove `BaseChannelAdapter` and `ChannelRouteContext` are
 defined only by the Interaction adapters leaf, every provider and the runtime
-wrapper use those exact owner objects, and the historical
+wrapper use those exact owner objects, and the base delegates access-policy,
+bounded denial-report, admitted inbound handoff, and outbound-enforcement
+behavior to the focused Interaction leaves without a duplicate path. They also
+prove inbound virtual overrides remain honored, denied input cannot reach
+middleware, outbound route-user overrides remain lazy, and policy-raised
+`PermissionError` values do not synthesize diagnostics. The historical
 `imagent.channels.native.base` module is absent in a clean process. Existing
 native Channel, access-policy, diagnostics, ingress, outbound, and Gateway
 vertical tests remain the behavior-preservation suite for the mechanical move.
