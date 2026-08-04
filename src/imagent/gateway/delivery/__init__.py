@@ -20,7 +20,6 @@ from .proactive import (
     DeliveryTargetKind,
     DestinationDeliveryResult,
     ProactiveDeliveryResult,
-    ProactiveDeliveryService,
     ThreadRouteDeliveryTarget,
     validate_delivery_intent,
 )
@@ -31,6 +30,7 @@ from .proactive_authorization import (
     validate_delivery_principal,
 )
 from .proactive_ingress import ProactiveDeliveryJsonHandler
+from .proactive_runtime import ProactiveDeliveryService as ProactiveDeliveryService
 from .submissions import (
     DeliverySubmissionOrigin,
     derive_delivery_payload_fingerprint,

@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import imagent.contracts as contract_facade
+import imagent.gateway as gateway_facade
 import imagent.gateway.delivery as delivery_facade
 from imagent.adapters import (
     DeliverySubmissionCapacityError,
@@ -51,10 +52,9 @@ from imagent.gateway.delivery import (
     ScopedDeliveryAuthorizer,
 )
 from imagent.gateway.delivery import proactive as proactive_owner
-from imagent.gateway.delivery.proactive import (
-    DeliveryRouteError,
-)
+from imagent.gateway.delivery import proactive_runtime as runtime_owner
 from imagent.gateway.delivery.proactive_authorization import DeliveryAuthorizationError
+from imagent.gateway.delivery.proactive_runtime import DeliveryRouteError
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryDeliverySubmissionRepository,
@@ -84,8 +84,15 @@ class ProactiveDeliveryOwnershipTests(unittest.TestCase):
                 self.assertIs(getattr(contract_facade, name), owner)
         self.assertIs(
             delivery_facade.ProactiveDeliveryService,
-            proactive_owner.ProactiveDeliveryService,
+            runtime_owner.ProactiveDeliveryService,
         )
+        self.assertIs(
+            gateway_facade.ProactiveDeliveryService,
+            runtime_owner.ProactiveDeliveryService,
+        )
+        self.assertFalse(hasattr(proactive_owner, "ProactiveDeliveryService"))
+        self.assertFalse(hasattr(proactive_owner, "DeliveryRouteError"))
+        self.assertFalse(hasattr(proactive_owner, "authorize_delivery_target"))
         self.assertIsNone(importlib.util.find_spec("imagent.proactive_delivery"))
 
 

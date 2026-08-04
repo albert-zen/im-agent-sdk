@@ -107,7 +107,7 @@ from .delivery.outcome_observation import (
     DeliveryOutcomeObserverRuntime,
 )
 from .delivery.planning import DeliveryPlanningError
-from .delivery.proactive import ProactiveDeliveryService
+from .delivery.proactive_runtime import ProactiveDeliveryService
 from .input import InboundContentTransformer as InboundContentTransformer
 from .input.content_transformation import InboundContentTransformRuntime
 from .input.failure_presentation import InboundFailurePhase as InboundFailurePhase
