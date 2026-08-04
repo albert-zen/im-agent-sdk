@@ -24,11 +24,61 @@ Only its App Server-specific positions belong here.
 
 Inputs are local transport/runtime transitions and already received native
 messages. `AppServerDiagnosticState.snapshot()` produces the ADR-0014
-read-only, bounded, redacted `ConnectionDiagnosticFacts` surface. Separate
-legacy debug summaries are internal mappings and logs; they are not part of
-that redaction guarantee and currently may include native/response IDs,
-content or error previews, commands, cwd, questions, and changed paths.
-Snapshot reads perform no I/O.
+read-only, bounded, redacted `ConnectionDiagnosticFacts` surface. Snapshot
+reads perform no I/O and retain their existing exact typed state, counter,
+epoch, queue, and failure-code behavior.
+
+The separate internal debug path uses exactly one bounded
+`appserver.debug.v1` vocabulary. It is not an ADR-0014 fact surface, exporter,
+or public context bag. Its records have a fixed record class and fixed fields:
+
+- transport summaries carry only transport shape, normalized method
+  category/kind/direction, error presence, one bounded structural body
+  summary, and the validated preview policy;
+- text summaries carry only a capped character length, a capped flag, an
+  optional SHA-256 fingerprint, explicit `fingerprint_redacted` and
+  `path_or_endpoint_redacted` flags, the validated preview limit, and a fixed
+  `preview_emitted: false` marker;
+- event records carry only allowlisted component/event/level/mode categories,
+  a capped process-local connection epoch, bounded structural message/data
+  summaries, and a capped ignored-field count; and
+- health records carry only fixed connection/status/transport/ownership
+  categories, booleans, capped epoch/retry counts, a health category, failure
+  presence, and a capped ignored-field count.
+
+Structural values use only fixed type, capped scalar-length, capped
+collection-count, and at-most-four sample fields. Scalar lengths cap at
+16,384 characters; collection and ignored-field counts cap at 64; and
+process-local epoch/retry counters cap at 1,000,000. Mapping samples contain a
+nullable SHA-256 fingerprint, capped length, and explicit `key_redacted` flag
+for a key plus the sampled value's type and scalar length; sequence samples
+contain only that value shape. An over-limit text or key, or a text/key that
+looks like a path or endpoint, has no fingerprint: its redaction flag is true
+and the fingerprint is `null`. The helper checks the scalar cap before any
+path/endpoint scan or fingerprinting, examines at most four samples, and never
+sorts or copies an unbounded native result, payload, permission, question,
+change, event, or health mapping.
+`max_preview_chars` is an integer that is neither `bool` nor non-positive and
+may not exceed 256. The policy deliberately emits no raw preview for any
+valid limit.
+
+No debug record retains or emits raw native response/request/Thread/Turn/item
+IDs, prompts/questions/answers, deltas/messages, commands, cwd, changed
+paths, permission values, tokens/credentials, endpoint/userinfo, arbitrary
+payload keys, or arbitrary payload values. A fingerprint is the only retained
+text-derived value and is never a reversible prefix. Managed-media, single- or
+embedded Unix paths, Windows drive/UNC paths, and endpoints/userinfo under any
+URI scheme are redacted fail-closed before any helper logs or fingerprints
+them. `emit_event` and `mark_appserver_health` normalize every supplied field
+into this vocabulary; unknown fields are counted, never logged as keys or
+values.
+
+The vocabulary has deliberate fallback rules, rather than echoing an unknown
+caller string: protocol shape/direction/category/kind use the fixed `unknown`
+value (or fixed `invalid` after mapping rejection); adapter component, mode,
+status, transport, and ownership use `other`; an unrecognized event becomes
+`appserver.other`; and an unrecognized level becomes `DEBUG`. These strings
+are finite diagnostics categories, never values copied from the native peer.
 
 The formal export is now `AppServerDiagnosticState` from the exact owner
 `imagent.applications.adapters.appserver.diagnostics`. The historical
@@ -41,10 +91,9 @@ The provider depends on the Interaction connection/queue diagnostic contract
 and internal App Server mapping classification. Counters and the current epoch are bounded
 process-local state. Notification/server-request overflow is explicit and
 connection-scoped; reset recovery is owned by the client/adapter, not by a
-diagnostic exporter. ADR-0014 redaction applies to the fixed diagnostic facts.
-The legacy debug-summary/logging path still needs a focused security pass that
-bounds previews and defines which native IDs, paths, commands, questions, and
-content-derived values may be retained or emitted.
+diagnostic exporter. ADR-0014 redaction applies to the fixed diagnostic facts;
+the internal `appserver.debug.v1` rules above apply independently to every
+debug helper and log sink.
 
 ## Current, target, and structural gap
 
@@ -57,10 +106,10 @@ reclassified as an App Server leaf. Common connection/queue values come from
 `imagent.interaction.diagnostics`.
 Current evidence is `tests/applications/adapters/appserver/test_client.py`,
 `tests/test_appserver_transport.py`, and `tests/gateway/test_diagnostics.py`; the target suite is
-`tests/applications/adapters/appserver/test_diagnostics.py`. The gap is to
-preserve the common diagnostic contract and keep Applications independent of
-Gateway, plus the legacy debug-summary redaction/bounding work described
-above.
+`tests/applications/adapters/appserver/test_diagnostics.py`. The diagnostic
+owner preserves the common contract and keeps Applications independent of
+Gateway; the legacy debug path is now bounded/redacted rather than a separate
+unbounded troubleshooting surface.
 
 ## Authority
 

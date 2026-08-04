@@ -228,13 +228,10 @@ class AppServerClient:
             "mode": self.connection_mode,
             "ownership": target.ownership,
             "transport": target.transport,
-            "endpoint": self._supervisor.display_connection_target,
             "connection_epoch": self.connection_epoch,
             "reconnect_enabled": self._supervisor.supports_background_reconnect,
             "local_image_paths": self.supports_local_image_paths(),
         }
-        if ready and isinstance(self._ready_health.get("rehydration"), dict):
-            facts["rehydration"] = dict(self._ready_health["rehydration"])
         return facts
 
     def connection_diagnostics(self) -> ConnectionDiagnosticFacts:
@@ -296,7 +293,7 @@ class AppServerClient:
         self._verified_shared_filesystem = verified
         self._verified_shared_filesystem_epoch = self.connection_epoch if verified else None
 
-    def _mark_appserver_health(self, **changes: Any) -> None:
+    def _mark_appserver_health(self, **changes: object) -> None:
         payload = self.connection_facts()
         payload.update(changes)
         mark_appserver_health(**payload)

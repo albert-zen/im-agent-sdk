@@ -35,6 +35,12 @@ at the callback envelope root. A server request already carries its JSON-RPC
 mapping's native payload bounds apply to the native payload rather than SDK
 bookkeeping.
 
+Client protocol/stderr/reconnect and supervisor diagnostics pass only through
+the App Server diagnostic leaf's fixed `appserver.debug.v1` structural
+vocabulary. The client never forwards its endpoint-bearing connection facts,
+native callback mappings, exception text, or arbitrary health kwargs to the
+logger; unknown helper fields collapse to a bounded count.
+
 The exact target facade exports `AppServerClient`,
 `AppServerDispatchPosition`, `AppServerError`, `AppServerResponse`,
 `AppServerSupervisor`, `APP_SERVER_DISPATCH_POSITION_KEY`, and

@@ -1406,24 +1406,24 @@ components:
   applications.adapters.appserver.diagnostics:
     id: applications.adapters.appserver.diagnostics
     parent: applications.adapters.appserver
-    purpose: Record redacted bounded App Server connection/queue facts and maintain adapter-internal legacy debug summaries.
-    owns: [AppServerDiagnosticState, fixed fact-surface redaction, legacy debug summarization, fixed health emission]
+    purpose: Record redacted bounded App Server connection/queue facts and maintain the fixed appserver.debug.v1 internal structural debug vocabulary.
+    owns: [AppServerDiagnosticState, fixed fact-surface redaction, bounded redacted debug summarization, fixed health emission]
     does_not_own: [Gateway health policy, retry decisions, consumer presentation]
     inputs: [local transport/runtime transitions and received native messages]
-    outputs: [ConnectionDiagnosticFacts and internal debug mappings/logs]
+    outputs: [ConnectionDiagnosticFacts and fixed bounded redacted internal debug mappings/logs]
     public_contracts: [AppServerDiagnosticState]
     public_exports:
       current: [imagent.applications.adapters.appserver.diagnostics:AppServerDiagnosticState]
       target: [imagent.applications.adapters.appserver.diagnostics:AppServerDiagnosticState]
     dependencies: [interaction.diagnostics, applications.application-contract, applications.adapters.appserver.mapping]
-    state_recovery: Process-lifetime counters and current connection epoch only; reads perform no I/O.
+    state_recovery: Process-lifetime counters and current connection epoch only; snapshot reads perform no I/O, while internal logs retain only fixed categories, bounded structural counts/lengths, and non-reversible SHA-256 fingerprints.
     current_code: [src/imagent/applications/adapters/appserver/diagnostics.py]
     target_code: [src/imagent/applications/adapters/appserver/diagnostics.py]
     current_tests: [tests/applications/adapters/appserver/test_diagnostics.py, tests/applications/adapters/appserver/test_client.py, tests/test_appserver_transport.py, tests/gateway/test_diagnostics.py]
     target_tests: [tests/applications/adapters/appserver/test_diagnostics.py]
     authoritative_docs: [docs/components/applications/adapters/appserver/diagnostics/design.md, docs/components/applications/adapters/appserver/diagnostics/testing.md]
     adrs: [docs/decisions/0014-read-only-diagnostics-surface.md]
-    gaps: [legacy debug summaries still require focused bounds and redaction]
+    gaps: []
 
   applications.adapters.codex:
     id: applications.adapters.codex

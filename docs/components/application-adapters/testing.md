@@ -98,6 +98,10 @@ Every adapter should prove:
   connection with fixed redacted failure, and a fresh epoch can recover;
 - App Server diagnostics cover ready/reconnect epochs and both dispatch-lane
   overflows without exposing endpoints, paths, native IDs, or error text;
+- App Server internal protocol/stderr/supervisor/health debug records have a
+  fixed bounded redacted vocabulary: nested sensitive native values never
+  survive, collections are bounded before sampling/sorting, and all text
+  previews remain absent;
 - T3 diagnostics expose no synthetic long-lived connection, proving the
   optional provider is not a Codex-specific Core requirement;
 - App Server callback positions preserve wire admission order across its
