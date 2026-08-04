@@ -44,8 +44,12 @@ or the adapter facade does not import native SDKs. Every worker/queue/cache and
 reconnect delay is finite, failures are explicit, and no consumer work runs on
 a provider socket-read callback.
 
-`diagnostics.py` owns the immutable native queue/connection/Channel facts, the
-bounded process-local transport state, and adapter event/health debug emission.
+`diagnostics.py` owns the native queue/connection snapshots, bounded
+process-local transport state, and adapter event/health debug emission. The
+canonical immutable `ConnectionDiagnosticFacts`, `QueueDiagnosticFacts`, and
+`ChannelDiagnosticFacts` contracts belong to the Interaction diagnostics
+leaves; this native helper imports them at the adapter boundary and does not
+redefine them.
 It performs no I/O, callbacks, persistence, export, or operator policy. Media
 staging keeps its own non-authoritative debug emission rather than importing a
 concrete-adapter owner from the ingress leaf. The historical native diagnostics

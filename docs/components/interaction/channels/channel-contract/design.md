@@ -34,7 +34,8 @@ Application `SupportLevel`. `DeliveryProfile` is the derived planning view for
 text units/limits, Markdown fallback, attachments/grouping, and the
 Interaction-owned `ReplyReferenceScope`. Unsupported behavior fails explicitly.
 Optional `ChannelStartupConfigurationValidator` is pure and repeatable; ADR
-0014 diagnostics is a separate synchronous read-only structural capability.
+0014 diagnostics is a separate synchronous read-only structural capability
+owned by [`interaction.channels.diagnostics`](../diagnostics/design.md).
 
 ## Admission and failure boundary
 

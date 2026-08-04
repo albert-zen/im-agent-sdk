@@ -160,9 +160,13 @@ and Weixin report none. This is not startup validation or an ADR 0015 message
 extension.
 
 The native Channel fact/state implementation lives with the Interaction
-adapter owner. It is distinct from the public Gateway aggregate diagnostic
-vocabulary and from media staging debug logs; no compatibility implementation
-remains under the historical native package.
+adapter owner. Its public `ChannelDiagnosticFacts` and
+`ChannelDiagnosticsProvider` contracts are owned by
+`imagent.interaction.channels.diagnostics`; the common connection/queue
+vocabulary is owned by `imagent.interaction.diagnostics`. This is distinct
+from the public Gateway aggregate diagnostics and from media staging debug
+logs; no compatibility implementation remains under the historical native
+package.
 
 Native behavior and limitations are documented separately:
 

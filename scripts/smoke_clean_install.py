@@ -7,6 +7,28 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / "dist"
+DIAGNOSTICS_FACADE_CHECK = (
+    "import subprocess, sys; "
+    "import imagent.interaction.diagnostics as common_owner; "
+    "import imagent.interaction.channels.diagnostics as channel_owner; "
+    "import imagent.diagnostics as transition_facade; "
+    "common_names = ('ConnectionDiagnosticState', 'DiagnosticFailureCode', "
+    "'QueueDiagnosticName', 'QueueDiagnosticFacts', 'ConnectionDiagnosticFacts'); "
+    "channel_names = ('ChannelDiagnosticFacts', 'ChannelDiagnosticsProvider'); "
+    "assert all(getattr(transition_facade, name) is getattr(common_owner, name) "
+    "for name in common_names); "
+    "assert all(getattr(transition_facade, name) is getattr(channel_owner, name) "
+    "for name in channel_names); "
+    "subprocess.run([sys.executable, '-c', "
+    '"import imagent.diagnostics as f; '
+    "import imagent.interaction.diagnostics as c; "
+    "import imagent.interaction.channels.diagnostics as ch; "
+    "assert f.ConnectionDiagnosticState is c.ConnectionDiagnosticState; "
+    "assert f.QueueDiagnosticFacts is c.QueueDiagnosticFacts; "
+    "assert f.ChannelDiagnosticFacts is ch.ChannelDiagnosticFacts; "
+    'assert f.ChannelDiagnosticsProvider is ch.ChannelDiagnosticsProvider"], '
+    "check=True); "
+)
 CHANNEL_FACADE_CHECK = (
     "import imagent.interaction.channels as channel_facade; "
     "import imagent.interaction.channels.contract as channel_owner; "
@@ -308,7 +330,7 @@ def main() -> int:
                 requirement,
                 "python",
                 "-c",
-                CHANNEL_FACADE_CHECK + code,
+                DIAGNOSTICS_FACADE_CHECK + CHANNEL_FACADE_CHECK + code,
             ],
             cwd=ROOT,
             check=True,

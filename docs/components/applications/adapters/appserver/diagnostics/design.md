@@ -14,9 +14,11 @@ becoming an operator or Gateway health policy.
 
 It does not own common diagnostic enums/value definitions, Gateway
 diagnostics, polling, retry decisions, or consumer presentation. The
-historical aggregate
-`src/imagent/diagnostics.py` remains a shared contract location until a later
-focused ownership split; only its App Server-specific positions belong here.
+historical aggregate `src/imagent/diagnostics.py` remains the transition
+facade for not-yet-moved Application/Gateway definitions; the
+dependency-neutral connection/queue contracts are owned by
+[`interaction.diagnostics`](../../../../interaction/diagnostics/design.md).
+Only its App Server-specific positions belong here.
 
 ## Typed boundary and public facade
 
@@ -35,8 +37,8 @@ facade or duplicate implementation is introduced.
 
 ## Dependencies, state, and recovery
 
-The provider depends on the Applications diagnostic contract and internal App
-Server mapping classification. Counters and the current epoch are bounded
+The provider depends on the Interaction connection/queue diagnostic contract
+and internal App Server mapping classification. Counters and the current epoch are bounded
 process-local state. Notification/server-request overflow is explicit and
 connection-scoped; reset recovery is owned by the client/adapter, not by a
 diagnostic exporter. ADR-0014 redaction applies to the fixed diagnostic facts.
@@ -48,8 +50,10 @@ content-derived values may be retained or emitted.
 
 The App Server diagnostic fact, summary, and runtime helpers now co-locate at
 `src/imagent/applications/adapters/appserver/diagnostics.py`.
-`src/imagent/diagnostics.py` remains the shared diagnostic contract and
-aggregate vocabulary; it is not moved or reclassified as an App Server leaf.
+`src/imagent/diagnostics.py` remains the explicit transition facade for
+remaining Application/Gateway facts; it is not moved or reclassified as an App
+Server leaf. Common connection/queue values come from
+`imagent.interaction.diagnostics`.
 Current evidence is `tests/applications/adapters/appserver/test_client.py`,
 `tests/test_appserver_transport.py`, and `tests/test_diagnostics.py`; the target suite is
 `tests/applications/adapters/appserver/test_diagnostics.py`. The gap is to
@@ -60,6 +64,7 @@ above.
 ## Authority
 
 - [App Server block](../README.md)
-- [Diagnostics design](../../../../diagnostics/design.md)
+- [Interaction diagnostics design](../../../../interaction/diagnostics/design.md)
+- [Transition diagnostics design](../../../../diagnostics/design.md)
 - [Applications adapter overview](../../../../application-adapters/design.md)
 - [ADR 0014](../../../../../decisions/0014-read-only-diagnostics-surface.md)

@@ -17,6 +17,7 @@ from ..contract import (
     InboundAdmissionHandler,
     MessageHandler,
 )
+from ..diagnostics import ChannelDiagnosticFacts
 from ..outbound_delivery import (
     NativeDeliveryResult,
 )
@@ -112,18 +113,19 @@ class NativeTransportChannelAdapter:
     def kind(self) -> str:
         return self._channel_id
 
-    def diagnostic_facts(self) -> NativeChannelDiagnosticSnapshot:
+    def diagnostic_facts(self) -> ChannelDiagnosticFacts:
         native = self._native
         facts = (
             self._with_process_lifetime_overflow(_native_connection_facts(native))
             if native is not None
             else None
         )
-        return NativeChannelDiagnosticSnapshot(
+        snapshot = NativeChannelDiagnosticSnapshot(
             channel_instance_id=self._channel_instance_id,
             kind=self._channel_id,
             connection=facts if native is not None else self._last_connection_facts,
         )
+        return snapshot.as_contract()
 
     @property
     def capabilities(self) -> ChannelCapabilities:

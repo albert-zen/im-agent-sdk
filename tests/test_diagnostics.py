@@ -11,17 +11,19 @@ from imagent.applications.adapters.t3 import T3ApplicationAdapter
 from imagent.contracts import ProjectMode, ThreadRef
 from imagent.diagnostics import (
     ApplicationDiagnosticFacts,
-    ChannelDiagnosticFacts,
-    ConnectionDiagnosticFacts,
-    ConnectionDiagnosticState,
     DiagnosticsSnapshot,
-    QueueDiagnosticFacts,
-    QueueDiagnosticName,
     collect_channel_diagnostics,
     summarize_projection_health,
 )
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
+from imagent.interaction.channels.diagnostics import ChannelDiagnosticFacts
+from imagent.interaction.diagnostics import (
+    ConnectionDiagnosticFacts,
+    ConnectionDiagnosticState,
+    QueueDiagnosticFacts,
+    QueueDiagnosticName,
+)
 from imagent.interaction.testing.fakes import FakeAgentApplicationAdapter
 from imagent.projections import ProjectionWorkerHealth, ProjectionWorkerState
 

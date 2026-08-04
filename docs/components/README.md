@@ -19,6 +19,7 @@ interaction
 ├── messages
 ├── operations
 ├── media
+├── diagnostics
 ├── controllers
 │   ├── controller-contract
 │   ├── command-registry
@@ -28,6 +29,7 @@ interaction
     ├── channel-contract
     ├── ingress
     ├── outbound-delivery
+    ├── diagnostics
     └── adapters
 ```
 
@@ -48,7 +50,8 @@ runtime layer or an Interaction runtime dependency.
 See the [Interaction navigation](interaction/README.md) and the authoritative
 leaf docs for [messages](interaction/messages/design.md),
 [operations](interaction/operations/design.md), and
-[media](interaction/media/design.md), plus the
+[media](interaction/media/design.md), and
+[dependency-neutral diagnostics](interaction/diagnostics/design.md), plus the
 [Controller subtree](interaction/controllers/README.md) and
 [Channel subtree](interaction/channels/README.md).
 

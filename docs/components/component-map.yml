@@ -224,6 +224,29 @@ components:
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
     gaps: [mixed delivery validation in the formal delivery contract remains a declared split candidate for its owner-specific move]
 
+  interaction.diagnostics:
+    id: interaction.diagnostics
+    parent: interaction
+    purpose: Own dependency-neutral immutable connection and queue diagnostic contracts.
+    owns: [ConnectionDiagnosticState, DiagnosticFailureCode, QueueDiagnosticName, QueueDiagnosticFacts, ConnectionDiagnosticFacts]
+    does_not_own: [Channel-scoped facts, native collection/state, aggregation, I/O, callbacks, secrets, free-form errors]
+    inputs: [bounded local diagnostic facts]
+    outputs: [immutable redacted connection and queue contracts]
+    public_contracts: [ConnectionDiagnosticState, DiagnosticFailureCode, QueueDiagnosticName, QueueDiagnosticFacts, ConnectionDiagnosticFacts]
+    public_exports:
+      current: [imagent.interaction.diagnostics:ConnectionDiagnosticState, imagent.interaction.diagnostics:DiagnosticFailureCode, imagent.interaction.diagnostics:QueueDiagnosticName, imagent.interaction.diagnostics:QueueDiagnosticFacts, imagent.interaction.diagnostics:ConnectionDiagnosticFacts, imagent.diagnostics:ConnectionDiagnosticState, imagent.diagnostics:DiagnosticFailureCode, imagent.diagnostics:QueueDiagnosticName, imagent.diagnostics:QueueDiagnosticFacts, imagent.diagnostics:ConnectionDiagnosticFacts]
+      target: [imagent.interaction.diagnostics:ConnectionDiagnosticState, imagent.interaction.diagnostics:DiagnosticFailureCode, imagent.interaction.diagnostics:QueueDiagnosticName, imagent.interaction.diagnostics:QueueDiagnosticFacts, imagent.interaction.diagnostics:ConnectionDiagnosticFacts, imagent.diagnostics:ConnectionDiagnosticState, imagent.diagnostics:DiagnosticFailureCode, imagent.diagnostics:QueueDiagnosticName, imagent.diagnostics:QueueDiagnosticFacts, imagent.diagnostics:ConnectionDiagnosticFacts]
+    dependencies: []
+    state_recovery: Stateless frozen values; only bounded process-local observations are represented and no identity or error text is retained.
+    current_code: [src/imagent/interaction/diagnostics.py]
+    target_code: [src/imagent/interaction/diagnostics.py]
+    current_tests: [tests/interaction/test_diagnostics.py]
+    target_tests: [tests/interaction/test_diagnostics.py]
+    authoritative_docs: [docs/components/interaction/diagnostics/design.md, docs/components/interaction/diagnostics/testing.md]
+    adrs: [docs/decisions/0014-read-only-diagnostics-surface.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [imagent.diagnostics remains a declared transition facade for these exact objects while Application and Gateway diagnostics finish later owner moves]
+
+
   interaction.controllers.controller-contract:
     id: interaction.controllers.controller-contract
     parent: interaction.controllers
@@ -334,6 +357,28 @@ components:
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0010-capability-driven-delivery-coordination.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
     gaps: [interaction/channels/adapters/runtime.py remains a split candidate; historical adapters/contracts Channel exports are retired without aliases]
 
+  interaction.channels.diagnostics:
+    id: interaction.channels.diagnostics
+    parent: interaction.channels
+    purpose: Own immutable Channel-scoped diagnostic facts and the optional structural provider contract.
+    owns: [ChannelDiagnosticFacts, ChannelDiagnosticsProvider]
+    does_not_own: [native adapter snapshots/state, connection/queue vocabulary, Gateway aggregation, socket callbacks, I/O]
+    inputs: [Channel identity/kind and optional Interaction connection facts]
+    outputs: [immutable Channel diagnostic facts or an optional provider capability]
+    public_contracts: [ChannelDiagnosticFacts, ChannelDiagnosticsProvider]
+    public_exports:
+      current: [imagent.interaction.channels.diagnostics:ChannelDiagnosticFacts, imagent.interaction.channels.diagnostics:ChannelDiagnosticsProvider, imagent.diagnostics:ChannelDiagnosticFacts, imagent.diagnostics:ChannelDiagnosticsProvider]
+      target: [imagent.interaction.channels.diagnostics:ChannelDiagnosticFacts, imagent.interaction.channels.diagnostics:ChannelDiagnosticsProvider, imagent.diagnostics:ChannelDiagnosticFacts, imagent.diagnostics:ChannelDiagnosticsProvider]
+    dependencies: [interaction.diagnostics]
+    state_recovery: Stateless frozen values; absence and invalid provider output remain identity-only at the Gateway collecting boundary.
+    current_code: [src/imagent/interaction/channels/diagnostics.py]
+    target_code: [src/imagent/interaction/channels/diagnostics.py]
+    current_tests: [tests/interaction/channels/test_diagnostics.py]
+    target_tests: [tests/interaction/channels/test_diagnostics.py]
+    authoritative_docs: [docs/components/interaction/channels/diagnostics/design.md, docs/components/interaction/channels/diagnostics/testing.md]
+    adrs: [docs/decisions/0014-read-only-diagnostics-surface.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: [native adapter collection remains in interaction.channels.adapters and the top-level diagnostics facade remains transitional]
+
   interaction.channels.ingress:
     id: interaction.channels.ingress
     parent: interaction.channels
@@ -390,9 +435,9 @@ components:
     public_exports:
       current: [imagent.channels:NativeTransportChannelAdapter, imagent.channels:channel_from_config, imagent.interaction.channels.adapters:NativeTransportChannelAdapter, imagent.interaction.channels.adapters:channel_from_config, imagent.interaction.channels.adapters:QQChannelAdapter, imagent.interaction.channels.adapters:QQ_QUOTE_ATTACHMENT_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_CONTENT_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_FILENAME_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_MESSAGE_TYPE, imagent.interaction.channels.adapters:QQ_QUOTE_REFERENCE_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_TRANSCRIPT_LIMIT]
       target: [imagent.channels:NativeTransportChannelAdapter, imagent.channels:channel_from_config, imagent.interaction.channels.adapters:NativeTransportChannelAdapter, imagent.interaction.channels.adapters:channel_from_config, imagent.interaction.channels.adapters:QQChannelAdapter, imagent.interaction.channels.adapters:QQ_QUOTE_ATTACHMENT_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_CONTENT_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_FILENAME_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_MESSAGE_TYPE, imagent.interaction.channels.adapters:QQ_QUOTE_REFERENCE_LIMIT, imagent.interaction.channels.adapters:QQ_QUOTE_TRANSCRIPT_LIMIT]
-    dependencies: [interaction.channels.channel-contract, interaction.channels.ingress, interaction.channels.outbound-delivery]
+    dependencies: [interaction.channels.channel-contract, interaction.channels.diagnostics, interaction.diagnostics, interaction.channels.ingress, interaction.channels.outbound-delivery]
     state_recovery: Each adapter owns bounded native reconnect/cursor and process-local transport diagnostics.
-    current_code: [src/imagent/channels/__init__.py, src/imagent/diagnostics.py, src/imagent/interaction/channels/adapters/__init__.py, src/imagent/interaction/channels/adapters/base.py, src/imagent/interaction/channels/adapters/runtime.py, src/imagent/interaction/channels/adapters/diagnostics.py, src/imagent/interaction/channels/adapters/endpoints.py, src/imagent/interaction/channels/adapters/qq.py, src/imagent/interaction/channels/adapters/qq_media.py, src/imagent/interaction/channels/adapters/qq_quote.py, src/imagent/interaction/channels/adapters/telegram.py, src/imagent/interaction/channels/adapters/feishu.py, src/imagent/interaction/channels/adapters/weixin.py, src/imagent/interaction/channels/adapters/weixin_ilink.py, src/imagent/interaction/channels/adapters/weixin_state.py]
+    current_code: [src/imagent/channels/__init__.py, src/imagent/interaction/channels/adapters/__init__.py, src/imagent/interaction/channels/adapters/base.py, src/imagent/interaction/channels/adapters/runtime.py, src/imagent/interaction/channels/adapters/diagnostics.py, src/imagent/interaction/channels/adapters/endpoints.py, src/imagent/interaction/channels/adapters/qq.py, src/imagent/interaction/channels/adapters/qq_media.py, src/imagent/interaction/channels/adapters/qq_quote.py, src/imagent/interaction/channels/adapters/telegram.py, src/imagent/interaction/channels/adapters/feishu.py, src/imagent/interaction/channels/adapters/weixin.py, src/imagent/interaction/channels/adapters/weixin_ilink.py, src/imagent/interaction/channels/adapters/weixin_state.py]
     target_code: [src/imagent/channels/__init__.py, src/imagent/interaction/channels/adapters/**]
     current_tests: [tests/interaction/channels/adapters/test_base_owner.py, tests/interaction/channels/adapters/test_diagnostics_owner.py, tests/interaction/channels/adapters/test_endpoints.py, tests/interaction/channels/adapters/test_runtime_facade.py, tests/interaction/channels/adapters/test_qq.py, tests/interaction/channels/adapters/test_qq_facade.py, tests/interaction/channels/adapters/test_telegram.py, tests/interaction/channels/adapters/test_feishu.py, tests/interaction/channels/adapters/test_weixin.py, tests/test_native_channels.py]
     target_tests: [tests/interaction/channels/adapters/**]
@@ -976,15 +1021,15 @@ components:
     id: gateway.diagnostics
     parent: gateway
     purpose: Aggregate immutable redacted bounded process-local infrastructure health.
-    owns: [diagnostic fact vocabulary, Gateway snapshot aggregation, fixed failure codes]
+    owns: [retained Application/Gateway diagnostic fact implementations, Gateway snapshot aggregation, fixed Gateway failure codes]
     does_not_own: [Agent health truth, exporters/endpoints, native I/O, free-form errors]
     inputs: [local adapter/runtime diagnostic providers]
     outputs: [DiagnosticsSnapshot]
-    public_contracts: [DiagnosticsSnapshot, DiagnosticsProvider, ChannelDiagnosticsProvider]
+    public_contracts: [DiagnosticsSnapshot, DiagnosticsProvider]
     public_exports:
-      current: [imagent.diagnostics:DiagnosticsSnapshot, imagent.diagnostics:DiagnosticsProvider, imagent.diagnostics:ChannelDiagnosticsProvider]
-      target: [imagent.gateway.diagnostics:DiagnosticsSnapshot, imagent.gateway.diagnostics:DiagnosticsProvider, imagent.gateway.diagnostics:ChannelDiagnosticsProvider]
-    dependencies: [interaction.channels.channel-contract, applications.application-contract]
+      current: [imagent.diagnostics:DiagnosticsSnapshot, imagent.diagnostics:DiagnosticsProvider]
+      target: [imagent.gateway.diagnostics:DiagnosticsSnapshot, imagent.gateway.diagnostics:DiagnosticsProvider]
+    dependencies: [interaction.channels.channel-contract, interaction.channels.diagnostics, interaction.diagnostics, applications.application-contract]
     state_recovery: Process-lifetime counters only; snapshot is synchronous, side-effect-free, bounded, and non-authoritative.
     current_code: [src/imagent/diagnostics.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/diagnostics.py]
@@ -992,7 +1037,7 @@ components:
     target_tests: [tests/gateway/test_diagnostics.py]
     authoritative_docs: [docs/components/diagnostics/design.md, docs/components/diagnostics/testing.md]
     adrs: [docs/decisions/0014-read-only-diagnostics-surface.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [public facts and Gateway aggregation share one current module]
+    gaps: [the transition module still physically retains Application/Gateway facts and aggregation while the canonical Interaction contracts have moved]
 
   applications.application-contract:
     id: applications.application-contract
@@ -1160,7 +1205,7 @@ components:
     public_exports:
       current: [imagent.applications.adapters.appserver.client.client:AppServerClient, imagent.applications.adapters.appserver.client:AppServerClient, imagent.applications.adapters.appserver.client.handoff:AppServerDispatchPosition, imagent.applications.adapters.appserver.client:AppServerDispatchPosition, imagent.applications.adapters.appserver.transport:AppServerError, imagent.applications.adapters.appserver.client:AppServerError, imagent.applications.adapters.appserver.client.handoff:AppServerResponse, imagent.applications.adapters.appserver.client:AppServerResponse, imagent.applications.adapters.appserver.client.supervisor:AppServerSupervisor, imagent.applications.adapters.appserver.client:AppServerSupervisor, imagent.applications.adapters.appserver.client.handoff:APP_SERVER_DISPATCH_POSITION_KEY, imagent.applications.adapters.appserver.client:APP_SERVER_DISPATCH_POSITION_KEY, imagent.applications.adapters.appserver.client:codex_app_server_client, imagent.applications:codex_app_server_client]
       target: [imagent.applications.adapters.appserver.client:AppServerClient, imagent.applications.adapters.appserver.client:AppServerDispatchPosition, imagent.applications.adapters.appserver.client:AppServerError, imagent.applications.adapters.appserver.client:AppServerResponse, imagent.applications.adapters.appserver.client:AppServerSupervisor, imagent.applications.adapters.appserver.client:APP_SERVER_DISPATCH_POSITION_KEY, imagent.applications.adapters.appserver.client:codex_app_server_client]
-    dependencies: [applications.application-contract, applications.adapters.appserver.transport, applications.adapters.appserver.diagnostics]
+    dependencies: [interaction.diagnostics, applications.application-contract, applications.adapters.appserver.transport, applications.adapters.appserver.diagnostics]
     state_recovery: Connection epoch and bounded queues are process-local; reset invalidates transport-bound request handles.
     current_code: [src/imagent/applications/adapters/appserver/client/**]
     target_code: [src/imagent/applications/adapters/appserver/client/**]
@@ -1248,15 +1293,15 @@ components:
     public_exports:
       current: [imagent.applications.adapters.appserver.diagnostics:AppServerDiagnosticState]
       target: [imagent.applications.adapters.appserver.diagnostics:AppServerDiagnosticState]
-    dependencies: [applications.application-contract, applications.adapters.appserver.mapping]
+    dependencies: [interaction.diagnostics, applications.application-contract, applications.adapters.appserver.mapping]
     state_recovery: Process-lifetime counters and current connection epoch only; reads perform no I/O.
-    current_code: [src/imagent/diagnostics.py, src/imagent/applications/adapters/appserver/diagnostics.py]
+    current_code: [src/imagent/applications/adapters/appserver/diagnostics.py]
     target_code: [src/imagent/applications/adapters/appserver/diagnostics.py]
     current_tests: [tests/applications/adapters/appserver/test_diagnostics.py, tests/applications/adapters/appserver/test_client.py, tests/test_appserver_transport.py, tests/test_diagnostics.py]
     target_tests: [tests/applications/adapters/appserver/test_diagnostics.py]
     authoritative_docs: [docs/components/applications/adapters/appserver/diagnostics/design.md, docs/components/applications/adapters/appserver/diagnostics/testing.md]
     adrs: [docs/decisions/0014-read-only-diagnostics-surface.md]
-    gaps: [legacy debug summaries still require focused bounds and redaction; shared diagnostic vocabulary remains in src/imagent/diagnostics.py]
+    gaps: [legacy debug summaries still require focused bounds and redaction; retained Application/Gateway diagnostic definitions remain in the explicitly mapped transition module]
 
   applications.adapters.codex:
     id: applications.adapters.codex
@@ -1270,7 +1315,7 @@ components:
     public_exports:
       current: [imagent.applications:CodexApplicationAdapter, imagent.applications.adapters.codex:CodexApplicationAdapter]
       target: [imagent.applications.adapters.codex:CodexApplicationAdapter]
-    dependencies: [interaction.messages, interaction.operations, interaction.media, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, applications.adapters.appserver.client, applications.adapters.appserver.mapping, applications.adapters.appserver.requests, applications.adapters.appserver.diagnostics, applications.presentation.live-activity, applications.presentation.artifact-materialization]
+    dependencies: [interaction.diagnostics, interaction.messages, interaction.operations, interaction.media, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, applications.adapters.appserver.client, applications.adapters.appserver.mapping, applications.adapters.appserver.requests, applications.adapters.appserver.diagnostics, applications.presentation.live-activity, applications.presentation.artifact-materialization]
     state_recovery: Native history is authoritative; steer candidate read never authorizes fallback start; ambiguous dispatch is unknown.
     current_code: [src/imagent/applications/adapters/codex.py, src/imagent/applications/adapters/appserver/_base.py]
     target_code: [src/imagent/applications/adapters/codex.py, src/imagent/applications/adapters/appserver/_base.py]
@@ -1292,7 +1337,7 @@ components:
     public_exports:
       current: [imagent.applications:ZenApplicationAdapter, imagent.applications.adapters.zen:ZenApplicationAdapter]
       target: [imagent.applications.adapters.zen:ZenApplicationAdapter]
-    dependencies: [interaction.messages, interaction.operations, interaction.media, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, applications.adapters.appserver.client, applications.adapters.appserver.mapping, applications.adapters.appserver.requests, applications.adapters.appserver.diagnostics, applications.presentation.artifact-materialization]
+    dependencies: [interaction.diagnostics, interaction.messages, interaction.operations, interaction.media, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, applications.adapters.appserver.client, applications.adapters.appserver.mapping, applications.adapters.appserver.requests, applications.adapters.appserver.diagnostics, applications.presentation.artifact-materialization]
     state_recovery: Starts new native Turns for prefer_active_turn until Zen proves steer; authoritative history handles gaps.
     current_code: [src/imagent/applications/adapters/zen.py, src/imagent/applications/adapters/appserver/_base.py]
     target_code: [src/imagent/applications/adapters/zen.py, src/imagent/applications/adapters/appserver/_base.py]
@@ -1522,8 +1567,8 @@ structural_status:
       owners: [gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation]
       reason: The intentional Gateway delivery package facade re-exports exact public values from focused delivery leaves without implementing any leaf.
     src/imagent/diagnostics.py:
-      owners: [interaction.channels.adapters, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.presentation, gateway.delivery.outcome-observation, gateway.diagnostics, applications.presentation.live-activity, applications.presentation.artifact-materialization, applications.adapters.appserver.diagnostics]
-      reason: Channel, fixed I1/I2/O1/O2/A1, Application presentation, and Gateway aggregate diagnostic facts share one historical public vocabulary module.
+      owners: [gateway.input.content-transformation, gateway.input.failure-presentation, gateway.presentation, gateway.delivery.outcome-observation, gateway.diagnostics, applications.presentation.live-activity, applications.presentation.artifact-materialization]
+      reason: The transition module retains the not-yet-moved Application/Gateway diagnostic implementations while explicitly re-exporting the moved Interaction contracts; the canonical Channel adapter and App Server call sites now depend on their real Interaction owners directly.
     src/imagent/projection_runtime.py:
       owners: [gateway.input.dispatch, gateway.projection.observation, gateway.projection.recovery]
       reason: Acceptance ordering, one-worker observation, and recovery supervision share one current state machine.

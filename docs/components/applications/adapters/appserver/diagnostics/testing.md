@@ -4,8 +4,8 @@
 
 App Server diagnostic facts are covered by
 `tests/applications/adapters/appserver/test_client.py`,
-`tests/test_appserver_transport.py`, and `tests/test_diagnostics.py`
-(`DiagnosticsSurfaceTests`). The evidence includes
+`tests/test_appserver_transport.py`, and the Interaction diagnostics contract
+tests in `tests/interaction/test_diagnostics.py`. The evidence includes
 ready/reconnecting/disconnected epochs, independent notification and
 server-request queue depth/overflow, fixed failure codes, and the bounded
 ADR-0014 `ConnectionDiagnosticFacts` surface. Epoch and queue overflow/reset
@@ -27,7 +27,7 @@ with the retained cross-component evidence:
 
 ```sh
 PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.test_diagnostics -v
-uv run python -m unittest tests.test_diagnostics -v
+uv run python -m unittest tests.interaction.test_diagnostics -v
 PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.test_client -v
 uv run python -m unittest tests.test_appserver_transport -v
 ```
@@ -40,5 +40,6 @@ their security hardening is a later slice.
 ## Authority
 
 - [Diagnostics design](design.md)
-- [Repository diagnostics design](../../../../diagnostics/design.md)
+- [Interaction diagnostics design](../../../../interaction/diagnostics/design.md)
+- [Transition diagnostics design](../../../../diagnostics/design.md)
 - [App Server testing context](../../../../application-adapters/testing.md)

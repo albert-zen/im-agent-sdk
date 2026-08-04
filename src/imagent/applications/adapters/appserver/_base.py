@@ -12,7 +12,8 @@ from types import MappingProxyType
 from typing import Protocol, cast
 
 from ....contracts.errors import ApplicationInputOutcomeUnknown
-from ....diagnostics import ApplicationDiagnosticFacts, ConnectionDiagnosticFacts
+from ....diagnostics import ApplicationDiagnosticFacts
+from ....interaction.diagnostics import ConnectionDiagnosticFacts
 from ....interaction.media import (
     AttachmentContent,
     AttachmentSourceKind,

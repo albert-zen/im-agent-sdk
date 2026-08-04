@@ -18,7 +18,6 @@ from imagent.contracts import (
     RemoteUrl,
     TextContent,
 )
-from imagent.diagnostics import ConnectionDiagnosticState, QueueDiagnosticName
 from imagent.interaction.channels import (
     ChannelStartupConfigurationValidator,
     DeliveryItemStatus,
@@ -27,6 +26,7 @@ from imagent.interaction.channels import (
 )
 from imagent.interaction.channels.adapters.base import BaseChannelAdapter
 from imagent.interaction.channels.adapters.diagnostics import (
+    NativeChannelDiagnosticSnapshot,
     NativeChannelDiagnosticState,
     NativeConnectionDiagnosticSnapshot,
 )
@@ -34,6 +34,7 @@ from imagent.interaction.channels.adapters.weixin_state import (
     WeixinCredentials,
     WeixinStateStore,
 )
+from imagent.interaction.channels.diagnostics import ChannelDiagnosticFacts
 from imagent.interaction.channels.ingress import ChannelAccessPolicy, InboundMessage
 from imagent.interaction.channels.outbound_delivery import (
     NativeDeliveryResult,
@@ -46,6 +47,11 @@ from imagent.interaction.channels.outbound_delivery import (
 )
 from imagent.interaction.channels.outbound_delivery import (
     OutboundMessage as NativeOutboundMessage,
+)
+from imagent.interaction.diagnostics import (
+    ConnectionDiagnosticFacts,
+    ConnectionDiagnosticState,
+    QueueDiagnosticName,
 )
 from imagent.testing import verify_channel_adapter
 
@@ -88,10 +94,14 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
             return None
 
         await adapter.start(ignore)
-        self.assertIsNotNone(adapter.diagnostic_facts().connection)
+        failed_stop_facts = adapter.diagnostic_facts()
+        self.assertIs(type(failed_stop_facts), ChannelDiagnosticFacts)
+        self.assertIsNotNone(failed_stop_facts.connection)
         with self.assertRaisesRegex(RuntimeError, "stop failed"):
             await adapter.stop()
-        self.assertIsNone(adapter.diagnostic_facts().connection)
+        stopped_after_failure = adapter.diagnostic_facts()
+        self.assertIs(type(stopped_after_failure), ChannelDiagnosticFacts)
+        self.assertIsNone(stopped_after_failure.connection)
 
     async def test_native_channel_diagnostics_track_lifecycle_without_io(self) -> None:
         class Native(BaseChannelAdapter):
@@ -125,9 +135,12 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
 
         await adapter.start(ignore)
         ready = adapter.diagnostic_facts()
+        self.assertIs(type(ready), ChannelDiagnosticFacts)
+        self.assertNotIsInstance(ready, NativeChannelDiagnosticSnapshot)
         ready_connection = ready.connection
         self.assertIsNotNone(ready_connection)
         assert ready_connection is not None
+        self.assertIs(type(ready_connection), ConnectionDiagnosticFacts)
         self.assertEqual(ready_connection.state, ConnectionDiagnosticState.READY)
         self.assertEqual(ready_connection.connection_epoch, 1)
         self.assertIsNone(adapter._last_connection_facts)
@@ -137,21 +150,26 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
         native.mark_health(connected=False, status="reconnecting")
         native.mark_health(connected=False, status="reconnecting")
         reconnecting = adapter.diagnostic_facts()
+        self.assertIs(type(reconnecting), ChannelDiagnosticFacts)
         reconnecting_connection = reconnecting.connection
         self.assertIsNotNone(reconnecting_connection)
         assert reconnecting_connection is not None
+        self.assertIs(type(reconnecting_connection), ConnectionDiagnosticFacts)
         self.assertEqual(reconnecting_connection.reconnect_count, 1)
         self.assertTrue(reconnecting_connection.worker_degraded)
         native.mark_health(connected=True, status="connected")
         reconnected = adapter.diagnostic_facts().connection
         self.assertIsNotNone(reconnected)
         assert reconnected is not None
+        self.assertIs(type(reconnected), ConnectionDiagnosticFacts)
         self.assertEqual(reconnected.connection_epoch, 2)
         await adapter.stop()
         stopped = adapter.diagnostic_facts()
+        self.assertIs(type(stopped), ChannelDiagnosticFacts)
         stopped_connection = stopped.connection
         self.assertIsNotNone(stopped_connection)
         assert stopped_connection is not None
+        self.assertIs(type(stopped_connection), ConnectionDiagnosticFacts)
         self.assertEqual(stopped_connection.state, ConnectionDiagnosticState.DISCONNECTED)
         self.assertFalse(stopped_connection.worker_running)
 
@@ -176,6 +194,11 @@ class NativeProductionChannelTests(unittest.IsolatedAsyncioTestCase):
                 adapter_by_kind = {adapter.kind: adapter for adapter in adapters}
                 facts = {adapter.kind: adapter.diagnostic_facts() for adapter in adapters}
                 native = {adapter.kind: cast(Any, adapter._native) for adapter in adapters}
+
+                for facts_value in facts.values():
+                    self.assertIs(type(facts_value), ChannelDiagnosticFacts)
+                    self.assertIsNotNone(facts_value.connection)
+                    self.assertIs(type(facts_value.connection), ConnectionDiagnosticFacts)
 
                 def connection_for(kind: str):
                     connection = facts[kind].connection

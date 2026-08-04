@@ -1,5 +1,12 @@
 # Diagnostics testing
 
+The canonical common contract tests now live in
+`tests/interaction/test_diagnostics.py`, and Channel contract tests live in
+`tests/interaction/channels/test_diagnostics.py`. This page remains the
+transition-facade and remaining Application/Gateway aggregation evidence;
+those tests also verify exact object identity through `imagent.diagnostics`
+while #276/#273 are pending.
+
 Required coverage:
 
 - immutable/versioned/non-authoritative snapshot shape;
@@ -44,6 +51,8 @@ Required coverage:
 - Channels without the optional provider, providers that raise, return an
   invalid shape, or mismatch configured identity still appear safely;
 - repeated reads do not mutate state and no exporter or callback is required.
+- `imagent.diagnostics` re-exports the canonical Interaction common and Channel
+  objects by identity without duplicate definitions or lazy `__getattr__`.
 
 The native Channel implementation owner also has a clean-process structural
 test proving the historical `imagent.channels.native.diagnostics` module no

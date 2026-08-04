@@ -40,8 +40,9 @@ Runtime facade tests prove `NativeTransportChannelAdapter` and
 `channel_from_config` are target-owned, the formal `imagent.channels` facade
 preserves exact object identity, importing either facade does not load a native
 provider, and the historical `imagent.channels.runtime` path is absent.
-Diagnostic ownership tests prove the target module owns the immutable fact and
-state objects, transition/epoch/reconnect behavior remains bounded and
+Diagnostic ownership tests prove the target module owns the native state
+helpers while the canonical Interaction contract objects have one owner;
+transition/epoch/reconnect behavior remains bounded and
 side-effect-free, and the historical native diagnostics path is absent in a
 clean process. Existing four-provider and Gateway diagnostics tests remain the
 behavioral conformance suite.

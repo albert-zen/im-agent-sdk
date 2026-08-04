@@ -54,8 +54,6 @@ from ..contracts import (
 from ..diagnostics import (
     DiagnosticsSnapshot,
     GatewayDiagnosticFacts,
-    QueueDiagnosticFacts,
-    QueueDiagnosticName,
     collect_application_diagnostics,
     collect_channel_diagnostics,
     new_diagnostics_snapshot,
@@ -67,6 +65,7 @@ from ..interaction.controllers.contract import (
     CommandInvocationFacts,
     _derive_command_invocation_id,
 )
+from ..interaction.diagnostics import QueueDiagnosticFacts, QueueDiagnosticName
 from ..interaction.messages import (
     ConversationRef,
     InboundMessage,

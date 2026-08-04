@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 from .....contracts import ApplicationInputOutcomeUnknown
-from .....diagnostics import (
+from .....interaction.diagnostics import (
     ConnectionDiagnosticFacts,
     QueueDiagnosticName,
 )

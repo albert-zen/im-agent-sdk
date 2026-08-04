@@ -80,6 +80,19 @@ class ComponentMapTests(unittest.TestCase):
             )
         )
 
+    def test_multi_owner_split_candidate_cannot_be_a_formal_facade(self) -> None:
+        component_map = copy.deepcopy(load_component_map())
+        component_map["structural_status"]["formal_facades"].append(
+            {
+                "path": "src/imagent/diagnostics.py",
+                "owner": "gateway.diagnostics",
+                "rationale": "Invalid mixed transition declaration for test coverage.",
+            }
+        )
+
+        with self.assertRaisesRegex(ComponentMapError, "invalid formal facade declaration"):
+            validate_component_map(component_map)
+
     def test_facade_alias_preserves_imported_and_bound_symbol_names(self) -> None:
         node = ast.parse("from .model import Internal as Public").body[0]
 
