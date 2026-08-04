@@ -11,12 +11,9 @@ from imagent.contracts import (
     AttachmentGrouping,
     AttachmentSourceKind,
     ConversationRef,
-    DeliveryProfile,
-    DeliverySupportLevel,
     LocalPath,
     OutboundMessage,
     RemoteUrl,
-    ReplyReferenceScope,
     TextContent,
     TextFormat,
     TextLengthUnit,
@@ -26,6 +23,11 @@ from imagent.gateway.delivery import (
     DeliveryPlanningError,
 )
 from imagent.gateway.delivery import planning as planning_owner
+from imagent.interaction.channels import (
+    DeliveryProfile,
+    DeliverySupportLevel,
+    ReplyReferenceScope,
+)
 from imagent.interaction.channels.adapters import NativeTransportChannelAdapter
 
 

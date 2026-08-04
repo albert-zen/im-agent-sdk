@@ -28,6 +28,11 @@ contain the following Gateway bridge values:
 - the cross-owner language-neutral schema union and its remaining validators;
 - the deliberate `imagent.contracts` compatibility facade.
 
+Channel contract, admission, capability/profile, and delivery-receipt values
+are deliberately excluded from that historical facade. Their sole formal
+Python surface is `imagent.interaction.channels`; the separate
+`imagent.channels` facade is reserved for exact native adapter objects.
+
 The complete Application model family is owned by
 [`applications.application-contract`](../applications/application-contract/design.md):
 `Page`, `ApplicationRef`, `ProjectRef`, `ThreadRef`, input continuation and

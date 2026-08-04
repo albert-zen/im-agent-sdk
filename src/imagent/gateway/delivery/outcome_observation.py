@@ -9,14 +9,14 @@ from itertools import islice
 from types import MappingProxyType
 from typing import Protocol
 
-from ...contracts import (
-    DeliveryItemReceipt,
-    DeliveryReceipt,
-    DeliverySegmentReceipt,
-)
 from ...diagnostics import (
     DeliveryOutcomeObserverDiagnosticFacts,
     DeliveryOutcomeObserverFailureCode,
+)
+from ...interaction.channels import (
+    DeliveryItemReceipt,
+    DeliveryReceipt,
+    DeliverySegmentReceipt,
 )
 from ...interaction.media import AttachmentContent, AttachmentHandle, LocalPath, RemoteUrl
 from ...interaction.messages import OutboundMessage, TextContent

@@ -7,14 +7,6 @@ from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from ...contracts import (
-    DeliveryItemReceipt,
-    DeliveryItemStatus,
-    DeliveryReceipt,
-    DeliveryReceiptStatus,
-    DeliverySegmentStatus,
-    validate_delivery_receipt_for_content,
-)
 from ...contracts.delivery import (
     DeliveryRouteSnapshot,
     DeliverySubmissionOrigin,
@@ -24,7 +16,15 @@ from ...contracts.delivery import (
     validate_delivery_submission_destination_count,
 )
 from ...contracts.model import ThreadProjectionRoute, ThreadRef
-from ...interaction.channels import ChannelAdapter
+from ...interaction.channels import (
+    ChannelAdapter,
+    DeliveryItemReceipt,
+    DeliveryItemStatus,
+    DeliveryReceipt,
+    DeliveryReceiptStatus,
+    DeliverySegmentStatus,
+    validate_delivery_receipt_for_content,
+)
 from ...interaction.media import AttachmentContent, LocalPath
 from ...interaction.messages import OutboundMessage
 from ...interaction.operations import ContractViolation

@@ -403,6 +403,11 @@ components:
       - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/interaction/channels/**
       - src/imagent/channels/**
+      # Historical facades are shared here because this slice retires only
+      # their Channel names while preserving unrelated aliases.
+      - src/imagent/adapters.py
+      - src/imagent/contracts/__init__.py
+      - scripts/smoke_clean_install.py
       - tests/interaction/channels/**
       - tests/test_native_channels.py
       - tests/interaction/channels/adapters/test_qq.py

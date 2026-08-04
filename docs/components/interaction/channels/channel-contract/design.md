@@ -49,24 +49,32 @@ All identities and queues are finite. Native ambiguity maps to unknown rather
 than hidden replay. Lifecycle and callback work never runs consumer delivery
 or Agent execution on a native socket-read task.
 
-## Current and target placement
+## Formal facade and placement
 
-`ChannelAdapter`, receipt values, capability/profile values, delivery support,
-reply scope, and their validation have one implementation owner in
-`src/imagent/interaction/channels/contract.py`. `imagent.contracts` remains an
-exact formal re-export facade for the capability and receipt value contracts,
-while `imagent.adapters` remains the exact compatibility re-export for
-`ChannelAdapter`; neither facade retains a parallel implementation.
-The stable v1 `ChannelCapabilities` field and positional-constructor order and
-the wire string discriminants remain unchanged. The schema exposes a distinct
-`DeliverySupportLevel` definition for Channel/profile fields even though its
-three wire values match `SupportLevel`. `SupportLevel` remains the Application
-capability type and is not accepted as the typed Channel API.
+`ChannelAdapter`, admission values, capability/profile values, delivery
+support, receipt values, and their validation have one implementation owner in
+`src/imagent/interaction/channels/contract.py`. The
+`imagent.interaction.channels` package is the sole formal facade for those
+objects. The stable v1 `ChannelCapabilities` field and
+positional-constructor order and the wire string discriminants remain
+unchanged. The schema exposes a distinct `DeliverySupportLevel` definition
+for Channel/profile fields even though its three wire values match
+`SupportLevel`; `SupportLevel` remains the Application capability type and is
+not accepted as the typed Channel API.
 
-`MessageHandler`, `InboundAdmission`, `InboundAdmissionHandler`, and
-`ChannelStartupConfigurationValidator` share the same Interaction owner as the
-capability and receipt values. `imagent.adapters.ChannelAdapter` is an exact
-compatibility re-export of that owner, not a second Protocol definition.
-Internal Channel/Gateway code imports the Interaction owner directly where
-dependency-safe. Top-level compatibility exports exist only where the
-component map declares them.
+The historical `imagent.adapters` facade no longer exports
+`ChannelAdapter`, `ChannelStartupConfigurationValidator`, `MessageHandler`,
+`InboundAdmission`, or `InboundAdmissionHandler`. The historical
+`imagent.contracts` facade no longer exports `ChannelCapabilities`,
+`DeliveryProfile`, `DeliverySupportLevel`, `ReplyReferenceScope`, any
+`DeliveryReceipt`/`DeliveryItemReceipt`/`DeliverySegmentReceipt` value or
+status, or either delivery-receipt validator. Those facades retain their
+unrelated Application, Gateway, proactive-authorization, and passive-state
+names; they do not use a compatibility alias or lazy attribute for the
+retired Channel names.
+
+Internal Channel, Gateway, testing, and release code imports the focused
+Interaction owner directly. `imagent.channels` is a separate intended
+adapter facade: its `NativeTransportChannelAdapter` and `channel_from_config`
+exports remain exact re-exports of the Interaction adapters runtime owner and
+do not become a second Channel contract facade.

@@ -5,6 +5,26 @@
 A Channel adapter translates one configured IM bot/account instance between
 native messages/actions and the common Channel Port.
 
+This document is the historical Channel-adapters navigation surface. The
+focused Interaction Channel leaves are authoritative for shared contract,
+ingress, outbound-delivery, and native-adapter ownership; this page records
+the provider-facing boundary and links to those leaves rather than defining a
+second Channel model.
+
+## Formal Channel facades
+
+The sole formal facade for Channel contract, admission, capability, profile,
+delivery-support, receipt, and receipt-validation values is
+`imagent.interaction.channels`. The historical `imagent.adapters` facade no
+longer exports `ChannelAdapter`, `ChannelStartupConfigurationValidator`,
+`MessageHandler`, `InboundAdmission`, or `InboundAdmissionHandler`; the
+historical `imagent.contracts` facade no longer exports the Channel capability,
+profile, support, reply-scope, receipt/status, or receipt-validation names.
+Those historical facades retain unrelated Application/Gateway,
+proactive-authorization, and passive-state names only. `imagent.channels`
+remains the intended exact-object adapter facade for
+`NativeTransportChannelAdapter` and `channel_from_config`.
+
 ## Ownership
 
 Channel adapters own:
@@ -12,12 +32,17 @@ Channel adapters own:
 - credentials, authenticated connection lifecycle, and native reconnect
   tokens;
 - native account, Conversation, sender, and message identity;
-- signature/authentication verification and access-control inputs;
-- admission, normalization, duplicate checks, and media staging;
+- signature/authentication verification and provider-specific access-control
+  inputs;
 - native Markdown/cards/buttons/replies/mentions and escaping;
 - platform API limits, credentials, native idempotency, rate-limit mapping,
   final validation, and receipts;
 - real platform capabilities and limits.
+
+Shared admission/normalization, media staging, delivery helpers, and receipt
+contract values remain owned by the focused Interaction Channel leaves. Native
+adapters invoke those boundaries and retain provider policy; they do not add a
+second admission, delivery, or contract implementation.
 
 They do not own:
 
@@ -101,11 +126,12 @@ Channel adapter; they are not Agent event replay cursors.
 ## Current implementation
 
 The SDK owns the reusable QQ, Telegram, Feishu, and Weixin native transports,
-media helpers, admission policy, and one common `channel_from_config` seam.
-The common native wrapper and factory live in the Interaction adapter leaf;
-`imagent.channels` is their stable formal facade rather than another runtime
-implementation. Protocol dependencies remain optional extras; importing
-Contracts, Ports, Gateway, or either adapter facade does not import them.
+the focused Interaction ingress/outbound helpers, and one common
+`channel_from_config` seam. The common native wrapper and factory live in the
+Interaction adapter leaf; `imagent.channels` is their stable formal adapter
+facade rather than another runtime implementation. Protocol dependencies
+remain optional extras; importing Contracts, Ports, Gateway, or either adapter
+facade does not import them.
 
 `channel_from_config` also exposes the optional structural
 `ChannelStartupConfigurationValidator` capability. Its

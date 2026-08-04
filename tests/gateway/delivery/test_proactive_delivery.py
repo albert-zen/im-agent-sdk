@@ -21,15 +21,8 @@ from imagent.contracts import (
     MAX_DELIVERY_SUBMISSION_DESTINATIONS,
     AttachmentContent,
     AttachmentSourceKind,
-    ChannelCapabilities,
     ConversationRef,
-    DeliveryItemReceipt,
-    DeliveryItemStatus,
     DeliveryPrincipal,
-    DeliveryReceipt,
-    DeliveryReceiptStatus,
-    DeliverySegmentStatus,
-    DeliverySupportLevel,
     LocalPath,
     OutboundMessage,
     ProjectionPolicy,
@@ -64,6 +57,15 @@ from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryDeliverySubmissionRepository,
     InMemoryProjectionRouteRepository,
+)
+from imagent.interaction.channels import (
+    ChannelCapabilities,
+    DeliveryItemReceipt,
+    DeliveryItemStatus,
+    DeliveryReceipt,
+    DeliveryReceiptStatus,
+    DeliverySegmentStatus,
+    DeliverySupportLevel,
 )
 from imagent.interaction.operations import ContractViolation
 from imagent.storage import SQLiteGatewayState

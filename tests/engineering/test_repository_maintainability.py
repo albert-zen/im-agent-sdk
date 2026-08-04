@@ -284,6 +284,27 @@ class ComponentMapTests(unittest.TestCase):
             set(components["interaction.channels.channel-contract"]["public_contracts"]),
             {"InboundAdmission", "InboundAdmissionHandler"},
         )
+        channel_contract = components["interaction.channels.channel-contract"]
+        self.assertEqual(
+            channel_contract["public_exports"]["current"],
+            channel_contract["public_exports"]["target"],
+        )
+        self.assertTrue(
+            all(
+                export.startswith("imagent.interaction.channels:")
+                for export in channel_contract["public_exports"]["current"]
+            )
+        )
+        self.assertNotIn(
+            "src/imagent/adapters.py",
+            channel_contract["current_code"],
+        )
+        native_facade = next(
+            facade
+            for facade in component_map["structural_status"]["formal_facades"]
+            if facade["path"] == "src/imagent/channels/__init__.py"
+        )
+        self.assertEqual(native_facade["owner"], "interaction.channels.adapters")
 
     def test_approved_runtime_layers_and_registry_owner_are_explicit(self) -> None:
         component_map = load_component_map()

@@ -6,16 +6,17 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Protocol
 
-from ....contracts import (
+from ...media import AttachmentSourceKind
+from ...messages import InboundMessage, OutboundMessage
+from .. import ingress as _ingress
+from .. import outbound_delivery as _outbound_delivery
+from ..contract import (
     ChannelCapabilities,
     DeliveryReceipt,
     DeliverySupportLevel,
+    InboundAdmissionHandler,
+    MessageHandler,
 )
-from ...media import AttachmentSourceKind
-from ...messages import InboundMessage, OutboundMessage
-from .. import InboundAdmissionHandler, MessageHandler
-from .. import ingress as _ingress
-from .. import outbound_delivery as _outbound_delivery
 from ..outbound_delivery import (
     NativeDeliveryResult,
 )

@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 
 import imagent.interaction.testing as testing_owner
 import imagent.testing as testing_facade
-from imagent.adapters import ChannelStartupConfigurationValidator
 from imagent.applications import (
     CodexApplicationAdapter,
     T3ApplicationAdapter,
@@ -19,6 +18,7 @@ from imagent.contracts import (
     ProjectMode,
     TextContent,
 )
+from imagent.interaction.channels import ChannelStartupConfigurationValidator
 from imagent.testing import (
     FakeAgentApplicationAdapter,
     FakeChannelAdapter,

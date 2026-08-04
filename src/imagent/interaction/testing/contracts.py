@@ -27,7 +27,6 @@ from imagent.contracts import (
     ApplicationOperationFailed,
     CreateThread,
     DeleteThread,
-    DeliverySupportLevel,
     GetProject,
     GetThread,
     GetThreadHistory,
@@ -49,7 +48,7 @@ from imagent.contracts import (
     derive_client_message_id,
     validate_application_operation_result,
 )
-from imagent.interaction.channels import ChannelAdapter
+from imagent.interaction.channels import ChannelAdapter, DeliverySupportLevel
 from imagent.interaction.messages import InboundMessage, OutboundMessage, TextContent
 
 

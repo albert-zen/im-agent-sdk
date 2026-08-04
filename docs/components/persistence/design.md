@@ -70,9 +70,9 @@ callers migrated to those owners.
 
 The complete Gateway repository Port/conflict family also belongs to the
 repository-contract leaf. `imagent.adapters` remains only an exact
-compatibility facade for those names while Application and Channel Ports
-continue their separate migrations. Repository implementations import the
-owner directly; no second Protocol, enum, or conflict type is retained.
+compatibility facade for those names; its historical Channel/admission names
+are no longer exported. Repository implementations import the owner directly;
+no second Protocol, enum, or conflict type is retained.
 
 The process-local projection-route repository likewise belongs to Gateway
 memory persistence, including its private merge/endpoint-conflict logic and

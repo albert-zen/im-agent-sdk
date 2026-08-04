@@ -28,7 +28,7 @@ The common adapter Protocol and its pre-dispatch callback are owned by the
 `src/imagent/applications/contract.py`. The finite `imagent.applications`
 facade exposes those exact objects; the historical `imagent.adapters` module
 is only a temporary compatibility facade for them and for unrelated legacy
-Channel/Gateway aliases.
+Gateway, proactive-authorization, and passive-state aliases.
 
 ## Adapters
 

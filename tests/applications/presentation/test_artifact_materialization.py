@@ -37,9 +37,7 @@ from imagent.contracts import (
     ApplicationRef,
     AttachmentContent,
     AttachmentSourceKind,
-    ChannelCapabilities,
     ConversationRef,
-    DeliverySupportLevel,
     GetThreadHistory,
     LocalPath,
     OutboundMessage,
@@ -51,6 +49,7 @@ from imagent.diagnostics import ApplicationArtifactMaterializationFailureCode
 from imagent.events import EventStreamReset
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
+from imagent.interaction.channels import ChannelCapabilities, DeliverySupportLevel
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

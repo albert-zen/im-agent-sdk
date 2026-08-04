@@ -23,7 +23,6 @@ from imagent.contracts import (
     ConversationBinding,
     ConversationBound,
     ConversationRef,
-    DeliveryReceipt,
     GatewayOperationFailed,
     GetThreadHistory,
     InboundMessage,
@@ -51,6 +50,7 @@ from imagent.gateway.persistence.memory import (
 )
 from imagent.gateway.presentation import OutboundPresentationContext
 from imagent.gateway.projection import derive_projection_delivery_id
+from imagent.interaction.channels import DeliveryReceipt
 from imagent.interaction.controllers import ControllerActions
 from imagent.projection_runtime import TurnAcceptanceBufferOverflow
 from imagent.projections import (

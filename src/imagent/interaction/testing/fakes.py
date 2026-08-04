@@ -50,12 +50,8 @@ from imagent.contracts import (
     ApplicationOperationFailed,
     ApplicationOperationResult,
     ApprovalRequest,
-    ChannelCapabilities,
     CreateThread,
     DeleteThread,
-    DeliveryReceipt,
-    DeliveryReceiptStatus,
-    DeliverySupportLevel,
     GetProject,
     GetThread,
     GetThreadHistory,
@@ -92,6 +88,12 @@ from imagent.contracts import (
     validate_application_operation,
     validate_application_operation_result,
     validate_request_response,
+)
+from imagent.interaction.channels import (
+    ChannelCapabilities,
+    DeliveryReceipt,
+    DeliveryReceiptStatus,
+    DeliverySupportLevel,
 )
 from imagent.interaction.messages import (
     InboundMessage,

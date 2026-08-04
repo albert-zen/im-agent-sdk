@@ -377,8 +377,10 @@ Platform acceptance does not claim device display or read.
 Retryable top-level, item, and segment evidence cannot carry a native message
 identity: observed native acceptance makes automatic replay unsafe.
 
-`DeliveryReceipt.items` carries typed per-content outcomes when a native
-delivery can partially succeed. A completed Channel call may therefore have
+`DeliveryReceipt` and its capability/profile values are owned and imported
+from `imagent.interaction.channels`; they are not part of the historical
+`imagent.contracts` facade. `DeliveryReceipt.items` carries typed per-content
+outcomes when a native delivery can partially succeed. A completed Channel call may therefore have
 aggregate platform acceptance while one attachment is rejected; Gateway
 projects that destination as `partial` instead of hiding the artifact failure
 in Metadata.
