@@ -21,14 +21,18 @@ and route/checkpoint recovery.
 ## Inputs, outputs, and dependencies
 
 Normalized native events enter this leaf and each subscriber receives its own
-bounded Thread event stream. It depends on Interaction message values and the
-Applications capability declaration, but never on Gateway. Stable event/item
-identities and any sequence/cursor fields describe only native guarantees;
-text and time do not establish identity.
+bounded Thread event stream. It depends on Interaction message and validation
+values plus the Applications capability declaration, but never on Gateway. Its
+request/resource annotations and validation delegate to the still-unmoved
+focused contract leaves; they do not make this leaf an owner of request or
+Application-resource semantics. Stable event/item identities and any
+sequence/cursor fields describe only native guarantees; text and time do not
+establish identity.
 
-Current exports are split across `imagent.contracts` and `imagent.events`; the
-target facade is `imagent.applications.events`, implemented once in
-`src/imagent/applications/events.py`.
+The implementation is `imagent.applications.events`, in
+`src/imagent/applications/events.py`. `imagent.contracts` and `imagent.events`
+remain exact public facades for the v1 values; neither contains a second event
+implementation.
 
 ## State, recovery, and structure
 
@@ -39,11 +43,11 @@ Gateway recovers from native replay where honestly supported, otherwise by
 subscribing then reconciling authoritative history/catch-up. The SDK never
 persists event bodies to bridge the gap.
 
-Current code is `schemas/v1/events.schema.json`,
-`src/imagent/contracts/{model.py,validators.py}`, and `src/imagent/events.py`.
-Current evidence is `tests/test_event_fanout.py` and `tests/test_contracts.py`;
-the target is `tests/applications/test_events.py`. Event values remaining in
-the cross-owner contract model are the explicit structural gap.
+The implementation is `schemas/v1/events.schema.json` plus
+`src/imagent/applications/events.py`. Focused owner evidence is
+`tests/applications/test_events.py`; adapter and Gateway integration coverage
+remains alongside those consumers. The schema and event semantics are
+unchanged by this mechanical move.
 
 ## Authority
 

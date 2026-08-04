@@ -8,8 +8,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from ..contracts import (
-    AgentEvent,
-    AgentEventType,
     ApplicationRef,
     RequestDuplicateError,
     RequestRef,
@@ -27,6 +25,7 @@ from .appserver_requests import (
     build_appserver_response,
     derive_appserver_request_ref,
 )
+from .events import AgentEvent, AgentEventType
 
 _TERMINAL_REQUEST_CACHE_LIMIT = 256
 

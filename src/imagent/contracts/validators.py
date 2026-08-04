@@ -7,13 +7,7 @@ from typing import TYPE_CHECKING
 from ..interaction.messages import ConversationRef
 from ..interaction.operations import ContractViolation, require_identifier
 from ._validation import validate_thread_ref
-from .model import (
-    AgentEvent,
-    AgentEventType,
-    ConversationBinding,
-    ThreadProjectionRoute,
-    TurnReplyCorrelation,
-)
+from .model import ConversationBinding, ThreadProjectionRoute, TurnReplyCorrelation
 from .operations import (
     ActivateNativeThread,
     ApplicationOperation,
@@ -59,68 +53,10 @@ from .operations import (
     TurnInterrupted,
     UserInputResponse,
 )
-from .request_validation import (
-    validate_interactive_request,
-    validate_request_ref,
-    validate_request_resolution,
-)
+from .request_validation import validate_request_ref
 
 if TYPE_CHECKING:
     from ..applications.capabilities import ApplicationCapabilities
-
-
-def validate_agent_event(
-    event: AgentEvent,
-    capabilities: ApplicationCapabilities,
-) -> None:
-    from ..applications.capabilities import EventSequenceScope, SupportLevel
-
-    require_identifier(event.event_id, "event_id")
-    require_identifier(event.application_instance_id, "application_instance_id")
-    if event.thread_ref is not None:
-        validate_thread_ref(event.thread_ref)
-        if event.thread_ref.application_instance_id != event.application_instance_id:
-            raise ContractViolation("event thread belongs to a different application")
-    if event.sequence is None:
-        if event.sequence_epoch is not None:
-            raise ContractViolation("sequence_epoch requires sequence")
-    else:
-        if event.sequence < 0:
-            raise ContractViolation("event sequence cannot be negative")
-        if capabilities.runtime.event_sequence_scope is EventSequenceScope.NONE:
-            raise ContractViolation("event sequence has no declared scope")
-        require_identifier(event.sequence_epoch or "", "sequence_epoch")
-    if (
-        event.cursor is not None
-        and capabilities.runtime.replay_from_cursor is SupportLevel.UNSUPPORTED
-    ):
-        raise ContractViolation("event cursor requires replay-from-cursor support")
-    if event.type is AgentEventType.REQUEST_OPENED:
-        if event.request is None or event.request_resolution is not None:
-            raise ContractViolation("request.opened requires one typed request")
-        validate_interactive_request(event.request)
-        if capabilities.runtime.interactive_requests is SupportLevel.UNSUPPORTED:
-            raise ContractViolation("request event requires interactive request support")
-        if event.thread_ref != event.request.thread_ref:
-            raise ContractViolation("request event belongs to a different Thread")
-        if event.turn_id != event.request.turn_id:
-            raise ContractViolation("request event belongs to a different Turn")
-        if (
-            event.request.request_ref.application_ref.application_instance_id
-            != event.application_instance_id
-        ):
-            raise ContractViolation("request event belongs to a different application")
-    elif event.type is AgentEventType.REQUEST_RESOLVED:
-        if event.request is not None or event.request_resolution is None:
-            raise ContractViolation("request.resolved requires one typed resolution")
-        validate_request_resolution(event.request_resolution)
-        if (
-            event.request_resolution.request_ref.application_ref.application_instance_id
-            != event.application_instance_id
-        ):
-            raise ContractViolation("request resolution belongs to a different application")
-    elif event.request is not None or event.request_resolution is not None:
-        raise ContractViolation("typed request fields require a request event")
 
 
 def validate_binding(

@@ -15,10 +15,14 @@ from .adapters import (
     RequestCorrelationRepository,
 )
 from .applications.capabilities import SupportLevel
-from .contracts import (
-    AcceptedTurn,
+from .applications.events import (
     AgentEvent,
     AgentEventType,
+    EventBufferOverflow,
+    EventStreamGap,
+)
+from .contracts import (
+    AcceptedTurn,
     AgentInput,
     AgentMessage,
     ApplicationInputDispatch,
@@ -34,7 +38,6 @@ from .contracts import (
     TurnReplyCorrelation,
     TurnReplyCorrelationPolicy,
 )
-from .events import EventBufferOverflow, EventStreamGap
 from .gateway.projection.recovery import ProjectionRecoveryUnavailable
 from .interaction.controllers import RequestPresenter
 from .interaction.messages import ConversationRef

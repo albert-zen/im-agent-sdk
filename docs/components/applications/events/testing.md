@@ -1,7 +1,7 @@
 # Application events testing
 
-Current tests are `tests/test_event_fanout.py` and `tests/test_contracts.py`;
-the target focused owner is `tests/applications/test_events.py`.
+Focused ownership coverage is `tests/applications/test_events.py`.
+`tests/test_event_fanout.py` retains adapter and Gateway integration evidence.
 
 Verify required stable event identity, optional ordering fields only when their
 native scope is truthful, canonical event discriminants, and schema parity.
@@ -12,8 +12,10 @@ cursor, transcript, or retained event log is introduced.
 
 Recovery/adapter scenarios must prove that gaps trigger native-authoritative
 replay/history reconciliation and that `message.completed` does not replace an
-explicit terminal Turn event.
+explicit terminal Turn event. The tests also prove the owner import remains
+Gateway-independent and the legacy facades preserve exact nominal identities.
 
 ```sh
-PYTHONPATH=src uv run python -m unittest tests.test_event_fanout tests.test_contracts -v
+PYTHONPATH=src uv run python -m unittest tests.applications.test_events -v
+PYTHONPATH=src uv run python -m unittest discover -s tests -p 'test_event_fanout.py' -v
 ```

@@ -44,6 +44,18 @@ architecture_lint:
   split_candidate_policy: require-one-explicit-owner-edge
   formal_facade_policy: declared-reexports-only
   current_import_exceptions:
+    - from: src/imagent/applications/events.py
+      to: src/imagent/contracts/_validation.py
+      symbol: validate_thread_ref
+      reason: Event validation preserves the existing ThreadRef invariant through the unmoved Application contract validator; moving that resource value is a later focused leaf.
+    - from: src/imagent/applications/events.py
+      to: src/imagent/contracts/request_validation.py
+      symbol: validate_interactive_request
+      reason: Event validation preserves the existing typed request invariant through the unmoved request validator; making events depend on the target request leaf would create the documented structural cycle.
+    - from: src/imagent/applications/events.py
+      to: src/imagent/contracts/request_validation.py
+      symbol: validate_request_resolution
+      reason: Event validation preserves the existing typed resolution invariant through the unmoved request validator; making events depend on the target request leaf would create the documented structural cycle.
     - from: src/imagent/applications/appserver_client/__init__.py
       to: src/imagent/__init__.py
       symbol: __version__
@@ -982,19 +994,19 @@ components:
     does_not_own: [native event journal, Gateway worker, transcript]
     inputs: [normalized native events]
     outputs: [independent bounded Thread event subscriptions]
-    public_contracts: [AgentEvent, AgentEventType, EventBroadcaster, EventStreamGap, validate_agent_event]
+    public_contracts: [AgentEvent, AgentEventType, CursorExpired, EventBroadcaster, EventBufferOverflow, EventStreamGap, EventStreamOverflow, EventStreamReset, FanoutSubscription, validate_agent_event]
     public_exports:
-      current: [imagent.contracts:AgentEvent, imagent.contracts:AgentEventType, imagent.events:EventBroadcaster, imagent.events:EventStreamGap, imagent.contracts:validate_agent_event]
-      target: [imagent.applications.events:AgentEvent, imagent.applications.events:AgentEventType, imagent.applications.events:EventBroadcaster, imagent.applications.events:EventStreamGap, imagent.applications.events:validate_agent_event]
-    dependencies: [interaction.messages, applications.capabilities]
+      current: [imagent.applications.events:AgentEvent, imagent.applications.events:AgentEventType, imagent.applications.events:CursorExpired, imagent.applications.events:EventBroadcaster, imagent.applications.events:EventBufferOverflow, imagent.applications.events:EventStreamGap, imagent.applications.events:EventStreamOverflow, imagent.applications.events:EventStreamReset, imagent.applications.events:FanoutSubscription, imagent.applications.events:validate_agent_event, imagent.contracts:AgentEvent, imagent.contracts:AgentEventType, imagent.contracts:validate_agent_event, imagent.events:AgentEvent, imagent.events:AgentEventType, imagent.events:CursorExpired, imagent.events:EventBroadcaster, imagent.events:EventBufferOverflow, imagent.events:EventStreamGap, imagent.events:EventStreamOverflow, imagent.events:EventStreamReset, imagent.events:FanoutSubscription, imagent.events:validate_agent_event]
+      target: [imagent.applications.events:AgentEvent, imagent.applications.events:AgentEventType, imagent.applications.events:CursorExpired, imagent.applications.events:EventBroadcaster, imagent.applications.events:EventBufferOverflow, imagent.applications.events:EventStreamGap, imagent.applications.events:EventStreamOverflow, imagent.applications.events:EventStreamReset, imagent.applications.events:FanoutSubscription, imagent.applications.events:validate_agent_event]
+    dependencies: [interaction.messages, interaction.operations, applications.capabilities]
     state_recovery: Queues are bounded/non-durable; gaps terminate the affected subscription and require authoritative recovery.
-    current_code: [schemas/v1/events.schema.json, src/imagent/contracts/model.py, src/imagent/contracts/validators.py, src/imagent/events.py]
+    current_code: [schemas/v1/events.schema.json, src/imagent/applications/events.py, src/imagent/events.py]
     target_code: [schemas/v1/events.schema.json, src/imagent/applications/events.py]
-    current_tests: [tests/test_event_fanout.py, tests/test_contracts.py]
+    current_tests: [tests/applications/test_events.py, tests/test_event_fanout.py]
     target_tests: [tests/applications/test_events.py]
     authoritative_docs: [docs/components/applications/events/design.md, docs/components/applications/events/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0013-bounded-application-event-admission.md]
-    gaps: [event values remain in cross-owner contracts/model.py]
+    gaps: [event request/resource annotations delegate to their unmoved focused leaves]
 
   applications.operations:
     id: applications.operations
@@ -1387,6 +1399,9 @@ structural_status:
     - path: src/imagent/contracts/__init__.py
       owner: engineering.release
       rationale: Deliberate cross-layer public contract facade; every symbol delegates to its mapped owner and no implementation lives here.
+    - path: src/imagent/events.py
+      owner: applications.events
+      rationale: Stable public Application-event facade; every symbol is an exact re-export from the focused events owner and no implementation remains here.
     - path: src/imagent/controllers/__init__.py
       owner: interaction.controllers.controller-contract
       rationale: Current public Controller facade; registry/common/request exports move without retaining duplicate implementations.
@@ -1434,8 +1449,8 @@ structural_status:
       owners: [interaction.channels.channel-contract, gateway.delivery.proactive-authorization, gateway.persistence.repository-contracts, applications.application-contract]
       reason: Channel/admission, proactive authorization, repository, and Application Ports share one historical module.
     src/imagent/contracts/model.py:
-      owners: [interaction.messages, gateway.persistence.state-contracts, applications.application-contract, applications.events, applications.requests]
-      reason: The language-neutral model is semantically correct but physically crosses all three target layers.
+      owners: [interaction.messages, gateway.persistence.state-contracts, applications.application-contract, applications.requests]
+      reason: The language-neutral model is semantically correct but physically crosses remaining target layers.
     src/imagent/contracts/delivery.py:
       owners: [interaction.media, gateway.delivery.submissions, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.persistence.state-contracts]
       reason: Media identity, proactive intent/authorization/results, and submission identity share one contract module.
@@ -1446,7 +1461,7 @@ structural_status:
       owners: [gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.projection.request-correlation, applications.operations, applications.requests]
       reason: Gateway binding, routing, observation, request-correlation, and Application operation variants remain physically combined after the common Interaction vocabulary moved to its owning leaf.
     src/imagent/contracts/validators.py:
-      owners: [gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.dispatch, gateway.projection.request-correlation, applications.application-contract, applications.events, applications.operations]
+      owners: [gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.dispatch, gateway.projection.request-correlation, applications.application-contract, applications.operations]
       reason: Cross-union validation follows the historical contract aggregation rather than the target owners of each validated type.
     src/imagent/contracts/request_validation.py:
       owners: [gateway.projection.request-correlation, gateway.persistence.state-contracts, applications.requests]

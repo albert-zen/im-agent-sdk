@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import inspect
 import unittest
-from contextlib import suppress
 from dataclasses import replace
 from datetime import UTC, datetime
 
@@ -23,7 +22,7 @@ from imagent.contracts import (
     TextContent,
     ThreadRef,
 )
-from imagent.events import EventBroadcaster, EventStreamOverflow, EventStreamReset
+from imagent.events import EventStreamOverflow, EventStreamReset
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.lifecycle import GatewayNotRunning, GatewayStartupOverflow
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
@@ -33,93 +32,6 @@ from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 
 class EventBroadcasterTests(unittest.IsolatedAsyncioTestCase):
-    def test_capacity_must_be_positive(self) -> None:
-        with self.assertRaisesRegex(ValueError, "max_pending must be positive"):
-            EventBroadcaster[str, str](max_pending=0)
-
-    async def test_slow_and_cancelled_subscribers_do_not_block_or_steal(self) -> None:
-        broadcaster = EventBroadcaster[str, str]()
-        fast = broadcaster.subscribe("thread")
-        slow = broadcaster.subscribe("thread")
-        cancelled = broadcaster.subscribe("thread")
-        pending = asyncio.create_task(anext(cancelled))
-        await asyncio.sleep(0)
-        pending.cancel()
-        with suppress(asyncio.CancelledError):
-            await pending
-
-        broadcaster.publish("thread", "first")
-        broadcaster.publish("thread", "second")
-
-        self.assertEqual(await anext(fast), "first")
-        self.assertEqual(await anext(fast), "second")
-        self.assertEqual(await anext(slow), "first")
-        self.assertEqual(await anext(slow), "second")
-        self.assertEqual(broadcaster.subscriber_count("thread"), 2)
-        await fast.aclose()
-        await slow.aclose()
-        self.assertEqual(broadcaster.subscriber_count("thread"), 0)
-
-    async def test_slow_subscriber_overflow_is_explicit_and_isolated(self) -> None:
-        broadcaster = EventBroadcaster[str, str](max_pending=2)
-        fast = broadcaster.subscribe("thread")
-        slow = broadcaster.subscribe("thread")
-        unrelated = broadcaster.subscribe("other-thread")
-
-        broadcaster.publish("thread", "first")
-        self.assertEqual(await anext(fast), "first")
-        broadcaster.publish("thread", "second")
-        self.assertEqual(await anext(fast), "second")
-        broadcaster.publish("thread", "third")
-        broadcaster.publish("other-thread", "unrelated")
-
-        self.assertEqual(slow.pending_count, 0)
-        self.assertEqual(broadcaster.subscriber_count("thread"), 1)
-        with self.assertRaises(EventStreamOverflow) as raised:
-            await anext(slow)
-        self.assertEqual(raised.exception.max_pending, 2)
-        self.assertEqual(
-            raised.exception.gap_code,
-            "application_event_fanout_overflow",
-        )
-        self.assertEqual(await anext(fast), "third")
-        self.assertEqual(await anext(unrelated), "unrelated")
-        await fast.aclose()
-        await unrelated.aclose()
-
-    async def test_key_scoped_failure_preserves_other_subscriptions(self) -> None:
-        broadcaster = EventBroadcaster[str, str]()
-        failed = broadcaster.subscribe("failed-thread")
-        unrelated = broadcaster.subscribe("other-thread")
-        broadcaster.publish("failed-thread", "before-gap")
-        broadcaster.fail(
-            "failed-thread",
-            lambda: EventStreamReset("application_event_poll_failed"),
-            discard_pending=False,
-        )
-        broadcaster.publish("other-thread", "still-running")
-
-        self.assertEqual(await anext(failed), "before-gap")
-        with self.assertRaisesRegex(EventStreamReset, "application_event_poll_failed"):
-            await anext(failed)
-        self.assertEqual(await anext(unrelated), "still-running")
-        await unrelated.aclose()
-
-    async def test_explicit_stream_reset_terminates_current_subscribers(self) -> None:
-        broadcaster = EventBroadcaster[str, str](max_pending=2)
-        first = broadcaster.subscribe("first")
-        second = broadcaster.subscribe("second")
-        broadcaster.publish("first", "discarded")
-
-        broadcaster.fail_all(EventStreamReset)
-
-        self.assertEqual(broadcaster.subscriber_count("first"), 0)
-        self.assertEqual(broadcaster.subscriber_count("second"), 0)
-        with self.assertRaises(EventStreamReset):
-            await anext(first)
-        with self.assertRaises(EventStreamReset):
-            await anext(second)
-
     async def test_appserver_fans_out_multiple_messages_before_terminal_event(self) -> None:
         native = NativeZenClient()
         adapter = CodexApplicationAdapter(
