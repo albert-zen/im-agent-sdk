@@ -48,6 +48,10 @@ Required scenarios:
   no notification row, callback state, content copy, cleanup job, or outbox;
 - concurrent proactive reservation has one winner and mismatched reuse of a
   delivery ID fails;
+- memory and SQLite reservation compare the complete destination-ID-to-route-
+  snapshot map independent of tuple order, reject any changed snapshot after
+  SQLite restart, and do not mistake mutable terminal outcome fields for a new
+  identity;
 - SDK-controlled origin and principal namespaces prevent external identities
   from colliding with Gateway-internal projection submissions;
 - rejected, in-flight, partial, and unknown proactive states remain sticky

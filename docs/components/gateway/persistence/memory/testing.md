@@ -6,6 +6,8 @@ Focused delivery-submission tests prove:
   record without a second winner;
 - concurrent reservation has one winner;
 - stable-ID reuse with changed root immutable identity fails explicitly;
+- a repeated reservation with the same destination snapshot set is
+  order-independent, while a changed destination ID or snapshot fails;
 - destination updates require an existing submission/destination and the
   expected prior state;
 - successful updates preserve every other immutable field and validate the
@@ -15,10 +17,9 @@ Focused delivery-submission tests prove:
 - imports use the persistence owner and proactive delivery behavior remains
   unchanged.
 
-Destination-set reservation identity and finite record capacity are explicit
-follow-up gaps and are not claimed by this mechanical suite. Their behavior
-slice must cover both memory/SQLite parity where applicable and default
-Gateway composition.
+Finite record capacity remains a separate explicit follow-up gap. Its behavior
+slice must cover default Gateway composition without weakening the completed
+memory/SQLite reservation identity parity.
 
 Run:
 

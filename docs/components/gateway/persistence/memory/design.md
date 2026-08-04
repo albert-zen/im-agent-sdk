@@ -16,11 +16,7 @@ durability.
 This leaf owns in-memory implementations for Conversation bindings,
 projection routes, request correlations, and proactive delivery submissions.
 Each implementation preserves the same conflict, fencing, compare-and-swap,
-and immutable-identity rules that its current repository contract
-implementation enforces. For delivery submissions, that currently means root
-identity and destination compare-and-swap; the complete reservation identity,
-including destination snapshots, is the explicit #152 follow-up described
-below.
+and immutable-identity rules as its repository contract.
 
 It does not own repository Protocols, state values, routing/delivery policy,
 message or artifact content, a retry scheduler, SQLite transactions, or a
@@ -31,13 +27,12 @@ durable recovery promise.
 The first focused extraction moves `InMemoryDeliverySubmissionRepository`
 from proactive orchestration into `src/imagent/gateway/persistence/memory.py`.
 Reservation validates the full record under one process-local lock. A stable
-submission ID currently enforces immutable root origin, principal, target, and
-payload identity: an identical repeat returns the existing record, while a
-root mismatch raises `DeliverySubmissionConflict`. The extracted memory and
-existing SQLite implementations do not yet compare the resolved destination
-snapshot set during an existing-root reservation. ADR 0009 requires that
-conflict rule, so destination-set parity is an explicit behavior follow-up,
-not falsely claimed as part of this mechanical move.
+submission ID enforces immutable root origin, principal, target, and payload
+identity plus the order-independent mapping from every destination delivery ID
+to its complete route snapshot. An identical repeat returns the existing
+record, while any root, destination-ID, or snapshot mismatch raises
+`DeliverySubmissionConflict`. Mutable destination state, receipt, error, and
+timestamps do not participate in reservation identity.
 
 Destination mutation is atomic under the same lock and requires the expected
 prior state. Missing submissions, missing destinations, and stale expected

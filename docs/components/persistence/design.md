@@ -164,6 +164,12 @@ Neither table stores text, inline artifact bytes, local paths from message
 content, bot credentials, or a replayable job body. An `in_flight` row left by
 a crash is truthful ambiguity, not evidence that a resend is safe.
 
+Delivery reservation identity includes the complete order-independent mapping
+of destination delivery IDs to route snapshots. Both memory and SQLite reject
+stable-ID reuse when that map differs, while ignoring mutable outcome and
+receipt fields during an identical replay. SQLite reconstructs the same map
+after restart; no additional identity column or schema migration is required.
+
 ## Change obligations
 
 Changes to `bindings.py` or `storage.py` require checking schema migration,

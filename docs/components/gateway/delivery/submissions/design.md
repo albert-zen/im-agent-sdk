@@ -23,8 +23,12 @@ remain in the separate proactive-authorization and proactive-delivery leaves.
 - destination delivery IDs derive from the submission and stable Conversation
   identity;
 - the first atomic reservation pins the complete destination snapshot set;
-- a repeated identical reservation returns the existing record; a conflicting
-  identity fails explicitly;
+- reservation identity compares the root fields plus an order-independent map
+  of every destination delivery ID to its complete route snapshot; mutable
+  outcome, receipt, error, and timestamp fields are not identity;
+- a repeated reservation with the same root and destination snapshot set
+  returns the existing record; a changed destination ID, Conversation, Thread,
+  route, route update time, or reply context fails explicitly;
 - destination updates use expected-state comparison and preserve the pinned
   snapshot.
 
@@ -40,6 +44,13 @@ and lock so reservation and destination comparison-and-swap remain atomic.
 Restart reconstructs the same immutable record and typed receipts. It does not
 recover content or schedule work: the caller must resubmit the same bounded
 intent, whose fingerprints are checked against the durable record.
+
+Proactive orchestration checks for an existing submission before resolving a
+current Thread route, so an ordinary retry reuses the stored snapshots instead
+of conflicting with route movement. The complete snapshot comparison applies
+when two first-reservation contenders race after independently resolving their
+destinations, and at each repository boundary; it prevents the losing caller
+or a non-conforming repository from silently changing the pinned set.
 
 During component rollout, SQLite table/row encoding remains co-located in the
 submission module and is therefore an explicit shared path with
