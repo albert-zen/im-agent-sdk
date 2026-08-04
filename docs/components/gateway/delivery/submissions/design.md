@@ -23,6 +23,8 @@ remain in the separate proactive-authorization and proactive-delivery leaves.
 - destination delivery IDs derive from the submission and stable Conversation
   identity;
 - the first atomic reservation pins the complete destination snapshot set;
+- one submission admits at most 64 destination snapshots before any
+  reservation or persistence work;
 - reservation identity compares the root fields plus an order-independent map
   of every destination delivery ID to its complete route snapshot; mutable
   outcome, receipt, error, and timestamp fields are not identity;

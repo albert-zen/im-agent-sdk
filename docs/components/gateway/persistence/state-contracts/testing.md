@@ -19,10 +19,11 @@ State-contract tests must prove:
   content, credential, callback, or retry job; and
 - JSON schemas and Python values remain compatible at their public boundary.
 
-The missing finite cardinality limits for delivery destinations and request
-questions/choice IDs remain an explicit capacity gap. A later behavior slice
-must add focused boundary and over-limit tests before claiming that every
-persisted collection is bounded.
+Focused boundary tests accept exactly 64 delivery destinations, 32 request
+questions, and 64 approval or per-question choice IDs. They reject one more
+member before fingerprinting/reservation/SQL or Channel/Application work, and
+prove that rejection preserves the immutable delivery snapshot and existing
+repository state.
 
 Repository conformance tests cover the complete monotonic request-state graph;
 the passive value tests continue to validate one declared state without

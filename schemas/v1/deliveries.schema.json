@@ -346,7 +346,8 @@
         "destinations": {
           "type": "array",
           "items": { "$ref": "#/$defs/DestinationDeliveryResult" },
-          "minItems": 1
+          "minItems": 1,
+          "maxItems": 64
         },
         "error": { "type": ["string", "null"] }
       },
@@ -483,7 +484,8 @@
         "destinations": {
           "type": "array",
           "items": { "$ref": "#/$defs/IngressDestinationResult" },
-          "minItems": 1
+          "minItems": 1,
+          "maxItems": 64
         },
         "error": { "type": ["string", "null"] }
       },

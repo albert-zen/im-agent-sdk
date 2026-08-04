@@ -19,6 +19,8 @@ from ..interaction.operations import ContractViolation, require_identifier
 from ._validation import validate_thread_ref
 from .model import ThreadRef
 
+MAX_DELIVERY_SUBMISSION_DESTINATIONS = 64
+
 
 class DeliveryTargetKind(StrEnum):
     CONVERSATION = "conversation"
@@ -228,6 +230,7 @@ def validate_delivery_submission_record(record: DeliverySubmissionRecord) -> Non
         raise ContractViolation("delivery submission update precedes creation")
     if not record.destinations:
         raise ContractViolation("delivery submission requires at least one destination")
+    validate_delivery_submission_destination_count(len(record.destinations))
     seen: set[str] = set()
     for destination in record.destinations:
         require_identifier(destination.delivery_id, "destination.delivery_id")
@@ -241,6 +244,14 @@ def validate_delivery_submission_record(record: DeliverySubmissionRecord) -> Non
         validate_delivery_route_snapshot(destination.snapshot)
         if destination.receipt is not None:
             validate_delivery_receipt(destination.receipt)
+
+
+def validate_delivery_submission_destination_count(count: int) -> None:
+    if count > MAX_DELIVERY_SUBMISSION_DESTINATIONS:
+        raise ContractViolation(
+            "delivery submission destinations exceed the maximum of "
+            f"{MAX_DELIVERY_SUBMISSION_DESTINATIONS}"
+        )
 
 
 def derive_delivery_target_fingerprint(target: DeliveryTarget) -> str:

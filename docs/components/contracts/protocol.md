@@ -304,6 +304,13 @@ policy. User-input responses map question IDs to string-answer tuples and are
 validated against explicit minimum/maximum cardinality, available choice IDs,
 and `allowsOther`.
 
+For finite bridge validation and persisted response routing evidence, one
+interactive request and response shape contain at most 32 questions, and one
+approval or question contains at most 64 choice IDs. A proactive submission
+contains at most 64 immutable destination snapshots. These are rejected before
+proportional fingerprinting, reservation, SQL, or native side effects; they do
+not evict retained evidence or introduce a spool/outbox.
+
 `secret` is a sensitivity requirement, not a claim that any presenter or
 Channel can collect the answer securely. A presenter without an evidenced
 secure-input capability must refuse response collection and must not create a
