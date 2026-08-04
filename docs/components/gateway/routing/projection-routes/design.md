@@ -9,11 +9,14 @@ activate native UI state, or create an Application subscription.
 
 This leaf owns:
 
+- the typed `ObserveThread` and `ThreadObserved` values and their specific
+  postcondition validation;
 - `foreground_only`, `remembered_last_recipient`, and `all_observers` route
   policy semantics;
 - stable route identity and per-Conversation destination references;
 - active-route resolution at delivery time;
-- route refresh rules that preserve completed projection checkpoints.
+- route refresh rules and route persistence that preserve completed projection
+  checkpoints.
 
 It does not own Channel delivery, presentation, delivery idempotency claims,
 checkpoint advancement, request response authority, Application history, or
@@ -65,7 +68,9 @@ movement.
 
 ## Current structural gap
 
-Route values, repository coordination, projection delivery, and request
-projection currently share broad modules. Later focused slices will move the
-route owner to its target module and leave delivery, checkpoints,
-request-correlation, and observation in their respective leaves.
+Route values, specific validation, repository coordination, projection
+delivery, and request projection currently share broad modules. The Gateway
+operations aggregate assembles these exact route-owned values and delegates
+through typed route methods; the later focused slice will move the route owner
+to its target module and leave delivery, checkpoints, request-correlation, and
+observation in their respective leaves.

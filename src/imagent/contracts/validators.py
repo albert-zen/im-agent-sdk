@@ -1,3 +1,12 @@
+"""Pending owner-specific Gateway validation delegates.
+
+The aggregate Gateway validator lives in
+``imagent.gateway.routing.operations``. These helpers remain with the pending
+projection-route and request-correlation contract values until those later
+slices move their concrete owners. ``derive_client_message_id`` remains an
+input-dispatch contract helper.
+"""
+
 from __future__ import annotations
 
 import hashlib
@@ -9,140 +18,65 @@ from ..applications.requests import (
     UserInputResponse,
     validate_request_ref,
 )
-from ..gateway.routing.bindings import (
-    BindConversationToProject as _BindConversationToProject,
-)
-from ..gateway.routing.bindings import (
-    BindConversationToThread as _BindConversationToThread,
-)
-from ..gateway.routing.bindings import (
-    ClearConversationThread as _ClearConversationThread,
-)
-from ..gateway.routing.bindings import (
-    ConversationBound as _ConversationBound,
-)
-from ..gateway.routing.bindings import (
-    _validate_binding_operation,
-    _validate_binding_operation_result,
-)
+from ..gateway.persistence.state_contracts import validate_projection_route
 from ..interaction.messages import ConversationRef
 from ..interaction.operations import ContractViolation, require_identifier
 from .operations import (
-    ApplicationsListed,
-    GatewayOperation,
-    GatewayOperationFailed,
-    GatewayOperationResult,
-    ListApplications,
-    ObserveThread,
-    RequestResponseRouted,
-    RespondToRequest,
-    SelectApplication,
-    ThreadObserved,
+    ObserveThread as _ObserveThread,
+)
+from .operations import (
+    RequestResponseRouted as _RequestResponseRouted,
+)
+from .operations import (
+    RespondToRequest as _RespondToRequest,
+)
+from .operations import (
+    ThreadObserved as _ThreadObserved,
 )
 
 
-def validate_gateway_operation(operation: GatewayOperation) -> None:
-    require_identifier(operation.operation_id, "operation_id")
-    require_identifier(operation.actor, "actor")
-    require_identifier(operation.conversation_ref.channel_instance_id, "channel_instance_id")
-    require_identifier(operation.conversation_ref.native_conversation_id, "native_conversation_id")
-    expected_revision = getattr(operation, "expected_revision", None)
-    if expected_revision is not None and expected_revision < 0:
-        raise ContractViolation("expected_revision cannot be negative")
-    if isinstance(operation, SelectApplication):
-        require_identifier(
-            operation.application_ref.application_instance_id,
-            "application_instance_id",
-        )
-    if isinstance(
-        operation,
-        (_BindConversationToProject, _BindConversationToThread, _ClearConversationThread),
-    ):
-        _validate_binding_operation(operation)
-    if isinstance(operation, ObserveThread):
-        validate_thread_ref(operation.thread_ref)
-        if operation.reply_to_message_id is not None:
-            require_identifier(operation.reply_to_message_id, "reply_to_message_id")
-    if isinstance(operation, RespondToRequest):
-        validate_request_ref(operation.request_ref)
-        if isinstance(operation.response, ApprovalResponse):
-            require_identifier(operation.response.choice_id, "choice_id")
-        if isinstance(operation.response, UserInputResponse):
-            if not operation.response.answers:
-                raise ContractViolation("user input response requires answers")
-            for question_id, answers in operation.response.answers.items():
-                require_identifier(question_id, "question_id")
-                if not answers or any(not answer for answer in answers):
-                    raise ContractViolation("each user input question requires non-empty answers")
+def _validate_observe_operation(operation: _ObserveThread) -> None:
+    validate_thread_ref(operation.thread_ref)
+    if operation.reply_to_message_id is not None:
+        require_identifier(operation.reply_to_message_id, "reply_to_message_id")
 
 
-def validate_gateway_operation_result(
-    operation: GatewayOperation,
-    result: GatewayOperationResult,
+def _validate_observe_operation_result(
+    operation: _ObserveThread,
+    result: object,
 ) -> None:
-    from ..gateway.persistence.state_contracts import (
-        validate_binding,
-        validate_projection_route,
-    )
-
-    require_identifier(result.operation_id, "operation_id")
-    if result.operation_id != operation.operation_id:
-        raise ContractViolation("Gateway result ID does not match the request")
-    if result.type is not operation.type:
-        raise ContractViolation("Gateway result type does not match the request")
-    if isinstance(result, GatewayOperationFailed):
-        _validate_error(result.error)
-        return
-    if isinstance(operation, ListApplications):
-        if not isinstance(result, ApplicationsListed):
-            raise ContractViolation("application.list must return ApplicationsListed")
-        return
-    if isinstance(operation, ObserveThread):
-        if not isinstance(result, ThreadObserved):
-            raise ContractViolation("thread.observe must return ThreadObserved")
-        validate_projection_route(result.route)
-        if result.route.thread_ref != operation.thread_ref:
-            raise ContractViolation("thread.observe returned a different Thread")
-        if result.route.conversation_ref != operation.conversation_ref:
-            raise ContractViolation("thread.observe returned a different Conversation")
-        if result.route.reply_to_message_id != operation.reply_to_message_id:
-            raise ContractViolation("thread.observe returned different reply correlation")
-        return
-    if isinstance(operation, RespondToRequest):
-        if not isinstance(result, RequestResponseRouted):
-            raise ContractViolation(
-                "conversation.respond_request must return RequestResponseRouted"
-            )
-        if result.request_ref != operation.request_ref:
-            raise ContractViolation("Gateway response routed a different request")
-        return
-    if isinstance(
-        operation,
-        (_BindConversationToProject, _BindConversationToThread, _ClearConversationThread),
-    ):
-        _validate_binding_operation_result(operation, result)
-        return
-    if not isinstance(
-        operation,
-        (SelectApplication,),
-    ) or not isinstance(result, _ConversationBound):
-        raise ContractViolation(f"{operation.type.value} must return ConversationBound")
-    if result.binding.conversation_ref != operation.conversation_ref:
-        raise ContractViolation("Gateway result belongs to a different Conversation")
-    validate_binding(result.binding)
-    if isinstance(operation, SelectApplication):
-        if (
-            result.binding.application_ref != operation.application_ref
-            or result.binding.project_ref is not None
-            or result.binding.thread_ref is not None
-        ):
-            raise ContractViolation("application.select returned an incompatible binding")
+    if not isinstance(result, _ThreadObserved):
+        raise ContractViolation("thread.observe must return ThreadObserved")
+    validate_projection_route(result.route)
+    if result.route.thread_ref != operation.thread_ref:
+        raise ContractViolation("thread.observe returned a different Thread")
+    if result.route.conversation_ref != operation.conversation_ref:
+        raise ContractViolation("thread.observe returned a different Conversation")
+    if result.route.reply_to_message_id != operation.reply_to_message_id:
+        raise ContractViolation("thread.observe returned different reply correlation")
 
 
-def _validate_error(error) -> None:
-    require_identifier(error.code, "error.code")
-    if not error.message:
-        raise ContractViolation("operation error message cannot be empty")
+def _validate_respond_operation(operation: _RespondToRequest) -> None:
+    validate_request_ref(operation.request_ref)
+    if isinstance(operation.response, ApprovalResponse):
+        require_identifier(operation.response.choice_id, "choice_id")
+    if isinstance(operation.response, UserInputResponse):
+        if not operation.response.answers:
+            raise ContractViolation("user input response requires answers")
+        for question_id, answers in operation.response.answers.items():
+            require_identifier(question_id, "question_id")
+            if not answers or any(not answer for answer in answers):
+                raise ContractViolation("each user input question requires non-empty answers")
+
+
+def _validate_respond_operation_result(
+    operation: _RespondToRequest,
+    result: object,
+) -> None:
+    if not isinstance(result, _RequestResponseRouted):
+        raise ContractViolation("conversation.respond_request must return RequestResponseRouted")
+    if result.request_ref != operation.request_ref:
+        raise ContractViolation("Gateway response routed a different request")
 
 
 def derive_client_message_id(

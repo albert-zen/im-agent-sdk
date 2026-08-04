@@ -14,19 +14,19 @@ if TYPE_CHECKING:
     from .delivery.proactive_authorization import DeliveryAuthorizer
 
 from ..applications.capabilities import ProjectMode
-from ..applications.contract import AgentApplicationAdapter, AgentInput, ThreadRef
+from ..applications.contract import (
+    AgentApplicationAdapter,
+    AgentInput,
+    ApplicationSummary,
+    ThreadRef,
+)
 from ..contracts import (
     ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,
-    ApplicationsListed,
     CreateThread,
-    GatewayOperation,
-    GatewayOperationFailed,
-    GatewayOperationResult,
     GetProject,
     GetThread,
-    ListApplications,
     ObserveThread,
     ProjectRead,
     RequestDuplicateError,
@@ -36,17 +36,14 @@ from ..contracts import (
     RequestStaleError,
     RespondRequest,
     RespondToRequest,
-    SelectApplication,
     ThreadCreated,
     ThreadObserved,
     ThreadRead,
-    derive_client_message_id,
     validate_application_operation,
     validate_application_operation_result,
-    validate_gateway_operation,
-    validate_gateway_operation_result,
     validate_request_response,
 )
+from ..contracts.validators import derive_client_message_id
 from ..interaction.channels.contract import ChannelAdapter, InboundAdmission
 from ..interaction.controllers import ControllerActions, ControllerLifecycle
 from ..interaction.controllers.contract import (
@@ -142,6 +139,27 @@ from .routing.bindings import (
     ClearConversationThread,
     ConversationBound,
 )
+from .routing.operations import (
+    ApplicationsListed as ApplicationsListed,
+)
+from .routing.operations import (
+    GatewayOperation,
+    GatewayOperationFailed,
+    GatewayOperationResult,
+    ListApplications,
+    SelectApplication,
+    _GatewayActionError,
+    _GatewayOperationExecutor,
+)
+from .routing.operations import (
+    GatewayOperationType as GatewayOperationType,
+)
+from .routing.operations import (
+    validate_gateway_operation as validate_gateway_operation,
+)
+from .routing.operations import (
+    validate_gateway_operation_result as validate_gateway_operation_result,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -217,9 +235,6 @@ class ImAgentGateway:
             if extensions.delivery_outcome_observer is not None
             else None
         )
-        self._conversation_locks = KeyedLockRegistry(
-            max_active_keys=limits.conversation_serialization_max_active_keys
-        )
         self._request_locks = KeyedLockRegistry()
         self._outbound_deliveries: dict[
             tuple[str, str],
@@ -256,6 +271,12 @@ class ImAgentGateway:
             turn_correlation_retention_seconds=limits.turn_correlation_retention_seconds,
             request_correlation_retention_seconds=(limits.request_correlation_retention_seconds),
         )
+        self._gateway_operations = _GatewayOperationExecutor(
+            delegates=self,
+            max_active_conversation_keys=limits.conversation_serialization_max_active_keys,
+            contract_error=_contract_error,
+        )
+        self._conversation_locks = self._gateway_operations.conversation_locks
         delivery_submissions = repositories.delivery_submissions
         if delivery_submissions is None:
             delivery_submissions = InMemoryDeliverySubmissionRepository(
@@ -452,16 +473,7 @@ class ImAgentGateway:
         operation: GatewayOperation,
     ) -> GatewayOperationResult:
         """Execute one typed Gateway operation under Conversation serialization."""
-        try:
-            async with self._conversation_locks.hold(operation.conversation_ref):
-                return await self._execute_gateway_locked(operation)
-        except KeyedLockCapacityError as error:
-            return GatewayOperationFailed(
-                operation_id=operation.operation_id,
-                type=operation.type,
-                completed_at=datetime.now(UTC),
-                error=_contract_error(error),
-            )
+        return await self._gateway_operations.execute(operation)
 
     async def get_binding(
         self,
@@ -491,249 +503,266 @@ class ImAgentGateway:
         self,
         operation: GatewayOperation,
     ) -> GatewayOperationResult:
-        try:
-            validate_gateway_operation(operation)
-            result = await self._apply_gateway_operation(operation)
-            validate_gateway_operation_result(operation, result)
-            return result
-        except _GatewayActionError as error:
-            contract_error = error.error
-        except Exception as error:
-            contract_error = _contract_error(error)
-        return GatewayOperationFailed(
+        return await self._gateway_operations.execute_locked(operation)
+
+    def list_applications(
+        self,
+        operation: ListApplications,
+        *,
+        completed_at: datetime,
+    ) -> tuple[ApplicationSummary, ...]:
+        del operation, completed_at
+        return tuple(application.summary for application in self._applications.values())
+
+    async def select_application(
+        self,
+        operation: SelectApplication,
+        *,
+        completed_at: datetime,
+    ) -> ConversationBound:
+        self._require_application(operation.application_ref.application_instance_id)
+        previous = await self._bindings.get(operation.conversation_ref)
+        binding = await self._bindings.put(
+            ConversationBinding(
+                conversation_ref=operation.conversation_ref,
+                application_ref=operation.application_ref,
+            ),
+            expected_revision=operation.expected_revision,
+        )
+        await self._projection_runtime.handle_binding_change(previous, binding)
+        return ConversationBound(
             operation_id=operation.operation_id,
             type=operation.type,
-            completed_at=datetime.now(UTC),
-            error=contract_error,
+            completed_at=completed_at,
+            binding=binding,
         )
 
-    async def _apply_gateway_operation(
+    async def bind_conversation_to_project(
         self,
-        operation: GatewayOperation,
-    ) -> GatewayOperationResult:
-        completed_at = datetime.now(UTC)
-        if isinstance(operation, ListApplications):
-            return ApplicationsListed(
-                operation_id=operation.operation_id,
-                completed_at=completed_at,
-                applications=tuple(
-                    application.summary for application in self._applications.values()
-                ),
+        operation: BindConversationToProject,
+        *,
+        completed_at: datetime,
+    ) -> ConversationBound:
+        application = self._require_application(operation.project_ref.application_instance_id)
+        read = await self.execute_application(
+            GetProject(
+                operation_id=f"{operation.operation_id}:validate-project",
+                application_ref=application.summary.ref,
+                project_ref=operation.project_ref,
+                created_at=operation.created_at,
             )
-        if isinstance(operation, SelectApplication):
-            self._require_application(operation.application_ref.application_instance_id)
-            previous = await self._bindings.get(operation.conversation_ref)
-            binding = await self._bindings.put(
-                ConversationBinding(
-                    conversation_ref=operation.conversation_ref,
-                    application_ref=operation.application_ref,
-                ),
-                expected_revision=operation.expected_revision,
+        )
+        if isinstance(read, ApplicationOperationFailed):
+            raise _GatewayActionError(read.error)
+        if not isinstance(read, ProjectRead):
+            raise RuntimeError("project.get returned an incompatible result")
+        previous = await self._bindings.get(operation.conversation_ref)
+        binding = await self._bindings.put(
+            ConversationBinding(
+                conversation_ref=operation.conversation_ref,
+                application_ref=application.summary.ref,
+                project_ref=read.project.ref,
+            ),
+            expected_revision=operation.expected_revision,
+        )
+        await self._projection_runtime.handle_binding_change(previous, binding)
+        return ConversationBound(
+            operation_id=operation.operation_id,
+            type=operation.type,
+            completed_at=completed_at,
+            binding=binding,
+        )
+
+    async def bind_conversation_to_thread(
+        self,
+        operation: BindConversationToThread,
+        *,
+        completed_at: datetime,
+    ) -> ConversationBound:
+        application = self._require_application(operation.thread_ref.application_instance_id)
+        read = await self.execute_application(
+            GetThread(
+                operation_id=f"{operation.operation_id}:validate-thread",
+                application_ref=application.summary.ref,
+                thread_ref=operation.thread_ref,
+                created_at=operation.created_at,
             )
-            await self._projection_runtime.handle_binding_change(previous, binding)
-            return ConversationBound(
-                operation_id=operation.operation_id,
-                type=operation.type,
-                completed_at=completed_at,
-                binding=binding,
+        )
+        if isinstance(read, ApplicationOperationFailed):
+            raise _GatewayActionError(read.error)
+        if not isinstance(read, ThreadRead):
+            raise RuntimeError("thread.get returned an incompatible result")
+        previous = await self._bindings.get(operation.conversation_ref)
+        if self._projection_policy is ProjectionPolicy.FOREGROUND_ONLY:
+            same_target = (
+                previous is not None
+                and previous.application_ref == application.summary.ref
+                and previous.project_ref == read.thread.ref.project_ref
+                and previous.thread_ref == read.thread.ref
             )
-        if isinstance(operation, BindConversationToProject):
-            application = self._require_application(operation.project_ref.application_instance_id)
-            read = await self.execute_application(
-                GetProject(
-                    operation_id=f"{operation.operation_id}:validate-project",
-                    application_ref=application.summary.ref,
-                    project_ref=operation.project_ref,
-                    created_at=operation.created_at,
+            if (
+                same_target
+                and previous is not None
+                and operation.expected_revision
+                not in {None, previous.revision, previous.revision - 1}
+            ):
+                raise BindingConflict(
+                    "same-target bind retry does not match the current "
+                    "or immediately preceding revision"
                 )
+            (
+                prepared_route,
+                route_was_created,
+            ) = await self._projection_runtime.prepare_foreground_binding_route(
+                read.thread.ref,
+                operation.conversation_ref,
             )
-            if isinstance(read, ApplicationOperationFailed):
-                raise _GatewayActionError(read.error)
-            if not isinstance(read, ProjectRead):
-                raise RuntimeError("project.get returned an incompatible result")
-            previous = await self._bindings.get(operation.conversation_ref)
-            binding = await self._bindings.put(
-                ConversationBinding(
-                    conversation_ref=operation.conversation_ref,
-                    application_ref=application.summary.ref,
-                    project_ref=read.project.ref,
-                ),
-                expected_revision=operation.expected_revision,
-            )
-            await self._projection_runtime.handle_binding_change(previous, binding)
-            return ConversationBound(
-                operation_id=operation.operation_id,
-                type=operation.type,
-                completed_at=completed_at,
-                binding=binding,
-            )
-        if isinstance(operation, BindConversationToThread):
-            application = self._require_application(operation.thread_ref.application_instance_id)
-            read = await self.execute_application(
-                GetThread(
-                    operation_id=f"{operation.operation_id}:validate-thread",
-                    application_ref=application.summary.ref,
-                    thread_ref=operation.thread_ref,
-                    created_at=operation.created_at,
-                )
-            )
-            if isinstance(read, ApplicationOperationFailed):
-                raise _GatewayActionError(read.error)
-            if not isinstance(read, ThreadRead):
-                raise RuntimeError("thread.get returned an incompatible result")
-            previous = await self._bindings.get(operation.conversation_ref)
-            if self._projection_policy is ProjectionPolicy.FOREGROUND_ONLY:
-                same_target = (
-                    previous is not None
-                    and previous.application_ref == application.summary.ref
-                    and previous.project_ref == read.thread.ref.project_ref
-                    and previous.thread_ref == read.thread.ref
-                )
-                if (
-                    same_target
-                    and previous is not None
-                    and operation.expected_revision
-                    not in {None, previous.revision, previous.revision - 1}
-                ):
-                    raise BindingConflict(
-                        "same-target bind retry does not match the current "
-                        "or immediately preceding revision"
-                    )
-                (
-                    prepared_route,
-                    route_was_created,
-                ) = await self._projection_runtime.prepare_foreground_binding_route(
-                    read.thread.ref, operation.conversation_ref
-                )
-                retain_prepared_barrier = False
-                try:
-                    require_checkpoint = not route_was_created
-                    if same_target:
-                        assert previous is not None
-                        retain_prepared_barrier = True
-                        await self._projection_runtime.handle_binding_change(
-                            None,
-                            previous,
-                            require_checkpoint=require_checkpoint,
-                        )
-                        return ConversationBound(
-                            operation_id=operation.operation_id,
-                            type=operation.type,
-                            completed_at=completed_at,
-                            binding=previous,
-                        )
-                    desired_binding = ConversationBinding(
-                        conversation_ref=operation.conversation_ref,
-                        application_ref=application.summary.ref,
-                        project_ref=read.thread.ref.project_ref,
-                        thread_ref=read.thread.ref,
-                    )
-                    try:
-                        binding = await self._bindings.put(
-                            desired_binding,
-                            expected_revision=operation.expected_revision,
-                        )
-                    except BaseException as error:
-                        retain_prepared_barrier = True
-                        try:
-                            current = await self._bindings.get(operation.conversation_ref)
-                        except BaseException as verification_error:
-                            error.add_note(
-                                "Binding outcome verification also failed; the prepared "
-                                f"route remains fenced: {verification_error!r}"
-                            )
-                        else:
-                            retain_prepared_barrier = (
-                                current is not None
-                                and current.application_ref == desired_binding.application_ref
-                                and current.project_ref == desired_binding.project_ref
-                                and current.thread_ref == desired_binding.thread_ref
-                            )
-                        raise
+            retain_prepared_barrier = False
+            try:
+                require_checkpoint = not route_was_created
+                if same_target:
+                    assert previous is not None
                     retain_prepared_barrier = True
                     await self._projection_runtime.handle_binding_change(
+                        None,
                         previous,
-                        binding,
                         require_checkpoint=require_checkpoint,
                     )
                     return ConversationBound(
                         operation_id=operation.operation_id,
                         type=operation.type,
                         completed_at=completed_at,
-                        binding=binding,
+                        binding=previous,
                     )
-                finally:
-                    if not retain_prepared_barrier:
-                        self._projection_runtime.complete_foreground_binding_route(
-                            prepared_route.route_id
-                        )
-            binding = await self._bindings.put(
-                ConversationBinding(
+                desired_binding = ConversationBinding(
                     conversation_ref=operation.conversation_ref,
                     application_ref=application.summary.ref,
                     project_ref=read.thread.ref.project_ref,
                     thread_ref=read.thread.ref,
-                ),
-                expected_revision=operation.expected_revision,
-            )
-            await self._projection_runtime.handle_binding_change(previous, binding)
-            return ConversationBound(
-                operation_id=operation.operation_id,
-                type=operation.type,
-                completed_at=completed_at,
-                binding=binding,
-            )
-        if isinstance(operation, ObserveThread):
-            application = self._require_application(operation.thread_ref.application_instance_id)
-            read = await self.execute_application(
-                GetThread(
-                    operation_id=f"{operation.operation_id}:validate-thread",
-                    application_ref=application.summary.ref,
-                    thread_ref=operation.thread_ref,
-                    created_at=operation.created_at,
                 )
-            )
-            if isinstance(read, ApplicationOperationFailed):
-                raise _GatewayActionError(read.error)
-            if not isinstance(read, ThreadRead):
-                raise RuntimeError("thread.get returned an incompatible result")
-            route = await self._projection_runtime.observe_thread(
-                application,
-                read.thread.ref,
-                operation.conversation_ref,
-                reply_to_message_id=operation.reply_to_message_id,
-            )
-            return ThreadObserved(
-                operation_id=operation.operation_id,
-                completed_at=completed_at,
-                route=route,
-            )
-        if isinstance(operation, RespondToRequest):
-            async with self._request_locks.hold(operation.request_ref):
-                return await self._respond_to_request(
-                    operation,
+                try:
+                    binding = await self._bindings.put(
+                        desired_binding,
+                        expected_revision=operation.expected_revision,
+                    )
+                except BaseException as error:
+                    retain_prepared_barrier = True
+                    try:
+                        current = await self._bindings.get(operation.conversation_ref)
+                    except BaseException as verification_error:
+                        error.add_note(
+                            "Binding outcome verification also failed; the prepared "
+                            f"route remains fenced: {verification_error!r}"
+                        )
+                    else:
+                        retain_prepared_barrier = (
+                            current is not None
+                            and current.application_ref == desired_binding.application_ref
+                            and current.project_ref == desired_binding.project_ref
+                            and current.thread_ref == desired_binding.thread_ref
+                        )
+                    raise
+                retain_prepared_barrier = True
+                await self._projection_runtime.handle_binding_change(
+                    previous,
+                    binding,
+                    require_checkpoint=require_checkpoint,
+                )
+                return ConversationBound(
+                    operation_id=operation.operation_id,
+                    type=operation.type,
                     completed_at=completed_at,
+                    binding=binding,
                 )
-        if isinstance(operation, ClearConversationThread):
-            current = await self._bindings.get(operation.conversation_ref)
-            if current is None:
-                raise ValueError("Conversation has no binding")
-            binding = await self._bindings.put(
-                ConversationBinding(
-                    conversation_ref=current.conversation_ref,
-                    application_ref=current.application_ref,
-                    project_ref=current.project_ref,
-                ),
-                expected_revision=operation.expected_revision,
+            finally:
+                if not retain_prepared_barrier:
+                    self._projection_runtime.complete_foreground_binding_route(
+                        prepared_route.route_id
+                    )
+        binding = await self._bindings.put(
+            ConversationBinding(
+                conversation_ref=operation.conversation_ref,
+                application_ref=application.summary.ref,
+                project_ref=read.thread.ref.project_ref,
+                thread_ref=read.thread.ref,
+            ),
+            expected_revision=operation.expected_revision,
+        )
+        await self._projection_runtime.handle_binding_change(previous, binding)
+        return ConversationBound(
+            operation_id=operation.operation_id,
+            type=operation.type,
+            completed_at=completed_at,
+            binding=binding,
+        )
+
+    async def clear_conversation_thread(
+        self,
+        operation: ClearConversationThread,
+        *,
+        completed_at: datetime,
+    ) -> ConversationBound:
+        current = await self._bindings.get(operation.conversation_ref)
+        if current is None:
+            raise ValueError("Conversation has no binding")
+        binding = await self._bindings.put(
+            ConversationBinding(
+                conversation_ref=current.conversation_ref,
+                application_ref=current.application_ref,
+                project_ref=current.project_ref,
+            ),
+            expected_revision=operation.expected_revision,
+        )
+        await self._projection_runtime.handle_binding_change(current, binding)
+        return ConversationBound(
+            operation_id=operation.operation_id,
+            type=operation.type,
+            completed_at=completed_at,
+            binding=binding,
+        )
+
+    async def observe_thread(
+        self,
+        operation: ObserveThread,
+        *,
+        completed_at: datetime,
+    ) -> ThreadObserved:
+        application = self._require_application(operation.thread_ref.application_instance_id)
+        read = await self.execute_application(
+            GetThread(
+                operation_id=f"{operation.operation_id}:validate-thread",
+                application_ref=application.summary.ref,
+                thread_ref=operation.thread_ref,
+                created_at=operation.created_at,
             )
-            await self._projection_runtime.handle_binding_change(current, binding)
-            return ConversationBound(
-                operation_id=operation.operation_id,
-                type=operation.type,
+        )
+        if isinstance(read, ApplicationOperationFailed):
+            raise _GatewayActionError(read.error)
+        if not isinstance(read, ThreadRead):
+            raise RuntimeError("thread.get returned an incompatible result")
+        route = await self._projection_runtime.observe_thread(
+            application,
+            read.thread.ref,
+            operation.conversation_ref,
+            reply_to_message_id=operation.reply_to_message_id,
+        )
+        return ThreadObserved(
+            operation_id=operation.operation_id,
+            completed_at=completed_at,
+            route=route,
+        )
+
+    async def respond_to_request(
+        self,
+        operation: RespondToRequest,
+        *,
+        completed_at: datetime,
+    ) -> RequestResponseRouted:
+        async with self._request_locks.hold(operation.request_ref):
+            return await self._respond_to_request(
+                operation,
                 completed_at=completed_at,
-                binding=binding,
             )
-        raise NotImplementedError(operation.type.value)
 
     async def _respond_to_request(
         self,
@@ -938,7 +967,7 @@ class ImAgentGateway:
         idempotency_owner_token: str,
         before_application_send: Callable[[], Awaitable[None]],
     ) -> None:
-        async with self._conversation_locks.hold(message.conversation_ref):
+        async with self._gateway_operations.hold_conversation(message.conversation_ref):
             scope, key = inbound_idempotency_identity(
                 message.conversation_ref,
                 message.message_id,
@@ -1312,12 +1341,6 @@ class _LockedControllerActions(ControllerActions):
             raise ValueError("effectful command invocation does not match owned inbound identity")
         self._effect_fence_entered = True
         await self._enter_effect_fence()
-
-
-class _GatewayActionError(RuntimeError):
-    def __init__(self, error: ContractError) -> None:
-        super().__init__(error.message)
-        self.error = error
 
 
 def _contract_error(error: Exception) -> ContractError:

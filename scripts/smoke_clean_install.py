@@ -109,6 +109,7 @@ import imagent.contracts.operations as historical_operations
 import imagent.contracts.validators as validators_owner
 import imagent.gateway as gateway_facade
 import imagent.gateway.routing as routing_facade
+import imagent.gateway.routing.operations as operations_owner
 from imagent.gateway.persistence import ConversationBinding
 from imagent.gateway.routing import bindings as binding_owner
 
@@ -132,25 +133,48 @@ binding_hints = typing.get_type_hints(binding_owner.ConversationBound)
 facade_hints = typing.get_type_hints(contracts_facade.ConversationBound)
 assert binding_hints["binding"] is ConversationBinding
 assert facade_hints["binding"] is ConversationBinding
-assert binding_hints["type"] is historical_operations.GatewayOperationType
-assert facade_hints["type"] is historical_operations.GatewayOperationType
+assert binding_hints["type"] is operations_owner.GatewayOperationType
+assert facade_hints["type"] is operations_owner.GatewayOperationType
 assert typing.get_type_hints(contracts_facade.__getattr__)["return"] is object
 assert typing.get_args(contracts_facade.GatewayOperation)
+for name in (
+    "ApplicationsListed",
+    "GatewayOperation",
+    "GatewayOperationFailed",
+    "GatewayOperationResult",
+    "GatewayOperationType",
+    "ListApplications",
+    "SelectApplication",
+):
+    owner = getattr(operations_owner, name)
+    assert getattr(contracts_facade, name) is owner
+    assert getattr(routing_facade, name) is owner
+    assert getattr(gateway_facade, name) is owner
+for name in ("validate_gateway_operation", "validate_gateway_operation_result"):
+    owner = getattr(operations_owner, name)
+    assert getattr(contracts_facade, name) is owner
+    assert getattr(routing_facade, name) is owner
+    assert getattr(gateway_facade, name) is owner
 assert inspect.signature(contracts_facade.validate_gateway_operation) == inspect.signature(
-    validators_owner.validate_gateway_operation
+    operations_owner.validate_gateway_operation
 )
 assert inspect.signature(contracts_facade.validate_gateway_operation_result) == inspect.signature(
-    validators_owner.validate_gateway_operation_result
+    operations_owner.validate_gateway_operation_result
 )
 assert typing.get_type_hints(contracts_facade.validate_gateway_operation) == typing.get_type_hints(
-    validators_owner.validate_gateway_operation
+    operations_owner.validate_gateway_operation
 )
 assert (
     typing.get_type_hints(contracts_facade.validate_gateway_operation_result)
-    == typing.get_type_hints(validators_owner.validate_gateway_operation_result)
+    == typing.get_type_hints(operations_owner.validate_gateway_operation_result)
 )
+assert not hasattr(historical_operations, "RequestRef")
+assert not hasattr(historical_operations, "RequestResponse")
+assert not hasattr(routing_facade, "GatewayOperationExecutor")
+assert not hasattr(gateway_facade, "GatewayOperationExecutor")
 """
 for first_import in (
+    "import imagent.gateway.routing.operations\n",
     "import imagent.gateway.routing.bindings\n",
     "import imagent.contracts.operations\n",
     "import imagent.contracts.validators\n",

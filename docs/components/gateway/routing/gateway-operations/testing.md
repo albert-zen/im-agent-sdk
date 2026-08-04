@@ -2,6 +2,12 @@
 
 Gateway operation conformance must prove:
 
+- the focused owner and every finite public facade expose the same exact
+  operation/result objects, signatures, and `typing.get_type_hints` results in
+  clean processes regardless of import order;
+- the aggregate delegates binding mutations, projection observation, and
+  request-response routing through explicit typed owner methods or ports, with
+  no generic repository/context parameter and no duplicated owner validator;
 - every accepted operation and result validates as its exact typed variant;
 - unknown, malformed, and unsupported operations produce stable explicit
   failures rather than a generic handler fallback;
@@ -28,7 +34,7 @@ Gateway operation conformance must prove:
   claim transition and can never authorize native input; and
 - product-only commands and generic extension hooks are absent.
 
-Current evidence is in `tests/test_gateway_operations.py` and
-`tests/test_gateway_vertical_slice.py`. The target mirrored suite is
-`tests/gateway/routing/test_operations.py`; moving it belongs to a later
-behavior-preserving slice.
+Focused owner evidence is in `tests/gateway/routing/test_operations.py`.
+Integration evidence remains in `tests/test_gateway_operations.py` and
+`tests/test_gateway_vertical_slice.py`; the focused extraction must preserve
+all of those branches rather than replacing or deleting them.

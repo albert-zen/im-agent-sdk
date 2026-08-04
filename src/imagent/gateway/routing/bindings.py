@@ -6,12 +6,17 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ForwardRef, TypeAlias
 
 from ...applications.contract import ProjectRef, ThreadRef
-from ...contracts.operations import (
-    GatewayOperationType,
+from ...interaction.operations import ContractViolation, require_identifier
+from .operations import (
+    GatewayOperationType as _GatewayOperationType,
+)
+from .operations import (
+    _complete_gateway_union as _complete_gateway_union,
+)
+from .operations import (
     _GatewayOperation,
     _GatewayOperationSucceeded,
 )
-from ...interaction.operations import ContractViolation, require_identifier
 
 if TYPE_CHECKING:
     from ...gateway.persistence.state_contracts import ConversationBinding
@@ -21,9 +26,9 @@ if TYPE_CHECKING:
 class BindConversationToProject(_GatewayOperation):
     project_ref: ProjectRef
     expected_revision: int | None = None
-    type: GatewayOperationType = field(
+    type: _GatewayOperationType = field(
         init=False,
-        default=GatewayOperationType.CONVERSATION_BIND_PROJECT,
+        default=_GatewayOperationType.CONVERSATION_BIND_PROJECT,
     )
 
 
@@ -31,24 +36,24 @@ class BindConversationToProject(_GatewayOperation):
 class BindConversationToThread(_GatewayOperation):
     thread_ref: ThreadRef
     expected_revision: int | None = None
-    type: GatewayOperationType = field(
+    type: _GatewayOperationType = field(
         init=False,
-        default=GatewayOperationType.CONVERSATION_BIND_THREAD,
+        default=_GatewayOperationType.CONVERSATION_BIND_THREAD,
     )
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ClearConversationThread(_GatewayOperation):
     expected_revision: int | None = None
-    type: GatewayOperationType = field(
+    type: _GatewayOperationType = field(
         init=False,
-        default=GatewayOperationType.CONVERSATION_CLEAR_THREAD,
+        default=_GatewayOperationType.CONVERSATION_CLEAR_THREAD,
     )
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ConversationBound(_GatewayOperationSucceeded):
-    type: GatewayOperationType
+    type: _GatewayOperationType
     binding: ConversationBinding
 
 
@@ -104,3 +109,6 @@ __all__ = [
     "ClearConversationThread",
     "ConversationBound",
 ]
+
+
+_complete_gateway_union()
