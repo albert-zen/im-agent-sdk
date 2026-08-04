@@ -48,6 +48,18 @@ Focused projection-route tests prove:
 - exact and selector-based cleanup cannot become an accidental delete-all;
 - a fresh repository starts without routes or correlations.
 
+Focused request-correlation tests prove:
+
+- the process-local repository has the memory owner and the historical module
+  does not retain the implementation;
+- complete correlation identity is validated before mutation, stable
+  destination reuse is idempotent, and conflicting reuse fails explicitly;
+- request-wide state transitions are monotonic, expected-state fenced, and
+  same-state idempotent across every destination;
+- a late destination inherits the request's terminal state and cannot reopen
+  `open`; and
+- deletion requires an explicit selector and restart begins with no records.
+
 Gateway composition tests additionally prove the stable default, invalid-limit
 construction rejection, explicit limit wiring, and that an injected repository
 is not wrapped or reconfigured by the default-only limit. A fresh process-local
@@ -64,6 +76,8 @@ PYTHONPATH=src python -m unittest \
   tests.gateway.delivery.test_proactive_ingress -v
 ```
 
-The request-correlation suite continues to own its process-local repository
-tests until that implementation moves in its own focused slice. Every slice
-also runs the full repository gates.
+The request-correlation repository contract remains covered by
+`tests/gateway/persistence/test_repository_contracts.py` and the existing
+storage/projection suites; its implementation-ownership assertions live in
+`tests/gateway/persistence/test_memory.py`. Every slice also runs the full
+repository gates.

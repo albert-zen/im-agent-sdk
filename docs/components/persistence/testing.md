@@ -21,6 +21,8 @@ Required scenarios:
 - projection routes survive restart without transcript content;
 - the process-local projection repository has one memory owner, starts empty,
   and is not retained by the projection semantic module;
+- the process-local request-correlation repository has one memory owner,
+  starts empty, and is not retained by the historical mixed module;
 - route refresh preserves checkpoints and rejects conflicting explicit values;
 - concurrent checkpoint advances use compare-and-swap and cannot overwrite a
   newer boundary;

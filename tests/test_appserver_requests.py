@@ -43,8 +43,8 @@ from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGatew
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,
+    InMemoryRequestCorrelationRepository,
 )
-from imagent.request_correlations import InMemoryRequestCorrelationRepository
 from imagent.testing import FakeChannelAdapter
 
 

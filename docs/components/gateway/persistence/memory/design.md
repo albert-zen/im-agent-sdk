@@ -62,6 +62,32 @@ run an Application observation worker, deliver to a Channel, or advance an
 idempotency claim. Those semantics remain in the Gateway routing/projection
 owners and consume this passive repository Port.
 
+## Request-correlation semantics
+
+`InMemoryRequestCorrelationRepository` is the process-local implementation of
+the request-correlation repository Port. It stores only the bounded typed
+bridge record for each delivered destination: stable Application/request,
+Thread/Turn, Conversation, delivery, supported response shape, state, and
+timestamps. It never stores a prompt, answer, permission, transcript item, or
+native request authority.
+
+Writes validate the complete record while holding one process-local lock.
+Stable correlation and destination identity are immutable; a conflicting
+reuse fails with `RequestCorrelationConflict`. A repeated write preserves the
+accepted monotonic request state, and a late destination inherits an existing
+request-wide terminal state instead of reopening `open`. State transitions
+apply to every correlation for one request under the same lock, require the
+caller-supplied expected states, reject regressions, and treat an identical
+state as idempotent. Deletion requires at least one explicit request, Thread,
+Conversation, or retention selector.
+
+The implementation does not reconcile native request truth, execute a
+response, select a destination, or create a retry job. Those semantics remain
+in the Gateway request-correlation and delivery owners. The SQLite mixin
+continues to share the historical pure transition/selector helpers until its
+own transaction-owner extraction; this slice moves no durable implementation
+or schema.
+
 ## Delivery submission semantics
 
 The first focused extraction moves `InMemoryDeliverySubmissionRepository`
@@ -107,9 +133,12 @@ src/imagent/gateway/persistence/memory.py
 tests/gateway/persistence/test_memory.py
 ```
 
-The request-correlation in-memory repository remains at its historical owner
-until a separate mechanical slice moves it into this leaf. No
-compatibility implementation is duplicated.
+The request-correlation implementation lives in
+`src/imagent/gateway/persistence/memory.py`. The historical
+`request_correlations.py` module retains only the request projection helpers,
+SQLite mixin, schema, and row/JSON conversion that are still shared by later
+focused slices. It does not retain a compatibility implementation of the
+process-local repository.
 
 ## Authority
 

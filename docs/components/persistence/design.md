@@ -74,6 +74,13 @@ minimal Turn reply-correlation map. Projection delivery, active-route policy,
 checkpoint convergence, and recovery remain outside persistence. SQLite route
 transactions and row mapping are unchanged.
 
+The process-local request-correlation repository also belongs to Gateway memory
+persistence. It stores only validated per-destination bridge records and
+per-request monotonic state under one process-local lock. Request projection
+policy, native request truth, response execution, and the SQLite transaction
+owner remain outside that implementation; no compatibility copy remains in
+the historical mixed request-correlation module.
+
 Route storage retains routing and per-route delivery fields only. A normal
 refresh with no checkpoint preserves an existing boundary. A `put` that
 carries a different checkpoint is rejected: only

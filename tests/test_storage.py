@@ -36,14 +36,16 @@ from imagent.contracts import (
 )
 from imagent.gateway import GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence import BindingConflict
-from imagent.gateway.persistence.memory import InMemoryProjectionRouteRepository
+from imagent.gateway.persistence.memory import (
+    InMemoryProjectionRouteRepository,
+    InMemoryRequestCorrelationRepository,
+)
 from imagent.interaction.operations import ContractViolation
 from imagent.projections import (
     derive_projection_route_id,
     derive_turn_reply_correlation_id,
 )
 from imagent.request_correlations import (
-    InMemoryRequestCorrelationRepository,
     derive_request_correlation_id,
 )
 from imagent.storage import SQLiteGatewayState

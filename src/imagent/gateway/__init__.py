@@ -95,7 +95,6 @@ from ..interaction.operations import (
 from ..keyed_locks import KeyedLockCapacityError, KeyedLockRegistry
 from ..projection_runtime import ThreadProjectionRuntime
 from ..projections import ProjectionWorkerHealth, RetryableDeliveryError
-from ..request_correlations import InMemoryRequestCorrelationRepository
 from .admission import (
     ClaimedInbound,
     InboundAdmissionService,
@@ -125,6 +124,7 @@ from .persistence import BindingConflict, InMemoryIdempotencyRepository
 from .persistence.memory import (
     InMemoryDeliverySubmissionRepository,
     InMemoryProjectionRouteRepository,
+    InMemoryRequestCorrelationRepository,
 )
 from .presentation import (
     OutboundPresentationContext,

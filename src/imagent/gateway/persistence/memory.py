@@ -18,15 +18,27 @@ from ...contracts import (
     DeliverySubmissionRecord,
     DeliverySubmissionState,
     DestinationDeliveryRecord,
+    RequestRouteCorrelation,
+    RequestRouteState,
     ThreadProjectionRoute,
     ThreadRef,
     TurnReplyCorrelation,
     validate_binding,
     validate_delivery_submission_record,
     validate_projection_route,
+    validate_request_route_correlation,
     validate_turn_reply_correlation,
 )
+from ...contracts.model import RequestRef
 from ...interaction.messages import ConversationRef
+from ...request_correlations import (
+    _matches,
+    _merge_correlation,
+    _reject_conflicting_endpoint,
+    _require_delete_selector,
+    _select_correlations,
+    _transition_correlations,
+)
 from .repository_contracts import BindingConflict
 from .submission_identity import ensure_same_delivery_submission_reservation
 
@@ -79,6 +91,99 @@ class InMemoryBindingRepository:
                     f"expected revision {expected_revision}, current revision is {current_revision}"
                 )
             self._bindings.pop(conversation, None)
+
+
+class InMemoryRequestCorrelationRepository:
+    """Process-local destination-safe request response routing state."""
+
+    def __init__(self) -> None:
+        self._correlations: dict[str, RequestRouteCorrelation] = {}
+        self._lock = asyncio.Lock()
+
+    async def list_request_correlations(
+        self,
+        *,
+        request_ref: RequestRef | None = None,
+        thread_ref: ThreadRef | None = None,
+        conversation_ref: ConversationRef | None = None,
+    ) -> tuple[RequestRouteCorrelation, ...]:
+        async with self._lock:
+            correlations = tuple(self._correlations.values())
+        return _select_correlations(
+            correlations,
+            request_ref=request_ref,
+            thread_ref=thread_ref,
+            conversation_ref=conversation_ref,
+        )
+
+    async def put_request_correlation(
+        self,
+        correlation: RequestRouteCorrelation,
+    ) -> RequestRouteCorrelation:
+        validate_request_route_correlation(correlation)
+        async with self._lock:
+            existing = self._correlations.get(correlation.correlation_id)
+            stored = _merge_correlation(
+                existing,
+                correlation,
+                request_correlations=tuple(
+                    candidate
+                    for candidate in self._correlations.values()
+                    if candidate.request_ref == correlation.request_ref
+                ),
+            )
+            _reject_conflicting_endpoint(self._correlations.values(), stored)
+            self._correlations[stored.correlation_id] = stored
+            return stored
+
+    async def transition_request_correlations(
+        self,
+        request_ref: RequestRef,
+        *,
+        expected_states: tuple[RequestRouteState, ...],
+        state: RequestRouteState,
+        updated_at: datetime,
+    ) -> tuple[RequestRouteCorrelation, ...]:
+        async with self._lock:
+            selected = tuple(
+                correlation
+                for correlation in self._correlations.values()
+                if correlation.request_ref == request_ref
+            )
+            transitioned = _transition_correlations(
+                selected,
+                expected_states=expected_states,
+                state=state,
+                updated_at=updated_at,
+            )
+            for correlation in transitioned:
+                self._correlations[correlation.correlation_id] = correlation
+            return transitioned
+
+    async def delete_request_correlations(
+        self,
+        *,
+        request_ref: RequestRef | None = None,
+        thread_ref: ThreadRef | None = None,
+        conversation_ref: ConversationRef | None = None,
+        older_than: datetime | None = None,
+    ) -> int:
+        _require_delete_selector(request_ref, thread_ref, conversation_ref, older_than)
+        async with self._lock:
+            keys = tuple(
+                correlation_id
+                for correlation_id, correlation in self._correlations.items()
+                if _matches(
+                    correlation,
+                    request_ref=request_ref,
+                    thread_ref=thread_ref,
+                    conversation_ref=conversation_ref,
+                    older_than=older_than,
+                )
+            )
+            for correlation_id in keys:
+                self._correlations.pop(correlation_id)
+            return len(keys)
 
 
 def _same_turn_reply_correlation(
