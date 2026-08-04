@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 
 from ...adapters import AgentApplicationAdapter
+from ...applications.capabilities import SupportLevel
 from ...contracts import (
     AgentEvent,
     ApplicationOperation,
@@ -14,7 +15,6 @@ from ...contracts import (
     ApplicationOperationResult,
     GetThreadHistory,
     GetTurnCatchup,
-    SupportLevel,
     ThreadHistory,
     ThreadHistoryRead,
     ThreadProjectionRoute,

@@ -19,7 +19,6 @@ from ..contracts import (
     AgentEventType,
     AgentInput,
     AgentMessage,
-    ApplicationCapabilities,
     ApplicationInputDispatch,
     ApplicationOperation,
     ApplicationOperationFailed,
@@ -28,7 +27,6 @@ from ..contracts import (
     ApplicationSummary,
     CreateThread,
     DeleteThread,
-    EventSequenceScope,
     GetProject,
     GetThread,
     GetThreadHistory,
@@ -41,19 +39,13 @@ from ..contracts import (
     ListProjects,
     ListThreads,
     Page,
-    ProjectCapabilities,
-    ProjectMode,
     ProjectRead,
     ProjectRef,
     ProjectsListed,
     ProjectSummary,
     RespondRequest,
-    RuntimeCapabilities,
-    SupportLevel,
-    ThreadCapabilities,
     ThreadCreated,
     ThreadDeleted,
-    ThreadDeletionCapability,
     ThreadDeletionMode,
     ThreadHistory,
     ThreadHistoryRead,
@@ -82,6 +74,16 @@ from ..interaction.media import (
 )
 from ..interaction.messages import MessageRole, TextContent, TextFormat
 from ..interaction.operations import operation_error
+from .capabilities import (
+    ApplicationCapabilities,
+    EventSequenceScope,
+    ProjectCapabilities,
+    ProjectMode,
+    RuntimeCapabilities,
+    SupportLevel,
+    ThreadCapabilities,
+    ThreadDeletionCapability,
+)
 from .presentation import (
     ApplicationPresentationCapacityError,
     ApplicationPresentationLimits,

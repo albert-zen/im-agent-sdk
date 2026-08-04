@@ -8,7 +8,8 @@ Parent: `applications`
 
 This leaf declares immutable, evidenced native support. It owns
 `ApplicationCapabilities`, `ProjectCapabilities`, `ThreadCapabilities`,
-`RuntimeCapabilities`, `SupportLevel`, `ThreadDeletionCapability`, and
+`RuntimeCapabilities`, `SupportLevel`, `ProjectMode`,
+`ThreadDeletionCapability`, `EventSequenceScope`, and
 `validate_application_capabilities`.
 
 It does not own a fallback, product configuration, a synthetic capability, or
@@ -19,8 +20,12 @@ pretended native operation; unsupported behavior remains an explicit outcome.
 
 Concrete adapter evidence supplies facts; this leaf outputs one bounded,
 immutable capability declaration. It depends only on typed Interaction media
-source kinds, because attachment support must state the native trust/encoding
-boundary honestly. It has no Gateway dependency.
+source kinds and the common contract error value used for explicit validation,
+because attachment support must state the native trust/encoding boundary
+honestly. `ProjectMode` and `EventSequenceScope` are nested capability
+discriminants, so this leaf owns their nominal Python identities rather than
+depending on the legacy aggregate contract module. It has no Gateway
+dependency.
 
 Current public values are exported from `imagent.contracts`; the target owner
 is `imagent.applications.capabilities`. The target code is
@@ -33,12 +38,11 @@ Capabilities are deployment/static declarations and must remain truthful after
 restart. They are not a mutable record of an Application runtime, replay
 cursor, provider setting, or product retry policy.
 
-Current code is `schemas/v1/capabilities.schema.json` plus
-`src/imagent/contracts/{model.py,validators.py}`. Current tests are
-`tests/test_contracts.py` and `tests/test_adapter_contracts.py`; the target is
-`tests/applications/test_capabilities.py`. The declared gap is that capability
-values remain embedded in the cross-owner contract model during the mechanical
-rollout.
+The implementation is `schemas/v1/capabilities.schema.json` plus
+`src/imagent/applications/capabilities.py`; `imagent.contracts` remains an
+exact public facade for the v1 values. Focused ownership evidence is
+`tests/applications/test_capabilities.py`, alongside adapter conformance. The
+schema and capability semantics are unchanged by this mechanical move.
 
 ## Authority
 

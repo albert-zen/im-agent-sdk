@@ -3,17 +3,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Generic, TypeAlias, TypeVar
+from typing import TYPE_CHECKING, Generic, TypeAlias, TypeVar
 
-from ..interaction.media import (
-    AttachmentSourceKind,
-)
 from ..interaction.messages import (
     Content,
     ConversationRef,
     MessageRole,
     Metadata,
 )
+
+if TYPE_CHECKING:
+    from ..applications.capabilities import ApplicationCapabilities
 
 T = TypeVar("T")
 
@@ -40,18 +40,6 @@ class ThreadRef:
     application_instance_id: str
     native_thread_id: str
     project_ref: ProjectRef | None = None
-
-
-class SupportLevel(StrEnum):
-    NATIVE = "native"
-    FALLBACK = "fallback"
-    UNSUPPORTED = "unsupported"
-
-
-class EventSequenceScope(StrEnum):
-    NONE = "none"
-    THREAD = "thread"
-    APPLICATION = "application"
 
 
 class ProjectionPolicy(StrEnum):
@@ -90,56 +78,6 @@ class RequestRouteState(StrEnum):
     RESPONDED = "responded"
     RESOLVED = "resolved"
     STALE = "stale"
-
-
-class ProjectMode(StrEnum):
-    MANAGED = "managed"
-    FLAT = "flat"
-    FIXED = "fixed"
-
-
-class ThreadDeletionCapability(StrEnum):
-    UNSUPPORTED = "unsupported"
-    ARCHIVE = "archive"
-    PERMANENT = "permanent"
-
-
-@dataclass(frozen=True, slots=True)
-class ProjectCapabilities:
-    mode: ProjectMode
-    discovery: SupportLevel
-    reading: SupportLevel
-    creation: SupportLevel = SupportLevel.UNSUPPORTED
-    deletion: SupportLevel = SupportLevel.UNSUPPORTED
-
-
-@dataclass(frozen=True, slots=True)
-class ThreadCapabilities:
-    listing: SupportLevel
-    creation: SupportLevel
-    reading: SupportLevel
-    deletion: ThreadDeletionCapability = ThreadDeletionCapability.UNSUPPORTED
-
-
-@dataclass(frozen=True, slots=True)
-class RuntimeCapabilities:
-    history: SupportLevel
-    streaming: SupportLevel
-    replay_from_cursor: SupportLevel
-    interruption: SupportLevel
-    interactive_requests: SupportLevel
-    pending_request_snapshot: SupportLevel = SupportLevel.UNSUPPORTED
-    native_thread_activation: SupportLevel = SupportLevel.UNSUPPORTED
-    gap_detection: SupportLevel = SupportLevel.UNSUPPORTED
-    event_sequence_scope: EventSequenceScope = EventSequenceScope.NONE
-
-
-@dataclass(frozen=True, slots=True)
-class ApplicationCapabilities:
-    projects: ProjectCapabilities
-    threads: ThreadCapabilities
-    runtime: RuntimeCapabilities
-    attachment_sources: tuple[AttachmentSourceKind, ...] = ()
 
 
 class ThreadStatus(StrEnum):

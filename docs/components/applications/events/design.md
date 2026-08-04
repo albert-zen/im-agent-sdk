@@ -8,8 +8,10 @@ Parent: `applications`
 
 This leaf defines canonical `AgentEvent` values, their type/ordering fields,
 and bounded independent live fan-out through `EventBroadcaster`. It owns
-`AgentEvent`, `AgentEventType`, `EventSequenceScope`, `EventBroadcaster`,
-`EventStreamGap`, and `validate_agent_event`.
+`AgentEvent`, `AgentEventType`, `EventBroadcaster`, `EventStreamGap`, and
+`validate_agent_event`. `EventSequenceScope` is the capability declaration
+that qualifies whether native ordering can be claimed, so it belongs to
+`applications.capabilities`.
 
 It does not own a native event journal, transcript, Gateway projection worker,
 Channel delivery, or a second Application subscription. The adapter owns
@@ -19,10 +21,10 @@ and route/checkpoint recovery.
 ## Inputs, outputs, and dependencies
 
 Normalized native events enter this leaf and each subscriber receives its own
-bounded Thread event stream. It depends on Interaction message values for
-canonical Agent content, but never on Gateway. Stable event/item identities
-and any sequence/cursor fields describe only native guarantees; text and time
-do not establish identity.
+bounded Thread event stream. It depends on Interaction message values and the
+Applications capability declaration, but never on Gateway. Stable event/item
+identities and any sequence/cursor fields describe only native guarantees;
+text and time do not establish identity.
 
 Current exports are split across `imagent.contracts` and `imagent.events`; the
 target facade is `imagent.applications.events`, implemented once in

@@ -521,9 +521,9 @@ components:
 
   applications-common:
     description: Typed Application contract, capability, event, operation, request, and adapter-owned A1 presentation boundaries.
-    # This docs-first slice maps only the new leaf authority. Existing source
-    # and tests keep their exact owner mapping until an individual mechanical
-    # extraction creates the recorded target path.
+    code:
+      - src/imagent/applications/capabilities.py
+      - tests/applications/**
     docs:
       - docs/components/applications/README.md
       - docs/components/applications/application-contract/design.md

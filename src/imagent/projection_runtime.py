@@ -14,6 +14,7 @@ from .adapters import (
     ProjectionRouteRepository,
     RequestCorrelationRepository,
 )
+from .applications.capabilities import SupportLevel
 from .contracts import (
     AcceptedTurn,
     AgentEvent,
@@ -28,7 +29,6 @@ from .contracts import (
     InputDisposition,
     ProjectionPolicy,
     RequestRef,
-    SupportLevel,
     ThreadProjectionRoute,
     ThreadRef,
     TurnReplyCorrelation,
