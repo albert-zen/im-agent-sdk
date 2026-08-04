@@ -1318,11 +1318,11 @@ components:
     state_recovery: Stateless validation; schema IDs and references are stable versioned contract identities.
     current_code: [schemas/v1/README.md, scripts/validate_schemas.py]
     target_code: [schemas/v1/README.md, scripts/validate_schemas.py]
-    current_tests: [tests/test_contracts.py]
+    current_tests: [tests/engineering/test_schema_conformance.py]
     target_tests: [tests/engineering/test_schema_conformance.py]
     authoritative_docs: [docs/engineering/schema-conformance/design.md, docs/engineering/schema-conformance/testing.md, schemas/v1/README.md, docs/components/contracts/protocol.md]
     adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0002-design-authority-and-control-boundaries.md]
-    gaps: [schema validation is a standalone required check but has no focused unit-test module yet]
+    gaps: []
 
   engineering.repository-maintainability:
     id: engineering.repository-maintainability

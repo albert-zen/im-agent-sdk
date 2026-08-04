@@ -312,6 +312,12 @@ class ComponentMapTests(unittest.TestCase):
             schema_support["current_code"],
             ["schemas/v1/README.md", "scripts/validate_schemas.py"],
         )
+        self.assertEqual(
+            schema_support["current_tests"],
+            ["tests/engineering/test_schema_conformance.py"],
+        )
+        self.assertEqual(schema_support["target_tests"], schema_support["current_tests"])
+        self.assertEqual(schema_support["gaps"], [])
         self.assertIn(
             "schemas/v1/messages.schema.json",
             components["interaction.messages"]["current_code"],

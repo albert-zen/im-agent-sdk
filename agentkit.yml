@@ -636,6 +636,8 @@ components:
     code:
       - docs/ARCHITECTURE.md
       - scripts/validate_schemas.py
+      - tests/engineering/__init__.py
+      - tests/engineering/test_schema_conformance.py
     docs:
       - docs/engineering/schema-conformance/design.md
       - docs/engineering/schema-conformance/testing.md
