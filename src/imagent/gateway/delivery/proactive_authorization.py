@@ -2,10 +2,39 @@ from __future__ import annotations
 
 import asyncio
 import secrets
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Protocol
 
-from ...adapters import DeliveryAuthorizer as DeliveryAuthorizer
-from ...contracts import DeliveryPrincipal as DeliveryPrincipal
-from ...contracts import validate_delivery_principal as validate_delivery_principal
+from ...interaction.messages import ConversationRef
+
+if TYPE_CHECKING:
+    from ...contracts.model import ThreadRef
+
+
+class DeliveryAuthorizer(Protocol):
+    async def authenticate(self, credential: str) -> DeliveryPrincipal: ...
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryPrincipal:
+    principal_id: str
+    allowed_threads: tuple[ThreadRef, ...] = ()
+    allowed_conversations: tuple[ConversationRef, ...] = ()
+
+
+def validate_delivery_principal(principal: DeliveryPrincipal) -> None:
+    from ...contracts._validation import validate_thread_ref
+    from ...interaction.operations import ContractViolation, require_identifier
+
+    require_identifier(principal.principal_id, "principal_id")
+    if len(set(principal.allowed_threads)) != len(principal.allowed_threads):
+        raise ContractViolation("allowed_threads must be unique")
+    if len(set(principal.allowed_conversations)) != len(principal.allowed_conversations):
+        raise ContractViolation("allowed_conversations must be unique")
+    for thread_ref in principal.allowed_threads:
+        validate_thread_ref(thread_ref)
+    for conversation_ref in principal.allowed_conversations:
+        _validate_conversation_ref(conversation_ref)
 
 
 class DeliveryAuthorizationError(PermissionError):
@@ -47,3 +76,16 @@ class ScopedDeliveryAuthorizer:
         if principal is None:
             raise DeliveryAuthorizationError("delivery credential is invalid")
         return principal
+
+
+def _validate_conversation_ref(conversation_ref: ConversationRef) -> None:
+    from ...interaction.operations import require_identifier
+
+    require_identifier(conversation_ref.channel_instance_id, "channel_instance_id")
+    require_identifier(conversation_ref.native_conversation_id, "native_conversation_id")
+
+
+# Bind the historical Thread reference only after this Gateway owner is fully
+# defined, so runtime annotation inspection remains supported without an
+# import-time cycle through the contracts facade.
+from ...contracts.model import ThreadRef  # noqa: E402

@@ -5,17 +5,12 @@ from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from ...adapters import (
-    DeliveryAuthorizer,
-    DeliverySubmissionConflict,
-    DeliverySubmissionRepository,
-)
+from ...adapters import DeliverySubmissionConflict, DeliverySubmissionRepository
 from ...contracts import (
     ConversationDeliveryTarget,
     DeliveryIntent,
     DeliveryItemReceipt,
     DeliveryItemStatus,
-    DeliveryPrincipal,
     DeliveryReceipt,
     DeliveryReceiptStatus,
     DeliveryRouteSnapshot,
@@ -35,7 +30,6 @@ from ...contracts import (
     derive_delivery_target_fingerprint,
     derive_destination_delivery_id,
     validate_delivery_intent,
-    validate_delivery_principal,
     validate_delivery_receipt_for_content,
     validate_delivery_submission_destination_count,
 )
@@ -54,6 +48,11 @@ from .outcome_observation import (
     DeliveryOutcomeObserverRuntime,
 )
 from .planning import DeliveryPlanningError
+from .proactive_authorization import (
+    DeliveryAuthorizer,
+    DeliveryPrincipal,
+    validate_delivery_principal,
+)
 
 ResolveThreadRoutes = Callable[
     [ThreadRef],
