@@ -5,9 +5,9 @@ import unittest
 
 import imagent.gateway.delivery as delivery_facade
 from imagent import contracts
-from imagent.contracts import delivery as delivery_contracts
-from imagent.contracts.delivery import DeliverySubmissionOrigin
+from imagent.gateway.delivery import DeliverySubmissionOrigin
 from imagent.gateway.delivery import submissions as submissions_owner
+from imagent.gateway.persistence import state_contracts as state_owner
 
 
 class DeliverySubmissionOwnershipTests(unittest.TestCase):
@@ -25,17 +25,15 @@ class DeliverySubmissionOwnershipTests(unittest.TestCase):
                 self.assertEqual(owner.__module__, submissions_owner.__name__)
                 self.assertNotIn(name, contracts.__all__)
                 self.assertFalse(hasattr(contracts, name))
-                self.assertFalse(hasattr(delivery_contracts, name))
+                self.assertFalse(hasattr(state_owner, name))
         self.assertTrue(hasattr(submissions_owner, "_content_identity"))
-        self.assertFalse(hasattr(delivery_contracts, "_content_identity"))
-        self.assertIs(
-            submissions_owner._canonical_metadata,
-            delivery_contracts._canonical_metadata,
-        )
+        self.assertFalse(hasattr(state_owner, "_content_identity"))
+        self.assertTrue(hasattr(submissions_owner, "_canonical_metadata"))
+        self.assertFalse(hasattr(state_owner, "_canonical_metadata"))
         self.assertIs(submissions_owner.DeliverySubmissionOrigin, DeliverySubmissionOrigin)
         self.assertIs(delivery_facade.DeliverySubmissionOrigin, DeliverySubmissionOrigin)
-        self.assertIs(contracts.DeliverySubmissionOrigin, DeliverySubmissionOrigin)
-        self.assertIn("DeliverySubmissionOrigin", contracts.__all__)
+        self.assertFalse(hasattr(contracts, "DeliverySubmissionOrigin"))
+        self.assertNotIn("DeliverySubmissionOrigin", contracts.__all__)
         self.assertIsNone(importlib.util.find_spec("imagent.delivery_submissions"))
 
 

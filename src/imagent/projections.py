@@ -12,9 +12,6 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from .applications.contract import AgentMessage, ThreadRef
-from .contracts import (
-    ThreadProjectionRoute,
-)
 from .interaction.messages import ConversationRef, OutboundMessage, TextContent, TextFormat
 
 if TYPE_CHECKING:
@@ -22,6 +19,7 @@ if TYPE_CHECKING:
         IdempotencyClaimStatus,
         ProjectionRouteRepository,
     )
+    from .gateway.persistence.state_contracts import ThreadProjectionRoute
     from .gateway.presentation import OutboundPresentationContext
 
 DeliverOutbound = Callable[

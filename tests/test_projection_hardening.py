@@ -20,7 +20,6 @@ from imagent.contracts import (
     ApplicationInputOutcomeUnknown,
     ApplicationOperation,
     BindConversationToThread,
-    ConversationBinding,
     ConversationBound,
     ConversationRef,
     GatewayOperationFailed,
@@ -31,19 +30,22 @@ from imagent.contracts import (
     MessageRole,
     ObserveThread,
     OutboundMessage,
-    ProjectionPolicy,
     ProjectMode,
     SupportLevel,
     TextContent,
     ThreadHistoryRead,
-    ThreadProjectionRoute,
     ThreadRef,
-    TurnReplyCorrelation,
     TurnReplyCorrelationPolicy,
 )
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import DeliveryCoordinator, DeliveryCoordinatorConfig
-from imagent.gateway.persistence import InMemoryIdempotencyRepository
+from imagent.gateway.persistence import (
+    ConversationBinding,
+    InMemoryIdempotencyRepository,
+    ProjectionPolicy,
+    ThreadProjectionRoute,
+    TurnReplyCorrelation,
+)
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,

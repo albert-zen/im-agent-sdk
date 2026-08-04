@@ -147,7 +147,11 @@ class ApplicationContractOwnershipTests(unittest.TestCase):
 
         repository_root = Path(__file__).resolve().parents[2]
         model_path = repository_root / "src" / "imagent" / "contracts" / "model.py"
-        tree = ast.parse(model_path.read_text(encoding="utf-8"))
+        self.assertFalse(model_path.exists())
+        state_path = (
+            repository_root / "src" / "imagent" / "gateway" / "persistence" / "state_contracts.py"
+        )
+        tree = ast.parse(state_path.read_text(encoding="utf-8"))
         class_names = {node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
         self.assertTrue(class_names.isdisjoint(_APPLICATION_MODEL_FAMILY))
         from imagent.interaction import messages

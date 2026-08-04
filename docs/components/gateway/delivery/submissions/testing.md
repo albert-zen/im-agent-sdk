@@ -5,7 +5,8 @@ submission-owner objects, that the four identity helpers and private content
 identity have one implementation owner, and that the historical top-level
 implementation path is absent. Clean-process imports prove that the four
 helpers are absent from `imagent.contracts` while `DeliverySubmissionOrigin`
-remains exported there, without creating a Gateway cycle. The proactive
+is exported only from the Gateway delivery facade, without creating a Gateway
+cycle. The proactive
 vocabulary is imported from its Gateway owner rather than redefined or
 aliased in this leaf.
 

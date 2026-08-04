@@ -8,14 +8,6 @@ from pathlib import Path
 
 from . import sqlite_rows
 from .applications.contract import ThreadRef
-from .contracts import (
-    ConversationBinding,
-    ThreadProjectionRoute,
-    TurnReplyCorrelation,
-    validate_binding,
-    validate_projection_route,
-    validate_turn_reply_correlation,
-)
 from .gateway.delivery.submissions import (
     SQLiteDeliverySubmissionMixin,
     initialize_delivery_submission_schema,
@@ -25,6 +17,14 @@ from .gateway.persistence.repository_contracts import (
     IdempotencyClaimStatus,
     ProjectionCheckpointConflict,
     TurnReplyCorrelationConflict,
+)
+from .gateway.persistence.state_contracts import (
+    ConversationBinding,
+    ThreadProjectionRoute,
+    TurnReplyCorrelation,
+    validate_binding,
+    validate_projection_route,
+    validate_turn_reply_correlation,
 )
 from .interaction.messages import ConversationRef
 from .request_correlations import (

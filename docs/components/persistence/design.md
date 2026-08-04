@@ -205,8 +205,8 @@ content, bot credentials, or a replayable job body. An `in_flight` row left by
 a crash is truthful ambiguity, not evidence that a resend is safe.
 
 The passive `DeliverySubmissionOrigin`, state, record, reservation, and route
-snapshot values remain in `contracts.delivery` and continue to cross the
-persistence boundary unchanged. The four closed identity/fingerprint helpers
+snapshot values are owned by `gateway.persistence.state_contracts` and continue
+to cross the persistence boundary unchanged. The four closed identity/fingerprint helpers
 and `_content_identity` are Gateway submission behavior in
 `gateway.delivery.submissions`; persistence imports them only through that
 owner and never recreates them.

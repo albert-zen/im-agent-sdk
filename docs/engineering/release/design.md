@@ -45,7 +45,7 @@ reviewable. The formal `imagent.contracts` facade deliberately omits the
 retired Channel capability/profile/support/reply-scope and delivery-receipt
 names, as well as the retired proactive vocabulary and closed
 submission-identity helper names; `DeliverySubmissionOrigin` remains a
-documented passive-state export. The historical `imagent.adapters` facade
+documented Gateway persistence/delivery export. The historical `imagent.adapters` facade
 likewise retains only its unrelated Application/Gateway,
 proactive-authorization, and passive-state names. The focused Interaction
 Channel facade and `imagent.channels` adapter facade re-export exact owner

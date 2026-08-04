@@ -71,7 +71,7 @@ class ChannelReceiptContractTests(unittest.TestCase):
 
         self.assertTrue(hasattr(adapters, "AgentApplicationAdapter"))
         self.assertTrue(hasattr(contracts, "SupportLevel"))
-        self.assertTrue(hasattr(contracts, "DeliverySubmissionOrigin"))
+        self.assertFalse(hasattr(contracts, "DeliverySubmissionOrigin"))
 
     def test_historical_facade_imports_fail_in_clean_process(self) -> None:
         snippets = tuple(

@@ -9,6 +9,7 @@ from typing import get_type_hints
 
 from imagent import contracts
 from imagent.applications import requests
+from imagent.gateway.persistence import RequestRouteCorrelation
 from imagent.interaction.operations import (
     ContractViolation,
     OperationErrorCode,
@@ -76,28 +77,12 @@ class ApplicationRequestTests(unittest.TestCase):
                 self.assertIs(getattr(contracts, name), getattr(requests, name))
 
     def test_historical_contract_modules_no_longer_define_request_contract(self) -> None:
-        historical_model = import_module("imagent.contracts.model")
         historical_errors = import_module("imagent.contracts.errors")
         historical_operations = import_module("imagent.contracts.operations")
-        historical_validation = import_module("imagent.contracts.request_validation")
-
-        for name in (
-            "ApprovalRequest",
-            "ApprovalResponseShape",
-            "InteractiveRequest",
-            "InteractiveRequestKind",
-            "RequestChoice",
-            "RequestRef",
-            "RequestResolution",
-            "RequestResolutionStatus",
-            "RequestResponseShape",
-            "UserInputQuestion",
-            "UserInputQuestionShape",
-            "UserInputRequest",
-            "UserInputResponseShape",
-        ):
-            with self.subTest(module="model", name=name):
-                self.assertFalse(hasattr(historical_model, name))
+        with self.assertRaises(ModuleNotFoundError):
+            import_module("imagent.contracts.model")
+        with self.assertRaises(ModuleNotFoundError):
+            import_module("imagent.contracts.request_validation")
         for name in (
             "RequestDuplicateError",
             "RequestResolvedError",
@@ -108,21 +93,7 @@ class ApplicationRequestTests(unittest.TestCase):
         for name in ("ApprovalResponse", "UserInputResponse", "RequestResponse"):
             with self.subTest(module="operations", name=name):
                 self.assertFalse(hasattr(historical_operations, name))
-        for name in (
-            "MAX_INTERACTIVE_REQUEST_CHOICES",
-            "MAX_INTERACTIVE_REQUEST_QUESTIONS",
-            "derive_request_response_shape",
-            "validate_interactive_request",
-            "validate_request_ref",
-            "validate_request_resolution",
-            "validate_request_response",
-            "validate_request_response_shape",
-        ):
-            with self.subTest(module="request_validation", name=name):
-                self.assertFalse(hasattr(historical_validation, name))
-
-        self.assertTrue(hasattr(historical_model, "RequestRouteCorrelation"))
-        self.assertTrue(hasattr(historical_validation, "validate_request_route_correlation"))
+        self.assertTrue(hasattr(RequestRouteCorrelation, "__dataclass_fields__"))
 
     def test_request_annotations_and_gateway_route_annotations_resolve(self) -> None:
         request_hints = get_type_hints(requests.ApprovalRequest)
@@ -133,14 +104,14 @@ class ApplicationRequestTests(unittest.TestCase):
             contracts.ApplicationRef,
         )
 
-        route_hints = get_type_hints(contracts.RequestRouteCorrelation)
+        route_hints = get_type_hints(RequestRouteCorrelation)
         self.assertIs(route_hints["request_ref"], requests.RequestRef)
         self.assertEqual(route_hints["response_shape"], requests.RequestResponseShape)
 
     def test_request_and_historical_resource_import_orders_are_clean(self) -> None:
         import_orders = (
             "import imagent.applications.requests",
-            "import imagent.contracts.model",
+            "import imagent.gateway.persistence.state_contracts",
             "import imagent.applications.operations",
             (
                 "from imagent.applications.requests import RequestRef; "

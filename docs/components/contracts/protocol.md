@@ -418,8 +418,9 @@ The typed proactive vocabulary and validator are implemented only in
 `imagent.gateway.delivery`, and the eight historical proactive names are not
 exported from `imagent.contracts`. The closed identity/fingerprint helpers
 belong only to `imagent.gateway.delivery.submissions`. `DeliverySubmissionOrigin`
-and the passive delivery state/record/reservation values remain available from
-`imagent.contracts`.
+and the passive delivery state/record/reservation values are owned by
+`imagent.gateway.persistence` and re-exported by the Gateway delivery facade;
+they are no longer part of `imagent.contracts`.
 
 A Thread target reuses the configured projection policy. It may therefore
 resolve to several destinations under `all_observers`. Gateway's

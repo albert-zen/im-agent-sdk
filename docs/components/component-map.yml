@@ -108,26 +108,6 @@ architecture_lint:
       to: src/imagent/applications/contract.py
       symbol: validate_thread_ref
       reason: Application request validation delegates the Applications-owned ThreadRef invariant while preserving runtime validation behavior during the mechanical move.
-    - from: src/imagent/contracts/__init__.py
-      to: src/imagent/contracts/validators.py
-      symbol: validate_binding
-      reason: The historical contracts facade re-exports the Gateway validator from its split implementation without becoming a second owner.
-    - from: src/imagent/contracts/__init__.py
-      to: src/imagent/contracts/validators.py
-      symbol: validate_projection_route
-      reason: The historical contracts facade re-exports the Gateway validator from its split implementation without becoming a second owner.
-    - from: src/imagent/contracts/__init__.py
-      to: src/imagent/contracts/validators.py
-      symbol: validate_turn_reply_correlation
-      reason: The historical contracts facade re-exports the Gateway validator from its split implementation without becoming a second owner.
-    - from: src/imagent/contracts/request_validation.py
-      to: src/imagent/interaction/operations.py
-      symbol: ContractViolation
-      reason: Gateway request-correlation validation preserves the existing common contract error vocabulary while the request-owned validators move to their focused leaf.
-    - from: src/imagent/contracts/request_validation.py
-      to: src/imagent/interaction/operations.py
-      symbol: require_identifier
-      reason: Gateway request-correlation validation preserves the existing bounded identifier invariant while the request-owned validators move to their focused leaf.
     - from: src/imagent/applications/adapters/appserver/client/__init__.py
       to: src/imagent/__init__.py
       symbol: __version__
@@ -236,7 +216,7 @@ components:
       target: [imagent.contracts:AttachmentContent, imagent.contracts:LocalPath, imagent.contracts:RemoteUrl, imagent.contracts:AttachmentHandle, imagent.contracts:AttachmentGrouping, imagent.contracts:AttachmentSource, imagent.contracts:AttachmentSourceKind, imagent.interaction.media:AttachmentContent, imagent.interaction.media:LocalPath, imagent.interaction.media:RemoteUrl, imagent.interaction.media:AttachmentHandle, imagent.interaction.media:AttachmentGrouping, imagent.interaction.media:AttachmentSource, imagent.interaction.media:AttachmentSourceKind, imagent.interaction.media:configure_shared_filesystem_root, imagent.interaction.media:resolve_local_attachment]
     dependencies: []
     state_recovery: Trust configuration is process-local; content lifetime and crash cleanup stay consumer-owned.
-    current_code: [schemas/v1/capabilities.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, src/imagent/contracts/delivery.py, src/imagent/interaction/media.py, src/imagent/interaction/media_staging.py]
+    current_code: [schemas/v1/capabilities.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, src/imagent/interaction/media.py, src/imagent/interaction/media_staging.py]
     target_code: [schemas/v1/capabilities.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, src/imagent/interaction/media.py, src/imagent/interaction/media_staging.py]
     current_tests: [tests/interaction/test_media.py, tests/interaction/test_media_staging.py, tests/test_contracts.py, tests/test_native_channels.py]
     target_tests: [tests/interaction/test_media.py, tests/interaction/test_media_staging.py]
@@ -676,7 +656,7 @@ components:
       target: [imagent.gateway.projection:InteractiveRequestProjection, imagent.gateway.projection:RespondToRequest, imagent.gateway.projection:RequestResponseRouted]
     dependencies: [interaction.messages, applications.application-contract, applications.capabilities, applications.requests, interaction.controllers.request-presentation, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Correlations are minimal, bounded, persisted, monotonic, and reconciled only from native authoritative facts.
-    current_code: [src/imagent/contracts/operations.py, src/imagent/contracts/request_validation.py, src/imagent/contracts/validators.py, src/imagent/gateway/__init__.py, src/imagent/request_correlations.py, src/imagent/request_projection_runtime.py, src/imagent/projection_routes.py]
+    current_code: [src/imagent/contracts/operations.py, src/imagent/contracts/validators.py, src/imagent/gateway/__init__.py, src/imagent/request_correlations.py, src/imagent/request_projection_runtime.py, src/imagent/projection_routes.py]
     target_code: [src/imagent/gateway/projection/request_correlation.py]
     current_tests: [tests/test_appserver_requests.py, tests/test_projection_hardening.py, tests/test_storage.py]
     target_tests: [tests/gateway/projection/test_request_correlation.py]
@@ -782,17 +762,17 @@ components:
     outputs: [DeliverySubmissionRecord]
     public_contracts: [DeliverySubmissionOrigin, derive_delivery_payload_fingerprint, derive_delivery_submission_id, derive_delivery_target_fingerprint, derive_destination_delivery_id]
     public_exports:
-      current: [imagent.gateway.delivery:DeliverySubmissionOrigin, imagent.gateway.delivery:derive_delivery_payload_fingerprint, imagent.gateway.delivery:derive_delivery_submission_id, imagent.gateway.delivery:derive_delivery_target_fingerprint, imagent.gateway.delivery:derive_destination_delivery_id, imagent.contracts:DeliverySubmissionOrigin]
+      current: [imagent.gateway.delivery:DeliverySubmissionOrigin, imagent.gateway.delivery:derive_delivery_payload_fingerprint, imagent.gateway.delivery:derive_delivery_submission_id, imagent.gateway.delivery:derive_delivery_target_fingerprint, imagent.gateway.delivery:derive_destination_delivery_id]
       target: [imagent.gateway.delivery:DeliverySubmissionOrigin, imagent.gateway.delivery:derive_delivery_payload_fingerprint, imagent.gateway.delivery:derive_delivery_submission_id, imagent.gateway.delivery:derive_delivery_target_fingerprint, imagent.gateway.delivery:derive_destination_delivery_id]
     dependencies: [interaction.messages, interaction.media, interaction.operations, interaction.channels.channel-contract, applications.application-contract, gateway.delivery.proactive-authorization, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: In-flight/unknown remain ambiguous; immutable snapshots prevent route drift on retry.
-    current_code: [schemas/v1/deliveries.schema.json, src/imagent/contracts/delivery.py, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/submissions.py]
+    current_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/submissions.py]
     target_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/submissions.py]
     current_tests: [tests/gateway/delivery/test_submissions.py, tests/gateway/delivery/test_proactive_ingress.py, tests/gateway/delivery/test_proactive_delivery.py, tests/test_storage.py]
     target_tests: [tests/gateway/delivery/test_submissions.py]
     authoritative_docs: [docs/components/gateway/delivery/submissions/design.md, docs/components/gateway/delivery/submissions/testing.md]
     adrs: [docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
-    gaps: [passive contract values remain in contracts/delivery until their focused state-contract split; proactive vocabulary is owned by gateway.delivery.proactive; SQLite row encoding remains co-located here until the focused persistence split]
+    gaps: [proactive vocabulary is owned by gateway.delivery.proactive; SQLite row encoding remains co-located here until the focused persistence split]
 
   gateway.delivery.proactive-authorization:
     id: gateway.delivery.proactive-authorization
@@ -814,7 +794,7 @@ components:
     target_tests: [tests/gateway/delivery/test_proactive_authorization.py]
     authoritative_docs: [docs/components/gateway/delivery/proactive-authorization/design.md, docs/components/gateway/delivery/proactive-authorization/testing.md]
     adrs: [docs/decisions/0009-proactive-delivery-routing.md]
-    gaps: [imagent.adapters and imagent.contracts retain exact compatibility aliases while the broader Ports and state-contract facades converge; unrelated delivery values remain in contracts/delivery.py]
+    gaps: [imagent.adapters retains exact compatibility aliases while the broader Ports and state-contract facades converge]
 
   gateway.delivery.proactive-delivery:
     id: gateway.delivery.proactive-delivery
@@ -836,7 +816,7 @@ components:
     target_tests: [tests/gateway/delivery/test_proactive_runtime.py, tests/gateway/delivery/test_proactive_delivery.py, tests/gateway/delivery/test_proactive_ingress.py]
     authoritative_docs: [docs/components/gateway/delivery/proactive-delivery/design.md, docs/components/gateway/delivery/proactive-delivery/testing.md]
     adrs: [docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
-    gaps: ["the same-leaf proactive.py contract seam and proactive_runtime.py orchestration owner are explicit; passive submission state remains in contracts/delivery pending its focused state-contract split; the reference CLI remains in historical files pending its focused Interaction client-tool split"]
+    gaps: ["the same-leaf proactive.py contract seam and proactive_runtime.py orchestration owner are explicit; the reference CLI remains in historical files pending its focused Interaction client-tool split"]
 
   gateway.delivery.outcome-observation:
     id: gateway.delivery.outcome-observation
@@ -864,23 +844,23 @@ components:
     id: gateway.persistence.state-contracts
     parent: gateway.persistence
     purpose: Define passive strongly typed values for minimal persisted Gateway bridge state.
-    owns: [binding records, projection route/policy records, reply/request correlation records, delivery submission records]
+    owns: [binding records, projection route/policy records, reply/request correlation records, delivery submission state/records]
     does_not_own: [repository I/O, routing orchestration, delivery execution, Agent truth]
     inputs: [stable Interaction and Application resource identities]
     outputs: [immutable validated bridge-state values]
     public_contracts: [ConversationBinding, ProjectionPolicy, ThreadProjectionRoute, TurnReplyCorrelation, RequestRouteState, RequestRouteCorrelation, DeliverySubmissionState, MAX_DELIVERY_SUBMISSION_DESTINATIONS, DeliveryRouteSnapshot, DestinationDeliveryRecord, DeliverySubmissionRecord, DeliveryReservation, validate_binding, validate_delivery_route_snapshot, validate_delivery_submission_destination_count, validate_delivery_submission_record, validate_projection_route, validate_request_route_correlation, validate_turn_reply_correlation]
     public_exports:
-      current: [imagent.contracts:ConversationBinding, imagent.contracts:ProjectionPolicy, imagent.contracts:ThreadProjectionRoute, imagent.contracts:TurnReplyCorrelation, imagent.contracts:RequestRouteState, imagent.contracts:RequestRouteCorrelation, imagent.contracts:DeliverySubmissionState, imagent.contracts:MAX_DELIVERY_SUBMISSION_DESTINATIONS, imagent.contracts:DeliveryRouteSnapshot, imagent.contracts:DestinationDeliveryRecord, imagent.contracts:DeliverySubmissionRecord, imagent.contracts:DeliveryReservation, imagent.contracts:validate_binding, imagent.contracts:validate_delivery_route_snapshot, imagent.contracts:validate_delivery_submission_destination_count, imagent.contracts:validate_delivery_submission_record, imagent.contracts:validate_projection_route, imagent.contracts:validate_request_route_correlation, imagent.contracts:validate_turn_reply_correlation]
-      target: [imagent.gateway.persistence:ConversationBinding, imagent.gateway.persistence:ProjectionPolicy, imagent.gateway.persistence:ThreadProjectionRoute, imagent.gateway.persistence:TurnReplyCorrelation, imagent.gateway.persistence:RequestRouteState, imagent.gateway.persistence:RequestRouteCorrelation, imagent.gateway.persistence:DeliverySubmissionState, imagent.gateway.persistence:MAX_DELIVERY_SUBMISSION_DESTINATIONS, imagent.gateway.persistence:DeliveryRouteSnapshot, imagent.gateway.persistence:DestinationDeliveryRecord, imagent.gateway.persistence:DeliverySubmissionRecord, imagent.gateway.persistence:DeliveryReservation, imagent.gateway.persistence:validate_binding, imagent.gateway.persistence:validate_delivery_route_snapshot, imagent.gateway.persistence:validate_delivery_submission_destination_count, imagent.gateway.persistence:validate_delivery_submission_record, imagent.gateway.persistence:validate_projection_route, imagent.gateway.persistence:validate_request_route_correlation, imagent.gateway.persistence:validate_turn_reply_correlation]
-    dependencies: [interaction.messages, applications.application-contract, applications.requests]
+      current: [imagent.gateway.persistence:ConversationBinding, imagent.gateway.persistence:ProjectionPolicy, imagent.gateway.persistence:ThreadProjectionRoute, imagent.gateway.persistence:TurnReplyCorrelation, imagent.gateway.persistence:RequestRouteState, imagent.gateway.persistence:RequestRouteCorrelation, imagent.gateway.persistence:DeliverySubmissionState, imagent.gateway.persistence:MAX_DELIVERY_SUBMISSION_DESTINATIONS, imagent.gateway.persistence:DeliveryRouteSnapshot, imagent.gateway.persistence:DestinationDeliveryRecord, imagent.gateway.persistence:DeliverySubmissionRecord, imagent.gateway.persistence:DeliveryReservation, imagent.gateway.persistence:validate_binding, imagent.gateway.persistence:validate_delivery_route_snapshot, imagent.gateway.persistence:validate_delivery_submission_destination_count, imagent.gateway.persistence:validate_delivery_submission_record, imagent.gateway.persistence:validate_projection_route, imagent.gateway.persistence:validate_request_route_correlation, imagent.gateway.persistence:validate_turn_reply_correlation, imagent.gateway.persistence.state_contracts:ConversationBinding, imagent.gateway.persistence.state_contracts:DeliveryReservation, imagent.gateway.persistence.state_contracts:DeliveryRouteSnapshot, imagent.gateway.persistence.state_contracts:DeliverySubmissionRecord, imagent.gateway.persistence.state_contracts:DeliverySubmissionState, imagent.gateway.persistence.state_contracts:DestinationDeliveryRecord, imagent.gateway.persistence.state_contracts:MAX_DELIVERY_SUBMISSION_DESTINATIONS, imagent.gateway.persistence.state_contracts:ProjectionPolicy, imagent.gateway.persistence.state_contracts:RequestRouteCorrelation, imagent.gateway.persistence.state_contracts:RequestRouteState, imagent.gateway.persistence.state_contracts:ThreadProjectionRoute, imagent.gateway.persistence.state_contracts:TurnReplyCorrelation, imagent.gateway.persistence.state_contracts:validate_binding, imagent.gateway.persistence.state_contracts:validate_delivery_route_snapshot, imagent.gateway.persistence.state_contracts:validate_delivery_submission_destination_count, imagent.gateway.persistence.state_contracts:validate_delivery_submission_record, imagent.gateway.persistence.state_contracts:validate_projection_route, imagent.gateway.persistence.state_contracts:validate_request_route_correlation, imagent.gateway.persistence.state_contracts:validate_turn_reply_correlation]
+      target: [imagent.gateway.persistence:ConversationBinding, imagent.gateway.persistence:ProjectionPolicy, imagent.gateway.persistence:ThreadProjectionRoute, imagent.gateway.persistence:TurnReplyCorrelation, imagent.gateway.persistence:RequestRouteState, imagent.gateway.persistence:RequestRouteCorrelation, imagent.gateway.persistence:DeliverySubmissionState, imagent.gateway.persistence:MAX_DELIVERY_SUBMISSION_DESTINATIONS, imagent.gateway.persistence:DeliveryRouteSnapshot, imagent.gateway.persistence:DestinationDeliveryRecord, imagent.gateway.persistence:DeliverySubmissionRecord, imagent.gateway.persistence:DeliveryReservation, imagent.gateway.persistence:validate_binding, imagent.gateway.persistence:validate_delivery_route_snapshot, imagent.gateway.persistence:validate_delivery_submission_destination_count, imagent.gateway.persistence:validate_delivery_submission_record, imagent.gateway.persistence:validate_projection_route, imagent.gateway.persistence:validate_request_route_correlation, imagent.gateway.persistence:validate_turn_reply_correlation, imagent.gateway.persistence.state_contracts:ConversationBinding, imagent.gateway.persistence.state_contracts:DeliveryReservation, imagent.gateway.persistence.state_contracts:DeliveryRouteSnapshot, imagent.gateway.persistence.state_contracts:DeliverySubmissionRecord, imagent.gateway.persistence.state_contracts:DeliverySubmissionState, imagent.gateway.persistence.state_contracts:DestinationDeliveryRecord, imagent.gateway.persistence.state_contracts:MAX_DELIVERY_SUBMISSION_DESTINATIONS, imagent.gateway.persistence.state_contracts:ProjectionPolicy, imagent.gateway.persistence.state_contracts:RequestRouteCorrelation, imagent.gateway.persistence.state_contracts:RequestRouteState, imagent.gateway.persistence.state_contracts:ThreadProjectionRoute, imagent.gateway.persistence.state_contracts:TurnReplyCorrelation, imagent.gateway.persistence.state_contracts:validate_binding, imagent.gateway.persistence.state_contracts:validate_delivery_route_snapshot, imagent.gateway.persistence.state_contracts:validate_delivery_submission_destination_count, imagent.gateway.persistence.state_contracts:validate_delivery_submission_record, imagent.gateway.persistence.state_contracts:validate_projection_route, imagent.gateway.persistence.state_contracts:validate_request_route_correlation, imagent.gateway.persistence.state_contracts:validate_turn_reply_correlation]
+    dependencies: [interaction.messages, interaction.channels.channel-contract, interaction.operations, applications.application-contract, applications.capabilities, applications.requests]
     state_recovery: Values carry stable identities/revisions/state only; repository implementations own atomic recovery mutations.
-    current_code: [schemas/v1/bindings.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, schemas/v1/projections.schema.json, src/imagent/contracts/delivery.py, src/imagent/contracts/model.py, src/imagent/contracts/request_validation.py]
+    current_code: [schemas/v1/bindings.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, schemas/v1/projections.schema.json, src/imagent/gateway/persistence/state_contracts.py]
     target_code: [schemas/v1/bindings.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, schemas/v1/projections.schema.json, src/imagent/gateway/persistence/state_contracts.py]
-    current_tests: [tests/test_contracts.py, tests/gateway/persistence/test_memory.py, tests/test_projection_routing.py, tests/test_storage.py]
+    current_tests: [tests/test_contracts.py, tests/gateway/persistence/test_memory.py, tests/test_projection_routing.py, tests/test_storage.py, tests/gateway/persistence/test_state_contracts.py]
     target_tests: [tests/gateway/persistence/test_state_contracts.py]
     authoritative_docs: [docs/components/gateway/persistence/state-contracts/design.md, docs/components/gateway/persistence/state-contracts/testing.md, docs/components/contracts/protocol.md, docs/components/persistence/design.md, docs/components/projections-and-recovery/design.md]
     adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [passive bridge-state values currently share broad contracts/model.py and contracts/delivery.py modules]
+    gaps: [state-contract extraction is complete; later routing/projection slices may remove their remaining mixed operation and orchestration owners]
 
   gateway.persistence.repository-contracts:
     id: gateway.persistence.repository-contracts
@@ -1520,18 +1500,12 @@ structural_status:
     src/imagent/adapters.py:
       owners: [gateway.delivery.proactive-authorization, gateway.persistence.repository-contracts, applications.application-contract]
       reason: The exact proactive-authorization compatibility Port, repository-contract aliases, and Application Ports share one historical facade module after the Channel/admission aliases were retired.
-    src/imagent/contracts/delivery.py:
-      owners: [interaction.media, gateway.delivery.submissions, gateway.persistence.state-contracts]
-      reason: Media identity, submission identity, and passive delivery state share one contract module; proactive intent/results and validation now have their sole Gateway delivery owner.
     src/imagent/contracts/operations.py:
       owners: [gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.projection.request-correlation]
       reason: Gateway binding, routing, observation, and request-correlation operations remain physically combined in the historical module after request response values moved to their Applications leaf.
     src/imagent/contracts/validators.py:
       owners: [gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.dispatch, gateway.projection.request-correlation]
       reason: Gateway, dispatch, projection, and request-correlation validation remains in the historical aggregation while it consumes the Applications-owned ThreadRef validator.
-    src/imagent/contracts/request_validation.py:
-      owners: [gateway.projection.request-correlation, gateway.persistence.state-contracts]
-      reason: Gateway-owned request route correlation validation remains in the historical module after Application request response-shape validators moved to their focused leaf.
     src/imagent/keyed_locks.py:
       owners: [gateway.routing.gateway-operations, gateway.delivery.coordination, gateway.delivery.proactive-delivery]
       reason: The process-local keyed serialization primitive currently serves bounded Conversation operation serialization, ordered destination delivery, and proactive delivery-ID serialization without owning any of those policies.

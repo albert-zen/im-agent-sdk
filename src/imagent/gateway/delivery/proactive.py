@@ -1,16 +1,13 @@
 """Low-dependency proactive delivery contract seam."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import TypeAlias
 
 from ...applications.contract import ThreadRef, validate_thread_ref
-from ...contracts.delivery import (
-    DeliverySubmissionState,
-    _canonical_metadata,
-    _validate_conversation_ref,
-)
 from ...interaction.channels import DeliveryReceipt
 from ...interaction.media import (
     AttachmentContent,
@@ -20,6 +17,7 @@ from ...interaction.media import (
 )
 from ...interaction.messages import Content, ConversationRef, Metadata, TextContent
 from ...interaction.operations import ContractViolation, require_identifier
+from ..persistence.state_contracts import DeliverySubmissionState
 
 __all__ = [
     "ConversationDeliveryTarget",
@@ -90,6 +88,9 @@ class ProactiveDeliveryResult:
 
 
 def validate_delivery_intent(intent: DeliveryIntent) -> None:
+    from ..persistence.state_contracts import _validate_conversation_ref
+    from .submissions import _canonical_metadata
+
     require_identifier(intent.delivery_id, "delivery_id")
     if isinstance(intent.target, ConversationDeliveryTarget):
         _validate_conversation_ref(intent.target.conversation_ref)

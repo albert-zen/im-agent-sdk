@@ -14,17 +14,19 @@ from imagent.contracts import (
     AgentMessage,
     AttachmentContent,
     AttachmentHandle,
-    ConversationBinding,
     ConversationRef,
     MessageRole,
     OutboundMessage,
     TextContent,
-    ThreadProjectionRoute,
     ThreadRef,
 )
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway import presentation as presentation_owner
-from imagent.gateway.persistence import InMemoryIdempotencyRepository
+from imagent.gateway.persistence import (
+    ConversationBinding,
+    InMemoryIdempotencyRepository,
+    ThreadProjectionRoute,
+)
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,

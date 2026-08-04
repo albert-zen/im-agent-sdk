@@ -8,20 +8,18 @@ from typing import Protocol
 
 from ...applications.contract import ThreadRef
 from ...applications.requests import RequestRef
-from ...contracts import (
+from ...interaction.messages import ConversationRef
+from .state_contracts import (
     ConversationBinding,
+    DeliveryReservation,
+    DeliverySubmissionRecord,
+    DeliverySubmissionState,
+    DestinationDeliveryRecord,
     RequestRouteCorrelation,
     RequestRouteState,
     ThreadProjectionRoute,
     TurnReplyCorrelation,
 )
-from ...contracts.delivery import (
-    DeliveryReservation,
-    DeliverySubmissionRecord,
-    DeliverySubmissionState,
-    DestinationDeliveryRecord,
-)
-from ...interaction.messages import ConversationRef
 
 
 class BindingConflict(RuntimeError):

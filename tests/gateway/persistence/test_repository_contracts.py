@@ -17,6 +17,9 @@ from imagent.applications.requests import RequestRef
 from imagent.contracts import (
     ApplicationRef,
     ApprovalResponseShape,
+    ThreadRef,
+)
+from imagent.gateway.persistence import (
     ConversationBinding,
     DeliveryReservation,
     DeliverySubmissionRecord,
@@ -25,7 +28,6 @@ from imagent.contracts import (
     RequestRouteCorrelation,
     RequestRouteState,
     ThreadProjectionRoute,
-    ThreadRef,
     TurnReplyCorrelation,
 )
 from imagent.gateway.persistence import repository_contracts as owner

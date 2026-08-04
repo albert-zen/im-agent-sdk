@@ -22,7 +22,6 @@ from ...contracts import (
     BindConversationToProject,
     BindConversationToThread,
     ClearConversationThread,
-    ConversationBinding,
     ConversationBound,
     CreateThread,
     DeleteThread,
@@ -49,6 +48,7 @@ from ...contracts import (
     TurnCatchupRead,
     UserInputResponse,
 )
+from ...gateway.persistence.state_contracts import ConversationBinding
 from ..messages import ConversationRef, InboundMessage, OutboundMessage, TextContent
 from .common_presentation import MarkdownSlashPresenter
 from .contract import CommandHandlerActions, ControllerActions

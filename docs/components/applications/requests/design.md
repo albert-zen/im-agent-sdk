@@ -25,8 +25,8 @@ resource identity, not Gateway implementation. Request IDs are scoped by
 `ApplicationRef`; a reused native ID after transport reset must be epoch-scoped
 by the adapter rather than merged by SDK inference.
 
-During the physical rollout, `ApplicationRef` and `ThreadRef` still live in the
-historical Application-contract portion of `contracts/model.py`. That broader
+During the physical rollout, `ApplicationRef` and `ThreadRef` live in the
+Applications contract leaf. The retired broader contracts model module
 contract also consumes request types through the Application Port, so declaring
 both target component edges now would create a cycle and would misrepresent the
 unfinished split. The component map records this resource-identity reference as

@@ -25,7 +25,7 @@ records only bridge identity/evidence needed for safe convergence.
   idempotent delivery through the common bounded path. Its contract seam in
   `proactive.py` is the sole owner of the typed vocabulary and validator, and
   its orchestration sibling in `proactive_runtime.py` remains the runtime
-  owner. Passive submission state stays in `contracts.delivery` without a
+  owner. Passive submission state stays in `gateway.persistence.state_contracts` without a
   reverse dependency.
 
 JSON/CLI proactive ingress remains mapped to its current authoritative

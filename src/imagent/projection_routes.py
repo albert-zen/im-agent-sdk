@@ -11,15 +11,15 @@ from .applications.requests import (
     RequestRef,
     derive_request_response_shape,
 )
-from .contracts import (
-    RequestRouteCorrelation,
-    RequestRouteState,
-    ThreadProjectionRoute,
-)
 from .gateway.persistence.repository_contracts import (
     IdempotencyClaimStatus,
     ProjectionRouteRepository,
     RequestCorrelationRepository,
+)
+from .gateway.persistence.state_contracts import (
+    RequestRouteCorrelation,
+    RequestRouteState,
+    ThreadProjectionRoute,
 )
 from .gateway.projection.recovery import read_bounded_authoritative_projection
 from .interaction.controllers import RequestPresenter

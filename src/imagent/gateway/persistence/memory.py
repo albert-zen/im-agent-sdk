@@ -7,24 +7,6 @@ from datetime import UTC, datetime
 
 from ...applications.contract import ThreadRef
 from ...applications.requests import RequestRef
-from ...contracts import (
-    ConversationBinding,
-    RequestRouteCorrelation,
-    RequestRouteState,
-    ThreadProjectionRoute,
-    TurnReplyCorrelation,
-    validate_binding,
-    validate_projection_route,
-    validate_request_route_correlation,
-    validate_turn_reply_correlation,
-)
-from ...contracts.delivery import (
-    DeliveryReservation,
-    DeliverySubmissionRecord,
-    DeliverySubmissionState,
-    DestinationDeliveryRecord,
-    validate_delivery_submission_record,
-)
 from ...interaction.messages import ConversationRef
 from ...request_correlations import (
     _matches,
@@ -41,6 +23,22 @@ from .repository_contracts import (
     ProjectionCheckpointConflict,
     ProjectionRouteConflict,
     TurnReplyCorrelationConflict,
+)
+from .state_contracts import (
+    ConversationBinding,
+    DeliveryReservation,
+    DeliverySubmissionRecord,
+    DeliverySubmissionState,
+    DestinationDeliveryRecord,
+    RequestRouteCorrelation,
+    RequestRouteState,
+    ThreadProjectionRoute,
+    TurnReplyCorrelation,
+    validate_binding,
+    validate_delivery_submission_record,
+    validate_projection_route,
+    validate_request_route_correlation,
+    validate_turn_reply_correlation,
 )
 from .submission_identity import ensure_same_delivery_submission_reservation
 

@@ -23,7 +23,6 @@ from ..contracts import (
     BindConversationToProject,
     BindConversationToThread,
     ClearConversationThread,
-    ConversationBinding,
     ConversationBound,
     CreateThread,
     GatewayOperation,
@@ -33,13 +32,11 @@ from ..contracts import (
     GetThread,
     ListApplications,
     ObserveThread,
-    ProjectionPolicy,
     ProjectRead,
     RequestDuplicateError,
     RequestResolvedError,
     RequestResponded,
     RequestResponseRouted,
-    RequestRouteState,
     RequestStaleError,
     RespondRequest,
     RespondToRequest,
@@ -54,7 +51,6 @@ from ..contracts import (
     validate_gateway_operation_result,
     validate_request_response,
 )
-from ..contracts.delivery import DeliverySubmissionState
 from ..diagnostics import (
     DiagnosticsSnapshot,
     GatewayDiagnosticFacts,
@@ -128,6 +124,12 @@ from .persistence.repository_contracts import (
     DeliverySubmissionConflict,
     IdempotencyClaimStatus,
     RequestCorrelationConflict,
+)
+from .persistence.state_contracts import (
+    ConversationBinding,
+    DeliverySubmissionState,
+    ProjectionPolicy,
+    RequestRouteState,
 )
 from .presentation import (
     OutboundPresentationContext,

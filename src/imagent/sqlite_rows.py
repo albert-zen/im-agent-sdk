@@ -4,17 +4,17 @@ import sqlite3
 from datetime import datetime
 
 from .applications.contract import ApplicationRef, ProjectRef, ThreadRef
-from .contracts import (
+from .gateway.persistence.repository_contracts import (
+    ProjectionCheckpointConflict,
+    ProjectionRouteConflict,
+)
+from .gateway.persistence.state_contracts import (
     ConversationBinding,
     ThreadProjectionRoute,
     TurnReplyCorrelation,
     validate_binding,
     validate_projection_route,
     validate_turn_reply_correlation,
-)
-from .gateway.persistence.repository_contracts import (
-    ProjectionCheckpointConflict,
-    ProjectionRouteConflict,
 )
 from .interaction.messages import ConversationRef
 

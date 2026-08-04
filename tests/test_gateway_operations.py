@@ -16,7 +16,6 @@ from imagent.contracts import (
     ApprovalRequest,
     ApprovalResponse,
     BindConversationToThread,
-    ConversationBinding,
     ConversationBound,
     ConversationRef,
     CreateThread,
@@ -29,20 +28,17 @@ from imagent.contracts import (
     ObserveThread,
     OperationErrorCode,
     OutboundMessage,
-    ProjectionPolicy,
     ProjectMode,
     ProjectRef,
     ProjectsListed,
     RequestChoice,
     RequestRef,
     RequestResponseRouted,
-    RequestRouteState,
     RespondToRequest,
     SelectApplication,
     SupportLevel,
     TextContent,
     ThreadCreated,
-    ThreadProjectionRoute,
     ThreadRef,
     ThreadsListed,
     UserInputQuestion,
@@ -51,7 +47,13 @@ from imagent.contracts import (
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.admission import inbound_idempotency_identity
 from imagent.gateway.delivery import DeliveryCoordinator, DeliveryCoordinatorConfig
-from imagent.gateway.persistence import InMemoryIdempotencyRepository
+from imagent.gateway.persistence import (
+    ConversationBinding,
+    InMemoryIdempotencyRepository,
+    ProjectionPolicy,
+    RequestRouteState,
+    ThreadProjectionRoute,
+)
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,

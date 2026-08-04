@@ -19,7 +19,6 @@ from imagent.contracts import (
     ApplicationRef,
     BindConversationToThread,
     ContractViolation,
-    ConversationBinding,
     ConversationBound,
     ConversationRef,
     GatewayOperationFailed,
@@ -27,14 +26,17 @@ from imagent.contracts import (
     InboundMessage,
     NativeThreadActivated,
     ObserveThread,
-    ProjectionPolicy,
     ProjectMode,
     TextContent,
     ThreadObserved,
-    ThreadProjectionRoute,
     ThreadRef,
 )
 from imagent.gateway import GatewayRepositories, ImAgentGateway
+from imagent.gateway.persistence import (
+    ConversationBinding,
+    ProjectionPolicy,
+    ThreadProjectionRoute,
+)
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,

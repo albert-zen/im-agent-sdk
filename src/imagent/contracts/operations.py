@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import TypeAlias
+from typing import TYPE_CHECKING, ForwardRef, TypeAlias
 
 from ..applications.contract import ApplicationRef, ApplicationSummary, ProjectRef, ThreadRef
 from ..applications.requests import (
@@ -14,10 +14,9 @@ from ..applications.requests import (
 )
 from ..interaction.messages import ConversationRef
 from ..interaction.operations import ContractError, OperationResultStatus
-from .model import (
-    ConversationBinding,
-    ThreadProjectionRoute,
-)
+
+if TYPE_CHECKING:
+    from ..gateway.persistence.state_contracts import ConversationBinding, ThreadProjectionRoute
 
 
 class GatewayOperationType(StrEnum):
@@ -177,4 +176,16 @@ GatewayOperationResult: TypeAlias = (
     | ThreadObserved
     | RequestResponseRouted
     | GatewayOperationFailed
+)
+
+# These two result fields point back into Gateway state while this historical
+# operation module is imported before the Gateway package root.  Preserve
+# runtime type-hint resolution without importing Gateway during that cycle.
+ConversationBound.__annotations__["binding"] = ForwardRef(
+    "ConversationBinding",
+    module="imagent.gateway.persistence.state_contracts",
+)
+ThreadObserved.__annotations__["route"] = ForwardRef(
+    "ThreadProjectionRoute",
+    module="imagent.gateway.persistence.state_contracts",
 )

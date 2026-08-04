@@ -15,21 +15,26 @@ from imagent.contracts import (
     AttachmentSourceKind,
     ConversationRef,
     DeliveryPrincipal,
-    DeliverySubmissionOrigin,
-    DeliverySubmissionState,
     LocalPath,
-    ProjectionPolicy,
     ProjectMode,
     TextContent,
-    ThreadProjectionRoute,
     ThreadRef,
 )
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
-from imagent.gateway.delivery import ProactiveDeliveryJsonHandler, ScopedDeliveryAuthorizer
+from imagent.gateway.delivery import (
+    DeliverySubmissionOrigin,
+    ProactiveDeliveryJsonHandler,
+    ScopedDeliveryAuthorizer,
+)
 from imagent.gateway.delivery.proactive_ingress import (
     ProactiveDeliveryJsonHandler as OwnerProactiveDeliveryJsonHandler,
 )
 from imagent.gateway.delivery.submissions import derive_delivery_submission_id
+from imagent.gateway.persistence import (
+    DeliverySubmissionState,
+    ProjectionPolicy,
+    ThreadProjectionRoute,
+)
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryDeliverySubmissionRepository,
