@@ -1,5 +1,13 @@
 # Diagnostics component design
 
+> Migration note: dependency-neutral connection/queue contracts now live in
+> [Interaction diagnostics](../interaction/diagnostics/design.md), and the
+> Channel-scoped fact/provider live in
+> [Interaction Channel diagnostics](../interaction/channels/diagnostics/design.md).
+> This page remains authoritative for the stable `imagent.diagnostics`
+> transition facade, the remaining Application/Gateway fact types, and
+> Gateway aggregation until #276/#273 move those definitions.
+
 ## Responsibility
 
 Diagnostics exposes a stable, immutable view of process-local bridge health.
@@ -54,8 +62,11 @@ credentials, endpoints, filesystem paths, and attachment metadata are absent.
 
 ## Ownership and extension
 
-The immutable fact vocabulary and Gateway aggregation are SDK infrastructure.
-Collecting a native transport fact is adapter policy. `diagnostic_facts()` is
+The remaining Application/Gateway fact types and Gateway aggregation are SDK
+infrastructure. The dependency-neutral connection/queue vocabulary is owned
+by Interaction, and the Channel fact/provider is owned by Interaction
+Channels. Collecting a native transport fact is adapter policy.
+`diagnostic_facts()` is
 a structural optional provider so an adapter without a long-lived connection
 does not invent one and a third-party adapter does not need to change its Core
 port implementation.
@@ -76,7 +87,9 @@ exception text.
 The internal native Channel queue/connection/state implementation belongs to
 `interaction.channels.adapters`; Gateway aggregation consumes only the bounded
 fact shape. Generic media staging logs are not diagnostic state and do not
-depend on that concrete-adapter module.
+depend on that concrete-adapter module. The historical `imagent.diagnostics`
+facade re-exports exact Interaction-owned objects and contains no duplicate
+moved definitions or lazy attribute resolver.
 
 ## Snapshot semantics
 

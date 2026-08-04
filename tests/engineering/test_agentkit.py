@@ -102,6 +102,8 @@ class AgentKitMappingTests(unittest.TestCase):
         expected = {
             "src/imagent/interaction/messages.py": {"contracts"},
             "src/imagent/interaction/operations.py": {"contracts"},
+            "src/imagent/interaction/diagnostics.py": {"diagnostics"},
+            "src/imagent/interaction/channels/diagnostics.py": {"diagnostics"},
             "src/imagent/contracts/operations.py": {"contracts"},
             "src/imagent/adapters.py": {"ports", "channel-adapters"},
             "src/imagent/contracts/__init__.py": {"release", "channel-adapters"},
@@ -180,6 +182,7 @@ class AgentKitMappingTests(unittest.TestCase):
         expected = {
             "tests/interaction/test_messages.py": {"contracts"},
             "tests/interaction/test_operations.py": {"contracts"},
+            "tests/interaction/test_diagnostics.py": {"diagnostics"},
             "tests/test_contracts.py": {"contracts"},
             "tests/interaction/test_media.py": {"attachments-and-media"},
             "tests/gateway/test_package_root.py": {"gateway"},
@@ -211,6 +214,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/interaction/controllers/test_request_presentation.py": {"controllers"},
             "tests/interaction/controllers/test_optional_controller.py": {"controllers"},
             "tests/interaction/channels/test_outbound_delivery.py": {"channel-adapters"},
+            "tests/interaction/channels/test_diagnostics.py": {"diagnostics"},
             "tests/test_native_channels.py": {"channel-adapters"},
             "tests/interaction/channels/adapters/test_qq.py": {"channel-adapters"},
             "tests/interaction/channels/adapters/test_telegram.py": {"channel-adapters"},

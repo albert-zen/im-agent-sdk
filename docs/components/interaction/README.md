@@ -13,6 +13,8 @@ does not own Gateway orchestration or native Agent truth.
   error, and validation vocabulary; see [testing](operations/testing.md).
 - [Media](media/design.md) — attachment sources and source/type/size/trust
   boundaries; see [testing](media/testing.md).
+- [Diagnostics](diagnostics/design.md) — dependency-neutral immutable
+  connection/queue facts; see [testing](diagnostics/testing.md).
 - [Controllers](controllers/README.md) — optional typed Controller contract,
   explicit bounded command composition, common commands, and request
   presentation.

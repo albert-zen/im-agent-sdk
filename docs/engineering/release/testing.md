@@ -41,6 +41,9 @@ install must not discover optional integration dependencies that were not
 requested. The aggregate `channels` extra and wheel contents such as
 `py.typed` remain separate release checks; the smoke script does not claim to
 cover them.
+The base case also proves that `imagent.diagnostics` preserves exact identity
+for the canonical Interaction common and Channel diagnostics objects and that
+the canonical Interaction leaves remain free of Applications/Gateway imports.
 
 ## Required repository evidence
 

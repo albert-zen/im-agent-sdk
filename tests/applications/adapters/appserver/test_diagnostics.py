@@ -9,7 +9,7 @@ from imagent.applications.adapters.appserver.diagnostics import (
     summarize_text,
     summarize_transport_message,
 )
-from imagent.diagnostics import (
+from imagent.interaction.diagnostics import (
     ConnectionDiagnosticState,
     DiagnosticFailureCode,
     QueueDiagnosticName,

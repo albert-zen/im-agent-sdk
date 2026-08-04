@@ -50,10 +50,15 @@ likewise retains only its unrelated Application/Gateway,
 proactive-authorization, and passive-state names. The focused Interaction
 Channel facade and `imagent.channels` adapter facade re-export exact owner
 objects and never hide a duplicate or lazy compatibility implementation. The
-Application event surface follows the same rule: `imagent.events`, the event
-aliases in `imagent.contracts`, and the package-root `events` module are
-formal explicit facades over `imagent.applications.events`, not implementation
-owners.
+ Application event surface follows the same rule: `imagent.events`, the event
+ aliases in `imagent.contracts`, and the package-root `events` module are
+ formal explicit facades over `imagent.applications.events`, not implementation
+ owners.
+The `imagent.diagnostics` transition facade likewise re-exports the exact
+canonical `imagent.interaction.diagnostics` and
+`imagent.interaction.channels.diagnostics` objects while retaining only the
+not-yet-moved Application/Gateway definitions; it has no duplicate moved
+classes and no lazy `__getattr__`.
 
 ## Version and publication boundary
 

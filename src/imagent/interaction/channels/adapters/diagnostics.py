@@ -5,6 +5,15 @@ from dataclasses import dataclass
 from threading import Lock
 from typing import Any
 
+from ...diagnostics import (
+    ConnectionDiagnosticFacts,
+    ConnectionDiagnosticState,
+    DiagnosticFailureCode,
+    QueueDiagnosticFacts,
+    QueueDiagnosticName,
+)
+from ..diagnostics import ChannelDiagnosticFacts
+
 logger = logging.getLogger(__name__)
 
 
@@ -14,6 +23,14 @@ class NativeQueueDiagnosticSnapshot:
     capacity: int
     depth: int
     overflow_count: int = 0
+
+    def as_contract(self) -> QueueDiagnosticFacts:
+        return QueueDiagnosticFacts(
+            name=QueueDiagnosticName(str(self.name)),
+            capacity=self.capacity,
+            depth=self.depth,
+            overflow_count=self.overflow_count,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,12 +43,34 @@ class NativeConnectionDiagnosticSnapshot:
     last_failure_code: str | None = None
     queues: tuple[NativeQueueDiagnosticSnapshot, ...] = ()
 
+    def as_contract(self) -> ConnectionDiagnosticFacts:
+        return ConnectionDiagnosticFacts(
+            state=ConnectionDiagnosticState(str(self.state)),
+            connection_epoch=self.connection_epoch,
+            reconnect_count=self.reconnect_count,
+            worker_running=self.worker_running,
+            worker_degraded=self.worker_degraded,
+            last_failure_code=(
+                DiagnosticFailureCode(str(self.last_failure_code))
+                if self.last_failure_code is not None
+                else None
+            ),
+            queues=tuple(queue.as_contract() for queue in self.queues),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class NativeChannelDiagnosticSnapshot:
     channel_instance_id: str
     kind: str
     connection: NativeConnectionDiagnosticSnapshot | None = None
+
+    def as_contract(self) -> ChannelDiagnosticFacts:
+        return ChannelDiagnosticFacts(
+            channel_instance_id=self.channel_instance_id,
+            kind=self.kind,
+            connection=self.connection.as_contract() if self.connection is not None else None,
+        )
 
 
 class NativeChannelDiagnosticState:

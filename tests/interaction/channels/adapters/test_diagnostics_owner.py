@@ -6,12 +6,70 @@ import unittest
 from dataclasses import FrozenInstanceError
 
 from imagent.interaction.channels.adapters.diagnostics import (
+    NativeChannelDiagnosticSnapshot,
     NativeChannelDiagnosticState,
+    NativeConnectionDiagnosticSnapshot,
     NativeQueueDiagnosticSnapshot,
+)
+from imagent.interaction.channels.diagnostics import ChannelDiagnosticFacts
+from imagent.interaction.diagnostics import (
+    ConnectionDiagnosticFacts,
+    ConnectionDiagnosticState,
+    DiagnosticFailureCode,
+    QueueDiagnosticFacts,
+    QueueDiagnosticName,
 )
 
 
 class NativeChannelDiagnosticsOwnershipTests(unittest.TestCase):
+    def test_native_snapshots_convert_to_canonical_contracts(self) -> None:
+        native = NativeChannelDiagnosticSnapshot(
+            channel_instance_id="qq-main",
+            kind="qq",
+            connection=NativeConnectionDiagnosticSnapshot(
+                state="reconnecting",
+                connection_epoch=3,
+                reconnect_count=2,
+                worker_running=True,
+                worker_degraded=True,
+                last_failure_code="transport_failed",
+                queues=(
+                    NativeQueueDiagnosticSnapshot(
+                        name="channel_inbound",
+                        capacity=8,
+                        depth=3,
+                        overflow_count=4,
+                    ),
+                ),
+            ),
+        )
+
+        contract = native.as_contract()
+
+        self.assertIs(type(contract), ChannelDiagnosticFacts)
+        connection = contract.connection
+        self.assertIs(type(connection), ConnectionDiagnosticFacts)
+        assert connection is not None
+        self.assertEqual(contract.channel_instance_id, "qq-main")
+        self.assertEqual(contract.kind, "qq")
+        self.assertEqual(connection.state, ConnectionDiagnosticState.RECONNECTING)
+        self.assertEqual(connection.connection_epoch, 3)
+        self.assertEqual(connection.reconnect_count, 2)
+        self.assertEqual(connection.last_failure_code, DiagnosticFailureCode.TRANSPORT_FAILED)
+        self.assertEqual(
+            connection.queues,
+            (
+                QueueDiagnosticFacts(
+                    QueueDiagnosticName.CHANNEL_INBOUND,
+                    capacity=8,
+                    depth=3,
+                    overflow_count=4,
+                ),
+            ),
+        )
+        self.assertIsNot(contract, native)
+        self.assertIsNot(contract.connection, native.connection)
+
     def test_state_transitions_and_queue_facts_remain_bounded_and_immutable(self) -> None:
         state = NativeChannelDiagnosticState()
         initial = state.snapshot()

@@ -23,7 +23,7 @@ from imagent.contracts import (
     CreateThread,
     ThreadCreated,
 )
-from imagent.diagnostics import (
+from imagent.interaction.diagnostics import (
     ConnectionDiagnosticState,
     DiagnosticFailureCode,
     QueueDiagnosticName,

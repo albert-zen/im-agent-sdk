@@ -38,7 +38,10 @@ the current filename as a component:
 4. Multiple owners do not grant a blanket exemption. They provide candidate
    pairings, and at least one explicit pairing must authorize the import.
 5. A formal facade may re-export only a symbol whose facade reference is
-   mapped to an owner that also owns the imported implementation path.
+   mapped to an owner that also owns the imported implementation path. A
+   transitional facade may share a file with explicitly declared real split
+   owners; the facade declaration authorizes only its named re-exports and is
+   not a blanket multi-owner exception.
 6. Unknown internal modules, unmapped source/target paths, dependency cycles,
    unused exact exceptions, and imports with no authorized owner pairing fail.
 

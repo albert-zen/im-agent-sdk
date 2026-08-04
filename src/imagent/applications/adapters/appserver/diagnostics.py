@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from ....diagnostics import (
+from ....interaction.diagnostics import (
     ConnectionDiagnosticFacts,
     ConnectionDiagnosticState,
     DiagnosticFailureCode,

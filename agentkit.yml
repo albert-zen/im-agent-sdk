@@ -288,11 +288,20 @@ components:
       - docs/ARCHITECTURE.md
       - docs/decisions/README.md
       - docs/decisions/0014-read-only-diagnostics-surface.md
+      - docs/decisions/0015-typed-extension-seams-and-composition.md
+      - src/imagent/interaction/diagnostics.py
+      - src/imagent/interaction/channels/diagnostics.py
       - src/imagent/diagnostics.py
+      - tests/interaction/test_diagnostics.py
+      - tests/interaction/channels/test_diagnostics.py
       - tests/test_diagnostics.py
     docs:
       - docs/components/diagnostics/design.md
       - docs/components/diagnostics/testing.md
+      - docs/components/interaction/diagnostics/design.md
+      - docs/components/interaction/diagnostics/testing.md
+      - docs/components/interaction/channels/diagnostics/design.md
+      - docs/components/interaction/channels/diagnostics/testing.md
     required_docs:
       - design
       - testing
@@ -404,7 +413,13 @@ components:
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - docs/migrations/issue-9-imcodex-owner-transfer.md
       - docs/migrations/imcodex-followup-blockers.md
-      - src/imagent/interaction/channels/**
+      - src/imagent/interaction/channels/__init__.py
+      - src/imagent/interaction/channels/contract.py
+      - src/imagent/interaction/channels/ingress.py
+      - src/imagent/interaction/channels/ingress_media.py
+      - src/imagent/interaction/channels/ingress_security.py
+      - src/imagent/interaction/channels/outbound_delivery.py
+      - src/imagent/interaction/channels/adapters/**
       - src/imagent/channels/**
       - examples/reference_consumer/interaction.py
       # Historical facades are shared here because this slice retires only
@@ -412,7 +427,13 @@ components:
       - src/imagent/adapters.py
       - src/imagent/contracts/__init__.py
       - scripts/smoke_clean_install.py
-      - tests/interaction/channels/**
+      - tests/interaction/channels/__init__.py
+      - tests/interaction/channels/test_contract.py
+      - tests/interaction/channels/test_ingress.py
+      - tests/interaction/channels/test_ingress_media_owner.py
+      - tests/interaction/channels/test_ingress_security.py
+      - tests/interaction/channels/test_outbound_delivery.py
+      - tests/interaction/channels/adapters/**
       - tests/test_native_channels.py
       - tests/interaction/channels/adapters/test_qq.py
       - tests/interaction/channels/adapters/test_telegram.py
