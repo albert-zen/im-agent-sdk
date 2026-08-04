@@ -44,6 +44,7 @@ from ._validation import (
     validate_thread_ref,
 )
 from .delivery import (
+    MAX_DELIVERY_SUBMISSION_DESTINATIONS,
     ConversationDeliveryTarget,
     DeliveryIntent,
     DeliveryPrincipal,
@@ -65,6 +66,7 @@ from .delivery import (
     validate_delivery_intent,
     validate_delivery_principal,
     validate_delivery_route_snapshot,
+    validate_delivery_submission_destination_count,
     validate_delivery_submission_record,
 )
 from .errors import (
@@ -176,6 +178,8 @@ from .operations import (
     UserInputResponse,
 )
 from .request_validation import (
+    MAX_INTERACTIVE_REQUEST_CHOICES,
+    MAX_INTERACTIVE_REQUEST_QUESTIONS,
     derive_request_response_shape,
     validate_interactive_request,
     validate_request_ref,
@@ -247,6 +251,9 @@ __all__ = [
     "InteractiveRequest",
     "InteractiveRequestKind",
     "LocalPath",
+    "MAX_DELIVERY_SUBMISSION_DESTINATIONS",
+    "MAX_INTERACTIVE_REQUEST_CHOICES",
+    "MAX_INTERACTIVE_REQUEST_QUESTIONS",
     "MessageRole",
     "Metadata",
     "OutboundMessage",
@@ -360,6 +367,7 @@ __all__ = [
     "validate_delivery_receipt_for_content",
     "validate_delivery_route_snapshot",
     "validate_delivery_submission_record",
+    "validate_delivery_submission_destination_count",
     "validate_gateway_operation",
     "validate_gateway_operation_result",
     "validate_projection_route",

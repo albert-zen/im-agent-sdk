@@ -12,6 +12,8 @@ from jsonschema.validators import validator_for
 from referencing import Registry, Resource
 
 from imagent.contracts import (
+    MAX_INTERACTIVE_REQUEST_CHOICES,
+    MAX_INTERACTIVE_REQUEST_QUESTIONS,
     AgentEvent,
     AgentEventType,
     ApplicationCapabilities,
@@ -72,6 +74,7 @@ from imagent.contracts import (
     validate_interactive_request,
     validate_projection_route,
     validate_request_response,
+    validate_request_response_shape,
     validate_turn_reply_correlation,
 )
 
@@ -328,6 +331,157 @@ class InteractiveRequestContractTests(unittest.TestCase):
             validate_request_response(
                 UserInputResponse({"environment": ("staging", "production")}),
                 shape,
+            )
+
+    def test_request_collection_limits_accept_the_boundary_and_reject_one_more(self) -> None:
+        approval_choices = tuple(
+            RequestChoice(f"choice-{index}", f"Choice {index}")
+            for index in range(MAX_INTERACTIVE_REQUEST_CHOICES)
+        )
+        validate_interactive_request(
+            ApprovalRequest(
+                request_ref=self.request_ref,
+                thread_ref=self.thread,
+                turn_id="turn-1",
+                prompt="Approve?",
+                choices=approval_choices,
+            )
+        )
+        with self.assertRaisesRegex(ContractViolation, "choices exceed"):
+            validate_interactive_request(
+                ApprovalRequest(
+                    request_ref=self.request_ref,
+                    thread_ref=self.thread,
+                    turn_id="turn-1",
+                    prompt="Approve?",
+                    choices=approval_choices + (RequestChoice("overflow", "Overflow"),),
+                )
+            )
+        validate_interactive_request(
+            UserInputRequest(
+                request_ref=self.request_ref,
+                thread_ref=self.thread,
+                turn_id="turn-1",
+                questions=(
+                    UserInputQuestion(
+                        question_id="bounded-choices",
+                        prompt="Choose one",
+                        choices=approval_choices,
+                        min_answers=1,
+                        max_answers=1,
+                    ),
+                ),
+            )
+        )
+        with self.assertRaisesRegex(ContractViolation, "choices exceed"):
+            validate_interactive_request(
+                UserInputRequest(
+                    request_ref=self.request_ref,
+                    thread_ref=self.thread,
+                    turn_id="turn-1",
+                    questions=(
+                        UserInputQuestion(
+                            question_id="too-many-choices",
+                            prompt="Choose one",
+                            choices=approval_choices + (RequestChoice("overflow", "Overflow"),),
+                            min_answers=1,
+                            max_answers=1,
+                        ),
+                    ),
+                )
+            )
+
+        questions = tuple(
+            UserInputQuestion(
+                question_id=f"question-{index}",
+                prompt=f"Question {index}",
+                allows_other=True,
+            )
+            for index in range(MAX_INTERACTIVE_REQUEST_QUESTIONS)
+        )
+        validate_interactive_request(
+            UserInputRequest(
+                request_ref=self.request_ref,
+                thread_ref=self.thread,
+                turn_id="turn-1",
+                questions=questions,
+            )
+        )
+        with self.assertRaisesRegex(ContractViolation, "questions exceed"):
+            validate_interactive_request(
+                UserInputRequest(
+                    request_ref=self.request_ref,
+                    thread_ref=self.thread,
+                    turn_id="turn-1",
+                    questions=questions
+                    + (
+                        UserInputQuestion(
+                            question_id="overflow",
+                            prompt="Overflow",
+                            allows_other=True,
+                        ),
+                    ),
+                )
+            )
+
+    def test_persisted_response_shape_collection_limits_reject_before_identity_walks(self) -> None:
+        choice_ids = tuple(f"choice-{index}" for index in range(MAX_INTERACTIVE_REQUEST_CHOICES))
+        validate_request_response_shape(ApprovalResponseShape(choice_ids))
+        with self.assertRaisesRegex(ContractViolation, "choices exceed"):
+            validate_request_response_shape(ApprovalResponseShape(choice_ids + ("overflow",)))
+        validate_request_response_shape(
+            UserInputResponseShape(
+                (
+                    UserInputQuestionShape(
+                        question_id="bounded-choices",
+                        choice_ids=choice_ids,
+                        allows_other=False,
+                        min_answers=1,
+                        max_answers=1,
+                    ),
+                )
+            )
+        )
+        with self.assertRaisesRegex(ContractViolation, "choices exceed"):
+            validate_request_response_shape(
+                UserInputResponseShape(
+                    (
+                        UserInputQuestionShape(
+                            question_id="too-many-choices",
+                            choice_ids=choice_ids + ("overflow",),
+                            allows_other=False,
+                            min_answers=1,
+                            max_answers=1,
+                        ),
+                    )
+                )
+            )
+
+        questions = tuple(
+            UserInputQuestionShape(
+                question_id=f"question-{index}",
+                choice_ids=(),
+                allows_other=True,
+                min_answers=0,
+                max_answers=1,
+            )
+            for index in range(MAX_INTERACTIVE_REQUEST_QUESTIONS)
+        )
+        validate_request_response_shape(UserInputResponseShape(questions))
+        with self.assertRaisesRegex(ContractViolation, "questions exceed"):
+            validate_request_response_shape(
+                UserInputResponseShape(
+                    questions
+                    + (
+                        UserInputQuestionShape(
+                            question_id="overflow",
+                            choice_ids=(),
+                            allows_other=True,
+                            min_answers=0,
+                            max_answers=1,
+                        ),
+                    )
+                )
             )
 
     def test_request_ref_must_match_event_application(self) -> None:

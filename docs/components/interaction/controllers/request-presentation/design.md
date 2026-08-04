@@ -44,8 +44,9 @@ format.
 ## Bounds and failure
 
 Input request/question/choice counts and field lengths are bounded by the
-typed Application contract. The presentation has finite content/item/text
-limits and fails explicitly if those limits or fixed identities are violated.
+typed Application contract: at most 32 questions per request and 64 choices
+per approval or question. The presentation has finite content/item/text limits
+and fails explicitly if those limits or fixed identities are violated.
 One destination's rendering or delivery failure does not authorize a response
 or block another destination.
 

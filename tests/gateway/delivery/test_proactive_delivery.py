@@ -16,6 +16,7 @@ from imagent.adapters import (
     IdempotencyClaimStatus,
 )
 from imagent.contracts import (
+    MAX_DELIVERY_SUBMISSION_DESTINATIONS,
     AttachmentContent,
     AttachmentSourceKind,
     ChannelCapabilities,
@@ -59,6 +60,7 @@ from imagent.gateway.persistence.memory import (
     InMemoryDeliverySubmissionRepository,
     InMemoryProjectionRouteRepository,
 )
+from imagent.interaction.operations import ContractViolation
 from imagent.storage import SQLiteGatewayState
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
@@ -340,6 +342,29 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(len(self.channel_a.sent), 1)
         self.assertEqual(len(self.channel_b.sent), 1)
+
+    async def test_route_destination_limit_rejects_before_reservation_or_send(self) -> None:
+        for index in range(MAX_DELIVERY_SUBMISSION_DESTINATIONS + 1):
+            await self.put_route(
+                ConversationRef("channel-a", f"conversation-{index}"),
+                route_id=f"route-{index}",
+            )
+
+        delivery_id = "delivery-too-many-destinations"
+        with self.assertRaisesRegex(ContractViolation, "destinations exceed"):
+            await self.gateway(policy=ProjectionPolicy.ALL_OBSERVERS).deliver_proactively(
+                self.intent(delivery_id=delivery_id),
+                credential=self.thread_token,
+            )
+
+        submission_id = derive_delivery_submission_id(
+            DeliverySubmissionOrigin.EXTERNAL,
+            "agent-task",
+            delivery_id,
+        )
+        self.assertIsNone(await self.submissions.get_delivery_submission(submission_id))
+        self.assertEqual(self.channel_a.sent, [])
+        self.assertEqual(self.channel_b.sent, [])
 
     async def test_route_snapshot_is_pinned_across_route_move(self) -> None:
         await self.projections.replace_thread_projection_routes(

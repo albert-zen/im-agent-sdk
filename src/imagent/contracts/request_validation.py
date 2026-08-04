@@ -16,6 +16,9 @@ from .model import (
 )
 from .operations import ApprovalResponse, UserInputResponse
 
+MAX_INTERACTIVE_REQUEST_QUESTIONS = 32
+MAX_INTERACTIVE_REQUEST_CHOICES = 64
+
 
 def validate_interactive_request(
     request: ApprovalRequest | UserInputRequest,
@@ -35,10 +38,12 @@ def validate_interactive_request(
             raise ContractViolation("approval prompt cannot be empty")
         if not request.choices:
             raise ContractViolation("approval request requires choices")
+        _validate_choice_count(len(request.choices))
         _validate_choices(request.choices)
         return
     if not request.questions:
         raise ContractViolation("user input request requires questions")
+    _validate_question_count(len(request.questions))
     question_ids = tuple(question.question_id for question in request.questions)
     if len(set(question_ids)) != len(question_ids):
         raise ContractViolation("user input question IDs must be unique")
@@ -46,6 +51,7 @@ def validate_interactive_request(
         require_identifier(question.question_id, "question_id")
         if not question.prompt.strip():
             raise ContractViolation("user input question cannot be empty")
+        _validate_choice_count(len(question.choices))
         _validate_choices(question.choices)
         if question.min_answers < 0:
             raise ContractViolation("minimum answers cannot be negative")
@@ -113,6 +119,7 @@ def validate_request_response_shape(shape: RequestResponseShape) -> None:
     if isinstance(shape, ApprovalResponseShape):
         if not shape.choice_ids:
             raise ContractViolation("approval response shape requires choices")
+        _validate_choice_count(len(shape.choice_ids))
         if len(set(shape.choice_ids)) != len(shape.choice_ids):
             raise ContractViolation("approval response choices must be unique")
         for choice_id in shape.choice_ids:
@@ -120,11 +127,13 @@ def validate_request_response_shape(shape: RequestResponseShape) -> None:
         return
     if not shape.questions:
         raise ContractViolation("user input response shape requires questions")
+    _validate_question_count(len(shape.questions))
     question_ids = tuple(question.question_id for question in shape.questions)
     if len(set(question_ids)) != len(question_ids):
         raise ContractViolation("user input response questions must be unique")
     for question in shape.questions:
         require_identifier(question.question_id, "question_id")
+        _validate_choice_count(len(question.choice_ids))
         if len(set(question.choice_ids)) != len(question.choice_ids):
             raise ContractViolation("user input response choices must be unique")
         for choice_id in question.choice_ids:
@@ -201,3 +210,18 @@ def _validate_choices(choices) -> None:
         require_identifier(choice.choice_id, "choice_id")
         if not choice.label.strip():
             raise ContractViolation("request choice label cannot be empty")
+
+
+def _validate_question_count(count: int) -> None:
+    if count > MAX_INTERACTIVE_REQUEST_QUESTIONS:
+        raise ContractViolation(
+            "interactive request questions exceed the maximum of "
+            f"{MAX_INTERACTIVE_REQUEST_QUESTIONS}"
+        )
+
+
+def _validate_choice_count(count: int) -> None:
+    if count > MAX_INTERACTIVE_REQUEST_CHOICES:
+        raise ContractViolation(
+            f"interactive request choices exceed the maximum of {MAX_INTERACTIVE_REQUEST_CHOICES}"
+        )

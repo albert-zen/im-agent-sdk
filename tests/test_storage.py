@@ -13,11 +13,17 @@ from imagent.adapters import (
     TurnReplyCorrelationConflict,
 )
 from imagent.contracts import (
+    MAX_DELIVERY_SUBMISSION_DESTINATIONS,
     AgentInput,
     ApplicationRef,
     ApprovalResponseShape,
     ConversationBinding,
     ConversationRef,
+    DeliveryRouteSnapshot,
+    DeliverySubmissionOrigin,
+    DeliverySubmissionRecord,
+    DeliverySubmissionState,
+    DestinationDeliveryRecord,
     ProjectMode,
     ProjectRef,
     RequestRef,
@@ -31,6 +37,7 @@ from imagent.contracts import (
 from imagent.gateway import GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence import BindingConflict
 from imagent.gateway.persistence.memory import InMemoryProjectionRouteRepository
+from imagent.interaction.operations import ContractViolation
 from imagent.projections import (
     derive_projection_route_id,
     derive_turn_reply_correlation_id,
@@ -137,6 +144,34 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                     await recovered.put_turn_reply_correlation(conflicting)
             finally:
                 await recovered.close()
+
+    async def test_oversized_destinations_fail_before_sqlite_reservation(self) -> None:
+        now = datetime.now(UTC)
+        destination = DestinationDeliveryRecord(
+            delivery_id="destination-1",
+            snapshot=DeliveryRouteSnapshot(ConversationRef("channel", "conversation")),
+            state=DeliverySubmissionState.IN_FLIGHT,
+            updated_at=now,
+        )
+        record = DeliverySubmissionRecord(
+            submission_id="submission-1",
+            delivery_id="delivery-1",
+            origin=DeliverySubmissionOrigin.EXTERNAL,
+            principal_id="principal-1",
+            target_fingerprint="target-1",
+            payload_fingerprint="payload-1",
+            destinations=(destination,) * (MAX_DELIVERY_SUBMISSION_DESTINATIONS + 1),
+            created_at=now,
+            updated_at=now,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_state = SQLiteGatewayState(Path(directory) / "delivery.sqlite3")
+            try:
+                with self.assertRaisesRegex(ContractViolation, "destinations exceed"):
+                    await sqlite_state.reserve_delivery_submission(record)
+                self.assertIsNone(await sqlite_state.get_delivery_submission(record.submission_id))
+            finally:
+                await sqlite_state.close()
 
     async def test_request_correlations_are_scoped_by_application_and_epoch(
         self,

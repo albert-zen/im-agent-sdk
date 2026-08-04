@@ -10,6 +10,7 @@ from typing import cast
 from imagent import projections as projection_semantics
 from imagent.adapters import DeliverySubmissionCapacityError, DeliverySubmissionConflict
 from imagent.contracts import (
+    MAX_DELIVERY_SUBMISSION_DESTINATIONS,
     ApplicationRef,
     ConversationBinding,
     ConversationRef,
@@ -232,6 +233,42 @@ class InMemoryDeliverySubmissionRepositoryTests(unittest.IsolatedAsyncioTestCase
             await repository.reserve_delivery_submission(
                 replace(record, payload_fingerprint="payload-2")
             )
+
+    async def test_destination_collection_limit_accepts_boundary_and_rejects_one_more(self) -> None:
+        repository = InMemoryDeliverySubmissionRepository()
+        record = _submission()
+        boundary_destinations = tuple(
+            replace(
+                record.destinations[0],
+                delivery_id=f"destination-{index}",
+                snapshot=DeliveryRouteSnapshot(ConversationRef("channel", f"conversation-{index}")),
+            )
+            for index in range(MAX_DELIVERY_SUBMISSION_DESTINATIONS)
+        )
+        boundary = replace(record, destinations=boundary_destinations)
+        reservation = await repository.reserve_delivery_submission(boundary)
+        self.assertTrue(reservation.acquired)
+
+        oversized = replace(
+            record,
+            submission_id="submission-oversized",
+            delivery_id="delivery-oversized",
+            destinations=boundary_destinations
+            + (
+                replace(
+                    record.destinations[0],
+                    delivery_id="destination-overflow",
+                    snapshot=DeliveryRouteSnapshot(
+                        ConversationRef("channel", "conversation-overflow")
+                    ),
+                ),
+            ),
+        )
+
+        with self.assertRaisesRegex(ContractViolation, "destinations exceed"):
+            await repository.reserve_delivery_submission(oversized)
+
+        self.assertIsNone(await repository.get_delivery_submission(oversized.submission_id))
 
     async def test_destination_update_requires_expected_state_and_preserves_record(self) -> None:
         repository = InMemoryDeliverySubmissionRepository()

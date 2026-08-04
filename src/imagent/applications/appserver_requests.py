@@ -6,6 +6,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from ..contracts import (
+    MAX_INTERACTIVE_REQUEST_CHOICES,
+    MAX_INTERACTIVE_REQUEST_QUESTIONS,
     ApplicationRef,
     ApprovalRequest,
     ApprovalResponse,
@@ -319,6 +321,11 @@ def _user_input(
     native_questions = params.get("questions")
     if not isinstance(native_questions, list) or not native_questions:
         raise ValueError("App Server user input request has no questions")
+    _require_collection_limit(
+        native_questions,
+        limit=MAX_INTERACTIVE_REQUEST_QUESTIONS,
+        field="App Server user input questions",
+    )
     questions: list[UserInputQuestion] = []
     answer_payloads: dict[str, Mapping[str, str]] = {}
     for native_question in native_questions:
@@ -327,6 +334,11 @@ def _user_input(
         question_id = _required_string(native_question, "id")
         native_options = native_question.get("options")
         options = native_options if isinstance(native_options, list) else []
+        _require_collection_limit(
+            options,
+            limit=MAX_INTERACTIVE_REQUEST_CHOICES,
+            field="App Server user input options",
+        )
         choices: list[RequestChoice] = []
         option_payloads: dict[str, str] = {}
         for index, native_option in enumerate(options, start=1):
@@ -374,6 +386,11 @@ def _user_input(
 def _approval_choices(
     decisions: Sequence[object],
 ) -> tuple[tuple[RequestChoice, ...], Mapping[str, object]]:
+    _require_collection_limit(
+        decisions,
+        limit=MAX_INTERACTIVE_REQUEST_CHOICES,
+        field="App Server approval decisions",
+    )
     choices: list[RequestChoice] = []
     payloads: dict[str, object] = {}
     for decision in decisions:
@@ -467,3 +484,13 @@ def _bounded_text(value: str, *, limit: int) -> str:
     if len(value) <= limit:
         return value
     return f"{value[: max(0, limit - 16)].rstrip()}\n… [truncated]"
+
+
+def _require_collection_limit(
+    values: Sequence[object],
+    *,
+    limit: int,
+    field: str,
+) -> None:
+    if len(values) > limit:
+        raise ValueError(f"{field} exceed the maximum of {limit}")

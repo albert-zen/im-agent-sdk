@@ -34,6 +34,10 @@ admission is lock-atomic. Proactive/internal delivery tests prove capacity is a
 known pre-side-effect failure, including outer-claim release and the bounded
 JSON ingress response. SQLite parity tests must remain unchanged.
 
+Submission-state tests also accept exactly 64 destinations and reject 65
+before reservation or SQLite writes, preserving all earlier immutable
+destination identity evidence.
+
 Run:
 
 ```sh

@@ -37,6 +37,7 @@ from ...contracts import (
     validate_delivery_intent,
     validate_delivery_principal,
     validate_delivery_receipt_for_content,
+    validate_delivery_submission_destination_count,
 )
 from ...contracts import DeliveryTargetKind as DeliveryTargetKind
 from ...interaction.channels import ChannelAdapter
@@ -153,10 +154,10 @@ class ProactiveDeliveryService:
             principal.principal_id,
             intent.delivery_id,
         )
-        target_fingerprint = derive_delivery_target_fingerprint(intent.target)
-        payload_fingerprint = derive_delivery_payload_fingerprint(intent)
         existing = await self._submissions.get_delivery_submission(submission_id)
         if existing is not None:
+            target_fingerprint = derive_delivery_target_fingerprint(intent.target)
+            payload_fingerprint = derive_delivery_payload_fingerprint(intent)
             _ensure_submission_identity(
                 existing,
                 principal_id=principal.principal_id,
@@ -185,6 +186,8 @@ class ProactiveDeliveryService:
         if authorize:
             authorize_delivery_target(principal, intent.target)
         snapshots = await self._resolve_snapshots(intent)
+        target_fingerprint = derive_delivery_target_fingerprint(intent.target)
+        payload_fingerprint = derive_delivery_payload_fingerprint(intent)
         execution_root_id = intent.delivery_id if not authorize else submission_id
         preflight_error = self._preflight(intent, snapshots)
         if preflight_error is not None:
@@ -361,6 +364,7 @@ class ProactiveDeliveryService:
             raise DeliveryRouteError(
                 f"no active projection route{qualifier} exists for the requested Thread"
             )
+        validate_delivery_submission_destination_count(len(routes))
         snapshots = tuple(
             DeliveryRouteSnapshot(
                 conversation_ref=route.conversation_ref,

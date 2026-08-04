@@ -16,6 +16,8 @@ from imagent.applications.appserver_requests import (
     map_zen_appserver_request,
 )
 from imagent.contracts import (
+    MAX_INTERACTIVE_REQUEST_CHOICES,
+    MAX_INTERACTIVE_REQUEST_QUESTIONS,
     AgentEventType,
     ApplicationOperationFailed,
     ApplicationRef,
@@ -95,6 +97,57 @@ class AppServerRequestMappingTests(unittest.TestCase):
                 _server_request(
                     method="item/tool/requestUserInput",
                     params={"questions": []},
+                ),
+            )
+
+    def test_mapper_rejects_oversized_request_collections_before_mapping(self) -> None:
+        with self.assertRaisesRegex(ValueError, "questions exceed"):
+            map_appserver_request(
+                self.application,
+                _server_request(
+                    method="item/tool/requestUserInput",
+                    params={
+                        "questions": [
+                            {
+                                "id": f"question-{index}",
+                                "question": "Choose one",
+                            }
+                            for index in range(MAX_INTERACTIVE_REQUEST_QUESTIONS + 1)
+                        ]
+                    },
+                ),
+            )
+        with self.assertRaisesRegex(ValueError, "options exceed"):
+            map_appserver_request(
+                self.application,
+                _server_request(
+                    method="item/tool/requestUserInput",
+                    params={
+                        "questions": [
+                            {
+                                "id": "question-1",
+                                "question": "Choose one",
+                                "options": [
+                                    {"label": f"Option {index}"}
+                                    for index in range(MAX_INTERACTIVE_REQUEST_CHOICES + 1)
+                                ],
+                            }
+                        ]
+                    },
+                ),
+            )
+        with self.assertRaisesRegex(ValueError, "decisions exceed"):
+            map_appserver_request(
+                self.application,
+                _server_request(
+                    method="item/commandExecution/requestApproval",
+                    params={
+                        "command": "true",
+                        "availableDecisions": [
+                            f"decision-{index}"
+                            for index in range(MAX_INTERACTIVE_REQUEST_CHOICES + 1)
+                        ],
+                    },
                 ),
             )
 

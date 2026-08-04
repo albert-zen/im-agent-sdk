@@ -16,6 +16,8 @@ Required scenarios:
 - one route's rendering/delivery failure neither authorizes that route nor
   blocks another route;
 - typed request, output item, and output text bounds fail explicitly;
+- exactly 32 questions and 64 choices are accepted, while an additional
+  question or choice fails before rendering or response-correlation storage;
 - replay of identical facts is semantically stable and does not mutate native
   request state;
 - reconnect without authoritative pending-request replay never reconstructs a

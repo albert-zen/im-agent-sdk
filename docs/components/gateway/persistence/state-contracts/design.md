@@ -58,14 +58,15 @@ logical delivery to the originally resolved destinations across retries and
 restart. It contains no text, artifact bytes, arbitrary local path, callback,
 or replayable work body, so it is neither a content spool nor an outbox.
 
-Stable scalar identities and the currently bounded fields are validated
-against their declared limits and cross-reference rules before persistence.
-Invalid complete typed values fail explicitly rather than being repaired by a
-repository implementation. The destination collection on
-`DeliverySubmissionRecord` and the questions/choice-ID collections in request
-response shapes do not yet have explicit cardinality limits. That is a
-capacity gap for a separate behavior slice; this documentation slice does not
-pretend the missing bounds exist.
+Stable scalar identities and every persisted collection are validated against
+their declared limits and cross-reference rules before fingerprinting,
+reservation, SQL, or native delivery/request side effects. Invalid complete
+typed values fail explicitly rather than being repaired by a repository
+implementation. `DeliverySubmissionRecord.destinations` has at most 64
+members. An interactive request and its persisted response shape have at most
+32 questions; an approval or one question has at most 64 choice IDs. These
+are admission limits, not retention policy: the SDK neither evicts delivery
+evidence nor spools excess work.
 
 ## Dependencies and recovery
 
