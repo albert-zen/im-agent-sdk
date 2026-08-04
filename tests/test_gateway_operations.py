@@ -8,7 +8,7 @@ from dataclasses import FrozenInstanceError, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from imagent.adapters import IdempotencyClaimStatus
 from imagent.applications.capabilities import ProjectMode, SupportLevel
@@ -862,6 +862,69 @@ class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(all(item.state is RequestRouteState.RESPONDED for item in correlations))
         self.assertEqual(self.gateway._request_locks.active_key_count, 0)
+
+    async def test_private_request_delegate_returns_converged_routed_result(self) -> None:
+        request = await self.application.open_approval_request(
+            self.thread.ref,
+            turn_id="turn-private-result",
+        )
+        await _wait_for_correlation_count(
+            self.correlations,
+            request.request_ref,
+            2,
+        )
+        completed_at = _now()
+        operation = RespondToRequest(
+            operation_id="private-response-result",
+            conversation_ref=self.conversation_a,
+            actor="user-a",
+            request_ref=request.request_ref,
+            response=ApprovalResponse("accept"),
+            created_at=_now(),
+        )
+
+        routed = await self.gateway._respond_to_request(
+            operation,
+            completed_at=completed_at,
+        )
+
+        self.assertIsInstance(routed, RequestResponseRouted)
+        self.assertEqual(routed.operation_id, operation.operation_id)
+        self.assertEqual(routed.request_ref, operation.request_ref)
+        self.assertEqual(routed.completed_at, completed_at)
+        correlations = await self.correlations.list_request_correlations(
+            request_ref=request.request_ref
+        )
+        self.assertTrue(all(item.state is RequestRouteState.RESPONDED for item in correlations))
+
+    async def test_private_request_route_returns_its_delegate_result(self) -> None:
+        completed_at = _now()
+        operation = RespondToRequest(
+            operation_id="private-route-result",
+            conversation_ref=self.conversation_a,
+            actor="user-a",
+            request_ref=RequestRef(self.application.summary.ref, "request-route-result"),
+            response=ApprovalResponse("accept"),
+            created_at=_now(),
+        )
+        expected = RequestResponseRouted(
+            operation_id=operation.operation_id,
+            request_ref=operation.request_ref,
+            completed_at=completed_at,
+        )
+        with patch.object(
+            self.gateway,
+            "_respond_to_request",
+            new_callable=AsyncMock,
+            return_value=expected,
+        ) as responder:
+            routed = await self.gateway._route_request_response(
+                operation,
+                completed_at=completed_at,
+            )
+
+        self.assertIs(routed, expected)
+        responder.assert_awaited_once_with(operation, completed_at=completed_at)
 
     async def test_transient_capacity_pressure_does_not_lose_open_request(self) -> None:
         blocker_conversation = ConversationRef("fake-channel", "capacity-blocker")

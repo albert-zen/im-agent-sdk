@@ -11,12 +11,6 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 if TYPE_CHECKING:
-    from ..contracts.operations import (
-        ObserveThread,
-        RequestResponseRouted,
-        RespondToRequest,
-        ThreadObserved,
-    )
     from .delivery.proactive_authorization import DeliveryAuthorizer
 
 import imagent.contracts as contracts_facade
@@ -732,10 +726,10 @@ class ImAgentGateway:
 
     async def _observe_thread(
         self,
-        operation: ObserveThread,
+        operation: contracts_facade.ObserveThread,
         *,
         completed_at: datetime,
-    ) -> ThreadObserved:
+    ) -> contracts_facade.ThreadObserved:
         from ..contracts.operations import ThreadObserved
         from .routing.operations import _GatewayActionError
 
@@ -766,29 +760,23 @@ class ImAgentGateway:
 
     async def _route_request_response(
         self,
-        operation: RespondToRequest,
+        operation: contracts_facade.RespondToRequest,
         *,
         completed_at: datetime,
-    ) -> RequestResponseRouted:
-        from ..contracts.operations import RequestResponseRouted
-
+    ) -> contracts_facade.RequestResponseRouted:
         async with self._request_locks.hold(operation.request_ref):
-            await self._respond_to_request(
+            return await self._respond_to_request(
                 operation,
-                completed_at=completed_at,
-            )
-            return RequestResponseRouted(
-                operation_id=operation.operation_id,
-                request_ref=operation.request_ref,
                 completed_at=completed_at,
             )
 
     async def _respond_to_request(
         self,
-        operation: RespondToRequest,
+        operation: contracts_facade.RespondToRequest,
         *,
         completed_at: datetime,
-    ) -> None:
+    ) -> contracts_facade.RequestResponseRouted:
+        from ..contracts.operations import RequestResponseRouted
         from .routing.operations import _GatewayActionError
 
         correlations = await self._request_correlations.list_request_correlations(
@@ -865,10 +853,15 @@ class ImAgentGateway:
                 for correlation in current
             ):
                 raise
+        return RequestResponseRouted(
+            operation_id=operation.operation_id,
+            request_ref=operation.request_ref,
+            completed_at=completed_at,
+        )
 
     async def _converge_native_request_failure(
         self,
-        operation: RespondToRequest,
+        operation: contracts_facade.RespondToRequest,
         result: ApplicationOperationFailed,
     ) -> None:
         target = {
@@ -890,7 +883,7 @@ class ImAgentGateway:
 
     async def _transition_request_state(
         self,
-        operation: RespondToRequest,
+        operation: contracts_facade.RespondToRequest,
         *,
         state: RequestRouteState,
         expected_states: tuple[RequestRouteState, ...],

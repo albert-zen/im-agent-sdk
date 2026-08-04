@@ -56,6 +56,7 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     import imagent.gateway as gateway_facade
     import imagent.gateway.routing as routing_facade
     import imagent.gateway.routing.operations as operations_owner
+    from imagent.applications.operations import ApplicationOperationFailed
     import imagent.interaction.controllers as controllers_facade
 
     aggregate_value_names = (
@@ -72,14 +73,24 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
         assert getattr(contracts_facade, name) is owner
         assert getattr(routing_facade, name) is owner
         assert getattr(gateway_facade, name) is owner
+        assert gateway_facade.__dict__[name] is owner
         if callable(owner):
             assert inspect.signature(getattr(contracts_facade, name)) == inspect.signature(owner)
 
-    for name in ("validate_gateway_operation", "validate_gateway_operation_result"):
+    aggregate_validator_names = (
+        "validate_gateway_operation",
+        "validate_gateway_operation_result",
+    )
+    assert gateway_facade._GATEWAY_OPERATION_EXPORTS == frozenset(
+        aggregate_value_names + aggregate_validator_names
+    )
+    assert not hasattr(gateway_facade, "unsupported_gateway_operation")
+    for name in aggregate_validator_names:
         owner = getattr(operations_owner, name)
         assert getattr(contracts_facade, name) is owner
         assert getattr(routing_facade, name) is owner
         assert getattr(gateway_facade, name) is owner
+        assert gateway_facade.__dict__[name] is owner
         assert inspect.signature(getattr(contracts_facade, name)) == inspect.signature(owner)
 
     for name in ("ObserveThread", "ThreadObserved", "RespondToRequest", "RequestResponseRouted"):
@@ -126,6 +137,32 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     assert len(typing.get_args(operations_owner.GatewayOperation)) == 7
     assert len(typing.get_args(operations_owner.GatewayOperationResult)) == 5
     assert typing.get_type_hints(contracts_facade.__getattr__)["return"] is object
+    assert typing.get_type_hints(gateway_facade.__getattr__)["return"] is object
+    root_delegate_hints = {
+        "_observe_thread": {
+            "operation": contracts_facade.ObserveThread,
+            "return": contracts_facade.ThreadObserved,
+        },
+        "_route_request_response": {
+            "operation": contracts_facade.RespondToRequest,
+            "return": contracts_facade.RequestResponseRouted,
+        },
+        "_respond_to_request": {
+            "operation": contracts_facade.RespondToRequest,
+            "return": contracts_facade.RequestResponseRouted,
+        },
+        "_converge_native_request_failure": {
+            "operation": contracts_facade.RespondToRequest,
+            "result": ApplicationOperationFailed,
+            "return": type(None),
+        },
+        "_transition_request_state": {
+            "operation": contracts_facade.RespondToRequest,
+        },
+    }
+    for method_name, expected in root_delegate_hints.items():
+        hints = typing.get_type_hints(getattr(gateway_facade.ImAgentGateway, method_name))
+        assert all(hints[name] is value for name, value in expected.items())
     assert typing.get_type_hints(
         contracts_facade.validate_gateway_operation
     ) == typing.get_type_hints(operations_owner.validate_gateway_operation)
