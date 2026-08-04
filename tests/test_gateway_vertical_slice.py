@@ -14,7 +14,6 @@ from imagent.applications import (
     T3ApplicationAdapter,
     ZenApplicationAdapter,
 )
-from imagent.bindings import InMemoryBindingRepository
 from imagent.channels import NativeTransportChannelAdapter
 from imagent.contracts import (
     ActivateNativeThread,
@@ -35,6 +34,7 @@ from imagent.contracts import (
 from imagent.controllers import SlashController
 from imagent.events import EventStreamOverflow
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
+from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.interaction.channels.adapters.qq import QQChannelAdapter
 from imagent.interaction.channels.outbound_delivery import NativeDeliveryResult
 from imagent.storage import SQLiteGatewayState

@@ -15,7 +15,6 @@ from imagent.applications.appserver_requests import (
     map_appserver_request,
     map_zen_appserver_request,
 )
-from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AgentEventType,
     ApplicationOperationFailed,
@@ -39,6 +38,7 @@ from imagent.contracts import (
 from imagent.controllers import MarkdownRequestPresenter
 from imagent.events import EventStreamReset
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
+from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.projections import InMemoryProjectionRouteRepository
 from imagent.request_correlations import InMemoryRequestCorrelationRepository
 from imagent.testing import FakeChannelAdapter

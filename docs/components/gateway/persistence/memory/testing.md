@@ -1,5 +1,16 @@
 # Gateway in-memory persistence testing
 
+Focused binding tests prove:
+
+- the first put assigns revision one and later puts increment monotonically;
+- validation happens before mutation;
+- stale expected revisions reject put and delete through the exact shared
+  `BindingConflict` type without changing the stored record;
+- delete with the current revision removes only that Conversation;
+- concurrent process-local operations are serialized by the repository lock;
+- restart constructs an empty repository and claims no durable recovery;
+- no route, Application worker, transcript, or product JSON state is created.
+
 Focused delivery-submission tests prove:
 
 - the first reservation acquires and an identical repeat returns the same
@@ -36,6 +47,6 @@ PYTHONPATH=src python -m unittest \
   tests.gateway.delivery.test_proactive_ingress -v
 ```
 
-The existing binding, projection, and request-correlation suites continue to
-own their process-local repository tests until those implementations move in
-their own focused slices. Every slice also runs the full repository gates.
+The projection and request-correlation suites continue to own their
+process-local repository tests until those implementations move in their own
+focused slices. Every slice also runs the full repository gates.

@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 from test_gateway_vertical_slice import NativeZenClient
 
 from imagent.applications import CodexApplicationAdapter
-from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AgentEventType,
     AgentMessage,
@@ -26,6 +25,7 @@ from imagent.contracts import (
 )
 from imagent.events import EventBroadcaster, EventStreamOverflow, EventStreamReset
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.gateway_startup import GatewayNotRunning, GatewayStartupOverflow
 from imagent.request_correlations import InMemoryRequestCorrelationRepository
 from imagent.request_projection_runtime import InteractiveRequestProjection

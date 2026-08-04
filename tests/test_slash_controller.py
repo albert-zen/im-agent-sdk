@@ -4,7 +4,6 @@ import asyncio
 import unittest
 from datetime import UTC, datetime
 
-from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     ApplicationRef,
     ConversationBound,
@@ -18,6 +17,7 @@ from imagent.contracts import (
 )
 from imagent.controllers import SlashController
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
+from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.interaction.controllers.common import parse_slash_command
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 

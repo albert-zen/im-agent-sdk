@@ -8,7 +8,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from imagent.bindings import InMemoryBindingRepository
 from imagent.cli.send import main as send_main
 from imagent.contracts import (
     AttachmentContent,
@@ -34,7 +33,10 @@ from imagent.gateway.delivery import ProactiveDeliveryJsonHandler, ScopedDeliver
 from imagent.gateway.delivery.proactive_ingress import (
     ProactiveDeliveryJsonHandler as OwnerProactiveDeliveryJsonHandler,
 )
-from imagent.gateway.persistence.memory import InMemoryDeliverySubmissionRepository
+from imagent.gateway.persistence.memory import (
+    InMemoryBindingRepository,
+    InMemoryDeliverySubmissionRepository,
+)
 from imagent.projections import InMemoryProjectionRouteRepository
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 

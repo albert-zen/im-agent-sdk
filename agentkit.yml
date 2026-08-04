@@ -280,19 +280,19 @@ components:
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
-      - src/imagent/bindings.py
       - src/imagent/gateway/delivery/submissions.py
       - src/imagent/gateway/persistence/**
       - src/imagent/request_correlations.py
       - src/imagent/sqlite_rows.py
       - src/imagent/storage.py
-      - tests/test_bindings.py
       - tests/gateway/persistence/**
       - tests/test_storage.py
     docs:
       - docs/components/gateway/persistence/README.md
       - docs/components/gateway/persistence/memory/design.md
       - docs/components/gateway/persistence/memory/testing.md
+      - docs/components/gateway/persistence/repository-contracts/design.md
+      - docs/components/gateway/persistence/repository-contracts/testing.md
       - docs/components/persistence/design.md
       - docs/components/persistence/testing.md
     required_docs:

@@ -9,7 +9,6 @@ from datetime import UTC, datetime
 
 import imagent.gateway as gateway_facade
 from imagent.adapters import IdempotencyClaimStatus
-from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AgentInput,
     AgentMessage,
@@ -25,6 +24,7 @@ from imagent.contracts import (
 )
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway import presentation as presentation_owner
+from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.gateway.presentation import (
     OutboundPresentationCapacityError,
     OutboundPresentationContext,

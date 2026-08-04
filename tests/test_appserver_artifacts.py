@@ -23,7 +23,6 @@ from imagent.applications.appserver_artifacts import (
     appserver_completed_item_facts,
 )
 from imagent.applications.appserver_client import AppServerClient as NativeAppServerClient
-from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AgentEventType,
     AgentMessage,
@@ -44,6 +43,7 @@ from imagent.contracts import (
 from imagent.diagnostics import ApplicationArtifactMaterializationFailureCode
 from imagent.events import EventStreamReset
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
+from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

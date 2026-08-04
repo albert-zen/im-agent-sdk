@@ -9,7 +9,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from imagent.adapters import IdempotencyClaimStatus
-from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AcceptedTurn,
     ApplicationInputOutcomeUnknown,
@@ -30,6 +29,7 @@ from imagent.gateway import (
     ImAgentGateway,
     InboundFailurePhase,
 )
+from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.inbound_admission import ClaimedInbound
 from imagent.inbound_failures import (
     InboundFailurePresentation,

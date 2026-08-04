@@ -3,7 +3,6 @@ from __future__ import annotations
 import unittest
 from datetime import UTC, datetime
 
-from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     ApplicationOperation,
     ApplicationOperationResult,
@@ -17,6 +16,7 @@ from imagent.contracts import (
 )
 from imagent.controllers import register_common_commands
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
+from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.interaction.controllers import (
     CommandExecutionSafety,
     CommandHandlerActions,

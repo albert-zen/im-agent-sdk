@@ -53,6 +53,13 @@ Binding updates are atomic from one Conversation's perspective. A stale
 expected revision fails explicitly. Project/Thread references are validated
 against Application ownership before they are persisted.
 
+The shared `BindingConflict` belongs to the Gateway repository-contract leaf;
+the process-local binding implementation belongs to Gateway memory
+persistence. SQLite imports the same conflict while retaining its intentional
+single connection/lock/transaction boundary. The historical mixed-owner
+`bindings.py` path was not a compatibility API and has been removed after all
+callers migrated to those owners.
+
 Route storage retains routing and per-route delivery fields only. A normal
 refresh with no checkpoint preserves an existing boundary. A `put` that
 carries a different checkpoint is rejected: only
@@ -180,6 +187,8 @@ or schema change.
 
 ## Change obligations
 
-Changes to `bindings.py` or `storage.py` require checking schema migration,
-restart behavior, revision conflicts, idempotency semantics, projection route
-invariants, and the projections/recovery docs when checkpoint shape changes.
+Changes to `gateway/persistence/repository_contracts.py`,
+`gateway/persistence/memory.py`, or `storage.py` require checking schema
+migration, restart behavior, revision conflicts, idempotency semantics,
+projection route invariants, and the projections/recovery docs when checkpoint
+shape changes.

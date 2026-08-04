@@ -15,7 +15,6 @@ from imagent.adapters import (
     DeliverySubmissionConflict,
     IdempotencyClaimStatus,
 )
-from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AttachmentContent,
     AttachmentSourceKind,
@@ -55,7 +54,10 @@ from imagent.gateway.delivery.proactive import (
     DeliveryRouteError,
 )
 from imagent.gateway.delivery.proactive_authorization import DeliveryAuthorizationError
-from imagent.gateway.persistence.memory import InMemoryDeliverySubmissionRepository
+from imagent.gateway.persistence.memory import (
+    InMemoryBindingRepository,
+    InMemoryDeliverySubmissionRepository,
+)
 from imagent.projections import InMemoryProjectionRouteRepository
 from imagent.storage import SQLiteGatewayState
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter

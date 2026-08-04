@@ -29,6 +29,7 @@ from imagent.contracts import (
     TurnReplyCorrelation,
 )
 from imagent.gateway import GatewayRepositories, ImAgentGateway
+from imagent.gateway.persistence import BindingConflict
 from imagent.projections import (
     InMemoryProjectionRouteRepository,
     derive_projection_route_id,
@@ -307,6 +308,33 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                         self.assertIs(repeated.state, RequestRouteState.STALE)
             finally:
                 await sqlite_state.close()
+
+    async def test_binding_conflict_is_shared_and_rolls_back_stale_mutations(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state = SQLiteGatewayState(Path(directory) / "gateway.sqlite3")
+            conversation = ConversationRef("qq-main", "c2c:user-conflict")
+            original = await state.put(
+                ConversationBinding(
+                    conversation_ref=conversation,
+                    application_ref=ApplicationRef("t3-main"),
+                )
+            )
+            try:
+                with self.assertRaises(BindingConflict):
+                    await state.put(
+                        ConversationBinding(
+                            conversation_ref=conversation,
+                            application_ref=ApplicationRef("zen-main"),
+                        ),
+                        expected_revision=0,
+                    )
+                self.assertEqual(await state.get(conversation), original)
+
+                with self.assertRaises(BindingConflict):
+                    await state.delete(conversation, expected_revision=0)
+                self.assertEqual(await state.get(conversation), original)
+            finally:
+                await state.close()
 
     async def test_bindings_and_completed_idempotency_survive_restart(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

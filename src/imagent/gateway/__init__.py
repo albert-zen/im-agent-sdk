@@ -17,7 +17,6 @@ from ..adapters import (
     IdempotencyClaimStatus,
     RequestCorrelationConflict,
 )
-from ..bindings import BindingConflict
 from ..contracts import (
     AgentInput,
     ApplicationOperation,
@@ -127,6 +126,7 @@ from .delivery.outcome_observation import (
 )
 from .delivery.planning import DeliveryPlanningError
 from .delivery.proactive import ProactiveDeliveryService
+from .persistence import BindingConflict
 from .persistence.memory import InMemoryDeliverySubmissionRepository
 from .presentation import (
     OutboundPresentationContext,
