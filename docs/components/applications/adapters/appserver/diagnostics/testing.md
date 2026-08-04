@@ -5,7 +5,8 @@
 App Server diagnostic facts are covered by
 `tests/applications/adapters/appserver/test_client.py`,
 `tests/test_appserver_transport.py`, and the Interaction diagnostics contract
-tests in `tests/interaction/test_diagnostics.py`. The evidence includes
+tests in `tests/interaction/test_diagnostics.py`; Gateway aggregation evidence
+is in `tests/gateway/test_diagnostics.py`. The evidence includes
 ready/reconnecting/disconnected epochs, independent notification and
 server-request queue depth/overflow, fixed failure codes, and the bounded
 ADR-0014 `ConnectionDiagnosticFacts` surface. Epoch and queue overflow/reset
@@ -44,5 +45,5 @@ their security hardening is a later slice.
 
 - [Diagnostics design](design.md)
 - [Interaction diagnostics design](../../../../interaction/diagnostics/design.md)
-- [Transition diagnostics design](../../../../diagnostics/design.md)
+- [Gateway diagnostics design](../../../../gateway/diagnostics/design.md)
 - [App Server testing context](../../../../application-adapters/testing.md)

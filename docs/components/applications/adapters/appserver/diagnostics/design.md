@@ -15,8 +15,7 @@ becoming an operator or Gateway health policy.
 It does not own common diagnostic enums/value definitions, Application
 diagnostic facts, Gateway diagnostics, polling, retry decisions, or consumer
 presentation. The historical aggregate `src/imagent/diagnostics.py` remains the
-transition facade for not-yet-moved Gateway definitions and exact Application
-re-exports; the
+transition facade for exact Gateway and Application re-exports; the
 dependency-neutral connection/queue contracts are owned by
 [`interaction.diagnostics`](../../../../interaction/diagnostics/design.md).
 Only its App Server-specific positions belong here.
@@ -52,12 +51,12 @@ content-derived values may be retained or emitted.
 The App Server diagnostic fact, summary, and runtime helpers now co-locate at
 `src/imagent/applications/adapters/appserver/diagnostics.py`.
 `src/imagent/applications/diagnostics.py` owns the Application fact contracts;
-`src/imagent/diagnostics.py` remains the explicit mixed transition facade for
-remaining Gateway facts and those exact Application re-exports. It is not
-moved or reclassified as an App Server leaf. Common connection/queue values come from
+`src/imagent/diagnostics.py` remains the explicit exact transition facade for
+Gateway facts and those exact Application re-exports. It is not moved or
+reclassified as an App Server leaf. Common connection/queue values come from
 `imagent.interaction.diagnostics`.
 Current evidence is `tests/applications/adapters/appserver/test_client.py`,
-`tests/test_appserver_transport.py`, and `tests/test_diagnostics.py`; the target suite is
+`tests/test_appserver_transport.py`, and `tests/gateway/test_diagnostics.py`; the target suite is
 `tests/applications/adapters/appserver/test_diagnostics.py`. The gap is to
 preserve the common diagnostic contract and keep Applications independent of
 Gateway, plus the legacy debug-summary redaction/bounding work described
@@ -67,6 +66,6 @@ above.
 
 - [App Server block](../README.md)
 - [Interaction diagnostics design](../../../../interaction/diagnostics/design.md)
-- [Transition diagnostics design](../../../../diagnostics/design.md)
+- [Gateway diagnostics design](../../../../gateway/diagnostics/design.md)
 - [Applications adapter overview](../../../../application-adapters/design.md)
 - [ADR 0014](../../../../../decisions/0014-read-only-diagnostics-surface.md)

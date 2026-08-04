@@ -57,9 +57,9 @@ objects and never hide a duplicate or lazy compatibility implementation. The
 The `imagent.diagnostics` transition facade likewise re-exports the exact
 canonical `imagent.interaction.diagnostics`,
 `imagent.interaction.channels.diagnostics`, and
-`imagent.applications.diagnostics` objects while retaining only the
-not-yet-moved Gateway definitions; it has no duplicate moved classes and no
-lazy `__getattr__`.
+`imagent.applications.diagnostics` objects plus the canonical
+`imagent.gateway.diagnostics` objects; it retains no diagnostic definitions,
+duplicate moved classes, or lazy `__getattr__`.
 
 ## Version and publication boundary
 

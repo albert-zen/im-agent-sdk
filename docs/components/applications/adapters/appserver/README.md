@@ -65,6 +65,6 @@ diagnostic facts and internal summaries now live at
 connection/queue values are owned by `src/imagent/interaction/diagnostics.py`,
 and Application diagnostic facts are owned by
 `src/imagent/applications/diagnostics.py`. The historical
-`src/imagent/diagnostics.py` remains an explicit mixed transition facade for
-the remaining Gateway values and exact Application re-exports. No aggregate
-package facade is introduced.
+`src/imagent/diagnostics.py` remains an explicit exact transition facade for
+the Gateway values and Application re-exports. No aggregate package facade is
+introduced.

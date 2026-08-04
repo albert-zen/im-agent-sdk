@@ -9,10 +9,6 @@ from itertools import islice
 from types import MappingProxyType
 from typing import Protocol
 
-from ...diagnostics import (
-    DeliveryOutcomeObserverDiagnosticFacts,
-    DeliveryOutcomeObserverFailureCode,
-)
 from ...interaction.channels.contract import (
     DeliveryItemReceipt,
     DeliveryReceipt,
@@ -20,6 +16,10 @@ from ...interaction.channels.contract import (
 )
 from ...interaction.media import AttachmentContent, AttachmentHandle, LocalPath, RemoteUrl
 from ...interaction.messages import OutboundMessage, TextContent
+from ..diagnostics import (
+    DeliveryOutcomeObserverDiagnosticFacts,
+    DeliveryOutcomeObserverFailureCode,
+)
 
 
 class DeliveryOutcomeErrorCode(StrEnum):

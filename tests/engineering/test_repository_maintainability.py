@@ -84,7 +84,7 @@ class ComponentMapTests(unittest.TestCase):
         component_map = copy.deepcopy(load_component_map())
         component_map["structural_status"]["formal_facades"].append(
             {
-                "path": "src/imagent/diagnostics.py",
+                "path": "src/imagent/gateway/__init__.py",
                 "owner": "gateway.diagnostics",
                 "rationale": "Invalid mixed transition declaration for test coverage.",
             }

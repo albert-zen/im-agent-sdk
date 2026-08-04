@@ -18,7 +18,6 @@ from imagent.contracts import (
     TextContent,
     derive_client_message_id,
 )
-from imagent.diagnostics import InboundContentTransformFailureCode
 from imagent.gateway import (
     GatewayExtensions,
     GatewayLimits,
@@ -26,6 +25,7 @@ from imagent.gateway import (
     ImAgentGateway,
     InboundContentTransformer,
 )
+from imagent.gateway.diagnostics import InboundContentTransformFailureCode
 from imagent.gateway.input.content_transformation import (
     InboundContentTransformationCapacityError,
     InboundContentTransformationError,
