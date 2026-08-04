@@ -6,7 +6,6 @@ import sys
 import unittest
 from datetime import UTC, datetime
 
-from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AgentMessage,
     AttachmentContent,
@@ -40,7 +39,10 @@ from imagent.gateway.delivery import outcome_observation as outcome_observation_
 from imagent.gateway.delivery.outcome_observation import (
     DeliveryOutcomeObserverRuntime,
 )
-from imagent.gateway.persistence.memory import InMemoryDeliverySubmissionRepository
+from imagent.gateway.persistence.memory import (
+    InMemoryBindingRepository,
+    InMemoryDeliverySubmissionRepository,
+)
 from imagent.gateway.presentation import (
     OutboundPresentationContext,
     ProjectionPresentationOrigin,

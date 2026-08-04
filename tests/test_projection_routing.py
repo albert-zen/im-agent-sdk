@@ -11,7 +11,6 @@ from imagent.adapters import (
     ProjectionRouteConflict,
     ProjectionRouteRepository,
 )
-from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     ActivateNativeThread,
     AgentInput,
@@ -36,6 +35,7 @@ from imagent.contracts import (
     ThreadRef,
 )
 from imagent.gateway import GatewayRepositories, ImAgentGateway
+from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.projections import (
     InMemoryProjectionRouteRepository,
     ProjectionWorkerState,

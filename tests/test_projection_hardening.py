@@ -10,7 +10,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from imagent.adapters import ApplicationInputDispatchHandler, IdempotencyClaimStatus
-from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AcceptedTurn,
     AgentEvent,
@@ -46,6 +45,7 @@ from imagent.contracts import (
 from imagent.controllers import ControllerActions
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import DeliveryCoordinator, DeliveryCoordinatorConfig
+from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.gateway.presentation import OutboundPresentationContext
 from imagent.projection_runtime import TurnAcceptanceBufferOverflow
 from imagent.projections import (

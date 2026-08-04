@@ -9,7 +9,9 @@ credential, Agent execution state, durable job, spool, or outbox.
 
 - state contracts — immutable binding, route, checkpoint, correlation, and
   submission records;
-- repository contracts — atomic typed mutation ports and conflicts;
+- [repository contracts](repository-contracts/design.md) and
+  [testing](repository-contracts/testing.md) — atomic typed mutation ports and
+  conflicts;
 - [memory](memory/design.md) and [testing](memory/testing.md) — process-local
   reference repositories, rebuilt empty after restart;
 - idempotency — fenced inbound/outbound claims;

@@ -89,6 +89,11 @@ against an expected opaque Agent item ID; implementations never infer ordering
 from that ID. Correlation bulk deletion requires at least one explicit
 selector.
 
+`BindingConflict` has moved to its Gateway repository-contract owner and is no
+longer defined beside the process-local implementation. The historical Ports
+module still owns the `BindingRepository` Protocol until its complete focused
+extraction; this mechanical split does not change that Protocol.
+
 `DeliveryAuthorizer.authenticate` converts an opaque untrusted credential into
 a trusted `DeliveryPrincipal`; the caller cannot declare its own effective
 scope. `DeliverySubmissionRepository.reserve_delivery_submission` is atomic

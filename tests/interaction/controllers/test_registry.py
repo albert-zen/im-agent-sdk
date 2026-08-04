@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from typing import cast
 
 from imagent.adapters import IdempotencyClaimStatus
-from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AttachmentContent,
     ConversationRef,
@@ -16,6 +15,7 @@ from imagent.contracts import (
     TextContent,
 )
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
+from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.inbound_admission import inbound_idempotency_identity
 from imagent.interaction.controllers import (
     CommandArgumentContract,

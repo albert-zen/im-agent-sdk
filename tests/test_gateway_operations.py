@@ -9,7 +9,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
-from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     ActivateNativeThread,
     ApplicationRef,
@@ -50,6 +49,7 @@ from imagent.contracts import (
 from imagent.controllers import MarkdownRequestPresenter, SlashController
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import DeliveryCoordinator, DeliveryCoordinatorConfig
+from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.projections import (
     InMemoryProjectionRouteRepository,
     derive_projection_route_id,

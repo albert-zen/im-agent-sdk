@@ -8,7 +8,6 @@ from types import SimpleNamespace
 from typing import cast
 
 from imagent.applications.t3 import T3ApplicationAdapter
-from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import ProjectMode, ThreadRef
 from imagent.diagnostics import (
     ApplicationDiagnosticFacts,
@@ -22,6 +21,7 @@ from imagent.diagnostics import (
     summarize_projection_health,
 )
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.projections import ProjectionWorkerHealth, ProjectionWorkerState
 from imagent.testing.fakes import FakeAgentApplicationAdapter
 

@@ -18,9 +18,23 @@ projection routes, request correlations, and proactive delivery submissions.
 Each implementation preserves the same conflict, fencing, compare-and-swap,
 and immutable-identity rules as its repository contract.
 
-It does not own repository Protocols, state values, routing/delivery policy,
+It does not own repository Protocols or conflict types, state values, routing/delivery policy,
 message or artifact content, a retry scheduler, SQLite transactions, or a
 durable recovery promise.
+
+## Conversation binding semantics
+
+`InMemoryBindingRepository` stores at most one current binding for each stable
+`ConversationRef`. `put` validates the complete passive binding value while
+holding one process-local lock, compares an optional expected revision, and
+stores a freshly timestamped record whose revision is exactly one greater than
+the current value. `delete` performs the same expected-revision comparison
+before removal. A stale comparison raises the repository-contract-owned
+`BindingConflict` without changing state.
+
+The implementation does not coordinate projection routes, start or observe an
+Application Thread, infer a retry, or retain history. Gateway remains the sole
+owner of the `foreground_only` prepare-route/binding-CAS orchestration.
 
 ## Delivery submission semantics
 
@@ -67,8 +81,9 @@ src/imagent/gateway/persistence/memory.py
 tests/gateway/persistence/test_memory.py
 ```
 
-The other three in-memory repositories remain at their historical owners
-until separate mechanical slices move them into the same leaf. No
+The projection-route and request-correlation in-memory repositories remain at
+their historical owners until separate mechanical slices move them into this
+leaf. No
 compatibility implementation is duplicated.
 
 ## Authority

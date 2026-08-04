@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import unittest
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -8,16 +9,138 @@ from typing import cast
 
 from imagent.adapters import DeliverySubmissionCapacityError, DeliverySubmissionConflict
 from imagent.contracts import (
+    ApplicationRef,
+    ConversationBinding,
     ConversationRef,
     DeliveryRouteSnapshot,
     DeliverySubmissionOrigin,
     DeliverySubmissionRecord,
     DeliverySubmissionState,
     DestinationDeliveryRecord,
+    ThreadRef,
 )
 from imagent.gateway.delivery import proactive as proactive_owner
-from imagent.gateway.persistence.memory import InMemoryDeliverySubmissionRepository
+from imagent.gateway.persistence import BindingConflict
+from imagent.gateway.persistence import repository_contracts as repository_contract_owner
+from imagent.gateway.persistence.memory import (
+    InMemoryBindingRepository,
+    InMemoryDeliverySubmissionRepository,
+)
 from imagent.interaction.operations import ContractViolation
+
+
+class InMemoryBindingRepositoryTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self.repository = InMemoryBindingRepository()
+        self.conversation = ConversationRef("qq-primary", "c2c:user-1")
+
+    def test_binding_owners_are_exact_and_historical_module_is_absent(self) -> None:
+        self.assertIs(BindingConflict, repository_contract_owner.BindingConflict)
+        self.assertEqual(
+            InMemoryBindingRepository.__module__,
+            "imagent.gateway.persistence.memory",
+        )
+        self.assertIsNone(importlib.util.find_spec("imagent.bindings"))
+
+    async def test_put_assigns_monotonic_revision(self) -> None:
+        first = await self.repository.put(
+            ConversationBinding(
+                conversation_ref=self.conversation,
+                application_ref=ApplicationRef("zen-local"),
+            )
+        )
+        second = await self.repository.put(
+            ConversationBinding(
+                conversation_ref=self.conversation,
+                application_ref=ApplicationRef("zen-local"),
+                thread_ref=ThreadRef("zen-local", "thread-1"),
+            ),
+            expected_revision=first.revision,
+        )
+        self.assertEqual(first.revision, 1)
+        self.assertEqual(second.revision, 2)
+        self.assertIsNotNone(second.updated_at)
+        self.assertEqual(await self.repository.get(self.conversation), second)
+
+    async def test_put_rejects_stale_revision_without_mutation(self) -> None:
+        stored = await self.repository.put(
+            ConversationBinding(
+                conversation_ref=self.conversation,
+                application_ref=ApplicationRef("zen-local"),
+            )
+        )
+        with self.assertRaises(BindingConflict):
+            await self.repository.put(
+                ConversationBinding(
+                    conversation_ref=self.conversation,
+                    application_ref=ApplicationRef("t3-local"),
+                ),
+                expected_revision=0,
+            )
+        self.assertEqual(await self.repository.get(self.conversation), stored)
+
+    async def test_invalid_put_fails_before_mutation(self) -> None:
+        stored = await self.repository.put(
+            ConversationBinding(
+                conversation_ref=self.conversation,
+                application_ref=ApplicationRef("zen-local"),
+            )
+        )
+        with self.assertRaises(ContractViolation):
+            await self.repository.put(
+                ConversationBinding(
+                    conversation_ref=self.conversation,
+                    application_ref=ApplicationRef("zen-local"),
+                    thread_ref=ThreadRef("t3-local", "thread-other"),
+                ),
+                expected_revision=stored.revision,
+            )
+        self.assertEqual(await self.repository.get(self.conversation), stored)
+
+    async def test_concurrent_puts_serialize_revisions(self) -> None:
+        first, second = await asyncio.gather(
+            self.repository.put(
+                ConversationBinding(
+                    conversation_ref=self.conversation,
+                    application_ref=ApplicationRef("zen-local"),
+                )
+            ),
+            self.repository.put(
+                ConversationBinding(
+                    conversation_ref=self.conversation,
+                    application_ref=ApplicationRef("t3-local"),
+                )
+            ),
+        )
+        self.assertEqual({first.revision, second.revision}, {1, 2})
+        current = await self.repository.get(self.conversation)
+        self.assertIsNotNone(current)
+        assert current is not None
+        self.assertEqual(current.revision, 2)
+
+    async def test_fresh_repository_starts_without_binding_state(self) -> None:
+        await self.repository.put(
+            ConversationBinding(
+                conversation_ref=self.conversation,
+                application_ref=ApplicationRef("zen-local"),
+            )
+        )
+        restarted = InMemoryBindingRepository()
+        self.assertIsNone(await restarted.get(self.conversation))
+
+    async def test_delete_supports_revision_guard(self) -> None:
+        stored = await self.repository.put(
+            ConversationBinding(
+                conversation_ref=self.conversation,
+                application_ref=ApplicationRef("zen-local"),
+            )
+        )
+        with self.assertRaises(BindingConflict):
+            await self.repository.delete(self.conversation, expected_revision=0)
+        self.assertEqual(await self.repository.get(self.conversation), stored)
+
+        await self.repository.delete(self.conversation, expected_revision=stored.revision)
+        self.assertIsNone(await self.repository.get(self.conversation))
 
 
 def _submission() -> DeliverySubmissionRecord:

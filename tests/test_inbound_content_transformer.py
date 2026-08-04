@@ -7,7 +7,6 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AgentInput,
     AttachmentContent,
@@ -28,6 +27,7 @@ from imagent.gateway import (
     ImAgentGateway,
     InboundContentTransformer,
 )
+from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.inbound_content import (
     InboundContentTransformationCapacityError,
     InboundContentTransformationError,

@@ -14,6 +14,10 @@ When a repository port changes, also run binding/storage tests. When an
 Application or Channel port changes, run every concrete adapter's focused and
 vertical-slice tests.
 
+The binding mechanical split additionally asserts that memory and SQLite
+raise the one repository-contract-owned `BindingConflict` object; it does not
+change the `BindingRepository` structural signature.
+
 The reusable contract suite proves that a modern Channel accepts the admission
 callback through its lifecycle. Focused native/Gateway tests must additionally
 prove that durable admission happens before media preparation, a missing lease

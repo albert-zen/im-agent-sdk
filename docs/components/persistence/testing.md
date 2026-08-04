@@ -4,6 +4,8 @@ Required scenarios:
 
 - binding revisions increase monotonically;
 - stale put/delete revisions fail;
+- memory and SQLite use the exact same repository-contract conflict type, and
+  stale failures leave the current binding unchanged;
 - managed/flat/fixed binding invariants remain valid;
 - completed idempotency survives SQLite restart;
 - claims distinguish acquired, completed, and in-flight work;
