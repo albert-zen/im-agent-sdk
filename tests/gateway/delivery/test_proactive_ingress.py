@@ -36,8 +36,8 @@ from imagent.gateway.delivery.proactive_ingress import (
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryDeliverySubmissionRepository,
+    InMemoryProjectionRouteRepository,
 )
-from imagent.projections import InMemoryProjectionRouteRepository
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

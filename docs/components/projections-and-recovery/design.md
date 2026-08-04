@@ -29,6 +29,13 @@ It does not own:
 - native Application replay guarantees;
 - a synthetic restart-unsafe sequence or SDK event log.
 
+The process-local projection-route and Turn reply-correlation implementation
+now lives in `gateway.persistence.memory`. This component consumes only its
+repository Port. Stable projection ID derivation, active-route selection,
+delivery decisions, checkpoint convergence, worker health, and authoritative
+recovery remain here; the mechanical repository move does not transfer any of
+those policies into persistence.
+
 Typed interactive requests share route selection and per-route delivery
 serialization with message projection, but they do not advance transcript
 checkpoints. A Request Presenter produces one stable outbound delivery per

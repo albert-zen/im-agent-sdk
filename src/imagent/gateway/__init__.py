@@ -110,11 +110,7 @@ from ..interaction.operations import (
 )
 from ..keyed_locks import KeyedLockRegistry
 from ..projection_runtime import ThreadProjectionRuntime
-from ..projections import (
-    InMemoryProjectionRouteRepository,
-    ProjectionWorkerHealth,
-    RetryableDeliveryError,
-)
+from ..projections import ProjectionWorkerHealth, RetryableDeliveryError
 from ..request_correlations import InMemoryRequestCorrelationRepository
 from ..storage import InMemoryIdempotencyRepository
 from .delivery.coordination import DeliveryCoordinator
@@ -127,7 +123,10 @@ from .delivery.outcome_observation import (
 from .delivery.planning import DeliveryPlanningError
 from .delivery.proactive import ProactiveDeliveryService
 from .persistence import BindingConflict
-from .persistence.memory import InMemoryDeliverySubmissionRepository
+from .persistence.memory import (
+    InMemoryDeliverySubmissionRepository,
+    InMemoryProjectionRouteRepository,
+)
 from .presentation import (
     OutboundPresentationContext,
     OutboundPresentationRuntime,

@@ -42,13 +42,13 @@ from imagent.gateway.delivery.outcome_observation import (
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryDeliverySubmissionRepository,
+    InMemoryProjectionRouteRepository,
 )
 from imagent.gateway.presentation import (
     OutboundPresentationContext,
     ProjectionPresentationOrigin,
 )
 from imagent.projections import (
-    InMemoryProjectionRouteRepository,
     ProjectedAgentMessage,
     deliver_projected_message,
     derive_projection_delivery_id,

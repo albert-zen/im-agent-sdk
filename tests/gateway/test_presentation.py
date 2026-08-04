@@ -24,7 +24,10 @@ from imagent.contracts import (
 )
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway import presentation as presentation_owner
-from imagent.gateway.persistence.memory import InMemoryBindingRepository
+from imagent.gateway.persistence.memory import (
+    InMemoryBindingRepository,
+    InMemoryProjectionRouteRepository,
+)
 from imagent.gateway.presentation import (
     OutboundPresentationCapacityError,
     OutboundPresentationContext,
@@ -36,7 +39,6 @@ from imagent.gateway.presentation import (
     ProjectionPresentationOrigin,
 )
 from imagent.projections import (
-    InMemoryProjectionRouteRepository,
     ProjectedAgentMessage,
     RetryableDeliveryError,
     deliver_projected_message,

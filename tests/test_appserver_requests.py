@@ -38,8 +38,10 @@ from imagent.contracts import (
 from imagent.controllers import MarkdownRequestPresenter
 from imagent.events import EventStreamReset
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
-from imagent.gateway.persistence.memory import InMemoryBindingRepository
-from imagent.projections import InMemoryProjectionRouteRepository
+from imagent.gateway.persistence.memory import (
+    InMemoryBindingRepository,
+    InMemoryProjectionRouteRepository,
+)
 from imagent.request_correlations import InMemoryRequestCorrelationRepository
 from imagent.testing import FakeChannelAdapter
 

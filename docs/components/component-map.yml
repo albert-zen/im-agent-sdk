@@ -834,13 +834,13 @@ components:
       target: []
     dependencies: [interaction.messages, applications.application-contract, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Process-local state is intentionally non-durable and is rebuilt empty after restart.
-    current_code: [src/imagent/projections.py, src/imagent/request_correlations.py, src/imagent/gateway/persistence/memory.py]
+    current_code: [src/imagent/request_correlations.py, src/imagent/gateway/persistence/memory.py]
     target_code: [src/imagent/gateway/persistence/memory.py]
     current_tests: [tests/test_projection_routing.py, tests/test_storage.py, tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_submission_identity.py, tests/gateway/delivery/test_proactive_delivery.py]
     target_tests: [tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_submission_identity.py]
     authoritative_docs: [docs/components/gateway/persistence/memory/design.md, docs/components/gateway/persistence/memory/testing.md, docs/components/persistence/design.md, docs/components/persistence/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md]
-    gaps: [projection route and request-correlation in-memory implementations remain colocated with their current semantic/runtime modules]
+    gaps: [request-correlation in-memory implementation remains colocated with its current semantic/SQLite module]
 
   gateway.persistence.idempotency:
     id: gateway.persistence.idempotency
@@ -1470,8 +1470,8 @@ structural_status:
       owners: [gateway.routing.projection-routes, gateway.projection.checkpoints, gateway.projection.request-correlation, gateway.projection.recovery]
       reason: Per-route ordering currently coordinates several independently documented decisions.
     src/imagent/projections.py:
-      owners: [gateway.routing.projection-routes, gateway.projection.observation, gateway.projection.checkpoints, gateway.presentation, gateway.persistence.memory]
-      reason: Projection values, in-memory repository, delivery helper, and health types are co-located.
+      owners: [gateway.routing.projection-routes, gateway.projection.observation, gateway.projection.checkpoints, gateway.presentation]
+      reason: Projection values, delivery helper, and health types remain co-located after the in-memory repository moved to its persistence owner.
     src/imagent/request_correlations.py:
       owners: [gateway.projection.request-correlation, gateway.persistence.memory, gateway.persistence.sqlite, gateway.persistence.row-mapping]
       reason: Correlation semantics, in-memory implementation, SQLite mixin, and row mapping share one module.

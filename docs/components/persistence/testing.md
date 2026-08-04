@@ -19,6 +19,8 @@ Required scenarios:
 - an owner-checked refresh extends only an `in_flight` lease and is required
   before a prepared inbound message enters Gateway processing;
 - projection routes survive restart without transcript content;
+- the process-local projection repository has one memory owner, starts empty,
+  and is not retained by the projection semantic module;
 - route refresh preserves checkpoints and rejects conflicting explicit values;
 - concurrent checkpoint advances use compare-and-swap and cannot overwrite a
   newer boundary;

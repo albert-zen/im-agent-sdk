@@ -86,6 +86,12 @@ Bounded delivery/backpressure and receipt-aware retry are tested in the
 delivery planning and coordination component; projection tests prove this
 component enters that same injected Coordinator path.
 
+Repository ownership checks additionally live in
+`tests/gateway/persistence/test_memory.py`; they assert the implementation is
+not retained or re-exported from the historical projection module. The shared
+memory/SQLite route conformance cases remain in `test_storage.py` until the
+durable persistence test tree is mechanically reorganized.
+
 Run:
 
 ```sh
