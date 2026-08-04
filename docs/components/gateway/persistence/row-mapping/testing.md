@@ -18,14 +18,21 @@ Row-mapping tests must prove:
 - legacy shapes are accepted only after the SQLite migration owner has
   transformed them into the current explicit schema.
 
-Current coverage runs through the durable adapter:
+Focused pure-mapping coverage lives in
+`tests/gateway/persistence/test_row_mapping.py` and runs without opening a
+database. Durable integration coverage remains in `tests/test_storage.py`:
 
 ```sh
-PYTHONPATH=src python -m unittest tests.test_storage -v
+PYTHONPATH=src python -m unittest \
+  tests.gateway.persistence.test_row_mapping \
+  tests.test_storage -v
 ```
 
-Focused durable-adapter coverage injects malformed current rows and proves
-that reads fail without mutating, repairing, replaying, or widening authority.
-It also opens the immediately supported legacy schema, proves that the SQLite
-owner performs its documented upgrade, and verifies that the resulting valid
-rows survive restart. The legacy fixture is never handed directly to a mapper.
+The focused suite proves the exact mapper output and identities, bounded
+response/receipt JSON validation, NULL/empty-string sentinel and enum behavior,
+timezone failure, deterministic malformed-row errors, and side-effect freedom.
+The durable suite injects malformed current rows and proves that reads fail
+without mutating, repairing, replaying, or widening authority. It also opens
+the immediately supported legacy schema, proves that the SQLite owner performs
+its documented upgrade, and verifies that the resulting valid rows survive
+restart. The legacy fixture is never handed directly to a mapper.

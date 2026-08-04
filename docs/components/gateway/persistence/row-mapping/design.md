@@ -63,17 +63,26 @@ into a new repository record.
 
 ## Structure
 
-Binding, route, and Turn-correlation helpers currently live in
-`sqlite_rows.py`. Request-correlation and delivery-submission row helpers
-remain mixed into their transaction mixins, and a few SQL argument mappings
-remain in `storage.py`. These are explained split candidates. Although it is
-currently colocated in `sqlite_rows.py`, `merge_projection_route` is not a
-mapper: it enforces endpoint conflicts and preserves a prior checkpoint during
-a route write. That mutation policy belongs to the SQLite owner and must move
-with it. The target mechanical slice consolidates only pure conversion in
-`gateway/persistence/row_mapping.py`, without moving SQL mutation order or
-creating a public API, and without changing this validation or compatibility
-decision.
+The pure mapper is implemented in
+`src/imagent/gateway/persistence/row_mapping.py`. It owns binding, route,
+Turn-correlation, request-correlation, delivery-submission, destination, and
+receipt conversion, plus the narrow scalar and storage-key helpers needed by
+those conversions. Encoders return SQLite scalar/JSON values or parameter
+tuples; they never execute SQL. Decoders reconstruct complete typed values and
+apply the owning state validator where one exists.
+
+`storage.py`, `request_correlations.py`, and
+`gateway/delivery/submissions.py` retain their transaction-owner methods,
+schema initialization, SQL selection/insertion/update ordering, and mutation
+policy while calling the mapper. `_canonical_metadata` remains owned by
+`gateway.delivery.submissions`; it is delivery identity behavior rather than a
+row codec. The historical `sqlite_rows.py` module now retains only
+`merge_projection_route`, which is SQLite mutation policy and is not part of
+the mapper; the later whole-owner move may co-locate it with `SQLiteGatewayState`.
+
+This is a mechanical ownership move: it does not create a public facade,
+second persistence path, generic serializer, or new durable state, and it does
+not change the validation or compatibility decision above.
 
 ## Authority
 

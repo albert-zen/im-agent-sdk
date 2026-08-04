@@ -73,12 +73,12 @@ upgrade decision and tests against the immediately supported legacy shape.
 
 The transaction owner currently lives in `storage.py` and composes request-
 correlation and delivery-submission mixins. This is one intentional owner, not
-three independent databases. Row conversion still mixed into those modules is
-a separate extraction gap. `sqlite_rows.py` also contains
-`merge_projection_route`, but that helper preserves checkpoint evidence and
-enforces endpoint conflicts, so it is SQLite mutation policy rather than pure
-row mapping. It must move with the SQLite transaction owner and stay out of
-the target pure mapper. A later mechanical slice may move the whole owner to
+three independent databases. Pure row conversion now lives in
+`gateway/persistence/row_mapping.py`; the mixins retain only the SQL wrappers
+and transaction policy that call it. `merge_projection_route` preserves
+checkpoint evidence and enforces endpoint conflicts, so it remains in the
+SQLite-owned `sqlite_rows.py` helper and stays out of the pure mapper. A later
+mechanical slice may move the whole owner to
 `gateway/persistence/sqlite.py`; it must not create parallel connections,
 transactions, schemas, or compatibility implementations.
 

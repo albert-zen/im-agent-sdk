@@ -948,7 +948,7 @@ components:
     target_tests: [tests/gateway/persistence/test_sqlite.py, tests/gateway/persistence/test_submission_identity.py]
     authoritative_docs: [docs/components/gateway/persistence/sqlite/design.md, docs/components/gateway/persistence/sqlite/testing.md, docs/components/persistence/design.md, docs/components/persistence/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [three mixin files share one intentional transaction owner but also contain separable row mapping, sqlite_rows.py colocates SQLite route mutation policy with pure row conversion]
+    gaps: [three mixin files share one intentional transaction owner; sqlite_rows.py retains route mutation policy until a later mechanical move may co-locate that owner in gateway/persistence/sqlite.py]
 
   gateway.persistence.row-mapping:
     id: gateway.persistence.row-mapping
@@ -962,15 +962,15 @@ components:
     public_exports:
       current: []
       target: []
-    dependencies: [interaction.messages, applications.application-contract, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
+    dependencies: [interaction.messages, applications.application-contract, applications.requests, interaction.channels.channel-contract, gateway.persistence.state-contracts]
     state_recovery: Stateless pure mapping rejects malformed current rows after complete typed validation; only the SQLite owner transforms the immediately supported legacy route shape before mapping.
-    current_code: [src/imagent/sqlite_rows.py, src/imagent/gateway/delivery/submissions.py, src/imagent/request_correlations.py, src/imagent/storage.py]
+    current_code: [src/imagent/gateway/persistence/row_mapping.py]
     target_code: [src/imagent/gateway/persistence/row_mapping.py]
-    current_tests: [tests/test_storage.py]
+    current_tests: [tests/gateway/persistence/test_row_mapping.py]
     target_tests: [tests/gateway/persistence/test_row_mapping.py]
     authoritative_docs: [docs/components/gateway/persistence/row-mapping/design.md, docs/components/gateway/persistence/row-mapping/testing.md, docs/components/persistence/design.md, docs/engineering/repository-maintainability/design.md]
     adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [delivery/request row helpers remain mixed into SQLite mixins]
+    gaps: []
 
   gateway.diagnostics:
     id: gateway.diagnostics
@@ -1537,17 +1537,11 @@ structural_status:
       owners: [gateway.routing.projection-routes, gateway.projection.observation, gateway.projection.checkpoints, gateway.presentation]
       reason: Projection values, delivery helper, and health types remain co-located after the in-memory repository moved to its persistence owner.
     src/imagent/request_correlations.py:
-      owners: [gateway.projection.request-correlation, gateway.persistence.memory, gateway.persistence.sqlite, gateway.persistence.row-mapping]
-      reason: The in-memory repository class moved to memory.py, while shared pure correlation helpers, SQLite mixin, and row mapping remain co-located here for later focused slices.
+      owners: [gateway.projection.request-correlation, gateway.persistence.memory, gateway.persistence.sqlite]
+      reason: The in-memory repository class moved to memory.py; shared correlation policy helpers and the SQLite mixin remain co-located here until the later SQLite-owner move.
     src/imagent/gateway/delivery/submissions.py:
-      owners: [gateway.delivery.submissions, gateway.delivery.proactive-delivery, gateway.persistence.sqlite, gateway.persistence.row-mapping]
-      reason: Submission state transitions and their SQLite persistence/mapping are co-located; the proactive runtime consumes the same file's identity helpers while its contract seam is split into proactive.py.
-    src/imagent/storage.py:
-      owners: [gateway.persistence.sqlite, gateway.persistence.row-mapping]
-      reason: The intentional all-repository SQLite transaction owner and its projection row mapping share one module.
-    src/imagent/sqlite_rows.py:
-      owners: [gateway.persistence.sqlite, gateway.persistence.row-mapping]
-      reason: Pure binding, route, and Turn-correlation conversion shares the file with merge_projection_route, whose endpoint-conflict and checkpoint-preservation mutation policy belongs to the SQLite transaction owner.
+      owners: [gateway.delivery.submissions, gateway.delivery.proactive-delivery, gateway.persistence.sqlite]
+      reason: Submission identity behavior and SQL transaction wrappers remain co-located; pure row mapping moved to gateway.persistence.row-mapping while the proactive runtime consumes this file's identity helpers.
     src/imagent/applications/adapters/appserver/_base.py:
       owners: [applications.adapters.codex, applications.adapters.zen]
       reason: Private shared App Server base owns typed start/input preparation, verified local-image epochs, the common STARTED/CREATE_NEW fence with no expected Turn ID, native turn/start, and common ordered normalization; Codex alone owns steer enablement, active-Turn selection, STEERED/PRESERVE_EXISTING classification with the active Turn ID, and turn/steer, while Zen remains start-only. No public aggregate facade is exposed.

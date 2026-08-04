@@ -12,6 +12,7 @@ from .gateway.delivery.submissions import (
     SQLiteDeliverySubmissionMixin,
     initialize_delivery_submission_schema,
 )
+from .gateway.persistence import row_mapping
 from .gateway.persistence.repository_contracts import (
     BindingConflict,
     IdempotencyClaimStatus,
@@ -182,7 +183,7 @@ class SQLiteGatewayState(
                     conversation.native_conversation_id,
                 ),
             ).fetchone()
-        return sqlite_rows.binding_from_row(row) if row is not None else None
+        return row_mapping.binding_from_row(row) if row is not None else None
 
     async def put(
         self,
@@ -237,27 +238,7 @@ class SQLiteGatewayState(
                         revision = excluded.revision,
                         updated_at = excluded.updated_at
                     """,
-                    (
-                        stored.conversation_ref.channel_instance_id,
-                        stored.conversation_ref.native_conversation_id,
-                        (
-                            stored.application_ref.application_instance_id
-                            if stored.application_ref is not None
-                            else None
-                        ),
-                        (
-                            stored.project_ref.native_project_id
-                            if stored.project_ref is not None
-                            else None
-                        ),
-                        (
-                            stored.thread_ref.native_thread_id
-                            if stored.thread_ref is not None
-                            else None
-                        ),
-                        stored.revision,
-                        updated_at.isoformat(),
-                    ),
+                    row_mapping.binding_to_row(stored),
                 )
                 self._connection.commit()
                 return stored
@@ -322,9 +303,9 @@ class SQLiteGatewayState(
                       AND thread_id = ?
                     ORDER BY updated_at
                     """,
-                    sqlite_rows.thread_storage_key(thread_ref),
+                    row_mapping.thread_storage_key(thread_ref),
                 ).fetchall()
-        return tuple(sqlite_rows.projection_route_from_row(row) for row in rows)
+        return tuple(row_mapping.projection_route_from_row(row) for row in rows)
 
     async def put_projection_route(
         self,
@@ -365,7 +346,7 @@ class SQLiteGatewayState(
                       AND project_id = ?
                       AND thread_id = ?
                     """,
-                    sqlite_rows.thread_storage_key(stored.thread_ref),
+                    row_mapping.thread_storage_key(stored.thread_ref),
                 )
                 self._write_projection_route(stored)
                 self._connection.commit()
@@ -440,7 +421,7 @@ class SQLiteGatewayState(
         where = """
             application_instance_id = ? AND project_id = ? AND thread_id = ?
             """
-        parameters: tuple[object, ...] = sqlite_rows.thread_storage_key(thread_ref)
+        parameters: tuple[object, ...] = row_mapping.thread_storage_key(thread_ref)
         if conversation_ref is not None:
             where += " AND channel_instance_id = ? AND native_conversation_id = ?"
             parameters += (
@@ -469,9 +450,9 @@ class SQLiteGatewayState(
                   AND thread_id = ?
                   AND turn_id = ?
                 """,
-                (*sqlite_rows.thread_storage_key(thread_ref), turn_id),
+                (*row_mapping.thread_storage_key(thread_ref), turn_id),
             ).fetchone()
-        return sqlite_rows.turn_reply_correlation_from_row(row) if row is not None else None
+        return row_mapping.turn_reply_correlation_from_row(row) if row is not None else None
 
     async def list_turn_reply_correlations(
         self,
@@ -491,9 +472,9 @@ class SQLiteGatewayState(
                       AND thread_id = ?
                     ORDER BY created_at
                     """,
-                    sqlite_rows.thread_storage_key(thread_ref),
+                    row_mapping.thread_storage_key(thread_ref),
                 ).fetchall()
-        return tuple(sqlite_rows.turn_reply_correlation_from_row(row) for row in rows)
+        return tuple(row_mapping.turn_reply_correlation_from_row(row) for row in rows)
 
     async def put_turn_reply_correlation(
         self,
@@ -523,16 +504,7 @@ class SQLiteGatewayState(
                 )
                 DO NOTHING
                 """,
-                (
-                    correlation.correlation_id,
-                    *sqlite_rows.thread_storage_key(correlation.thread_ref),
-                    correlation.turn_id,
-                    correlation.client_message_id,
-                    correlation.conversation_ref.channel_instance_id,
-                    correlation.conversation_ref.native_conversation_id,
-                    correlation.reply_to_message_id,
-                    correlation.created_at.isoformat(),
-                ),
+                row_mapping.turn_reply_correlation_to_row(correlation),
             )
             self._connection.commit()
             row = self._connection.execute(
@@ -543,11 +515,11 @@ class SQLiteGatewayState(
                   AND thread_id = ?
                   AND turn_id = ?
                 """,
-                (*sqlite_rows.thread_storage_key(correlation.thread_ref), correlation.turn_id),
+                (*row_mapping.thread_storage_key(correlation.thread_ref), correlation.turn_id),
             ).fetchone()
             if row is None:
                 raise RuntimeError("Turn reply correlation insert did not persist a row")
-            current = sqlite_rows.turn_reply_correlation_from_row(row)
+            current = row_mapping.turn_reply_correlation_from_row(row)
             if not _same_turn_reply_correlation(current, correlation):
                 raise TurnReplyCorrelationConflict(
                     "Turn reply correlation already belongs to another IM input"
@@ -568,7 +540,7 @@ class SQLiteGatewayState(
                   AND thread_id = ?
                   AND turn_id = ?
                 """,
-                (*sqlite_rows.thread_storage_key(thread_ref), turn_id),
+                (*row_mapping.thread_storage_key(thread_ref), turn_id),
             )
             self._connection.commit()
             return cursor.rowcount == 1
@@ -592,7 +564,7 @@ class SQLiteGatewayState(
                     "thread_id = ?",
                 )
             )
-            parameters.extend(sqlite_rows.thread_storage_key(thread_ref))
+            parameters.extend(row_mapping.thread_storage_key(thread_ref))
         if conversation_ref is not None:
             clauses.extend(
                 (
@@ -641,16 +613,7 @@ class SQLiteGatewayState(
                 checkpointed_at = excluded.checkpointed_at,
                 updated_at = excluded.updated_at
             """,
-            (
-                route.route_id,
-                *sqlite_rows.thread_storage_key(route.thread_ref),
-                route.conversation_ref.channel_instance_id,
-                route.conversation_ref.native_conversation_id,
-                route.reply_to_message_id,
-                route.checkpoint_agent_item_id,
-                (route.checkpointed_at.isoformat() if route.checkpointed_at is not None else None),
-                updated_at.isoformat(),
-            ),
+            row_mapping.projection_route_to_row(route, updated_at=updated_at),
         )
 
     def _read_projection_route(
@@ -661,7 +624,7 @@ class SQLiteGatewayState(
             "SELECT * FROM thread_projection_routes WHERE route_id = ?",
             (route_id,),
         ).fetchone()
-        return sqlite_rows.projection_route_from_row(row) if row is not None else None
+        return row_mapping.projection_route_from_row(row) if row is not None else None
 
     def _read_projection_route_for_endpoints(
         self,
@@ -677,12 +640,12 @@ class SQLiteGatewayState(
               AND native_conversation_id = ?
             """,
             (
-                *sqlite_rows.thread_storage_key(route.thread_ref),
+                *row_mapping.thread_storage_key(route.thread_ref),
                 route.conversation_ref.channel_instance_id,
                 route.conversation_ref.native_conversation_id,
             ),
         ).fetchone()
-        return sqlite_rows.projection_route_from_row(row) if row is not None else None
+        return row_mapping.projection_route_from_row(row) if row is not None else None
 
     async def claim(
         self,
@@ -730,7 +693,7 @@ class SQLiteGatewayState(
                     self._connection.rollback()
                     raise ValueError("idempotency status is invalid")
                 try:
-                    updated_at = sqlite_rows.decode_datetime(row["updated_at"], "updated_at")
+                    updated_at = row_mapping.decode_datetime(row["updated_at"], "updated_at")
                 except ValueError:
                     self._connection.rollback()
                     raise

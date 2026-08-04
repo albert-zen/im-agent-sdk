@@ -70,11 +70,13 @@ when two first-reservation contenders race after independently resolving their
 destinations, and at each repository boundary; it prevents the losing caller
 or a non-conforming repository from silently changing the pinned set.
 
-During component rollout, SQLite table/row encoding remains co-located in the
-submission module and is therefore an explicit shared path with
-`gateway.persistence.sqlite` and `gateway.persistence.row-mapping`. A later
-focused persistence split may move that mechanical encoding; it must not
-duplicate the repository or change submission transitions.
+SQLite table access remains co-located with this submission transaction mixin,
+but pure row encoding/decoding is owned by
+`gateway.persistence.row_mapping`. The mixin calls that leaf for scalar/JSON
+values while retaining SQL ordering, reservation CAS, destination mutation,
+and schema initialization. `_canonical_metadata` remains in this delivery
+leaf and is never recreated by persistence row mapping; moving the codec must
+not duplicate the repository or change submission transitions.
 
 ## Public surface
 
