@@ -2,10 +2,11 @@
 
 ## Current evidence
 
-`tests/test_t3_client.py` (`HttpT3ClientTests`) currently covers one
-authenticated happy-path request/response flow. It does not yet cover
-non-object responses, bounded/redacted error values, or the full client
-lifecycle; those remain required target cases.
+`tests/applications/adapters/test_t3.py` (`HttpT3ClientTests` plus focused
+adapter cases) covers the authenticated HTTP request/response flow, target
+facade identity, and the co-located owner. It also covers baseline admission,
+active-lock capacity, deterministic seen-message/terminal-Turn eviction, and
+native-history recovery after finite dedupe retention.
 `tests/conformance/test_adapter_contracts.py` exercises
 the public Application contract. `tests/test_gateway_vertical_slice.py`
 covers T3 Projects/Threads/history/input and distinct native behavior.
@@ -13,20 +14,27 @@ covers T3 Projects/Threads/history/input and distinct native behavior.
 recoverable activity presenter, stable identity, its finite presentation
 window, cancellation, and replay-safe history association.
 
-Evidence must preserve native acceptance before presenter work, stable IDs,
-explicit gaps, authoritative history recovery, no synthetic connection
-diagnostics, and unsupported interactive requests. Focused adapter tests must
-also establish finite eviction/capacity for poll and dedupe state before that
-state is described as bounded.
+Evidence must preserve native acceptance before observation/presenter work,
+stable IDs, explicit gaps, authoritative history recovery, no synthetic
+connection diagnostics, and unsupported interactive requests. Focused owner
+tests must prove callback failure performs zero dispatch; dispatch, follow-up
+read, cancellation, and missing-ID failures become one
+`ApplicationInputOutcomeUnknown` with no fallback; the baseline reservation is
+released for later capacity use; and `AcceptedTurn` returns before any
+post-identity publish/presentation work. They must also prove active baseline
+authority is never evicted, capacity rejects before callback/native mutation,
+send-lock waiters/owners are cancellation-safe, and cache windows evict the
+oldest stable identity deterministically without creating a local transcript
+or durable spool.
 
 ## Target evidence and verification
 
-The target mirrored suite is `tests/applications/adapters/test_t3.py`; the
-existing conformance, vertical, and presentation suites remain affected
-evidence until physical test movement. Run:
+The target owner suite is `tests/applications/adapters/test_t3.py`; the
+existing conformance, vertical, diagnostics, and presentation suites remain
+affected evidence. Run:
 
 ```sh
-uv run python -m unittest tests.test_t3_client -v
+uv run python -m unittest tests.applications.adapters.test_t3 -v
 uv run python -m unittest tests.conformance.test_adapter_contracts -v
 uv run python -m unittest tests.test_gateway_vertical_slice -v
 ```

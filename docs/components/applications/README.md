@@ -42,9 +42,9 @@ structural gap before physical reorganization.
 The older aggregate [Application adapter design](../application-adapters/design.md)
 and [testing guide](../application-adapters/testing.md) remain cross-adapter
 transition context. They do not replace the leaf ownership records in the
-adapter subtree. The App Server transport is the first physical move; the
-remaining native adapter code stays in historical paths until later focused
-mechanical slices move it.
+adapter subtree. The App Server, Codex, Zen, and T3 leaves now use their
+focused target owners; the historical paths are not retained as internal
+compatibility implementations.
 
 ## Shared constraints
 

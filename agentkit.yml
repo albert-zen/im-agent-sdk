@@ -522,9 +522,8 @@ components:
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/applications/__init__.py
-      - src/imagent/applications/t3.py
-      - src/imagent/applications/t3_client.py
-      - tests/test_t3_client.py
+      - src/imagent/applications/adapters/t3.py
+      - tests/applications/adapters/test_t3.py
     docs:
       - docs/components/applications/adapters/README.md
       - docs/components/applications/adapters/t3/design.md
@@ -753,12 +752,12 @@ maintainability:
         - src/imagent/applications/adapters/appserver/_base.py
         - src/imagent/applications/adapters/codex.py
         - src/imagent/applications/adapters/zen.py
-        - src/imagent/applications/t3.py
-      max_lines: 1100
-      max_functions: 45
-      max_classes: 5
+        - src/imagent/applications/adapters/t3.py
+      max_lines: 1800
+      max_functions: 65
+      max_classes: 8
       mode: warn
-      guidance: Keep native translation cohesive; split protocol clients or pure mapping helpers when a native adapter grows beyond one reviewable unit.
+      guidance: Keep native translation cohesive; T3 intentionally co-locates its HTTP client and adapter for this physical slice, while future protocol extraction requires a focused ownership decision.
     - name: appserver-native-mapping
       paths:
         - src/imagent/applications/adapters/appserver/mapping.py

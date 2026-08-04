@@ -68,7 +68,11 @@ The private base shares typed start/input preparation, the common
 normalization; Codex owns steer selection, active-Turn discovery,
 `STEERED`/`PRESERVE_EXISTING` classification with the active Turn ID, and
 `turn/steer`, while Zen is start-only.
-T3 remains reserved for its later one-issue/one-PR mechanical slice.
+T3 is co-located at `src/imagent/applications/adapters/t3.py` with its focused
+owner tests. It remains a separate native adapter: its HTTP request/response
+client has no synthetic long-lived connection epoch, and its bounded process
+state recovers through authoritative native history rather than a local
+transcript or spool.
 
 The cross-adapter overview remains available as [transition design
 context](../../application-adapters/design.md) and [cross-adapter testing

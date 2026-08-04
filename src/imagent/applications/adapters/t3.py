@@ -6,22 +6,28 @@ import inspect
 import logging
 import mimetypes
 import uuid
+from collections import OrderedDict
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
+from urllib.parse import quote
 
-from ..diagnostics import ApplicationDiagnosticFacts
-from ..interaction.media import (
+import httpx
+
+from ...contracts.errors import ApplicationInputOutcomeUnknown
+from ...diagnostics import ApplicationDiagnosticFacts
+from ...interaction.media import (
     AttachmentContent,
     AttachmentSourceKind,
     configure_shared_filesystem_root,
     resolve_local_attachment,
 )
-from ..interaction.messages import MessageRole, TextContent, TextFormat
-from ..interaction.operations import operation_error
-from .capabilities import (
+from ...interaction.messages import MessageRole, TextContent, TextFormat
+from ...interaction.operations import operation_error
+from ..capabilities import (
     ApplicationCapabilities,
     EventSequenceScope,
     ProjectCapabilities,
@@ -31,7 +37,7 @@ from .capabilities import (
     ThreadCapabilities,
     ThreadDeletionCapability,
 )
-from .contract import (
+from ..contract import (
     AcceptedTurn,
     AgentInput,
     AgentMessage,
@@ -52,14 +58,14 @@ from .contract import (
     TurnReplyCorrelationPolicy,
     TurnStatus,
 )
-from .events import (
+from ..events import (
     AgentEvent,
     AgentEventType,
     EventBroadcaster,
     EventStreamGap,
     EventStreamReset,
 )
-from .operations import (
+from ..operations import (
     ActivateNativeThread,
     ApplicationOperation,
     ApplicationOperationFailed,
@@ -89,17 +95,119 @@ from .operations import (
     validate_application_operation,
     validate_application_operation_result,
 )
-from .presentation import (
+from ..presentation import (
     ApplicationPresentationCapacityError,
     ApplicationPresentationLimits,
     ApplicationPresentationRuntime,
     T3ActivityFacts,
     T3ActivityPresenter,
 )
-from .requests import InteractiveRequest
+from ..requests import InteractiveRequest
 
 _ID_NAMESPACE = uuid.UUID("15440f13-a923-4a4c-8791-637914777e5e")
 logger = logging.getLogger(__name__)
+
+
+class T3ClientError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        code: str | None = None,
+        reason: str | None = None,
+        trace_id: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.code = code
+        self.reason = reason
+        self.trace_id = trace_id
+
+
+class HttpT3Client:
+    """Authenticated client for the native T3 orchestration HTTP API."""
+
+    def __init__(
+        self,
+        origin: str,
+        token_provider: Callable[[], str],
+        *,
+        timeout: float = 15.0,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self.origin = origin.rstrip("/")
+        self._token_provider = token_provider
+        self._client = httpx.AsyncClient(
+            base_url=self.origin,
+            timeout=timeout,
+            transport=transport,
+        )
+
+    async def __aenter__(self) -> HttpT3Client:
+        return self
+
+    async def __aexit__(self, *_args: object) -> None:
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
+
+    async def shell_snapshot(self) -> Mapping[str, object]:
+        return await self._request("GET", "/api/orchestration/shell")
+
+    async def thread_detail(self, thread_id: str) -> Mapping[str, object]:
+        encoded = quote(thread_id, safe="")
+        return await self._request(
+            "GET",
+            f"/api/orchestration/threads/{encoded}",
+        )
+
+    async def dispatch(
+        self,
+        command: Mapping[str, object],
+    ) -> Mapping[str, object]:
+        return await self._request(
+            "POST",
+            "/api/orchestration/dispatch",
+            json=dict(command),
+        )
+
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: dict[str, object] | None = None,
+    ) -> Mapping[str, object]:
+        try:
+            response = await self._client.request(
+                method,
+                path,
+                headers={
+                    "Authorization": f"Bearer {self._token_provider()}",
+                    "Accept": "application/json",
+                },
+                json=json,
+            )
+        except httpx.HTTPError as error:
+            raise T3ClientError("Unable to connect to T3") from error
+        try:
+            payload: object = response.json()
+        except ValueError:
+            payload = {}
+        if response.is_error:
+            body = payload if isinstance(payload, dict) else {}
+            raise T3ClientError(
+                f"T3 request failed (HTTP {response.status_code})",
+                status_code=response.status_code,
+                code=_optional_string(body.get("code")),
+                reason=_optional_string(body.get("reason")),
+                trace_id=_optional_string(body.get("traceId")),
+            )
+        if not isinstance(payload, dict):
+            raise T3ClientError("T3 returned a non-object JSON response")
+        return payload
 
 
 @dataclass(slots=True)
@@ -108,6 +216,16 @@ class _T3PresentationState:
     seen_activity_ids: set[str] = field(default_factory=set)
     activity_cursor_id: str | None = None
     pinned_by_poll: bool = False
+
+
+@dataclass(slots=True)
+class _T3SendLockEntry:
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    users: int = 0
+
+
+class _T3StateCapacityError(RuntimeError):
+    """A bounded T3 state table cannot admit another stable identity."""
 
 
 class T3Client(Protocol):
@@ -136,7 +254,18 @@ class T3ApplicationAdapter:
         event_buffer_max_pending: int = 1024,
         activity_presenter: T3ActivityPresenter | None = None,
         presentation_limits: ApplicationPresentationLimits = ApplicationPresentationLimits(),
+        turn_baseline_max_entries: int = 4_096,
+        send_lock_max_threads: int = 1_024,
+        seen_message_max_entries: int = 8_192,
+        terminal_turn_max_entries: int = 4_096,
     ) -> None:
+        for name, value in (
+            ("turn_baseline_max_entries", turn_baseline_max_entries),
+            ("send_lock_max_threads", send_lock_max_threads),
+            ("seen_message_max_entries", seen_message_max_entries),
+            ("terminal_turn_max_entries", terminal_turn_max_entries),
+        ):
+            _require_positive_capacity(name, value)
         self._application_instance_id = application_instance_id
         self._client = client
         self._runtime_mode = runtime_mode
@@ -150,13 +279,21 @@ class T3ApplicationAdapter:
             if activity_presenter is not None
             else None
         )
-        self._turn_baselines: dict[tuple[str, str], frozenset[str]] = {}
+        self._turn_baseline_max_entries = turn_baseline_max_entries
+        self._send_lock_max_threads = send_lock_max_threads
+        self._seen_message_max_entries = seen_message_max_entries
+        self._terminal_turn_max_entries = terminal_turn_max_entries
+        self._turn_baselines: OrderedDict[tuple[str, str], frozenset[str]] = OrderedDict()
+        self._active_turn_baselines: set[tuple[str, str]] = set()
+        self._reserved_turn_baselines = 0
         self._events = EventBroadcaster[str, AgentEvent](max_pending=event_buffer_max_pending)
         self._poll_tasks: dict[str, asyncio.Task[None]] = {}
-        self._send_locks: dict[str, asyncio.Lock] = {}
+        self._send_locks: dict[str, _T3SendLockEntry] = {}
         self._presentation_states: dict[str, _T3PresentationState] = {}
         self._seen_messages: dict[str, set[str]] = {}
+        self._seen_message_order: OrderedDict[tuple[str, str], None] = OrderedDict()
         self._terminal_turns: dict[str, set[str]] = {}
+        self._terminal_turn_order: OrderedDict[tuple[str, str], None] = OrderedDict()
         self._initialized_threads: set[str] = set()
         self._summary = ApplicationSummary(
             ref=ApplicationRef(application_instance_id),
@@ -599,16 +736,33 @@ class T3ApplicationAdapter:
         if not isinstance(continuation, InputContinuationPreference):
             raise ValueError("unknown input continuation preference")
         self._require_own_thread(thread_ref)
-        lock = self._send_locks.setdefault(
-            thread_ref.native_thread_id,
-            asyncio.Lock(),
-        )
-        async with lock:
+        async with self._hold_send_lock(thread_ref.native_thread_id):
             return await self._send_input_locked(
                 thread_ref,
                 message,
                 before_dispatch=before_dispatch,
             )
+
+    @asynccontextmanager
+    async def _hold_send_lock(self, thread_id: str) -> AsyncIterator[None]:
+        entry = self._send_locks.get(thread_id)
+        if entry is None:
+            if len(self._send_locks) >= self._send_lock_max_threads:
+                raise _T3StateCapacityError("T3 active Thread send-lock capacity is exhausted")
+            entry = _T3SendLockEntry()
+            self._send_locks[thread_id] = entry
+        entry.users += 1
+        acquired = False
+        try:
+            await entry.lock.acquire()
+            acquired = True
+            yield
+        finally:
+            if acquired:
+                entry.lock.release()
+            entry.users -= 1
+            if entry.users == 0 and self._send_locks.get(thread_id) is entry:
+                self._send_locks.pop(thread_id, None)
 
     async def _send_input_locked(
         self,
@@ -646,29 +800,47 @@ class T3ApplicationAdapter:
             "interactionMode": self._interaction_mode,
             "createdAt": _utc_now(),
         }
-        if before_dispatch is not None:
-            await before_dispatch(
-                ApplicationInputDispatch(
-                    thread_ref=thread_ref,
-                    client_message_id=message.client_message_id,
-                    disposition=InputDisposition.STARTED,
-                    correlation_policy=TurnReplyCorrelationPolicy.CREATE_NEW,
+        self._reserve_turn_baseline()
+        reserved = True
+        try:
+            if before_dispatch is not None:
+                await before_dispatch(
+                    ApplicationInputDispatch(
+                        thread_ref=thread_ref,
+                        client_message_id=message.client_message_id,
+                        disposition=InputDisposition.STARTED,
+                        correlation_policy=TurnReplyCorrelationPolicy.CREATE_NEW,
+                    )
                 )
+            try:
+                await self._client.dispatch(command)
+                detail = await self._client.thread_detail(thread_ref.native_thread_id)
+                thread = _object(detail.get("thread"), "thread")
+                latest_turn = _object(thread.get("latestTurn"), "latestTurn")
+                turn_id = str(latest_turn.get("turnId") or latest_turn.get("id") or "")
+                if not turn_id:
+                    raise RuntimeError("T3 did not return the accepted turn id")
+            except Exception as cause:
+                if isinstance(cause, ApplicationInputOutcomeUnknown):
+                    raise
+                raise ApplicationInputOutcomeUnknown(
+                    "T3 input was dispatched but its native outcome is unknown",
+                    cause,
+                ) from cause
+            except asyncio.CancelledError as cause:
+                raise ApplicationInputOutcomeUnknown(
+                    "T3 input was dispatched but its native outcome is unknown",
+                    cause,
+                ) from cause
+            self._record_turn_baseline(
+                thread_ref.native_thread_id,
+                turn_id,
+                baseline,
             )
-        await self._client.dispatch(command)
-        detail = await self._client.thread_detail(thread_ref.native_thread_id)
-        thread = _object(detail.get("thread"), "thread")
-        latest_turn = _object(thread.get("latestTurn"), "latestTurn")
-        turn_id = str(latest_turn.get("turnId") or latest_turn.get("id") or "")
-        if not turn_id:
-            raise RuntimeError("T3 did not return the accepted turn id")
-        self._turn_baselines[(thread_ref.native_thread_id, turn_id)] = baseline
-        if self._activity_presenter is None:
-            await self._publish_thread_state(
-                thread_ref,
-                thread,
-                only_turn_id=turn_id,
-            )
+            reserved = False
+        finally:
+            if reserved:
+                self._release_turn_baseline_reservation()
         return AcceptedTurn(
             thread_ref=thread_ref,
             turn_id=turn_id,
@@ -676,6 +848,77 @@ class T3ApplicationAdapter:
             disposition=InputDisposition.STARTED,
             correlation_policy=TurnReplyCorrelationPolicy.CREATE_NEW,
         )
+
+    def _reserve_turn_baseline(self) -> None:
+        while (
+            len(self._turn_baselines) + self._reserved_turn_baselines
+            >= self._turn_baseline_max_entries
+        ):
+            evictable = next(
+                (key for key in self._turn_baselines if key not in self._active_turn_baselines),
+                None,
+            )
+            if evictable is None:
+                raise _T3StateCapacityError("T3 active turn-baseline capacity is exhausted")
+            self._turn_baselines.pop(evictable)
+        self._reserved_turn_baselines += 1
+
+    def _release_turn_baseline_reservation(self) -> None:
+        if self._reserved_turn_baselines <= 0:
+            raise RuntimeError("T3 turn-baseline reservation underflow")
+        self._reserved_turn_baselines -= 1
+
+    def _record_turn_baseline(
+        self,
+        thread_id: str,
+        turn_id: str,
+        baseline: frozenset[str],
+    ) -> None:
+        if self._reserved_turn_baselines <= 0:
+            raise RuntimeError("T3 turn-baseline was not reserved")
+        key = (thread_id, turn_id)
+        self._turn_baselines[key] = baseline
+        self._turn_baselines.move_to_end(key)
+        self._active_turn_baselines.add(key)
+        self._reserved_turn_baselines -= 1
+
+    def _mark_turn_terminal(self, thread_id: str, turn_id: str) -> None:
+        self._active_turn_baselines.discard((thread_id, turn_id))
+
+    def _remember_seen_message(self, thread_id: str, message_id: str) -> None:
+        if not message_id:
+            return
+        seen = self._seen_messages.setdefault(thread_id, set())
+        key = (thread_id, message_id)
+        if message_id in seen:
+            return
+        seen.add(message_id)
+        self._seen_message_order[key] = None
+        while len(self._seen_message_order) > self._seen_message_max_entries:
+            evicted_thread_id, evicted_message_id = self._seen_message_order.popitem(last=False)[0]
+            evicted_seen = self._seen_messages.get(evicted_thread_id)
+            if evicted_seen is None:
+                continue
+            evicted_seen.discard(evicted_message_id)
+            if not evicted_seen:
+                self._seen_messages.pop(evicted_thread_id, None)
+
+    def _remember_terminal_turn(self, thread_id: str, turn_id: str) -> bool:
+        terminal_turns = self._terminal_turns.setdefault(thread_id, set())
+        if turn_id in terminal_turns:
+            return False
+        key = (thread_id, turn_id)
+        terminal_turns.add(turn_id)
+        self._terminal_turn_order[key] = None
+        while len(self._terminal_turn_order) > self._terminal_turn_max_entries:
+            evicted_thread_id, evicted_turn_id = self._terminal_turn_order.popitem(last=False)[0]
+            evicted_turns = self._terminal_turns.get(evicted_thread_id)
+            if evicted_turns is None:
+                continue
+            evicted_turns.discard(evicted_turn_id)
+            if not evicted_turns:
+                self._terminal_turns.pop(evicted_thread_id, None)
+        return True
 
     def subscribe_thread(
         self,
@@ -756,7 +999,7 @@ class T3ApplicationAdapter:
         initialize: bool = False,
     ) -> None:
         thread_id = thread_ref.native_thread_id
-        seen = self._seen_messages.setdefault(thread_id, set())
+        seen = self._seen_messages.get(thread_id, set())
         messages = _object_list(thread.get("messages"))
         if self._activity_presenter is None:
             for message in messages:
@@ -772,7 +1015,7 @@ class T3ApplicationAdapter:
                     initialize=initialize,
                 ):
                     continue
-                seen.add(message_id)
+                self._remember_seen_message(thread_id, message_id)
                 self._publish_t3_message(thread_ref, message, message_id, turn_id)
 
         if self._activity_presenter is not None:
@@ -833,7 +1076,7 @@ class T3ApplicationAdapter:
                 if candidate_kind == "message":
                     message_id = _message_id(candidate)
                     turn_id = str(candidate.get("turnId") or "")
-                    seen.add(message_id)
+                    self._remember_seen_message(thread_id, message_id)
                     self._publish_t3_message(thread_ref, candidate, message_id, turn_id)
                     continue
                 activity_id = str(candidate.get("id") or "")
@@ -880,11 +1123,12 @@ class T3ApplicationAdapter:
             "cancelled": AgentEventType.TURN_INTERRUPTED,
             "canceled": AgentEventType.TURN_INTERRUPTED,
         }.get(state)
-        terminal_turns = self._terminal_turns.setdefault(thread_id, set())
-        if event_type is None or not turn_id or turn_id in terminal_turns:
+        if event_type is None or not turn_id:
             return
-        terminal_turns.add(turn_id)
-        if initialize:
+        self._mark_turn_terminal(thread_id, turn_id)
+        if not self._remember_terminal_turn(thread_id, turn_id):
+            return
+        if initialize and (thread_id, turn_id) not in self._turn_baselines:
             return
         self._events.publish(
             thread_id,
@@ -975,10 +1219,10 @@ class T3ApplicationAdapter:
             return False
         baseline = self._turn_baselines.get((thread_id, turn_id))
         if initialize and baseline is None:
-            seen.add(message_id)
+            self._remember_seen_message(thread_id, message_id)
             return False
         if baseline is not None and message_id in baseline:
-            seen.add(message_id)
+            self._remember_seen_message(thread_id, message_id)
             return False
         return True
 
@@ -1168,6 +1412,11 @@ def _object(value: object, name: str) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
         raise RuntimeError(f"T3 result did not contain {name}")
     return value
+
+
+def _require_positive_capacity(name: str, value: int) -> None:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise ValueError(f"{name} must be a positive integer")
 
 
 def _optional_object(value: object) -> Mapping[str, object] | None:
