@@ -19,12 +19,17 @@ components:
       - docs/ARCHITECTURE.md
       - docs/decisions/**
       # Source and schemas.
-      - src/imagent/contracts/**
+      - src/imagent/contracts/_validation.py
+      - src/imagent/contracts/delivery.py
+      - src/imagent/contracts/errors.py
+      - src/imagent/contracts/model.py
+      - src/imagent/contracts/operations.py
+      - src/imagent/contracts/request_validation.py
+      - src/imagent/contracts/validators.py
       - src/imagent/interaction/__init__.py
       - src/imagent/interaction/messages.py
       - src/imagent/interaction/operations.py
-      - schemas/v1/**
-      - scripts/validate_schemas.py
+      - schemas/v1/*.schema.json
       # Tests.
       - tests/test_contracts.py
       - tests/interaction/__init__.py
@@ -68,8 +73,6 @@ components:
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/adapters.py
-      - src/imagent/__init__.py
-      - src/imagent/py.typed
     docs:
       - docs/components/ports/design.md
       - docs/components/ports/testing.md
@@ -577,6 +580,8 @@ components:
       - src/imagent/testing/**
       - tests/test_adapter_contracts.py
     docs:
+      - docs/engineering/testing-and-conformance/design.md
+      - docs/engineering/testing-and-conformance/testing.md
       - docs/components/testing-and-conformance/design.md
       - docs/components/testing-and-conformance/testing.md
     required_docs:
@@ -589,26 +594,14 @@ components:
       - contract-test
 
   repository-maintainability:
-    description: AgentKit configuration, repository guidance, CI, provenance, roadmap, and documentation navigation.
+    description: Repository guidance, ownership inventory, CI, provenance, roadmap, documentation navigation, and maintainability budgets.
     code:
-      - .agents/**
       - .github/workflows/**
       - .gitignore
       - AGENTS.md
-      - README.md
-      - agentkit.yml
-      - pyproject.toml
-      - uv.lock
-      - plugins/agentkit/**
-      - scripts/agentkit
-      - scripts/agentkit.cmd
-      - scripts/agentkit.py
       - scripts/check_doc_links.py
       - scripts/validate_component_map.py
-      - scripts/smoke_clean_install.py
-      - tests/test_agentkit_mapping.py
       - tests/test_component_map.py
-      - tests/test_package_independence.py
       - docs/README.md
       - docs/ARCHITECTURE.md
       - docs/REUSE.md
@@ -619,7 +612,14 @@ components:
       - docs/components/repository-maintainability/**
       - docs/components/README.md
       - docs/components/component-map.yml
+      - docs/engineering/README.md
+      - docs/engineering/repository-maintainability/design.md
+      - docs/engineering/repository-maintainability/testing.md
+      - tests/test_documentation_links.py
     docs:
+      - docs/engineering/repository-maintainability/design.md
+      - docs/engineering/repository-maintainability/testing.md
+      - docs/engineering/README.md
       - docs/components/repository-maintainability/design.md
       - docs/components/repository-maintainability/testing.md
       - docs/migrations/imcodex-followup-blockers.md
@@ -627,11 +627,78 @@ components:
       - design
       - testing
     keywords:
-      - agentkit
       - maintainability
       - documentation
       - ci
       - provenance
+
+  schema-conformance:
+    description: Versioned JSON Schema inventory, reference validation, and schema navigation.
+    code:
+      - docs/ARCHITECTURE.md
+      - scripts/validate_schemas.py
+    docs:
+      - docs/engineering/schema-conformance/design.md
+      - docs/engineering/schema-conformance/testing.md
+      - schemas/v1/README.md
+      - docs/components/contracts/protocol.md
+    required_docs:
+      - design
+      - testing
+    keywords:
+      - schema
+      - validation
+      - conformance
+
+  agentkit:
+    description: Pinned AgentKit launcher, lifecycle routing, architecture gates, and review guidance.
+    code:
+      - docs/ARCHITECTURE.md
+      - .agents/plugins/**
+      - agentkit.yml
+      - plugins/agentkit/**
+      - scripts/agentkit
+      - scripts/agentkit.cmd
+      - scripts/agentkit.py
+      - tests/test_agentkit_mapping.py
+    docs:
+      - docs/engineering/agentkit/design.md
+      - docs/engineering/agentkit/testing.md
+      - plugins/agentkit/skills/agentkit/SKILL.md
+    required_docs:
+      - design
+      - testing
+    keywords:
+      - agentkit
+      - lifecycle
+      - review
+      - architecture
+
+  release:
+    description: Package metadata, public facades, typing marker, wheels, and clean-install verification.
+    code:
+      - docs/ARCHITECTURE.md
+      - README.md
+      - pyproject.toml
+      - uv.lock
+      - scripts/smoke_clean_install.py
+      - src/imagent/__init__.py
+      - src/imagent/contracts/__init__.py
+      - src/imagent/py.typed
+      - tests/test_package_independence.py
+    docs:
+      - docs/engineering/release/design.md
+      - docs/engineering/release/testing.md
+      - README.md
+      - docs/REUSE.md
+    required_docs:
+      - design
+      - testing
+    keywords:
+      - release
+      - package
+      - wheel
+      - install
 
 review:
   require_for:

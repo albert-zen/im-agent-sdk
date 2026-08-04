@@ -5,9 +5,10 @@ Applications. It is not an Agent runtime, transcript store, policy engine, or
 general orchestrator.
 
 Before changing behavior or boundaries, read [docs/VISION.md](docs/VISION.md),
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), the affected component docs in
-`docs/components/`, and any applicable accepted decision in
-[docs/decisions/README.md](docs/decisions/README.md). The human navigation map is
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), any applicable accepted decision
+in [docs/decisions/README.md](docs/decisions/README.md), and the affected
+authority: runtime component docs under `docs/components/` or repository-support
+docs under `docs/engineering/`. The human navigation map is
 [docs/README.md](docs/README.md).
 
 Non-negotiable rules:
@@ -16,7 +17,8 @@ Non-negotiable rules:
   execution truth.
 - The SDK persists only IM bridge state and rebuildable projections.
 - `Message` carries content; `Operation` carries control intent.
-- Common semantics require evidence from at least two real integrations.
+- Common semantics require evidence from two real integrations or a concrete
+  counterexample, as defined by ADR 0006.
 - Unsupported behavior fails explicitly; stable IDs, not text or timestamps,
   drive idempotency.
 - Runtime semantics are designed in authoritative docs before implementation.

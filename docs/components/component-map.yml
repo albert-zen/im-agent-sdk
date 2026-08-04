@@ -924,7 +924,7 @@ components:
     target_code: [src/imagent/gateway/persistence/row_mapping.py]
     current_tests: [tests/test_storage.py]
     target_tests: [tests/gateway/persistence/test_row_mapping.py]
-    authoritative_docs: [docs/components/gateway/persistence/row-mapping/design.md, docs/components/gateway/persistence/row-mapping/testing.md, docs/components/persistence/design.md, docs/components/repository-maintainability/design.md]
+    authoritative_docs: [docs/components/gateway/persistence/row-mapping/design.md, docs/components/gateway/persistence/row-mapping/testing.md, docs/components/persistence/design.md, docs/engineering/repository-maintainability/design.md]
     adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
     gaps: [delivery/request row helpers remain mixed into SQLite mixins]
 
@@ -1144,7 +1144,7 @@ components:
     target_code: [src/imagent/applications/adapters/appserver/transport.py]
     current_tests: [tests/test_appserver_transport.py]
     target_tests: [tests/applications/adapters/appserver/test_transport.py]
-    authoritative_docs: [docs/components/application-adapters/design.md, docs/components/repository-maintainability/design.md]
+    authoritative_docs: [docs/components/application-adapters/design.md, docs/engineering/repository-maintainability/design.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md]
     gaps: [target leaf design/testing docs not yet created]
 
@@ -1298,7 +1298,7 @@ components:
     target_code: [src/imagent/testing/__init__.py, src/imagent/interaction/testing/**]
     current_tests: [tests/test_adapter_contracts.py]
     target_tests: [tests/conformance/test_adapter_contracts.py]
-    authoritative_docs: [docs/components/testing-and-conformance/design.md, docs/components/testing-and-conformance/testing.md]
+    authoritative_docs: [docs/engineering/testing-and-conformance/design.md, docs/engineering/testing-and-conformance/testing.md]
     adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
     gaps: [retain imagent.testing only as a formal public facade while moving its implementation into the mirrored tree]
 
@@ -1320,7 +1320,7 @@ components:
     target_code: [schemas/v1/README.md, scripts/validate_schemas.py]
     current_tests: [tests/test_contracts.py]
     target_tests: [tests/engineering/test_schema_conformance.py]
-    authoritative_docs: [schemas/v1/README.md, docs/components/contracts/protocol.md, docs/components/repository-maintainability/testing.md]
+    authoritative_docs: [docs/engineering/schema-conformance/design.md, docs/engineering/schema-conformance/testing.md, schemas/v1/README.md, docs/components/contracts/protocol.md]
     adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0002-design-authority-and-control-boundaries.md]
     gaps: [schema validation is a standalone required check but has no focused unit-test module yet]
 
@@ -1340,11 +1340,11 @@ components:
     state_recovery: Stateless repository checks; generated AgentKit task state is ignored.
     current_code: [.github/workflows/ci.yml, scripts/check_doc_links.py, scripts/validate_component_map.py]
     target_code: [.github/workflows/ci.yml, scripts/check_doc_links.py, scripts/validate_component_map.py]
-    current_tests: [tests/test_agentkit_mapping.py, tests/test_component_map.py, tests/test_package_independence.py]
+    current_tests: [tests/test_component_map.py, tests/test_documentation_links.py]
     target_tests: [tests/engineering/test_repository_maintainability.py]
-    authoritative_docs: [docs/components/repository-maintainability/design.md, docs/components/repository-maintainability/testing.md, docs/architecture/dependency-rules.md]
+    authoritative_docs: [docs/engineering/repository-maintainability/design.md, docs/engineering/repository-maintainability/testing.md, docs/architecture/dependency-rules.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md]
-    gaps: [engineering docs have not yet moved under docs/engineering/repository-maintainability]
+    gaps: []
 
   engineering.agentkit:
     id: engineering.agentkit
@@ -1364,7 +1364,7 @@ components:
     target_code: [.agents/plugins/marketplace.json, agentkit.yml, plugins/agentkit/.codex-plugin/plugin.json, plugins/agentkit/hooks.json, plugins/agentkit/skills/agentkit/SKILL.md, scripts/agentkit, scripts/agentkit.cmd, scripts/agentkit.py]
     current_tests: [tests/test_agentkit_mapping.py]
     target_tests: [tests/engineering/test_agentkit.py]
-    authoritative_docs: [docs/components/repository-maintainability/design.md, plugins/agentkit/skills/agentkit/SKILL.md]
+    authoritative_docs: [docs/engineering/agentkit/design.md, docs/engineering/agentkit/testing.md, plugins/agentkit/skills/agentkit/SKILL.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md]
     gaps: [AgentKit v1 does not natively consume the component map, so the repository launcher must run the single authoritative component-map gate before delegating check or lint-architecture]
 
@@ -1386,7 +1386,7 @@ components:
     target_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/contracts/__init__.py, src/imagent/py.typed]
     current_tests: [tests/test_package_independence.py]
     target_tests: [tests/engineering/test_release.py]
-    authoritative_docs: [README.md, docs/components/repository-maintainability/design.md, docs/REUSE.md]
+    authoritative_docs: [docs/engineering/release/design.md, docs/engineering/release/testing.md, README.md, docs/REUSE.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md]
     gaps: [formal top-level facade must be updated only after internal moves; no duplicate implementation may remain]
 

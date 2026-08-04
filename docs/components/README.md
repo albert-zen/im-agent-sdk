@@ -137,15 +137,24 @@ translation until their focused mechanical slices move them under this tree.
 
 ## Engineering support
 
-Engineering documentation will converge under `docs/engineering/` for:
+Engineering support is a repository concern, not a fourth runtime layer. Its
+authoritative tree is [`../engineering/README.md`](../engineering/README.md):
 
-- testing and conformance;
-- language-neutral schema conformance;
-- repository maintainability;
-- AgentKit workflow;
-- release and clean-install verification.
+```text
+engineering
+├── testing-and-conformance
+├── schema-conformance
+├── repository-maintainability
+├── agentkit
+└── release
+```
 
-These are repository support concerns, not a runtime layer.
+Every engineering leaf has a meaningful `design.md` and `testing.md`. The
+focused pages own repository support mechanics; runtime contract semantics
+remain with the Interaction, Gateway, or Applications leaf named by the
+component map. The old broad testing-and-conformance and
+repository-maintainability pages remain navigation-only during the link
+convergence.
 
 ## Leaf documentation rule
 
