@@ -20,7 +20,7 @@ from ...interaction.operations import (
 from ..concurrency import KeyedLockCapacityError, KeyedLockRegistry
 
 if TYPE_CHECKING:
-    from ...contracts.operations import (
+    from ..projection.request_correlation import (
         RequestResponseRouted,
         RespondToRequest,
     )
@@ -194,7 +194,7 @@ def _complete_gateway_union() -> None:
 
     _UNION_COMPLETING = True
     try:
-        from ...contracts import operations as pending_operations
+        from ..projection import request_correlation as request_owner
         from . import bindings as binding_owner
         from . import projection_routes as projection_route_owner
 
@@ -208,18 +208,18 @@ def _complete_gateway_union() -> None:
             "ObserveThread",
             "ThreadObserved",
         )
-        pending_names = (
+        request_names = (
             "RespondToRequest",
             "RequestResponseRouted",
         )
         binding_values = vars(binding_owner)
         projection_route_values = vars(projection_route_owner)
-        pending_values = vars(pending_operations)
+        request_values = vars(request_owner)
         if not all(name in binding_values for name in binding_names):
             return
         if not all(name in projection_route_values for name in projection_route_names):
             return
-        if not all(name in pending_values for name in pending_names):
+        if not all(name in request_values for name in request_names):
             return
 
         operation_union = (
@@ -229,18 +229,18 @@ def _complete_gateway_union() -> None:
             | binding_values["BindConversationToThread"]
             | binding_values["ClearConversationThread"]
             | projection_route_values["ObserveThread"]
-            | pending_values["RespondToRequest"]
+            | request_values["RespondToRequest"]
         )
         result_union = (
             ApplicationsListed
             | binding_values["ConversationBound"]
             | projection_route_values["ThreadObserved"]
-            | pending_values["RequestResponseRouted"]
+            | request_values["RequestResponseRouted"]
             | GatewayOperationFailed
         )
         globals().update({name: binding_values[name] for name in binding_names})
         globals().update({name: projection_route_values[name] for name in projection_route_names})
-        globals().update({name: pending_values[name] for name in pending_names})
+        globals().update({name: request_values[name] for name in request_names})
         globals()["GatewayOperation"] = operation_union
         globals()["GatewayOperationResult"] = result_union
         _UNION_COMPLETED = True
@@ -295,7 +295,7 @@ def validate_gateway_operation(operation: GatewayOperation) -> None:
 
         _validate_observe_operation(operation)
     elif isinstance(operation, RespondToRequest):
-        from ...contracts.validators import _validate_respond_operation
+        from ..projection.request_correlation import _validate_respond_operation
 
         _validate_respond_operation(operation)
 
@@ -341,7 +341,7 @@ def validate_gateway_operation_result(
         _validate_observe_operation_result(operation, result)
         return
     if isinstance(operation, RespondToRequest):
-        from ...contracts.validators import _validate_respond_operation_result
+        from ..projection.request_correlation import _validate_respond_operation_result
 
         _validate_respond_operation_result(operation, result)
         return

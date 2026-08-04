@@ -19,7 +19,6 @@ components:
       - docs/ARCHITECTURE.md
       - docs/decisions/**
       # Source and schemas.
-      - src/imagent/contracts/operations.py
       - src/imagent/contracts/validators.py
       - src/imagent/interaction/__init__.py
       - src/imagent/interaction/messages.py
@@ -259,7 +258,6 @@ components:
       - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/projection_routes.py
       - src/imagent/projection_runtime.py
-      - src/imagent/request_projection_runtime.py
       - src/imagent/projections.py
       - src/imagent/gateway/projection/__init__.py
       - src/imagent/gateway/projection/checkpoints.py

@@ -111,28 +111,6 @@ def derive_live_projection_delivery_id(
     return f"imagent:delivery:live:sha256:{digest}"
 
 
-def derive_turn_reply_correlation_id(
-    thread_ref: ThreadRef,
-    turn_id: str,
-) -> str:
-    identity = json.dumps(
-        [
-            thread_ref.application_instance_id,
-            (
-                thread_ref.project_ref.native_project_id
-                if thread_ref.project_ref is not None
-                else None
-            ),
-            thread_ref.native_thread_id,
-            turn_id,
-        ],
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
-    digest = hashlib.sha256(identity.encode()).hexdigest()
-    return f"imagent:turn-reply:sha256:{digest}"
-
-
 def immutable_projection_metadata(
     metadata: Mapping[str, object],
 ) -> Mapping[str, object]:

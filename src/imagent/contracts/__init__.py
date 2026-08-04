@@ -27,7 +27,6 @@ if TYPE_CHECKING:
         validate_gateway_operation_result,
     )
     from ..interaction.messages import ConversationRef
-    from .operations import RequestResponseRouted, RespondToRequest
     from .validators import (
         derive_client_message_id,
     )
@@ -84,12 +83,6 @@ _GATEWAY_OPERATION_EXPORTS = frozenset(
         "validate_gateway_operation_result",
     }
 )
-_GATEWAY_PENDING_OPERATION_EXPORTS = frozenset(
-    {
-        "RequestResponseRouted",
-        "RespondToRequest",
-    }
-)
 _GATEWAY_VALIDATOR_EXPORTS = frozenset(
     {
         "derive_client_message_id",
@@ -134,8 +127,6 @@ __all__ = [
     "OperationResultStatus",
     "OperationErrorCode",
     "RemoteUrl",
-    "RequestResponseRouted",
-    "RespondToRequest",
     "SelectApplication",
     "TextContent",
     "TextFormat",
@@ -155,8 +146,6 @@ def __getattr__(name: str) -> object:
         module = import_module("..gateway.routing.bindings", __name__)
     elif name in _GATEWAY_OPERATION_EXPORTS:
         module = import_module("..gateway.routing.operations", __name__)
-    elif name in _GATEWAY_PENDING_OPERATION_EXPORTS:
-        module = import_module(".operations", __name__)
     elif name in _GATEWAY_VALIDATOR_EXPORTS:
         module = import_module(".validators", __name__)
     elif name in _GATEWAY_PERSISTENCE_EXPORTS:

@@ -24,4 +24,5 @@ Routing owns durable destination-edge policy; projection consumes those edges.
 Delivery owns planning and Channel execution; projection only supplies the
 ordered destination decision. Persistence owns passive records and atomic
 repository implementation. The [component map](../../component-map.yml)
-records the current mixed modules and the focused target paths.
+records the remaining mixed observation/recovery modules and the completed
+request-correlation owner.

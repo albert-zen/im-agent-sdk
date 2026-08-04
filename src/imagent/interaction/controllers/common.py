@@ -42,11 +42,10 @@ from ...contracts import (
     ConversationBound,
     GatewayOperationFailed,
     ListApplications,
-    RequestResponseRouted,
-    RespondToRequest,
     SelectApplication,
 )
 from ...gateway.persistence.state_contracts import ConversationBinding
+from ...gateway.projection import RequestResponseRouted, RespondToRequest
 from ...gateway.routing import ObserveThread, ThreadObserved
 from ..messages import ConversationRef, InboundMessage, OutboundMessage, TextContent
 from .common_presentation import MarkdownSlashPresenter

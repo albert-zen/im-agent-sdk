@@ -36,8 +36,6 @@ from imagent.contracts import (
     ConversationBound,
     GatewayOperationFailed,
     ListApplications,
-    RequestResponseRouted,
-    RespondToRequest,
     SelectApplication,
 )
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
@@ -57,6 +55,7 @@ from imagent.gateway.persistence.memory import (
     InMemoryRequestCorrelationRepository,
 )
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
+from imagent.gateway.projection import RequestResponseRouted, RespondToRequest
 from imagent.gateway.routing import ObserveThread, ProjectionPolicy
 from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.channels import DeliveryReceipt
@@ -221,7 +220,10 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
         second = ImAgentGateway(channels=[], applications=[], repositories=repositories)
 
         self.assertIsNot(first._idempotency, second._idempotency)
-        self.assertIsNot(first._request_correlations, second._request_correlations)
+        self.assertIsNot(
+            first._request_projection._correlations,
+            second._request_projection._correlations,
+        )
         self.assertIsNot(first._delivery_coordinator, second._delivery_coordinator)
         self.assertIsNot(
             first._projection_runtime._projections,
@@ -408,14 +410,18 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
                 completed_at=completed_at,
             )
 
-        with patch.object(gateway, "_respond_to_request", side_effect=block_response) as response:
+        with patch.object(
+            gateway._request_projection,
+            "_respond_to_request",
+            side_effect=block_response,
+        ) as response:
             owner = asyncio.create_task(gateway.execute_gateway(first))
             await entered.wait()
             self.assertEqual(gateway._conversation_locks.active_key_count, 1)
-            self.assertEqual(gateway._request_locks.active_key_count, 1)
+            self.assertEqual(gateway._request_projection._request_locks.active_key_count, 1)
             assert gateway._conversation_locks.capacity is not None
             self.assertLessEqual(
-                gateway._request_locks.active_key_count,
+                gateway._request_projection._request_locks.active_key_count,
                 gateway._conversation_locks.capacity,
             )
 
@@ -427,12 +433,12 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
                 OperationErrorCode.CAPACITY_EXHAUSTED.value,
             )
             self.assertEqual(response.await_count, 1)
-            self.assertEqual(gateway._request_locks.active_key_count, 1)
+            self.assertEqual(gateway._request_projection._request_locks.active_key_count, 1)
 
             release.set()
             self.assertIsInstance(await owner, RequestResponseRouted)
 
-        self.assertEqual(gateway._request_locks.active_key_count, 0)
+        self.assertEqual(gateway._request_projection._request_locks.active_key_count, 0)
         self.assertEqual(gateway._conversation_locks.active_key_count, 0)
 
     async def test_inbound_capacity_rejection_preserves_i2_claim_rules(self) -> None:
@@ -851,7 +857,10 @@ class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
         )
-        self.assertEqual(self.gateway._request_locks.active_key_count, 0)
+        self.assertEqual(
+            self.gateway._request_projection._request_locks.active_key_count,
+            0,
+        )
 
     async def test_same_conversation_request_response_uses_private_fence_once(self) -> None:
         request = await self.application.open_approval_request(
@@ -876,9 +885,9 @@ class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
                 wraps=self.gateway._route_request_response,
             ) as route_wrapper,
             patch.object(
-                self.gateway._request_locks,
+                self.gateway._request_projection._request_locks,
                 "hold",
-                wraps=self.gateway._request_locks.hold,
+                wraps=self.gateway._request_projection._request_locks.hold,
             ) as request_lock,
             patch.object(
                 self.application,
@@ -924,7 +933,10 @@ class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
             request_ref=request.request_ref
         )
         self.assertTrue(all(item.state is RequestRouteState.RESPONDED for item in correlations))
-        self.assertEqual(self.gateway._request_locks.active_key_count, 0)
+        self.assertEqual(
+            self.gateway._request_projection._request_locks.active_key_count,
+            0,
+        )
 
     async def test_private_request_delegate_returns_converged_routed_result(self) -> None:
         request = await self.application.open_approval_request(
@@ -946,7 +958,7 @@ class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
             created_at=_now(),
         )
 
-        routed = await self.gateway._respond_to_request(
+        routed = await self.gateway._request_projection._respond_to_request(
             operation,
             completed_at=completed_at,
         )
@@ -976,7 +988,7 @@ class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
             completed_at=completed_at,
         )
         with patch.object(
-            self.gateway,
+            self.gateway._request_projection,
             "_respond_to_request",
             new_callable=AsyncMock,
             return_value=expected,
@@ -1549,7 +1561,10 @@ class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
             self.assertIsInstance(result, GatewayOperationFailed)
-        self.assertEqual(self.gateway._request_locks.active_key_count, 0)
+        self.assertEqual(
+            self.gateway._request_projection._request_locks.active_key_count,
+            0,
+        )
 
 
 class RequestRestartTests(unittest.IsolatedAsyncioTestCase):

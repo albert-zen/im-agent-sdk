@@ -60,10 +60,12 @@ in `gateway/projection/recovery.py`. The
 objects. The historical `imagent.recovery` module is absent; it is not a
 compatibility import path.
 
-Recovery supervision remains distributed across `projection_runtime.py`,
-`projection_routes.py`, and `request_projection_runtime.py`. Those separate
-observation, routing, and request-correlation responsibilities remain outside
-this mechanical move.
+Generic recovery supervision remains distributed across
+`projection_runtime.py` and `projection_routes.py`. Authoritative pending
+request reconciliation is instead co-located with the one canonical
+request-correlation runtime in `gateway/projection/request_correlation.py`;
+generic recovery calls its typed Thread-scoped method after a gap and does not
+gain request authority.
 
 - [ADR 0004](../../../../decisions/0004-event-fanout-and-recovery.md)
 - [ADR 0007](../../../../decisions/0007-projection-lifecycle-and-delivery-boundaries.md)

@@ -105,7 +105,6 @@ class AgentKitMappingTests(unittest.TestCase):
             "src/imagent/interaction/operations.py": {"contracts"},
             "src/imagent/interaction/diagnostics.py": {"diagnostics"},
             "src/imagent/interaction/channels/diagnostics.py": {"diagnostics"},
-            "src/imagent/contracts/operations.py": {"contracts"},
             "src/imagent/adapters.py": {"ports", "channel-adapters"},
             "src/imagent/contracts/__init__.py": {
                 "applications-common",
@@ -134,7 +133,6 @@ class AgentKitMappingTests(unittest.TestCase):
             "src/imagent/events.py": {"release"},
             "src/imagent/projection_routes.py": {"projections-and-recovery"},
             "src/imagent/projection_runtime.py": {"projections-and-recovery"},
-            "src/imagent/request_projection_runtime.py": {"projections-and-recovery"},
             "src/imagent/gateway/projection/checkpoints.py": {"projections-and-recovery"},
             "src/imagent/gateway/projection/request_correlation.py": {"projections-and-recovery"},
             "src/imagent/gateway/projection/recovery.py": {"projections-and-recovery"},

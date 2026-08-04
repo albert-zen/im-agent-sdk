@@ -132,22 +132,22 @@ architecture_lint:
       to: src/imagent/gateway/routing/operations.py
       symbol: _complete_gateway_union
       reason: The finite named facade bootstrap completes the one closed aggregate after binding values load; it is a temporary import-order edge, not a runtime lookup or second union.
-    - from: src/imagent/contracts/operations.py
+    - from: src/imagent/gateway/projection/request_correlation.py
       to: src/imagent/gateway/routing/operations.py
       symbol: GatewayOperationType
-      reason: Pending request values temporarily resolve the canonical Gateway discriminator from the operations owner while their later physical owner moves; the alias remains private in this historical module.
-    - from: src/imagent/contracts/operations.py
+      reason: Request-response operation values resolve the canonical private Gateway discriminator from the aggregate owner without defining a second enum or public re-export.
+    - from: src/imagent/gateway/projection/request_correlation.py
       to: src/imagent/gateway/routing/operations.py
       symbol: _GatewayOperation
-      reason: Pending request values temporarily reuse the canonical private Gateway base without exposing an old internal re-export path or defining a second base.
-    - from: src/imagent/contracts/operations.py
+      reason: Request-response operation values reuse the canonical private Gateway base without a compatibility implementation or duplicate aggregate variant.
+    - from: src/imagent/gateway/projection/request_correlation.py
       to: src/imagent/gateway/routing/operations.py
       symbol: _GatewayOperationSucceeded
-      reason: Pending request result values temporarily reuse the canonical private Gateway result base without exposing an old internal re-export path or defining a second base.
-    - from: src/imagent/contracts/operations.py
+      reason: Request-response result values reuse the canonical private Gateway result base without a compatibility implementation or duplicate aggregate variant.
+    - from: src/imagent/gateway/projection/request_correlation.py
       to: src/imagent/gateway/routing/operations.py
       symbol: _complete_gateway_union
-      reason: The finite named facade bootstrap completes the one closed aggregate after pending request values load; it is not a compatibility implementation or service locator.
+      reason: The finite named facade bootstrap completes the one closed aggregate after request-correlation values load; it is not a compatibility implementation or service locator.
     - from: src/imagent/gateway/routing/projection_routes.py
       to: src/imagent/gateway/routing/operations.py
       symbol: GatewayOperationType
@@ -178,10 +178,6 @@ architecture_lint:
       reason: Route sequencing consumes the historical projection-delivery Port; it forwards a completed outcome to the injected checkpoint authority without making a checkpoint decision.
     - from: src/imagent/projection_routes.py
       to: src/imagent/projections.py
-      symbol: DeliverRequestOutbound
-      reason: Route sequencing consumes the historical typed request-delivery Port while projection/observation physical relocation remains separately scoped.
-    - from: src/imagent/projection_routes.py
-      to: src/imagent/projections.py
       symbol: ProjectedAgentMessage
       reason: Route sequencing consumes the historical observation value while projection/observation physical relocation remains separately scoped.
     - from: src/imagent/projection_routes.py
@@ -197,7 +193,7 @@ architecture_lint:
       reason: Controller action annotations use the declared finite contracts facade to resolve exact Gateway operation and ConversationBinding objects after clean package initialization, without importing Gateway orchestration from the Interaction contract module.
     - from: src/imagent/gateway/__init__.py
       to: src/imagent/contracts/__init__.py
-      reason: Gateway root annotations use the declared finite contracts facade so a pending contracts.operations import does not demand the incomplete #292 aggregate during package initialization; runtime values remain direct canonical owner imports.
+      reason: Gateway root annotations use the declared finite contracts facade for the remaining cross-boundary values while request-response runtime values are imported directly from their canonical projection owner.
 dependency_exceptions:
   - from: interaction.controllers.controller-contract
     to: applications.operations
@@ -657,7 +653,7 @@ components:
     target_tests: [tests/gateway/routing/test_operations.py, tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py]
     authoritative_docs: [docs/components/gateway/routing/gateway-operations/design.md, docs/components/gateway/routing/gateway-operations/testing.md, docs/components/contracts/protocol.md, docs/components/gateway/design.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0008-interactive-request-routing.md]
-    gaps: [request-correlation value/authority move remains in its later focused slice; the versioned schema remains intentionally cross-owner]
+    gaps: [the versioned schema remains intentionally cross-owner]
 
   gateway.routing.projection-routes:
     id: gateway.routing.projection-routes
@@ -679,7 +675,7 @@ components:
     target_tests: [tests/gateway/routing/test_projection_routes.py]
     authoritative_docs: [docs/components/gateway/routing/projection-routes/design.md, docs/components/gateway/routing/projection-routes/testing.md, docs/components/projections-and-recovery/design.md, docs/components/gateway/design.md]
     adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md]
-    gaps: [route delivery ordering and request projection remain in their focused projection owners]
+    gaps: [per-route delivery ordering remains in historical src/imagent/projection_routes.py pending a focused coordination move]
 
   gateway.input.content-transformation:
     id: gateway.input.content-transformation
@@ -715,7 +711,7 @@ components:
     public_exports:
       current: [imagent.contracts:derive_client_message_id]
       target: [imagent.gateway.input:derive_client_message_id]
-    dependencies: [interaction.operations, applications.application-contract, applications.operations, gateway.concurrency, gateway.admission, gateway.projection.request-correlation]
+    dependencies: [interaction.messages, interaction.operations, applications.application-contract, applications.operations, gateway.concurrency, gateway.admission, gateway.projection.request-correlation]
     state_recovery: Pre-dispatch failures release; outcome_unknown stays side_effect_started; accepted results are terminal for inbound idempotency.
     current_code: [src/imagent/contracts/validators.py, src/imagent/gateway/__init__.py, src/imagent/projection_runtime.py]
     target_code: [src/imagent/gateway/input/dispatch.py]
@@ -796,22 +792,22 @@ components:
     parent: gateway.projection
     purpose: Correlate delivered interactive requests and accepted Turns to exact authorized IM destinations.
     owns: [Turn reply correlation, Request route correlation, RespondToRequest, RequestResponseRouted, response validation, claim/transition fences, correlation persistence, replay rules]
-    does_not_own: [native request truth, prompt transcript, approval policy, Gateway aggregate dispatch or Conversation serialization]
-    inputs: [AcceptedTurn, delivered request result, RequestRef]
+    does_not_own: [native request truth, prompt transcript, approval policy, Gateway aggregate dispatch or Conversation serialization, route activation or delivery ordering, generic history recovery]
+    inputs: [AcceptedTurn, Application input dispatch facts, delivered request result, authoritative pending-request snapshot, RequestRef]
     outputs: [minimal typed correlation and routed response]
     public_contracts: [InteractiveRequestProjection, RespondToRequest, RequestResponseRouted]
     public_exports:
-      current: [imagent.request_projection_runtime:InteractiveRequestProjection, imagent.contracts:RespondToRequest, imagent.contracts:RequestResponseRouted]
-      target: [imagent.gateway.projection:InteractiveRequestProjection, imagent.gateway.projection:RespondToRequest, imagent.gateway.projection:RequestResponseRouted]
-    dependencies: [interaction.messages, interaction.operations, applications.application-contract, applications.capabilities, applications.requests, interaction.controllers.request-presentation, gateway.concurrency, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
+      current: [imagent.gateway.projection.request_correlation:InteractiveRequestProjection, imagent.gateway.projection.request_correlation:RespondToRequest, imagent.gateway.projection.request_correlation:RequestResponseRouted, imagent.gateway.projection:InteractiveRequestProjection, imagent.gateway.projection:RespondToRequest, imagent.gateway.projection:RequestResponseRouted]
+      target: [imagent.gateway.projection.request_correlation:InteractiveRequestProjection, imagent.gateway.projection.request_correlation:RespondToRequest, imagent.gateway.projection.request_correlation:RequestResponseRouted, imagent.gateway.projection:InteractiveRequestProjection, imagent.gateway.projection:RespondToRequest, imagent.gateway.projection:RequestResponseRouted]
+    dependencies: [interaction.messages, interaction.operations, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, interaction.controllers.request-presentation, gateway.concurrency, gateway.routing.projection-routes, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Correlations are minimal, bounded, persisted, monotonic, and reconciled only from native authoritative facts.
-    current_code: [src/imagent/contracts/operations.py, src/imagent/contracts/validators.py, src/imagent/gateway/__init__.py, src/imagent/gateway/projection/request_correlation.py, src/imagent/request_projection_runtime.py, src/imagent/projection_routes.py]
+    current_code: [src/imagent/gateway/projection/request_correlation.py]
     target_code: [src/imagent/gateway/projection/request_correlation.py]
-    current_tests: [tests/gateway/projection/test_request_correlation.py, tests/test_appserver_requests.py, tests/test_projection_hardening.py]
+    current_tests: [tests/gateway/projection/test_request_correlation.py, tests/test_appserver_requests.py, tests/test_gateway_operations.py, tests/test_projection_hardening.py]
     target_tests: [tests/gateway/projection/test_request_correlation.py]
     authoritative_docs: [docs/components/gateway/projection/request-correlation/design.md, docs/components/gateway/projection/request-correlation/testing.md, docs/components/gateway/persistence/state-contracts/design.md, docs/components/interaction/controllers/request-presentation/design.md]
     adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [Gateway root, request projection runtime, route orchestration, and contract-validation aggregation remain future focused projection slices]
+    gaps: []
 
   gateway.projection.recovery:
     id: gateway.projection.recovery
@@ -825,9 +821,9 @@ components:
     public_exports:
       current: [imagent.gateway.projection:ThreadRecovery, imagent.gateway.projection:RecoveryMode, imagent.gateway.projection:ProjectionRecoveryUnavailable]
       target: [imagent.gateway.projection:ThreadRecovery, imagent.gateway.projection:RecoveryMode, imagent.gateway.projection:ProjectionRecoveryUnavailable]
-    dependencies: [interaction.messages, applications.application-contract, applications.capabilities, applications.events, applications.operations, gateway.routing.projection-routes, gateway.projection.checkpoints, gateway.persistence.state-contracts]
+    dependencies: [interaction.messages, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, gateway.routing.projection-routes, gateway.projection.checkpoints, gateway.projection.request-correlation, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Subscribe-before-history when replay is absent; missing checkpoints and bounded-scan exhaustion stay explicit, while completed evidence is passed to the checkpoint owner for convergence.
-    current_code: [src/imagent/gateway/projection/__init__.py, src/imagent/gateway/projection/recovery.py, src/imagent/projection_runtime.py, src/imagent/projection_routes.py, src/imagent/request_projection_runtime.py]
+    current_code: [src/imagent/gateway/projection/__init__.py, src/imagent/gateway/projection/recovery.py, src/imagent/projection_runtime.py, src/imagent/projection_routes.py]
     target_code: [src/imagent/gateway/projection/recovery.py]
     current_tests: [tests/gateway/projection/test_recovery.py, tests/test_projection_hardening.py, tests/test_projection_routing.py]
     target_tests: [tests/gateway/projection/test_recovery.py]
@@ -1720,7 +1716,7 @@ structural_status:
       rationale: Finite Applications presentation facade; it re-exports the live-activity and artifact-materialization leaves exactly and retains no runtime or compatibility implementation.
     - path: src/imagent/contracts/__init__.py
       owner: engineering.release
-      rationale: Deliberate finite cross-layer public contract facade; Gateway binding, aggregate-operation, request-correlation, and the permanent ConversationBinding persistence name resolve to their exact focused owners, while projection-route values are intentionally absent, with no compatibility code or service lookup.
+      rationale: Deliberate finite cross-layer public contract facade; Gateway binding, aggregate-operation, and the permanent ConversationBinding persistence name resolve to their exact focused owners, while projection-route and request-response values are intentionally absent, with no compatibility code or service lookup.
     - path: src/imagent/events.py
       owner: engineering.release
       rationale: Stable public Application-event facade; every symbol is an exact re-export from the focused events owner and no implementation remains here.
@@ -1738,7 +1734,7 @@ structural_status:
       rationale: Gateway routing facade re-exports exact binding-owner, projection-route-owner, and aggregate-operation-owner contracts, including canonical aggregate validators, without exposing the private executor or retaining a compatibility implementation. The mixed imagent.gateway orchestration root separately has a finite lazy resolver for exactly ApplicationsListed, GatewayOperation, GatewayOperationFailed, GatewayOperationResult, GatewayOperationType, ListApplications, SelectApplication, validate_gateway_operation, and validate_gateway_operation_result; it resolves and caches exact routing-operation owner objects only after aggregate bootstrap, preserves import-order identity, rejects unknown names, and has no compatibility implementation.
     - path: src/imagent/gateway/projection/__init__.py
       owner: gateway.projection.recovery
-      rationale: Gateway projection facade re-exports exact public contracts from focused checkpoint and recovery leaves without implementing either leaf.
+      rationale: Gateway projection facade re-exports exact public contracts from focused checkpoint, request-correlation, and recovery leaves without implementing any leaf.
     - path: src/imagent/interaction/controllers/__init__.py
       owner: interaction.controllers.controller-contract
       rationale: Sole Interaction Controller facade; contract, registry, and presentation names bind eagerly while the finite cached common-command pair resolves exact owner objects only on demand, so Gateway composition does not load common behavior and no implementation lives here.
@@ -1773,24 +1769,15 @@ structural_status:
     src/imagent/adapters.py:
       owners: [gateway.delivery.proactive-authorization, gateway.persistence.repository-contracts]
       reason: The exact proactive-authorization compatibility Port and repository-contract aliases share one historical facade module after the Application and Channel/admission aliases were retired.
-    src/imagent/contracts/validators.py:
-      owners: [gateway.input.dispatch, gateway.projection.request-correlation]
-      reason: Pending request-correlation and input-dispatch specific validation remains here until those later focused owners move them; the aggregate Gateway validator is owned by gateway.routing.gateway-operations and delegates these exact branches.
     src/imagent/gateway/__init__.py:
-      owners: [gateway.composition, gateway.lifecycle, gateway.admission, gateway.routing.projection-routes, gateway.input.content-transformation, gateway.input.dispatch, gateway.input.failure-presentation, gateway.projection.observation, gateway.projection.request-correlation, gateway.delivery.coordination, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.diagnostics]
-      reason: The package root re-exports composition values while the same module sequences admission, input, delivery, diagnostics, and lifecycle behavior, so it remains a multi-owner split candidate rather than a single-owner formal facade. Its finite lazy Gateway-operation resolver is documented with the routing formal facade. Gateway aggregate dispatch and Conversation serialization live in gateway.routing.gateway-operations; binding repository/CAS and same-target convergence live in gateway.routing.bindings; projection-route values live in gateway.routing.projection-routes. The presentation owner returns a typed post-claim result; the root's existing idempotency branch consumes it without retaining O1 policy/origin logic. Private root delegates retain other cross-owner sequencing, Application Project/Thread truth validation, projection and request-correlation behavior, and input dispatch. ApplicationOperation remains on the existing independent Gateway/ControllerActions path.
+      owners: [gateway.composition, gateway.lifecycle, gateway.admission, gateway.routing.projection-routes, gateway.input.content-transformation, gateway.input.dispatch, gateway.input.failure-presentation, gateway.projection.observation, gateway.delivery.coordination, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.diagnostics]
+      reason: The package root re-exports composition values while the same module sequences admission, input, delivery, diagnostics, and lifecycle behavior, so it remains a multi-owner split candidate rather than a single-owner formal facade. Its finite lazy Gateway-operation resolver is documented with the routing formal facade. Gateway aggregate dispatch and Conversation serialization live in gateway.routing.gateway-operations; binding repository/CAS and same-target convergence live in gateway.routing.bindings; projection-route values live in gateway.routing.projection-routes. The presentation owner returns a typed post-claim result; the root's existing idempotency branch consumes it without retaining O1 policy/origin logic. The private request delegate only adapts a typed request-correlation owner rejection into the aggregate failure result. Private root delegates retain other cross-owner sequencing, Application Project/Thread truth validation, projection, and input dispatch. ApplicationOperation remains on the existing independent Gateway/ControllerActions path.
     src/imagent/gateway/delivery/__init__.py:
       owners: [gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation]
       reason: The intentional Gateway delivery package facade re-exports exact public values from focused delivery leaves without implementing any leaf.
     src/imagent/projection_runtime.py:
       owners: [gateway.input.dispatch, gateway.projection.observation, gateway.projection.recovery]
       reason: Acceptance ordering, one-worker observation, and recovery supervision share one current state machine.
-    src/imagent/request_projection_runtime.py:
-      owners: [gateway.projection.request-correlation, gateway.projection.recovery]
-      reason: Request delivery/correlation and authoritative pending-request gap/restart reconciliation share one runtime.
-    src/imagent/projection_routes.py:
-      owners: [gateway.projection.request-correlation, gateway.projection.recovery]
-      reason: Per-route ordering coordinates request-correlation and bounded recovery after the injected checkpoint authority moved to gateway.projection.checkpoints and canonical route authority moved to gateway.routing.projection-routes.
     src/imagent/gateway/delivery/submissions.py:
       owners: [gateway.delivery.submissions, gateway.delivery.proactive-delivery]
       reason: Delivery identity, canonical metadata, and planning-facing helpers remain in delivery; SQLite SQL and schema now have one owner in gateway.persistence.sqlite.

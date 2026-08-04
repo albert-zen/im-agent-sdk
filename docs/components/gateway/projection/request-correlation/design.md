@@ -82,16 +82,29 @@ snapshot, a transport reset invalidates stale response handles and leaves a
 truthful degraded request-recovery fact. `request.resolved` does not close the
 Turn.
 
-The process-local request-correlation repository implementation lives in
-`gateway/persistence/memory.py`. The pure request identity, destination
-selection, monotonic transition, and conflict policy helpers live in
-`gateway/projection/request_correlation.py`; persistence owns passive records
-and atomic storage, while this leaf owns the routing authority and typed
-response operation values that consume the Port. The Gateway operations
-aggregate delegates to this owner through explicit typed methods and does not
-own response validation, transition fences, correlation persistence, or
-replay. SQLite schema and SQL mutation now live only in
-`gateway/persistence/sqlite.py`; row conversion remains in the pure
+The canonical runtime, typed response operation/result values, concrete
+validation, stable identities, destination selection, Turn-correlation
+orchestration, monotonic transition/claim fences, and authoritative pending
+request reconciliation live together in
+`gateway/projection/request_correlation.py`. One runtime instance is composed
+with the observation and route-delivery coordinators: those owners retain
+acceptance buffering and per-route delivery ordering, while delegating every
+correlation decision and mutation to this leaf. The historical
+`imagent.request_projection_runtime` module is absent.
+
+`imagent.gateway.projection` exposes the exact `InteractiveRequestProjection`,
+`RespondToRequest`, and `RequestResponseRouted` owner objects. The historical
+`imagent.contracts` facade and its `operations` and `validators` modules do not
+retain these moved request attributes. The closed Gateway operation aggregate
+imports the exact operation family from this owner and the Gateway root only
+adapts an owner rejection into the aggregate failure result; it does not own
+response validation, request locking, transitions, correlation persistence,
+or replay.
+
+The process-local repository implementation remains in
+`gateway/persistence/memory.py`; persistence owns passive records and atomic
+storage only. SQLite schema and SQL mutation live only in
+`gateway/persistence/sqlite.py`, and row conversion remains in the pure
 row-mapping leaf.
 
 - [ADR 0008](../../../../decisions/0008-interactive-request-routing.md)

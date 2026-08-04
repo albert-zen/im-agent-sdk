@@ -6,32 +6,15 @@ from datetime import UTC, datetime
 
 from .applications.contract import AgentApplicationAdapter, ThreadRef
 from .applications.operations import ApplicationOperation, ApplicationOperationResult
-from .applications.requests import (
-    InteractiveRequest,
-    RequestRef,
-    derive_request_response_shape,
-)
-from .gateway.persistence.repository_contracts import (
-    IdempotencyClaimStatus,
-    ProjectionRouteRepository,
-    RequestCorrelationRepository,
-)
-from .gateway.persistence.state_contracts import (
-    RequestRouteCorrelation,
-    RequestRouteState,
-    ThreadProjectionRoute,
-)
+from .applications.requests import InteractiveRequest, RequestRef
+from .gateway.persistence.repository_contracts import ProjectionRouteRepository
+from .gateway.persistence.state_contracts import ThreadProjectionRoute
 from .gateway.projection.checkpoints import _ProjectionCheckpointAuthority
 from .gateway.projection.recovery import read_bounded_authoritative_projection
-from .gateway.projection.request_correlation import (
-    derive_request_correlation_id,
-    derive_request_delivery_id,
-)
+from .gateway.projection.request_correlation import _request_expired
 from .gateway.routing.projection_routes import get_projection_route
-from .interaction.controllers import RequestPresenter
 from .projections import (
     DeliverOutbound,
-    DeliverRequestOutbound,
     ProjectedAgentMessage,
     RetryableDeliveryError,
     deliver_projected_message,
@@ -48,6 +31,10 @@ ActiveRoutes = Callable[
     [ThreadRef | None],
     Awaitable[tuple[ThreadProjectionRoute, ...]],
 ]
+DeliverRequestOnce = Callable[
+    [ThreadProjectionRoute, InteractiveRequest],
+    Awaitable[None],
+]
 
 
 class ProjectionRouteCoordinator:
@@ -57,12 +44,10 @@ class ProjectionRouteCoordinator:
         self,
         *,
         projections: ProjectionRouteRepository,
-        request_correlations: RequestCorrelationRepository,
-        request_presenter: RequestPresenter | None,
         execute_application: ExecuteApplication,
         active_routes: ActiveRoutes,
         deliver_outbound: DeliverOutbound,
-        deliver_request_outbound: DeliverRequestOutbound,
+        deliver_request_once: DeliverRequestOnce,
         wait_for_acceptance: WaitForAcceptance,
         record_gap: RecordGap,
         record_delivery_failure: RecordDeliveryFailure,
@@ -79,12 +64,10 @@ class ProjectionRouteCoordinator:
         self._checkpoint_authority = _ProjectionCheckpointAuthority(
             projections=projections,
         )
-        self._request_correlations = request_correlations
-        self._request_presenter = request_presenter
         self._execute_application = execute_application
         self._active_routes = active_routes
         self._deliver_outbound = deliver_outbound
-        self._deliver_request_outbound = deliver_request_outbound
+        self._deliver_request_once = deliver_request_once
         self._wait_for_acceptance = wait_for_acceptance
         self._record_gap = record_gap
         self._record_delivery_failure = record_delivery_failure
@@ -331,74 +314,6 @@ class ProjectionRouteCoordinator:
                     self._block_route(current, error)
                     return
 
-    async def _deliver_request_once(
-        self,
-        route: ThreadProjectionRoute,
-        request: InteractiveRequest,
-    ) -> None:
-        if _request_expired(request):
-            return
-        presenter = self._request_presenter
-        if presenter is None:
-            raise RuntimeError("interactive request presenter is not configured")
-        reply_correlation = await self._projections.get_turn_reply_correlation(
-            request.thread_ref,
-            request.turn_id,
-        )
-        reply_to = (
-            reply_correlation.reply_to_message_id
-            if reply_correlation is not None
-            and reply_correlation.conversation_ref == route.conversation_ref
-            else None
-        )
-        delivery_id = derive_request_delivery_id(
-            request.request_ref,
-            route.conversation_ref,
-        )
-        presentation = presenter.present_request(
-            request,
-            conversation_ref=route.conversation_ref,
-            delivery_id=delivery_id,
-            reply_to_message_id=reply_to,
-        )
-        if request.expires_at is None:
-            outcome = await self._deliver_request_outbound(presentation.message)
-        else:
-            remaining = (request.expires_at - datetime.now(UTC)).total_seconds()
-            if remaining <= 0:
-                return
-            try:
-                async with asyncio.timeout(remaining):
-                    outcome = await self._deliver_request_outbound(presentation.message)
-            except TimeoutError:
-                return
-        if outcome is IdempotencyClaimStatus.IN_FLIGHT:
-            raise RuntimeError(f"interactive request delivery is already in flight: {delivery_id}")
-        if not presentation.response_supported or _request_expired(request):
-            return
-        current = await self._current_active_route(route)
-        if current is None:
-            return
-        now = datetime.now(UTC)
-        await self._request_correlations.put_request_correlation(
-            RequestRouteCorrelation(
-                correlation_id=derive_request_correlation_id(
-                    request.request_ref,
-                    current.conversation_ref,
-                ),
-                request_ref=request.request_ref,
-                thread_ref=request.thread_ref,
-                turn_id=request.turn_id,
-                conversation_ref=current.conversation_ref,
-                delivery_id=delivery_id,
-                response_shape=derive_request_response_shape(request),
-                state=RequestRouteState.OPEN,
-                created_at=now,
-                updated_at=now,
-                expires_at=request.expires_at,
-            )
-        )
-
     def _schedule_request_delivery(
         self,
         route: ThreadProjectionRoute,
@@ -533,7 +448,3 @@ class ProjectionRouteCoordinator:
     ) -> None:
         self._blocked_routes.add(route.route_id)
         self._record_delivery_failure(route, error)
-
-
-def _request_expired(request: InteractiveRequest) -> bool:
-    return request.expires_at is not None and request.expires_at <= datetime.now(UTC)
