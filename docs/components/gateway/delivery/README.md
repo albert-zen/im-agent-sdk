@@ -22,11 +22,12 @@ records only bridge identity/evidence needed for safe convergence.
   stable delivery scope.
 - [proactive delivery design](proactive-delivery/design.md) and
   [testing](proactive-delivery/testing.md) — authorized, route-pinned,
-  idempotent delivery through the common bounded path. Its contract seam in
-  `proactive.py` is the sole owner of the typed vocabulary and validator, and
-  its orchestration sibling in `proactive_runtime.py` remains the runtime
-  owner. Passive submission state stays in `gateway.persistence.state_contracts` without a
-  reverse dependency.
+  idempotent delivery through the common bounded path, including finite
+  process-local exact-delivery-ID ingress coordination before authorization or
+  staging. Its contract seam in `proactive.py` is the sole owner of the typed
+  vocabulary and validator, and its orchestration sibling in
+  `proactive_runtime.py` remains the runtime owner. Passive submission state
+  stays in `gateway.persistence.state_contracts` without a reverse dependency.
 
 JSON/CLI proactive ingress remains mapped to its current authoritative
 documents until its focused move. Delivery owns no native encoding, durable

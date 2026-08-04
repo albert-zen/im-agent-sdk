@@ -78,6 +78,27 @@ Caller-supplied server paths remain unsupported. The staging helper cannot
 authorize, send, retain bytes beyond that attempt, or create a web server,
 spool, background worker, or retry scheduler.
 
+The handler also owns one finite process-local delivery-ID coordination
+registry. Its keyword-only `max_active_delivery_ids` bound is a positive
+non-boolean integer and defaults to 256. The handler first validates the JSON
+`deliveryId` as a non-empty string, then uses that exact string without
+trimming or namespacing as the registry key. It acquires that key before
+target parsing, authentication, base64 inspection/decoding, staging, route
+resolution, submission lookup/reservation, or delivery.
+
+At the bound, an already active identical delivery ID joins the existing key
+and therefore retains the durable replay/in-flight result of the one
+serialized submission. A distinct ID receives a fixed redacted 503 response
+with code `delivery_ingress_capacity_exhausted`; the durable repository's
+separate `delivery_capacity_exhausted` response remains unchanged. The final
+owner/waiter leaving normally or by cancellation removes only that active key,
+so a later distinct ID may use the slot. A new handler/restart begins with an
+empty registry. The registry is not a durable replay authority and adds no
+Gateway limit, global registry, queue, diagnostic provider, hook, worker,
+spool, outbox, persistence, or second execution path. Durable submission
+snapshots and accepted/retryable/rejected/unknown outcomes remain the sole
+restart and retry evidence.
+
 ## Public surface
 
 `imagent.gateway.delivery` is the finite target facade for the service and
