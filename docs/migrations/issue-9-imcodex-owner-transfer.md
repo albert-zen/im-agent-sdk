@@ -121,7 +121,7 @@ Reusable protocol/client code lives below
 | `app_server_target.py` | `target.py` | transfer endpoint/ownership model; remove IMCodex env-name wording |
 | `appserver/retry.py` | `retry.py` | transfer transport retry primitive |
 | `appserver/protocol_map.py` | `adapters/appserver/mapping.py` | transfer protocol notification/request classification |
-| `appserver/diagnostics.py` | `diagnostics.py` | transfer redacted transport diagnostics |
+| `appserver/diagnostics.py` | `adapters/appserver/diagnostics.py` | transfer App Server diagnostic facts and internal debug helpers |
 | `appserver/client.py` | `client.py` | transfer JSON-RPC, stdio/WebSocket, queue, reconnect, and request dispatch |
 | `appserver/supervisor.py` | `supervisor.py` | transfer spawned-stdio/external endpoint lifecycle; remove product telemetry |
 

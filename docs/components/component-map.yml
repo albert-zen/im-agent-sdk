@@ -1266,17 +1266,17 @@ components:
     outputs: [ApplicationDiagnosticFacts-compatible bounded facts and internal debug mappings/logs]
     public_contracts: [AppServerDiagnosticState]
     public_exports:
-      current: [imagent.applications.appserver_client.diagnostic_facts:AppServerDiagnosticState]
+      current: [imagent.applications.adapters.appserver.diagnostics:AppServerDiagnosticState]
       target: [imagent.applications.adapters.appserver.diagnostics:AppServerDiagnosticState]
     dependencies: [applications.application-contract, applications.adapters.appserver.mapping]
     state_recovery: Process-lifetime counters and current connection epoch only; reads perform no I/O.
-    current_code: [src/imagent/diagnostics.py, src/imagent/applications/appserver_client/diagnostic_facts.py, src/imagent/applications/appserver_client/diagnostics.py, src/imagent/applications/appserver_client/runtime_diagnostics.py]
+    current_code: [src/imagent/diagnostics.py, src/imagent/applications/adapters/appserver/diagnostics.py]
     target_code: [src/imagent/applications/adapters/appserver/diagnostics.py]
-    current_tests: [tests/test_appserver_client.py, tests/test_appserver_transport.py, tests/test_diagnostics.py]
+    current_tests: [tests/applications/adapters/appserver/test_diagnostics.py, tests/test_appserver_client.py, tests/test_appserver_transport.py, tests/test_diagnostics.py]
     target_tests: [tests/applications/adapters/appserver/test_diagnostics.py]
     authoritative_docs: [docs/components/applications/adapters/appserver/diagnostics/design.md, docs/components/applications/adapters/appserver/diagnostics/testing.md]
     adrs: [docs/decisions/0014-read-only-diagnostics-surface.md]
-    gaps: [authoritative leaf docs now exist; App Server diagnostic positions remain split across appserver_client files and the historical aggregate diagnostics module; legacy debug summaries still require focused bounds and redaction]
+    gaps: [legacy debug summaries still require focused bounds and redaction; shared diagnostic vocabulary remains in src/imagent/diagnostics.py]
 
   applications.adapters.codex:
     id: applications.adapters.codex

@@ -20,19 +20,21 @@ affected cross-adapter evidence, not an App Server diagnostic dependency.
 
 ## Target evidence and verification
 
-The future mirrored path is
-`tests/applications/adapters/appserver/test_diagnostics.py`. Run current
-evidence with:
+The target focused suite is
+`tests/applications/adapters/appserver/test_diagnostics.py`. Run it together
+with the retained cross-component evidence:
 
 ```sh
+PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.test_diagnostics -v
 uv run python -m unittest tests.test_diagnostics -v
 uv run python -m unittest tests.test_appserver_client -v
 uv run python -m unittest tests.test_appserver_transport -v
 ```
 
-The later physical split must keep diagnostic reads side-effect free and
-bounded, then run every AGENTS gate, component-map/AgentKit check, and
-clean-wheel smoke.
+The physical move keeps diagnostic reads side-effect free and bounded, then
+requires every AGENTS gate, component-map/AgentKit check, and clean-wheel
+smoke. Legacy debug summaries remain outside the ADR-0014 fact guarantee;
+their security hardening is a later slice.
 
 ## Authority
 

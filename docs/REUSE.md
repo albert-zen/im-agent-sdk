@@ -79,11 +79,13 @@ Issue #9 can close.
 
 ## Codex App Server client transfer
 
-Reusable target, retry, diagnostics, JSON-RPC client, and supervisor modules
-were transferred from the same pinned IMCodex commit into
-`src/imagent/applications/appserver_client/`; protocol/resource mapping is now
-owned by `src/imagent/applications/adapters/appserver/mapping.py`, and
-framing/closure is owned by
+Reusable target, retry, JSON-RPC client, and supervisor modules were
+transferred from the same pinned IMCodex commit into
+`src/imagent/applications/appserver_client/`; App Server diagnostic facts and
+internal helpers are now owned by
+`src/imagent/applications/adapters/appserver/diagnostics.py`,
+protocol/resource mapping is owned by
+`src/imagent/applications/adapters/appserver/mapping.py`, and framing/closure is owned by
 `src/imagent/applications/adapters/appserver/transport.py`. They support
 spawned stdio, Unix-socket, and TCP WebSocket endpoints without importing
 product backends or configuration. Consumer supervision, branding, commands,

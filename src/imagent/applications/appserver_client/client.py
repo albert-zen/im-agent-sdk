@@ -12,21 +12,25 @@ from ...diagnostics import (
     ConnectionDiagnosticFacts,
     QueueDiagnosticName,
 )
+from ..adapters.appserver.diagnostics import (
+    AppServerDiagnosticState,
+    emit_event,
+    mark_appserver_health,
+    summarize_text,
+    summarize_transport_message,
+)
 from ..adapters.appserver.transport import (
     AppServerError,
     AppServerTransport,
     StdioAppServerTransport,
     WebSocketAppServerTransport,
 )
-from .diagnostic_facts import AppServerDiagnosticState
-from .diagnostics import summarize_text, summarize_transport_message
 from .handoff import (
     APP_SERVER_DISPATCH_POSITION_KEY,
     AppServerDispatchPosition,
     AppServerResponse,
 )
 from .retry import RetryBackoff
-from .runtime_diagnostics import emit_event, mark_appserver_health
 from .target import EXTERNAL_CONNECTION_MODE, SPAWNED_STDIO_CONNECTION_MODE
 
 JsonDict = dict[str, Any]

@@ -28,10 +28,10 @@ that redaction guarantee and currently may include native/response IDs,
 content or error previews, commands, cwd, questions, and changed paths.
 Snapshot reads perform no I/O.
 
-The current formal export is `AppServerDiagnosticState` from
-`imagent.applications.appserver_client.diagnostic_facts`. The target exact
-owner is `imagent.applications.adapters.appserver.diagnostics`; the
-historical client facade identity remains stable during migration.
+The formal export is now `AppServerDiagnosticState` from the exact owner
+`imagent.applications.adapters.appserver.diagnostics`. The historical
+`appserver_client` diagnostic modules are removed; no aggregate diagnostics
+facade or duplicate implementation is introduced.
 
 ## Dependencies, state, and recovery
 
@@ -46,21 +46,16 @@ content-derived values may be retained or emitted.
 
 ## Current, target, and structural gap
 
-Current code is split across the App Server diagnostic fact, summary, and
-runtime files plus the App Server-specific portion of
-`src/imagent/diagnostics.py`:
-
-- `src/imagent/applications/appserver_client/diagnostic_facts.py`
-- `src/imagent/applications/appserver_client/diagnostics.py`
-- `src/imagent/applications/appserver_client/runtime_diagnostics.py`
-- `src/imagent/diagnostics.py`
-
+The App Server diagnostic fact, summary, and runtime helpers now co-locate at
+`src/imagent/applications/adapters/appserver/diagnostics.py`.
+`src/imagent/diagnostics.py` remains the shared diagnostic contract and
+aggregate vocabulary; it is not moved or reclassified as an App Server leaf.
 Current evidence is `tests/test_appserver_client.py`,
 `tests/test_appserver_transport.py`, and `tests/test_diagnostics.py`; the target suite is
 `tests/applications/adapters/appserver/test_diagnostics.py`. The gap is to
-move only App Server-specific implementation while preserving the common
-diagnostic contract and keeping Applications independent of Gateway, plus the
-legacy debug-summary redaction/bounding work described above.
+preserve the common diagnostic contract and keep Applications independent of
+Gateway, plus the legacy debug-summary redaction/bounding work described
+above.
 
 ## Authority
 

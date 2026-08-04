@@ -827,9 +827,9 @@ maintainability:
       guidance: Keep wire transports limited to JSON framing, I/O lifecycle, and connection-closed translation.
     - name: appserver-client-diagnostics
       paths:
-        - src/imagent/applications/appserver_client/diagnostic_facts.py
-      max_lines: 120
-      max_functions: 8
+        - src/imagent/applications/adapters/appserver/diagnostics.py
+      max_lines: 350
+      max_functions: 25
       max_classes: 2
       mode: warn
       guidance: Keep diagnostic state bounded, redacted, process-local, and free of transport or recovery ownership.
