@@ -1166,7 +1166,7 @@ components:
     target_tests: [tests/applications/presentation/test_artifact_materialization.py]
     authoritative_docs: [docs/components/applications/presentation/artifact-materialization/design.md, docs/components/applications/presentation/artifact-materialization/testing.md]
     adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [App Server native ordering and adapter invocation remain in historical appserver.py until the adapter split]
+    gaps: [App Server native ordering and adapter invocation remain in the explicitly mapped two-owner private adapter base]
 
   applications.adapters.appserver.client:
     id: applications.adapters.appserver.client
@@ -1288,17 +1288,17 @@ components:
     outputs: [common Application contract behavior]
     public_contracts: [CodexApplicationAdapter]
     public_exports:
-      current: [imagent.applications:CodexApplicationAdapter]
+      current: [imagent.applications:CodexApplicationAdapter, imagent.applications.adapters.codex:CodexApplicationAdapter]
       target: [imagent.applications.adapters.codex:CodexApplicationAdapter]
     dependencies: [interaction.messages, interaction.operations, interaction.media, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, applications.adapters.appserver.client, applications.adapters.appserver.mapping, applications.adapters.appserver.requests, applications.adapters.appserver.diagnostics, applications.presentation.live-activity, applications.presentation.artifact-materialization]
     state_recovery: Native history is authoritative; steer candidate read never authorizes fallback start; ambiguous dispatch is unknown.
-    current_code: [src/imagent/applications/appserver.py]
-    target_code: [src/imagent/applications/adapters/codex.py]
-    current_tests: [tests/applications/adapters/appserver/test_client.py, tests/test_appserver_input.py, tests/applications/adapters/appserver/test_mapping.py, tests/applications/adapters/appserver/test_requests.py, tests/test_appserver_requests.py, tests/applications/presentation/test_artifact_materialization.py, tests/applications/presentation/test_live_activity.py]
+    current_code: [src/imagent/applications/adapters/codex.py, src/imagent/applications/adapters/appserver/_base.py]
+    target_code: [src/imagent/applications/adapters/codex.py, src/imagent/applications/adapters/appserver/_base.py]
+    current_tests: [tests/applications/adapters/test_codex.py, tests/applications/adapters/appserver/test_client.py, tests/test_appserver_input.py, tests/applications/adapters/appserver/test_mapping.py, tests/applications/adapters/appserver/test_requests.py, tests/test_appserver_requests.py, tests/applications/presentation/test_artifact_materialization.py, tests/applications/presentation/test_live_activity.py]
     target_tests: [tests/applications/adapters/test_codex.py]
     authoritative_docs: [docs/components/applications/adapters/codex/design.md, docs/components/applications/adapters/codex/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [authoritative leaf docs now exist; appserver.py still combines the common App Server base plus Codex and Zen and must be split mechanically without changing native ordering or outcome semantics]
+    gaps: []
 
   applications.adapters.zen:
     id: applications.adapters.zen
@@ -1310,17 +1310,17 @@ components:
     outputs: [common Application contract behavior]
     public_contracts: [ZenApplicationAdapter]
     public_exports:
-      current: [imagent.applications:ZenApplicationAdapter]
+      current: [imagent.applications:ZenApplicationAdapter, imagent.applications.adapters.zen:ZenApplicationAdapter]
       target: [imagent.applications.adapters.zen:ZenApplicationAdapter]
     dependencies: [interaction.messages, interaction.operations, interaction.media, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, applications.adapters.appserver.client, applications.adapters.appserver.mapping, applications.adapters.appserver.requests, applications.adapters.appserver.diagnostics, applications.presentation.artifact-materialization]
     state_recovery: Starts new native Turns for prefer_active_turn until Zen proves steer; authoritative history handles gaps.
-    current_code: [src/imagent/applications/appserver.py]
-    target_code: [src/imagent/applications/adapters/zen.py]
-    current_tests: [tests/applications/adapters/appserver/test_client.py, tests/test_appserver_input.py, tests/applications/adapters/appserver/test_requests.py, tests/test_appserver_requests.py, tests/applications/presentation/test_artifact_materialization.py, tests/test_gateway_vertical_slice.py]
+    current_code: [src/imagent/applications/adapters/zen.py, src/imagent/applications/adapters/appserver/_base.py]
+    target_code: [src/imagent/applications/adapters/zen.py, src/imagent/applications/adapters/appserver/_base.py]
+    current_tests: [tests/applications/adapters/test_zen.py, tests/applications/adapters/appserver/test_client.py, tests/test_appserver_input.py, tests/applications/adapters/appserver/test_requests.py, tests/test_appserver_requests.py, tests/applications/presentation/test_artifact_materialization.py, tests/test_gateway_vertical_slice.py]
     target_tests: [tests/applications/adapters/test_zen.py]
     authoritative_docs: [docs/components/applications/adapters/zen/design.md, docs/components/applications/adapters/zen/testing.md]
     adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [authoritative leaf docs now exist; Zen and Codex still share one current adapter module and require a mechanical split that does not inherit Codex-only semantics]
+    gaps: []
 
   applications.adapters.t3:
     id: applications.adapters.t3
@@ -1574,6 +1574,6 @@ structural_status:
     src/imagent/sqlite_rows.py:
       owners: [gateway.persistence.sqlite, gateway.persistence.row-mapping]
       reason: Pure binding, route, and Turn-correlation conversion shares the file with merge_projection_route, whose endpoint-conflict and checkpoint-preservation mutation policy belongs to the SQLite transaction owner.
-    src/imagent/applications/appserver.py:
+    src/imagent/applications/adapters/appserver/_base.py:
       owners: [applications.adapters.codex, applications.adapters.zen]
-      reason: Shared App Server base plus concrete Codex and Zen mappings require focused extraction without duplicating transport state.
+      reason: Private shared App Server base owns typed start/input preparation, verified local-image epochs, the common STARTED/CREATE_NEW fence with no expected Turn ID, native turn/start, and common ordered normalization; Codex alone owns steer enablement, active-Turn selection, STEERED/PRESERVE_EXISTING classification with the active Turn ID, and turn/steer, while Zen remains start-only. No public aggregate facade is exposed.

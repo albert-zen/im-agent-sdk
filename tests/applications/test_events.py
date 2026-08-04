@@ -51,7 +51,8 @@ class ApplicationEventTests(unittest.IsolatedAsyncioTestCase):
                 "-c",
                 "import sys; "
                 "from imagent.applications import events; "
-                "assert 'imagent.applications.appserver' not in sys.modules; "
+                "assert 'imagent.applications.adapters.codex' not in sys.modules; "
+                "assert 'imagent.applications.adapters.zen' not in sys.modules; "
                 "assert 'imagent.applications.t3' not in sys.modules",
             ],
             capture_output=True,

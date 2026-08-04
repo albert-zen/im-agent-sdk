@@ -33,8 +33,9 @@ identity; the base case additionally verifies the focused
 `imagent.interaction.channels` contract facade and clean-process absence of
 every retired `imagent.adapters`/`imagent.contracts` Channel name. The base
 case also verifies the formal `imagent.interaction.controllers` facade
-identities, runtime type hints, and clean-process absence/unimportability of
-`imagent.controllers`. Every case checks expected public imports, native
+identities, runtime type hints, exact Codex/Zen adapter owner identities, and
+clean-process absence/unimportability of `imagent.controllers` and the
+historical shared App Server module. Every case checks expected public imports, native
 dependency boundaries, and absence of the consumer package. A clean base
 install must not discover optional integration dependencies that were not
 requested. The aggregate `channels` extra and wheel contents such as

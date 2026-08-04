@@ -59,11 +59,16 @@ Gateway sees only Applications contracts and canonical events.
 ## Current and target layout
 
 Issue #240 established this documentation authority before mechanical moves.
-The App Server transport leaf is now physically at its target path; the
-remaining implementation and test paths are still the historical paths
-recorded by the [component map](../../component-map.yml). The other target
-package paths remain reserved for later one-issue/one-PR mechanical slices.
-No aggregate `imagent.applications.adapters.appserver` facade is introduced.
+The App Server transport, client, mapping, request, and diagnostics leaves are
+physically at their target paths. Codex and Zen have separate concrete modules
+with one explicitly mapped private two-owner base under the App Server subtree;
+no aggregate `imagent.applications.adapters.appserver` facade is introduced.
+The private base shares typed start/input preparation, the common
+`STARTED`/`CREATE_NEW` fence with no expected Turn ID, and common native
+normalization; Codex owns steer selection, active-Turn discovery,
+`STEERED`/`PRESERVE_EXISTING` classification with the active Turn ID, and
+`turn/steer`, while Zen is start-only.
+T3 remains reserved for its later one-issue/one-PR mechanical slice.
 
 The cross-adapter overview remains available as [transition design
 context](../../application-adapters/design.md) and [cross-adapter testing

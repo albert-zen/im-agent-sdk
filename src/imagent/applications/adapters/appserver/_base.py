@@ -5,76 +5,23 @@ import inspect
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
 from typing import Protocol, cast
 
-from ..contracts.errors import ApplicationInputOutcomeUnknown
-from ..diagnostics import ApplicationDiagnosticFacts, ConnectionDiagnosticFacts
-from ..interaction.media import (
+from ....contracts.errors import ApplicationInputOutcomeUnknown
+from ....diagnostics import ApplicationDiagnosticFacts, ConnectionDiagnosticFacts
+from ....interaction.media import (
     AttachmentContent,
     AttachmentSourceKind,
     configure_shared_filesystem_root,
     resolve_local_attachment,
 )
-from ..interaction.messages import MessageRole, TextContent, TextFormat
-from ..interaction.operations import operation_error
-from .adapters.appserver.mapping import (
-    is_agent_item as _is_agent_item,
-)
-from .adapters.appserver.mapping import (
-    is_unsupported_method_error as _is_unsupported_method_error,
-)
-from .adapters.appserver.mapping import (
-    item_text as _item_text,
-)
-from .adapters.appserver.mapping import (
-    native_list as _native_list,
-)
-from .adapters.appserver.mapping import (
-    native_object as _native_object,
-)
-from .adapters.appserver.mapping import (
-    native_turn_id as _native_turn_id,
-)
-from .adapters.appserver.mapping import (
-    normalized_item_type as _normalized_item_type,
-)
-from .adapters.appserver.mapping import (
-    optional_string as _optional_string,
-)
-from .adapters.appserver.mapping import (
-    parse_datetime as _parse_datetime,
-)
-from .adapters.appserver.mapping import (
-    thread_status as _thread_status,
-)
-from .adapters.appserver.mapping import (
-    turn_error as _turn_error,
-)
-from .adapters.appserver.mapping import (
-    turn_id as _turn_id,
-)
-from .adapters.appserver.mapping import (
-    turn_items as _turn_items,
-)
-from .adapters.appserver.mapping import (
-    turn_list as _turn_list,
-)
-from .adapters.appserver.mapping import (
-    turn_status as _turn_status,
-)
-from .adapters.appserver.mapping import (
-    turn_updated_at as _turn_updated_at,
-)
-from .adapters.appserver.requests import (
-    AppServerRequestRuntime,
-    ServerRequestMapper,
-    map_appserver_request,
-    map_zen_appserver_request,
-)
-from .capabilities import (
+from ....interaction.messages import MessageRole, TextContent, TextFormat
+from ....interaction.operations import operation_error
+from ...capabilities import (
     ApplicationCapabilities,
     EventSequenceScope,
     ProjectCapabilities,
@@ -84,7 +31,7 @@ from .capabilities import (
     ThreadCapabilities,
     ThreadDeletionCapability,
 )
-from .contract import (
+from ...contract import (
     AcceptedTurn,
     AgentInput,
     AgentMessage,
@@ -96,15 +43,14 @@ from .contract import (
     Page,
     ThreadHistory,
     ThreadRef,
-    ThreadStatus,
     ThreadSummary,
     TurnCatchup,
     TurnHistoryEntry,
     TurnReplyCorrelationPolicy,
     TurnStatus,
 )
-from .events import AgentEvent, AgentEventType, EventBroadcaster, EventStreamReset
-from .operations import (
+from ...events import AgentEvent, AgentEventType, EventBroadcaster, EventStreamReset
+from ...operations import (
     ActivateNativeThread,
     ApplicationOperation,
     ApplicationOperationFailed,
@@ -131,16 +77,8 @@ from .operations import (
     validate_application_operation,
     validate_application_operation_result,
 )
-from .presentation import (
-    ApplicationPresentationLimits,
-    ApplicationPresentationRuntime,
-    CodexLiveActivityFacts,
-    CodexLiveActivityKind,
-    CodexLiveActivityMethod,
-    CodexLiveActivityPresenter,
-    CodexPlanStep,
-)
-from .presentation.artifact_materialization import (
+from ...presentation import ApplicationPresentationRuntime
+from ...presentation.artifact_materialization import (
     ApplicationArtifactMaterialization,
     ApplicationArtifactMaterializationCancelled,
     ApplicationArtifactMaterializationCapacityError,
@@ -155,7 +93,59 @@ from .presentation.artifact_materialization import (
     AppServerTurnTerminalStatus,
     appserver_completed_item_facts,
 )
-from .requests import InteractiveRequest
+from ...requests import InteractiveRequest
+from .mapping import (
+    is_agent_item as _is_agent_item,
+)
+from .mapping import (
+    is_unsupported_method_error as _is_unsupported_method_error,
+)
+from .mapping import (
+    item_text as _item_text,
+)
+from .mapping import (
+    native_list as _native_list,
+)
+from .mapping import (
+    native_object as _native_object,
+)
+from .mapping import (
+    native_turn_id as _native_turn_id,
+)
+from .mapping import (
+    normalized_item_type as _normalized_item_type,
+)
+from .mapping import (
+    optional_string as _optional_string,
+)
+from .mapping import (
+    parse_datetime as _parse_datetime,
+)
+from .mapping import (
+    thread_status as _thread_status,
+)
+from .mapping import (
+    turn_error as _turn_error,
+)
+from .mapping import (
+    turn_id as _turn_id,
+)
+from .mapping import (
+    turn_items as _turn_items,
+)
+from .mapping import (
+    turn_list as _turn_list,
+)
+from .mapping import (
+    turn_status as _turn_status,
+)
+from .mapping import (
+    turn_updated_at as _turn_updated_at,
+)
+from .requests import (
+    AppServerRequestRuntime,
+    ServerRequestMapper,
+)
 
 _ARTIFACT_OBSERVATION_ERRORS = (
     ApplicationArtifactMaterializationError,
@@ -164,6 +154,12 @@ _ARTIFACT_OBSERVATION_ERRORS = (
     ApplicationArtifactMaterializationCancelled,
     ApplicationArtifactMaterializationFailed,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class _PreparedAppServerInput:
+    text: str
+    input_items: tuple[Mapping[str, object], ...] | None
 
 
 class AppServerClient(Protocol):
@@ -203,7 +199,7 @@ class AppServerClient(Protocol):
 
 
 class _AppServerApplicationAdapter:
-    """Codex App Server projection shared by distinct Zen and Codex adapters."""
+    """Common App Server projection shared by distinct Zen and Codex adapters."""
 
     def __init__(
         self,
@@ -216,10 +212,8 @@ class _AppServerApplicationAdapter:
         shared_filesystem_root: str | Path | None = None,
         server_request_mapper: ServerRequestMapper | None = None,
         event_buffer_max_pending: int = 1024,
-        steer_active_turn: bool = False,
         thread_start_options: Mapping[str, object] | None = None,
-        live_activity_presenter: CodexLiveActivityPresenter | None = None,
-        presentation_limits: ApplicationPresentationLimits = ApplicationPresentationLimits(),
+        presentation_runtime: ApplicationPresentationRuntime | None = None,
         artifact_materializer: AppServerArtifactMaterializer | None = None,
         artifact_materialization_limits: AppServerArtifactMaterializationLimits = (
             AppServerArtifactMaterializationLimits()
@@ -231,15 +225,7 @@ class _AppServerApplicationAdapter:
         self._shared_filesystem_root = configure_shared_filesystem_root(shared_filesystem_root)
         self._thread_start_options = _thread_start_options(thread_start_options)
         self._events = EventBroadcaster[str, AgentEvent](max_pending=event_buffer_max_pending)
-        self._steer_active_turn = steer_active_turn
-        self._live_activity_presenter = live_activity_presenter
-        self._presentation_limits = presentation_limits
-        self._seen_live_activity_ids: dict[tuple[str, str], None] = {}
-        self._presentation_runtime = (
-            ApplicationPresentationRuntime(presentation_limits)
-            if live_activity_presenter is not None
-            else None
-        )
+        self._presentation_runtime = presentation_runtime
         self._artifact_materializer = artifact_materializer
         self._artifact_materialization_limits = artifact_materialization_limits
         self._artifact_materialization_runtime = (
@@ -845,11 +831,63 @@ class _AppServerApplicationAdapter:
         before_dispatch: Callable[[ApplicationInputDispatch], Awaitable[None]] | None = None,
     ) -> AcceptedTurn:
         self._require_own_thread(thread_ref)
+        prepared = self._prepare_input(message)
+        if not isinstance(continuation, InputContinuationPreference):
+            raise ValueError("unknown input continuation preference")
+        return await self._start_prepared_input(
+            thread_ref,
+            message,
+            prepared,
+            before_dispatch,
+        )
+
+    async def _start_prepared_input(
+        self,
+        thread_ref: ThreadRef,
+        message: AgentInput,
+        prepared: _PreparedAppServerInput,
+        before_dispatch: Callable[[ApplicationInputDispatch], Awaitable[None]] | None,
+    ) -> AcceptedTurn:
+        expected_local_image_epoch = (
+            await self._verified_local_image_epoch() if prepared.input_items is not None else None
+        )
+        if before_dispatch is not None:
+            await before_dispatch(
+                ApplicationInputDispatch(
+                    thread_ref=thread_ref,
+                    client_message_id=message.client_message_id,
+                    disposition=InputDisposition.STARTED,
+                    correlation_policy=TurnReplyCorrelationPolicy.CREATE_NEW,
+                    expected_turn_id=None,
+                )
+            )
+        result = await self._start_input(
+            thread_id=thread_ref.native_thread_id,
+            prepared=prepared,
+            expected_local_image_epoch=expected_local_image_epoch,
+        )
+
+        turn_id = _native_turn_id(result)
+        if not turn_id:
+            cause = RuntimeError("turn/start did not return a turn id")
+            raise ApplicationInputOutcomeUnknown(
+                "turn/start was accepted but its native Turn identity is unknown",
+                cause,
+            ) from cause
+        return AcceptedTurn(
+            thread_ref=thread_ref,
+            turn_id=turn_id,
+            client_message_id=message.client_message_id,
+            disposition=InputDisposition.STARTED,
+            correlation_policy=TurnReplyCorrelationPolicy.CREATE_NEW,
+        )
+
+    def _prepare_input(self, message: AgentInput) -> _PreparedAppServerInput:
         text = "\n".join(
             part.text for part in message.content if isinstance(part, TextContent)
         ).strip()
         attachments = tuple(part for part in message.content if isinstance(part, AttachmentContent))
-        input_items: list[dict[str, object]] | None = None
+        input_items: list[Mapping[str, object]] | None = None
         if attachments:
             input_items = []
             if text:
@@ -865,83 +903,35 @@ class _AppServerApplicationAdapter:
                 input_items.append({"type": "localImage", "path": str(local_path)})
         elif not text:
             raise ValueError("Codex App Server input requires text or image")
-
-        if not isinstance(continuation, InputContinuationPreference):
-            raise ValueError("unknown input continuation preference")
-        active_turn_id = None
-        if (
-            self._steer_active_turn
-            and continuation is InputContinuationPreference.PREFER_ACTIVE_TURN
-        ):
-            active_turn_id = await self._read_active_turn_id(thread_ref.native_thread_id)
-        expected_local_image_epoch = (
-            await self._verified_local_image_epoch() if input_items is not None else None
-        )
-        if active_turn_id is not None:
-            steer_turn = getattr(self._client, "steer_turn", None)
-            if not callable(steer_turn):
-                raise RuntimeError("configured App Server client does not support turn/steer")
-            disposition = InputDisposition.STEERED
-            correlation_policy = TurnReplyCorrelationPolicy.PRESERVE_EXISTING
-        else:
-            disposition = InputDisposition.STARTED
-            correlation_policy = TurnReplyCorrelationPolicy.CREATE_NEW
-        if before_dispatch is not None:
-            await before_dispatch(
-                ApplicationInputDispatch(
-                    thread_ref=thread_ref,
-                    client_message_id=message.client_message_id,
-                    disposition=disposition,
-                    correlation_policy=correlation_policy,
-                    expected_turn_id=active_turn_id,
-                )
-            )
-        result = await self._dispatch_input(
-            thread_id=thread_ref.native_thread_id,
-            active_turn_id=active_turn_id,
+        return _PreparedAppServerInput(
             text=text,
-            input_items=input_items,
-            expected_local_image_epoch=expected_local_image_epoch,
+            input_items=(tuple(input_items) if input_items is not None else None),
         )
 
-        turn_id = _native_turn_id(result)
-        if not turn_id:
-            operation = "turn/steer" if active_turn_id is not None else "turn/start"
-            cause = RuntimeError(f"{operation} did not return a turn id")
-            raise ApplicationInputOutcomeUnknown(
-                f"{operation} was accepted but its native Turn identity is unknown",
-                cause,
-            ) from cause
-        return AcceptedTurn(
-            thread_ref=thread_ref,
-            turn_id=turn_id,
-            client_message_id=message.client_message_id,
-            disposition=disposition,
-            correlation_policy=correlation_policy,
-        )
+    def _input_arguments(
+        self,
+        prepared: _PreparedAppServerInput,
+        expected_local_image_epoch: int | None,
+    ) -> tuple[str | None, dict[str, object]]:
+        if prepared.input_items is None:
+            return prepared.text, {}
+        return None, {
+            "input_items": [dict(item) for item in prepared.input_items],
+            "expected_local_image_epoch": expected_local_image_epoch,
+        }
 
-    async def _read_active_turn_id(self, thread_id: str) -> str | None:
-        result = await self._client.read_thread(thread_id, include_turns=True)
-        thread = _native_object(result, "thread")
-        turns = thread.get("turns")
-        if not isinstance(turns, list):
-            raise RuntimeError("active-Turn steering requires an authoritative native turn list")
-        for turn in reversed(turns):
-            if (
-                not isinstance(turn, Mapping)
-                or _turn_status(turn.get("status")) is not TurnStatus.RUNNING
-            ):
-                continue
-            turn_id = _optional_string(turn.get("id") or turn.get("turnId"))
-            if turn_id is None:
-                raise RuntimeError("active native Turn did not contain an id")
-            return turn_id
-        status_value = thread.get("status")
-        if isinstance(status_value, Mapping):
-            status_value = status_value.get("type") or status_value.get("status")
-        if _thread_status(status_value) is ThreadStatus.RUNNING:
-            raise RuntimeError("native thread is active but did not expose an active Turn identity")
-        return None
+    async def _start_input(
+        self,
+        *,
+        thread_id: str,
+        prepared: _PreparedAppServerInput,
+        expected_local_image_epoch: int | None,
+    ) -> Mapping[str, object]:
+        native_text, kwargs = self._input_arguments(
+            prepared,
+            expected_local_image_epoch,
+        )
+        return await self._client.start_turn(thread_id, native_text, **kwargs)
 
     async def _verified_local_image_epoch(self) -> int:
         epoch_reader = getattr(self._client, "local_image_paths_epoch", None)
@@ -962,31 +952,6 @@ class _AppServerApplicationAdapter:
                 "Codex App Server local images require a verified shared filesystem epoch"
             )
         return int(cast(int, epoch))
-
-    async def _dispatch_input(
-        self,
-        *,
-        thread_id: str,
-        active_turn_id: str | None,
-        text: str,
-        input_items: list[dict[str, object]] | None,
-        expected_local_image_epoch: int | None,
-    ) -> Mapping[str, object]:
-        kwargs: dict[str, object] = {}
-        native_text: str | None = text
-        if input_items is not None:
-            native_text = None
-            kwargs["input_items"] = input_items
-            kwargs["expected_local_image_epoch"] = expected_local_image_epoch
-        if active_turn_id is None:
-            return await self._client.start_turn(thread_id, native_text, **kwargs)
-        steer_turn = getattr(self._client, "steer_turn", None)
-        if not callable(steer_turn):
-            raise RuntimeError("configured App Server client does not support turn/steer")
-        result = steer_turn(thread_id, active_turn_id, native_text, **kwargs)
-        if not inspect.isawaitable(result):
-            raise RuntimeError("configured App Server turn/steer did not return an awaitable")
-        return await cast(Awaitable[Mapping[str, object]], result)
 
     def subscribe_thread(
         self,
@@ -1025,53 +990,6 @@ class _AppServerApplicationAdapter:
             params.get("turnId") or (turn.get("id") if isinstance(turn, dict) else "") or ""
         )
         thread_ref = self._thread_ref(thread_id)
-        live_activity_presenter = self._live_activity_presenter
-        if live_activity_presenter is not None:
-            facts = _codex_live_activity_facts(
-                thread_ref,
-                turn_id=turn_id or None,
-                method=method,
-                params=params,
-            )
-            if facts is not None:
-                identity = (thread_id, facts.event_id)
-                if identity in self._seen_live_activity_ids:
-                    return
-                self._seen_live_activity_ids[identity] = None
-                while (
-                    len(self._seen_live_activity_ids)
-                    > self._presentation_limits.max_seen_identities
-                ):
-                    self._seen_live_activity_ids.pop(next(iter(self._seen_live_activity_ids)))
-                runtime = self._presentation_runtime
-                if runtime is None:
-                    raise RuntimeError("Codex live presenter runtime is not configured")
-                presentation = await runtime.invoke(
-                    lambda: live_activity_presenter.present_live_activity(facts)
-                )
-                if presentation is not None:
-                    message = AgentMessage(
-                        agent_item_id=facts.event_id,
-                        thread_ref=thread_ref,
-                        role=MessageRole.SYSTEM,
-                        content=presentation.content,
-                        created_at=datetime.now(UTC),
-                        metadata={
-                            "native_application": self._summary.kind,
-                            "native_method": facts.native_method.value,
-                            "kind": facts.kind.value,
-                            "live_only": True,
-                        },
-                    )
-                    self._emit(
-                        thread_id,
-                        AgentEventType.MESSAGE_CREATED,
-                        {"message": message},
-                        event_id=facts.event_id,
-                        thread_ref=thread_ref,
-                        turn_id=turn_id or None,
-                    )
-                return
         if method == "item/agentMessage/delta":
             self._emit(
                 thread_id,
@@ -1261,159 +1179,6 @@ class _AppServerApplicationAdapter:
     def _require_own_thread(self, thread_ref: ThreadRef) -> None:
         if thread_ref.application_instance_id != self._application_instance_id:
             raise ValueError("thread belongs to a different application instance")
-
-
-class ZenApplicationAdapter(_AppServerApplicationAdapter):
-    def __init__(
-        self,
-        *,
-        application_instance_id: str,
-        client: AppServerClient,
-        cwd: str,
-        shared_filesystem_root: str | Path | None = None,
-        event_buffer_max_pending: int = 1024,
-        thread_start_options: Mapping[str, object] | None = None,
-        artifact_materializer: AppServerArtifactMaterializer | None = None,
-        artifact_materialization_limits: AppServerArtifactMaterializationLimits = (
-            AppServerArtifactMaterializationLimits()
-        ),
-    ) -> None:
-        super().__init__(
-            application_instance_id=application_instance_id,
-            kind="zen",
-            display_name="Zen",
-            client=client,
-            cwd=cwd,
-            shared_filesystem_root=shared_filesystem_root,
-            server_request_mapper=map_zen_appserver_request,
-            event_buffer_max_pending=event_buffer_max_pending,
-            thread_start_options=thread_start_options,
-            artifact_materializer=artifact_materializer,
-            artifact_materialization_limits=artifact_materialization_limits,
-        )
-
-
-class CodexApplicationAdapter(_AppServerApplicationAdapter):
-    def __init__(
-        self,
-        *,
-        application_instance_id: str,
-        client: AppServerClient,
-        cwd: str,
-        shared_filesystem_root: str | Path | None = None,
-        event_buffer_max_pending: int = 1024,
-        steer_active_turn: bool = True,
-        thread_start_options: Mapping[str, object] | None = None,
-        live_activity_presenter: CodexLiveActivityPresenter | None = None,
-        presentation_limits: ApplicationPresentationLimits = ApplicationPresentationLimits(),
-        artifact_materializer: AppServerArtifactMaterializer | None = None,
-        artifact_materialization_limits: AppServerArtifactMaterializationLimits = (
-            AppServerArtifactMaterializationLimits()
-        ),
-    ) -> None:
-        super().__init__(
-            application_instance_id=application_instance_id,
-            kind="codex",
-            display_name="Codex",
-            client=client,
-            cwd=cwd,
-            shared_filesystem_root=shared_filesystem_root,
-            server_request_mapper=map_appserver_request,
-            event_buffer_max_pending=event_buffer_max_pending,
-            steer_active_turn=steer_active_turn,
-            thread_start_options=thread_start_options,
-            live_activity_presenter=live_activity_presenter,
-            presentation_limits=presentation_limits,
-            artifact_materializer=artifact_materializer,
-            artifact_materialization_limits=artifact_materialization_limits,
-        )
-
-
-_CODEX_LIVE_METHODS = {
-    CodexLiveActivityMethod.PLAN_UPDATED.value: (
-        CodexLiveActivityMethod.PLAN_UPDATED,
-        CodexLiveActivityKind.PLAN_UPDATED,
-    ),
-    CodexLiveActivityMethod.DIFF_UPDATED.value: (
-        CodexLiveActivityMethod.DIFF_UPDATED,
-        CodexLiveActivityKind.DIFF_UPDATED,
-    ),
-    CodexLiveActivityMethod.THREAD_STATUS_CHANGED.value: (
-        CodexLiveActivityMethod.THREAD_STATUS_CHANGED,
-        CodexLiveActivityKind.THREAD_STATUS_CHANGED,
-    ),
-    CodexLiveActivityMethod.THREAD_COMPACTED.value: (
-        CodexLiveActivityMethod.THREAD_COMPACTED,
-        CodexLiveActivityKind.THREAD_COMPACTED,
-    ),
-    CodexLiveActivityMethod.MODEL_REROUTED.value: (
-        CodexLiveActivityMethod.MODEL_REROUTED,
-        CodexLiveActivityKind.MODEL_REROUTED,
-    ),
-}
-
-
-def _codex_live_activity_facts(
-    thread_ref: ThreadRef,
-    *,
-    turn_id: str | None,
-    method: str,
-    params: Mapping[str, object],
-) -> CodexLiveActivityFacts | None:
-    classification = _CODEX_LIVE_METHODS.get(method)
-    if classification is None:
-        return None
-    native_method, kind = classification
-    event_id = str(params.get("eventId") or params.get("event_id") or "")
-    if not event_id:
-        event_id = f"imagent:appserver-live:{uuid.uuid4()}"
-    summary: str | None = None
-    changed_file_count: int | None = None
-    plan: tuple[CodexPlanStep, ...] = ()
-    if kind is CodexLiveActivityKind.PLAN_UPDATED:
-        summary = _bounded_presentation_text(params.get("explanation"))
-        native_plan = params.get("plan")
-        if isinstance(native_plan, list):
-            normalized_plan: list[CodexPlanStep] = []
-            for entry in native_plan[:100]:
-                if not isinstance(entry, Mapping):
-                    continue
-                status = _bounded_presentation_text(entry.get("status"), limit=128)
-                step = _bounded_presentation_text(entry.get("step"))
-                if status is not None and step is not None:
-                    normalized_plan.append(CodexPlanStep(status=status, step=step))
-            plan = tuple(normalized_plan)
-    elif kind is CodexLiveActivityKind.DIFF_UPDATED:
-        summary = _bounded_presentation_text(params.get("summary"))
-        native_files = params.get("files")
-        if isinstance(native_files, list):
-            changed_file_count = min(len(native_files), 100)
-    elif kind is CodexLiveActivityKind.THREAD_STATUS_CHANGED:
-        status = params.get("status")
-        if isinstance(status, Mapping):
-            status = status.get("type") or status.get("status")
-        summary = _bounded_presentation_text(status, limit=128)
-    elif kind is CodexLiveActivityKind.THREAD_COMPACTED:
-        summary = _bounded_presentation_text(params.get("summary"))
-    else:
-        summary = _bounded_presentation_text(params.get("message"))
-    return CodexLiveActivityFacts(
-        event_id=event_id,
-        thread_ref=thread_ref,
-        turn_id=turn_id,
-        kind=kind,
-        native_method=native_method,
-        summary=summary,
-        changed_file_count=changed_file_count,
-        plan=plan,
-    )
-
-
-def _bounded_presentation_text(value: object, *, limit: int = 8_000) -> str | None:
-    if not isinstance(value, str):
-        return None
-    text = value.strip()
-    return text[:limit] or None
 
 
 def _thread_start_options(

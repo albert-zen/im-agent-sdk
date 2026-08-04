@@ -4,8 +4,9 @@
 
 Zen is covered by the shared App Server suites and vertical evidence:
 
-- `tests/applications/adapters/appserver/test_client.py` and `tests/test_appserver_input.py` prove
-  native start, profile/options, connection reset, and no Codex steer policy;
+- `tests/applications/adapters/test_zen.py` and the retained
+  `tests/test_appserver_input.py` prove native start, profile/options,
+  connection reset, and no Codex steer policy;
 - `tests/applications/adapters/appserver/test_requests.py` proves
   command-approval mapping and explicit unsupported request methods; the
   retained Gateway integration case remains in
@@ -21,11 +22,12 @@ shared transport fixture is not evidence for a Codex-only Zen feature.
 
 ## Target evidence and verification
 
-The target mirrored suite is `tests/applications/adapters/test_zen.py`;
-existing integration tests remain affected evidence during migration. Run:
+The target owner suite is `tests/applications/adapters/test_zen.py`; the
+retained input and vertical suites remain affected cross-component evidence.
+Run:
 
 ```sh
-uv run python -m unittest tests.test_appserver_input -v
+uv run python -m unittest tests.applications.adapters.test_zen -v
 uv run python -m unittest tests.applications.adapters.appserver.test_requests -v
 uv run python -m unittest tests.test_appserver_requests -v
 uv run python -m unittest tests.test_gateway_vertical_slice -v

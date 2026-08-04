@@ -463,9 +463,13 @@ components:
       - docs/migrations/issue-9-imcodex-owner-transfer.md
       - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/applications/__init__.py
-      - src/imagent/applications/appserver.py
+      - src/imagent/applications/adapters/appserver/_base.py
+      - src/imagent/applications/adapters/codex.py
+      - src/imagent/applications/adapters/zen.py
       - src/imagent/applications/adapters/appserver/**
       - tests/test_appserver_input.py
+      - tests/applications/adapters/test_codex.py
+      - tests/applications/adapters/test_zen.py
       - tests/test_appserver_requests.py
       - tests/test_appserver_transport.py
       - tests/applications/adapters/__init__.py
@@ -749,7 +753,9 @@ maintainability:
       guidance: Keep Gateway focused on orchestration; extract delivery planning or component-owned policy before adding more branches.
     - name: application-adapter-modules
       paths:
-        - src/imagent/applications/appserver.py
+        - src/imagent/applications/adapters/appserver/_base.py
+        - src/imagent/applications/adapters/codex.py
+        - src/imagent/applications/adapters/zen.py
         - src/imagent/applications/t3.py
       max_lines: 1100
       max_functions: 45

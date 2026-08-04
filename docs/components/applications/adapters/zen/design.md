@@ -26,10 +26,17 @@ input outcomes, canonical `AgentEvent` values, and bounded artifact facts when
 configured. Native request and capability gaps fail explicitly.
 
 The current formal export is `ZenApplicationAdapter` from the lazy
-`imagent.applications` facade, implemented in the shared
-`src/imagent/applications/appserver.py`. The target exact export is
-`imagent.applications.adapters.zen:ZenApplicationAdapter`; the top facade must
-preserve the same object identity and lazy import behavior.
+`imagent.applications` facade, implemented at the exact target
+`imagent.applications.adapters.zen:ZenApplicationAdapter`; the top facade
+preserves the same object identity and lazy import behavior. The private
+shared App Server base is an explicitly mapped two-owner split candidate under
+`imagent.applications.adapters.appserver._base`; it is not a public aggregate
+adapter API. Its input path is truthful start-only behavior: the shared base
+owns typed text/image preparation, verified local-image epochs, the common
+typed pre-dispatch fence, `STARTED`/`CREATE_NEW` classification with no expected
+Turn ID, and native `turn/start`. It has no Codex steer configuration,
+active-Turn read, `STEERED`/`PRESERVE_EXISTING` classification, or native
+`turn/steer`.
 
 ## Dependencies, state, and recovery
 
@@ -37,22 +44,23 @@ Zen depends on Interaction messages/operations/media, common Applications
 contract/capabilities/events/operations/requests, four direct App Server
 leaves (client, mapping, requests, and diagnostics), and optional artifact
 materialization. Transport remains transitive through the App Server client.
-`prefer_active_turn` remains a new native start until Zen
-proves an equivalent steer mutation. A dispatched start with lost response is
-unknown, not an automatic retry. History is native recovery authority;
-connection reset and observation/materialization failure are explicit gaps.
+`prefer_active_turn` remains a new native start because Zen has no steer
+policy. A dispatched start with lost response is unknown, not an automatic
+retry. History is native recovery authority; connection reset and
+observation/materialization failure are explicit gaps.
 
 ## Current, target, and structural gap
 
-Current code is co-located with Codex in
-`src/imagent/applications/appserver.py`. Current evidence is in
-`tests/applications/adapters/appserver/test_client.py`, `test_appserver_input.py`,
+Current code is `src/imagent/applications/adapters/zen.py` plus the explicitly
+mapped private shared base
+`src/imagent/applications/adapters/appserver/_base.py`. Adapter-owned evidence
+is in `tests/applications/adapters/test_zen.py`,
+`tests/applications/adapters/appserver/test_client.py`,
 `tests/applications/adapters/appserver/test_requests.py`, the artifact
 presentation suite, and
 `tests/test_gateway_vertical_slice.py` for distinct Zen/Codex behavior. The
-target is `src/imagent/applications/adapters/zen.py` with focused tests at
-`tests/applications/adapters/test_zen.py`. The exact gap is the mechanical
-Codex/Zen split without inheriting Codex-only semantics.
+retained `tests/test_appserver_input.py` remains affected cross-component
+evidence. Zen owns the concrete facade and has no dependency on Codex.
 
 ## Authority
 

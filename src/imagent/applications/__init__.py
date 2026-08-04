@@ -31,7 +31,8 @@ from .contract import (
 
 if TYPE_CHECKING:
     from .adapters.appserver.client import codex_app_server_client
-    from .appserver import CodexApplicationAdapter, ZenApplicationAdapter
+    from .adapters.codex import CodexApplicationAdapter
+    from .adapters.zen import ZenApplicationAdapter
     from .presentation import (
         ApplicationArtifactMaterialization,
         ApplicationArtifactMaterializationCancelled,
@@ -127,7 +128,6 @@ __all__ = [
     "validate_thread_ref",
 ]
 
-_APPSERVER_EXPORTS = frozenset({"CodexApplicationAdapter", "ZenApplicationAdapter"})
 _ARTIFACT_EXPORTS = frozenset(
     {
         "AppServerArtifactCandidate",
@@ -170,8 +170,10 @@ _T3_CLIENT_EXPORTS = frozenset({"HttpT3Client", "T3ClientError"})
 
 
 def __getattr__(name: str) -> object:
-    if name in _APPSERVER_EXPORTS:
-        module = import_module("imagent.applications.appserver")
+    if name == "CodexApplicationAdapter":
+        module = import_module("imagent.applications.adapters.codex")
+    elif name == "ZenApplicationAdapter":
+        module = import_module("imagent.applications.adapters.zen")
     elif name in _ARTIFACT_EXPORTS:
         module = import_module("imagent.applications.presentation")
     elif name in _PRESENTATION_EXPORTS:

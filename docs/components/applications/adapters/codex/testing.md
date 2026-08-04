@@ -6,8 +6,8 @@ Codex behavior is currently covered by the App Server suites:
 
 - `tests/applications/adapters/appserver/test_client.py` and `tests/test_appserver_transport.py` for
   client composition, epochs, lanes, and fences;
-- `tests/test_appserver_input.py` for start/steer policy, pre-dispatch races,
-  local-image epochs, replacement, and unsupported files;
+- `tests/applications/adapters/test_codex.py` for start/steer policy,
+  pre-dispatch races, local-image epochs, replacement, and unsupported files;
 - `tests/applications/adapters/appserver/test_mapping.py` for resource/item normalization;
 - `tests/applications/adapters/appserver/test_requests.py` for the Codex
   request/response lifecycle; the retained Gateway integration case remains
@@ -23,13 +23,13 @@ test should route raw native events or Gateway policy through the adapter.
 
 ## Target evidence and verification
 
-The target mirrored suite is `tests/applications/adapters/test_codex.py`;
-existing integration/vertical tests remain affected evidence until the test
-tree is mechanically mirrored. Run the current focused set with:
+The target owner suite is `tests/applications/adapters/test_codex.py`; the
+retained `tests/test_appserver_input.py` case remains affected cross-adapter
+evidence. Run the focused set with:
 
 ```sh
 PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.test_client -v
-uv run python -m unittest tests.test_appserver_input -v
+uv run python -m unittest tests.applications.adapters.test_codex -v
 PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.test_mapping -v
 uv run python -m unittest tests.applications.adapters.appserver.test_requests -v
 uv run python -m unittest tests.test_appserver_requests -v

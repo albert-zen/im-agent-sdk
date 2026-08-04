@@ -40,7 +40,7 @@ class ComponentMapTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ComponentMapError,
-            "(?s)forbidden internal component imports.*appserver.py",
+            "(?s)forbidden internal component imports.*_base.py",
         ):
             validate_component_map(component_map)
 

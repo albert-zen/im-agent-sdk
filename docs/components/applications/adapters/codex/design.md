@@ -28,10 +28,17 @@ bounded typed presentation/artifact facts. No raw native envelope crosses the
 Application boundary.
 
 The current formal export is `CodexApplicationAdapter` from the lazy
-`imagent.applications` facade, implemented in `src/imagent/applications/appserver.py`.
-The target exact export is
+`imagent.applications` facade, implemented at the exact target
 `imagent.applications.adapters.codex:CodexApplicationAdapter`; the top facade
-must preserve object identity and lazy cold-import behavior.
+preserves object identity and lazy cold-import behavior. The private shared
+App Server base is an explicitly mapped two-owner split candidate under
+`imagent.applications.adapters.appserver._base`; it is not a public aggregate
+adapter API. That base owns typed text/image preparation, verified local-image
+epochs, the common typed pre-dispatch fence, `STARTED`/`CREATE_NEW` classification with
+no expected Turn ID, and native `turn/start` dispatch shared by both leaves. It
+does not own `steer_active_turn`, active-Turn selection, `STEERED`/
+`PRESERVE_EXISTING` classification, or native `turn/steer`. Those
+Codex-only positions live in this leaf.
 
 ## Dependencies, state, and recovery
 
@@ -39,27 +46,28 @@ Codex depends on Interaction messages/operations/media, common Applications
 contract/capabilities/events/operations/requests, four direct App Server
 leaves (client, mapping, requests, and diagnostics), and the two presentation
 leaves. Transport remains behind the App Server client rather than becoming a
-direct adapter dependency. A candidate active-turn read never
-authorizes fallback start. The typed pre-dispatch fence runs exactly once;
-after native dispatch, missing acceptance is unknown. Native history is the
+direct adapter dependency. This leaf owns `steer_active_turn`, the
+authoritative active-Turn read, `STEERED`/`PRESERVE_EXISTING` classification
+with the active Turn ID, and native `turn/steer` dispatch. A candidate
+active-turn read never authorizes fallback start. The common typed
+pre-dispatch fence runs exactly once immediately before native mutation;
+missing acceptance after native dispatch is unknown. Native history is the
 recovery authority. App Server queue reset or presentation failure becomes an
 explicit observation gap, not silent continuation or a second subscriber.
 
 ## Current, target, and structural gap
 
-Current code is the shared `src/imagent/applications/appserver.py`; it contains
-the common App Server base plus `ZenApplicationAdapter`, so Codex and Zen are
-declared split candidates rather than duplicate implementations. Current
-evidence is in `tests/applications/adapters/appserver/test_client.py`,
-`test_appserver_input.py`,
+Current code is `src/imagent/applications/adapters/codex.py` plus the explicitly
+mapped private shared base
+`src/imagent/applications/adapters/appserver/_base.py`. Adapter-owned evidence
+is in `tests/applications/adapters/test_codex.py`,
+`tests/applications/adapters/appserver/test_client.py`,
 `tests/applications/adapters/appserver/test_mapping.py`,
 `tests/applications/adapters/appserver/test_requests.py`, and the two
-Applications presentation suites. Gateway request-correlation/presenter
-integration remains in `tests/test_appserver_requests.py`.
-The target is `src/imagent/applications/adapters/codex.py` with focused tests
-at `tests/applications/adapters/test_codex.py`. The gap is the mechanical
-adapter split while preserving native notification ordering, request/runtime
-ownership, and artifact/live state machines.
+Applications presentation suites. The retained
+`tests/test_appserver_input.py` and Gateway vertical/request-correlation
+suites remain affected cross-component evidence. Codex owns the concrete
+facade; Zen has no dependency on this module.
 
 ## Authority
 
