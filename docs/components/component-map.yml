@@ -300,6 +300,28 @@ components:
     adrs: [docs/decisions/0014-read-only-diagnostics-surface.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
     gaps: []
 
+  interaction.client-tools:
+    id: interaction.client-tools
+    parent: interaction
+    purpose: Provide stateless local reference clients for consumer-hosted SDK ingress surfaces.
+    owns: [local CLI argument parsing, numeric-loopback endpoint validation, scoped credential input, request-scoped local file-to-inline-content encoding, typed ingress response presentation]
+    does_not_own: [Gateway delivery semantics, Application implementation, Channel admission, web server, credential store, durable content, spool, outbox, retry scheduler, global registry]
+    inputs: [local command arguments, one scoped credential source, explicitly named regular files, typed JSON ingress response]
+    outputs: [one synchronous JSON request, formatted response, stable process exit code]
+    public_contracts: [main]
+    public_exports:
+      current: [imagent.interaction.client_tools.send:main]
+      target: [imagent.interaction.client_tools.send:main]
+    dependencies: []
+    state_recovery: Stateless one-shot client; the caller supplies stable delivery identity and Gateway owns all replay and recovery evidence.
+    current_code: [src/imagent/interaction/client_tools/__init__.py, src/imagent/interaction/client_tools/send.py]
+    target_code: [src/imagent/interaction/client_tools/__init__.py, src/imagent/interaction/client_tools/send.py]
+    current_tests: [tests/interaction/client_tools/__init__.py, tests/interaction/client_tools/test_send.py]
+    target_tests: [tests/interaction/client_tools/__init__.py, tests/interaction/client_tools/test_send.py]
+    authoritative_docs: [docs/components/interaction/client-tools/design.md, docs/components/interaction/client-tools/testing.md]
+    adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0009-proactive-delivery-routing.md]
+    gaps: []
+
 
   interaction.controllers.controller-contract:
     id: interaction.controllers.controller-contract
@@ -921,8 +943,8 @@ components:
     id: gateway.delivery.proactive-delivery
     parent: gateway.delivery
     purpose: Authorize and route proactive content through the same planning/coordination path as projection output.
-    owns: [DeliveryIntent handling, scoped authorizer use, route resolution, safe JSON/CLI ingress, finite process-local active delivery-ID coordination]
-    does_not_own: [web server, credential store, durable content body, automatic recovery scheduler, global admission registry]
+    owns: [DeliveryIntent handling, scoped authorizer use, route resolution, safe JSON ingress, finite process-local active delivery-ID coordination]
+    does_not_own: [local client argument or artifact encoding, response presentation, web server, credential store, durable content body, automatic recovery scheduler, global admission registry]
     inputs: [opaque credential, stable DeliveryIntent, exact validated JSON delivery ID]
     outputs: [ProactiveDeliveryResult, bounded JSON ingress response]
     public_contracts: [ProactiveDeliveryService, ProactiveDeliveryJsonHandler, DeliveryIntent, ConversationDeliveryTarget, DeliveryTarget, DeliveryTargetKind, DestinationDeliveryResult, ProactiveDeliveryResult, ThreadRouteDeliveryTarget, validate_delivery_intent]
@@ -931,13 +953,13 @@ components:
       target: [imagent.gateway.delivery.proactive:DeliveryIntent, imagent.gateway.delivery.proactive:ConversationDeliveryTarget, imagent.gateway.delivery.proactive:DeliveryTarget, imagent.gateway.delivery.proactive:DeliveryTargetKind, imagent.gateway.delivery.proactive:DestinationDeliveryResult, imagent.gateway.delivery.proactive:ProactiveDeliveryResult, imagent.gateway.delivery.proactive:ThreadRouteDeliveryTarget, imagent.gateway.delivery.proactive:validate_delivery_intent, imagent.gateway.delivery:ProactiveDeliveryService, imagent.gateway.delivery:ProactiveDeliveryJsonHandler, imagent.gateway.delivery:DeliveryIntent, imagent.gateway.delivery:ConversationDeliveryTarget, imagent.gateway.delivery:DeliveryTarget, imagent.gateway.delivery:DeliveryTargetKind, imagent.gateway.delivery:DestinationDeliveryResult, imagent.gateway.delivery:ProactiveDeliveryResult, imagent.gateway.delivery:ThreadRouteDeliveryTarget, imagent.gateway.delivery:validate_delivery_intent]
     dependencies: [interaction.messages, interaction.operations, interaction.media, interaction.channels.channel-contract, applications.application-contract, gateway.concurrency, gateway.delivery.proactive-authorization, gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.outcome-observation, gateway.routing.projection-routes, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Persist identity/snapshots/outcomes only; staged inline bytes live through one synchronous attempt and are removed after join, while active ingress delivery-ID keys are process-local and restart empty.
-    current_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/proactive.py, src/imagent/gateway/delivery/proactive_runtime.py, src/imagent/gateway/delivery/proactive_ingress.py, src/imagent/gateway/delivery/submissions.py, src/imagent/cli/__init__.py, src/imagent/cli/send.py, src/imagent/gateway/__init__.py]
+    current_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/proactive.py, src/imagent/gateway/delivery/proactive_runtime.py, src/imagent/gateway/delivery/proactive_ingress.py, src/imagent/gateway/delivery/submissions.py, src/imagent/gateway/__init__.py]
     target_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/proactive.py, src/imagent/gateway/delivery/proactive_runtime.py, src/imagent/gateway/delivery/proactive_ingress.py]
     current_tests: [tests/gateway/delivery/test_proactive_runtime.py, tests/gateway/delivery/test_proactive_delivery.py, tests/gateway/delivery/test_proactive_ingress.py]
     target_tests: [tests/gateway/delivery/test_proactive_runtime.py, tests/gateway/delivery/test_proactive_delivery.py, tests/gateway/delivery/test_proactive_ingress.py]
     authoritative_docs: [docs/components/gateway/delivery/proactive-delivery/design.md, docs/components/gateway/delivery/proactive-delivery/testing.md]
     adrs: [docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
-    gaps: ["the same-leaf proactive.py contract seam and proactive_runtime.py orchestration owner are explicit; the reference CLI remains in historical files pending its focused Interaction client-tool split"]
+    gaps: []
 
   gateway.delivery.outcome-observation:
     id: gateway.delivery.outcome-observation
@@ -1567,7 +1589,7 @@ components:
     public_exports:
       current: [imagent:__version__, imagent:adapters, imagent:contracts, imagent:delivery_coordination, imagent:delivery_planning, imagent:diagnostics, imagent:events]
       target: [imagent:__version__, imagent:adapters, imagent:contracts, imagent:delivery_coordination, imagent:delivery_planning, imagent:diagnostics, imagent:events]
-    dependencies: [interaction.messages, interaction.channels.channel-contract, gateway.composition, gateway.delivery.planning, gateway.delivery.coordination, gateway.projection.observation, gateway.projection.recovery, gateway.diagnostics, applications.application-contract, applications.events]
+    dependencies: [interaction.messages, interaction.client-tools, interaction.channels.channel-contract, gateway.composition, gateway.delivery.planning, gateway.delivery.coordination, gateway.projection.observation, gateway.projection.recovery, gateway.diagnostics, applications.application-contract, applications.events]
     state_recovery: Stateless packaging; build must not import optional native dependencies in the base install.
     current_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/contracts/__init__.py, src/imagent/events.py, src/imagent/py.typed]
     target_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/contracts/__init__.py, src/imagent/events.py, src/imagent/py.typed]

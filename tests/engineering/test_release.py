@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -56,6 +57,58 @@ class PackageIndependenceTests(unittest.TestCase):
         self.assertTrue(_is_dependency_boundary_text(Path("adapter.py")))
         self.assertTrue(_is_dependency_boundary_text(Path("ci.yml")))
         self.assertTrue(_is_dependency_boundary_text(Path("py.typed")))
+
+    def test_console_script_resolves_to_client_tool_owner_without_historical_package(self) -> None:
+        metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        self.assertEqual(
+            metadata["project"]["scripts"]["imagent-send"],
+            "imagent.interaction.client_tools.send:main",
+        )
+        self.assertTrue((ROOT / "src" / "imagent" / "interaction" / "client_tools").is_dir())
+        self.assertFalse((ROOT / "src" / "imagent" / "cli").exists())
+
+        environment = os.environ.copy()
+        source_root = str(ROOT / "src")
+        existing_pythonpath = environment.get("PYTHONPATH")
+        environment["PYTHONPATH"] = (
+            source_root
+            if not existing_pythonpath
+            else os.pathsep.join((source_root, existing_pythonpath))
+        )
+        code = r"""
+import importlib
+import importlib.util
+import sys
+
+assert importlib.util.find_spec("imagent.cli") is None
+try:
+    importlib.import_module("imagent.cli")
+except ModuleNotFoundError:
+    pass
+else:
+    raise AssertionError("historical imagent.cli package is importable")
+
+from imagent.interaction.client_tools.send import main
+
+assert main.__module__ == "imagent.interaction.client_tools.send"
+assert not any(
+    name == "imagent.gateway" or name.startswith("imagent.gateway.")
+    for name in sys.modules
+)
+assert not any(
+    name == "imagent.applications" or name.startswith("imagent.applications.")
+    for name in sys.modules
+)
+"""
+        completed = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_top_level_facade_is_finite_lazy_and_exact_in_a_clean_process(self) -> None:
         environment = os.environ.copy()

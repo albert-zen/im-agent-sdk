@@ -47,7 +47,7 @@ dev = [
 Repository = "https://github.com/albert-zen/im-agent-sdk"
 
 [project.scripts]
-imagent-send = "imagent.cli.send:main"
+imagent-send = "imagent.interaction.client_tools.send:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/imagent"]

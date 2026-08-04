@@ -38,8 +38,9 @@ The accepted design now has runnable vertical slices:
   Agent input;
 - Markdown-first outbound messages and image attachment mapping;
 - durable SQLite conversation bindings and delivery/inbound idempotency.
-- scoped proactive text/artifact delivery through Gateway, with a loopback-only
-  reference `imagent-send` client and typed partial results.
+- scoped proactive text/artifact delivery through Gateway, with an
+  Interaction-owned loopback-only reference `imagent-send` client and typed
+  partial results.
 
 Language-neutral JSON Schemas remain paired with the Python reference package
 and adapter contract test kit.
@@ -61,6 +62,9 @@ imagent-send \
 
 The scoped caller supplies a Thread identity and never needs bot credentials,
 Gateway database access, or a Channel-native Conversation ID.
+The console entry point resolves directly to the stateless
+`imagent.interaction.client_tools.send` owner; the historical `imagent.cli`
+package is intentionally absent.
 
 Start design/maintenance work from:
 

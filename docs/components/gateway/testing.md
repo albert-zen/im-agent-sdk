@@ -132,7 +132,8 @@
   side effects;
 - per-artifact failures and multi-destination failures remain typed partial
   results, and ambiguous outcomes are never resent automatically;
-- the optional JSON ingress removes staged bytes and the reference CLI refuses
+- the optional JSON ingress removes staged bytes, while the Interaction
+  client-tools suite separately proves the reference client refuses
   non-loopback endpoints;
 - slow Channel delivery does not await/block the native event producer;
 - startup claimed-message admission is FIFO and bounded, overflow fails

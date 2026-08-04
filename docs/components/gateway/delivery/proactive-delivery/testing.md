@@ -25,9 +25,13 @@ the owner seam's finite `__all__` contains exactly those eight names. Both
 historical implementation modules remain absent. The tests also prove that
 `DeliverySubmissionOrigin` stays available through the Gateway persistence and
 delivery facades, while passive state/helper imports remain one-way.
-The mirrored Gateway JSON/CLI ingress suite continues to cover authorization-before-staging,
-cancellation join, cleanup, route/result mapping, and loopback CLI policy. Its
-focused process-local coordination cases additionally prove:
+The mirrored Gateway JSON ingress suite continues to cover
+authorization-before-staging, cancellation join, cleanup, route/result
+mapping, and a real common-delivery integration. Focused loopback, credential,
+local artifact, HTTP, response, and exit-code evidence now lives in the
+Interaction [client-tools suite](../../../interaction/client-tools/testing.md).
+The Gateway suite's focused process-local coordination cases additionally
+prove:
 
 - `max_active_delivery_ids` is keyword-only, defaults to 256, and accepts only
   a positive non-boolean integer through the shared finite keyed registry;

@@ -164,9 +164,10 @@ configured staging root, and removes staged bytes after the synchronous call.
 If the ingress request is cancelled, its awaited Coordinator worker is first
 cancelled and joined, the destination becomes `unknown`, and only then are the
 staged paths removed.
-The reference `imagent-send` client accepts only loopback HTTP(S), reads a
-scoped credential from a file or stdin, and never reads Gateway persistence or
-Channel credentials.
+The separate Interaction [client-tools leaf](../interaction/client-tools/design.md)
+owns the reference `imagent-send` client's loopback, credential-input, local
+encoding, and response-presentation behavior. Gateway defines and implements
+only the authenticated ingress and delivery semantics that client consumes.
 
 Thread-targeted public results expose route identity and sanitized outcome
 only. They omit the resolved native Conversation and both aggregate and
