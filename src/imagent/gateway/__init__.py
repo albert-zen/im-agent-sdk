@@ -108,7 +108,7 @@ from ..interaction.operations import (
     OperationErrorCode,
     operation_error,
 )
-from ..keyed_locks import KeyedLockRegistry
+from ..keyed_locks import KeyedLockCapacityError, KeyedLockRegistry
 from ..projection_runtime import ThreadProjectionRuntime
 from ..projections import ProjectionWorkerHealth, RetryableDeliveryError
 from ..request_correlations import InMemoryRequestCorrelationRepository
@@ -212,7 +212,9 @@ class ImAgentGateway:
             if extensions.delivery_outcome_observer is not None
             else None
         )
-        self._locks: dict[object, asyncio.Lock] = {}
+        self._conversation_locks = KeyedLockRegistry(
+            max_active_keys=limits.conversation_serialization_max_active_keys
+        )
         self._request_locks = KeyedLockRegistry()
         self._outbound_deliveries: dict[
             tuple[str, str],
@@ -445,9 +447,16 @@ class ImAgentGateway:
         operation: GatewayOperation,
     ) -> GatewayOperationResult:
         """Execute one typed Gateway operation under Conversation serialization."""
-        lock = self._locks.setdefault(operation.conversation_ref, asyncio.Lock())
-        async with lock:
-            return await self._execute_gateway_locked(operation)
+        try:
+            async with self._conversation_locks.hold(operation.conversation_ref):
+                return await self._execute_gateway_locked(operation)
+        except KeyedLockCapacityError as error:
+            return GatewayOperationFailed(
+                operation_id=operation.operation_id,
+                type=operation.type,
+                completed_at=datetime.now(UTC),
+                error=_contract_error(error),
+            )
 
     async def get_binding(
         self,
@@ -924,8 +933,7 @@ class ImAgentGateway:
         idempotency_owner_token: str,
         before_application_send: Callable[[], Awaitable[None]],
     ) -> None:
-        lock = self._locks.setdefault(message.conversation_ref, asyncio.Lock())
-        async with lock:
+        async with self._conversation_locks.hold(message.conversation_ref):
             scope, key = inbound_idempotency_identity(
                 message.conversation_ref,
                 message.message_id,
@@ -1310,6 +1318,13 @@ class _GatewayActionError(RuntimeError):
 def _contract_error(error: Exception) -> ContractError:
     if isinstance(error, BindingConflict):
         return operation_error(error, code=OperationErrorCode.CONFLICT)
+    if isinstance(error, KeyedLockCapacityError):
+        return ContractError(
+            code=OperationErrorCode.CAPACITY_EXHAUSTED.value,
+            message=str(error),
+            retryable=True,
+            metadata={"native_exception": type(error).__name__},
+        )
     return operation_error(error)
 
 

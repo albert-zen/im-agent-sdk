@@ -46,7 +46,8 @@ grow together:
   routes, request correlations, and delivery submissions;
 - immutable `GatewayLimits` holds every bounded capacity, recovery page/item
   limit, retry delay, and correlation retention value, including the positive
-  finite in-memory delivery-submission record bound (4096 by default);
+  finite in-memory delivery-submission record bound and active Conversation
+  serialization-key bound (both 4096 by default);
 - immutable `GatewayExtensions` holds the optional Controller, Request
   Presenter, I1 inbound-content transformer, I2 inbound-failure presenter, and
   O1 destination-presentation policy and is the only group later Gateway-owned

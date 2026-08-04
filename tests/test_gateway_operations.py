@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
+from imagent.adapters import IdempotencyClaimStatus
 from imagent.contracts import (
     ActivateNativeThread,
     ApplicationRef,
@@ -22,6 +23,7 @@ from imagent.contracts import (
     DeliveryReceipt,
     GatewayOperationFailed,
     InboundMessage,
+    ListApplications,
     ListProjects,
     ListThreads,
     NativeThreadActivated,
@@ -37,6 +39,7 @@ from imagent.contracts import (
     RequestResponseRouted,
     RequestRouteState,
     RespondToRequest,
+    SelectApplication,
     SupportLevel,
     TextContent,
     ThreadCreated,
@@ -53,11 +56,13 @@ from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,
 )
+from imagent.inbound_admission import inbound_idempotency_identity
+from imagent.keyed_locks import KeyedLockCapacityError
 from imagent.projections import (
     derive_projection_route_id,
 )
 from imagent.request_correlations import InMemoryRequestCorrelationRepository
-from imagent.storage import SQLiteGatewayState
+from imagent.storage import InMemoryIdempotencyRepository, SQLiteGatewayState
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 
@@ -73,6 +78,44 @@ class _DelayedRequestChannel(FakeChannelAdapter):
             self.delay_started.set()
             await self.release_delay.wait()
         return await super().send(message)
+
+
+class _BlockingBindingRepository(InMemoryBindingRepository):
+    def __init__(self, blocked_conversation: ConversationRef) -> None:
+        super().__init__()
+        self.blocked_conversation = blocked_conversation
+        self.entered = asyncio.Event()
+        self.release = asyncio.Event()
+        self._blocked_once = False
+
+    async def get(self, conversation: ConversationRef) -> ConversationBinding | None:
+        if conversation == self.blocked_conversation and not self._blocked_once:
+            self._blocked_once = True
+            self.entered.set()
+            await self.release.wait()
+        return await super().get(conversation)
+
+
+class _CapacityPresenter:
+    def __init__(self) -> None:
+        self.phases: list[str] = []
+
+    async def present_failure(
+        self,
+        phase,
+        *,
+        conversation_ref,
+        delivery_id,
+        reply_to_message_id,
+    ) -> OutboundMessage:
+        self.phases.append(phase.value)
+        return OutboundMessage(
+            delivery_id=delivery_id,
+            conversation_ref=conversation_ref,
+            content=(TextContent("Gateway is at bounded capacity."),),
+            created_at=_now(),
+            reply_to=reply_to_message_id,
+        )
 
 
 class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
@@ -117,6 +160,7 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(limits.delivery_outcome_observer_max_items, 256)
         self.assertEqual(limits.delivery_outcome_observer_max_text_characters, 65_536)
         self.assertEqual(limits.delivery_outcome_observer_max_concurrency, 16)
+        self.assertEqual(limits.conversation_serialization_max_active_keys, 4096)
         self.assertIsNone(extensions.controller)
         self.assertIsNone(extensions.request_presenter)
         self.assertIsNone(extensions.inbound_content_transformer)
@@ -130,6 +174,9 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(invalid_delivery_submission_max_records=invalid):
                 with self.assertRaisesRegex(ValueError, "positive integer"):
                     GatewayLimits(delivery_submission_max_records=invalid)
+            with self.subTest(invalid_conversation_serialization_max_active_keys=invalid):
+                with self.assertRaisesRegex(ValueError, "positive integer"):
+                    GatewayLimits(conversation_serialization_max_active_keys=invalid)
 
     def test_gateway_limits_preserve_existing_positional_layout(self) -> None:
         limits = GatewayLimits(
@@ -148,6 +195,7 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(limits.subscription_retry_initial_seconds, 0.125)
         self.assertEqual(limits.subscription_retry_max_seconds, 3.0)
         self.assertEqual(limits.delivery_submission_max_records, 4096)
+        self.assertEqual(limits.conversation_serialization_max_active_keys, 4096)
 
     def test_flat_gateway_repository_constructor_is_removed(self) -> None:
         with self.assertRaisesRegex(TypeError, "bindings"):
@@ -173,6 +221,180 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
             first._delivery_service._submissions,
             second._delivery_service._submissions,
         )
+
+    async def test_conversation_serialization_is_bounded_waiter_safe_and_ephemeral(
+        self,
+    ) -> None:
+        first_conversation = ConversationRef("fake-channel", "capacity-first")
+        second_conversation = ConversationRef("fake-channel", "capacity-second")
+        bindings = _BlockingBindingRepository(first_conversation)
+        gateway = ImAgentGateway(
+            channels=[],
+            applications=[self.application],
+            repositories=GatewayRepositories(bindings=bindings),
+            limits=GatewayLimits(conversation_serialization_max_active_keys=1),
+        )
+        first = asyncio.create_task(
+            gateway.execute_gateway(
+                SelectApplication(
+                    operation_id="capacity-first",
+                    conversation_ref=first_conversation,
+                    actor="user",
+                    application_ref=self.application.summary.ref,
+                    created_at=_now(),
+                )
+            )
+        )
+        await bindings.entered.wait()
+        same_key_waiter = asyncio.create_task(
+            gateway.execute_gateway(
+                ListApplications(
+                    operation_id="capacity-same-key",
+                    conversation_ref=first_conversation,
+                    actor="user",
+                    created_at=_now(),
+                )
+            )
+        )
+        await asyncio.sleep(0)
+
+        rejected = await gateway.execute_gateway(
+            ListApplications(
+                operation_id="capacity-new-key",
+                conversation_ref=second_conversation,
+                actor="user",
+                created_at=_now(),
+            )
+        )
+        self.assertIsInstance(rejected, GatewayOperationFailed)
+        assert isinstance(rejected, GatewayOperationFailed)
+        self.assertEqual(rejected.error.code, OperationErrorCode.CAPACITY_EXHAUSTED.value)
+        self.assertTrue(rejected.error.retryable)
+        self.assertEqual(gateway._conversation_locks.active_key_count, 1)
+
+        bindings.release.set()
+        self.assertNotIsInstance(await first, GatewayOperationFailed)
+        self.assertNotIsInstance(await same_key_waiter, GatewayOperationFailed)
+        self.assertEqual(gateway._conversation_locks.active_key_count, 0)
+
+    async def test_cancelled_conversation_waiter_releases_usage_exactly_once(self) -> None:
+        conversation = ConversationRef("fake-channel", "capacity-cancel")
+        other = ConversationRef("fake-channel", "capacity-after-cancel")
+        bindings = _BlockingBindingRepository(conversation)
+        gateway = ImAgentGateway(
+            channels=[],
+            applications=[self.application],
+            repositories=GatewayRepositories(bindings=bindings),
+            limits=GatewayLimits(conversation_serialization_max_active_keys=1),
+        )
+        owner = asyncio.create_task(
+            gateway.execute_gateway(
+                SelectApplication(
+                    operation_id="capacity-owner",
+                    conversation_ref=conversation,
+                    actor="user",
+                    application_ref=self.application.summary.ref,
+                    created_at=_now(),
+                )
+            )
+        )
+        await bindings.entered.wait()
+        waiter = asyncio.create_task(
+            gateway.execute_gateway(
+                ListApplications(
+                    operation_id="capacity-cancelled-waiter",
+                    conversation_ref=conversation,
+                    actor="user",
+                    created_at=_now(),
+                )
+            )
+        )
+        await asyncio.sleep(0)
+        waiter.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await waiter
+        self.assertEqual(gateway._conversation_locks.active_key_count, 1)
+
+        rejected = await gateway.execute_gateway(
+            ListApplications(
+                operation_id="capacity-still-full",
+                conversation_ref=other,
+                actor="user",
+                created_at=_now(),
+            )
+        )
+        self.assertIsInstance(rejected, GatewayOperationFailed)
+        bindings.release.set()
+        self.assertNotIsInstance(await owner, GatewayOperationFailed)
+        self.assertEqual(gateway._conversation_locks.active_key_count, 0)
+
+    async def test_inbound_capacity_rejection_preserves_i2_claim_rules(self) -> None:
+        for with_presenter in (False, True):
+            with self.subTest(with_presenter=with_presenter):
+                occupied = ConversationRef("fake-channel", "capacity-occupied")
+                incoming = ConversationRef("fake-channel", f"capacity-inbound-{with_presenter}")
+                bindings = _BlockingBindingRepository(occupied)
+                idempotency = InMemoryIdempotencyRepository()
+                channel = FakeChannelAdapter()
+                presenter = _CapacityPresenter() if with_presenter else None
+                application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+                gateway = ImAgentGateway(
+                    channels=[channel],
+                    applications=[application],
+                    repositories=GatewayRepositories(
+                        bindings=bindings,
+                        idempotency=idempotency,
+                    ),
+                    limits=GatewayLimits(conversation_serialization_max_active_keys=1),
+                    extensions=GatewayExtensions(inbound_failure_presenter=presenter),
+                )
+                message = InboundMessage(
+                    message_id=f"capacity-message-{with_presenter}",
+                    conversation_ref=incoming,
+                    sender="user",
+                    content=(TextContent("hello"),),
+                    created_at=_now(),
+                )
+
+                await gateway.start()
+                owner = asyncio.create_task(
+                    gateway.execute_gateway(
+                        SelectApplication(
+                            operation_id=f"capacity-block-{with_presenter}",
+                            conversation_ref=occupied,
+                            actor="user",
+                            application_ref=application.summary.ref,
+                            created_at=_now(),
+                        )
+                    )
+                )
+                await bindings.entered.wait()
+                try:
+                    if with_presenter:
+                        await channel.emit_message(message)
+                    else:
+                        with self.assertRaises(KeyedLockCapacityError):
+                            await channel.emit_message(message)
+                    scope, key = inbound_idempotency_identity(incoming, message.message_id)
+                    reclaim = await idempotency.claim(
+                        scope,
+                        key,
+                        owner_token="replacement",
+                    )
+                    expected = (
+                        IdempotencyClaimStatus.ALREADY_COMPLETED
+                        if with_presenter
+                        else IdempotencyClaimStatus.ACQUIRED
+                    )
+                    self.assertEqual(reclaim, expected)
+                    self.assertEqual(application._inputs, [])
+                    if presenter is not None:
+                        self.assertEqual(presenter.phases, ["pre_acceptance"])
+                        self.assertEqual(len(channel.sent), 1)
+                finally:
+                    bindings.release.set()
+                    await owner
+                    await gateway.stop()
 
     async def test_resource_listing_never_changes_conversation_binding(self) -> None:
         original = await self.bindings.put(

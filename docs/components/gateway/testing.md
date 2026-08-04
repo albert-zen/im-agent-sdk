@@ -12,6 +12,10 @@
   `GatewayLimits` record bound; invalid configuration fails during construction,
   capacity failure precedes Channel work and releases any outer idempotency
   claim, while an injected repository is unchanged;
+- Conversation serialization receives its finite positive `GatewayLimits`
+  active-key bound, retains no completed key, permits same-key waiters at
+  capacity, rejects a new key before side effects, and releases cancelled
+  owners/waiters exactly once;
 - grouping does not change binding, idempotency, projection recovery,
   request-correlation, Controller/Presenter, Coordinator, proactive-delivery,
   startup, or shutdown identity and ordering;

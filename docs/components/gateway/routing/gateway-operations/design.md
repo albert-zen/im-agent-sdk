@@ -35,6 +35,20 @@ for unrelated Conversations is not forced through one global lock. Read-only
 listing returns normalized Application-owned resource facts and performs no
 binding, route, activation, or observation mutation.
 
+The process-local keyed registry admits only a configured finite number of
+distinct active Conversation keys. An already-active key may add a waiter at
+that limit so serialization cannot split. A new key fails before Controller,
+Application, binding, route, or Channel side effects with the stable retryable
+`capacity_exhausted` operation error. Entries disappear after their last owner
+or waiter exits, including cancellation; an occupied or awaited entry is never
+evicted to manufacture capacity.
+
+For claimed inbound input, capacity rejection is a known pre-acceptance
+failure after durable admission but before native dispatch. The existing I2
+rules remain authoritative: without I2 the owned claim is released and the
+exception is raised; with I2 the claim is completed before terminal error
+presentation. Presenter or Channel failure cannot reopen the input.
+
 Replay behavior is operation-specific rather than a generic `operation_id`
 deduplication guarantee. A mutation may converge after retry only where its
 typed postcondition and repository contract prove the complete requested state
@@ -53,9 +67,6 @@ public typed actions, never on this leaf's implementation or Gateway context.
 ## Current structural gap
 
 Gateway and Application operation variants currently share broad contract and
-validator modules, while execution remains in the Gateway package root. The
-current per-Conversation lock table also retains every observed Conversation
-for process lifetime; the target owner requires a bounded, concurrency-safe
-lifetime policy without evicting an in-use lock. Later focused slices will
-separate the owner paths, close that capacity gap, and update all imports
-without leaving two internal operation models.
+validator modules, while execution remains in the Gateway package root. Later
+focused slices will separate the owner paths and update all imports without
+leaving two internal operation models.

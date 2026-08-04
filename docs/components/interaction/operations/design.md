@@ -54,9 +54,11 @@ not grant the Controller access to Gateway or Application implementations.
 ## Failure and replay boundary
 
 Stable error codes distinguish invalid, unsupported, missing, conflicting,
-adapter-failed, unauthorized-destination, and request-lifecycle outcomes.
-Native exception types may be projected into that public vocabulary, but an
-error result does not invent support or retry permission.
+adapter-failed, capacity-exhausted, unauthorized-destination, and
+request-lifecycle outcomes. `capacity_exhausted` is retryable only because it
+is emitted before the owning operation's side-effect boundary. Native
+exception types may be projected into that public vocabulary, but an error
+result does not otherwise invent support or retry permission.
 
 Owner-specific exceptions may carry one stable `OperationErrorCode` through a
 private common mapped-error base. The base contains no Application or Gateway

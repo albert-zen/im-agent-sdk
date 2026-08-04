@@ -59,6 +59,7 @@ class GatewayLimits:
     delivery_outcome_observer_max_text_characters: int = 65_536
     delivery_outcome_observer_max_concurrency: int = 16
     delivery_submission_max_records: int = 4096
+    conversation_serialization_max_active_keys: int = 4096
 
     def __post_init__(self) -> None:
         if (
@@ -67,6 +68,14 @@ class GatewayLimits:
             or self.delivery_submission_max_records < 1
         ):
             raise ValueError("delivery_submission_max_records must be a positive integer")
+        if (
+            not isinstance(self.conversation_serialization_max_active_keys, int)
+            or isinstance(self.conversation_serialization_max_active_keys, bool)
+            or self.conversation_serialization_max_active_keys < 1
+        ):
+            raise ValueError(
+                "conversation_serialization_max_active_keys must be a positive integer"
+            )
 
 
 @dataclass(frozen=True, slots=True)
