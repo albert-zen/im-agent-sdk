@@ -420,7 +420,7 @@ components:
     target_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/bindings.py]
     current_tests: [tests/gateway/persistence/test_memory.py, tests/test_gateway_operations.py, tests/test_projection_routing.py]
     target_tests: [tests/gateway/routing/test_bindings.py]
-    authoritative_docs: [docs/components/gateway/design.md, docs/components/persistence/design.md, docs/components/projections-and-recovery/design.md]
+    authoritative_docs: [docs/components/gateway/routing/bindings/design.md, docs/components/gateway/routing/bindings/testing.md, docs/components/gateway/design.md, docs/components/persistence/design.md, docs/components/projections-and-recovery/design.md]
     adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md]
     gaps: [binding contract and orchestration are spread across contracts and the Gateway package root]
 
@@ -442,9 +442,9 @@ components:
     target_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/operations.py]
     current_tests: [tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py]
     target_tests: [tests/gateway/routing/test_operations.py]
-    authoritative_docs: [docs/components/contracts/protocol.md, docs/components/gateway/design.md]
+    authoritative_docs: [docs/components/gateway/routing/gateway-operations/design.md, docs/components/gateway/routing/gateway-operations/testing.md, docs/components/contracts/protocol.md, docs/components/gateway/design.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0008-interactive-request-routing.md]
-    gaps: [current operation union mixes Application and Gateway ownership]
+    gaps: [current operation union mixes Application and Gateway ownership, current per-Conversation lock registry retains every observed Conversation for process lifetime]
 
   gateway.routing.projection-routes:
     id: gateway.routing.projection-routes
@@ -464,7 +464,7 @@ components:
     target_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/projection_routes.py]
     current_tests: [tests/test_projection_routing.py, tests/test_projection_hardening.py, tests/test_gateway_operations.py]
     target_tests: [tests/gateway/routing/test_projection_routes.py]
-    authoritative_docs: [docs/components/projections-and-recovery/design.md, docs/components/gateway/design.md]
+    authoritative_docs: [docs/components/gateway/routing/projection-routes/design.md, docs/components/gateway/routing/projection-routes/testing.md, docs/components/projections-and-recovery/design.md, docs/components/gateway/design.md]
     adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md]
     gaps: [route coordination currently also owns delivery and request projection]
 

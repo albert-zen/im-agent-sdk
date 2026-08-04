@@ -193,6 +193,13 @@ components:
       - docs/components/gateway/README.md
       - docs/components/gateway/design.md
       - docs/components/gateway/testing.md
+      - docs/components/gateway/routing/README.md
+      - docs/components/gateway/routing/bindings/design.md
+      - docs/components/gateway/routing/bindings/testing.md
+      - docs/components/gateway/routing/gateway-operations/design.md
+      - docs/components/gateway/routing/gateway-operations/testing.md
+      - docs/components/gateway/routing/projection-routes/design.md
+      - docs/components/gateway/routing/projection-routes/testing.md
       - docs/migrations/imcodex-followup-blockers.md
     required_docs:
       - design

@@ -7,6 +7,9 @@ Channel transport, Agent transcript, or second runtime.
 
 ## Current leaf navigation
 
+- [routing](routing/README.md) — Conversation bindings, typed Gateway
+  operations, and outbound projection-route policy kept as separate
+  authorities.
 - [delivery](delivery/README.md) — deterministic planning and the remaining
   coordination/submission/proactive/outcome leaves as they move in focused
   slices.
