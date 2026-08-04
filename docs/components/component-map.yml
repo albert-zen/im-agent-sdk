@@ -56,6 +56,10 @@ architecture_lint:
       to: src/imagent/contracts/request_validation.py
       symbol: validate_request_resolution
       reason: Event validation preserves the existing typed resolution invariant through the unmoved request validator; making events depend on the target request leaf would create the documented structural cycle.
+    - from: src/imagent/applications/operations.py
+      to: src/imagent/contracts/_validation.py
+      symbol: validate_thread_ref
+      reason: Application operation validation preserves the existing ThreadRef invariant through the unmoved Application contract validator; moving that resource value is a later focused leaf.
     - from: src/imagent/applications/appserver_client/__init__.py
       to: src/imagent/__init__.py
       symbol: __version__
@@ -1020,15 +1024,15 @@ components:
     public_exports:
       current: [imagent.contracts:ApplicationOperation, imagent.contracts:ApplicationOperationResult, imagent.contracts:ActivateNativeThread, imagent.contracts:ApplicationOperationFailed, imagent.contracts:ApplicationOperationType, imagent.contracts:CreateThread, imagent.contracts:DeleteThread, imagent.contracts:GetProject, imagent.contracts:GetThread, imagent.contracts:GetThreadHistory, imagent.contracts:GetThreadStatus, imagent.contracts:GetTurnCatchup, imagent.contracts:InterruptTurn, imagent.contracts:ListProjects, imagent.contracts:ListThreads, imagent.contracts:NativeThreadActivated, imagent.contracts:ProjectRead, imagent.contracts:ProjectsListed, imagent.contracts:RespondRequest, imagent.contracts:RequestResponded, imagent.contracts:ThreadCreated, imagent.contracts:ThreadDeleted, imagent.contracts:ThreadDeletionMode, imagent.contracts:ThreadHistoryRead, imagent.contracts:ThreadRead, imagent.contracts:ThreadsListed, imagent.contracts:ThreadStatusRead, imagent.contracts:TurnCatchupRead, imagent.contracts:TurnInterrupted, imagent.contracts:validate_application_operation, imagent.contracts:validate_application_operation_result]
       target: [imagent.applications.operations:ApplicationOperation, imagent.applications.operations:ApplicationOperationResult, imagent.applications.operations:ActivateNativeThread, imagent.applications.operations:ApplicationOperationFailed, imagent.applications.operations:ApplicationOperationType, imagent.applications.operations:CreateThread, imagent.applications.operations:DeleteThread, imagent.applications.operations:GetProject, imagent.applications.operations:GetThread, imagent.applications.operations:GetThreadHistory, imagent.applications.operations:GetThreadStatus, imagent.applications.operations:GetTurnCatchup, imagent.applications.operations:InterruptTurn, imagent.applications.operations:ListProjects, imagent.applications.operations:ListThreads, imagent.applications.operations:NativeThreadActivated, imagent.applications.operations:ProjectRead, imagent.applications.operations:ProjectsListed, imagent.applications.operations:RespondRequest, imagent.applications.operations:RequestResponded, imagent.applications.operations:ThreadCreated, imagent.applications.operations:ThreadDeleted, imagent.applications.operations:ThreadDeletionMode, imagent.applications.operations:ThreadHistoryRead, imagent.applications.operations:ThreadRead, imagent.applications.operations:ThreadsListed, imagent.applications.operations:ThreadStatusRead, imagent.applications.operations:TurnCatchupRead, imagent.applications.operations:TurnInterrupted, imagent.applications.operations:validate_application_operation, imagent.applications.operations:validate_application_operation_result]
-    dependencies: [interaction.operations]
+    dependencies: [interaction.messages, interaction.operations, applications.requests]
     state_recovery: Operation ID is stable; adapters preserve ambiguous mutation outcomes and never silently retry.
-    current_code: [schemas/v1/operations.schema.json, src/imagent/contracts/operations.py, src/imagent/contracts/validators.py]
+    current_code: [schemas/v1/operations.schema.json, src/imagent/applications/operations.py]
     target_code: [schemas/v1/operations.schema.json, src/imagent/applications/operations.py]
-    current_tests: [tests/test_contracts.py, tests/test_adapter_contracts.py, tests/test_appserver_input.py]
+    current_tests: [tests/applications/test_operations.py]
     target_tests: [tests/applications/test_operations.py]
     authoritative_docs: [docs/components/applications/operations/design.md, docs/components/applications/operations/testing.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [one current module co-locates separate Application and Gateway operation unions; product-only commands remain intentionally absent]
+    gaps: [Gateway operation variants and request response values remain in historical contract modules until their focused leaves move; product-only commands remain intentionally absent]
 
   applications.requests:
     id: applications.requests
@@ -1458,11 +1462,11 @@ structural_status:
       owners: [applications.application-contract, applications.requests]
       reason: Dispatched-input ambiguity and request lifecycle errors remain distinct Applications-owned values after common operation error projection moved to Interaction.
     src/imagent/contracts/operations.py:
-      owners: [gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.projection.request-correlation, applications.operations, applications.requests]
-      reason: Gateway binding, routing, observation, request-correlation, and Application operation variants remain physically combined after the common Interaction vocabulary moved to its owning leaf.
+      owners: [gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.projection.request-correlation, applications.requests]
+      reason: Gateway binding, routing, observation, request-correlation, and request response values remain physically combined after the common Interaction vocabulary and Application operation variants moved to their owning leaves.
     src/imagent/contracts/validators.py:
-      owners: [gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.dispatch, gateway.projection.request-correlation, applications.application-contract, applications.operations]
-      reason: Cross-union validation follows the historical contract aggregation rather than the target owners of each validated type.
+      owners: [gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.dispatch, gateway.projection.request-correlation, applications.application-contract]
+      reason: Gateway, dispatch, projection, and common Application contract validation remains in the historical aggregation until each focused validator leaf moves.
     src/imagent/contracts/request_validation.py:
       owners: [gateway.projection.request-correlation, gateway.persistence.state-contracts, applications.requests]
       reason: One module validates Application-owned request response shapes plus Gateway-owned route correlation and persisted state evidence.
