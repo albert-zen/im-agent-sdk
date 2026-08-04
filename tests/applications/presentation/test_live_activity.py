@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import importlib
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,7 +24,11 @@ from imagent.applications import (
     ZenApplicationAdapter,
     presentation,
 )
-from imagent.applications.presentation import ApplicationPresentationRuntime, live_activity
+from imagent.applications.presentation import (
+    ApplicationPresentationRuntime,
+    artifact_materialization,
+    live_activity,
+)
 from imagent.contracts import (
     AgentEventType,
     AgentInput,
@@ -207,8 +210,8 @@ class _BlockingT3Presenter(_T3Presenter):
 
 
 class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
-    def test_presentation_package_is_the_exact_finite_live_activity_facade(self) -> None:
-        expected_exports = {
+    def test_presentation_package_is_the_exact_finite_facade(self) -> None:
+        live_exports = {
             "ApplicationPresentationCancelled",
             "ApplicationPresentationCapacityError",
             "ApplicationPresentationError",
@@ -225,25 +228,46 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
             "T3ActivityFacts",
             "T3ActivityPresenter",
         }
+        artifact_exports = {
+            "AppServerArtifactCandidate",
+            "AppServerArtifactMaterializationLimits",
+            "AppServerArtifactMaterializer",
+            "AppServerArtifactSourceKind",
+            "AppServerCompletedItemFacts",
+            "AppServerCompletedItemKind",
+            "AppServerCompletedItemPhase",
+            "AppServerTurnTerminalFacts",
+            "AppServerTurnTerminalStatus",
+            "ApplicationArtifactMaterialization",
+            "ApplicationArtifactMaterializationCancelled",
+            "ApplicationArtifactMaterializationCapacityError",
+            "ApplicationArtifactMaterializationError",
+            "ApplicationArtifactMaterializationFailed",
+            "ApplicationArtifactMaterializationTimeout",
+        }
+        expected_exports = live_exports | artifact_exports
 
         self.assertEqual(set(presentation.__all__), expected_exports)
         self.assertEqual(len(presentation.__all__), len(expected_exports))
-        for name in expected_exports:
+        for name in live_exports:
             self.assertIs(getattr(presentation, name), getattr(live_activity, name))
+        for name in artifact_exports:
+            self.assertIs(
+                getattr(presentation, name),
+                getattr(artifact_materialization, name),
+            )
 
-        for name in expected_exports - {"ApplicationPresentationRuntime"}:
+        for name in live_exports - {"ApplicationPresentationRuntime"}:
             self.assertIs(getattr(applications, name), getattr(live_activity, name))
+        for name in artifact_exports:
+            self.assertIs(getattr(applications, name), getattr(artifact_materialization, name))
 
         package_path = Path(presentation.__file__ or "")
         self.assertEqual(package_path.name, "__init__.py")
         legacy_module_path = package_path.parent.parent / "presentation.py"
         self.assertFalse(legacy_module_path.exists())
         self.assertFalse(hasattr(presentation, "ApplicationPresentationDiagnosticFacts"))
-        self.assertFalse(hasattr(presentation, "AppServerArtifactMaterializer"))
-        self.assertEqual(
-            importlib.import_module("imagent.applications.appserver_artifacts").__name__,
-            "imagent.applications.appserver_artifacts",
-        )
+        self.assertTrue(hasattr(presentation, "AppServerArtifactMaterializer"))
 
     async def test_codex_live_presentation_is_typed_ordered_and_live_only(self) -> None:
         client = _AppServerClient()

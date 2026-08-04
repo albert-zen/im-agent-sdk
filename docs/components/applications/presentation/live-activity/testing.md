@@ -17,8 +17,9 @@ while polling failure produces an explicit recoverable gap without erasing
 accepted input correlation. Both adapters prove that absence changes nothing.
 
 The focused owner suite also proves that the package facade re-exports the
-exact live-activity objects, that the old monolithic module is absent, and that
-artifact materialization remains outside this slice.
+exact live-activity objects and that the old monolithic module is absent.
+Artifact-materialization facade and historical-module absence evidence lives
+in its sibling focused owner suite.
 
 ```sh
 PYTHONPATH=src uv run python -m unittest \

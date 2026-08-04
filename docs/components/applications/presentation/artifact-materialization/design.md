@@ -31,8 +31,8 @@ The materializer returns `None` or a finite
 `AttachmentContent`. It cannot select message/event identity, role, Thread,
 Turn, terminal status, recovery/checkpoint behavior, or destination. This leaf
 depends on Interaction media, the Application contract/events leaves, and App
-Server mapping. Current exports are in `imagent.applications`; target exports
-are in `imagent.applications.presentation`, backed by
+Server mapping. Current exact facades are `imagent.applications` and
+`imagent.applications.presentation`, both backed by
 `src/imagent/applications/presentation/artifact_materialization.py`.
 
 ## State and recovery
@@ -53,12 +53,14 @@ Crash-safe cleanup remains the consumer's ledger/startup sweep responsibility.
 
 ## Current and target structure
 
-Current code is `src/imagent/applications/appserver_artifacts.py` plus
-diagnostic facts in `src/imagent/diagnostics.py`. Current tests are
-`tests/test_appserver_artifacts.py`; target tests are
-`tests/applications/presentation/test_artifact_materialization.py`. The target
-leaf documents a still-unmoved implementation; it adds no artifact storage or
-new Application API semantics.
+The owner implementation is
+`src/imagent/applications/presentation/artifact_materialization.py`, with
+diagnostic facts remaining in `src/imagent/diagnostics.py`. Focused tests are
+`tests/applications/presentation/test_artifact_materialization.py`, and the
+finite `src/imagent/applications/presentation/__init__.py` facade re-exports
+the named artifact contracts alongside the live-activity contracts. The
+historical `appserver_artifacts.py` module is absent; this move adds no
+artifact storage or new Application API semantics.
 
 ## Authority
 

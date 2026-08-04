@@ -382,7 +382,10 @@ class ComponentMapTests(unittest.TestCase):
             "applications.presentation.artifact-materialization",
             zen["dependencies"],
         )
-        self.assertIn("tests/test_appserver_artifacts.py", zen["current_tests"])
+        self.assertIn(
+            "tests/applications/presentation/test_artifact_materialization.py",
+            zen["current_tests"],
+        )
         self.assertIn(
             "docs/decisions/0015-typed-extension-seams-and-composition.md",
             zen["adrs"],

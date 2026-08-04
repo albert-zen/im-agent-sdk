@@ -1080,7 +1080,7 @@ components:
     target_tests: [tests/applications/presentation/test_live_activity.py]
     authoritative_docs: [docs/components/applications/presentation/live-activity/design.md, docs/components/applications/presentation/live-activity/testing.md]
     adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [Codex and T3 fact shapes share runtime but must remain distinct typed positions, artifact materialization remains at its historical Applications path until its focused move]
+    gaps: [Codex and T3 fact shapes share runtime but must remain distinct typed positions]
 
   applications.presentation.artifact-materialization:
     id: applications.presentation.artifact-materialization
@@ -1092,17 +1092,17 @@ components:
     outputs: [bounded ApplicationArtifactMaterialization or omission]
     public_contracts: [AppServerArtifactMaterializer, ApplicationArtifactMaterialization, AppServerArtifactCandidate, AppServerArtifactMaterializationLimits, AppServerArtifactSourceKind, AppServerCompletedItemFacts, AppServerCompletedItemKind, AppServerCompletedItemPhase, AppServerTurnTerminalFacts, AppServerTurnTerminalStatus, ApplicationArtifactMaterializationCancelled, ApplicationArtifactMaterializationCapacityError, ApplicationArtifactMaterializationError, ApplicationArtifactMaterializationFailed, ApplicationArtifactMaterializationTimeout]
     public_exports:
-      current: [imagent.applications:AppServerArtifactMaterializer, imagent.applications:ApplicationArtifactMaterialization, imagent.applications:AppServerArtifactCandidate, imagent.applications:AppServerArtifactMaterializationLimits, imagent.applications:AppServerArtifactSourceKind, imagent.applications:AppServerCompletedItemFacts, imagent.applications:AppServerCompletedItemKind, imagent.applications:AppServerCompletedItemPhase, imagent.applications:AppServerTurnTerminalFacts, imagent.applications:AppServerTurnTerminalStatus, imagent.applications:ApplicationArtifactMaterializationCancelled, imagent.applications:ApplicationArtifactMaterializationCapacityError, imagent.applications:ApplicationArtifactMaterializationError, imagent.applications:ApplicationArtifactMaterializationFailed, imagent.applications:ApplicationArtifactMaterializationTimeout]
+      current: [imagent.applications:AppServerArtifactMaterializer, imagent.applications:ApplicationArtifactMaterialization, imagent.applications:AppServerArtifactCandidate, imagent.applications:AppServerArtifactMaterializationLimits, imagent.applications:AppServerArtifactSourceKind, imagent.applications:AppServerCompletedItemFacts, imagent.applications:AppServerCompletedItemKind, imagent.applications:AppServerCompletedItemPhase, imagent.applications:AppServerTurnTerminalFacts, imagent.applications:AppServerTurnTerminalStatus, imagent.applications:ApplicationArtifactMaterializationCancelled, imagent.applications:ApplicationArtifactMaterializationCapacityError, imagent.applications:ApplicationArtifactMaterializationError, imagent.applications:ApplicationArtifactMaterializationFailed, imagent.applications:ApplicationArtifactMaterializationTimeout, imagent.applications.presentation:AppServerArtifactMaterializer, imagent.applications.presentation:ApplicationArtifactMaterialization, imagent.applications.presentation:AppServerArtifactCandidate, imagent.applications.presentation:AppServerArtifactMaterializationLimits, imagent.applications.presentation:AppServerArtifactSourceKind, imagent.applications.presentation:AppServerCompletedItemFacts, imagent.applications.presentation:AppServerCompletedItemKind, imagent.applications.presentation:AppServerCompletedItemPhase, imagent.applications.presentation:AppServerTurnTerminalFacts, imagent.applications.presentation:AppServerTurnTerminalStatus, imagent.applications.presentation:ApplicationArtifactMaterializationCancelled, imagent.applications.presentation:ApplicationArtifactMaterializationCapacityError, imagent.applications.presentation:ApplicationArtifactMaterializationError, imagent.applications.presentation:ApplicationArtifactMaterializationFailed, imagent.applications.presentation:ApplicationArtifactMaterializationTimeout]
       target: [imagent.applications.presentation:AppServerArtifactMaterializer, imagent.applications.presentation:ApplicationArtifactMaterialization, imagent.applications.presentation:AppServerArtifactCandidate, imagent.applications.presentation:AppServerArtifactMaterializationLimits, imagent.applications.presentation:AppServerArtifactSourceKind, imagent.applications.presentation:AppServerCompletedItemFacts, imagent.applications.presentation:AppServerCompletedItemKind, imagent.applications.presentation:AppServerCompletedItemPhase, imagent.applications.presentation:AppServerTurnTerminalFacts, imagent.applications.presentation:AppServerTurnTerminalStatus, imagent.applications.presentation:ApplicationArtifactMaterializationCancelled, imagent.applications.presentation:ApplicationArtifactMaterializationCapacityError, imagent.applications.presentation:ApplicationArtifactMaterializationError, imagent.applications.presentation:ApplicationArtifactMaterializationFailed, imagent.applications.presentation:ApplicationArtifactMaterializationTimeout]
     dependencies: [interaction.media, applications.application-contract, applications.events, applications.adapters.appserver.mapping]
     state_recovery: Live duplicate window is finite; authoritative history may reinvoke and consumer association must be replay-safe.
-    current_code: [src/imagent/applications/appserver_artifacts.py, src/imagent/diagnostics.py]
+    current_code: [src/imagent/applications/presentation/artifact_materialization.py, src/imagent/diagnostics.py]
     target_code: [src/imagent/applications/presentation/artifact_materialization.py]
-    current_tests: [tests/test_appserver_artifacts.py]
+    current_tests: [tests/applications/presentation/test_artifact_materialization.py]
     target_tests: [tests/applications/presentation/test_artifact_materialization.py]
     authoritative_docs: [docs/components/applications/presentation/artifact-materialization/design.md, docs/components/applications/presentation/artifact-materialization/testing.md]
     adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [artifact materialization implementation remains at its historical applications path]
+    gaps: [App Server native ordering and adapter invocation remain in historical appserver.py until the adapter split]
 
   applications.adapters.appserver.client:
     id: applications.adapters.appserver.client
@@ -1230,7 +1230,7 @@ components:
     state_recovery: Native history is authoritative; steer candidate read never authorizes fallback start; ambiguous dispatch is unknown.
     current_code: [src/imagent/applications/appserver.py]
     target_code: [src/imagent/applications/adapters/codex.py]
-    current_tests: [tests/test_appserver_client.py, tests/test_appserver_input.py, tests/test_appserver_mapping.py, tests/test_appserver_requests.py, tests/test_appserver_artifacts.py, tests/applications/presentation/test_live_activity.py]
+    current_tests: [tests/test_appserver_client.py, tests/test_appserver_input.py, tests/test_appserver_mapping.py, tests/test_appserver_requests.py, tests/applications/presentation/test_artifact_materialization.py, tests/applications/presentation/test_live_activity.py]
     target_tests: [tests/applications/adapters/test_codex.py]
     authoritative_docs: [docs/components/application-adapters/adapters/codex.md, docs/components/application-adapters/design.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -1252,7 +1252,7 @@ components:
     state_recovery: Starts new native Turns for prefer_active_turn until Zen proves steer; authoritative history handles gaps.
     current_code: [src/imagent/applications/appserver.py]
     target_code: [src/imagent/applications/adapters/zen.py]
-    current_tests: [tests/test_appserver_client.py, tests/test_appserver_input.py, tests/test_appserver_requests.py, tests/test_appserver_artifacts.py, tests/test_gateway_vertical_slice.py]
+    current_tests: [tests/test_appserver_client.py, tests/test_appserver_input.py, tests/test_appserver_requests.py, tests/applications/presentation/test_artifact_materialization.py, tests/test_gateway_vertical_slice.py]
     target_tests: [tests/applications/adapters/test_zen.py]
     authoritative_docs: [docs/components/application-adapters/adapters/zen.md, docs/components/application-adapters/design.md]
     adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -1406,7 +1406,7 @@ structural_status:
       rationale: Current public Applications facade; its closed named lazy re-exports preserve exact identities without retaining old implementations or initializing concrete adapters for an unrelated capability import.
     - path: src/imagent/applications/presentation/__init__.py
       owner: applications.presentation.live-activity
-      rationale: Finite Applications presentation facade; it re-exports the live-activity leaf exactly and retains no runtime or compatibility implementation.
+      rationale: Finite Applications presentation facade; it re-exports the live-activity and artifact-materialization leaves exactly and retains no runtime or compatibility implementation.
     - path: src/imagent/contracts/__init__.py
       owner: engineering.release
       rationale: Deliberate cross-layer public contract facade; every symbol delegates to its mapped owner and no implementation lives here.
