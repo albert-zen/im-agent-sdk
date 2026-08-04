@@ -324,7 +324,7 @@ components:
     target_tests: [tests/interaction/channels/test_outbound_delivery.py]
     authoritative_docs: [docs/components/interaction/channels/outbound-delivery/design.md, docs/components/interaction/channels/outbound-delivery/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
-    gaps: [receipt normalization remains interleaved with runtime and provider adapters]
+    gaps: [native outbound conversion and final Channel receipt assembly remain interleaved with runtime and adapter responsibilities]
 
   interaction.channels.adapters:
     id: interaction.channels.adapters
@@ -1471,7 +1471,7 @@ structural_status:
       reason: The process-local keyed serialization primitive currently serves bounded Conversation operation serialization, ordered destination delivery, and proactive delivery-ID serialization without owning any of those policies.
     src/imagent/interaction/channels/adapters/runtime.py:
       owners: [interaction.channels.channel-contract, interaction.channels.ingress, interaction.channels.outbound-delivery, interaction.channels.adapters]
-      reason: One wrapper currently combines public contract adaptation, ingress, delivery mapping, and native factory composition.
+      reason: One wrapper currently combines public contract adaptation, ingress, remaining outbound conversion/receipt assembly, and native factory composition.
     src/imagent/interaction/channels/adapters/base.py:
       owners: [interaction.channels.ingress, interaction.channels.outbound-delivery, interaction.channels.adapters]
       reason: BaseChannelAdapter combines lifecycle/startup validation, ingress access, outbound send validation, and native diagnostic state.

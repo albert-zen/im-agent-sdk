@@ -9,12 +9,14 @@ import unittest
 from pathlib import Path
 from typing import Any, cast
 
+from imagent.interaction.channels import DeliveryItemStatus
 from imagent.interaction.channels.outbound_delivery import (
     ArtifactDeliveryReceipt,
     NativeDeliveryResult,
     OutboundArtifact,
     OutboundMessage,
     PermanentArtifactDeliveryError,
+    _artifact_item_receipts,
     deliver_artifact_batch,
     read_managed_artifact,
     split_text,
@@ -43,6 +45,53 @@ class ChannelOutboundTextTests(unittest.TestCase):
 
     def test_native_delivery_result_defaults_to_no_platform_identity(self) -> None:
         self.assertEqual(NativeDeliveryResult().native_message_ids, ())
+
+    def test_native_artifact_receipts_have_one_outbound_owner(self) -> None:
+        from imagent.interaction.channels.adapters import runtime
+
+        self.assertFalse(hasattr(runtime, "_artifact_item_receipts"))
+
+    def test_native_artifact_receipts_are_sorted_and_ignore_unknown_entries(self) -> None:
+        receipts = _artifact_item_receipts(
+            {
+                "artifact_receipts": [
+                    {
+                        "attachment_id": "second",
+                        "status": "delivered",
+                        "platform_message_id": "native-2",
+                    },
+                    "malformed",
+                    {
+                        "attachment_id": "unknown",
+                        "status": "delivered",
+                        "platform_message_id": "native-unknown",
+                    },
+                    {
+                        "attachment_id": "first",
+                        "status": "failed",
+                        "error": "unsupported",
+                    },
+                ]
+            },
+            item_indexes={"first": 2, "second": 0},
+        )
+
+        self.assertEqual(
+            tuple(
+                (
+                    receipt.content_index,
+                    receipt.attachment_id,
+                    receipt.status,
+                    receipt.native_message_id,
+                    receipt.detail,
+                )
+                for receipt in receipts
+            ),
+            (
+                (0, "second", DeliveryItemStatus.ACCEPTED, "native-2", None),
+                (2, "first", DeliveryItemStatus.REJECTED, None, "unsupported"),
+            ),
+        )
 
     def test_outbound_artifact_mappings_are_coerced_to_mutable_model_list(self) -> None:
         message = OutboundMessage(

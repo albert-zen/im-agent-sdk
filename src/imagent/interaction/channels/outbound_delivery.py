@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from .contract import DeliveryItemReceipt, DeliveryItemStatus
+
 
 @dataclass(frozen=True, slots=True)
 class OutboundArtifact:
@@ -32,6 +34,37 @@ class PermanentArtifactDeliveryError(RuntimeError):
 class ArtifactDeliveryReceipt:
     platform_message_id: str = ""
     delivery_identity: str = ""
+
+
+def _artifact_item_receipts(
+    metadata: dict[str, object],
+    *,
+    item_indexes: dict[str, int],
+) -> tuple[DeliveryItemReceipt, ...]:
+    raw_receipts = metadata.get("artifact_receipts")
+    if not isinstance(raw_receipts, list):
+        return ()
+    receipts: list[DeliveryItemReceipt] = []
+    for raw in raw_receipts:
+        if not isinstance(raw, dict):
+            continue
+        attachment_id = str(raw.get("attachment_id") or "")
+        content_index = item_indexes.get(attachment_id)
+        if content_index is None:
+            continue
+        delivered = raw.get("status") == "delivered"
+        receipts.append(
+            DeliveryItemReceipt(
+                content_index=content_index,
+                attachment_id=attachment_id,
+                status=(DeliveryItemStatus.ACCEPTED if delivered else DeliveryItemStatus.REJECTED),
+                native_message_id=(str(raw.get("platform_message_id") or "") or None),
+                detail=(
+                    None if delivered else str(raw.get("error") or "attachment delivery failed")
+                ),
+            )
+        )
+    return tuple(sorted(receipts, key=lambda receipt: receipt.content_index))
 
 
 @dataclass(slots=True)

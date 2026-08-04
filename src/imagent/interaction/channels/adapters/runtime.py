@@ -12,8 +12,6 @@ from typing import Protocol
 
 from ....contracts import (
     ChannelCapabilities,
-    DeliveryItemReceipt,
-    DeliveryItemStatus,
     DeliveryReceipt,
     DeliveryReceiptStatus,
     DeliverySupportLevel,
@@ -27,6 +25,7 @@ from ...messages import (
     TextFormat,
 )
 from .. import InboundAdmissionHandler, MessageHandler
+from .. import outbound_delivery as _outbound_delivery
 from ..outbound_delivery import (
     NativeDeliveryResult,
 )
@@ -258,7 +257,7 @@ class NativeTransportChannelAdapter:
             for index, item in enumerate(message.content)
             if isinstance(item, AttachmentContent)
         }
-        item_receipts = _artifact_item_receipts(
+        item_receipts = _outbound_delivery._artifact_item_receipts(
             native_message.metadata,
             item_indexes=item_indexes,
         )
@@ -509,37 +508,6 @@ def _to_native_artifact(attachment: AttachmentContent) -> NativeOutboundArtifact
         sha256=str(attachment.metadata.get("sha256") or ""),
         attachment_id=attachment.attachment_id,
     )
-
-
-def _artifact_item_receipts(
-    metadata: dict[str, object],
-    *,
-    item_indexes: dict[str, int],
-) -> tuple[DeliveryItemReceipt, ...]:
-    raw_receipts = metadata.get("artifact_receipts")
-    if not isinstance(raw_receipts, list):
-        return ()
-    receipts: list[DeliveryItemReceipt] = []
-    for raw in raw_receipts:
-        if not isinstance(raw, dict):
-            continue
-        attachment_id = str(raw.get("attachment_id") or "")
-        content_index = item_indexes.get(attachment_id)
-        if content_index is None:
-            continue
-        delivered = raw.get("status") == "delivered"
-        receipts.append(
-            DeliveryItemReceipt(
-                content_index=content_index,
-                attachment_id=attachment_id,
-                status=(DeliveryItemStatus.ACCEPTED if delivered else DeliveryItemStatus.REJECTED),
-                native_message_id=(str(raw.get("platform_message_id") or "") or None),
-                detail=(
-                    None if delivered else str(raw.get("error") or "attachment delivery failed")
-                ),
-            )
-        )
-    return tuple(sorted(receipts, key=lambda receipt: receipt.content_index))
 
 
 def _parse_datetime(value: object) -> datetime:
