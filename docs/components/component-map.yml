@@ -684,8 +684,8 @@ components:
   gateway.projection.observation:
     id: gateway.projection.observation
     parent: gateway.projection
-    purpose: Maintain exactly one Application observation worker per Thread and isolate bounded subscriber failures.
-    owns: [Thread worker lifecycle, live fan-out consumption, bootstrap barrier]
+    purpose: Maintain one bounded Application observation worker per active Thread and isolate bounded subscriber failures.
+    owns: [Thread worker lifecycle, active-Thread capacity, terminal runtime-entry cleanup, live fan-out consumption, bootstrap barrier]
     does_not_own: [native subscription producer, transcript, second event journal]
     inputs: [Application Thread subscription]
     outputs: [ordered normalized events for active routes]
@@ -694,7 +694,7 @@ components:
       current: [imagent.projection_runtime:ThreadProjectionRuntime, imagent.projections:ProjectionWorkerHealth]
       target: [imagent.gateway.projection:ThreadProjectionRuntime, imagent.gateway.projection:ProjectionWorkerHealth]
     dependencies: [interaction.messages, interaction.controllers.request-presentation, applications.application-contract, applications.capabilities, applications.events, applications.requests, gateway.routing.projection-routes, gateway.projection.recovery, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
-    state_recovery: Bounded queue gaps terminate only one observation; worker resubscribes and reconciles authoritatively.
+    state_recovery: Active-worker capacity and per-Thread runtime entries are process-local; an in-flight same-Thread admission retains its identity across task turnover, bounded queue gaps retain the worker slot while supervised resubscription reconciles authoritatively, and terminal workers release it once no admission lease remains.
     current_code: [src/imagent/gateway/__init__.py, src/imagent/projection_runtime.py, src/imagent/projections.py]
     target_code: [src/imagent/gateway/projection/observation.py]
     current_tests: [tests/gateway/projection/test_observation.py, tests/test_projection_hardening.py, tests/test_projection_routing.py]

@@ -10,7 +10,7 @@ or Channel delivery policy.
 ## Leaves
 
 - [observation](observation/design.md) and [testing](observation/testing.md) —
-  one bounded Thread worker and independent live fan-out.
+  one bounded active Thread worker and independent live fan-out.
 - [checkpoints](checkpoints/design.md) and [testing](checkpoints/testing.md) —
   per-route durable completion boundaries and idempotent convergence.
 - [request correlation](request-correlation/design.md) and

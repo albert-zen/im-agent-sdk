@@ -21,6 +21,14 @@
   active-key bound, retains no completed key, permits same-key waiters at
   capacity, rejects a new key before side effects, and releases cancelled
   owners/waiters exactly once;
+- active Thread observation receives its finite positive `GatewayLimits` bound,
+  joins same-Thread starters and waiters at the final slot, rejects only a
+  distinct Thread before Application subscription/recovery/checkpoint or
+  delivery work, retains a same-Thread admission across task turnover, and
+  releases terminal/cancelled/start-failed worker slots/health without clearing
+  a pending acceptance fence before its final owner drains it; restart retains
+  its existing acceptance-buffer reset boundary; a full foreground switch does
+  not mutate the existing binding or persist the rejected candidate route;
 - grouping does not change binding, idempotency, projection recovery,
   request-correlation, Controller/Presenter, Coordinator, proactive-delivery,
   startup, or shutdown identity and ordering;

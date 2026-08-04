@@ -26,6 +26,20 @@ creation, and registration contain no suspension point, so concurrent route
 activation observes the same registered task. A future cross-thread entry
 point requires explicit synchronization rather than relying on this invariant.
 
+`GatewayLimits.projection_max_active_threads` is one positive, process-local
+bound for distinct active worker identities. The runtime evaluates an existing
+or starting worker, or an in-flight admission, for the same stable `ThreadRef`
+first, so same-Thread routes and waiters join it even at the final slot. An
+in-flight admission retains a counted identity across an existing worker's
+terminal transition until its caller reaches `finally`; a distinct Thread
+therefore cannot occupy the final slot between route preparation and
+`_ensure_projection`. Only a distinct new Thread at the limit fails with a
+fixed redacted capacity error, before Application subscription, authoritative
+recovery/checkpoint, presentation, or Channel delivery. Admission and task
+registration still have no suspension point. The bound neither persists a
+worker registry nor changes durable route, checkpoint, or Application
+authority.
+
 The Application publishes into independent finite subscriber queues without
 awaiting a Gateway or Channel consumer. A slow, cancelled, failed, or
 overflowed subscriber loses only its own live position, reports a typed gap,
@@ -57,6 +71,20 @@ is durable. The worker holds only a finite per-Thread acceptance buffer until
 the correlation is recorded. Its overflow keeps the accepted inbound claim
 terminal, records an explicit gap, and recovers from authoritative history;
 it never creates permission to dispatch the input again.
+
+Subscription/recovery exceptions remain inside the supervised worker and keep
+its existing slot while bounded backoff and authoritative recovery run. A
+terminal return, cancellation, or start task failure removes worker-owned
+health and releases its identity once no admission lease remains. A caller
+cancelled while waiting for a same-Thread starter does not cancel or release
+that shared worker. If input acceptance is pending, its correlation fence,
+ready event, event lock, and buffered events are acceptance-owned: terminal
+worker cleanup must not clear or signal them. The final `send_input` owner
+persists or validates the correlation, signals the fence, drains the ordered
+buffer, then removes those entries. Gateway stop/rollback applies the same
+split worker cleanup; the established `restore()` boundary clears all
+process-local acceptance tracking before durable routes and checkpoints rebuild
+their existing recovery authority.
 
 ## Current structure and authority
 

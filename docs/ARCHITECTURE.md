@@ -294,6 +294,18 @@ contains no transcript or Turn truth.
   one-worker invariant. Gateway lifecycle entrypoints currently assume
   execution on their owning event loop; a future cross-thread API would need
   an explicit synchronization boundary.
+- active Application observation workers have one positive, process-local
+  `GatewayLimits.projection_max_active_threads` bound keyed by stable
+  `ThreadRef`. A running, starting, or in-flight same-Thread admission joins
+  before capacity is considered; a distinct Thread at the limit fails
+  explicitly before subscription, authoritative reconciliation/checkpoint,
+  presentation, or Channel delivery. The in-flight admission lease preserves
+  that identity across task turnover until its caller reaches its `finally`.
+  Terminal/cancelled workers discard process-local health and normally release
+  their slot; an accepted-input correlation fence, its event lock, and buffered
+  events remain until the final input owner durably resolves the correlation
+  and drains them. Supervised resubscription keeps its existing slot and
+  recovery authority.
 - subscription/recovery failure enters bounded-backoff resubscription and is
   visible in process-local worker health;
 - `foreground_only` reclaims workers with no active binding route and restores

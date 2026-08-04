@@ -26,7 +26,11 @@ Tests must prove:
   Application work, stops the current and prior applicable Channels exactly
   once per attempt, and leaves a later restart bounded and explicit;
 - normal stop closes projection and each bounded extension/delivery runtime and
-  leaves no second Application subscription or Channel admission path.
+  leaves no second Application subscription, Channel admission path, or stale
+  active-Thread observation slot/health entry; a pending accepted-input fence
+  remains ordered until its input owner completes rather than being cleared by
+  worker cancellation, while the established restore boundary resets its
+  process-local acceptance buffers before route recovery.
 - `GatewayStartupAdmission`, `GatewayStartupOverflow`, and
   `GatewayNotRunning` have one owner in `imagent.gateway.lifecycle`, while
   importing the removed `imagent.gateway_startup` module fails explicitly.

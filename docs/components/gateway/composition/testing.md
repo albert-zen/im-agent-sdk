@@ -19,6 +19,11 @@
   extensions preserve behavior exactly;
 - invalid finite capacities, including the default in-memory idempotency record
   bound, fail during construction before startup or I/O;
+- the positive active-Thread observation bound reaches the one projection
+  runtime, rejects only a distinct Thread before Application subscription or
+  projection delivery work, and has no durable slot state; a full
+  `foreground_only` switch leaves the prior Conversation binding and candidate
+  route unchanged, then succeeds after the occupied worker releases its slot;
 - the default in-memory idempotency repository receives the configured bound,
   rejects a new identity explicitly before media/planning/Channel work, and
   leaves an injected repository unwrapped and unconfigured;

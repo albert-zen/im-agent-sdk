@@ -83,6 +83,21 @@ single-worker behavior has direct concurrent-observer regression coverage.
 Gateway lifecycle calls assume one owning event loop; a future cross-thread
 entrypoint would require explicit synchronization.
 
+The same runtime bounds distinct active worker `ThreadRef` identities with the
+positive `GatewayLimits.projection_max_active_threads` value. Existing or
+starting same-Thread tasks, including a same-Thread admission in flight, join
+before capacity admission; a distinct new Thread at capacity gets a fixed
+redacted failure before subscription, reconciliation/checkpoint, or delivery
+effects. An admission retains the identity across task turnover until its
+caller completes. Worker health and capacity are process-local and disappear
+when a worker terminates or is cancelled, unless a short-lived admission lease
+still protects that identity. An accepted-input correlation fence, event lock,
+and buffer are instead retained until the final input owner safely resolves
+the correlation and drains the buffer; the established restore boundary clears
+that process-local acceptance tracking before recovery. Supervised recovery
+remains inside the same worker and retains the slot; durable routes and
+checkpoints remain the only restart authority.
+
 `message.completed` is one durable message observation. A Turn can produce
 many such messages. Only `turn.completed`, `turn.failed`, or
 `turn.interrupted` ends that Turn. Current workers remain active until Gateway

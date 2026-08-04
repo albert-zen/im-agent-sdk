@@ -4,6 +4,17 @@ Observation conformance must prove:
 
 - concurrent first routes for one Application/Thread create and register one
   worker, while different Threads remain isolated;
+- a positive active-Thread capacity admits the final distinct `ThreadRef`,
+  lets same-Thread starters/waiters join that worker, and rejects only another
+  Thread before subscription, authoritative reconciliation/checkpoint,
+  presentation, or Channel delivery; task termination between same-Thread
+  admission and ensure must retain that identity until the caller completes;
+- cancellation of a same-Thread waiter leaves the shared worker and its slot
+  intact; terminal, cancelled, and start-failed workers release worker-owned
+  capacity and health entries; a worker terminal during pending acceptance must
+  retain the fence, lock, and buffer until the final input owner persists the
+  correlation and drains it; the established restore boundary clears all
+  process-local acceptance tracking before route/checkpoint recovery;
 - every live subscriber has an independent finite queue, and a slow or
   overflowed subscriber neither steals from nor blocks another subscriber or
   an Application socket/read callback;

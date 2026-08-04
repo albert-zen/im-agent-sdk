@@ -314,14 +314,14 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
                 thread.ref,
                 "turn-1:message:2",
             )
+            health = gateway.get_projection_health(thread.ref)
+            assert health is not None
+            self.assertGreaterEqual(health.restart_count, 1)
         finally:
             await gateway.stop()
 
         self.assertGreaterEqual(attempts, 3)
         self.assertEqual(routes[0].checkpoint_agent_item_id, "turn-1:message:2")
-        health = gateway.get_projection_health(thread.ref)
-        assert health is not None
-        self.assertGreaterEqual(health.restart_count, 1)
 
     async def test_live_only_suppression_never_advances_checkpoint(self) -> None:
         policy = _Policy(lambda _message, _context: None)

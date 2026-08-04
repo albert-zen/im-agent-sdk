@@ -64,7 +64,7 @@ from ..interaction.operations import (
     operation_error,
 )
 from ..keyed_locks import KeyedLockCapacityError, KeyedLockRegistry
-from ..projection_runtime import ThreadProjectionRuntime
+from ..projection_runtime import ProjectionWorkerCapacityError, ThreadProjectionRuntime
 from ..projections import ProjectionWorkerHealth, RetryableDeliveryError
 from .admission import (
     ClaimedInbound,
@@ -263,6 +263,7 @@ class ImAgentGateway:
             projection_item_limit=limits.projection_item_limit,
             request_delivery_max_pending=limits.request_delivery_max_pending,
             turn_acceptance_event_max_pending=limits.turn_acceptance_event_max_pending,
+            max_active_threads=limits.projection_max_active_threads,
             subscription_retry_initial_seconds=limits.subscription_retry_initial_seconds,
             subscription_retry_max_seconds=limits.subscription_retry_max_seconds,
             turn_correlation_retention_seconds=limits.turn_correlation_retention_seconds,
@@ -678,10 +679,10 @@ class ImAgentGateway:
                     binding=binding,
                 )
             finally:
-                if not retain_prepared_barrier:
-                    self._projection_runtime.complete_foreground_binding_route(
-                        prepared_route.route_id
-                    )
+                self._projection_runtime.complete_foreground_binding_route(
+                    prepared_route.route_id,
+                    complete_bootstrap=not retain_prepared_barrier,
+                )
         binding = await self._bindings.put(
             ConversationBinding(
                 conversation_ref=operation.conversation_ref,
@@ -1361,7 +1362,7 @@ class _LockedControllerActions(ControllerActions):
 def _contract_error(error: Exception) -> ContractError:
     if isinstance(error, BindingConflict):
         return operation_error(error, code=OperationErrorCode.CONFLICT)
-    if isinstance(error, KeyedLockCapacityError):
+    if isinstance(error, (KeyedLockCapacityError, ProjectionWorkerCapacityError)):
         return ContractError(
             code=OperationErrorCode.CAPACITY_EXHAUSTED.value,
             message=str(error),
