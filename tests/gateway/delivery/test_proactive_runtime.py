@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import get_type_hints
 
 import imagent.contracts as contract_facade
+import imagent.contracts.delivery as delivery_contracts
 import imagent.gateway as gateway_facade
 import imagent.gateway.delivery as delivery_facade
 from imagent.gateway.delivery import proactive as contract_seam
@@ -99,7 +100,14 @@ class ProactiveRuntimeOwnershipTests(unittest.TestCase):
         )
         for name in CONTRACT_NAMES:
             with self.subTest(contract=name):
-                self.assertIs(getattr(contract_seam, name), getattr(contract_facade, name))
+                self.assertIs(getattr(contract_seam, name), getattr(delivery_contracts, name))
+                self.assertIs(getattr(delivery_facade, name), getattr(contract_seam, name))
+                self.assertNotIn(name, contract_facade.__all__)
+                self.assertFalse(hasattr(contract_facade, name))
+        self.assertIs(
+            contract_facade.DeliverySubmissionOrigin,
+            delivery_contracts.DeliverySubmissionOrigin,
+        )
 
     def test_runtime_source_has_the_exact_finite_owner_set(self) -> None:
         current_source = (
@@ -147,6 +155,16 @@ class ProactiveRuntimeOwnershipTests(unittest.TestCase):
             "import imagent.gateway.delivery.proactive_runtime as runtime\n"
             "import imagent.gateway.delivery as delivery\n"
             "import imagent.gateway as gateway\n"
+            "import imagent.contracts as contracts\n"
+            "removed = ('DeliveryTargetKind', 'ConversationDeliveryTarget',\n"
+            "'ThreadRouteDeliveryTarget', 'DeliveryTarget', 'DeliveryIntent',\n"
+            "'DestinationDeliveryResult', 'ProactiveDeliveryResult',\n"
+            "'validate_delivery_intent', 'derive_delivery_target_fingerprint',\n"
+            "'derive_delivery_payload_fingerprint', 'derive_delivery_submission_id',\n"
+            "'derive_destination_delivery_id')\n"
+            "assert all(not hasattr(contracts, name) and name not in contracts.__all__\n"
+            "for name in removed)\n"
+            "assert contracts.DeliverySubmissionOrigin.EXTERNAL.value == 'external'\n"
             "assert not hasattr(seam, 'ProactiveDeliveryService')\n"
             "assert not hasattr(seam, 'DeliveryRouteError')\n"
             "assert delivery.ProactiveDeliveryService is runtime.ProactiveDeliveryService\n"

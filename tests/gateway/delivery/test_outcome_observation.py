@@ -10,9 +10,7 @@ from imagent.contracts import (
     AgentMessage,
     AttachmentContent,
     ChannelCapabilities,
-    ConversationDeliveryTarget,
     ConversationRef,
-    DeliveryIntent,
     DeliveryPrincipal,
     DeliveryReceipt,
     DeliveryReceiptStatus,
@@ -39,6 +37,7 @@ from imagent.gateway.delivery import outcome_observation as outcome_observation_
 from imagent.gateway.delivery.outcome_observation import (
     DeliveryOutcomeObserverRuntime,
 )
+from imagent.gateway.delivery.proactive import ConversationDeliveryTarget, DeliveryIntent
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,

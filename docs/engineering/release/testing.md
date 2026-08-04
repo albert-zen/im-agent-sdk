@@ -56,7 +56,10 @@ Confirm that the wheel contains no duplicate implementation hidden behind a
 facade, that `imagent` imports without optional extras, and that `__version__`
 and `py.typed` remain available from the documented public package. Check the
 wheel in an isolated temporary environment rather than relying on the source
-checkout's import path.
+checkout's import path. The six clean-install cases must also prove that the
+retired proactive vocabulary and four submission-identity helpers are absent
+from `imagent.contracts`, while `DeliverySubmissionOrigin` remains available,
+and that the Gateway facades expose exact owner identities.
 
 ## Failure handling
 

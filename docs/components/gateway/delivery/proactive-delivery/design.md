@@ -12,12 +12,11 @@ delivery runtime.
 
 This leaf has an intentional same-leaf physical split:
 
-- `proactive.py` is the low-dependency proactive contract seam. In this
-  predecessor it still exposes the vocabulary and validator through their
-  current `contracts.delivery` objects. The target component map removes the
-  historical `imagent.contracts` proactive exports. A separate public-facade
-  convergence slice must retire those exports and rewire their internal users
-  before #216 moves the definitions and validation here.
+- `proactive.py` is the low-dependency proactive contract seam. It exposes
+  the vocabulary and validator as exact aliases of their temporary
+  `contracts.delivery` definitions. This slice removes the historical
+  `imagent.contracts` proactive exports and rewires internal users to this
+  named Gateway seam before #216 moves the definitions and validation here.
 - `proactive_runtime.py` owns `ResolveThreadRoutes`, `DeliveryRouteError`,
   `ProactiveDeliveryService`, and the private orchestration helpers used only
   by that service. It imports the contract seam and implementation Ports, but
@@ -82,18 +81,18 @@ spool, background worker, or retry scheduler.
 `imagent.gateway.delivery` is the finite target facade for the service and
 JSON handler plus typed intent/target/result vocabulary. The historical
 `imagent.delivery_ingress` implementation path is removed rather than retained
-as a compatibility module. `imagent.contracts` remains the current formal
-exact-object contract facade in this predecessor, but the component-map target
-does not retain its proactive-delivery exports. They must be removed in an
-explicit API-convergence slice, not recreated as reverse aliases. The old
+as a compatibility module. The `imagent.contracts` facade no longer exports
+the eight proactive vocabulary/validator names; callers use
+`imagent.gateway.delivery` (or its `proactive` owner seam) instead. This is a
+removal, not a reverse compatibility alias. The old
 `imagent.proactive_delivery` implementation path is removed.
 
-After that facade convergence, #216 must move only the typed proactive
-vocabulary and `validate_delivery_intent` into this seam. It must delete the
-historical definitions rather than add reverse compatibility aliases, and it
-must not move fingerprint/ID helpers, `_canonical_metadata`, submission/state
-records, authorization, JSON ingress, planning, coordination, O2, CLI, or
-persistence as part of that contract extraction.
+#216 must move only the typed proactive vocabulary and
+`validate_delivery_intent` into this seam. It must delete the temporary
+`contracts.delivery` definitions rather than add reverse compatibility
+aliases, and it must not move fingerprint/ID helpers, `_canonical_metadata`,
+submission/state records, authorization, JSON ingress, planning, coordination,
+O2, CLI, or persistence as part of that contract extraction.
 
 ## Authority
 

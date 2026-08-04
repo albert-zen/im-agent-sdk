@@ -8,14 +8,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
-from ...contracts import (
-    ConversationDeliveryTarget,
-    DeliveryIntent,
-    DeliveryTarget,
-    ProactiveDeliveryResult,
+from ...contracts.model import (
     ProjectRef,
     ThreadRef,
-    ThreadRouteDeliveryTarget,
 )
 from ...interaction.media import AttachmentContent
 from ...interaction.media_staging import (
@@ -30,6 +25,13 @@ from ...keyed_locks import KeyedLockRegistry
 from ..persistence.repository_contracts import (
     DeliverySubmissionCapacityError,
     DeliverySubmissionConflict,
+)
+from .proactive import (
+    ConversationDeliveryTarget,
+    DeliveryIntent,
+    DeliveryTarget,
+    ProactiveDeliveryResult,
+    ThreadRouteDeliveryTarget,
 )
 from .proactive_authorization import DeliveryAuthorizationError
 from .proactive_runtime import DeliveryRouteError

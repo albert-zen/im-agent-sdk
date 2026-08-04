@@ -27,9 +27,6 @@ from ..contracts import (
     ConversationBinding,
     ConversationBound,
     CreateThread,
-    DeliveryIntent,
-    DeliverySubmissionState,
-    DeliveryTarget,
     GatewayOperation,
     GatewayOperationFailed,
     GatewayOperationResult,
@@ -37,7 +34,6 @@ from ..contracts import (
     GetThread,
     ListApplications,
     ObserveThread,
-    ProactiveDeliveryResult,
     ProjectionPolicy,
     ProjectRead,
     RequestDuplicateError,
@@ -60,6 +56,7 @@ from ..contracts import (
     validate_gateway_operation_result,
     validate_request_response,
 )
+from ..contracts.delivery import DeliverySubmissionState
 from ..diagnostics import (
     DiagnosticsSnapshot,
     GatewayDiagnosticFacts,
@@ -107,6 +104,11 @@ from .delivery.outcome_observation import (
     DeliveryOutcomeObserverRuntime,
 )
 from .delivery.planning import DeliveryPlanningError
+from .delivery.proactive import (
+    DeliveryIntent,
+    DeliveryTarget,
+    ProactiveDeliveryResult,
+)
 from .delivery.proactive_runtime import ProactiveDeliveryService
 from .input import InboundContentTransformer as InboundContentTransformer
 from .input.content_transformation import InboundContentTransformRuntime

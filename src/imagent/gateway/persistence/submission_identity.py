@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...contracts import DeliverySubmissionRecord
+from ...contracts.delivery import DeliverySubmissionRecord
 from .repository_contracts import DeliverySubmissionConflict
 
 

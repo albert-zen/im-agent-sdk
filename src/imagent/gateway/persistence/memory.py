@@ -8,20 +8,22 @@ from datetime import UTC, datetime
 from ...applications.requests import RequestRef
 from ...contracts import (
     ConversationBinding,
-    DeliveryReservation,
-    DeliverySubmissionRecord,
-    DeliverySubmissionState,
-    DestinationDeliveryRecord,
     RequestRouteCorrelation,
     RequestRouteState,
     ThreadProjectionRoute,
     ThreadRef,
     TurnReplyCorrelation,
     validate_binding,
-    validate_delivery_submission_record,
     validate_projection_route,
     validate_request_route_correlation,
     validate_turn_reply_correlation,
+)
+from ...contracts.delivery import (
+    DeliveryReservation,
+    DeliverySubmissionRecord,
+    DeliverySubmissionState,
+    DestinationDeliveryRecord,
+    validate_delivery_submission_record,
 )
 from ...interaction.messages import ConversationRef
 from ...request_correlations import (

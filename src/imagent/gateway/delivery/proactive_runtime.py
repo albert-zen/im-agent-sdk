@@ -12,21 +12,18 @@ from ...contracts import (
     DeliveryItemStatus,
     DeliveryReceipt,
     DeliveryReceiptStatus,
-    DeliveryRouteSnapshot,
     DeliverySegmentStatus,
+    validate_delivery_receipt_for_content,
+)
+from ...contracts.delivery import (
+    DeliveryRouteSnapshot,
     DeliverySubmissionOrigin,
     DeliverySubmissionRecord,
     DeliverySubmissionState,
     DestinationDeliveryRecord,
-    ThreadProjectionRoute,
-    ThreadRef,
-    derive_delivery_payload_fingerprint,
-    derive_delivery_submission_id,
-    derive_delivery_target_fingerprint,
-    derive_destination_delivery_id,
-    validate_delivery_receipt_for_content,
     validate_delivery_submission_destination_count,
 )
+from ...contracts.model import ThreadProjectionRoute, ThreadRef
 from ...interaction.channels import ChannelAdapter
 from ...interaction.media import AttachmentContent, LocalPath
 from ...interaction.messages import OutboundMessage
@@ -58,6 +55,12 @@ from .proactive_authorization import (
     DeliveryAuthorizer,
     DeliveryPrincipal,
     validate_delivery_principal,
+)
+from .submissions import (
+    derive_delivery_payload_fingerprint,
+    derive_delivery_submission_id,
+    derive_delivery_target_fingerprint,
+    derive_destination_delivery_id,
 )
 
 ResolveThreadRoutes = Callable[
