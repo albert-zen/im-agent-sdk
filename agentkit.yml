@@ -516,6 +516,40 @@ components:
       - adapter
       - t3
 
+  applications-common:
+    description: Typed Application contract, capability, event, operation, request, and adapter-owned A1 presentation boundaries.
+    # This docs-first slice maps only the new leaf authority. Existing source
+    # and tests keep their exact owner mapping until an individual mechanical
+    # extraction creates the recorded target path.
+    docs:
+      - docs/components/applications/README.md
+      - docs/components/applications/application-contract/design.md
+      - docs/components/applications/application-contract/testing.md
+      - docs/components/applications/capabilities/design.md
+      - docs/components/applications/capabilities/testing.md
+      - docs/components/applications/events/design.md
+      - docs/components/applications/events/testing.md
+      - docs/components/applications/operations/design.md
+      - docs/components/applications/operations/testing.md
+      - docs/components/applications/requests/design.md
+      - docs/components/applications/requests/testing.md
+      - docs/components/applications/presentation/README.md
+      - docs/components/applications/presentation/live-activity/design.md
+      - docs/components/applications/presentation/live-activity/testing.md
+      - docs/components/applications/presentation/artifact-materialization/design.md
+      - docs/components/applications/presentation/artifact-materialization/testing.md
+    required_docs:
+      - design
+      - testing
+    keywords:
+      - application
+      - capability
+      - event
+      - operation
+      - request
+      - presentation
+      - artifact
+
   testing-and-conformance:
     description: Reusable fake adapters, contract suites, and cross-adapter honesty checks.
     code:
