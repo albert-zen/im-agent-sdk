@@ -12,22 +12,23 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast, get_type_hints
 
+import yaml
+
 import imagent.adapters as compatibility
 import imagent.applications as facade
 from imagent import contracts
 from imagent.applications import contract as owner
-from imagent.applications.events import AgentEvent, AgentEventType
-from imagent.contracts import (
+from imagent.applications.contract import (
     AcceptedTurn,
     AgentInput,
     ApplicationInputDispatch,
-    ApplicationOperation,
-    ApplicationOperationResult,
     ApplicationSummary,
     InputContinuationPreference,
-    InteractiveRequest,
     ThreadRef,
 )
+from imagent.applications.events import AgentEvent, AgentEventType
+from imagent.applications.operations import ApplicationOperation, ApplicationOperationResult
+from imagent.applications.requests import InteractiveRequest
 from imagent.interaction.messages import MessageRole, TextContent
 from imagent.interaction.operations import ContractViolation
 
@@ -62,6 +63,20 @@ def _summary_getter() -> Callable[..., object]:
     return cast(Callable[..., object], getter)
 
 
+def _retired_application_exports() -> tuple[str, ...]:
+    repository_root = Path(__file__).resolve().parents[2]
+    component_map = yaml.safe_load(
+        (repository_root / "docs" / "components" / "component-map.yml").read_text(encoding="utf-8")
+    )
+    transition = component_map["structural_status"]["retired_application_public_exports"]
+    current = set(transition["current"])
+    target = set(transition["target"])
+    retired = tuple(sorted(current - target))
+    if not retired:
+        raise AssertionError("component map must lock retired Application exports")
+    return retired
+
+
 class ApplicationContractOwnershipTests(unittest.TestCase):
     def test_unknown_input_outcome_has_one_exact_owner_and_signature(self) -> None:
         owner_object = owner.ApplicationInputOutcomeUnknown
@@ -87,7 +102,8 @@ class ApplicationContractOwnershipTests(unittest.TestCase):
             with self.subTest(name=name):
                 owner_object = getattr(owner, name)
                 self.assertIs(getattr(facade, name), owner_object)
-                self.assertIs(getattr(contracts, name), owner_object)
+                self.assertFalse(hasattr(contracts, name))
+                self.assertNotIn(name, contracts.__all__)
                 self.assertEqual(owner_object.__module__, "imagent.applications.contract")
                 self.assertIn(name, owner.__all__)
                 self.assertIn(name, facade.__all__)
@@ -187,7 +203,7 @@ class ApplicationContractOwnershipTests(unittest.TestCase):
             with self.subTest(name=name):
                 owner_object = getattr(owner, name)
                 self.assertIs(getattr(facade, name), owner_object)
-                self.assertIs(getattr(compatibility, name), owner_object)
+                self.assertFalse(hasattr(compatibility, name))
                 self.assertIn(name, facade.__all__)
 
         self.assertEqual(
@@ -294,30 +310,38 @@ class ApplicationContractOwnershipTests(unittest.TestCase):
         code = """
 import sys
 
-import imagent
+import imagent.applications as applications
 
-gateway_modules_before = {
+gateway_modules_after_root = {
     name for name in sys.modules if name == 'imagent.gateway' or name.startswith('imagent.gateway.')
 }
-
-from imagent.applications.contract import (
-    AgentApplicationAdapter,
-    ApplicationInputDispatchHandler,
-)
-import imagent.applications as applications
-import imagent.adapters as adapters
-
-assert applications.AgentApplicationAdapter is AgentApplicationAdapter
-assert applications.ApplicationInputDispatchHandler is ApplicationInputDispatchHandler
-assert adapters.AgentApplicationAdapter is AgentApplicationAdapter
-assert adapters.ApplicationInputDispatchHandler is ApplicationInputDispatchHandler
-assert {
-    name for name in sys.modules if name == 'imagent.gateway' or name.startswith('imagent.gateway.')
-} == gateway_modules_before
+assert not gateway_modules_after_root
 assert 'imagent.applications.adapters.codex' not in sys.modules
 assert 'imagent.applications.adapters.zen' not in sys.modules
 assert 'imagent.applications.adapters.appserver.client' not in sys.modules
 assert 'imagent.applications.adapters.t3' not in sys.modules
+
+import imagent.applications.contract
+import imagent.contracts
+import imagent.adapters
+
+assert not {
+    name for name in sys.modules if name == 'imagent.gateway' or name.startswith('imagent.gateway.')
+}
+assert 'imagent.applications.adapters.codex' not in sys.modules
+assert 'imagent.applications.adapters.zen' not in sys.modules
+assert 'imagent.applications.adapters.appserver.client' not in sys.modules
+assert 'imagent.applications.adapters.t3' not in sys.modules
+assert not hasattr(imagent.adapters, 'AgentApplicationAdapter')
+assert not hasattr(imagent.adapters, 'ApplicationInputDispatchHandler')
+assert not hasattr(imagent.contracts, 'ApplicationRef')
+assert not hasattr(imagent.contracts, 'ApplicationCapabilities')
+assert not hasattr(imagent.contracts, 'ApplicationOperation')
+assert not hasattr(imagent.contracts, 'RequestRef')
+
+from imagent.applications.contract import AgentApplicationAdapter, ApplicationInputDispatchHandler
+assert applications.AgentApplicationAdapter is AgentApplicationAdapter
+assert applications.ApplicationInputDispatchHandler is ApplicationInputDispatchHandler
 assert 'imagent.applications.t3' not in sys.modules
 assert 'imagent.applications.t3_client' not in sys.modules
 """
@@ -330,6 +354,69 @@ assert 'imagent.applications.t3_client' not in sys.modules
             text=True,
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_retired_application_imports_fail_in_clean_import_orders(self) -> None:
+        retired_exports = _retired_application_exports()
+        retired_contract_names = tuple(
+            sorted(
+                reference.partition(":")[2]
+                for reference in retired_exports
+                if reference.startswith("imagent.contracts:")
+            )
+        )
+        retired_adapter_names = tuple(
+            sorted(
+                reference.partition(":")[2]
+                for reference in retired_exports
+                if reference.startswith("imagent.adapters:")
+            )
+        )
+        self.assertEqual(
+            set(retired_adapter_names),
+            {"AgentApplicationAdapter", "ApplicationInputDispatchHandler"},
+        )
+        for name in retired_contract_names:
+            with self.subTest(facade="contracts", name=name):
+                self.assertFalse(hasattr(contracts, name))
+                self.assertNotIn(name, contracts.__all__)
+        for name in retired_adapter_names:
+            with self.subTest(facade="adapters", name=name):
+                self.assertFalse(hasattr(compatibility, name))
+                self.assertNotIn(name, getattr(compatibility, "__all__", ()))
+        orders = (
+            "import imagent.applications.contract; import imagent.contracts; "
+            "import imagent.adapters",
+            "import imagent.adapters; import imagent.applications.requests; "
+            "import imagent.contracts",
+            "import imagent.contracts; import imagent.applications.operations; "
+            "import imagent.adapters",
+        )
+        for order in orders:
+            code = f"""
+{order}
+for name in {retired_contract_names!r}:
+    try:
+        exec(f'from imagent.contracts import {{name}}')
+    except ImportError:
+        pass
+    else:
+        raise AssertionError(name)
+for name in {retired_adapter_names!r}:
+    try:
+        exec(f'from imagent.adapters import {{name}}')
+    except ImportError:
+        pass
+    else:
+        raise AssertionError(name)
+"""
+            with self.subTest(order=order):
+                completed = subprocess.run(
+                    [sys.executable, "-c", code],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
 
 
 if __name__ == "__main__":

@@ -34,13 +34,15 @@ SHARED_PATH_OWNERS = {
         "ports",
         "channel-adapters",
     },
-    "src/imagent/contracts/__init__.py": {
-        "release",
-        "channel-adapters",
-    },
     "src/imagent/applications/__init__.py": {
         "application-adapters-appserver",
         "application-adapters-t3",
+        "applications-common",
+    },
+    "src/imagent/contracts/__init__.py": {
+        "applications-common",
+        "channel-adapters",
+        "release",
     },
     "src/imagent/gateway/delivery/submissions.py": {
         "delivery-planning-and-coordination",
@@ -105,7 +107,11 @@ class AgentKitMappingTests(unittest.TestCase):
             "src/imagent/interaction/channels/diagnostics.py": {"diagnostics"},
             "src/imagent/contracts/operations.py": {"contracts"},
             "src/imagent/adapters.py": {"ports", "channel-adapters"},
-            "src/imagent/contracts/__init__.py": {"release", "channel-adapters"},
+            "src/imagent/contracts/__init__.py": {
+                "applications-common",
+                "channel-adapters",
+                "release",
+            },
             "src/imagent/interaction/media.py": {"attachments-and-media"},
             "src/imagent/gateway/__init__.py": {"gateway"},
             "src/imagent/gateway/composition.py": {"gateway"},

@@ -4,21 +4,23 @@ import asyncio
 import unittest
 from datetime import UTC, datetime
 
+from imagent.applications.capabilities import ProjectMode
+from imagent.applications.contract import ApplicationRef
 from imagent.contracts import (
-    ApplicationRef,
     ConversationBound,
-    ConversationRef,
-    InboundMessage,
-    OutboundMessage,
-    ProjectMode,
     SelectApplication,
-    TextContent,
-    TextFormat,
 )
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.interaction.controllers import SlashController
 from imagent.interaction.controllers.common import parse_slash_command
+from imagent.interaction.messages import (
+    ConversationRef,
+    InboundMessage,
+    OutboundMessage,
+    TextContent,
+    TextFormat,
+)
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

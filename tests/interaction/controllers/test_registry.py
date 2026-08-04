@@ -7,13 +7,7 @@ from datetime import UTC, datetime
 from typing import cast
 
 from imagent.adapters import IdempotencyClaimStatus
-from imagent.contracts import (
-    AttachmentContent,
-    ConversationRef,
-    LocalPath,
-    ProjectMode,
-    TextContent,
-)
+from imagent.applications.capabilities import ProjectMode
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
 from imagent.gateway.admission import inbound_idempotency_identity
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
@@ -35,7 +29,12 @@ from imagent.interaction.controllers import (
     CommandResultError,
     ControllerActions,
 )
-from imagent.interaction.messages import InboundMessage
+from imagent.interaction.media import AttachmentContent, LocalPath
+from imagent.interaction.messages import (
+    ConversationRef,
+    InboundMessage,
+    TextContent,
+)
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

@@ -3,7 +3,11 @@ from __future__ import annotations
 import unittest
 
 from imagent import contracts as legacy_contracts
-from imagent.contracts import RequestDuplicateError, RequestResolvedError, RequestStaleError
+from imagent.applications.requests import (
+    RequestDuplicateError,
+    RequestResolvedError,
+    RequestStaleError,
+)
 from imagent.interaction.operations import (
     ContractError,
     ContractViolation,

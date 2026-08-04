@@ -23,7 +23,7 @@ from imagent.applications.adapters.appserver.mapping import (
     turn_status,
     turn_updated_at,
 )
-from imagent.contracts import ThreadStatus, TurnStatus
+from imagent.applications.contract import ThreadStatus, TurnStatus
 
 
 class AppServerMappingTests(unittest.TestCase):

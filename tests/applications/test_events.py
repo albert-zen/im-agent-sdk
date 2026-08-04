@@ -12,7 +12,8 @@ import imagent
 from imagent import contracts
 from imagent import events as legacy_events
 from imagent.applications import capabilities, events
-from imagent.applications.contract import AgentMessage, ThreadRef
+from imagent.applications.contract import AgentMessage, ProjectRef, ThreadRef
+from imagent.applications.requests import InteractiveRequest, RequestResolution
 from imagent.interaction.messages import MessageRole, TextContent
 from imagent.interaction.operations import ContractViolation
 
@@ -109,10 +110,10 @@ class ApplicationEventTests(unittest.IsolatedAsyncioTestCase):
 
     def test_event_annotations_keep_exact_resource_and_request_types(self) -> None:
         hints = get_type_hints(events.AgentEvent)
-        self.assertEqual(hints["project_ref"], contracts.ProjectRef | None)
-        self.assertEqual(hints["thread_ref"], contracts.ThreadRef | None)
-        self.assertEqual(hints["request"], contracts.InteractiveRequest | None)
-        self.assertEqual(hints["request_resolution"], contracts.RequestResolution | None)
+        self.assertEqual(hints["project_ref"], ProjectRef | None)
+        self.assertEqual(hints["thread_ref"], ThreadRef | None)
+        self.assertEqual(hints["request"], InteractiveRequest | None)
+        self.assertEqual(hints["request_resolution"], RequestResolution | None)
 
     def test_capacity_must_be_positive(self) -> None:
         with self.assertRaisesRegex(ValueError, "max_pending must be positive"):

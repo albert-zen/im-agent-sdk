@@ -5,7 +5,7 @@ from subprocess import run
 from sys import executable
 
 import imagent.projections as historical_projections
-from imagent.contracts import ThreadRef
+from imagent.applications.contract import ThreadRef
 from imagent.gateway.projection import derive_projection_delivery_id
 from imagent.interaction.messages import ConversationRef
 

@@ -124,6 +124,14 @@ Interaction. The historical `imagent.controllers` package has been removed;
 there is no compatibility alias, second contract implementation, or accepted
 repository-internal import path.
 
+The facade eagerly binds contract, registry, and request-presentation values.
+Its only lazy names are the bounded common-command pair
+`SlashController` and `register_common_commands`; each resolves once to the
+exact common-command owner object and is cached. This prevents Gateway
+composition from loading common-command behavior merely to obtain controller
+contracts, and is a finite formal facade mechanism rather than a compatibility
+shim or alternate implementation.
+
 The standalone registry behavior slice added the registry-only one-way effect
 fence without creating another admission path. This public-path cleanup does
 not change that fence, the registry behavior, or any Gateway action.

@@ -43,13 +43,6 @@ if TYPE_CHECKING:
         TurnReplyCorrelationConflict as TurnReplyCorrelationConflict,
     )
 
-from .applications.contract import (
-    AgentApplicationAdapter as AgentApplicationAdapter,
-)
-from .applications.contract import (
-    ApplicationInputDispatchHandler as ApplicationInputDispatchHandler,
-)
-
 
 def __getattr__(name: str) -> object:
     if name == "DeliveryAuthorizer":

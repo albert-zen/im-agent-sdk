@@ -17,17 +17,9 @@ from imagent.adapters import (
     DeliverySubmissionConflict,
     IdempotencyClaimStatus,
 )
-from imagent.contracts import (
-    AttachmentContent,
-    AttachmentSourceKind,
-    ConversationRef,
-    DeliveryPrincipal,
-    LocalPath,
-    OutboundMessage,
-    ProjectMode,
-    TextContent,
-    ThreadRef,
-)
+from imagent.applications.capabilities import ProjectMode
+from imagent.applications.contract import ThreadRef
+from imagent.contracts import DeliveryPrincipal
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import (
     DeliveryCoordinator,
@@ -67,6 +59,16 @@ from imagent.interaction.channels import (
     DeliveryReceiptStatus,
     DeliverySegmentStatus,
     DeliverySupportLevel,
+)
+from imagent.interaction.media import (
+    AttachmentContent,
+    AttachmentSourceKind,
+    LocalPath,
+)
+from imagent.interaction.messages import (
+    ConversationRef,
+    OutboundMessage,
+    TextContent,
 )
 from imagent.interaction.operations import ContractViolation
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter

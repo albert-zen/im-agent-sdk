@@ -99,6 +99,14 @@ in `src/imagent/applications/operations.py`.
 `imagent.contracts` and `imagent.gateway.routing` remain finite exact public
 facades. Their import-order bootstrap may resolve a partially initialized
 binding leaf so the closed Gateway union is completed once both exact owners
-are loaded; it is a finite named facade mechanism, not a compatibility
-implementation, service locator, or second operation definition. All resolved
-public names retain owner identity, signatures, and runtime annotations.
+are loaded. The retained `imagent.gateway` package root has a separate finite
+lazy Gateway-operation resolver for exactly `ApplicationsListed`,
+`GatewayOperation`, `GatewayOperationFailed`, `GatewayOperationResult`,
+`GatewayOperationType`, `ListApplications`, `SelectApplication`,
+`validate_gateway_operation`, and `validate_gateway_operation_result`. It
+obtains each exact object from `imagent.gateway.routing.operations` only on
+access and caches that object on the root, so every supported import order
+preserves exact identity, signatures, and runtime annotations. This keeps the
+root's aggregate exports out of package initialization until the closed owner
+aggregate has completed. The resolver is not a compatibility implementation,
+service locator, or second operation definition; unknown names fail explicitly.

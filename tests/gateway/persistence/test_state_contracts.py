@@ -81,7 +81,9 @@ class StateContractOwnershipTests(unittest.TestCase):
         for name in names:
             with self.subTest(name=name):
                 self.assertIs(getattr(persistence_facade, name), getattr(owner, name))
-        for name in names:
+        self.assertIs(contracts_facade.ConversationBinding, owner.ConversationBinding)
+        self.assertIn("ConversationBinding", contracts_facade.__all__)
+        for name in set(names) - {"ConversationBinding"}:
             self.assertFalse(hasattr(contracts_facade, name))
             self.assertNotIn(name, contracts_facade.__all__)
         self.assertFalse(hasattr(persistence_facade, "DeliverySubmissionOrigin"))

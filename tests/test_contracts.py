@@ -11,53 +11,57 @@ from jsonschema import ValidationError
 from jsonschema.validators import validator_for
 from referencing import Registry, Resource
 
-from imagent.applications.events import AgentEvent, AgentEventType, validate_agent_event
-from imagent.contracts import (
-    MAX_INTERACTIVE_REQUEST_CHOICES,
-    MAX_INTERACTIVE_REQUEST_QUESTIONS,
+from imagent.applications.capabilities import (
     ApplicationCapabilities,
-    ApplicationOperationFailed,
-    ApplicationOperationType,
-    ApplicationRef,
-    ApprovalRequest,
-    ApprovalResponse,
-    ApprovalResponseShape,
-    AttachmentSourceKind,
-    BindConversationToThread,
-    ContractError,
-    ContractViolation,
-    ConversationBound,
-    ConversationRef,
     EventSequenceScope,
-    GatewayOperationType,
-    GetThreadHistory,
-    GetTurnCatchup,
-    ListThreads,
-    Page,
     ProjectCapabilities,
     ProjectMode,
-    ProjectRef,
-    RequestChoice,
-    RequestRef,
     RuntimeCapabilities,
     SupportLevel,
     ThreadCapabilities,
     ThreadDeletionCapability,
+)
+from imagent.applications.contract import (
+    ApplicationRef,
+    Page,
+    ProjectRef,
     ThreadRef,
+)
+from imagent.applications.events import AgentEvent, AgentEventType, validate_agent_event
+from imagent.applications.operations import (
+    ApplicationOperationFailed,
+    ApplicationOperationType,
+    GetThreadHistory,
+    GetTurnCatchup,
+    ListThreads,
     ThreadsListed,
+    validate_application_operation,
+    validate_application_operation_result,
+)
+from imagent.applications.requests import (
+    MAX_INTERACTIVE_REQUEST_CHOICES,
+    MAX_INTERACTIVE_REQUEST_QUESTIONS,
+    ApprovalRequest,
+    ApprovalResponse,
+    ApprovalResponseShape,
+    RequestChoice,
+    RequestRef,
     UserInputQuestion,
     UserInputQuestionShape,
     UserInputRequest,
     UserInputResponse,
     UserInputResponseShape,
-    derive_client_message_id,
-    validate_application_operation,
-    validate_application_operation_result,
-    validate_gateway_operation,
-    validate_gateway_operation_result,
     validate_interactive_request,
     validate_request_response,
     validate_request_response_shape,
+)
+from imagent.contracts import (
+    BindConversationToThread,
+    ConversationBound,
+    GatewayOperationType,
+    derive_client_message_id,
+    validate_gateway_operation,
+    validate_gateway_operation_result,
 )
 from imagent.gateway.persistence import (
     ConversationBinding,
@@ -78,6 +82,9 @@ from imagent.interaction.channels import (
     DeliverySupportLevel,
     validate_delivery_receipt,
 )
+from imagent.interaction.media import AttachmentSourceKind
+from imagent.interaction.messages import ConversationRef
+from imagent.interaction.operations import ContractError, ContractViolation
 
 
 def capabilities(mode: ProjectMode) -> ApplicationCapabilities:

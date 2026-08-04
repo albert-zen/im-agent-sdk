@@ -24,7 +24,11 @@ The Python reference owner for `ApplicationRef`, `ProjectRef`, `ThreadRef`,
 the Project/Thread/Turn summaries and statuses, input/history values, and
 `validate_thread_ref` is
 [`applications.application-contract`](../applications/application-contract/design.md).
-The `imagent.contracts` names remain exact compatibility aliases only.
+The complete Application contract family is exposed by that owner and the
+finite `imagent.applications` facade. `imagent.contracts` retains only the
+exact `ApplicationInputOutcomeUnknown` alias from this Applications block;
+capability, operation, request, and all other Application model names are not
+compatibility exports.
 
 The full organization model is:
 

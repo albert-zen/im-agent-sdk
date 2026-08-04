@@ -5,13 +5,14 @@ from datetime import UTC, datetime
 from importlib import import_module
 from typing import get_type_hints
 
+import imagent.applications as applications
 from imagent import contracts
-from imagent.applications import operations
+from imagent.applications import contract, operations, requests
 from imagent.interaction.operations import ContractError, ContractViolation
 
 
 class ApplicationOperationTests(unittest.TestCase):
-    def test_facade_exports_preserve_exact_owner_identities(self) -> None:
+    def test_owner_has_exact_finite_exports_and_facades_are_negative(self) -> None:
         for name in (
             "ActivateNativeThread",
             "ApplicationOperation",
@@ -46,7 +47,11 @@ class ApplicationOperationTests(unittest.TestCase):
             "validate_application_operation_result",
         ):
             with self.subTest(name=name):
-                self.assertIs(getattr(contracts, name), getattr(operations, name))
+                self.assertTrue(hasattr(operations, name))
+                self.assertIn(name, operations.__all__)
+                self.assertFalse(hasattr(contracts, name))
+                self.assertNotIn(name, contracts.__all__)
+                self.assertNotIn(name, applications.__all__)
 
     def test_historical_contract_modules_no_longer_define_application_operations(self) -> None:
         historical_operations = import_module("imagent.contracts.operations")
@@ -65,13 +70,13 @@ class ApplicationOperationTests(unittest.TestCase):
 
     def test_operation_annotations_resolve_to_existing_contract_values(self) -> None:
         hints = get_type_hints(operations.RespondRequest)
-        self.assertIs(hints["application_ref"], contracts.ApplicationRef)
-        self.assertIs(hints["request_ref"], contracts.RequestRef)
-        self.assertEqual(hints["response"], contracts.RequestResponse)
+        self.assertIs(hints["application_ref"], contract.ApplicationRef)
+        self.assertIs(hints["request_ref"], requests.RequestRef)
+        self.assertEqual(hints["response"], requests.RequestResponse)
 
     def test_operation_validation_preserves_scope_and_bounds(self) -> None:
-        application = operations.ApplicationRef("zen-local")
-        thread = operations.ThreadRef("zen-local", "thread-1")
+        application = contract.ApplicationRef("zen-local")
+        thread = contract.ThreadRef("zen-local", "thread-1")
         operations.validate_application_operation(
             operations.GetTurnCatchup(
                 operation_id="op-catchup",
@@ -97,7 +102,7 @@ class ApplicationOperationTests(unittest.TestCase):
                 operations.GetTurnCatchup(
                     operation_id="op-cross-app",
                     application_ref=application,
-                    thread_ref=operations.ThreadRef("t3-remote", "thread-1"),
+                    thread_ref=contract.ThreadRef("t3-remote", "thread-1"),
                     created_at=datetime.now(UTC),
                 )
             )
@@ -105,13 +110,13 @@ class ApplicationOperationTests(unittest.TestCase):
     def test_result_validation_preserves_variant_and_error_checks(self) -> None:
         operation = operations.ListThreads(
             operation_id="op-list",
-            application_ref=operations.ApplicationRef("zen-local"),
+            application_ref=contract.ApplicationRef("zen-local"),
             created_at=datetime.now(UTC),
         )
         result = operations.ThreadsListed(
             operation_id=operation.operation_id,
             completed_at=datetime.now(UTC),
-            threads=operations.Page(()),
+            threads=contract.Page(()),
         )
         operations.validate_application_operation_result(operation, result)
 

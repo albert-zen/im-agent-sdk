@@ -11,25 +11,21 @@ from imagent.adapters import (
     ProjectionRouteConflict,
     ProjectionRouteRepository,
 )
-from imagent.contracts import (
+from imagent.applications.capabilities import ProjectMode
+from imagent.applications.contract import AgentInput, ApplicationRef, ThreadRef
+from imagent.applications.operations import (
     ActivateNativeThread,
-    AgentInput,
     ApplicationOperation,
     ApplicationOperationResult,
-    ApplicationRef,
-    BindConversationToThread,
-    ContractViolation,
-    ConversationBound,
-    ConversationRef,
-    GatewayOperationFailed,
     GetThreadHistory,
-    InboundMessage,
     NativeThreadActivated,
+)
+from imagent.contracts import (
+    BindConversationToThread,
+    ConversationBound,
+    GatewayOperationFailed,
     ObserveThread,
-    ProjectMode,
-    TextContent,
     ThreadObserved,
-    ThreadRef,
 )
 from imagent.gateway import GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence import (
@@ -42,6 +38,8 @@ from imagent.gateway.persistence.memory import (
     InMemoryProjectionRouteRepository,
 )
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
+from imagent.interaction.messages import ConversationRef, InboundMessage, TextContent
+from imagent.interaction.operations import ContractViolation
 from imagent.projections import (
     ProjectionWorkerState,
     derive_projection_route_id,

@@ -89,6 +89,13 @@ portable Markdown presentation. `imagent.interaction.controllers` exposes the
 sole formal public API. The historical `imagent.controllers` package has been
 removed, with no compatibility alias or accepted internal import path.
 
+The two common-command facade names are a finite lazy pair: the controller
+package resolves and caches exact owner objects only when a caller requests
+`SlashController` or `register_common_commands`. Gateway composition therefore
+does not import common-command behavior while it only needs the controller
+contracts. This is import isolation for the sole formal facade, not a
+compatibility shim or a second command implementation.
+
 The mechanical ownership slice removes the historical
 `imagent.controllers` package without changing registry, command,
 presentation, action, fence, or replay behavior.

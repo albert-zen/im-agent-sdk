@@ -9,32 +9,31 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from imagent.adapters import ApplicationInputDispatchHandler, IdempotencyClaimStatus
-from imagent.applications.contract import ApplicationInputOutcomeUnknown
-from imagent.applications.events import AgentEvent, AgentEventType
-from imagent.contracts import (
+from imagent.adapters import IdempotencyClaimStatus
+from imagent.applications.capabilities import ProjectMode, SupportLevel
+from imagent.applications.contract import (
     AcceptedTurn,
     AgentInput,
     AgentMessage,
     ApplicationInputDispatch,
-    ApplicationOperation,
-    BindConversationToThread,
-    ConversationBound,
-    ConversationRef,
-    GatewayOperationFailed,
-    GetThreadHistory,
-    InboundMessage,
+    ApplicationInputDispatchHandler,
+    ApplicationInputOutcomeUnknown,
     InputContinuationPreference,
     InputDisposition,
-    MessageRole,
-    ObserveThread,
-    OutboundMessage,
-    ProjectMode,
-    SupportLevel,
-    TextContent,
-    ThreadHistoryRead,
     ThreadRef,
     TurnReplyCorrelationPolicy,
+)
+from imagent.applications.events import AgentEvent, AgentEventType
+from imagent.applications.operations import (
+    ApplicationOperation,
+    GetThreadHistory,
+    ThreadHistoryRead,
+)
+from imagent.contracts import (
+    BindConversationToThread,
+    ConversationBound,
+    GatewayOperationFailed,
+    ObserveThread,
 )
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import DeliveryCoordinator, DeliveryCoordinatorConfig
@@ -54,6 +53,13 @@ from imagent.gateway.presentation import OutboundPresentationContext
 from imagent.gateway.projection import derive_projection_delivery_id
 from imagent.interaction.channels import DeliveryReceipt
 from imagent.interaction.controllers import ControllerActions
+from imagent.interaction.messages import (
+    ConversationRef,
+    InboundMessage,
+    MessageRole,
+    OutboundMessage,
+    TextContent,
+)
 from imagent.projection_runtime import TurnAcceptanceBufferOverflow
 from imagent.projections import (
     ProjectionWorkerState,

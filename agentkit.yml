@@ -582,6 +582,10 @@ components:
     description: Typed Application contract, capability, event, operation, request, and adapter-owned A1 presentation boundaries.
     code:
       - src/imagent/applications/contract.py
+      # The root facade and the formal cross-layer facade carry the
+      # Applications edge of this public-surface slice.
+      - src/imagent/applications/__init__.py
+      - src/imagent/contracts/__init__.py
       - src/imagent/applications/capabilities.py
       - src/imagent/applications/events.py
       - src/imagent/applications/operations.py

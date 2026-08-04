@@ -27,10 +27,11 @@ discriminants, so this leaf owns their nominal Python identities rather than
 depending on the legacy aggregate contract module. It has no Gateway
 dependency.
 
-Current public values are exported from `imagent.contracts`; the target owner
-is `imagent.applications.capabilities`. The target code is
-`src/imagent/applications/capabilities.py`, while the v1 capabilities schema
-remains language-neutral.
+The canonical public values are exported only from
+`imagent.applications.capabilities`; the v1 capabilities schema remains
+language-neutral. `imagent.contracts` and the package root do not expose this
+Applications capability family, and the owner module does not load concrete
+adapters or Gateway implementation as an import side effect.
 
 ## State, recovery, and structure
 
@@ -39,10 +40,10 @@ restart. They are not a mutable record of an Application runtime, replay
 cursor, provider setting, or product retry policy.
 
 The implementation is `schemas/v1/capabilities.schema.json` plus
-`src/imagent/applications/capabilities.py`; `imagent.contracts` remains an
-exact public facade for the v1 values. Focused ownership evidence is
-`tests/applications/test_capabilities.py`, alongside adapter conformance. The
-schema and capability semantics are unchanged by this mechanical move.
+`src/imagent/applications/capabilities.py`. Focused ownership evidence is
+`tests/applications/test_capabilities.py`, alongside adapter conformance and
+negative clean-process facade/import-order checks. The schema and capability
+semantics are unchanged by this mechanical move.
 
 ## Authority
 

@@ -32,9 +32,12 @@ policy into the common contract.
 The common adapter Protocol and its pre-dispatch callback are owned by the
 `applications.application-contract` leaf in
 `src/imagent/applications/contract.py`. The finite `imagent.applications`
-facade exposes those exact objects; the historical `imagent.adapters` module
-is only a temporary compatibility facade for them and for unrelated legacy
-Gateway, proactive-authorization, and passive-state aliases.
+facade exposes the complete Application contract family as exact objects and
+resolves explicitly named concrete adapter/presentation exports without
+eagerly importing concrete adapters. Capabilities, operations, and requests
+remain available only from their canonical owner modules. The historical
+`imagent.adapters` module exports no Application names; it retains only the
+unrelated Gateway, proactive-authorization, and passive-state aliases.
 
 ## Adapters
 

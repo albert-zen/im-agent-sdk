@@ -28,6 +28,9 @@ Required scenarios:
 - restart discards views and rebuilds from Gateway/Application authority;
 - no product-only command or concrete Application client enters the common
   module.
+- clean-process import order proves the controller facade does not load this
+  module until one of its two finite common-command exports is requested, and
+  that both cached values have exact owner identity.
 
 Focused validation currently includes:
 

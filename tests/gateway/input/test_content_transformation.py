@@ -7,15 +7,9 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from imagent.applications.capabilities import ProjectMode
+from imagent.applications.contract import AgentInput, InputContinuationPreference
 from imagent.contracts import (
-    AgentInput,
-    AttachmentContent,
-    ConversationRef,
-    InboundMessage,
-    InputContinuationPreference,
-    LocalPath,
-    ProjectMode,
-    TextContent,
     derive_client_message_id,
 )
 from imagent.gateway import (
@@ -35,6 +29,12 @@ from imagent.gateway.input.content_transformation import (
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.interaction.controllers import SlashController
+from imagent.interaction.media import AttachmentContent, LocalPath
+from imagent.interaction.messages import (
+    ConversationRef,
+    InboundMessage,
+    TextContent,
+)
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 

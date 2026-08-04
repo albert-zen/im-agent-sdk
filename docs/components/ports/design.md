@@ -2,15 +2,12 @@
 
 ## Purpose
 
-`src/imagent/adapters.py` is the remaining compatibility facade for Python
-runtime seams whose implementations now all live under their owning
-Interaction, Gateway, or Applications component. The facade re-exports exact
-objects while callers migrate, but it does not retain a second implementation.
-The common
-`AgentApplicationAdapter` Protocol and
-`ApplicationInputDispatchHandler` callback now live under
-`applications.application-contract`; this historical module only re-exports
-those exact objects for compatibility.
+`src/imagent/adapters.py` is the remaining compatibility facade for Gateway
+Python runtime seams whose implementations now live under their owning
+Gateway component. It re-exports exact objects while callers migrate, but it
+does not retain a second implementation. The Applications Protocol and
+pre-dispatch callback live under `applications.application-contract` and are
+not exported by this historical module.
 
 ## Ownership
 
@@ -26,9 +23,9 @@ The Applications contract owner owns:
   automatically.
 
 The remaining Ports surface owns no runtime seam. It exposes only historical
-exact-object aliases for Application and Gateway contracts that have already
-reached their component owners; the Channel/admission aliases were retired
-after the Interaction Channel facade became authoritative.
+exact-object aliases for Gateway contracts that have already reached their
+component owners; the Application and Channel/admission aliases were retired
+after their owning facades became authoritative.
 
 Gateway's `gateway.persistence.repository-contracts` leaf owns the complete
 Gateway repository Port/conflict family: binding, projection-route,

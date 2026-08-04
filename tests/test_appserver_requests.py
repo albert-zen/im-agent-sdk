@@ -9,13 +9,12 @@ from imagent.applications import ZenApplicationAdapter
 from imagent.applications.adapters.appserver.requests import (
     derive_appserver_request_ref,
 )
+from imagent.applications.contract import ThreadRef
+from imagent.applications.requests import ApprovalResponse
 from imagent.contracts import (
-    ApprovalResponse,
-    ConversationRef,
     ObserveThread,
     RequestResponseRouted,
     RespondToRequest,
-    ThreadRef,
 )
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence import ProjectionPolicy
@@ -25,6 +24,7 @@ from imagent.gateway.persistence.memory import (
     InMemoryRequestCorrelationRepository,
 )
 from imagent.interaction.controllers import MarkdownRequestPresenter
+from imagent.interaction.messages import ConversationRef
 from imagent.testing import FakeChannelAdapter
 
 

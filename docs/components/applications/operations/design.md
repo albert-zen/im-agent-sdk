@@ -28,10 +28,11 @@ This leaf depends on Interaction operation primitives and consumes the canonical
 request response shapes owned by `applications.requests`; it never depends on
 Gateway implementation.
 
-Current public values live in `imagent.contracts`; target exports are
+The canonical public values are exported only from
 `imagent.applications.operations`, implemented in
-`src/imagent/applications/operations.py`. The v1 operations schema remains a
-shared language-neutral contract.
+`src/imagent/applications/operations.py`. The package root and
+`imagent.contracts` do not expose these Application operation names. The v1
+operations schema remains a shared language-neutral contract.
 
 ## State, recovery, and structure
 
@@ -42,21 +43,21 @@ option vocabularies and product UX remain a concrete adapter/consumer seam.
 
 Current code is `schemas/v1/operations.schema.json`,
 `src/imagent/applications/operations.py`, and historical
-`src/imagent/contracts/{operations.py,validators.py}`. The historical modules
-retain Gateway variants and validators; request-owned response values now live
-in `applications.requests`. This leaf makes the Application operation/result
-variants and their validators authoritative at
-`src/imagent/applications/operations.py`; the historical module remains only
-as a declared transition surface for the unmoved Gateway leaf.
+`src/imagent/contracts/{operations.py,validators.py}` for Gateway values only.
+The historical modules retain Gateway variants and validators; request-owned
+response values live in `applications.requests`. This leaf makes the
+Application operation/result variants and their validators authoritative at
+`src/imagent/applications/operations.py`; no compatibility Application
+operation exports remain in `imagent.contracts`.
 Current tests are `tests/test_contracts.py`, `tests/conformance/test_adapter_contracts.py`,
 and `tests/test_appserver_input.py`; focused ownership evidence moves to
 `tests/applications/test_operations.py` while affected integration tests remain
 in place. The language-neutral schema remains a deliberate cross-owner union.
 
 The mechanical move preserves every dataclass field, discriminant, validation
-bound, error projection, and exact `imagent.contracts` object identity. It does
-not move request response-shape definitions, Gateway operations, native wire
-mapping, or any operation execution behavior.
+bound, and error projection. It does not move request response-shape
+definitions, Gateway operations, native wire mapping, or any operation
+execution behavior.
 
 ## Authority
 

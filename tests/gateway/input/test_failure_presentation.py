@@ -9,18 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from imagent.adapters import IdempotencyClaimStatus
-from imagent.applications.contract import ApplicationInputOutcomeUnknown
-from imagent.contracts import (
-    AcceptedTurn,
-    AttachmentContent,
-    Content,
-    ConversationRef,
-    InboundMessage,
-    LocalPath,
-    OutboundMessage,
-    TextContent,
-    ThreadRef,
-)
+from imagent.applications.contract import AcceptedTurn, ApplicationInputOutcomeUnknown, ThreadRef
 from imagent.gateway import (
     GatewayExtensions,
     GatewayLimits,
@@ -41,6 +30,14 @@ from imagent.gateway.input.failure_presentation import (
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
+from imagent.interaction.media import AttachmentContent, LocalPath
+from imagent.interaction.messages import (
+    Content,
+    ConversationRef,
+    InboundMessage,
+    OutboundMessage,
+    TextContent,
+)
 from imagent.projection_runtime import InputPostAcceptanceError
 from imagent.testing import FakeChannelAdapter
 

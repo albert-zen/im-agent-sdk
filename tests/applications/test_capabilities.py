@@ -4,6 +4,7 @@ import unittest
 from subprocess import run
 from sys import executable
 
+import imagent.applications as applications
 from imagent import contracts
 from imagent.applications import capabilities
 from imagent.interaction.media import AttachmentSourceKind
@@ -46,6 +47,7 @@ class ApplicationCapabilitiesTests(unittest.TestCase):
                 "-c",
                 "import sys; "
                 "from imagent.applications import capabilities; "
+                "assert not any(name.startswith('imagent.gateway') for name in sys.modules); "
                 "assert 'imagent.applications.adapters.codex' not in sys.modules; "
                 "assert 'imagent.applications.adapters.zen' not in sys.modules; "
                 "from imagent.applications import CodexApplicationAdapter; "
@@ -59,7 +61,7 @@ class ApplicationCapabilitiesTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_contracts_facade_exports_exact_owner_objects(self) -> None:
+    def test_owner_has_exact_finite_exports_and_facades_are_negative(self) -> None:
         exported = (
             "ApplicationCapabilities",
             "EventSequenceScope",
@@ -73,7 +75,11 @@ class ApplicationCapabilitiesTests(unittest.TestCase):
         )
         for name in exported:
             with self.subTest(name=name):
-                self.assertIs(getattr(contracts, name), getattr(capabilities, name))
+                self.assertTrue(hasattr(capabilities, name))
+                self.assertIn(name, capabilities.__all__)
+                self.assertFalse(hasattr(contracts, name))
+                self.assertNotIn(name, contracts.__all__)
+                self.assertNotIn(name, applications.__all__)
 
     def test_accepts_all_project_modes(self) -> None:
         for mode in capabilities.ProjectMode:

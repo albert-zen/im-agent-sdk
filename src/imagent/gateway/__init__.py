@@ -13,6 +13,8 @@ from uuid import uuid4
 if TYPE_CHECKING:
     from .delivery.proactive_authorization import DeliveryAuthorizer
 
+import imagent.contracts as contracts_facade
+
 from ..applications.capabilities import ProjectMode
 from ..applications.contract import (
     AgentApplicationAdapter,
@@ -20,30 +22,27 @@ from ..applications.contract import (
     ApplicationSummary,
     ThreadRef,
 )
-from ..contracts import (
+from ..applications.operations import (
     ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,
     CreateThread,
     GetProject,
     GetThread,
-    ObserveThread,
     ProjectRead,
-    RequestDuplicateError,
-    RequestResolvedError,
     RequestResponded,
-    RequestResponseRouted,
-    RequestStaleError,
     RespondRequest,
-    RespondToRequest,
     ThreadCreated,
-    ThreadObserved,
     ThreadRead,
     validate_application_operation,
     validate_application_operation_result,
+)
+from ..applications.requests import (
+    RequestDuplicateError,
+    RequestResolvedError,
+    RequestStaleError,
     validate_request_response,
 )
-from ..contracts.validators import derive_client_message_id
 from ..interaction.channels.contract import ChannelAdapter, InboundAdmission
 from ..interaction.controllers import ControllerActions, ControllerLifecycle
 from ..interaction.controllers.contract import (
@@ -139,29 +138,22 @@ from .routing.bindings import (
     ClearConversationThread,
     ConversationBound,
 )
-from .routing.operations import (
-    ApplicationsListed as ApplicationsListed,
-)
-from .routing.operations import (
-    GatewayOperation,
-    GatewayOperationFailed,
-    GatewayOperationResult,
-    ListApplications,
-    SelectApplication,
-    _GatewayActionError,
-    _GatewayOperationExecutor,
-)
-from .routing.operations import (
-    GatewayOperationType as GatewayOperationType,
-)
-from .routing.operations import (
-    validate_gateway_operation as validate_gateway_operation,
-)
-from .routing.operations import (
-    validate_gateway_operation_result as validate_gateway_operation_result,
-)
 
 logger = logging.getLogger(__name__)
+
+_GATEWAY_OPERATION_EXPORTS = frozenset(
+    {
+        "ApplicationsListed",
+        "GatewayOperation",
+        "GatewayOperationFailed",
+        "GatewayOperationResult",
+        "GatewayOperationType",
+        "ListApplications",
+        "SelectApplication",
+        "validate_gateway_operation",
+        "validate_gateway_operation_result",
+    }
+)
 
 
 class ImAgentGateway:
@@ -276,6 +268,8 @@ class ImAgentGateway:
             turn_correlation_retention_seconds=limits.turn_correlation_retention_seconds,
             request_correlation_retention_seconds=(limits.request_correlation_retention_seconds),
         )
+        from .routing.operations import _GatewayOperationExecutor
+
         self._gateway_operations = _GatewayOperationExecutor(
             delegates=self,
             max_active_conversation_keys=limits.conversation_serialization_max_active_keys,
@@ -475,8 +469,8 @@ class ImAgentGateway:
 
     async def execute_gateway(
         self,
-        operation: GatewayOperation,
-    ) -> GatewayOperationResult:
+        operation: contracts_facade.GatewayOperation,
+    ) -> contracts_facade.GatewayOperationResult:
         """Execute one typed Gateway operation under Conversation serialization."""
         return await self._gateway_operations.execute(operation)
 
@@ -506,13 +500,13 @@ class ImAgentGateway:
 
     async def _execute_gateway_locked(
         self,
-        operation: GatewayOperation,
-    ) -> GatewayOperationResult:
+        operation: contracts_facade.GatewayOperation,
+    ) -> contracts_facade.GatewayOperationResult:
         return await self._gateway_operations.execute_locked(operation)
 
     def _list_applications(
         self,
-        operation: ListApplications,
+        operation: contracts_facade.ListApplications,
         *,
         completed_at: datetime,
     ) -> tuple[ApplicationSummary, ...]:
@@ -521,7 +515,7 @@ class ImAgentGateway:
 
     async def _select_application(
         self,
-        operation: SelectApplication,
+        operation: contracts_facade.SelectApplication,
         *,
         completed_at: datetime,
     ) -> ConversationBound:
@@ -548,6 +542,8 @@ class ImAgentGateway:
         *,
         completed_at: datetime,
     ) -> ConversationBound:
+        from .routing.operations import _GatewayActionError
+
         application = self._require_application(operation.project_ref.application_instance_id)
         read = await self.execute_application(
             GetProject(
@@ -584,6 +580,8 @@ class ImAgentGateway:
         *,
         completed_at: datetime,
     ) -> ConversationBound:
+        from .routing.operations import _GatewayActionError
+
         application = self._require_application(operation.thread_ref.application_instance_id)
         read = await self.execute_application(
             GetThread(
@@ -728,10 +726,13 @@ class ImAgentGateway:
 
     async def _observe_thread(
         self,
-        operation: ObserveThread,
+        operation: contracts_facade.ObserveThread,
         *,
         completed_at: datetime,
-    ) -> ThreadObserved:
+    ) -> contracts_facade.ThreadObserved:
+        from ..contracts.operations import ThreadObserved
+        from .routing.operations import _GatewayActionError
+
         application = self._require_application(operation.thread_ref.application_instance_id)
         read = await self.execute_application(
             GetThread(
@@ -759,10 +760,10 @@ class ImAgentGateway:
 
     async def _route_request_response(
         self,
-        operation: RespondToRequest,
+        operation: contracts_facade.RespondToRequest,
         *,
         completed_at: datetime,
-    ) -> RequestResponseRouted:
+    ) -> contracts_facade.RequestResponseRouted:
         async with self._request_locks.hold(operation.request_ref):
             return await self._respond_to_request(
                 operation,
@@ -771,10 +772,13 @@ class ImAgentGateway:
 
     async def _respond_to_request(
         self,
-        operation: RespondToRequest,
+        operation: contracts_facade.RespondToRequest,
         *,
         completed_at: datetime,
-    ) -> RequestResponseRouted:
+    ) -> contracts_facade.RequestResponseRouted:
+        from ..contracts.operations import RequestResponseRouted
+        from .routing.operations import _GatewayActionError
+
         correlations = await self._request_correlations.list_request_correlations(
             request_ref=operation.request_ref
         )
@@ -857,7 +861,7 @@ class ImAgentGateway:
 
     async def _converge_native_request_failure(
         self,
-        operation: RespondToRequest,
+        operation: contracts_facade.RespondToRequest,
         result: ApplicationOperationFailed,
     ) -> None:
         target = {
@@ -879,7 +883,7 @@ class ImAgentGateway:
 
     async def _transition_request_state(
         self,
-        operation: RespondToRequest,
+        operation: contracts_facade.RespondToRequest,
         *,
         state: RequestRouteState,
         expected_states: tuple[RequestRouteState, ...],
@@ -972,6 +976,8 @@ class ImAgentGateway:
         idempotency_owner_token: str,
         before_application_send: Callable[[], Awaitable[None]],
     ) -> None:
+        from .routing.operations import SelectApplication
+
         async with self._gateway_operations.hold_conversation(message.conversation_ref):
             scope, key = inbound_idempotency_identity(
                 message.conversation_ref,
@@ -1073,6 +1079,8 @@ class ImAgentGateway:
                 message.conversation_ref,
                 thread_was_created=thread_was_created,
             )
+            from ..contracts.validators import derive_client_message_id
+
             client_message_id = derive_client_message_id(
                 message.conversation_ref,
                 message.message_id,
@@ -1112,8 +1120,10 @@ class ImAgentGateway:
     async def _deliver_operation_error(
         self,
         inbound: InboundMessage,
-        result: ApplicationOperationResult | GatewayOperationResult,
+        result: ApplicationOperationResult | contracts_facade.GatewayOperationResult,
     ) -> None:
+        from .routing.operations import GatewayOperationFailed
+
         error = (
             result.error
             if isinstance(result, (ApplicationOperationFailed, GatewayOperationFailed))
@@ -1313,8 +1323,8 @@ class _LockedControllerActions(ControllerActions):
 
     async def execute_gateway(
         self,
-        operation: GatewayOperation,
-    ) -> GatewayOperationResult:
+        operation: contracts_facade.GatewayOperation,
+    ) -> contracts_facade.GatewayOperationResult:
         return await self._gateway._execute_gateway_locked(operation)
 
     async def get_binding(
@@ -1371,4 +1381,10 @@ def __getattr__(name: str) -> object:
 
         globals()[name] = DeliveryAuthorizer
         return DeliveryAuthorizer
+    if name in _GATEWAY_OPERATION_EXPORTS:
+        from .routing import operations as operations_owner
+
+        value = getattr(operations_owner, name)
+        globals()[name] = value
+        return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

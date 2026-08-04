@@ -7,8 +7,10 @@ evidence.
 Tests validate every enum/discriminant, project mode and Thread deletion
 declaration, attachment-source support, replay/order/request/runtime claims,
 rejection of inconsistent capability combinations, and that importing the
-capability owner does not initialize concrete adapters while existing lazy
-facade exports retain exact object identity. Adapter conformance
+capability owner does not initialize concrete adapters or Gateway modules.
+Clean-process import-order cases prove the owner is the sole capability public
+surface: the package root and `imagent.contracts` do not expose these names.
+Adapter conformance
 must prove a capability maps to real native behavior or an explicit
 unsupported result—never a hidden fallback or product policy.
 

@@ -1,8 +1,9 @@
 # Application operations testing
 
-Current test evidence is `tests/test_contracts.py`,
-`tests/conformance/test_adapter_contracts.py`, and `tests/test_appserver_input.py`; the
-target focused owner suite is `tests/applications/test_operations.py`.
+The current executable owner mirror is
+`tests/applications/test_operations.py`. It is the focused suite for this
+leaf; adapter conformance and input integration suites remain separate,
+affected evidence rather than alternate owners.
 
 Tests cover closed operation/result discriminants, stable operation IDs,
 reference scoping, explicit unsupported/error results, archive versus permanent
@@ -11,17 +12,21 @@ separate from binding, a concrete native Thread-create option mapping cannot
 widen `CreateThread`, and a consumer-only command never enters the common
 union without shared evidence.
 
-The focused owner suite also proves that the Applications module is the sole
-implementation for Application operation/result values and validators, while
-the `imagent.contracts` facade preserves exact identities. Request response
-shapes remain the canonical values from `applications.requests`; Gateway
-operation/result values and validators remain outside this leaf.
+The focused owner suite proves that the Applications module is the sole
+implementation and public surface for Application operation/result values and
+validators. Clean subprocesses prove that the package root and
+`imagent.contracts` do not retain the retired Application names. Request
+response shapes remain the canonical values from `applications.requests`;
+Gateway operation/result values and validators remain outside this leaf.
 
 Input-mutating operations must preserve the pre-dispatch/unknown-outcome
 boundary and must not auto-retry after an ambiguous native mutation.
 
 ```sh
+uv run python -m unittest tests.applications.test_operations -v
+
+# Affected integration evidence (not this leaf's implementation owner)
 PYTHONPATH=src uv run python -m unittest \
-  tests.test_contracts tests.conformance.test_adapter_contracts tests.test_appserver_input -v
+  tests.conformance.test_adapter_contracts tests.test_appserver_input -v
 uv run python scripts/validate_schemas.py
 ```

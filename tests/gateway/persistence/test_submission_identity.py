@@ -7,10 +7,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from imagent.adapters import DeliverySubmissionConflict
-from imagent.contracts import (
-    ConversationRef,
-    ThreadRef,
-)
+from imagent.applications.contract import ThreadRef
 from imagent.gateway.delivery import DeliverySubmissionOrigin
 from imagent.gateway.persistence import (
     DeliveryRouteSnapshot,
@@ -21,6 +18,7 @@ from imagent.gateway.persistence import (
 from imagent.gateway.persistence.memory import InMemoryDeliverySubmissionRepository
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.interaction.channels import DeliveryReceipt, DeliveryReceiptStatus
+from imagent.interaction.messages import ConversationRef
 
 
 def _submission() -> DeliverySubmissionRecord:

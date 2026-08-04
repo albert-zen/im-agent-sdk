@@ -22,7 +22,7 @@ from imagent.applications.contract import (
     validate_thread_ref,
 )
 from imagent.applications.events import AgentEvent, AgentEventType, validate_agent_event
-from imagent.contracts import (
+from imagent.applications.operations import (
     ActivateNativeThread,
     ApplicationOperationFailed,
     CreateThread,
@@ -45,7 +45,6 @@ from imagent.contracts import (
     ThreadsListed,
     ThreadStatusRead,
     TurnCatchupRead,
-    derive_client_message_id,
     validate_application_operation_result,
 )
 from imagent.interaction.channels.contract import ChannelAdapter, DeliverySupportLevel
@@ -237,10 +236,10 @@ async def verify_application_adapter(
         _require_result(activate_result, NativeThreadActivated)
         checks.append(ContractCheck("explicit native thread activation"))
 
-    client_message_id = derive_client_message_id(
-        sample_conversation(),
-        "contract-message-1",
-    )
+    # The reusable kit proves only that an adapter preserves a stable,
+    # non-empty bounded input identity. Derivation is Gateway input-dispatch
+    # behavior and must not make this lower-layer test kit import Gateway.
+    client_message_id = "contract-message-1"
     first_events = adapter.subscribe_thread(created.ref)
     second_events = adapter.subscribe_thread(created.ref)
     dispatches: list[ApplicationInputDispatch] = []

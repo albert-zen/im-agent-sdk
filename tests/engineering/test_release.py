@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -53,6 +56,61 @@ class PackageIndependenceTests(unittest.TestCase):
         self.assertTrue(_is_dependency_boundary_text(Path("adapter.py")))
         self.assertTrue(_is_dependency_boundary_text(Path("ci.yml")))
         self.assertTrue(_is_dependency_boundary_text(Path("py.typed")))
+
+    def test_top_level_facade_is_finite_lazy_and_exact_in_a_clean_process(self) -> None:
+        environment = os.environ.copy()
+        source_root = str(ROOT / "src")
+        existing_pythonpath = environment.get("PYTHONPATH")
+        environment["PYTHONPATH"] = (
+            source_root
+            if not existing_pythonpath
+            else os.pathsep.join((source_root, existing_pythonpath))
+        )
+        code = r"""
+import importlib
+import sys
+import typing
+
+import imagent
+
+owner_modules = {
+    "adapters": "imagent.adapters",
+    "contracts": "imagent.contracts",
+    "delivery_coordination": "imagent.gateway.delivery.coordination",
+    "delivery_planning": "imagent.gateway.delivery.planning",
+    "diagnostics": "imagent.diagnostics",
+    "events": "imagent.events",
+    "projections": "imagent.projections",
+}
+assert imagent.__all__ == list(owner_modules)
+assert typing.get_type_hints(imagent.__getattr__) == {"name": str, "return": object}
+assert all(name not in imagent.__dict__ for name in owner_modules)
+assert not any(
+    name == "imagent.gateway" or name.startswith("imagent.gateway.")
+    for name in sys.modules
+)
+assert not any(
+    name in sys.modules
+    for name in ("websockets", "PIL", "Crypto", "lark_oapi", "lark")
+)
+assert not hasattr(imagent, "unsupported_root_export")
+
+for name, module_name in owner_modules.items():
+    first = getattr(imagent, name)
+    owner = importlib.import_module(module_name)
+    assert first is owner
+    assert getattr(imagent, name) is owner
+    assert imagent.__dict__[name] is owner
+"""
+        completed = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ from ...applications.contract import (
     TurnCatchup,
 )
 from ...applications.events import AgentEvent, CursorExpired
-from ...contracts import (
+from ...applications.operations import (
     ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,

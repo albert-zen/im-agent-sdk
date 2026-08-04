@@ -13,13 +13,16 @@ the `(message, cause)` constructor and `.cause`, and leaves
 `imagent.contracts.errors` absent after the historical implementation is
 retired.
 
-The focused ownership tests assert that every family member is one exact object
-across `imagent.applications`, `imagent.applications.contract`, and the
-temporary `imagent.contracts` facade. They also assert that
-`AgentApplicationAdapter` and `ApplicationInputDispatchHandler` are exact
-objects across the Applications and `imagent.adapters` facades; the old module
-has no Protocol or callback implementation. Contract imports do not initialize
-a concrete adapter, add a Gateway dependency, or use a lazy facade workaround.
+The focused ownership tests assert that every contract-family member is one
+exact object across `imagent.applications` and
+`imagent.applications.contract`. They assert that only
+`ApplicationInputOutcomeUnknown` is present in `imagent.contracts`, and that
+the retired Application names fail in clean subprocesses after each relevant
+import order. `AgentApplicationAdapter` and
+`ApplicationInputDispatchHandler` remain exact between the owner and the root
+Applications facade, but are absent from `imagent.adapters`. Contract imports
+do not initialize a concrete adapter or Gateway implementation, and the
+finite root facade does not eagerly load concrete adapters.
 Runtime `typing.get_type_hints` preserves the model fields and the native
 continuation, pre-dispatch fence, pending-request, and single
 Thread-subscription signatures.
