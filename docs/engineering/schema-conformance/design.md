@@ -22,6 +22,20 @@ document. This engineering leaf owns only:
 It does not own runtime behavior, generated native models, compatibility
 policy, transport encoding, or a second contract vocabulary.
 
+## Executable boundary
+
+`scripts/validate_schemas.py` is the single implementation of the structural
+check. The focused executable evidence for that implementation lives at
+`tests/engineering/test_schema_conformance.py`. The test module invokes the
+real validator entry point against the checked-in inventory and small,
+deterministic temporary inventories. It supplies fixture documents only to
+exercise the validator's existing branches; it does not reimplement inventory,
+ID, reference, or JSON Pointer validation.
+
+The engineering test module is a repository-maintainability aid, not a second
+schema authority. It must remain independent of runtime adapters and must not
+introduce generated models, a schema registry, or a second validation path.
+
 ## Version and reference rules
 
 The current schema set is under `schemas/v1/`. Each schema has a unique `$id`
