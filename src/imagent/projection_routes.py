@@ -3,30 +3,25 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from typing import Protocol
 
-from .applications.contract import AgentApplicationAdapter, ThreadRef
-from .applications.operations import ApplicationOperation, ApplicationOperationResult
+from .applications.contract import ThreadRef
 from .applications.requests import InteractiveRequest, RequestRef
 from .gateway.persistence.repository_contracts import ProjectionRouteRepository
 from .gateway.persistence.state_contracts import ThreadProjectionRoute
 from .gateway.projection.checkpoints import _ProjectionCheckpointAuthority
-from .gateway.projection.recovery import read_bounded_authoritative_projection
 from .gateway.projection.request_correlation import _request_expired
 from .gateway.routing.projection_routes import get_projection_route
 from .projections import (
     DeliverOutbound,
     ProjectedAgentMessage,
     RetryableDeliveryError,
+    _DestinationDecisionError,
     deliver_projected_message,
 )
 
-RecordGap = Callable[[ThreadRef, str, str], None]
 RecordDeliveryFailure = Callable[[ThreadProjectionRoute, Exception], None]
 WaitForAcceptance = Callable[[ThreadRef], Awaitable[None]]
-ExecuteApplication = Callable[
-    [ApplicationOperation],
-    Awaitable[ApplicationOperationResult],
-]
 ActiveRoutes = Callable[
     [ThreadRef | None],
     Awaitable[tuple[ThreadProjectionRoute, ...]],
@@ -37,6 +32,11 @@ DeliverRequestOnce = Callable[
 ]
 
 
+class _AuthoritativeProjection(Protocol):
+    @property
+    def messages(self) -> tuple[ProjectedAgentMessage, ...]: ...
+
+
 class ProjectionRouteCoordinator:
     """Serialize bootstrap, reconciliation, and delivery per destination route."""
 
@@ -44,18 +44,11 @@ class ProjectionRouteCoordinator:
         self,
         *,
         projections: ProjectionRouteRepository,
-        execute_application: ExecuteApplication,
         active_routes: ActiveRoutes,
         deliver_outbound: DeliverOutbound,
         deliver_request_once: DeliverRequestOnce,
         wait_for_acceptance: WaitForAcceptance,
-        record_gap: RecordGap,
         record_delivery_failure: RecordDeliveryFailure,
-        baseline_history_limit: int,
-        recovery_history_page_size: int,
-        recovery_max_pages: int,
-        catchup_limit: int,
-        projection_item_limit: int,
         request_delivery_max_pending: int,
     ) -> None:
         if request_delivery_max_pending < 1:
@@ -64,18 +57,11 @@ class ProjectionRouteCoordinator:
         self._checkpoint_authority = _ProjectionCheckpointAuthority(
             projections=projections,
         )
-        self._execute_application = execute_application
         self._active_routes = active_routes
         self._deliver_outbound = deliver_outbound
         self._deliver_request_once = deliver_request_once
         self._wait_for_acceptance = wait_for_acceptance
-        self._record_gap = record_gap
         self._record_delivery_failure = record_delivery_failure
-        self._baseline_history_limit = baseline_history_limit
-        self._recovery_history_page_size = recovery_history_page_size
-        self._recovery_max_pages = recovery_max_pages
-        self._catchup_limit = catchup_limit
-        self._projection_item_limit = projection_item_limit
         self._request_delivery_max_pending = request_delivery_max_pending
         self._request_capacity_changed = asyncio.Event()
         self._bootstrap: dict[str, asyncio.Event] = {}
@@ -166,36 +152,17 @@ class ProjectionRouteCoordinator:
                     await asyncio.gather(*tasks, return_exceptions=True)
                     self._request_capacity_changed.set()
 
-    async def reconcile_routes(
+    async def deliver_authoritative(
         self,
-        application: AgentApplicationAdapter,
-        routes: tuple[ThreadProjectionRoute, ...],
-        *,
-        require_checkpoint: bool,
-    ) -> None:
-        results = await asyncio.gather(
-            *(
-                self.reconcile_route(
-                    application,
-                    route,
-                    require_checkpoint=require_checkpoint,
-                )
-                for route in routes
-            ),
-            return_exceptions=True,
-        )
-        for result in results:
-            if isinstance(result, BaseException):
-                raise result
-
-    async def reconcile_route(
-        self,
-        application: AgentApplicationAdapter,
         route: ThreadProjectionRoute,
         *,
-        require_checkpoint: bool,
+        read_projection: Callable[
+            [ThreadProjectionRoute],
+            Awaitable[_AuthoritativeProjection],
+        ],
         retain_barrier_on_failure: bool = False,
     ) -> None:
+        """Serialize one recovery-owned authoritative read and route delivery."""
         lock = self._locks.setdefault(route.route_id, asyncio.Lock())
         completed = False
         try:
@@ -206,23 +173,7 @@ class ProjectionRouteCoordinator:
                 )
                 if current is None:
                     return
-                projection = await read_bounded_authoritative_projection(
-                    application,
-                    current,
-                    execute_application=self._execute_application,
-                    baseline_history_limit=self._baseline_history_limit,
-                    recovery_history_page_size=self._recovery_history_page_size,
-                    recovery_max_pages=self._recovery_max_pages,
-                    catchup_limit=self._catchup_limit,
-                    projection_item_limit=self._projection_item_limit,
-                    require_checkpoint=require_checkpoint,
-                )
-                if projection.gap is not None:
-                    self._record_gap(
-                        route.thread_ref,
-                        route.route_id,
-                        projection.gap,
-                    )
+                projection = await read_projection(current)
                 await self._wait_for_acceptance(route.thread_ref)
                 await self._deliver_messages(
                     current,
@@ -406,9 +357,7 @@ class ProjectionRouteCoordinator:
                     checkpoint_authority=self._checkpoint_authority,
                     authoritative=False,
                 )
-            except RetryableDeliveryError:
-                raise
-            except Exception as error:
+            except _DestinationDecisionError as error:
                 self._block_route(current, error)
 
     async def _deliver_messages(
@@ -435,9 +384,7 @@ class ProjectionRouteCoordinator:
                     checkpoint_authority=self._checkpoint_authority,
                     authoritative=authoritative,
                 )
-            except RetryableDeliveryError:
-                raise
-            except Exception as error:
+            except _DestinationDecisionError as error:
                 self._block_route(current, error)
                 return
 

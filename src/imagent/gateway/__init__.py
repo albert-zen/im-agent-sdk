@@ -56,7 +56,12 @@ from ..interaction.operations import (
     operation_error,
 )
 from ..projection_runtime import ProjectionWorkerCapacityError, ThreadProjectionRuntime
-from ..projections import ProjectionWorkerHealth, RetryableDeliveryError
+from ..projections import (
+    ProjectionWorkerHealth,
+    RetryableDeliveryError,
+    _DestinationDecisionError,
+    _ProjectionRecoveryRequired,
+)
 from .admission import (
     ClaimedInbound,
     InboundAdmissionService,
@@ -1058,7 +1063,7 @@ class ImAgentGateway:
             )
             if isinstance(presentation.error, asyncio.CancelledError):
                 raise presentation.error
-            raise RetryableDeliveryError(
+            raise _ProjectionRecoveryRequired(
                 "outbound presentation failed before Channel side effect"
             ) from presentation.error
         if isinstance(presentation, _SuppressedClaimedOutbound):
@@ -1109,7 +1114,7 @@ class ImAgentGateway:
                     message.delivery_id,
                     owner_token=owner_token,
                 )
-            raise RuntimeError(
+            raise _DestinationDecisionError(
                 destination.error
                 or f"Channel delivery did not complete successfully: {message.delivery_id}"
             )

@@ -10,7 +10,10 @@ This leaf maintains exactly one Gateway-owned Application observation worker
 for an active Thread. The worker consumes the Application's normalized live
 stream once, preserves its declared order, and makes that canonical stream
 available to active projection routes. It owns worker lifecycle, bounded
-fan-out consumption, bootstrap barriers, and bounded health facts.
+fan-out consumption, bootstrap ordering, and bounded health facts. Pending the
+accepted physical move, the historical `ProjectionRouteCoordinator` still
+implements the single per-route barrier that this leaf sequences; there is no
+second barrier or owner.
 
 It does not own a native producer, raw native callback, transcript, Agent
 event journal, a second subscription per Conversation, destination selection,
@@ -62,9 +65,11 @@ and bounded. Durable routes and Conversation bindings decide which Thread
 workers are restored; `foreground_only` retains observation only while a
 matching binding authorizes a route, while remembered/all-observer policies
 follow their durable routes. Subscription or recovery failure gets bounded
-backoff and authoritative reconciliation. A per-route Channel failure is not
-an observation failure and neither restarts the worker nor interrupts other
-destinations.
+backoff and authoritative reconciliation. A typed per-route Channel decision
+failure is not an observation failure and neither restarts the worker nor
+interrupts other destinations. Repository reads and checkpoint persistence
+are not inside that destination catch; a transient failure restarts only the
+affected Thread's same worker and converges through authoritative recovery.
 
 Accepted IM input may have live output queued before its Turn reply correlation
 is durable. The worker holds only a finite per-Thread acceptance buffer until
@@ -88,10 +93,13 @@ their existing recovery authority.
 
 ## Current structure and authority
 
-The current worker, input-acceptance ordering, and some recovery supervision
-share `projection_runtime.py` and the Gateway package root. That is an
-explained split candidate, not a license for duplicate workers. The target is
-`gateway/projection/observation.py`.
+The current worker and input-acceptance ordering share
+`projection_runtime.py` and the Gateway package root. Recovery-specific
+attempt state, error classification, retry inputs, authoritative
+reconciliation, and request-snapshot coordination are delegated to the
+canonical private supervisor in `gateway/projection/recovery.py`; observation
+retains the sole task/subscription loop and normalized event consumption. The
+remaining observation target is `gateway/projection/observation.py`.
 
 - [ADR 0004](../../../../decisions/0004-event-fanout-and-recovery.md)
 - [ADR 0007](../../../../decisions/0007-projection-lifecycle-and-delivery-boundaries.md)

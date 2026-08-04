@@ -45,7 +45,7 @@ from imagent.interaction.messages import (
 )
 from imagent.projections import (
     ProjectedAgentMessage,
-    RetryableDeliveryError,
+    _ProjectionRecoveryRequired,
     deliver_projected_message,
 )
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
@@ -267,7 +267,7 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
         await gateway.start()
         try:
             with self.assertRaisesRegex(
-                RetryableDeliveryError,
+                _ProjectionRecoveryRequired,
                 "failed before Channel side effect",
             ) as raised:
                 await gateway._deliver_projected_outbound(message, True)
@@ -417,7 +417,7 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
         gateway, channel, _ = self._gateway(policy)
         await gateway.start()
         try:
-            with self.assertRaises(RetryableDeliveryError) as raised:
+            with self.assertRaises(_ProjectionRecoveryRequired) as raised:
                 await gateway._deliver_projected_outbound(_message("invalid"), True)
             self.assertIsInstance(raised.exception.__cause__, OutboundPresentationError)
             self.assertIn("routing identity", str(raised.exception.__cause__))
@@ -435,7 +435,7 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
         gateway, channel, _ = self._gateway(policy)
         await gateway.start()
         try:
-            with self.assertRaises(RetryableDeliveryError) as raised:
+            with self.assertRaises(_ProjectionRecoveryRequired) as raised:
                 await gateway._deliver_projected_outbound(_message("attachment"), True)
             self.assertIsInstance(raised.exception.__cause__, OutboundPresentationError)
             self.assertIn("attachment authority", str(raised.exception.__cause__))
@@ -514,7 +514,7 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
         )
         await policy.entered.wait()
         try:
-            with self.assertRaises(RetryableDeliveryError) as raised:
+            with self.assertRaises(_ProjectionRecoveryRequired) as raised:
                 await gateway._deliver_projected_outbound(_message("capacity-2"), True)
             self.assertIsInstance(raised.exception.__cause__, OutboundPresentationCapacityError)
             policy.release.set()

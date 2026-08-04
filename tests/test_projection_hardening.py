@@ -35,7 +35,6 @@ from imagent.contracts import (
     GatewayOperationFailed,
 )
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
-from imagent.gateway.delivery import DeliveryCoordinator, DeliveryCoordinatorConfig
 from imagent.gateway.persistence import (
     ConversationBinding,
     InMemoryIdempotencyRepository,
@@ -54,7 +53,7 @@ from imagent.gateway.projection.request_correlation import (
 )
 from imagent.gateway.routing import ObserveThread, ProjectionPolicy
 from imagent.gateway.routing.projection_routes import derive_projection_route_id
-from imagent.interaction.channels import DeliveryReceipt
+from imagent.interaction.channels import DeliveryReceipt, DeliveryReceiptStatus
 from imagent.interaction.controllers import ControllerActions
 from imagent.interaction.messages import (
     ConversationRef,
@@ -320,43 +319,34 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await gateway.stop()
 
-    async def test_transient_coordinator_backpressure_recovers_without_sticky_route(
+    async def test_live_retryable_route_failure_does_not_restart_observation(
         self,
     ) -> None:
         application = CountingSubscriptionApplication()
         thread = await application.create_thread()
-        fast_conversation = ConversationRef("fast-channel", "fast")
+        good_conversation = ConversationRef("good-channel", "good")
+        bad_conversation = ConversationRef("bad-channel", "bad")
         bindings = InMemoryBindingRepository()
         projections = InMemoryProjectionRouteRepository()
-        await bindings.put(
-            ConversationBinding(
-                conversation_ref=fast_conversation,
-                application_ref=application.summary.ref,
-                thread_ref=thread.ref,
+        for conversation in (good_conversation, bad_conversation):
+            await bindings.put(
+                ConversationBinding(
+                    conversation_ref=conversation,
+                    application_ref=application.summary.ref,
+                    thread_ref=thread.ref,
+                )
             )
-        )
-        await projections.put_projection_route(_route(thread.ref, fast_conversation))
-        slow = BlockingChannelAdapter("slow-channel")
-        fast = FakeChannelAdapter("fast-channel")
-        coordinator = DeliveryCoordinator(
-            config=DeliveryCoordinatorConfig(
-                max_pending=1,
-                backpressure_retry_after_seconds=0.01,
-            )
-        )
+            await projections.put_projection_route(_route(thread.ref, conversation))
+        good = FakeChannelAdapter("good-channel")
+        bad = RetryableChannelAdapter("bad-channel")
         gateway = ImAgentGateway(
-            channels=[slow, fast],
+            channels=[good, bad],
             applications=[application],
             repositories=GatewayRepositories(
                 bindings=bindings,
                 projections=projections,
             ),
             projection_policy=ProjectionPolicy.ALL_OBSERVERS,
-            delivery_coordinator=coordinator,
-            limits=GatewayLimits(
-                subscription_retry_initial_seconds=0.01,
-                subscription_retry_max_seconds=0.01,
-            ),
         )
         await gateway.start()
         try:
@@ -367,25 +357,64 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                     ProjectionWorkerState.RUNNING,
                 )
             )
-            blocker = coordinator.submit(
-                slow,
-                OutboundMessage(
-                    delivery_id="capacity-blocker",
-                    conversation_ref=ConversationRef("slow-channel", "slow"),
-                    content=(TextContent("block"),),
-                    created_at=datetime.now(UTC),
-                ),
-            )
-            await slow.delivery_started.wait()
             await application.send_input(
                 thread.ref,
                 AgentInput(client_message_id="burst", content=(TextContent("run"),)),
             )
-            await _wait_until(lambda: application.subscription_calls >= 2)
+            await _wait_until(lambda: len(good.sent) == 2)
+            health = gateway.get_projection_health(thread.ref)
+            assert health is not None
+            self.assertEqual(health.delivery_failure_count, 1)
+            self.assertEqual(application.subscription_calls, 1)
+            self.assertEqual(application.active_subscriptions, 1)
+            self.assertEqual(bad.attempts, 1)
 
-            slow.release.set()
-            await blocker.result()
-            await _wait_until(lambda: len(fast.sent) == 1)
+            await application.send_input(
+                thread.ref,
+                AgentInput(client_message_id="after-failure", content=(TextContent("more"),)),
+            )
+            await _wait_until(lambda: len(good.sent) == 4)
+            self.assertEqual(application.subscription_calls, 1)
+            self.assertEqual(bad.attempts, 1)
+        finally:
+            await gateway.stop()
+
+    async def test_authoritative_retryable_route_failure_does_not_restart_observation(
+        self,
+    ) -> None:
+        application = CountingSubscriptionApplication()
+        thread = await application.create_thread()
+        await application.send_input(
+            thread.ref,
+            AgentInput(client_message_id="before-start", content=(TextContent("history"),)),
+        )
+        good_conversation = ConversationRef("good-channel", "good-authoritative")
+        bad_conversation = ConversationRef("bad-channel", "bad-authoritative")
+        bindings = InMemoryBindingRepository()
+        projections = InMemoryProjectionRouteRepository()
+        for conversation in (good_conversation, bad_conversation):
+            await bindings.put(
+                ConversationBinding(
+                    conversation_ref=conversation,
+                    application_ref=application.summary.ref,
+                    thread_ref=thread.ref,
+                )
+            )
+            await projections.put_projection_route(_route(thread.ref, conversation))
+        good = FakeChannelAdapter("good-channel")
+        bad = RetryableChannelAdapter("bad-channel")
+        gateway = ImAgentGateway(
+            channels=[good, bad],
+            applications=[application],
+            repositories=GatewayRepositories(
+                bindings=bindings,
+                projections=projections,
+            ),
+            projection_policy=ProjectionPolicy.ALL_OBSERVERS,
+        )
+        await gateway.start()
+        try:
+            await _wait_until(lambda: len(good.sent) == 2)
             await _wait_until(
                 lambda: _health_state_is(
                     gateway,
@@ -393,16 +422,110 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                     ProjectionWorkerState.RUNNING,
                 )
             )
+            self.assertEqual(application.subscription_calls, 1)
+            self.assertEqual(application.active_subscriptions, 1)
+            self.assertEqual(bad.attempts, 1)
 
-            stored = await projections.list_projection_routes(thread.ref)
-            self.assertEqual(len(stored), 1)
-            self.assertTrue(all(route.checkpoint_agent_item_id is not None for route in stored))
-            health = gateway.get_projection_health(thread.ref)
-            assert health is not None
-            self.assertEqual(health.delivery_failure_count, 0)
-            self.assertGreaterEqual(health.restart_count, 1)
+            await application.send_input(
+                thread.ref,
+                AgentInput(client_message_id="after-start", content=(TextContent("live"),)),
+            )
+            await _wait_until(lambda: len(good.sent) == 4)
+            self.assertEqual(application.subscription_calls, 1)
+            self.assertEqual(bad.attempts, 1)
         finally:
-            slow.release.set()
+            await gateway.stop()
+
+    async def test_checkpoint_repository_failure_recovers_only_affected_thread(
+        self,
+    ) -> None:
+        application = CountingSubscriptionApplication()
+        affected = await application.create_thread()
+        healthy = await application.create_thread()
+        affected_conversation = ConversationRef("fake-channel", "affected")
+        healthy_conversation = ConversationRef("fake-channel", "healthy")
+        bindings = InMemoryBindingRepository()
+        projections = FailOnceCheckpointRepository()
+        affected_route = _route(affected.ref, affected_conversation)
+        healthy_route = _route(healthy.ref, healthy_conversation)
+        for thread, conversation, route in (
+            (affected, affected_conversation, affected_route),
+            (healthy, healthy_conversation, healthy_route),
+        ):
+            await bindings.put(
+                ConversationBinding(
+                    conversation_ref=conversation,
+                    application_ref=application.summary.ref,
+                    thread_ref=thread.ref,
+                )
+            )
+            await projections.put_projection_route(route)
+        channel = FakeChannelAdapter()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            repositories=GatewayRepositories(
+                bindings=bindings,
+                projections=projections,
+            ),
+            projection_policy=ProjectionPolicy.ALL_OBSERVERS,
+            limits=GatewayLimits(
+                subscription_retry_initial_seconds=0,
+                subscription_retry_max_seconds=0,
+            ),
+        )
+        await gateway.start()
+        try:
+            await _wait_until(
+                lambda: all(
+                    _health_state_is(gateway, thread.ref, ProjectionWorkerState.RUNNING)
+                    for thread in (affected, healthy)
+                )
+            )
+            self.assertEqual(application.subscription_threads.count(affected.ref), 1)
+            self.assertEqual(application.subscription_threads.count(healthy.ref), 1)
+
+            projections.fail_next_route_id = affected_route.route_id
+            accepted = await application.send_input(
+                affected.ref,
+                AgentInput(client_message_id="checkpoint-failure", content=(TextContent("run"),)),
+            )
+            await _wait_until(lambda: application.subscription_threads.count(affected.ref) == 2)
+            async with asyncio.timeout(1):
+                while True:
+                    stored = await projections.list_projection_routes(affected.ref)
+                    health = gateway.get_projection_health(affected.ref)
+                    if (
+                        stored[0].checkpoint_agent_item_id == f"{accepted.turn_id}:message:2"
+                        and health is not None
+                        and health.state is ProjectionWorkerState.RUNNING
+                    ):
+                        break
+                    await asyncio.sleep(0)
+
+            self.assertEqual(projections.checkpoint_failures, 1)
+            self.assertEqual(application.subscription_threads.count(affected.ref), 2)
+            self.assertEqual(application.subscription_threads.count(healthy.ref), 1)
+            affected_health = gateway.get_projection_health(affected.ref)
+            healthy_health = gateway.get_projection_health(healthy.ref)
+            assert affected_health is not None
+            assert healthy_health is not None
+            self.assertEqual(affected_health.restart_count, 1)
+            self.assertEqual(affected_health.delivery_failure_count, 0)
+            self.assertEqual(healthy_health.restart_count, 0)
+
+            await application.send_input(
+                healthy.ref,
+                AgentInput(client_message_id="still-live", content=(TextContent("ok"),)),
+            )
+            async with asyncio.timeout(1):
+                while True:
+                    stored = await projections.list_projection_routes(healthy.ref)
+                    if stored[0].checkpoint_agent_item_id is not None:
+                        break
+                    await asyncio.sleep(0)
+            self.assertEqual(application.subscription_threads.count(healthy.ref), 1)
+        finally:
             await gateway.stop()
 
     async def test_concurrent_first_observers_share_one_owned_subscription(
@@ -2976,6 +3099,32 @@ class FailingRefreshRepository(InMemoryProjectionRouteRepository):
         return await super().put_projection_route(route)
 
 
+class FailOnceCheckpointRepository(InMemoryProjectionRouteRepository):
+    def __init__(self) -> None:
+        super().__init__()
+        self.fail_next_route_id: str | None = None
+        self.checkpoint_failures = 0
+
+    async def advance_projection_checkpoint(
+        self,
+        route_id: str,
+        *,
+        expected_agent_item_id: str | None,
+        agent_item_id: str,
+        checkpointed_at: datetime,
+    ) -> ThreadProjectionRoute:
+        if route_id == self.fail_next_route_id:
+            self.fail_next_route_id = None
+            self.checkpoint_failures += 1
+            raise RuntimeError("temporary projection checkpoint repository failure")
+        return await super().advance_projection_checkpoint(
+            route_id,
+            expected_agent_item_id=expected_agent_item_id,
+            agent_item_id=agent_item_id,
+            checkpointed_at=checkpointed_at,
+        )
+
+
 class FailOnceListingProjectionRepository(InMemoryProjectionRouteRepository):
     def __init__(self, *, fail_on_call: int) -> None:
         super().__init__()
@@ -3033,16 +3182,19 @@ class FailingChannelAdapter(FakeChannelAdapter):
         raise RuntimeError("simulated destination failure")
 
 
-class BlockingChannelAdapter(FakeChannelAdapter):
+class RetryableChannelAdapter(FakeChannelAdapter):
     def __init__(self, channel_instance_id: str) -> None:
         super().__init__(channel_instance_id)
-        self.delivery_started = asyncio.Event()
-        self.release = asyncio.Event()
+        self.attempts = 0
 
     async def send(self, message: OutboundMessage) -> DeliveryReceipt:
-        self.delivery_started.set()
-        await self.release.wait()
-        return await super().send(message)
+        del message
+        self.attempts += 1
+        return DeliveryReceipt(
+            status=DeliveryReceiptStatus.RETRYABLE_FAILURE,
+            detail="simulated retryable destination failure",
+            retry_after_seconds=60,
+        )
 
 
 def _observe(
