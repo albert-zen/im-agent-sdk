@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import inspect
 import tempfile
 import unittest
 from datetime import UTC, datetime
@@ -14,8 +15,11 @@ from imagent.cli.send import main as send_main
 from imagent.contracts import DeliveryPrincipal
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import (
+    DeliveryIntent,
     DeliverySubmissionOrigin,
+    DeliveryTarget,
     ProactiveDeliveryJsonHandler,
+    ProactiveDeliveryResult,
     ScopedDeliveryAuthorizer,
 )
 from imagent.gateway.delivery.proactive_ingress import (
@@ -80,12 +84,16 @@ class _ReadingChannel(FakeChannelAdapter):
 class _BlockingReadingChannel(_ReadingChannel):
     def __init__(self) -> None:
         super().__init__()
+        self.send_attempts = 0
         self.started_read = asyncio.Event()
         self.cancelled_read = asyncio.Event()
         self.staged_path: Path | None = None
         self.path_existed_when_cancelled = False
 
     async def send(self, message) -> DeliveryReceipt:
+        self.send_attempts += 1
+        if self.send_attempts > 1:
+            return await super().send(message)
         attachment = next(item for item in message.content if isinstance(item, AttachmentContent))
         assert isinstance(attachment.source, LocalPath)
         self.staged_path = Path(attachment.source.path)
@@ -97,6 +105,67 @@ class _BlockingReadingChannel(_ReadingChannel):
             self.cancelled_read.set()
             raise
         raise AssertionError("blocking test Channel was unexpectedly released")
+
+
+class _GatedReadingChannel(_ReadingChannel):
+    def __init__(self) -> None:
+        super().__init__()
+        self.send_attempts = 0
+        self.first_send_started = asyncio.Event()
+        self.release_first_send = asyncio.Event()
+
+    async def send(self, message) -> DeliveryReceipt:
+        self.send_attempts += 1
+        if self.send_attempts == 1:
+            self.first_send_started.set()
+            await self.release_first_send.wait()
+        return await super().send(message)
+
+
+class _BlockingAuthorizationEndpoint:
+    def __init__(self) -> None:
+        self.authorization_calls = 0
+        self.delivery_calls = 0
+        self.authorization_started = asyncio.Event()
+        self.release_authorization = asyncio.Event()
+
+    async def authorize_proactive_target(
+        self,
+        target: DeliveryTarget,
+        *,
+        credential: str,
+    ) -> None:
+        del target, credential
+        self.authorization_calls += 1
+        if self.authorization_calls == 1:
+            self.authorization_started.set()
+            await self.release_authorization.wait()
+
+    async def deliver_proactively(
+        self,
+        intent: DeliveryIntent,
+        *,
+        credential: str,
+    ) -> ProactiveDeliveryResult:
+        del credential
+        self.delivery_calls += 1
+        return ProactiveDeliveryResult(
+            delivery_id=intent.delivery_id,
+            state=DeliverySubmissionState.ACCEPTED,
+            destinations=(),
+        )
+
+
+def _text_payload(delivery_id: str) -> dict[str, object]:
+    return {
+        "deliveryId": delivery_id,
+        "target": {
+            "kind": "threadRoutes",
+            "applicationInstanceId": "application",
+            "nativeThreadId": "thread-1",
+        },
+        "content": [{"type": "text", "text": "bounded"}],
+    }
 
 
 class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
@@ -120,8 +189,16 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
                 allowed_threads=(self.thread_ref,),
             )
         )
-        self.gateway = ImAgentGateway(
-            channels=[self.channel],
+        self.gateway = self._gateway_for_channel(self.channel)
+
+    def _gateway_for_channel(
+        self,
+        channel: _ReadingChannel,
+        *,
+        submissions: InMemoryDeliverySubmissionRepository | None = None,
+    ) -> ImAgentGateway:
+        return ImAgentGateway(
+            channels=[channel],
             applications=[
                 FakeAgentApplicationAdapter(
                     application_instance_id="application",
@@ -131,6 +208,7 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
             repositories=GatewayRepositories(
                 bindings=InMemoryBindingRepository(),
                 projections=self.routes,
+                delivery_submissions=submissions,
             ),
             delivery_authorizer=self.authorizer,
             projection_policy=ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
@@ -140,6 +218,127 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(ProactiveDeliveryJsonHandler, OwnerProactiveDeliveryJsonHandler)
         with self.assertRaises(ModuleNotFoundError):
             __import__("imagent.delivery_ingress")
+
+    def test_active_delivery_id_limit_is_keyword_only_positive_and_finite(self) -> None:
+        parameter = inspect.signature(ProactiveDeliveryJsonHandler).parameters[
+            "max_active_delivery_ids"
+        ]
+        self.assertIs(parameter.kind, inspect.Parameter.KEYWORD_ONLY)
+        self.assertEqual(parameter.default, 256)
+
+        default = ProactiveDeliveryJsonHandler(
+            self.gateway,
+            staging_root="ingress",
+        )
+        self.assertEqual(default._locks.capacity, 256)
+
+        for invalid in (0, -1, True, 1.5):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex(ValueError, "positive integer"):
+                    ProactiveDeliveryJsonHandler(
+                        self.gateway,
+                        staging_root="ingress",
+                        max_active_delivery_ids=invalid,  # type: ignore[arg-type]
+                    )
+
+    async def test_distinct_capacity_failure_precedes_auth_parse_staging_route_and_delivery(
+        self,
+    ) -> None:
+        endpoint = _BlockingAuthorizationEndpoint()
+        with tempfile.TemporaryDirectory() as directory:
+            staging_root = Path(directory, "ingress")
+            handler = ProactiveDeliveryJsonHandler(
+                endpoint,
+                staging_root=staging_root,
+                max_active_delivery_ids=1,
+            )
+            owner = asyncio.create_task(
+                handler.handle(
+                    _text_payload("delivery-exact"),
+                    credential="owner-credential",
+                )
+            )
+            await endpoint.authorization_started.wait()
+
+            invalid_id = await handler.handle(
+                _text_payload("   "),
+                credential="invalid-id-credential",
+            )
+            self.assertEqual(invalid_id.status_code, 400)
+            invalid_error = invalid_id.body["error"]
+            assert isinstance(invalid_error, dict)
+            self.assertEqual(invalid_error["code"], "invalid_delivery_request")
+
+            secret = base64.b64encode(b"secret artifact bytes").decode()
+            with (
+                patch(
+                    "imagent.gateway.delivery.proactive_ingress._parse_target",
+                    side_effect=AssertionError("capacity must precede target parsing"),
+                ) as parse_target,
+                patch(
+                    "imagent.gateway.delivery.proactive_ingress.validated_inline_artifact_size",
+                    side_effect=AssertionError("capacity must precede base64 inspection"),
+                ) as inspect_artifact,
+                patch(
+                    "imagent.gateway.delivery.proactive_ingress.create_inline_staging_directory",
+                    side_effect=AssertionError("capacity must precede staging"),
+                ) as create_staging,
+                patch(
+                    "imagent.gateway.delivery.proactive_ingress.stage_inline_artifacts",
+                    side_effect=AssertionError("capacity must precede base64 decode"),
+                ) as stage_artifacts,
+            ):
+                capacity = await asyncio.wait_for(
+                    handler.handle(
+                        {
+                            "deliveryId": " delivery-exact ",
+                            "target": {
+                                "kind": "threadRoutes",
+                                "applicationInstanceId": "application",
+                                "nativeThreadId": "thread-1",
+                            },
+                            "content": [
+                                {
+                                    "type": "inlineArtifact",
+                                    "attachmentId": "secret-artifact",
+                                    "filename": "secret.bin",
+                                    "mediaType": "application/octet-stream",
+                                    "contentBase64": secret,
+                                }
+                            ],
+                        },
+                        credential="secret-credential",
+                    ),
+                    timeout=1.0,
+                )
+
+            self.assertEqual(capacity.status_code, 503)
+            self.assertEqual(
+                capacity.body,
+                {
+                    "error": {
+                        "code": "delivery_ingress_capacity_exhausted",
+                        "message": "proactive delivery ingress is at bounded capacity",
+                    }
+                },
+            )
+            response_text = repr(capacity.body)
+            self.assertNotIn("delivery-exact", response_text)
+            self.assertNotIn("secret-credential", response_text)
+            self.assertNotIn(secret, response_text)
+            self.assertEqual(endpoint.authorization_calls, 1)
+            self.assertEqual(endpoint.delivery_calls, 0)
+            self.assertEqual(parse_target.call_count, 0)
+            self.assertEqual(inspect_artifact.call_count, 0)
+            self.assertEqual(create_staging.call_count, 0)
+            self.assertEqual(stage_artifacts.call_count, 0)
+            self.assertFalse(staging_root.exists())
+
+            endpoint.release_authorization.set()
+            admitted = await owner
+
+        self.assertEqual(admitted.status_code, 200)
+        self.assertEqual(endpoint.delivery_calls, 1)
 
     async def test_inline_artifacts_are_staged_sent_and_removed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -199,6 +398,131 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(second_artifact.attachment_id, "artifact-2")
             self.assertEqual(list(staging_root.glob("**/*")), [])
 
+    async def test_same_delivery_id_joins_at_capacity_and_replays_one_send(self) -> None:
+        channel = _GatedReadingChannel()
+        gateway = self._gateway_for_channel(channel)
+        with tempfile.TemporaryDirectory() as directory:
+            handler = ProactiveDeliveryJsonHandler(
+                gateway,
+                staging_root=Path(directory, "ingress"),
+                max_active_delivery_ids=1,
+            )
+            payload = _text_payload("delivery-joined")
+            owner = asyncio.create_task(handler.handle(payload, credential=self.credential))
+            await channel.first_send_started.wait()
+
+            joiner = asyncio.create_task(handler.handle(payload, credential=self.credential))
+            await asyncio.sleep(0)
+            self.assertFalse(joiner.done())
+            self.assertEqual(channel.send_attempts, 1)
+
+            distinct = await handler.handle(
+                _text_payload("delivery-distinct"),
+                credential=self.credential,
+            )
+            self.assertEqual(distinct.status_code, 503)
+            distinct_error = distinct.body["error"]
+            assert isinstance(distinct_error, dict)
+            self.assertEqual(
+                distinct_error["code"],
+                "delivery_ingress_capacity_exhausted",
+            )
+
+            channel.release_first_send.set()
+            first, replay = await asyncio.gather(owner, joiner)
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(replay.status_code, 200)
+        replay_destinations = replay.body["destinations"]
+        assert isinstance(replay_destinations, list)
+        self.assertTrue(replay_destinations[0]["replayed"])
+        self.assertEqual(channel.send_attempts, 1)
+        self.assertEqual(handler._locks.active_key_count, 0)
+        await gateway.stop()
+
+    async def test_distinct_final_slot_race_admits_exactly_one_key(self) -> None:
+        channel = _GatedReadingChannel()
+        gateway = self._gateway_for_channel(channel)
+        with tempfile.TemporaryDirectory() as directory:
+            handler = ProactiveDeliveryJsonHandler(
+                gateway,
+                staging_root=Path(directory, "ingress"),
+                max_active_delivery_ids=1,
+            )
+            requests = tuple(
+                asyncio.create_task(
+                    handler.handle(
+                        _text_payload(delivery_id),
+                        credential=self.credential,
+                    )
+                )
+                for delivery_id in ("delivery-race-a", "delivery-race-b")
+            )
+            await channel.first_send_started.wait()
+            await asyncio.sleep(0)
+            channel.release_first_send.set()
+            responses = await asyncio.gather(*requests)
+
+        self.assertEqual(sorted(response.status_code for response in responses), [200, 503])
+        capacity = next(response for response in responses if response.status_code == 503)
+        capacity_error = capacity.body["error"]
+        assert isinstance(capacity_error, dict)
+        self.assertEqual(
+            capacity_error["code"],
+            "delivery_ingress_capacity_exhausted",
+        )
+        self.assertEqual(channel.send_attempts, 1)
+        self.assertEqual(handler._locks.active_key_count, 0)
+        await gateway.stop()
+
+    async def test_cancelled_same_id_waiter_keeps_owner_key_until_completion_then_reuses_slot(
+        self,
+    ) -> None:
+        channel = _GatedReadingChannel()
+        gateway = self._gateway_for_channel(channel)
+        with tempfile.TemporaryDirectory() as directory:
+            handler = ProactiveDeliveryJsonHandler(
+                gateway,
+                staging_root=Path(directory, "ingress"),
+                max_active_delivery_ids=1,
+            )
+            owner = asyncio.create_task(
+                handler.handle(
+                    _text_payload("delivery-owner"),
+                    credential=self.credential,
+                )
+            )
+            await channel.first_send_started.wait()
+            waiter = asyncio.create_task(
+                handler.handle(
+                    _text_payload("delivery-owner"),
+                    credential=self.credential,
+                )
+            )
+            await asyncio.sleep(0)
+            waiter.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await waiter
+
+            still_full = await handler.handle(
+                _text_payload("delivery-before-owner-completes"),
+                credential=self.credential,
+            )
+            self.assertEqual(still_full.status_code, 503)
+
+            channel.release_first_send.set()
+            completed = await owner
+            reused = await handler.handle(
+                _text_payload("delivery-after-owner-completes"),
+                credential=self.credential,
+            )
+
+        self.assertEqual(completed.status_code, 200)
+        self.assertEqual(reused.status_code, 200)
+        self.assertEqual(channel.send_attempts, 2)
+        self.assertEqual(handler._locks.active_key_count, 0)
+        await gateway.stop()
+
     async def test_capacity_exhaustion_is_a_bounded_service_response(self) -> None:
         gateway = ImAgentGateway(
             channels=[self.channel],
@@ -249,25 +573,14 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
     async def test_cancelled_ingress_joins_send_before_cleanup_and_records_unknown(self) -> None:
         channel = _BlockingReadingChannel()
         submissions = InMemoryDeliverySubmissionRepository()
-        gateway = ImAgentGateway(
-            channels=[channel],
-            applications=[
-                FakeAgentApplicationAdapter(
-                    application_instance_id="application",
-                    project_mode=ProjectMode.FLAT,
-                )
-            ],
-            repositories=GatewayRepositories(
-                bindings=InMemoryBindingRepository(),
-                projections=self.routes,
-                delivery_submissions=submissions,
-            ),
-            delivery_authorizer=self.authorizer,
-            projection_policy=ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
-        )
+        gateway = self._gateway_for_channel(channel, submissions=submissions)
         with tempfile.TemporaryDirectory() as directory:
             staging_root = Path(directory, "ingress")
-            handler = ProactiveDeliveryJsonHandler(gateway, staging_root=staging_root)
+            handler = ProactiveDeliveryJsonHandler(
+                gateway,
+                staging_root=staging_root,
+                max_active_delivery_ids=1,
+            )
             request = asyncio.create_task(
                 handler.handle(
                     {
@@ -301,6 +614,14 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(channel.cancelled_read.is_set())
             self.assertTrue(channel.path_existed_when_cancelled)
             self.assertEqual(list(staging_root.glob("**/*")), [])
+            self.assertEqual(handler._locks.active_key_count, 0)
+
+            reused = await handler.handle(
+                _text_payload("delivery-after-cancel"),
+                credential=self.credential,
+            )
+            self.assertEqual(reused.status_code, 200)
+            self.assertEqual(handler._locks.active_key_count, 0)
 
         record = await submissions.get_delivery_submission(
             derive_delivery_submission_id(
@@ -312,6 +633,7 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(record)
         assert record is not None
         self.assertIs(record.destinations[0].state, DeliverySubmissionState.UNKNOWN)
+        self.assertEqual(channel.send_attempts, 2)
         await gateway.stop()
 
     async def test_invalid_credential_is_rejected_before_artifact_staging(self) -> None:
@@ -346,7 +668,7 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(staging_root.exists())
             self.assertEqual(self.channel.sent, [])
 
-    async def test_retry_is_stable_when_staging_root_changes(self) -> None:
+    async def test_reconstructed_handler_starts_empty_and_preserves_durable_replay(self) -> None:
         payload = {
             "deliveryId": "delivery-root-change",
             "target": {
@@ -365,14 +687,22 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
             ],
         }
         with tempfile.TemporaryDirectory() as directory:
-            first = await ProactiveDeliveryJsonHandler(
+            first_handler = ProactiveDeliveryJsonHandler(
                 self.gateway,
                 staging_root=Path(directory, "first"),
-            ).handle(payload, credential=self.credential)
-            replay = await ProactiveDeliveryJsonHandler(
+                max_active_delivery_ids=1,
+            )
+            first = await first_handler.handle(payload, credential=self.credential)
+            reconstructed_handler = ProactiveDeliveryJsonHandler(
                 self.gateway,
                 staging_root=Path(directory, "second"),
-            ).handle(payload, credential=self.credential)
+                max_active_delivery_ids=1,
+            )
+            self.assertEqual(reconstructed_handler._locks.active_key_count, 0)
+            replay = await reconstructed_handler.handle(
+                payload,
+                credential=self.credential,
+            )
 
         self.assertEqual(first.body["state"], "accepted")
         self.assertEqual(replay.body["state"], "accepted")

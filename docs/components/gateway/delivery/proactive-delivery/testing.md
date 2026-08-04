@@ -26,7 +26,28 @@ historical implementation modules remain absent. The tests also prove that
 `DeliverySubmissionOrigin` stays available through the Gateway persistence and
 delivery facades, while passive state/helper imports remain one-way.
 The mirrored Gateway JSON/CLI ingress suite continues to cover authorization-before-staging,
-cancellation join, cleanup, route/result mapping, and loopback CLI policy.
+cancellation join, cleanup, route/result mapping, and loopback CLI policy. Its
+focused process-local coordination cases additionally prove:
+
+- `max_active_delivery_ids` is keyword-only, defaults to 256, and accepts only
+  a positive non-boolean integer through the shared finite keyed registry;
+- capacity identity is the exact already-validated `deliveryId`, independent
+  of credential, target, payload, route, timestamp, and durable submission
+  namespace;
+- a distinct ID at capacity receives the fixed redacted 503
+  `delivery_ingress_capacity_exhausted` response before target parsing,
+  authentication, base64 work, staging, routing, submission, or Channel work,
+  without being confused with durable `delivery_capacity_exhausted`;
+- an identical ID joins at capacity and converges through the existing durable
+  replay/in-flight result rather than consuming a second key;
+- concurrent distinct callers racing for the final slot admit exactly one,
+  while same-ID waiters do not consume another slot;
+- normal completion and owner/waiter cancellation remove only the applicable
+  active key, permit later reuse, and preserve staged-artifact cleanup plus
+  sticky unknown-outcome evidence; and
+- a reconstructed handler starts with empty coordination state while durable
+  replay, route snapshots, and unknown/retry safety remain unchanged.
+
 Pure decoded-byte, path-confinement, digest, and staged-content construction
 cases live in `tests/interaction/test_media_staging.py`.
 

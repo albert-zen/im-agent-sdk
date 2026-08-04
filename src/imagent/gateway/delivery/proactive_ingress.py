@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import shutil
 from collections.abc import Mapping, Sequence
+from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,7 +19,7 @@ from ...interaction.media_staging import (
 )
 from ...interaction.messages import ConversationRef, TextContent, TextFormat
 from ...interaction.operations import ContractViolation
-from ...keyed_locks import KeyedLockRegistry
+from ...keyed_locks import KeyedLockCapacityError, KeyedLockRegistry
 from ..persistence.repository_contracts import (
     DeliverySubmissionCapacityError,
     DeliverySubmissionConflict,
@@ -70,13 +71,16 @@ class ProactiveDeliveryJsonHandler:
         *,
         staging_root: str | Path,
         max_inline_bytes: int = 64 * 1024 * 1024,
+        max_active_delivery_ids: int = 256,
     ) -> None:
         if max_inline_bytes <= 0:
             raise ValueError("max_inline_bytes must be positive")
         self._endpoint = endpoint
         self._staging_root = Path(staging_root).resolve()
         self._max_inline_bytes = max_inline_bytes
-        self._locks = KeyedLockRegistry()
+        self._locks = KeyedLockRegistry(
+            max_active_keys=max_active_delivery_ids,
+        )
 
     async def handle(
         self,
@@ -88,7 +92,13 @@ class ProactiveDeliveryJsonHandler:
             delivery_id = _required_string(payload, "deliveryId")
         except (ValueError, TypeError) as error:
             return _error_response(400, "invalid_delivery_request", error)
-        async with self._locks.hold(delivery_id):
+
+        async with AsyncExitStack() as lock_stack:
+            try:
+                await lock_stack.enter_async_context(self._locks.hold(delivery_id))
+            except KeyedLockCapacityError:
+                return _delivery_ingress_capacity_response()
+
             staging_directory: Path | None = None
             try:
                 target = _parse_target(_required_mapping(payload, "target"))
@@ -316,6 +326,18 @@ def _error_response(
             "error": {
                 "code": code,
                 "message": str(error) or type(error).__name__,
+            }
+        },
+    )
+
+
+def _delivery_ingress_capacity_response() -> DeliveryIngressResponse:
+    return DeliveryIngressResponse(
+        status_code=503,
+        body={
+            "error": {
+                "code": "delivery_ingress_capacity_exhausted",
+                "message": "proactive delivery ingress is at bounded capacity",
             }
         },
     )
