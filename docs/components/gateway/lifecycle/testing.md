@@ -2,7 +2,7 @@
 
 Current lifecycle evidence is spread across
 `tests/test_gateway_operations.py`, `tests/test_gateway_vertical_slice.py`,
-`tests/test_diagnostics.py`, and startup races in the inbound/projection suites.
+`tests/gateway/test_diagnostics.py`, and startup races in the inbound/projection suites.
 The target exact-owner suite is `tests/gateway/test_lifecycle.py`. Until the
 package-root `ImAgentGateway.start()`/`stop()` orchestration gap is moved, the
 focused suite must also prove the lifecycle helper owner and exact facade

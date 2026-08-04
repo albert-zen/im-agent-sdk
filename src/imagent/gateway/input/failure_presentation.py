@@ -9,10 +9,6 @@ from enum import StrEnum
 from typing import Protocol
 
 from ...applications.contract import ApplicationInputOutcomeUnknown
-from ...diagnostics import (
-    InboundFailurePresentationFailureCode,
-    InboundFailurePresenterDiagnosticFacts,
-)
 from ...interaction.messages import (
     ConversationRef,
     InboundMessage,
@@ -22,6 +18,10 @@ from ...interaction.messages import (
 )
 from ...projection_runtime import InputPostAcceptanceError
 from ..admission import ClaimedInbound
+from ..diagnostics import (
+    InboundFailurePresentationFailureCode,
+    InboundFailurePresenterDiagnosticFacts,
+)
 from ..persistence.repository_contracts import IdempotencyRepository
 
 

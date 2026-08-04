@@ -21,7 +21,6 @@ from imagent.contracts import (
     TextContent,
     ThreadRef,
 )
-from imagent.diagnostics import InboundFailurePresentationFailureCode
 from imagent.gateway import (
     GatewayExtensions,
     GatewayLimits,
@@ -30,6 +29,7 @@ from imagent.gateway import (
     InboundFailurePhase,
 )
 from imagent.gateway.admission import ClaimedInbound
+from imagent.gateway.diagnostics import InboundFailurePresentationFailureCode
 from imagent.gateway.input.failure_presentation import (
     InboundFailurePresentation,
     InboundFailurePresentationCapacityError,

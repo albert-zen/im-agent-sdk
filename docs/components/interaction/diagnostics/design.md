@@ -37,14 +37,14 @@ contracts but does not redefine them.
 
 ## Transition facade
 
-`imagent.diagnostics` remains an explicit stable transition facade while the
-Application definitions move in #276 and Gateway definitions move in #273. It
-imports and re-exports the exact five canonical objects from this
+`imagent.diagnostics` remains an explicit stable transition facade after the
+Application and Gateway owner moves. It imports and re-exports the exact five
+canonical objects from this
 leaf and the exact Channel objects from
 `imagent.interaction.channels.diagnostics`; it contains no duplicate
-definitions for those moved objects and no lazy `__getattr__`. The remaining
-Gateway fact types and aggregation may stay in that facade until #273. The
-facade is not a second Interaction owner.
+definitions for those moved objects and no lazy `__getattr__`. The Gateway
+fact types and aggregation are canonical in `imagent.gateway.diagnostics` and
+the facade is not a second Interaction owner.
 
 The accepted [ADR 0014](../../../decisions/0014-read-only-diagnostics-surface.md)
 and [ADR 0015](../../../decisions/0015-typed-extension-seams-and-composition.md)

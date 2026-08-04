@@ -33,9 +33,9 @@ content storage, or a durable observer/outbox.
 The implementation lives once at
 `src/imagent/gateway/delivery/outcome_observation.py`. The Gateway delivery
 package re-exports the exact public protocol and values; no historical
-`imagent.delivery_outcomes` implementation/import path remains. Shared
-diagnostic values stay in `diagnostics.py` until the diagnostics ownership
-slice.
+`imagent.delivery_outcomes` implementation/import path remains. The O2
+diagnostic enum and fact values are owned by
+`src/imagent/gateway/diagnostics.py` and imported directly by this runtime.
 
 ## Authority
 

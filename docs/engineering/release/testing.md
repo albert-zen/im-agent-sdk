@@ -41,10 +41,12 @@ install must not discover optional integration dependencies that were not
 requested. The aggregate `channels` extra and wheel contents such as
 `py.typed` remain separate release checks; the smoke script does not claim to
 cover them.
-The base case also proves that `imagent.diagnostics` preserves exact identity
-for the canonical Interaction, Application, and Channel diagnostics objects;
-the canonical Interaction and Application leaves remain free of Gateway
-imports.
+The base case also proves, in the original transition-first clean process,
+that `imagent.diagnostics` preserves exact identity for the canonical
+Interaction, Channel, and Application diagnostics objects. It additionally
+imports the canonical Gateway owner first and the transition facade first in
+separate clean processes, proving exact Gateway identity in both orders. The
+canonical Interaction and Application leaves remain free of Gateway imports.
 
 ## Required repository evidence
 

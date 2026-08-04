@@ -52,10 +52,10 @@ native adapter behavior exactly.
 ## Current and target structure
 
 Before this slice, implementation was `src/imagent/applications/presentation.py`
-with diagnostic fact types in `src/imagent/diagnostics.py`. The moved owner is
-`src/imagent/applications/presentation/live_activity.py` and its finite facade
-is `src/imagent/applications/presentation/__init__.py`; diagnostic fact
-ownership is now `src/imagent/applications/diagnostics.py`. Focused evidence is
+with diagnostic fact types in the transition surface. The moved presentation
+owner is `src/imagent/applications/presentation/live_activity.py` and its finite
+facade is `src/imagent/applications/presentation/__init__.py`; diagnostic fact
+ownership remains `src/imagent/applications/diagnostics.py`. Focused evidence is
 `tests/applications/presentation/test_live_activity.py`; adapter integration
 tests remain in their historical suites. The explicit gap is that Codex/T3
 fact shapes share a runtime while remaining irreducibly separate typed

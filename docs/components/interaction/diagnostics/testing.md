@@ -23,4 +23,5 @@ queue behavior remains covered by
 
 Run the focused tests together with the Applications, Gateway, and native
 Channel suites. The full repository suite is required because the transition
-facade still retains Gateway definitions while #273 is pending.
+facade spans all four canonical diagnostics owners while preserving exact
+public identity.

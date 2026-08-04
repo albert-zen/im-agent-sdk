@@ -293,6 +293,7 @@ components:
       - docs/decisions/README.md
       - docs/decisions/0014-read-only-diagnostics-surface.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
+      - src/imagent/gateway/diagnostics.py
       - src/imagent/interaction/diagnostics.py
       - src/imagent/interaction/channels/diagnostics.py
       - src/imagent/applications/diagnostics.py
@@ -300,10 +301,10 @@ components:
       - tests/interaction/test_diagnostics.py
       - tests/interaction/channels/test_diagnostics.py
       - tests/applications/test_diagnostics.py
-      - tests/test_diagnostics.py
+      - tests/gateway/test_diagnostics.py
     docs:
-      - docs/components/diagnostics/design.md
-      - docs/components/diagnostics/testing.md
+      - docs/components/gateway/diagnostics/design.md
+      - docs/components/gateway/diagnostics/testing.md
       - docs/components/interaction/diagnostics/design.md
       - docs/components/interaction/diagnostics/testing.md
       - docs/components/interaction/channels/diagnostics/design.md

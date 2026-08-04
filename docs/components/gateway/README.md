@@ -30,6 +30,10 @@ Channel transport, Agent transcript, or second runtime.
 - [presentation design](presentation/design.md) and
   [testing](presentation/testing.md) — O1 bounded per-destination projection
   presentation and suppression.
+- [diagnostics design](diagnostics/design.md) and
+  [testing](diagnostics/testing.md) — Gateway-owned I1/I2/O1/O2,
+  projection/startup aggregation, bounded provider normalization, and the
+  exact stable transition facade.
 - [persistence](persistence/README.md) — bridge-state contracts and repository
   implementations, including process-local [memory](persistence/memory/design.md)
   and its [tests](persistence/memory/testing.md).

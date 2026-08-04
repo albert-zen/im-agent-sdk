@@ -84,7 +84,7 @@ class ComponentMapTests(unittest.TestCase):
         component_map = copy.deepcopy(load_component_map())
         component_map["structural_status"]["formal_facades"].append(
             {
-                "path": "src/imagent/diagnostics.py",
+                "path": "src/imagent/gateway/__init__.py",
                 "owner": "gateway.diagnostics",
                 "rationale": "Invalid mixed transition declaration for test coverage.",
             }
@@ -92,6 +92,28 @@ class ComponentMapTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ComponentMapError, "invalid formal facade declaration"):
             validate_component_map(component_map)
+
+    def test_gateway_diagnostics_map_tracks_both_facade_export_states(self) -> None:
+        component = load_component_map()["components"]["gateway.diagnostics"]
+        expected_gateway_facade_exports = {
+            "imagent.gateway:GatewayDiagnosticFacts",
+            "imagent.gateway:DiagnosticsSnapshot",
+            "imagent.gateway:summarize_projection_health",
+            "imagent.gateway:collect_application_diagnostics",
+            "imagent.gateway:collect_channel_diagnostics",
+            "imagent.gateway:new_diagnostics_snapshot",
+        }
+
+        for state in ("current", "target"):
+            self.assertTrue(
+                expected_gateway_facade_exports.issubset(set(component["public_exports"][state]))
+            )
+
+        formal_facades = load_component_map()["structural_status"]["formal_facades"]
+        diagnostics_facade = next(
+            facade for facade in formal_facades if facade["path"] == "src/imagent/diagnostics.py"
+        )
+        self.assertEqual(diagnostics_facade["owner"], "gateway.diagnostics")
 
     def test_facade_alias_preserves_imported_and_bound_symbol_names(self) -> None:
         node = ast.parse("from .model import Internal as Public").body[0]

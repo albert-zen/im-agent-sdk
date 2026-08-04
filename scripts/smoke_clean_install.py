@@ -13,6 +13,8 @@ DIAGNOSTICS_FACADE_CHECK = (
     "import imagent.interaction.diagnostics as common_owner; "
     "import imagent.interaction.channels.diagnostics as channel_owner; "
     "import imagent.applications.diagnostics as application_owner; "
+    "import imagent.gateway.diagnostics as gateway_owner; "
+    "import imagent.gateway as gateway_facade; "
     "import imagent.diagnostics as transition_facade; "
     "common_names = ('ConnectionDiagnosticState', 'DiagnosticFailureCode', "
     "'QueueDiagnosticName', 'QueueDiagnosticFacts', 'ConnectionDiagnosticFacts'); "
@@ -22,12 +24,27 @@ DIAGNOSTICS_FACADE_CHECK = (
     "'ApplicationPresentationDiagnosticFacts', "
     "'ApplicationArtifactMaterializationDiagnosticFacts', "
     "'ApplicationDiagnosticsProvider', 'DiagnosticsProvider'); "
+    "gateway_names = ('InboundContentTransformFailureCode', "
+    "'InboundContentTransformerDiagnosticFacts', "
+    "'InboundFailurePresentationFailureCode', "
+    "'InboundFailurePresenterDiagnosticFacts', 'OutboundPresentationFailureCode', "
+    "'OutboundPresentationDiagnosticFacts', 'DeliveryOutcomeObserverFailureCode', "
+    "'DeliveryOutcomeObserverDiagnosticFacts', 'ProjectionDiagnosticFacts', "
+    "'GatewayDiagnosticFacts', 'DiagnosticsSnapshot', 'summarize_projection_health', "
+    "'collect_application_diagnostics', 'collect_channel_diagnostics', "
+    "'new_diagnostics_snapshot'); "
     "assert all(getattr(transition_facade, name) is getattr(common_owner, name) "
     "for name in common_names); "
     "assert all(getattr(transition_facade, name) is getattr(channel_owner, name) "
     "for name in channel_names); "
     "assert all(getattr(transition_facade, name) is getattr(application_owner, name) "
     "for name in application_names); "
+    "assert all(getattr(transition_facade, name) is getattr(gateway_owner, name) "
+    "for name in gateway_names); "
+    "assert all(getattr(gateway_facade, name) is getattr(gateway_owner, name) "
+    "for name in ('GatewayDiagnosticFacts', 'DiagnosticsSnapshot', "
+    "'summarize_projection_health', 'collect_application_diagnostics', "
+    "'collect_channel_diagnostics', 'new_diagnostics_snapshot')); "
     "subprocess.run([sys.executable, '-c', "
     '"import imagent.diagnostics as f; '
     "import imagent.interaction.diagnostics as c; "
@@ -40,6 +57,16 @@ DIAGNOSTICS_FACADE_CHECK = (
     "assert f.ApplicationDiagnosticFacts is a.ApplicationDiagnosticFacts; "
     "assert f.ApplicationDiagnosticsProvider is a.ApplicationDiagnosticsProvider; "
     'assert f.DiagnosticsProvider is a.DiagnosticsProvider"], '
+    "check=True); "
+    "subprocess.run([sys.executable, '-c', "
+    '"import imagent.gateway.diagnostics as g; '
+    "import imagent.diagnostics as f; "
+    'assert all(getattr(f, n) is getattr(g, n) for n in g.__all__)"], '
+    "check=True); "
+    "subprocess.run([sys.executable, '-c', "
+    '"import imagent.diagnostics as f; '
+    "import imagent.gateway.diagnostics as g; "
+    'assert all(getattr(f, n) is getattr(g, n) for n in g.__all__)"], '
     "check=True); "
 )
 CHANNEL_FACADE_CHECK = (

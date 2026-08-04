@@ -41,11 +41,10 @@ instead of fabricating configured capability.
 
 ## Transition surface
 
-`imagent.diagnostics` remains a truthful mixed transition module while the
-Gateway definitions and aggregation await #273. It re-exports these exact
-Application objects by identity and retains no duplicate or lazy compatibility
-implementation. The transition module is still a split candidate because it
-also contains Gateway-owned fact types and aggregation.
+`imagent.diagnostics` is now a truthful finite transition facade. It re-exports
+these exact Application objects and the canonical Gateway objects by identity,
+while retaining no diagnostic definitions or lazy compatibility implementation.
+Applications internals continue to import this canonical owner directly.
 
 ## State and recovery
 

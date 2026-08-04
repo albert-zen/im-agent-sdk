@@ -1,21 +1,33 @@
 from __future__ import annotations
 
+import ast
+import inspect
 import json
+import subprocess
+import sys
+import typing
 import unittest
 from dataclasses import asdict
 from datetime import UTC, datetime
+from importlib.util import resolve_name
+from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
+import imagent.diagnostics as transition_facade
+import imagent.gateway as gateway_facade
+import imagent.gateway.diagnostics as gateway_diagnostics
 from imagent.applications.adapters.t3 import T3ApplicationAdapter
 from imagent.applications.diagnostics import ApplicationDiagnosticFacts
 from imagent.contracts import ProjectMode, ThreadRef
-from imagent.diagnostics import (
+from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway.diagnostics import (
     DiagnosticsSnapshot,
+    _DiagnosticApplication,
+    collect_application_diagnostics,
     collect_channel_diagnostics,
     summarize_projection_health,
 )
-from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.interaction.channels.diagnostics import ChannelDiagnosticFacts
 from imagent.interaction.diagnostics import (
@@ -42,6 +54,141 @@ class _UnusedT3Client:
 
 
 class DiagnosticsSurfaceTests(unittest.TestCase):
+    def test_gateway_owner_and_transition_facade_export_exact_objects(self) -> None:
+        self.assertEqual(len(gateway_diagnostics.__all__), len(set(gateway_diagnostics.__all__)))
+        self.assertNotIn("__getattr__", transition_facade.__dict__)
+        for name in gateway_diagnostics.__all__:
+            self.assertIs(
+                getattr(transition_facade, name),
+                getattr(gateway_diagnostics, name),
+                name,
+            )
+        gateway_facade_names = (
+            "GatewayDiagnosticFacts",
+            "DiagnosticsSnapshot",
+            "summarize_projection_health",
+            "collect_application_diagnostics",
+            "collect_channel_diagnostics",
+            "new_diagnostics_snapshot",
+        )
+        for name in gateway_facade_names:
+            self.assertIs(getattr(gateway_facade, name), getattr(gateway_diagnostics, name))
+
+        transition_tree = ast.parse(
+            (Path(__file__).parents[2] / "src/imagent/diagnostics.py").read_text(encoding="utf-8")
+        )
+        definitions = tuple(
+            node.name
+            for node in transition_tree.body
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+        )
+        self.assertEqual(definitions, ())
+
+    def test_gateway_owner_and_call_sites_have_no_top_facade_or_higher_import(self) -> None:
+        root = Path(__file__).parents[2]
+        owner_path = root / "src/imagent/gateway/diagnostics.py"
+        tree = ast.parse(owner_path.read_text(encoding="utf-8"), filename=str(owner_path))
+        internal_modules: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                internal_modules.update(
+                    alias.name for alias in node.names if alias.name.startswith("imagent")
+                )
+            elif isinstance(node, ast.ImportFrom):
+                module = (
+                    resolve_name("." * node.level + (node.module or ""), "imagent.gateway")
+                    if node.level
+                    else (node.module or "")
+                )
+                if module.startswith("imagent"):
+                    internal_modules.add(module)
+        self.assertNotIn("imagent.diagnostics", internal_modules)
+        self.assertNotIn("imagent.gateway", internal_modules)
+        self.assertEqual(
+            internal_modules,
+            {
+                "imagent.applications.diagnostics",
+                "imagent.interaction.channels.diagnostics",
+                "imagent.interaction.diagnostics",
+            },
+        )
+
+        call_sites = {
+            "src/imagent/gateway/__init__.py": "from .diagnostics import",
+            "src/imagent/gateway/presentation.py": "from .diagnostics import",
+            "src/imagent/gateway/input/content_transformation.py": "from ..diagnostics import",
+            "src/imagent/gateway/input/failure_presentation.py": "from ..diagnostics import",
+            "src/imagent/gateway/delivery/outcome_observation.py": "from ..diagnostics import",
+        }
+        for relative_path, expected_import in call_sites.items():
+            source = (root / relative_path).read_text(encoding="utf-8")
+            self.assertNotIn("imagent.diagnostics", source, relative_path)
+            self.assertIn(expected_import, source, relative_path)
+
+    def test_gateway_owner_import_order_and_runtime_hints_preserve_identity(self) -> None:
+        check_suffix = """
+for name in owner.__all__:
+    assert getattr(facade, name) is getattr(owner, name)
+for name in (
+    'GatewayDiagnosticFacts', 'DiagnosticsSnapshot',
+    'summarize_projection_health', 'collect_application_diagnostics',
+    'collect_channel_diagnostics', 'new_diagnostics_snapshot',
+):
+    assert getattr(gateway_facade, name) is getattr(owner, name)
+"""
+        for imports in (
+            "import imagent.gateway.diagnostics as owner\n"
+            "import imagent.diagnostics as facade\n"
+            "import imagent.gateway as gateway_facade\n",
+            "import imagent.diagnostics as facade\n"
+            "import imagent.gateway.diagnostics as owner\n"
+            "import imagent.gateway as gateway_facade\n",
+        ):
+            subprocess.run([sys.executable, "-c", imports + check_suffix], check=True)
+
+        snapshot_hints = typing.get_type_hints(gateway_diagnostics.DiagnosticsSnapshot)
+        self.assertIs(
+            typing.get_args(snapshot_hints["applications"])[0], ApplicationDiagnosticFacts
+        )
+        self.assertIs(typing.get_args(snapshot_hints["channels"])[0], ChannelDiagnosticFacts)
+        self.assertIs(snapshot_hints["projections"], gateway_diagnostics.ProjectionDiagnosticFacts)
+        self.assertIs(snapshot_hints["gateway"], gateway_diagnostics.GatewayDiagnosticFacts)
+
+        snapshot_factory_hints = typing.get_type_hints(gateway_diagnostics.new_diagnostics_snapshot)
+        self.assertIs(snapshot_factory_hints["return"], gateway_diagnostics.DiagnosticsSnapshot)
+        self.assertIs(
+            typing.get_args(snapshot_factory_hints["applications"])[0],
+            ApplicationDiagnosticFacts,
+        )
+        self.assertIs(
+            typing.get_args(snapshot_factory_hints["channels"])[0],
+            ChannelDiagnosticFacts,
+        )
+        self.assertIs(
+            snapshot_factory_hints["projections"], gateway_diagnostics.ProjectionDiagnosticFacts
+        )
+        self.assertIs(snapshot_factory_hints["gateway"], gateway_diagnostics.GatewayDiagnosticFacts)
+        self.assertIs(
+            typing.get_args(
+                typing.get_type_hints(gateway_diagnostics.collect_application_diagnostics)["return"]
+            )[0],
+            ApplicationDiagnosticFacts,
+        )
+        self.assertIs(
+            typing.get_args(
+                typing.get_type_hints(gateway_diagnostics.collect_channel_diagnostics)["return"]
+            )[0],
+            ChannelDiagnosticFacts,
+        )
+        self.assertIs(
+            typing.get_type_hints(ImAgentGateway.diagnostics_snapshot)["return"],
+            gateway_diagnostics.DiagnosticsSnapshot,
+        )
+        self.assertEqual(
+            inspect.signature(transition_facade.new_diagnostics_snapshot),
+            inspect.signature(gateway_diagnostics.new_diagnostics_snapshot),
+        )
+
     def test_queue_fact_vocabulary_and_bounds_are_enforced(self) -> None:
         with self.assertRaisesRegex(ValueError, "fixed vocabulary"):
             QueueDiagnosticFacts(
@@ -262,6 +409,63 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
                 self.assertNotIn("secret-instance", serialized)
                 self.assertNotIn("secret provider failure", serialized)
                 self.assertNotIn("consumer-value", serialized)
+
+    def test_application_diagnostics_fail_closed_for_every_optional_provider_failure(self) -> None:
+        def make_summary(identifier: str, kind: str) -> SimpleNamespace:
+            return SimpleNamespace(
+                ref=SimpleNamespace(application_instance_id=identifier),
+                kind=kind,
+            )
+
+        valid_facts = ApplicationDiagnosticFacts("z-valid", "codex")
+        valid = SimpleNamespace(
+            summary=make_summary("z-valid", "codex"),
+            diagnostic_facts=lambda: valid_facts,
+        )
+        missing = SimpleNamespace(summary=make_summary("a-missing", "t3"))
+        invalid = SimpleNamespace(
+            summary=make_summary("b-invalid", "zen"),
+            diagnostic_facts=lambda: SimpleNamespace(
+                application_instance_id="native-secret",
+                kind="untrusted-kind",
+            ),
+        )
+        mismatched = SimpleNamespace(
+            summary=make_summary("c-mismatch", "codex"),
+            diagnostic_facts=lambda: ApplicationDiagnosticFacts("native-secret", "codex"),
+        )
+
+        class RaisingDescriptor:
+            summary = make_summary("d-descriptor", "zen")
+
+            @property
+            def diagnostic_facts(self) -> object:
+                raise RuntimeError("native provider secret")
+
+        class RaisingProvider:
+            summary = make_summary("e-provider", "t3")
+
+            def diagnostic_facts(self) -> object:
+                raise RuntimeError("native provider secret")
+
+        applications = (valid, RaisingProvider(), mismatched, missing, RaisingDescriptor(), invalid)
+        collected = collect_application_diagnostics(
+            cast(tuple[_DiagnosticApplication, ...], applications)
+        )
+
+        self.assertEqual(
+            tuple(facts.application_instance_id for facts in collected),
+            ("a-missing", "b-invalid", "c-mismatch", "d-descriptor", "e-provider", "z-valid"),
+        )
+        self.assertEqual(len(collected), len(applications))
+        self.assertIs(collected[-1], valid_facts)
+        for facts in collected[:-1]:
+            self.assertIsNone(facts.connection)
+            self.assertIsNone(facts.presentation)
+            self.assertIsNone(facts.artifact_materialization)
+            serialized = json.dumps(asdict(facts), default=str)
+            self.assertNotIn("native-secret", serialized)
+            self.assertNotIn("native provider secret", serialized)
 
     def test_application_and_channel_queue_scopes_remain_distinct(self) -> None:
         channel_queue = QueueDiagnosticFacts(
