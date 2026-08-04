@@ -58,11 +58,12 @@ Gateway sees only Applications contracts and canonical events.
 
 ## Current and target layout
 
-Issue #240 establishes this documentation authority before mechanical moves.
-The current implementation remains in the historical paths recorded by the
-[component map](../../component-map.yml). The target package paths in each
-leaf are reserved for later one-issue/one-PR mechanical slices. This slice
-does not change source, tests, schemas, public exports, or behavior.
+Issue #240 established this documentation authority before mechanical moves.
+The App Server transport leaf is now physically at its target path; the
+remaining implementation and test paths are still the historical paths
+recorded by the [component map](../../component-map.yml). The other target
+package paths remain reserved for later one-issue/one-PR mechanical slices.
+No aggregate `imagent.applications.adapters.appserver` facade is introduced.
 
 The cross-adapter overview remains available as [transition design
 context](../../application-adapters/design.md) and [cross-adapter testing

@@ -21,12 +21,11 @@ persists frames nor claims replay/cursor semantics.
 
 Inputs are JSON mappings and a configured process/WebSocket endpoint. Outputs
 are decoded JSON mappings, successful close completion, or `AppServerError`.
-The current formal export owned here is `AppServerTransport` from
-`imagent.applications.appserver_client.transports`; concrete transport classes
-remain implementation positions. `AppServerError` is defined by the current
-transport module and re-exported by the historical client facade; that exact
-object must remain stable through the eventual target package rather than
-creating a second exception hierarchy.
+The target formal export owned here is `AppServerTransport` from
+`imagent.applications.adapters.appserver.transport`; concrete transport classes
+remain implementation positions. `AppServerError` is defined by this transport
+module and re-exported by the historical client facade; that exact object
+remains stable without creating a second exception hierarchy.
 
 ## Dependencies, state, and recovery
 
@@ -40,17 +39,16 @@ externally supplied WebSocket is not size-fenced by this layer.
 
 ## Current, target, and structural gap
 
-Current code is `src/imagent/applications/appserver_client/transports.py`.
-The target is
+The implementation now lives at
 `src/imagent/applications/adapters/appserver/transport.py`, preserving the
-exact protocol and concrete behavior. Current evidence is
-`tests/test_appserver_transport.py` (`AppServerTransportLifecycleTests` and
-framing/closure fixtures); the target suite is
-`tests/applications/adapters/appserver/test_transport.py`. In addition to the
-physical placement gap, the transport requires an explicit finite frame-size
-limit for both stdio and supplied WebSocket receives, fixed oversize failure
-semantics, and focused tests proving that excess input is rejected without
-unbounded buffering or leaking native content.
+exact protocol and concrete behavior; the historical transport module is
+removed. Direct framing/closure evidence now lives in
+`tests/applications/adapters/appserver/test_transport.py`. The transport still
+requires a separate explicit finite frame-size limit for both stdio and
+supplied WebSocket receives, fixed oversize failure semantics, and focused
+tests proving that excess input is rejected without unbounded buffering or
+leaking native content. Those capacity/security changes are outside this
+mechanical move.
 
 ## Authority
 

@@ -143,8 +143,8 @@ the [presentation subtree](applications/presentation/README.md), and the
 complete [Applications adapter subtree](applications/adapters/README.md).
 The adapter subtree is the documentation authority for App Server client,
 transport, mapping, requests, diagnostics, Codex, Zen, and T3 boundaries;
-their current code remains in historical paths until focused mechanical
-slices move it.
+the App Server transport is now physically moved, while the remaining current
+code stays in historical paths until focused mechanical slices move it.
 
 ## Engineering support
 

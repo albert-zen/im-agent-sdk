@@ -1,14 +1,10 @@
 from __future__ import annotations
 
-import json
 import unittest
 
 from imagent import __version__
 from imagent.applications import codex_app_server_client
-from imagent.applications.appserver_client.client import (
-    AppServerClient,
-    StdioAppServerTransport,
-)
+from imagent.applications.appserver_client.client import AppServerClient
 from imagent.applications.appserver_client.retry import RetryBackoff
 from imagent.applications.appserver_client.supervisor import AppServerSupervisor
 from imagent.applications.appserver_client.target import (
@@ -16,31 +12,6 @@ from imagent.applications.appserver_client.target import (
     parse_app_server_target,
     resolve_app_server_target,
 )
-
-
-class _FakeStdin:
-    def __init__(self) -> None:
-        self.writes: list[bytes] = []
-
-    def write(self, data: bytes) -> None:
-        self.writes.append(data)
-
-    async def drain(self) -> None:
-        return None
-
-
-class _FakeStdout:
-    def __init__(self, *lines: bytes) -> None:
-        self.lines = list(lines)
-
-    async def readline(self) -> bytes:
-        return self.lines.pop(0) if self.lines else b""
-
-
-class _FakeProcess:
-    def __init__(self, *lines: bytes) -> None:
-        self.stdin = _FakeStdin()
-        self.stdout = _FakeStdout(*lines)
 
 
 class AppServerClientTests(unittest.IsolatedAsyncioTestCase):
@@ -86,19 +57,6 @@ class AppServerClientTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(invalid=invalid):
                 with self.assertRaises(AppServerTargetConfigError):
                     parse_app_server_target(invalid)
-
-    async def test_stdio_transport_uses_jsonl_frames(self) -> None:
-        process = _FakeProcess(b'{"id":1,"result":{"threads":[]}}\n')
-        transport = StdioAppServerTransport(process)
-
-        await transport.send_json({"id": 1, "method": "thread/list"})
-        response = await transport.receive_json()
-
-        self.assertEqual(
-            process.stdin.writes,
-            [(json.dumps({"id": 1, "method": "thread/list"}) + "\n").encode()],
-        )
-        self.assertEqual(response, {"id": 1, "result": {"threads": []}})
 
     async def test_local_paths_require_transport_or_verified_shared_filesystem(self) -> None:
         remote = AppServerClient(

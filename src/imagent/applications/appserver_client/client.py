@@ -12,6 +12,12 @@ from ...diagnostics import (
     ConnectionDiagnosticFacts,
     QueueDiagnosticName,
 )
+from ..adapters.appserver.transport import (
+    AppServerError,
+    AppServerTransport,
+    StdioAppServerTransport,
+    WebSocketAppServerTransport,
+)
 from .diagnostic_facts import AppServerDiagnosticState
 from .diagnostics import summarize_text, summarize_transport_message
 from .handoff import (
@@ -22,12 +28,6 @@ from .handoff import (
 from .retry import RetryBackoff
 from .runtime_diagnostics import emit_event, mark_appserver_health
 from .target import EXTERNAL_CONNECTION_MODE, SPAWNED_STDIO_CONNECTION_MODE
-from .transports import (
-    AppServerError,
-    AppServerTransport,
-    StdioAppServerTransport,
-    WebSocketAppServerTransport,
-)
 
 JsonDict = dict[str, Any]
 NotificationHandler = Callable[[JsonDict], Awaitable[None] | None]

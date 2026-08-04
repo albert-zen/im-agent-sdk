@@ -138,7 +138,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "src/imagent/applications/appserver.py": {"application-adapters-appserver"},
             "src/imagent/applications/presentation/live_activity.py": {"applications-common"},
             "src/imagent/applications/appserver_mapping.py": {"application-adapters-appserver"},
-            "src/imagent/applications/appserver_client/transports.py": {
+            "src/imagent/applications/adapters/appserver/transport.py": {
                 "application-adapters-appserver"
             },
             "src/imagent/applications/appserver_request_runtime.py": {
@@ -199,6 +199,9 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/test_appserver_mapping.py": {"application-adapters-appserver"},
             "tests/test_appserver_requests.py": {"application-adapters-appserver"},
             "tests/test_appserver_transport.py": {"application-adapters-appserver"},
+            "tests/applications/adapters/appserver/test_transport.py": {
+                "application-adapters-appserver"
+            },
             "tests/applications/presentation/test_live_activity.py": {"applications-common"},
             "tests/test_t3_client.py": {"application-adapters-t3"},
             "tests/conformance/test_adapter_contracts.py": {"testing-and-conformance"},

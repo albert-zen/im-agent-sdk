@@ -3,10 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from ... import __version__
-from .client import (
-    AppServerClient,
-    AppServerError,
-)
+from ..adapters.appserver.transport import AppServerError
+from .client import AppServerClient
 from .handoff import (
     APP_SERVER_DISPATCH_POSITION_KEY,
     AppServerDispatchPosition,

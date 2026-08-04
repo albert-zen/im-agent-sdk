@@ -81,10 +81,11 @@ Issue #9 can close.
 
 Reusable target, retry, protocol-map, diagnostics, JSON-RPC client, and
 supervisor modules were transferred from the same pinned IMCodex commit into
-`src/imagent/applications/appserver_client/`. They support spawned stdio,
-Unix-socket, and TCP WebSocket endpoints without importing product backends or
-configuration. Consumer supervision, branding, commands, and product policy
-were not promoted to Core.
+`src/imagent/applications/appserver_client/`; the framing/closure transport is
+now owned by `src/imagent/applications/adapters/appserver/transport.py`. They
+support spawned stdio, Unix-socket, and TCP WebSocket endpoints without
+importing product backends or configuration. Consumer supervision, branding,
+commands, and product policy were not promoted to Core.
 
 Additional reviewed source, not copied by this transfer:
 

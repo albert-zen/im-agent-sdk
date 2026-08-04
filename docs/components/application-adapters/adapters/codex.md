@@ -148,11 +148,11 @@ silently disclose an absolute host path.
 
 ## Current client ownership
 
-The SDK owns the reusable JSON-RPC client, stdio/WebSocket transports, target
-model, bounded retry, protocol classification, redacted diagnostics, and
-supervisor under `applications/appserver_client/`. Local paths are exposed
-only for stdio/Unix-socket transports or an explicitly verified shared
-filesystem.
+The SDK owns the reusable JSON-RPC client, target model, bounded retry,
+protocol classification, redacted diagnostics, and supervisor under
+`applications/appserver_client/`; stdio/WebSocket framing is owned by
+`applications/adapters/appserver/transport.py`. Local paths are exposed only
+for stdio/Unix-socket transports or an explicitly verified shared filesystem.
 
 The stable SDK diagnostic provider exposes only connection state/epoch,
 reconnect count, dispatch worker state, fixed notification/server-request
