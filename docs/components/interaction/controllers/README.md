@@ -36,6 +36,9 @@ the sole formal public facade; the historical `imagent.controllers` package
 has been removed and must be absent and unimportable in every import order.
 The historical [Controllers overview](../../controllers/design.md) remains
 navigation evidence, not a substitute for these leaf contracts. The
-machine-readable [component map](../../component-map.yml) records each
-current path, target path, test owner, export, dependency, and remaining
-structural gap.
+optional Controller/common-command parity suite is owned by
+`tests/interaction/controllers/test_optional_controller.py`; remaining root
+Gateway/Application parity suites are separate migration slices. The
+machine-readable [component map](../../component-map.yml) records each current
+path, target path, test owner, export, dependency, and remaining structural
+gap.

@@ -196,7 +196,7 @@ components:
     state_recovery: Controller invocation has no durable authority; action-specific replay fences remain explicit.
     current_code: [src/imagent/interaction/controllers/__init__.py, src/imagent/interaction/controllers/contract.py]
     target_code: [src/imagent/interaction/controllers/__init__.py, src/imagent/interaction/controllers/contract.py]
-    current_tests: [tests/interaction/controllers/test_contract.py, tests/interaction/controllers/test_registry.py, tests/test_slash_controller.py, tests/test_gateway_operations.py]
+    current_tests: [tests/interaction/controllers/test_contract.py, tests/interaction/controllers/test_registry.py, tests/interaction/controllers/test_optional_controller.py, tests/test_gateway_operations.py]
     target_tests: [tests/interaction/controllers/test_contract.py]
     authoritative_docs: [docs/components/interaction/controllers/controller-contract/design.md, docs/components/interaction/controllers/controller-contract/testing.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -240,11 +240,11 @@ components:
     state_recovery: View caches are bounded and discardable; action authority stays in typed actions.
     current_code: [src/imagent/interaction/controllers/common.py, src/imagent/interaction/controllers/common_presentation.py]
     target_code: [src/imagent/interaction/controllers/common.py, src/imagent/interaction/controllers/common_presentation.py]
-    current_tests: [tests/interaction/controllers/test_common_commands.py, tests/test_slash_controller.py, tests/test_gateway_vertical_slice.py]
-    target_tests: [tests/interaction/controllers/test_common_commands.py]
+    current_tests: [tests/interaction/controllers/test_common_commands.py, tests/interaction/controllers/test_optional_controller.py, tests/test_gateway_vertical_slice.py]
+    target_tests: [tests/interaction/controllers/test_common_commands.py, tests/interaction/controllers/test_optional_controller.py]
     authoritative_docs: [docs/components/interaction/controllers/common-commands/design.md, docs/components/interaction/controllers/common-commands/testing.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0005-input-activation-and-projection.md]
-    gaps: [root parity tests remain outside the target mirror until the later tests convergence slice]
+    gaps: [root Gateway/Application parity tests remain outside the target owner until their later mechanical slices]
 
   interaction.controllers.request-presentation:
     id: interaction.controllers.request-presentation

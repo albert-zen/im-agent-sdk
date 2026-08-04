@@ -187,7 +187,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/interaction/controllers/test_registry.py": {"controllers"},
             "tests/interaction/controllers/test_common_commands.py": {"controllers"},
             "tests/interaction/controllers/test_request_presentation.py": {"controllers"},
-            "tests/test_slash_controller.py": {"controllers"},
+            "tests/interaction/controllers/test_optional_controller.py": {"controllers"},
             "tests/interaction/channels/test_outbound_delivery.py": {"channel-adapters"},
             "tests/test_native_channels.py": {"channel-adapters"},
             "tests/interaction/channels/adapters/test_qq.py": {"channel-adapters"},

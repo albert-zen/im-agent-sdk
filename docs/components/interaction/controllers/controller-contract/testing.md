@@ -36,7 +36,7 @@ Focused validation currently includes:
 ```sh
 PYTHONPATH=src python -m unittest \
   tests.interaction.controllers.test_contract \
-  tests.test_slash_controller \
+  tests.interaction.controllers.test_optional_controller \
   tests.test_gateway_operations \
   tests.test_gateway_vertical_slice \
   tests.test_projection_hardening -v
