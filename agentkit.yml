@@ -193,6 +193,19 @@ components:
       - docs/components/gateway/README.md
       - docs/components/gateway/design.md
       - docs/components/gateway/testing.md
+      - docs/components/gateway/composition/design.md
+      - docs/components/gateway/composition/testing.md
+      - docs/components/gateway/lifecycle/design.md
+      - docs/components/gateway/lifecycle/testing.md
+      - docs/components/gateway/admission/design.md
+      - docs/components/gateway/admission/testing.md
+      - docs/components/gateway/input/README.md
+      - docs/components/gateway/input/content-transformation/design.md
+      - docs/components/gateway/input/content-transformation/testing.md
+      - docs/components/gateway/input/dispatch/design.md
+      - docs/components/gateway/input/dispatch/testing.md
+      - docs/components/gateway/input/failure-presentation/design.md
+      - docs/components/gateway/input/failure-presentation/testing.md
       - docs/components/gateway/routing/README.md
       - docs/components/gateway/routing/bindings/design.md
       - docs/components/gateway/routing/bindings/testing.md
