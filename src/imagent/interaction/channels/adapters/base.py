@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from threading import Lock
 
-from ..ingress import ChannelAccessPolicy, InboundMessage
+from ..ingress import ChannelAccessPolicy, InboundMessage, _InboundPreparation
 from ..outbound_delivery import (
     NativeDeliveryResult,
     OutboundMessage,
@@ -180,7 +180,7 @@ class BaseChannelAdapter(ABC):
         inbound: InboundMessage,
         *,
         reply_to_message_id: str | None = None,
-        prepare_inbound=None,
+        prepare_inbound: _InboundPreparation | None = None,
         pending_attachment_count: int = 0,
     ) -> None:
         if not self.inbound_allowed(inbound):

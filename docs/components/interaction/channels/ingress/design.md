@@ -5,9 +5,9 @@
 Ingress turns one adapter-authenticated native event into one verified
 `InboundMessage`. It owns the shared ordering and helpers for configured access
 evaluation, stable account/Conversation/sender/message identity and public
-envelope normalization, a bounded process-local duplicate fast path, pre-media
-admission use, common media validation/staging, and explicit `AttachmentSource`
-values.
+envelope normalization, a bounded process-local duplicate fast path, the
+provider-neutral pre-media admission/handoff transaction, common media
+validation/staging, and explicit `AttachmentSource` values.
 
 It does not own provider signature/authentication algorithms, credential/API
 clients, provider-specific download/decryption/acknowledgement rules, the
@@ -42,10 +42,24 @@ content tuple. It preserves direct required native message, Conversation, and
 sender identity coercion; the explicit reply override and native reply
 fallback; the selected `channel_id`, `input_error`, and `trace_id` metadata;
 and `_parse_datetime` ISO/`Z` parsing with its current fallback behavior. It
-does not update route context, assemble or reorder text and attachments, run
-admission, retrieve or decrypt provider media, or acknowledge a provider.
-Those mechanics remain in their existing runtime and adapter owners for later
-focused slices.
+does not update route context, assemble or reorder text and attachments,
+retrieve or decrypt provider media, or acknowledge a provider. Route-context
+and content assembly remain in runtime; provider-native work remains in the
+adapters. The ingress-owned admission transaction is the separate boundary
+described below.
+
+The private `_InboundAdmissionTransaction` owns the provider-neutral
+transaction after access policy: it retains only the bounded transient
+identity set and its lock, requests the opaque lease, invokes one finite
+preparation/normalization stage, and either delivers exactly one complete
+public message or releases only a confirmed pre-handoff failure. It preserves
+the no-lease key discard, transfer fence before `InboundAdmission.deliver`,
+release-failure note, original-error precedence, and failure key discard. The
+stage callables are narrow ingress-specific Protocols; they are invoked for
+one transaction and are not a generic middleware or hook chain. Runtime keeps
+route-context updates and ordered content assembly and supplies the normalizer;
+the current BaseChannelAdapter access-policy invocation and concrete provider
+authentication, retrieval/decryption, and acknowledgement remain in adapters.
 
 ## Capacity, trust, and recovery
 
@@ -66,10 +80,10 @@ shared value before admission and media work.
 The obsolete provider-native access module is not a compatibility facade:
 access policy is an internal owning-leaf contract, so repository callers use
 the Interaction path directly. Runtime still owns route-context updates and
-content/attachment assembly, while it invokes the ingress-owned public
-identity/time/metadata envelope helper. Admission handoff sequencing remains
-in runtime for a later mechanical slice. Platform-specific authentication,
-retrieval/decryption, and acknowledgement remain under adapters.
+content/attachment assembly, while it invokes the ingress-owned admission
+transaction and public identity/time/metadata envelope helper. Platform-
+specific authentication, retrieval/decryption, and acknowledgement remain
+under adapters.
 
 `ingress_security.py` owns the private Windows staging-path DACL helper. On
 Windows it resolves the current process user SID and replaces each staged file
