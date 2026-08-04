@@ -354,7 +354,7 @@ components:
     target_code: [src/imagent/gateway/composition.py]
     current_tests: [tests/gateway/test_package_root.py, tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py]
     target_tests: [tests/gateway/test_composition.py, tests/gateway/test_package_root.py]
-    authoritative_docs: [docs/components/gateway/design.md, docs/components/gateway/testing.md]
+    authoritative_docs: [docs/components/gateway/composition/design.md, docs/components/gateway/composition/testing.md, docs/components/gateway/design.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
     gaps: [the Gateway package root still combines composition and runtime orchestration]
 
@@ -376,7 +376,7 @@ components:
     target_code: [src/imagent/gateway/lifecycle.py]
     current_tests: [tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py, tests/test_diagnostics.py]
     target_tests: [tests/gateway/test_lifecycle.py]
-    authoritative_docs: [docs/components/gateway/design.md, docs/components/gateway/testing.md]
+    authoritative_docs: [docs/components/gateway/lifecycle/design.md, docs/components/gateway/lifecycle/testing.md, docs/components/gateway/design.md, docs/components/gateway/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0013-bounded-application-event-admission.md]
     gaps: [lifecycle logic is split between the Gateway package root and gateway_startup.py]
 
@@ -398,9 +398,9 @@ components:
     target_code: [src/imagent/gateway/admission.py]
     current_tests: [tests/test_inbound_admission.py, tests/test_native_channels.py]
     target_tests: [tests/gateway/test_admission.py]
-    authoritative_docs: [docs/components/gateway/design.md, docs/components/persistence/design.md]
+    authoritative_docs: [docs/components/gateway/admission/design.md, docs/components/gateway/admission/testing.md, docs/components/gateway/design.md, docs/components/persistence/design.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
-    gaps: [target leaf design/testing docs not yet created]
+    gaps: [implementation remains split between inbound_admission.py and the Gateway package root, legacy Channel start-signature fallback remains until all supported Channels use pre-media admission directly]
 
   gateway.routing.bindings:
     id: gateway.routing.bindings
@@ -486,9 +486,9 @@ components:
     target_code: [src/imagent/gateway/input/content_transformation.py]
     current_tests: [tests/test_inbound_content_transformer.py]
     target_tests: [tests/gateway/input/test_content_transformation.py]
-    authoritative_docs: [docs/components/gateway/design.md, docs/components/gateway/testing.md]
+    authoritative_docs: [docs/components/gateway/input/content-transformation/design.md, docs/components/gateway/input/content-transformation/testing.md, docs/components/gateway/design.md, docs/components/gateway/testing.md]
     adrs: [docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [target leaf design/testing docs not yet created]
+    gaps: [implementation and bounded runtime remain in inbound_content.py while orchestration and shared diagnostic facts remain split across Gateway and diagnostics]
 
   gateway.input.dispatch:
     id: gateway.input.dispatch
@@ -508,7 +508,7 @@ components:
     target_code: [src/imagent/gateway/input/dispatch.py]
     current_tests: [tests/test_gateway_vertical_slice.py, tests/test_projection_hardening.py, tests/test_recovery.py]
     target_tests: [tests/gateway/input/test_dispatch.py]
-    authoritative_docs: [docs/components/gateway/design.md, docs/components/projections-and-recovery/design.md]
+    authoritative_docs: [docs/components/gateway/input/dispatch/design.md, docs/components/gateway/input/dispatch/testing.md, docs/components/gateway/design.md, docs/components/projections-and-recovery/design.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
     gaps: [dispatch and projection worker lifecycle share projection_runtime.py]
 
@@ -530,9 +530,9 @@ components:
     target_code: [src/imagent/gateway/input/failure_presentation.py]
     current_tests: [tests/test_inbound_failure_presenter.py, tests/test_storage.py]
     target_tests: [tests/gateway/input/test_failure_presentation.py]
-    authoritative_docs: [docs/components/gateway/design.md, docs/components/persistence/design.md]
+    authoritative_docs: [docs/components/gateway/input/failure-presentation/design.md, docs/components/gateway/input/failure-presentation/testing.md, docs/components/gateway/design.md, docs/components/persistence/design.md]
     adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [target leaf design/testing docs not yet created]
+    gaps: [implementation and bounded runtime remain in inbound_failures.py while orchestration and shared diagnostic facts remain split across Gateway and diagnostics]
 
   gateway.projection.observation:
     id: gateway.projection.observation

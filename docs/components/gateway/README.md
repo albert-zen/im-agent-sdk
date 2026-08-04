@@ -7,6 +7,17 @@ Channel transport, Agent transcript, or second runtime.
 
 ## Current leaf navigation
 
+- [composition design](composition/design.md) and
+  [testing](composition/testing.md) — immutable repository, limit, and typed
+  extension groups plus explicit graph wiring.
+- [lifecycle design](lifecycle/design.md) and
+  [testing](lifecycle/testing.md) — bounded startup admission, rollback, and
+  shutdown ordering.
+- [admission design](admission/design.md) and
+  [testing](admission/testing.md) — fenced durable inbound identity acquired
+  before Channel media work.
+- [input](input/README.md) — independent content-transformation, dispatch, and
+  failure-presentation leaves.
 - [routing](routing/README.md) — Conversation bindings, typed Gateway
   operations, and outbound projection-route policy kept as separate
   authorities.
