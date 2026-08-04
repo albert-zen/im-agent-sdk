@@ -9,7 +9,9 @@ Codex behavior is currently covered by the App Server suites:
 - `tests/test_appserver_input.py` for start/steer policy, pre-dispatch races,
   local-image epochs, replacement, and unsupported files;
 - `tests/applications/adapters/appserver/test_mapping.py` for resource/item normalization;
-- `tests/test_appserver_requests.py` for Codex request/response lifecycle;
+- `tests/applications/adapters/appserver/test_requests.py` for the Codex
+  request/response lifecycle; the retained Gateway integration case remains
+  in `tests/test_appserver_requests.py`;
 - `tests/applications/presentation/test_live_activity.py` and
   `test_artifact_materialization.py` for optional typed A1 positions;
 - Gateway vertical and conformance suites for the public Application seam.
@@ -29,6 +31,7 @@ tree is mechanically mirrored. Run the current focused set with:
 PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.test_client -v
 uv run python -m unittest tests.test_appserver_input -v
 PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.test_mapping -v
+uv run python -m unittest tests.applications.adapters.appserver.test_requests -v
 uv run python -m unittest tests.test_appserver_requests -v
 ```
 

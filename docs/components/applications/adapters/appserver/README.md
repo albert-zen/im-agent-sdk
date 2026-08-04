@@ -44,8 +44,10 @@ reset stales request handles instead of fabricating recoverability.
 The transport leaf now lives at
 `src/imagent/applications/adapters/appserver/transport.py`. The client leaf
 now lives at `src/imagent/applications/adapters/appserver/client/**`; the
-remaining current files are `appserver_requests.py`,
-`appserver_request_runtime.py`, and the App Server portions of `appserver.py`.
+request leaf is co-located at
+`src/imagent/applications/adapters/appserver/requests.py`. The remaining
+current file is `appserver.py`, whose shared Codex/Zen portions are reserved
+for the combined split slice.
 The mapping leaf now lives at
 `src/imagent/applications/adapters/appserver/mapping.py`; the remaining target
 leaves are reserved for their own focused mechanical slices. App Server

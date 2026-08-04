@@ -1,8 +1,9 @@
 # Application requests testing
 
-Current coverage is `tests/test_contracts.py` and
-`tests/test_appserver_requests.py`; target focused coverage is
-`tests/applications/test_requests.py`.
+Current coverage is `tests/test_contracts.py` and the adapter-owned
+`tests/applications/adapters/appserver/test_requests.py`; the retained Gateway
+integration evidence is `tests/test_appserver_requests.py`. Target focused
+coverage is `tests/applications/test_requests.py`.
 
 Tests prove Application-scoped request identity, bounded approval choices and
 user-input questions, typed response shape validation, explicit unsupported
@@ -26,6 +27,7 @@ while the Application contract finishes its later focused split.
 ```sh
 PYTHONPATH=src uv run python -m unittest \
   tests.applications.test_requests \
-  tests.test_contracts tests.test_appserver_requests -v
+  tests.test_contracts tests.applications.adapters.appserver.test_requests \
+  tests.test_appserver_requests -v
 uv run python scripts/validate_schemas.py
 ```

@@ -53,7 +53,9 @@ declared split candidates rather than duplicate implementations. Current
 evidence is in `tests/applications/adapters/appserver/test_client.py`,
 `test_appserver_input.py`,
 `tests/applications/adapters/appserver/test_mapping.py`,
-`test_appserver_requests.py`, and the two Applications presentation suites.
+`tests/applications/adapters/appserver/test_requests.py`, and the two
+Applications presentation suites. Gateway request-correlation/presenter
+integration remains in `tests/test_appserver_requests.py`.
 The target is `src/imagent/applications/adapters/codex.py` with focused tests
 at `tests/applications/adapters/test_codex.py`. The gap is the mechanical
 adapter split while preserving native notification ordering, request/runtime
