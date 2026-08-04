@@ -28,9 +28,6 @@ from .. import outbound_delivery as _outbound_delivery
 from ..outbound_delivery import (
     NativeDeliveryResult,
 )
-from ..outbound_delivery import (
-    OutboundMessage as NativeOutboundMessage,
-)
 from .base import ChannelRouteContext
 from .diagnostics import NativeChannelDiagnosticSnapshot, NativeConnectionDiagnosticSnapshot
 
@@ -86,18 +83,6 @@ _CHANNEL_CAPABILITIES = {
 
 _TRANSIENT_ROUTE_LIMIT = 4_096
 _TRANSIENT_ADMISSION_LIMIT = 16_384
-_NATIVE_OWNED_METADATA_KEYS = frozenset(
-    {
-        "artifact_failures",
-        "artifact_receipts",
-        "delivery_id",
-        "message_id",
-        "qq_reply_identity_pinned",
-        "qq_reply_to_message_id",
-        "reply_to_message_id",
-        "reply_to_seen_at",
-    }
-)
 
 
 class NativeTransportChannelAdapter:
@@ -228,7 +213,7 @@ class NativeTransportChannelAdapter:
             raise ValueError("message belongs to a different channel instance")
         if getattr(native, "enabled", True) is False:
             raise RuntimeError(f"{self._channel_id} Channel delivery is disabled for this instance")
-        native_message = _to_native_outbound(
+        native_message = _outbound_delivery._to_native_outbound(
             channel_id=self._channel_id,
             message=message,
         )
@@ -447,38 +432,6 @@ class _InboundMiddleware:
             (channel_id, conversation_id),
             ChannelRouteContext(),
         )
-
-
-def _to_native_outbound(*, channel_id: str, message: OutboundMessage):
-    text_parts = [item.text for item in message.content if isinstance(item, TextContent)]
-    artifacts = [
-        _outbound_delivery._to_native_artifact(item)
-        for item in message.content
-        if isinstance(item, AttachmentContent)
-    ]
-    markdown = any(
-        isinstance(item, TextContent) and item.format is TextFormat.MARKDOWN
-        for item in message.content
-    )
-    metadata = {
-        key: value
-        for key, value in message.metadata.items()
-        if key not in _NATIVE_OWNED_METADATA_KEYS
-    }
-    metadata.update(
-        {
-            "delivery_id": message.delivery_id,
-            "reply_to_message_id": message.reply_to,
-        }
-    )
-    return NativeOutboundMessage(
-        channel_id=channel_id,
-        conversation_id=message.conversation_ref.native_conversation_id,
-        message_type="markdown" if markdown else "text",
-        text="\n".join(text_parts),
-        metadata=metadata,
-        artifacts=artifacts,
-    )
 
 
 def _parse_datetime(value: object) -> datetime:

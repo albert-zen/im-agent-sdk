@@ -17,6 +17,9 @@ Required scenarios:
   sources, preserves stable attachment metadata, derives a filename and
   bounded native kind deterministically, and rejects invalid size or filename
   inputs without reading bytes;
+- public `OutboundMessage` conversion preserves native conversation/content
+  order, Markdown selection, stable delivery/reply correlation, and only
+  caller metadata outside the reserved native-owned keys;
 - accepted/rejected/retryable/partial/unknown and per-item evidence is truthful
   and validates against source content;
 - native artifact receipt metadata maps recognized stable attachment IDs to
@@ -45,5 +48,5 @@ leaf-internal DTOs to public contracts. They also prove the historical
 identity ignores temporary path changes, and artifact recovery state remains
 bounded to the current native-message attempt. The same focused suite covers
 `_artifact_item_receipts` ownership and its stable-ID/content-index ordering
-plus `_to_native_artifact` ownership without moving native message conversion
-or final Channel receipt assembly out of the adapter runtime.
+plus `_to_native_artifact` and `_to_native_outbound` ownership without moving
+final Channel receipt assembly out of the adapter runtime.

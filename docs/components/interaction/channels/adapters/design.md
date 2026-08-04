@@ -24,13 +24,14 @@ upload/download/decryption/acknowledgement, URL rules, QR/token state, rate
 limit/response mapping, and diagnostic worker facts.
 
 `runtime.py` owns the common native-transport wrapper and `channel_from_config`
-factory inside this leaf. Native `AttachmentContent` to leaf-internal
-`OutboundArtifact` conversion belongs to outbound-delivery; the runtime
-invokes that helper while retaining only its native message-envelope and
-receipt assembly responsibilities. The factory is explicit composition, not
-global or import-time registration. The formal `imagent.channels` package remains a
-stable facade over those target-owned objects; the historical
-`imagent.channels.runtime` implementation path is not a second API or owner.
+factory inside this leaf. Public `OutboundMessage` and `AttachmentContent`
+conversion to leaf-internal outbound DTOs belongs to outbound-delivery; the
+runtime invokes that leaf-owned conversion while retaining only final Channel
+receipt assembly. The
+factory is explicit composition, not global or import-time registration. The
+formal `imagent.channels` package remains a stable facade over those target-owned
+objects; the historical `imagent.channels.runtime` implementation path is not a
+second API or owner.
 Optional provider dependencies remain extras; importing Interaction contracts
 or the adapter facade does not import native SDKs. Every worker/queue/cache and
 reconnect delay is finite, failures are explicit, and no consumer work runs on
