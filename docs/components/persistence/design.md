@@ -60,6 +60,12 @@ single connection/lock/transaction boundary. The historical mixed-owner
 `bindings.py` path was not a compatibility API and has been removed after all
 callers migrated to those owners.
 
+The process-local projection-route repository likewise belongs to Gateway
+memory persistence, including its private merge/endpoint-conflict logic and
+minimal Turn reply-correlation map. Projection delivery, active-route policy,
+checkpoint convergence, and recovery remain outside persistence. SQLite route
+transactions and row mapping are unchanged.
+
 Route storage retains routing and per-route delivery fields only. A normal
 refresh with no checkpoint preserves an existing boundary. A `put` that
 carries a different checkpoint is rejected: only

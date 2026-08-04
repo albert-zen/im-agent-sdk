@@ -33,6 +33,21 @@ Focused delivery-submission tests prove:
 - imports use the persistence owner and proactive delivery behavior remains
   unchanged.
 
+Focused projection-route tests prove:
+
+- the implementation class has the memory owner and is absent from the
+  historical projection module;
+- additive and replace-thread writes preserve immutable endpoint identity and
+  an omitted checkpoint;
+- conflicting route ID/endpoint reuse and explicit checkpoint replacement
+  fail without mutation;
+- checkpoint advance uses expected-value compare-and-swap and a missing route
+  remains distinct;
+- Turn reply correlation is create-only/idempotent-same and a different
+  immutable destination fails;
+- exact and selector-based cleanup cannot become an accidental delete-all;
+- a fresh repository starts without routes or correlations.
+
 Gateway composition tests additionally prove the stable default, invalid-limit
 construction rejection, explicit limit wiring, and that an injected repository
 is not wrapped or reconfigured by the default-only limit. A fresh process-local
@@ -43,10 +58,12 @@ Run:
 ```sh
 PYTHONPATH=src python -m unittest \
   tests.gateway.persistence.test_memory \
+  tests.test_projection_routing \
+  tests.test_storage \
   tests.gateway.delivery.test_proactive_delivery \
   tests.gateway.delivery.test_proactive_ingress -v
 ```
 
-The projection and request-correlation suites continue to own their
-process-local repository tests until those implementations move in their own
-focused slices. Every slice also runs the full repository gates.
+The request-correlation suite continues to own its process-local repository
+tests until that implementation moves in its own focused slice. Every slice
+also runs the full repository gates.

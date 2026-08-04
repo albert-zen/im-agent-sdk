@@ -34,8 +34,8 @@ from imagent.contracts import (
 )
 from imagent.diagnostics import ApplicationPresentationFailureCode
 from imagent.events import EventStreamReset
+from imagent.gateway.persistence.memory import InMemoryProjectionRouteRepository
 from imagent.projections import (
-    InMemoryProjectionRouteRepository,
     ProjectedAgentMessage,
     deliver_projected_message,
     derive_live_projection_delivery_id,

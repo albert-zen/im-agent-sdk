@@ -36,6 +36,32 @@ The implementation does not coordinate projection routes, start or observe an
 Application Thread, infer a retry, or retain history. Gateway remains the sole
 owner of the `foreground_only` prepare-route/binding-CAS orchestration.
 
+## Projection route and reply-correlation semantics
+
+`InMemoryProjectionRouteRepository` implements the process-local projection
+route Port under one lock. Route identity is the immutable combination of
+stable route ID, Thread, and Conversation: reusing either endpoint mapping
+with a conflicting stable ID fails explicitly. Additive put and per-Thread
+replacement both preserve an existing omitted checkpoint and reject a caller
+that attempts to replace an explicit checkpoint outside the dedicated
+compare-and-swap operation.
+
+Checkpoint advance matches the stable route ID and expected opaque Agent item
+ID before storing the new item ID and boundary time. It never sorts item IDs
+or treats time as replay identity. A missing route and a stale checkpoint are
+distinct explicit failures.
+
+Turn reply correlations are create-only for the `(ThreadRef, turn_id)` key.
+An identical repeat is idempotent; a different Conversation, client message,
+reply ID, or other immutable fact raises the repository-contract conflict.
+Deletion either names one exact key or supplies at least one explicit bounded
+selector. The repository stores no message content or Turn status.
+
+The repository does not select `foreground_only`, resolve active destinations,
+run an Application observation worker, deliver to a Channel, or advance an
+idempotency claim. Those semantics remain in the Gateway routing/projection
+owners and consume this passive repository Port.
+
 ## Delivery submission semantics
 
 The first focused extraction moves `InMemoryDeliverySubmissionRepository`
@@ -81,9 +107,8 @@ src/imagent/gateway/persistence/memory.py
 tests/gateway/persistence/test_memory.py
 ```
 
-The projection-route and request-correlation in-memory repositories remain at
-their historical owners until separate mechanical slices move them into this
-leaf. No
+The request-correlation in-memory repository remains at its historical owner
+until a separate mechanical slice moves it into this leaf. No
 compatibility implementation is duplicated.
 
 ## Authority

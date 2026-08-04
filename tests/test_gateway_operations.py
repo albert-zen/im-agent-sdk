@@ -49,9 +49,11 @@ from imagent.contracts import (
 from imagent.controllers import MarkdownRequestPresenter, SlashController
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import DeliveryCoordinator, DeliveryCoordinatorConfig
-from imagent.gateway.persistence.memory import InMemoryBindingRepository
-from imagent.projections import (
+from imagent.gateway.persistence.memory import (
+    InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,
+)
+from imagent.projections import (
     derive_projection_route_id,
 )
 from imagent.request_correlations import InMemoryRequestCorrelationRepository

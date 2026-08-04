@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import math
-from collections.abc import Awaitable, Callable, Iterable, Mapping
-from dataclasses import dataclass, replace
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from itertools import islice
@@ -14,18 +13,12 @@ from typing import TYPE_CHECKING
 
 from .adapters import (
     IdempotencyClaimStatus,
-    ProjectionCheckpointConflict,
-    ProjectionRouteConflict,
     ProjectionRouteRepository,
-    TurnReplyCorrelationConflict,
 )
 from .contracts import (
     AgentMessage,
     ThreadProjectionRoute,
     ThreadRef,
-    TurnReplyCorrelation,
-    validate_projection_route,
-    validate_turn_reply_correlation,
 )
 from .interaction.messages import ConversationRef, OutboundMessage, TextContent, TextFormat
 
@@ -92,178 +85,6 @@ class AuthoritativeProjectionSlice:
     pages_read: int
     checkpoint_found: bool
     gap: str | None = None
-
-
-def _same_turn_reply_correlation(
-    left: TurnReplyCorrelation,
-    right: TurnReplyCorrelation,
-) -> bool:
-    return (
-        left.correlation_id == right.correlation_id
-        and left.thread_ref == right.thread_ref
-        and left.turn_id == right.turn_id
-        and left.client_message_id == right.client_message_id
-        and left.conversation_ref == right.conversation_ref
-        and left.reply_to_message_id == right.reply_to_message_id
-    )
-
-
-class InMemoryProjectionRouteRepository:
-    """Process-local minimal Thread-to-Conversation delivery routing."""
-
-    def __init__(self) -> None:
-        self._routes: dict[
-            tuple[ThreadRef, ConversationRef],
-            ThreadProjectionRoute,
-        ] = {}
-        self._turn_correlations: dict[
-            tuple[ThreadRef, str],
-            TurnReplyCorrelation,
-        ] = {}
-        self._lock = asyncio.Lock()
-
-    async def list_projection_routes(
-        self,
-        thread_ref: ThreadRef | None = None,
-    ) -> tuple[ThreadProjectionRoute, ...]:
-        async with self._lock:
-            routes = tuple(self._routes.values())
-        if thread_ref is None:
-            return routes
-        return tuple(route for route in routes if route.thread_ref == thread_ref)
-
-    async def put_projection_route(
-        self,
-        route: ThreadProjectionRoute,
-    ) -> ThreadProjectionRoute:
-        validate_projection_route(route)
-        async with self._lock:
-            _reject_conflicting_route_id(self._routes.values(), route)
-            key = (route.thread_ref, route.conversation_ref)
-            stored = merge_projection_route(self._routes.get(key), route)
-            self._routes[key] = stored
-        return stored
-
-    async def replace_thread_projection_routes(
-        self,
-        route: ThreadProjectionRoute,
-    ) -> ThreadProjectionRoute:
-        validate_projection_route(route)
-        async with self._lock:
-            _reject_conflicting_route_id(self._routes.values(), route)
-            key = (route.thread_ref, route.conversation_ref)
-            stored = merge_projection_route(self._routes.get(key), route)
-            for key in tuple(self._routes):
-                if key[0] == route.thread_ref:
-                    self._routes.pop(key)
-            self._routes[(route.thread_ref, route.conversation_ref)] = stored
-        return stored
-
-    async def advance_projection_checkpoint(
-        self,
-        route_id: str,
-        *,
-        expected_agent_item_id: str | None,
-        agent_item_id: str,
-        checkpointed_at: datetime,
-    ) -> ThreadProjectionRoute:
-        async with self._lock:
-            for key, route in self._routes.items():
-                if route.route_id == route_id:
-                    if route.checkpoint_agent_item_id != expected_agent_item_id:
-                        raise ProjectionCheckpointConflict(
-                            f"projection checkpoint changed for route {route_id}"
-                        )
-                    advanced = replace(
-                        route,
-                        checkpoint_agent_item_id=agent_item_id,
-                        checkpointed_at=checkpointed_at,
-                    )
-                    validate_projection_route(advanced)
-                    self._routes[key] = advanced
-                    return advanced
-        raise KeyError(f"projection route does not exist: {route_id}")
-
-    async def delete_projection_routes(
-        self,
-        thread_ref: ThreadRef,
-        conversation_ref: ConversationRef | None = None,
-    ) -> int:
-        async with self._lock:
-            keys = tuple(
-                key
-                for key in self._routes
-                if key[0] == thread_ref and (conversation_ref is None or key[1] == conversation_ref)
-            )
-            for key in keys:
-                self._routes.pop(key)
-            return len(keys)
-
-    async def get_turn_reply_correlation(
-        self,
-        thread_ref: ThreadRef,
-        turn_id: str,
-    ) -> TurnReplyCorrelation | None:
-        async with self._lock:
-            return self._turn_correlations.get((thread_ref, turn_id))
-
-    async def list_turn_reply_correlations(
-        self,
-        thread_ref: ThreadRef | None = None,
-    ) -> tuple[TurnReplyCorrelation, ...]:
-        async with self._lock:
-            correlations = tuple(self._turn_correlations.values())
-        if thread_ref is None:
-            return correlations
-        return tuple(
-            correlation for correlation in correlations if correlation.thread_ref == thread_ref
-        )
-
-    async def put_turn_reply_correlation(
-        self,
-        correlation: TurnReplyCorrelation,
-    ) -> TurnReplyCorrelation:
-        validate_turn_reply_correlation(correlation)
-        async with self._lock:
-            key = (correlation.thread_ref, correlation.turn_id)
-            current = self._turn_correlations.get(key)
-            if current is None:
-                self._turn_correlations[key] = correlation
-                return correlation
-            if not _same_turn_reply_correlation(current, correlation):
-                raise TurnReplyCorrelationConflict(
-                    "Turn reply correlation already belongs to another IM input"
-                )
-            return current
-
-    async def delete_turn_reply_correlation(
-        self,
-        thread_ref: ThreadRef,
-        turn_id: str,
-    ) -> bool:
-        async with self._lock:
-            return self._turn_correlations.pop((thread_ref, turn_id), None) is not None
-
-    async def delete_turn_reply_correlations(
-        self,
-        *,
-        thread_ref: ThreadRef | None = None,
-        conversation_ref: ConversationRef | None = None,
-        older_than: datetime | None = None,
-    ) -> int:
-        if thread_ref is None and conversation_ref is None and older_than is None:
-            raise ValueError("correlation deletion requires at least one selector")
-        async with self._lock:
-            keys = tuple(
-                key
-                for key, correlation in self._turn_correlations.items()
-                if (thread_ref is None or correlation.thread_ref == thread_ref)
-                and (conversation_ref is None or correlation.conversation_ref == conversation_ref)
-                and (older_than is None or correlation.created_at < older_than)
-            )
-            for key in keys:
-                self._turn_correlations.pop(key)
-            return len(keys)
 
 
 def derive_projection_route_id(
@@ -396,52 +217,6 @@ def immutable_projection_metadata(
             raise ValueError("AgentMessage projection metadata values must be bounded scalars")
         copied[key] = value
     return MappingProxyType(copied)
-
-
-def merge_projection_route(
-    existing: ThreadProjectionRoute | None,
-    replacement: ThreadProjectionRoute,
-) -> ThreadProjectionRoute:
-    if existing is None:
-        return replacement
-    if (
-        existing.route_id != replacement.route_id
-        or existing.thread_ref != replacement.thread_ref
-        or existing.conversation_ref != replacement.conversation_ref
-    ):
-        raise ProjectionRouteConflict(
-            f"route ID belongs to different endpoints: {replacement.route_id}"
-        )
-    if replacement.checkpoint_agent_item_id is not None:
-        if (
-            replacement.checkpoint_agent_item_id != existing.checkpoint_agent_item_id
-            or replacement.checkpointed_at != existing.checkpointed_at
-        ):
-            raise ProjectionCheckpointConflict(
-                f"route refresh cannot change checkpoint: {replacement.route_id}"
-            )
-        return replacement
-    if existing.checkpoint_agent_item_id is None:
-        return replacement
-    return replace(
-        replacement,
-        checkpoint_agent_item_id=existing.checkpoint_agent_item_id,
-        checkpointed_at=existing.checkpointed_at,
-    )
-
-
-def _reject_conflicting_route_id(
-    routes: Iterable[ThreadProjectionRoute],
-    replacement: ThreadProjectionRoute,
-) -> None:
-    for existing in routes:
-        if existing.route_id == replacement.route_id and (
-            existing.thread_ref != replacement.thread_ref
-            or existing.conversation_ref != replacement.conversation_ref
-        ):
-            raise ProjectionRouteConflict(
-                f"route ID belongs to different endpoints: {replacement.route_id}"
-            )
 
 
 async def get_projection_route(

@@ -7,6 +7,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
+from imagent import projections as projection_semantics
 from imagent.adapters import DeliverySubmissionCapacityError, DeliverySubmissionConflict
 from imagent.contracts import (
     ApplicationRef,
@@ -25,6 +26,7 @@ from imagent.gateway.persistence import repository_contracts as repository_contr
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryDeliverySubmissionRepository,
+    InMemoryProjectionRouteRepository,
 )
 from imagent.interaction.operations import ContractViolation
 
@@ -141,6 +143,20 @@ class InMemoryBindingRepositoryTests(unittest.IsolatedAsyncioTestCase):
 
         await self.repository.delete(self.conversation, expected_revision=stored.revision)
         self.assertIsNone(await self.repository.get(self.conversation))
+
+
+class InMemoryProjectionRouteRepositoryOwnershipTests(unittest.IsolatedAsyncioTestCase):
+    def test_projection_repository_has_one_memory_owner(self) -> None:
+        self.assertEqual(
+            InMemoryProjectionRouteRepository.__module__,
+            "imagent.gateway.persistence.memory",
+        )
+        self.assertFalse(hasattr(projection_semantics, "InMemoryProjectionRouteRepository"))
+
+    async def test_fresh_repository_has_no_routes_or_correlations(self) -> None:
+        repository = InMemoryProjectionRouteRepository()
+        self.assertEqual(await repository.list_projection_routes(), ())
+        self.assertEqual(await repository.list_turn_reply_correlations(), ())
 
 
 def _submission() -> DeliverySubmissionRecord:

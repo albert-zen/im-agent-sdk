@@ -57,8 +57,8 @@ from imagent.gateway.delivery.proactive_authorization import DeliveryAuthorizati
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryDeliverySubmissionRepository,
+    InMemoryProjectionRouteRepository,
 )
-from imagent.projections import InMemoryProjectionRouteRepository
 from imagent.storage import SQLiteGatewayState
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 

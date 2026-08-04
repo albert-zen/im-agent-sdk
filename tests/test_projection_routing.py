@@ -35,9 +35,11 @@ from imagent.contracts import (
     ThreadRef,
 )
 from imagent.gateway import GatewayRepositories, ImAgentGateway
-from imagent.gateway.persistence.memory import InMemoryBindingRepository
-from imagent.projections import (
+from imagent.gateway.persistence.memory import (
+    InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,
+)
+from imagent.projections import (
     ProjectionWorkerState,
     derive_projection_route_id,
 )
