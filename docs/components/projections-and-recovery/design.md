@@ -1,4 +1,9 @@
-# Projections and recovery component design
+# Historical projection/recovery aggregate
+
+The authoritative target documentation is now the
+[Gateway projection subtree](../gateway/projection/README.md). This aggregate
+remains current-code evidence while the focused mechanical moves are pending;
+it does not define a second component ownership model.
 
 ## Purpose
 

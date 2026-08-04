@@ -21,6 +21,9 @@ Channel transport, Agent transcript, or second runtime.
 - [routing](routing/README.md) — Conversation bindings, typed Gateway
   operations, and outbound projection-route policy kept as separate
   authorities.
+- [projection](projection/README.md) — one Thread-scoped Application observer,
+  per-route completion checkpoints, minimal request/reply correlation, and
+  bounded authoritative recovery.
 - [delivery](delivery/README.md) — deterministic planning and the remaining
   coordination/submission/proactive/outcome leaves as they move in focused
   slices.

@@ -224,7 +224,7 @@ components:
       - idempotency
 
   projections-and-recovery:
-    description: Fan-out-safe event observation, Thread projection routing, authoritative reconciliation, and honest cursor recovery.
+    description: Gateway-owned one-worker Thread observation, per-route checkpoints, request correlation, and bounded authoritative recovery.
     code:
       - docs/VISION.md
       - docs/ARCHITECTURE.md
@@ -250,6 +250,16 @@ components:
       - tests/test_projection_routing.py
       - tests/test_recovery.py
     docs:
+      - docs/components/gateway/projection/README.md
+      - docs/components/gateway/projection/observation/design.md
+      - docs/components/gateway/projection/observation/testing.md
+      - docs/components/gateway/projection/checkpoints/design.md
+      - docs/components/gateway/projection/checkpoints/testing.md
+      - docs/components/gateway/projection/request-correlation/design.md
+      - docs/components/gateway/projection/request-correlation/testing.md
+      - docs/components/gateway/projection/recovery/design.md
+      - docs/components/gateway/projection/recovery/testing.md
+      # Current aggregate evidence remains relevant until focused code/test moves.
       - docs/components/projections-and-recovery/design.md
       - docs/components/projections-and-recovery/testing.md
       - docs/migrations/imcodex-followup-blockers.md

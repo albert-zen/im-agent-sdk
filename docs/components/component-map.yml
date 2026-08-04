@@ -552,7 +552,7 @@ components:
     target_code: [src/imagent/gateway/projection/observation.py]
     current_tests: [tests/test_event_fanout.py, tests/test_projection_hardening.py, tests/test_projection_routing.py]
     target_tests: [tests/gateway/projection/test_observation.py]
-    authoritative_docs: [docs/components/projections-and-recovery/design.md, docs/components/projections-and-recovery/testing.md]
+    authoritative_docs: [docs/components/gateway/projection/observation/design.md, docs/components/gateway/projection/observation/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0013-bounded-application-event-admission.md]
     gaps: [projection_runtime.py also owns input acceptance and recovery supervision]
 
@@ -574,7 +574,7 @@ components:
     target_code: [src/imagent/gateway/projection/checkpoints.py]
     current_tests: [tests/test_projection_hardening.py, tests/test_projection_routing.py, tests/test_storage.py]
     target_tests: [tests/gateway/projection/test_checkpoints.py]
-    authoritative_docs: [docs/components/projections-and-recovery/design.md, docs/components/persistence/design.md]
+    authoritative_docs: [docs/components/gateway/projection/checkpoints/design.md, docs/components/gateway/projection/checkpoints/testing.md, docs/components/gateway/persistence/state-contracts/design.md]
     adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
     gaps: [checkpoint logic is mixed with route repository and delivery orchestration]
 
@@ -596,7 +596,7 @@ components:
     target_code: [src/imagent/gateway/projection/request_correlation.py]
     current_tests: [tests/test_appserver_requests.py, tests/test_projection_hardening.py, tests/test_storage.py]
     target_tests: [tests/gateway/projection/test_request_correlation.py]
-    authoritative_docs: [docs/components/projections-and-recovery/design.md, docs/components/persistence/design.md, docs/components/interaction/controllers/request-presentation/design.md]
+    authoritative_docs: [docs/components/gateway/projection/request-correlation/design.md, docs/components/gateway/projection/request-correlation/testing.md, docs/components/gateway/persistence/state-contracts/design.md, docs/components/interaction/controllers/request-presentation/design.md]
     adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
     gaps: [request_correlations.py mixes repository implementation and projection policy]
 
@@ -618,9 +618,9 @@ components:
     target_code: [src/imagent/gateway/projection/recovery.py]
     current_tests: [tests/test_recovery.py, tests/test_projection_hardening.py, tests/test_projection_routing.py]
     target_tests: [tests/gateway/projection/test_recovery.py]
-    authoritative_docs: [docs/components/projections-and-recovery/design.md, docs/components/projections-and-recovery/testing.md]
+    authoritative_docs: [docs/components/gateway/projection/recovery/design.md, docs/components/gateway/projection/recovery/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0013-bounded-application-event-admission.md]
-    gaps: [recovery supervision is distributed across three current modules]
+    gaps: [recovery supervision is distributed across four current modules]
 
   gateway.presentation:
     id: gateway.presentation
