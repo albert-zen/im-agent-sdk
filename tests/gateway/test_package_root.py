@@ -2,13 +2,21 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from subprocess import run
+from sys import executable
 
 import imagent.gateway as gateway_package
 from imagent.gateway import (
+    ClaimedInbound,
     GatewayExtensions,
     GatewayLimits,
     GatewayRepositories,
     ImAgentGateway,
+    InboundAdmissionService,
+)
+from imagent.gateway.admission import ClaimedInbound as AdmissionClaimedInbound
+from imagent.gateway.admission import (
+    InboundAdmissionService as AdmissionInboundAdmissionService,
 )
 from imagent.gateway_composition import (
     GatewayExtensions as CompositionGatewayExtensions,
@@ -30,6 +38,30 @@ class GatewayPackageRootTests(unittest.TestCase):
         self.assertIs(GatewayExtensions, CompositionGatewayExtensions)
         self.assertIs(GatewayLimits, CompositionGatewayLimits)
         self.assertIs(GatewayRepositories, CompositionGatewayRepositories)
+
+    def test_admission_exports_preserve_exact_object_identity(self) -> None:
+        self.assertIs(ClaimedInbound, AdmissionClaimedInbound)
+        self.assertIs(InboundAdmissionService, AdmissionInboundAdmissionService)
+        self.assertEqual(ClaimedInbound.__module__, "imagent.gateway.admission")
+        self.assertEqual(InboundAdmissionService.__module__, "imagent.gateway.admission")
+
+    def test_historical_admission_module_is_not_importable_in_a_clean_process(self) -> None:
+        result = run(
+            [
+                executable,
+                "-c",
+                "from imagent.gateway import ClaimedInbound; "
+                "from imagent.gateway.admission import ClaimedInbound as target; "
+                "assert ClaimedInbound is target; "
+                "import imagent.inbound_admission",
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ModuleNotFoundError", result.stderr)
+        self.assertIn("imagent.inbound_admission", result.stderr)
 
 
 if __name__ == "__main__":

@@ -51,12 +51,12 @@ from imagent.contracts import (
 )
 from imagent.controllers import MarkdownRequestPresenter, SlashController
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway.admission import inbound_idempotency_identity
 from imagent.gateway.delivery import DeliveryCoordinator, DeliveryCoordinatorConfig
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,
 )
-from imagent.inbound_admission import inbound_idempotency_identity
 from imagent.keyed_locks import KeyedLockCapacityError
 from imagent.projections import (
     derive_projection_route_id,

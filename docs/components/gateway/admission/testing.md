@@ -1,8 +1,8 @@
 # Gateway inbound admission testing
 
-Current focused evidence is `tests/test_inbound_admission.py`; native Channel
-integration and preparation ordering remain in `tests/test_native_channels.py`.
-The target exact-owner suite is `tests/gateway/test_admission.py`.
+Focused evidence is `tests/gateway/test_admission.py`; package-root export
+evidence is `tests/gateway/test_package_root.py`; native Channel integration
+and preparation ordering remain in `tests/test_native_channels.py`.
 
 Tests must cover:
 
@@ -16,11 +16,11 @@ Tests must cover:
 - failed preparation, cancellation, startup rejection, and shutdown races
   release only proven pre-side-effect ownership;
 - dispatch-fenced state is never reclaimed or reauthorized;
-- clean-process exact facade identity and removal of the historical module
-  after the later mechanical slice.
+- clean-process exact `imagent.gateway` facade identity and removal of the
+  historical module.
 
 Run:
 
 ```sh
-PYTHONPATH=src uv run python -m unittest tests.test_inbound_admission tests.test_native_channels -v
+PYTHONPATH=src uv run python -m unittest tests.gateway.test_admission tests.test_native_channels -v
 ```

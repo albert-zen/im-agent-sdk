@@ -15,8 +15,8 @@ from imagent.contracts import (
     TextContent,
 )
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
+from imagent.gateway.admission import inbound_idempotency_identity
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
-from imagent.inbound_admission import inbound_idempotency_identity
 from imagent.interaction.controllers import (
     CommandArgumentContract,
     CommandDefinition,
