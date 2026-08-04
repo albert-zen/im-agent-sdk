@@ -824,7 +824,7 @@ class VersionOneSchemaCompatibilityTests(unittest.TestCase):
         self,
     ) -> None:
         schema_path = (
-            Path(__file__).resolve().parents[1] / "schemas" / "v1" / "capabilities.schema.json"
+            Path(__file__).resolve().parents[2] / "schemas" / "v1" / "capabilities.schema.json"
         )
         definitions = json.loads(schema_path.read_text(encoding="utf-8"))["$defs"]
 
@@ -866,7 +866,7 @@ class VersionOneSchemaCompatibilityTests(unittest.TestCase):
 
 
 def _definition_validator(filename: str, definition: str) -> Any:
-    schema_directory = Path(__file__).resolve().parents[1] / "schemas" / "v1"
+    schema_directory = Path(__file__).resolve().parents[2] / "schemas" / "v1"
     resources: list[tuple[str, Resource[Any]]] = []
     documents: dict[str, Any] = {}
     for path in schema_directory.glob("*.json"):

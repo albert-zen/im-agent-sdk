@@ -39,9 +39,9 @@ PYTHONPATH=src python -m unittest \
   tests.interaction.controllers.test_common_commands \
   tests.interaction.controllers.test_registry \
   tests.interaction.controllers.test_optional_controller \
-  tests.test_gateway_operations \
-  tests.test_gateway_vertical_slice \
-  tests.test_projection_routing -v
+  tests.gateway.test_operations_integration \
+  tests.gateway.test_vertical_slice \
+  tests.gateway.routing.test_projection_integration -v
 ```
 
 `tests/interaction/controllers/test_common_commands.py` owns registry

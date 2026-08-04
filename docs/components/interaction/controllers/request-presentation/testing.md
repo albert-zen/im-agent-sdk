@@ -32,8 +32,8 @@ Focused validation currently includes:
 ```sh
 PYTHONPATH=src python -m unittest \
   tests.interaction.controllers.test_request_presentation \
-  tests.test_appserver_requests \
-  tests.test_gateway_operations -v
+  tests.applications.adapters.appserver.test_gateway_request_integration \
+  tests.gateway.test_operations_integration -v
 ```
 
 The physical extraction places focused rendering/security, exact-owner identity,

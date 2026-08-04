@@ -15,8 +15,24 @@ must prove that the component-map and documentation-link test bodies remain
 present, that exactly one engineering mirror owns them, and that the two
 historical root paths are absent. Importing the new module must not recreate
 either deleted path or alter the behavior of the scripts it exercises.
-On this slice, each focused invocation reports 28 tests: 22 component-map
-checks and 6 documentation-link checks.
+On this slice, each focused invocation reports 31 tests: 24 component-map
+checks and 7 documentation-link checks.
+
+The mirror also asserts that `tests/` has no direct `test_*.py` modules.
+Every runtime test module belongs in one of the three layer mirrors; no
+root-level compatibility shim may recreate the retired paths.
+
+After a physical test move, compare the complete `unittest discover -s tests`
+test-ID sets from latest main and the candidate branch. Normalize only the
+eight documented root-module renames into their mirror paths; the normalized
+comparison must have zero lost IDs. The three-layer mirror also keeps
+`tests/gateway/routing/__init__.py` as an explicit package marker so standard
+discovery reaches its canonical routing suites. For this layout, the only
+allowed added IDs are the root-empty/layout assertion and the 34 existing
+routing tests that the missing marker had left undiscovered: 8
+`BindingOwnerTests`, 9 `BindingRuntimeTests`, 9
+`GatewayOperationsOwnerTests`, 3 `ProjectionRouteAuthorityTests`, and 5
+`ProjectionRouteContractOwnershipTests`.
 
 Run the repository-level checks from a clean, dependency-complete checkout:
 

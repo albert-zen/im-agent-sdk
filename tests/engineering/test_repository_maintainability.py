@@ -585,6 +585,10 @@ class DocumentationLinkTests(unittest.TestCase):
             with self.subTest(historical_path=historical_path):
                 self.assertFalse(historical_path.exists())
 
+    def test_root_test_modules_are_absent_after_three_layer_mirror(self) -> None:
+        self.assertEqual(list((ROOT / "tests").glob("test_*.py")), [])
+        self.assertTrue((ROOT / "tests/gateway/routing/__init__.py").is_file())
+
     def test_all_local_markdown_links_resolve(self) -> None:
         self.assertEqual(main(), 0)
 

@@ -46,10 +46,10 @@ The implementation is the request portions of
 `src/imagent/applications/requests.py`; historical aggregate model and
 validation modules no longer define this request contract. Gateway route
 correlation and Gateway operations retain their own owners. Current tests are
-`tests/test_contracts.py` and
+`tests/interaction/test_contracts.py` and
 `tests/applications/adapters/appserver/test_requests.py`; the retained Gateway
 request-correlation/presenter integration remains in
-`tests/test_appserver_requests.py`. Focused ownership evidence moves to
+`tests/applications/adapters/appserver/test_gateway_request_integration.py`. Focused ownership evidence moves to
 `tests/applications/test_requests.py` while other affected integration tests
 remain in place. The versioned schemas remain deliberate cross-owner
 contracts.

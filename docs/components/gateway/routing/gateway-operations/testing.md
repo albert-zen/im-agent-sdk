@@ -48,6 +48,6 @@ key selection, the configured Gateway limit, failure mapping, and the exact
 pre-side-effect boundary; they do not duplicate the primitive implementation.
 
 Focused owner evidence is in `tests/gateway/routing/test_operations.py`.
-Integration evidence remains in `tests/test_gateway_operations.py` and
-`tests/test_gateway_vertical_slice.py`; the focused extraction must preserve
+Integration evidence remains in `tests/gateway/test_operations_integration.py` and
+`tests/gateway/test_vertical_slice.py`; the focused extraction must preserve
 all of those branches rather than replacing or deleting them.

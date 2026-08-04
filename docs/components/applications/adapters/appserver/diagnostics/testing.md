@@ -4,7 +4,7 @@
 
 App Server diagnostic facts are covered by
 `tests/applications/adapters/appserver/test_client.py`,
-`tests/test_appserver_transport.py`, and the Interaction diagnostics contract
+`tests/applications/adapters/appserver/test_transport_lifecycle.py`, and the Interaction diagnostics contract
 tests in `tests/interaction/test_diagnostics.py`; Gateway aggregation evidence
 is in `tests/gateway/test_diagnostics.py`. The evidence includes
 ready/reconnecting/disconnected epochs, independent notification and
@@ -47,7 +47,7 @@ with the retained cross-component evidence:
 PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.test_diagnostics -v
 uv run python -m unittest tests.interaction.test_diagnostics -v
 PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.test_client -v
-uv run python -m unittest tests.test_appserver_transport -v
+uv run python -m unittest tests.applications.adapters.appserver.test_transport_lifecycle -v
 ```
 
 The snapshot tests preserve the exact ADR-0014 typed fact values and prove

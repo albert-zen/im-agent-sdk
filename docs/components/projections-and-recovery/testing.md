@@ -93,8 +93,9 @@ Protect these historical and known failure modes:
 - `request.resolved` incorrectly terminating its Turn;
 - restart/reconnect manufacturing pending requests without a native snapshot.
 
-These cases are covered by `test_projection_hardening.py`,
-`test_projection_routing.py`, `test_event_fanout.py`,
+These cases are covered by `tests/gateway/projection/test_hardening.py`,
+`tests/gateway/routing/test_projection_integration.py`,
+`tests/test_event_fanout.py`,
 `gateway/projection/test_observation.py`, `gateway/test_lifecycle.py`,
 `gateway/projection/test_recovery.py`, `gateway/projection/test_checkpoints.py`,
 and `gateway/persistence/test_sqlite.py`. Gateway vertical slices additionally prove that Zen App

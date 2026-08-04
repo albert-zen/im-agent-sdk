@@ -26,7 +26,7 @@ Focused owner evidence lives in
 facade identity, clean-process import order and runtime type hints, the absent
 historical contracts names, specific validation, stable identity, active-route
 policy, and checkpoint-preserving route writes. Integration evidence remains
-in `tests/test_projection_routing.py`, `tests/test_projection_hardening.py`,
-and `tests/test_gateway_operations.py`; it continues to prove the unchanged
+in `tests/gateway/routing/test_projection_integration.py`, `tests/gateway/projection/test_hardening.py`,
+and `tests/gateway/test_operations_integration.py`; it continues to prove the unchanged
 binding/CAS sequencing, one-worker fan-out, recovery, checkpoint, request, and
 delivery behavior.

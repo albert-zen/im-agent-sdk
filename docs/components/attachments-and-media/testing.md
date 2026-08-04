@@ -44,5 +44,5 @@ Run:
 ```sh
 PYTHONPATH=src python -m unittest \
   tests.interaction.test_media \
-  tests.test_gateway_vertical_slice -v
+  tests.gateway.test_vertical_slice -v
 ```

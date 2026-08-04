@@ -87,8 +87,8 @@ Run:
 PYTHONPATH=src python -m unittest \
   tests.test_bindings \
   tests.gateway.persistence.test_sqlite \
-  tests.test_projection_hardening \
-  tests.test_projection_routing -v
+  tests.gateway.projection.test_hardening \
+  tests.gateway.routing.test_projection_integration -v
 ```
 
 Any durable schema change must include an upgrade/compatibility decision before

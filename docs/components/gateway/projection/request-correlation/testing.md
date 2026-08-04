@@ -29,5 +29,5 @@ in `tests/gateway/projection/test_request_correlation.py`. It also proves exact
 public identity in clean processes and the absence of the historical runtime
 and `imagent.contracts` attributes. Durable SQLite, restart, generic recovery,
 and real Application/Gateway integration evidence remains in
-`tests/gateway/persistence/test_sqlite.py`, `tests/test_appserver_requests.py`,
-`tests/test_gateway_operations.py`, and `tests/test_projection_hardening.py`.
+`tests/gateway/persistence/test_sqlite.py`, `tests/applications/adapters/appserver/test_gateway_request_integration.py`,
+`tests/gateway/test_operations_integration.py`, and `tests/gateway/projection/test_hardening.py`.

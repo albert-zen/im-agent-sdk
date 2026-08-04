@@ -31,7 +31,7 @@ Focused evidence is:
 ```sh
 PYTHONPATH=src python -m unittest \
   tests.interaction.test_operations \
-  tests.test_contracts -v
+  tests.interaction.test_contracts -v
 python scripts/validate_schemas.py
 ```
 

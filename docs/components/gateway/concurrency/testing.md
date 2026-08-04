@@ -22,7 +22,7 @@ Focused evidence lives in `tests/gateway/test_concurrency.py` and must prove:
 Behavior-specific suites remain with their consumers:
 
 - `tests/gateway/routing/test_operations.py` and
-  `tests/test_gateway_operations.py` cover the Conversation key, capacity
+  `tests/gateway/test_operations_integration.py` cover the Conversation key, capacity
   mapping, pre-side-effect rejection, and inbound claim behavior;
 - `tests/gateway/delivery/test_coordination.py` covers destination FIFO,
   independent progress, retry-delay ordering, joined cancellation, and that

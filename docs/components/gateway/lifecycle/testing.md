@@ -1,7 +1,7 @@
 # Gateway lifecycle testing
 
 Current lifecycle evidence is spread across
-`tests/test_gateway_operations.py`, `tests/test_gateway_vertical_slice.py`,
+`tests/gateway/test_operations_integration.py`, `tests/gateway/test_vertical_slice.py`,
 `tests/gateway/test_diagnostics.py`, and startup races in the inbound/projection suites.
 The target exact-owner suite is `tests/gateway/test_lifecycle.py`. Until the
 package-root `ImAgentGateway.start()`/`stop()` orchestration gap is moved, the
@@ -38,5 +38,5 @@ Tests must prove:
 Run:
 
 ```sh
-PYTHONPATH=src uv run python -m unittest tests.test_gateway_operations tests.test_gateway_vertical_slice tests.test_diagnostics -v
+PYTHONPATH=src uv run python -m unittest tests.gateway.test_operations_integration tests.gateway.test_vertical_slice tests.gateway.test_diagnostics -v
 ```

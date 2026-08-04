@@ -60,8 +60,8 @@ is in `tests/applications/adapters/test_zen.py`,
 `tests/applications/adapters/appserver/test_client.py`,
 `tests/applications/adapters/appserver/test_requests.py`, the artifact
 presentation suite, and
-`tests/test_gateway_vertical_slice.py` for distinct Zen/Codex behavior. The
-retained `tests/test_appserver_input.py` remains affected cross-component
+`tests/gateway/test_vertical_slice.py` for distinct Zen/Codex behavior. The
+retained `tests/applications/adapters/appserver/test_input_integration.py` remains affected cross-component
 evidence. Zen owns the concrete facade and has no dependency on Codex.
 
 ## Authority

@@ -26,7 +26,6 @@ fresh completion CAS, authoritative convergence from `already_completed`,
 live duplicate non-convergence, in-flight/live-only non-advancement,
 same-item idempotence, competing expected-current CAS, and independent
 per-destination progress without ordering opaque item IDs. Cross-leaf
-checkpoint evidence remains in `tests/test_projection_hardening.py`,
-`tests/test_projection_routing.py`, and
-`tests/gateway/persistence/test_sqlite.py` while their focused mechanical
-moves are pending.
+checkpoint evidence remains in `tests/gateway/projection/test_hardening.py`,
+`tests/gateway/routing/test_projection_integration.py`, and
+`tests/gateway/persistence/test_sqlite.py`.

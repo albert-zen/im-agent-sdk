@@ -228,7 +228,7 @@ components:
     state_recovery: Stateless values; stable IDs, never text or timestamps, drive replay identity.
     current_code: [schemas/v1/common.schema.json, schemas/v1/messages.schema.json, src/imagent/interaction/messages.py]
     target_code: [schemas/v1/common.schema.json, schemas/v1/messages.schema.json, src/imagent/interaction/messages.py]
-    current_tests: [tests/interaction/test_messages.py, tests/test_contracts.py]
+    current_tests: [tests/interaction/test_messages.py, tests/interaction/test_contracts.py]
     target_tests: [tests/interaction/test_messages.py]
     authoritative_docs: [docs/components/interaction/messages/design.md, docs/components/interaction/messages/testing.md, docs/components/contracts/protocol.md]
     adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0002-design-authority-and-control-boundaries.md]
@@ -272,7 +272,7 @@ components:
     state_recovery: Trust configuration is process-local; content lifetime and crash cleanup stay consumer-owned.
     current_code: [schemas/v1/capabilities.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, src/imagent/interaction/media.py, src/imagent/interaction/media_staging.py]
     target_code: [schemas/v1/capabilities.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, src/imagent/interaction/media.py, src/imagent/interaction/media_staging.py]
-    current_tests: [tests/interaction/test_media.py, tests/interaction/test_media_staging.py, tests/test_contracts.py, tests/interaction/channels/adapters/test_native_channels.py]
+    current_tests: [tests/interaction/test_media.py, tests/interaction/test_media_staging.py, tests/interaction/test_contracts.py, tests/interaction/channels/adapters/test_native_channels.py]
     target_tests: [tests/interaction/test_media.py, tests/interaction/test_media_staging.py]
     authoritative_docs: [docs/components/interaction/media/design.md, docs/components/interaction/media/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -339,7 +339,7 @@ components:
     state_recovery: Controller invocation has no durable authority; action-specific replay fences remain explicit.
     current_code: [src/imagent/interaction/controllers/__init__.py, src/imagent/interaction/controllers/contract.py]
     target_code: [src/imagent/interaction/controllers/__init__.py, src/imagent/interaction/controllers/contract.py]
-    current_tests: [tests/interaction/controllers/test_contract.py, tests/interaction/controllers/test_registry.py, tests/interaction/controllers/test_optional_controller.py, tests/test_gateway_operations.py]
+    current_tests: [tests/interaction/controllers/test_contract.py, tests/interaction/controllers/test_registry.py, tests/interaction/controllers/test_optional_controller.py, tests/gateway/test_operations_integration.py]
     target_tests: [tests/interaction/controllers/test_contract.py]
     authoritative_docs: [docs/components/interaction/controllers/controller-contract/design.md, docs/components/interaction/controllers/controller-contract/testing.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -383,7 +383,7 @@ components:
     state_recovery: View caches are bounded and discardable; action authority stays in typed actions.
     current_code: [src/imagent/interaction/controllers/common.py, src/imagent/interaction/controllers/common_presentation.py]
     target_code: [src/imagent/interaction/controllers/common.py, src/imagent/interaction/controllers/common_presentation.py]
-    current_tests: [tests/interaction/controllers/test_common_commands.py, tests/interaction/controllers/test_optional_controller.py, tests/test_gateway_vertical_slice.py]
+    current_tests: [tests/interaction/controllers/test_common_commands.py, tests/interaction/controllers/test_optional_controller.py, tests/gateway/test_vertical_slice.py]
     target_tests: [tests/interaction/controllers/test_common_commands.py, tests/interaction/controllers/test_optional_controller.py]
     authoritative_docs: [docs/components/interaction/controllers/common-commands/design.md, docs/components/interaction/controllers/common-commands/testing.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0005-input-activation-and-projection.md]
@@ -405,7 +405,7 @@ components:
     state_recovery: Stateless rendering; Gateway creates response correlation only after successful delivery.
     current_code: [src/imagent/interaction/controllers/request_presentation.py]
     target_code: [src/imagent/interaction/controllers/request_presentation.py]
-    current_tests: [tests/interaction/controllers/test_request_presentation.py, tests/test_appserver_requests.py]
+    current_tests: [tests/interaction/controllers/test_request_presentation.py, tests/applications/adapters/appserver/test_gateway_request_integration.py]
     target_tests: [tests/interaction/controllers/test_request_presentation.py]
     authoritative_docs: [docs/components/interaction/controllers/request-presentation/design.md, docs/components/interaction/controllers/request-presentation/testing.md]
     adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -537,7 +537,7 @@ components:
     state_recovery: Frozen construction values only; no runtime state or locator lookup.
     current_code: [src/imagent/gateway/composition.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/composition.py]
-    current_tests: [tests/gateway/test_package_root.py, tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py, tests/gateway/test_reference_consumer.py]
+    current_tests: [tests/gateway/test_package_root.py, tests/gateway/test_operations_integration.py, tests/gateway/test_vertical_slice.py, tests/gateway/test_reference_consumer.py]
     target_tests: [tests/gateway/test_composition.py, tests/gateway/test_package_root.py, tests/gateway/test_reference_consumer.py]
     authoritative_docs: [docs/components/gateway/composition/design.md, docs/components/gateway/composition/testing.md, docs/components/gateway/design.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -559,7 +559,7 @@ components:
     state_recovery: Registry entries and counts are process-local and restart empty; an active equal key joins without splitting, no active entry is evicted, and only the final owner or waiter removes the exact entry.
     current_code: [src/imagent/gateway/concurrency.py]
     target_code: [src/imagent/gateway/concurrency.py]
-    current_tests: [tests/gateway/test_concurrency.py, tests/gateway/routing/test_operations.py, tests/gateway/delivery/test_coordination.py, tests/gateway/delivery/test_proactive_ingress.py, tests/test_gateway_operations.py]
+    current_tests: [tests/gateway/test_concurrency.py, tests/gateway/routing/test_operations.py, tests/gateway/delivery/test_coordination.py, tests/gateway/delivery/test_proactive_ingress.py, tests/gateway/test_operations_integration.py]
     target_tests: [tests/gateway/test_concurrency.py]
     authoritative_docs: [docs/components/gateway/concurrency/design.md, docs/components/gateway/concurrency/testing.md, docs/components/gateway/routing/gateway-operations/design.md, docs/components/gateway/delivery/coordination/design.md, docs/components/gateway/delivery/proactive-delivery/design.md, docs/components/gateway/projection/request-correlation/design.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
@@ -581,7 +581,7 @@ components:
     state_recovery: Bounded process-local FIFO; rollback closes admission before awaiting cleanup.
     current_code: [src/imagent/gateway/__init__.py, src/imagent/gateway/lifecycle.py]
     target_code: [src/imagent/gateway/lifecycle.py]
-    current_tests: [tests/gateway/test_lifecycle.py, tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py, tests/gateway/test_diagnostics.py]
+    current_tests: [tests/gateway/test_lifecycle.py, tests/gateway/test_operations_integration.py, tests/gateway/test_vertical_slice.py, tests/gateway/test_diagnostics.py]
     target_tests: [tests/gateway/test_lifecycle.py]
     authoritative_docs: [docs/components/gateway/lifecycle/design.md, docs/components/gateway/lifecycle/testing.md, docs/components/gateway/design.md, docs/components/gateway/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0013-bounded-application-event-admission.md]
@@ -625,8 +625,8 @@ components:
     state_recovery: The constructor-injected binding runtime is the sole repository/CAS and same-target convergence owner; it verifies unknown write outcomes against the complete desired target while Conversation serialization, foreground route fencing, and recovery policy remain with their existing Gateway routing owners.
     current_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/bindings.py]
     target_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/bindings.py]
-    current_tests: [tests/gateway/routing/test_bindings.py, tests/test_gateway_operations.py, tests/test_projection_routing.py]
-    target_tests: [tests/gateway/routing/test_bindings.py, tests/test_gateway_operations.py, tests/test_projection_routing.py]
+    current_tests: [tests/gateway/routing/test_bindings.py, tests/gateway/test_operations_integration.py, tests/gateway/routing/test_projection_integration.py]
+    target_tests: [tests/gateway/routing/test_bindings.py, tests/gateway/test_operations_integration.py, tests/gateway/routing/test_projection_integration.py]
     authoritative_docs: [docs/components/gateway/routing/bindings/design.md, docs/components/gateway/routing/bindings/testing.md, docs/components/gateway/design.md, docs/components/persistence/design.md, docs/components/projections-and-recovery/design.md]
     adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md]
     gaps: []
@@ -647,8 +647,8 @@ components:
     state_recovery: Stable operation IDs and delegated owner fences remain explicit at the aggregate boundary; finite keyed locks remove idle Conversation keys after ownership or cancellation without evicting active waiters, while unknown outcomes fail closed according to the delegated owner.
     current_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/operations.py, src/imagent/gateway/routing/__init__.py]
     target_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/operations.py, src/imagent/gateway/routing/__init__.py]
-    current_tests: [tests/gateway/routing/test_operations.py, tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py]
-    target_tests: [tests/gateway/routing/test_operations.py, tests/test_gateway_operations.py, tests/test_gateway_vertical_slice.py]
+    current_tests: [tests/gateway/routing/test_operations.py, tests/gateway/test_operations_integration.py, tests/gateway/test_vertical_slice.py]
+    target_tests: [tests/gateway/routing/test_operations.py, tests/gateway/test_operations_integration.py, tests/gateway/test_vertical_slice.py]
     authoritative_docs: [docs/components/gateway/routing/gateway-operations/design.md, docs/components/gateway/routing/gateway-operations/testing.md, docs/components/contracts/protocol.md, docs/components/gateway/design.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0008-interactive-request-routing.md]
     gaps: [the versioned schema remains intentionally cross-owner]
@@ -669,7 +669,7 @@ components:
     state_recovery: Routes persist independently; foreground authority requires current binding equality.
     current_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/projection_routes.py, src/imagent/gateway/__init__.py]
     target_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/projection_routes.py]
-    current_tests: [tests/gateway/routing/test_projection_routes.py, tests/test_projection_routing.py, tests/test_projection_hardening.py, tests/test_gateway_operations.py]
+    current_tests: [tests/gateway/routing/test_projection_routes.py, tests/gateway/routing/test_projection_integration.py, tests/gateway/projection/test_hardening.py, tests/gateway/test_operations_integration.py]
     target_tests: [tests/gateway/routing/test_projection_routes.py]
     authoritative_docs: [docs/components/gateway/routing/projection-routes/design.md, docs/components/gateway/routing/projection-routes/testing.md, docs/components/projections-and-recovery/design.md, docs/components/gateway/design.md]
     adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md]
@@ -757,7 +757,7 @@ components:
     state_recovery: Active-worker capacity and per-Thread runtime entries are process-local; an in-flight same-Thread admission retains its identity across task turnover, bounded queue and dispatch-owned acceptance-ordering gaps retain the worker slot while supervised resubscription reconciles authoritatively, and terminal workers release it once no admission lease remains without clearing the dispatch-owned gate.
     current_code: [src/imagent/gateway/__init__.py, src/imagent/gateway/projection/observation.py]
     target_code: [src/imagent/gateway/projection/observation.py]
-    current_tests: [tests/gateway/projection/test_observation.py, tests/test_projection_hardening.py, tests/test_projection_routing.py]
+    current_tests: [tests/gateway/projection/test_observation.py, tests/gateway/projection/test_hardening.py, tests/gateway/routing/test_projection_integration.py]
     target_tests: [tests/gateway/projection/test_observation.py]
     authoritative_docs: [docs/components/gateway/projection/observation/design.md, docs/components/gateway/projection/observation/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0013-bounded-application-event-admission.md]
@@ -779,7 +779,7 @@ components:
     state_recovery: Completed idempotency converges a lagging CAS only from bounded authoritative evidence; in_flight and live-only outcomes never advance.
     current_code: [src/imagent/gateway/projection/checkpoints.py]
     target_code: [src/imagent/gateway/projection/checkpoints.py]
-    current_tests: [tests/gateway/projection/test_checkpoints.py, tests/test_projection_hardening.py, tests/test_projection_routing.py, tests/gateway/persistence/test_sqlite.py]
+    current_tests: [tests/gateway/projection/test_checkpoints.py, tests/gateway/projection/test_hardening.py, tests/gateway/routing/test_projection_integration.py, tests/gateway/persistence/test_sqlite.py]
     target_tests: [tests/gateway/projection/test_checkpoints.py]
     authoritative_docs: [docs/components/gateway/projection/checkpoints/design.md, docs/components/gateway/projection/checkpoints/testing.md, docs/components/gateway/persistence/state-contracts/design.md]
     adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -801,7 +801,7 @@ components:
     state_recovery: Correlations are minimal, bounded, persisted, monotonic, and reconciled only from native authoritative facts.
     current_code: [src/imagent/gateway/projection/request_correlation.py]
     target_code: [src/imagent/gateway/projection/request_correlation.py]
-    current_tests: [tests/gateway/projection/test_request_correlation.py, tests/test_appserver_requests.py, tests/test_gateway_operations.py, tests/test_projection_hardening.py]
+    current_tests: [tests/gateway/projection/test_request_correlation.py, tests/applications/adapters/appserver/test_gateway_request_integration.py, tests/gateway/test_operations_integration.py, tests/gateway/projection/test_hardening.py]
     target_tests: [tests/gateway/projection/test_request_correlation.py]
     authoritative_docs: [docs/components/gateway/projection/request-correlation/design.md, docs/components/gateway/projection/request-correlation/testing.md, docs/components/gateway/persistence/state-contracts/design.md, docs/components/interaction/controllers/request-presentation/design.md]
     adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
@@ -823,7 +823,7 @@ components:
     state_recovery: Subscribe-before-history when replay is absent; missing checkpoints and bounded-scan exhaustion stay explicit, while completed evidence is passed to the checkpoint owner for convergence.
     current_code: [src/imagent/gateway/projection/__init__.py, src/imagent/gateway/projection/recovery.py]
     target_code: [src/imagent/gateway/projection/recovery.py]
-    current_tests: [tests/gateway/projection/test_recovery.py, tests/test_projection_hardening.py, tests/test_projection_routing.py]
+    current_tests: [tests/gateway/projection/test_recovery.py, tests/gateway/projection/test_hardening.py, tests/gateway/routing/test_projection_integration.py]
     target_tests: [tests/gateway/projection/test_recovery.py]
     authoritative_docs: [docs/components/gateway/projection/recovery/design.md, docs/components/gateway/projection/recovery/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0013-bounded-application-event-admission.md]
@@ -845,7 +845,7 @@ components:
     state_recovery: The idempotency owner completes a replay-safe suppression before the checkpoint owner evaluates CAS; failed/cancelled pre-Channel policy decisions release only that owner claim, and live-only never checkpoints.
     current_code: [src/imagent/gateway/presentation.py]
     target_code: [src/imagent/gateway/presentation.py]
-    current_tests: [tests/gateway/test_presentation.py, tests/test_projection_hardening.py]
+    current_tests: [tests/gateway/test_presentation.py, tests/gateway/projection/test_hardening.py]
     target_tests: [tests/gateway/test_presentation.py]
     authoritative_docs: [docs/components/gateway/presentation/design.md, docs/components/gateway/presentation/testing.md]
     adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -889,7 +889,7 @@ components:
     state_recovery: Process-local lanes are cancelled/joined at stop; unknown outcomes never auto-retry.
     current_code: [src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/coordination.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/delivery/coordination.py]
-    current_tests: [tests/gateway/delivery/test_coordination.py, tests/gateway/delivery/test_outcome_observation.py, tests/test_gateway_vertical_slice.py]
+    current_tests: [tests/gateway/delivery/test_coordination.py, tests/gateway/delivery/test_outcome_observation.py, tests/gateway/test_vertical_slice.py]
     target_tests: [tests/gateway/delivery/test_coordination.py]
     authoritative_docs: [docs/components/gateway/delivery/coordination/design.md, docs/components/gateway/delivery/coordination/testing.md]
     adrs: [docs/decisions/0010-capability-driven-delivery-coordination.md]
@@ -999,7 +999,7 @@ components:
     state_recovery: Values carry stable identities/revisions/state only; repository implementations own atomic recovery mutations.
     current_code: [schemas/v1/bindings.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, schemas/v1/projections.schema.json, src/imagent/gateway/persistence/state_contracts.py]
     target_code: [schemas/v1/bindings.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, schemas/v1/projections.schema.json, src/imagent/gateway/persistence/state_contracts.py]
-    current_tests: [tests/test_contracts.py, tests/gateway/persistence/test_memory.py, tests/test_projection_routing.py, tests/gateway/persistence/test_sqlite.py, tests/gateway/persistence/test_state_contracts.py]
+    current_tests: [tests/interaction/test_contracts.py, tests/gateway/persistence/test_memory.py, tests/gateway/routing/test_projection_integration.py, tests/gateway/persistence/test_sqlite.py, tests/gateway/persistence/test_state_contracts.py]
     target_tests: [tests/gateway/persistence/test_state_contracts.py]
     authoritative_docs: [docs/components/gateway/persistence/state-contracts/design.md, docs/components/gateway/persistence/state-contracts/testing.md, docs/components/contracts/protocol.md, docs/components/persistence/design.md, docs/components/projections-and-recovery/design.md]
     adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
@@ -1043,7 +1043,7 @@ components:
     state_recovery: Process-local state is intentionally non-durable and is rebuilt empty after restart.
     current_code: [src/imagent/gateway/persistence/memory.py]
     target_code: [src/imagent/gateway/persistence/memory.py]
-    current_tests: [tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_repository_contracts.py, tests/gateway/persistence/test_sqlite.py, tests/test_projection_routing.py]
+    current_tests: [tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_repository_contracts.py, tests/gateway/persistence/test_sqlite.py, tests/gateway/routing/test_projection_integration.py]
     target_tests: [tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_repository_contracts.py]
     authoritative_docs: [docs/components/gateway/persistence/memory/design.md, docs/components/gateway/persistence/memory/testing.md, docs/components/persistence/design.md, docs/components/persistence/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
@@ -1329,7 +1329,7 @@ components:
     state_recovery: Connection epoch and bounded queues are process-local; reset invalidates transport-bound request handles.
     current_code: [src/imagent/applications/adapters/appserver/client/**]
     target_code: [src/imagent/applications/adapters/appserver/client/**]
-    current_tests: [tests/applications/adapters/appserver/test_client.py, tests/test_appserver_transport.py]
+    current_tests: [tests/applications/adapters/appserver/test_client.py, tests/applications/adapters/appserver/test_transport_lifecycle.py]
     target_tests: [tests/applications/adapters/appserver/test_client.py]
     authoritative_docs: [docs/components/applications/adapters/appserver/client/design.md, docs/components/applications/adapters/appserver/client/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0013-bounded-application-event-admission.md]
@@ -1373,7 +1373,7 @@ components:
     state_recovery: Pure finite mapping with no replay state; native text, collections, mapping keys, content aggregation, and method-required stable identities are validated before copying or canonical dispatch. A malformed notification produces a fixed explicit recovery gap; malformed resource/history/request facts fail closed.
     current_code: [src/imagent/applications/adapters/appserver/mapping.py]
     target_code: [src/imagent/applications/adapters/appserver/mapping.py]
-    current_tests: [tests/applications/adapters/appserver/test_mapping.py, tests/test_appserver_input.py]
+    current_tests: [tests/applications/adapters/appserver/test_mapping.py, tests/applications/adapters/appserver/test_input_integration.py]
     target_tests: [tests/applications/adapters/appserver/test_mapping.py]
     authoritative_docs: [docs/components/applications/adapters/appserver/mapping/design.md, docs/components/applications/adapters/appserver/mapping/testing.md]
     adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -1395,7 +1395,7 @@ components:
     state_recovery: Transport reset stales handles when no authoritative pending snapshot exists; terminal cache is bounded.
     current_code: [src/imagent/applications/adapters/appserver/requests.py]
     target_code: [src/imagent/applications/adapters/appserver/requests.py]
-    current_tests: [tests/applications/adapters/appserver/test_requests.py, tests/test_appserver_requests.py]
+    current_tests: [tests/applications/adapters/appserver/test_requests.py, tests/applications/adapters/appserver/test_gateway_request_integration.py]
     target_tests: [tests/applications/adapters/appserver/test_requests.py]
     authoritative_docs: [docs/components/applications/adapters/appserver/requests/design.md, docs/components/applications/adapters/appserver/requests/testing.md]
     adrs: [docs/decisions/0008-interactive-request-routing.md]
@@ -1417,7 +1417,7 @@ components:
     state_recovery: Process-lifetime counters and current connection epoch only; snapshot reads perform no I/O, while internal logs retain only fixed categories, bounded structural counts/lengths, and non-reversible SHA-256 fingerprints.
     current_code: [src/imagent/applications/adapters/appserver/diagnostics.py]
     target_code: [src/imagent/applications/adapters/appserver/diagnostics.py]
-    current_tests: [tests/applications/adapters/appserver/test_diagnostics.py, tests/applications/adapters/appserver/test_client.py, tests/test_appserver_transport.py, tests/gateway/test_diagnostics.py]
+    current_tests: [tests/applications/adapters/appserver/test_diagnostics.py, tests/applications/adapters/appserver/test_client.py, tests/applications/adapters/appserver/test_transport_lifecycle.py, tests/gateway/test_diagnostics.py]
     target_tests: [tests/applications/adapters/appserver/test_diagnostics.py]
     authoritative_docs: [docs/components/applications/adapters/appserver/diagnostics/design.md, docs/components/applications/adapters/appserver/diagnostics/testing.md]
     adrs: [docs/decisions/0014-read-only-diagnostics-surface.md]
@@ -1439,7 +1439,7 @@ components:
     state_recovery: Native history is authoritative; steer candidate read never authorizes fallback start; ambiguous dispatch is unknown.
     current_code: [src/imagent/applications/adapters/codex.py, src/imagent/applications/adapters/appserver/_base.py]
     target_code: [src/imagent/applications/adapters/codex.py, src/imagent/applications/adapters/appserver/_base.py]
-    current_tests: [tests/applications/adapters/test_codex.py, tests/applications/adapters/appserver/test_client.py, tests/test_appserver_input.py, tests/applications/adapters/appserver/test_mapping.py, tests/applications/adapters/appserver/test_requests.py, tests/test_appserver_requests.py, tests/applications/presentation/test_artifact_materialization.py, tests/applications/presentation/test_live_activity.py]
+    current_tests: [tests/applications/adapters/test_codex.py, tests/applications/adapters/appserver/test_client.py, tests/applications/adapters/appserver/test_input_integration.py, tests/applications/adapters/appserver/test_mapping.py, tests/applications/adapters/appserver/test_requests.py, tests/applications/adapters/appserver/test_gateway_request_integration.py, tests/applications/presentation/test_artifact_materialization.py, tests/applications/presentation/test_live_activity.py]
     target_tests: [tests/applications/adapters/test_codex.py]
     authoritative_docs: [docs/components/applications/adapters/codex/design.md, docs/components/applications/adapters/codex/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -1461,7 +1461,7 @@ components:
     state_recovery: Starts new native Turns for prefer_active_turn until Zen proves steer; authoritative history handles gaps.
     current_code: [src/imagent/applications/adapters/zen.py, src/imagent/applications/adapters/appserver/_base.py]
     target_code: [src/imagent/applications/adapters/zen.py, src/imagent/applications/adapters/appserver/_base.py]
-    current_tests: [tests/applications/adapters/test_zen.py, tests/applications/adapters/appserver/test_client.py, tests/test_appserver_input.py, tests/applications/adapters/appserver/test_requests.py, tests/test_appserver_requests.py, tests/applications/presentation/test_artifact_materialization.py, tests/test_gateway_vertical_slice.py]
+    current_tests: [tests/applications/adapters/test_zen.py, tests/applications/adapters/appserver/test_client.py, tests/applications/adapters/appserver/test_input_integration.py, tests/applications/adapters/appserver/test_requests.py, tests/applications/adapters/appserver/test_gateway_request_integration.py, tests/applications/presentation/test_artifact_materialization.py, tests/gateway/test_vertical_slice.py]
     target_tests: [tests/applications/adapters/test_zen.py]
     authoritative_docs: [docs/components/applications/adapters/zen/design.md, docs/components/applications/adapters/zen/testing.md]
     adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
@@ -1483,7 +1483,7 @@ components:
     state_recovery: Stable native IDs/history recover activity and finite A1 presentation cursors fail gaps explicitly; baseline, active send-lock, seen-message, and terminal-Turn tables have explicit stable-identity capacities, deterministic eviction/rejection, and active-baseline protection.
     current_code: [src/imagent/applications/adapters/t3.py]
     target_code: [src/imagent/applications/adapters/t3.py]
-    current_tests: [tests/applications/adapters/test_t3.py, tests/conformance/test_adapter_contracts.py, tests/test_gateway_vertical_slice.py, tests/gateway/test_diagnostics.py, tests/applications/presentation/test_live_activity.py]
+    current_tests: [tests/applications/adapters/test_t3.py, tests/conformance/test_adapter_contracts.py, tests/gateway/test_vertical_slice.py, tests/gateway/test_diagnostics.py, tests/applications/presentation/test_live_activity.py]
     target_tests: [tests/applications/adapters/test_t3.py]
     authoritative_docs: [docs/components/applications/adapters/t3/design.md, docs/components/applications/adapters/t3/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
