@@ -5,6 +5,9 @@ Every built-in adapter must prove:
 - stable configured identity, credentials/config validation, and honest
   capability/profile values;
 - provider authentication/access and durable admission occur before media;
+- the shared ingress admission-handoff transaction preserves duplicate/no-lease
+  cleanup, synchronous/asynchronous preparation, transfer fencing, and
+  pre-handoff-only release across all providers;
 - reconnect/cursor/local duplicate state is bounded and remains adapter-owned;
 - queue overflow, cancellation, shutdown, rate limit, and native ambiguity are
   explicit;

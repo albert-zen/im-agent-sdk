@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+import asyncio
+import inspect
+from collections.abc import Awaitable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal, Protocol, cast
@@ -12,17 +14,12 @@ from ..messages import (
 from ..messages import (
     InboundMessage as InteractionInboundMessage,
 )
+from .contract import InboundAdmission, InboundAdmissionHandler, MessageHandler
 
 AccessMatch = Literal["any", "all"]
 _UNRESTRICTED = "*"
 _DENY_ALL = "none"
-
-
-class _InboundIdentitySource(Protocol):
-    channel_id: object
-    conversation_id: object
-    user_id: object
-    message_id: object
+_TRANSIENT_ADMISSION_LIMIT = 16_384
 
 
 def parse_id_set(value: object) -> frozenset[str]:
@@ -137,32 +134,122 @@ class InboundMessage:
     trace_id: str | None = None
 
 
+class _InboundPreparation(Protocol):
+    def __call__(
+        self,
+        inbound: InboundMessage,
+        /,
+    ) -> InboundMessage | Awaitable[InboundMessage]: ...
+
+
+class _InboundNormalizer(Protocol):
+    def __call__(
+        self,
+        inbound: InboundMessage,
+        *,
+        reply_to_message_id: str | None,
+    ) -> InteractionInboundMessage: ...
+
+
+class _InboundAdmissionTransaction:
+    def __init__(
+        self,
+        *,
+        channel_instance_id: str,
+        on_message: MessageHandler,
+        on_admission: InboundAdmissionHandler | None,
+    ) -> None:
+        self._channel_instance_id = channel_instance_id
+        self._on_message = on_message
+        self._on_admission = on_admission
+        self._admitted_inbound: set[tuple[str, str, str]] = set()
+        self._admission_lock = asyncio.Lock()
+
+    async def run(
+        self,
+        inbound: InboundMessage,
+        *,
+        normalize_inbound: _InboundNormalizer,
+        prepare_inbound: _InboundPreparation | None = None,
+        reply_to_message_id: str | None = None,
+    ) -> None:
+        admission_key = (
+            str(inbound.channel_id),
+            str(inbound.conversation_id),
+            str(inbound.message_id),
+        )
+        async with self._admission_lock:
+            if admission_key in self._admitted_inbound:
+                return
+            self._admitted_inbound.add(admission_key)
+            while len(self._admitted_inbound) > _TRANSIENT_ADMISSION_LIMIT:
+                self._admitted_inbound.pop()
+        admission: InboundAdmission | None = None
+        transferred = False
+        try:
+            if self._on_admission is not None:
+                admission = await self._on_admission(
+                    ConversationRef(
+                        channel_instance_id=self._channel_instance_id,
+                        native_conversation_id=str(inbound.conversation_id),
+                    ),
+                    str(inbound.message_id),
+                )
+                if admission is None:
+                    async with self._admission_lock:
+                        self._admitted_inbound.discard(admission_key)
+                    return
+            if prepare_inbound is not None:
+                prepared = prepare_inbound(inbound)
+                inbound = await prepared if inspect.isawaitable(prepared) else prepared
+            message = normalize_inbound(
+                inbound,
+                reply_to_message_id=reply_to_message_id,
+            )
+            if admission is None:
+                await self._on_message(message)
+            else:
+                transferred = True
+                await admission.deliver(message)
+        except BaseException as error:
+            if admission is not None and not transferred:
+                try:
+                    await admission.release()
+                except BaseException as release_error:
+                    error.add_note(
+                        "Failed to release inbound admission after pre-handoff "
+                        f"processing failed: {release_error!r}"
+                    )
+            async with self._admission_lock:
+                self._admitted_inbound.discard(admission_key)
+            raise
+
+
 def _normalize_inbound_message(
     *,
     channel_instance_id: str,
-    inbound: object,
+    inbound: InboundMessage,
     content: tuple[Content, ...],
     reply_to_message_id: str | None,
 ) -> InteractionInboundMessage:
-    native = cast(_InboundIdentitySource, inbound)
     return InteractionInboundMessage(
-        message_id=str(native.message_id),
+        message_id=str(inbound.message_id),
         conversation_ref=ConversationRef(
             channel_instance_id=channel_instance_id,
-            native_conversation_id=str(native.conversation_id),
+            native_conversation_id=str(inbound.conversation_id),
         ),
-        sender=str(native.user_id),
+        sender=str(inbound.user_id),
         content=content,
-        created_at=_parse_datetime(getattr(native, "sent_at", None)),
+        created_at=_parse_datetime(getattr(inbound, "sent_at", None)),
         reply_to=(
             str(reply_to_message_id)
             if reply_to_message_id is not None
-            else getattr(native, "reply_to_message_id", None)
+            else getattr(inbound, "reply_to_message_id", None)
         ),
         metadata={
-            "channel_id": str(native.channel_id),
-            "input_error": getattr(native, "input_error", None),
-            "trace_id": getattr(native, "trace_id", None),
+            "channel_id": str(inbound.channel_id),
+            "input_error": getattr(inbound, "input_error", None),
+            "trace_id": getattr(inbound, "trace_id", None),
         },
     )
 

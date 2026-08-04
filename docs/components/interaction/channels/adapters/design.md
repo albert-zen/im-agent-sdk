@@ -24,13 +24,14 @@ upload/download/decryption/acknowledgement, URL rules, QR/token state, rate
 limit/response mapping, and diagnostic worker facts.
 
 `runtime.py` owns the common native-transport wrapper and `channel_from_config`
-factory inside this leaf. Public inbound identity/time/selected-metadata
-normalization belongs to Interaction ingress; runtime invokes that leaf-owned
-envelope helper after retaining route-context updates and ordered
-text/attachment assembly. Public `OutboundMessage` and `AttachmentContent`
-conversion to leaf-internal outbound DTOs belongs to outbound-delivery; the
-runtime invokes those leaf-owned conversions around the native call while
-retaining only native send orchestration and the common transport factory. The
+factory inside this leaf. The provider-neutral admission-handoff transaction
+and public inbound identity/time/selected-metadata normalization belong to
+Interaction ingress; runtime invokes that leaf-owned transaction with its
+normalizer after retaining route-context updates and ordered text/attachment
+assembly. Public `OutboundMessage` and `AttachmentContent` conversion to
+leaf-internal outbound DTOs belongs to outbound-delivery; the runtime invokes
+those leaf-owned conversions around the native call while retaining only
+native send orchestration and the common transport factory. The
 factory is explicit composition, not global or import-time registration. The
 formal `imagent.channels` package remains a stable facade over those target-owned
 objects; the historical `imagent.channels.runtime` implementation path is not a

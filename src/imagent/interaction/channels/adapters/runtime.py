@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import asyncio
 import contextlib
-import inspect
 import time
 from collections.abc import Callable
 from dataclasses import replace
@@ -15,7 +13,6 @@ from ....contracts import (
 )
 from ...media import AttachmentContent, AttachmentSourceKind, LocalPath
 from ...messages import (
-    ConversationRef,
     InboundMessage,
     OutboundMessage,
     TextContent,
@@ -81,7 +78,6 @@ _CHANNEL_CAPABILITIES = {
 }
 
 _TRANSIENT_ROUTE_LIMIT = 4_096
-_TRANSIENT_ADMISSION_LIMIT = 16_384
 
 
 class NativeTransportChannelAdapter:
@@ -280,77 +276,34 @@ class _InboundMiddleware:
         on_admission: InboundAdmissionHandler | None,
     ) -> None:
         self._channel_instance_id = channel_instance_id
-        self._on_message = on_message
-        self._on_admission = on_admission
         self._routes: dict[tuple[str, str], object] = {}
-        self._admitted_inbound: set[tuple[str, str, str]] = set()
-        self._admission_lock = asyncio.Lock()
+        self._inbound_transaction = _ingress._InboundAdmissionTransaction(
+            channel_instance_id=channel_instance_id,
+            on_message=on_message,
+            on_admission=on_admission,
+        )
 
     async def handle_inbound(
         self,
         _adapter,
-        inbound,
+        inbound: _ingress.InboundMessage,
         *,
         reply_to_message_id: str | None = None,
-        prepare_inbound=None,
+        prepare_inbound: _ingress._InboundPreparation | None = None,
         pending_attachment_count: int = 0,
         **_options,
     ) -> None:
         del pending_attachment_count
-        admission_key = (
-            str(inbound.channel_id),
-            str(inbound.conversation_id),
-            str(inbound.message_id),
+        await self._inbound_transaction.run(
+            inbound,
+            normalize_inbound=self._normalize_inbound,
+            prepare_inbound=prepare_inbound,
+            reply_to_message_id=reply_to_message_id,
         )
-        async with self._admission_lock:
-            if admission_key in self._admitted_inbound:
-                return
-            self._admitted_inbound.add(admission_key)
-            while len(self._admitted_inbound) > _TRANSIENT_ADMISSION_LIMIT:
-                self._admitted_inbound.pop()
-        admission = None
-        transferred = False
-        try:
-            if self._on_admission is not None:
-                admission = await self._on_admission(
-                    ConversationRef(
-                        channel_instance_id=self._channel_instance_id,
-                        native_conversation_id=str(inbound.conversation_id),
-                    ),
-                    str(inbound.message_id),
-                )
-                if admission is None:
-                    async with self._admission_lock:
-                        self._admitted_inbound.discard(admission_key)
-                    return
-            if prepare_inbound is not None:
-                prepared = prepare_inbound(inbound)
-                inbound = await prepared if inspect.isawaitable(prepared) else prepared
-            message = self._normalize_inbound(
-                inbound,
-                reply_to_message_id=reply_to_message_id,
-            )
-            if admission is None:
-                await self._on_message(message)
-            else:
-                transferred = True
-                await admission.deliver(message)
-        except BaseException as error:
-            if admission is not None and not transferred:
-                try:
-                    await admission.release()
-                except BaseException as release_error:
-                    error.add_note(
-                        "Failed to release inbound admission after pre-handoff "
-                        f"processing failed: {release_error!r}"
-                    )
-            async with self._admission_lock:
-                self._admitted_inbound.discard(admission_key)
-            raise
 
     def _normalize_inbound(
         self,
-        inbound,
+        inbound: _ingress.InboundMessage,
         *,
         reply_to_message_id: str | None,
     ) -> InboundMessage:

@@ -8,11 +8,21 @@ Required scenarios:
 - public inbound normalization preserves stable native message, Conversation,
   sender, and reply identity, created-at parsing/fallback, selected metadata,
   and text-before-attachments content ordering;
+- the bounded transient `(channel_id, conversation_id, message_id)` fast path
+  returns duplicates and removes its key after a no-lease result;
+- admission is requested before synchronous or asynchronous preparation, and
+  only confirmed pre-handoff failures release the opaque lease;
+- the transfer fence precedes delivery, release failures become notes without
+  masking the original error, and every failure discards the transient key;
+- without an admission callback, the completed public message goes directly to
+  the `MessageHandler`;
 - durable completed/in-flight duplicates stop before preparation;
 - preparation failure releases only its owned lease, while stale ownership
   cannot hand off or release a replacement claim;
-- cancellation before handoff is reclaimable and cancellation after callback
-  entry remains Gateway-owned;
+- cancellation during preparation releases the untransferred lease, discards
+  the transient key, and permits durable reclaim; cancellation after delivery
+  callback entry never releases or reauthorizes input, even though transient
+  cleanup lets the Gateway-owned durable claim answer a provider redelivery;
 - media count/type/size/source/path/decoded-size and native metadata bounds are
   enforced before constructing the message;
 - queue overflow and shutdown are explicit and joined; socket readers do not
@@ -36,6 +46,13 @@ ISO/`Z` timestamps, and absent or malformed timestamp fallback. Runtime and
 provider suites continue proving that the helper is invoked without changing
 route-context updates, admission handoff, native retrieval/decryption, or
 acknowledgement behavior.
+
+It also covers `_InboundAdmissionTransaction` with a bounded duplicate set,
+no-lease retry, sync/async preparation, pre-handoff release, transfer fencing,
+release-note/original-error precedence, failure cleanup, and direct delivery
+when admission is absent. These tests exercise only the typed native/public
+message and Channel callback contracts; they do not create a second admission
+path or provider callback abstraction.
 
 Focused tests also lock the leaf-internal inbound attachment tuple/defaults;
 provider and vertical suites continue proving normalization into the public
