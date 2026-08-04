@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import inspect
 import unittest
 from collections.abc import Callable
 from dataclasses import replace
@@ -30,6 +31,8 @@ from imagent.gateway.presentation import (
     OutboundPresentationRuntime,
     OutboundPresentationTimeout,
     ProjectionPresentationOrigin,
+    _decide_claimed_outbound_presentation,
+    _projection_presentation_context,
 )
 from imagent.gateway.projection.checkpoints import _ProjectionCheckpointAuthority
 from imagent.gateway.routing.projection_routes import derive_projection_route_id
@@ -116,6 +119,20 @@ class OutboundPresentationOwnershipTests(unittest.TestCase):
         )
         self.assertIsNone(importlib.util.find_spec("imagent.outbound_presentation"))
 
+    def test_owner_maps_checkpointability_without_transition_authority(self) -> None:
+        self.assertEqual(
+            _projection_presentation_context(checkpointable=True).origin,
+            ProjectionPresentationOrigin.AUTHORITATIVE,
+        )
+        self.assertEqual(
+            _projection_presentation_context(checkpointable=False).origin,
+            ProjectionPresentationOrigin.LIVE_ONLY,
+        )
+        self.assertEqual(
+            set(inspect.signature(_decide_claimed_outbound_presentation).parameters),
+            {"message", "presentation_context", "runtime"},
+        )
+
 
 class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
     def _gateway(
@@ -170,7 +187,7 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
                 repository,
                 visible,
                 projected,
-                deliver_outbound=gateway._deliver_outbound,
+                deliver_outbound=gateway._deliver_projected_outbound,
                 checkpoint_authority=_ProjectionCheckpointAuthority(
                     projections=repository,
                 ),
@@ -180,7 +197,7 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
                 repository,
                 hidden,
                 projected,
-                deliver_outbound=gateway._deliver_outbound,
+                deliver_outbound=gateway._deliver_projected_outbound,
                 checkpoint_authority=_ProjectionCheckpointAuthority(
                     projections=repository,
                 ),
@@ -212,15 +229,12 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
 
         await gateway.start()
         try:
-            first = await gateway._deliver_outbound(
-                message,
-                OutboundPresentationContext(ProjectionPresentationOrigin.AUTHORITATIVE),
-            )
+            first = await gateway._deliver_projected_outbound(message, True)
             recovered = await deliver_projected_message(
                 repository,
                 route,
                 projected,
-                deliver_outbound=gateway._deliver_outbound,
+                deliver_outbound=gateway._deliver_projected_outbound,
                 checkpoint_authority=_ProjectionCheckpointAuthority(
                     projections=repository,
                 ),
@@ -250,16 +264,15 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
         policy = _Policy(present)
         gateway, channel, _ = self._gateway(policy)
         message = _message("retry-after-policy-error")
-        context = OutboundPresentationContext(ProjectionPresentationOrigin.AUTHORITATIVE)
         await gateway.start()
         try:
             with self.assertRaisesRegex(
                 RetryableDeliveryError,
                 "failed before Channel side effect",
             ) as raised:
-                await gateway._deliver_outbound(message, context)
+                await gateway._deliver_projected_outbound(message, True)
             self.assertIsInstance(raised.exception.__cause__, RuntimeError)
-            result = await gateway._deliver_outbound(message, context)
+            result = await gateway._deliver_projected_outbound(message, True)
         finally:
             await gateway.stop()
 
@@ -269,6 +282,37 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
         assert facts is not None
         self.assertEqual(facts.failure_count, 1)
         self.assertEqual(facts.last_failure_code, OutboundPresentationFailureCode.POLICY_FAILED)
+
+    async def test_policy_cancellation_releases_claim_for_projection_recovery(self) -> None:
+        attempts = 0
+
+        def present(
+            message: OutboundMessage,
+            _context: OutboundPresentationContext,
+        ) -> OutboundMessage:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise asyncio.CancelledError
+            return message
+
+        policy = _Policy(present)
+        gateway, channel, _ = self._gateway(policy)
+        message = _message("retry-after-policy-cancellation")
+        await gateway.start()
+        try:
+            with self.assertRaises(asyncio.CancelledError):
+                await gateway._deliver_projected_outbound(message, True)
+            result = await gateway._deliver_projected_outbound(message, True)
+        finally:
+            await gateway.stop()
+
+        self.assertEqual(result, IdempotencyClaimStatus.ACQUIRED)
+        self.assertEqual(len(channel.sent), 1)
+        facts = gateway.diagnostics_snapshot().gateway.outbound_presentation
+        assert facts is not None
+        self.assertEqual(facts.cancellation_count, 1)
+        self.assertEqual(facts.last_failure_code, OutboundPresentationFailureCode.CANCELLED)
 
     async def test_policy_failure_reenters_authoritative_route_recovery(self) -> None:
         attempts = 0
@@ -347,7 +391,7 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
                 repository,
                 route,
                 projected,
-                deliver_outbound=gateway._deliver_outbound,
+                deliver_outbound=gateway._deliver_projected_outbound,
                 checkpoint_authority=_ProjectionCheckpointAuthority(
                     projections=repository,
                 ),
@@ -371,11 +415,10 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         gateway, channel, _ = self._gateway(policy)
-        context = OutboundPresentationContext(ProjectionPresentationOrigin.AUTHORITATIVE)
         await gateway.start()
         try:
             with self.assertRaises(RetryableDeliveryError) as raised:
-                await gateway._deliver_outbound(_message("invalid"), context)
+                await gateway._deliver_projected_outbound(_message("invalid"), True)
             self.assertIsInstance(raised.exception.__cause__, OutboundPresentationError)
             self.assertIn("routing identity", str(raised.exception.__cause__))
         finally:
@@ -390,11 +433,10 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
         )
         policy = _Policy(lambda message, _context: replace(message, content=(attachment,)))
         gateway, channel, _ = self._gateway(policy)
-        context = OutboundPresentationContext(ProjectionPresentationOrigin.AUTHORITATIVE)
         await gateway.start()
         try:
             with self.assertRaises(RetryableDeliveryError) as raised:
-                await gateway._deliver_outbound(_message("attachment"), context)
+                await gateway._deliver_projected_outbound(_message("attachment"), True)
             self.assertIsInstance(raised.exception.__cause__, OutboundPresentationError)
             self.assertIn("attachment authority", str(raised.exception.__cause__))
         finally:
@@ -432,10 +474,7 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
         gateway, channel, _ = self._gateway(policy)
         await gateway.start()
         try:
-            await gateway._deliver_outbound(
-                message,
-                OutboundPresentationContext(ProjectionPresentationOrigin.AUTHORITATIVE),
-            )
+            await gateway._deliver_projected_outbound(message, True)
         finally:
             await gateway.stop()
 
@@ -469,17 +508,18 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
         policy = _BlockingPolicy()
         limits = GatewayLimits(outbound_presentation_max_concurrency=1)
         gateway, channel, _ = self._gateway(policy, limits=limits)
-        context = OutboundPresentationContext(ProjectionPresentationOrigin.AUTHORITATIVE)
         await gateway.start()
-        first = asyncio.create_task(gateway._deliver_outbound(_message("capacity-1"), context))
+        first = asyncio.create_task(
+            gateway._deliver_projected_outbound(_message("capacity-1"), True)
+        )
         await policy.entered.wait()
         try:
             with self.assertRaises(RetryableDeliveryError) as raised:
-                await gateway._deliver_outbound(_message("capacity-2"), context)
+                await gateway._deliver_projected_outbound(_message("capacity-2"), True)
             self.assertIsInstance(raised.exception.__cause__, OutboundPresentationCapacityError)
             policy.release.set()
             await first
-            await gateway._deliver_outbound(_message("capacity-2"), context)
+            await gateway._deliver_projected_outbound(_message("capacity-2"), True)
         finally:
             policy.release.set()
             await gateway.stop()
@@ -508,10 +548,7 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(absent.diagnostics_snapshot().gateway.outbound_presentation)
         await absent.start()
         try:
-            await absent._deliver_outbound(
-                _message("absent"),
-                OutboundPresentationContext(ProjectionPresentationOrigin.AUTHORITATIVE),
-            )
+            await absent._deliver_projected_outbound(_message("absent"), True)
         finally:
             await absent.stop()
         self.assertEqual(len(absent_channel.sent), 1)

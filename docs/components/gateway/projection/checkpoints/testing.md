@@ -7,8 +7,8 @@ Checkpoint conformance must prove:
 - ordinary route writes preserve a checkpoint and cannot silently clear,
   replace, or advance it;
 - a stale expected checkpoint fails without changing any other route;
-- an accepted delivery or durable O1 suppression completes idempotency before
-  checkpoint CAS;
+- an accepted delivery or durable O1 suppression completed by the idempotency
+  owner precedes checkpoint CAS;
 - authoritative recovery converges a completed stable delivery whose crash
   left the CAS behind, without resending or reinvoking O1;
 - `in_flight`, unknown, failed, and live-only decisions never advance it;

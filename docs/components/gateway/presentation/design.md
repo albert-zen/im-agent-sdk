@@ -6,23 +6,31 @@ Component ID: `gateway.presentation`
 
 Presentation is the ADR 0015 O1 position. It applies one replay-safe policy to
 one already-routed immutable projection message after Gateway owns its stable
-outbound idempotency claim and before delivery planning. It may return bounded
-replacement presentation or suppress only that destination.
+outbound idempotency claim and before delivery planning. It translates the
+projection checkpointability fact into the fixed origin vocabulary and returns
+one typed post-claim decision: bounded replacement presentation, suppression,
+or policy failure for that destination.
 
-It owns the typed policy/context/origin contract, finite runtime, output
-validation, suppression representation, and fixed diagnostic failures. It
-does not own native Application normalization, product/request presentation,
-route/delivery identity, attachment trust, planning, delivery retry,
-idempotency transitions, or checkpoint mutation.
+It owns the typed policy/context/origin contract, checkpointability-to-origin
+mapping, finite runtime, output validation, post-claim decision representation,
+and fixed diagnostic failures. It does not own native Application
+normalization, product/request presentation, route/delivery identity,
+attachment trust, planning, delivery retry, idempotency claim/complete/release
+transitions, or checkpoint mutation.
 
 ## Invariants
 
 - destination, delivery ID, reply, creation time, and attachment authority are
   fixed before policy invocation and cannot be changed;
 - content/item/text/metadata facts and execution capacity/lifetime are finite;
+- the owner accepts no repository, claim owner token, or completion/release
+  callback: its narrow post-claim result is presented, suppressed, or failed;
+- Gateway's idempotency owner completes a suppressed claim and releases a
+  failed/cancelled pre-Channel claim from that typed decision; the presentation
+  owner never performs those transitions;
 - a crash before claim completion may reevaluate because no Channel side
   effect occurred;
-- suppression completes outbound idempotency before the injected checkpoint
+- after the idempotency owner completes suppression, the injected checkpoint
   authority performs its expected-current CAS; bounded recovery can converge a
   lagging checkpoint without reinvoking O1;
 - live-only presentation never advances a completion checkpoint;

@@ -62,21 +62,25 @@ Coordinator rather than retaining stale lanes or capacity.
 For projection delivery only, the optional ADR 0015 O1 destination policy runs
 after the concrete route and stable outbound idempotency claim exist, but
 before this component plans the message. The policy receives no planner,
-Channel, repository, checkpoint, correlation, or retry authority. Gateway
-validates that any transformed result retains the fixed delivery, destination,
-reply, time, and existing attachment authority, and remains within configured
-item, text, and metadata bounds before calling the planner. Independent routes
-therefore make independent presentation decisions while still using the same
-planner and Coordinator as all other origins.
+Channel, repository, checkpoint, correlation, or retry authority. The
+presentation owner validates that any transformed result retains the fixed
+delivery, destination, reply, time, and existing attachment authority, and
+remains within configured item, text, and metadata bounds before calling the
+planner. It returns a typed presented/suppressed/failed decision; Gateway's
+idempotency owner, not presentation, performs any resulting complete or
+release transition. Independent routes therefore make independent presentation
+decisions while still using the same planner and Coordinator as all other
+origins.
 
-An O1 suppression is not submitted to the Coordinator. Gateway completes the
-existing outbound claim first; only then may authoritative projection logic
-advance its checkpoint. Recovery from a completed claim bypasses O1 and
-converges that checkpoint. A pre-completion policy failure releases the owned
-claim because no Channel side effect has begun. Live-only presentation has the
-same stable event-scoped outbound idempotency but never advances a projection
-checkpoint. O1 tasks have finite concurrency and lifetime and do not run on an
-Application or Channel socket-read callback.
+An O1 suppression is not submitted to the Coordinator. Gateway's idempotency
+owner completes the existing outbound claim first; only then may authoritative
+projection logic advance its checkpoint. Recovery from a completed claim
+bypasses O1 and converges that checkpoint. A pre-completion policy failure
+causes the idempotency owner to release the owned claim because no Channel side
+effect has begun. Live-only presentation has the same stable event-scoped
+outbound idempotency but never advances a projection checkpoint. O1 tasks have
+finite concurrency and lifetime and do not run on an Application or Channel
+socket-read callback.
 
 An ADR 0015 O2 observer is offered one notification only after one logical
 Coordinator attempt has released its lane/capacity and produced its final
