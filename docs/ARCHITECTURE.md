@@ -97,6 +97,13 @@ imports through the owners and public exports recorded by that map. Split
 candidates provide candidate owner pairings, never an automatic exemption;
 any cross-layer exception remains exact and explicit.
 
+Gateway composition values have one current owner:
+`imagent.gateway.composition`. The `imagent.gateway` package facade re-exports
+those exact objects while it still combines its public facade with
+`ImAgentGateway` runtime orchestration; that remaining package-root split is
+tracked explicitly in the component map and creates no duplicate composition
+implementation.
+
 ## Authority and persistence
 
 | State | Authority | SDK persistence |

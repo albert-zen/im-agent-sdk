@@ -89,7 +89,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "src/imagent/adapters.py": {"ports"},
             "src/imagent/interaction/media.py": {"attachments-and-media"},
             "src/imagent/gateway/__init__.py": {"gateway"},
-            "src/imagent/gateway_composition.py": {"gateway"},
+            "src/imagent/gateway/composition.py": {"gateway"},
             "src/imagent/gateway/input/content_transformation.py": {"gateway"},
             "src/imagent/gateway/input/failure_presentation.py": {"gateway"},
             "src/imagent/keyed_locks.py": {"delivery-planning-and-coordination"},

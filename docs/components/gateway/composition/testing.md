@@ -3,7 +3,8 @@
 ## Current evidence
 
 - `tests/gateway/test_package_root.py` checks formal facade identity and the
-  current owner module.
+  current owner module, including the absence of the removed historical
+  internal module.
 - `tests/test_gateway_operations.py` checks frozen groups, defaults, finite
   limit validation, injected repositories, and removed flat constructor
   arguments.
@@ -19,11 +20,12 @@
 - invalid finite capacities fail during construction before startup or I/O;
 - the graph contains one Channel admission path and one Application observer
   per Thread, with no locator, generic hook, transcript, spool, or runtime;
-- a clean process cannot import a removed historical internal module after the
-  later mechanical move.
+- the historical `imagent.gateway_composition` internal module cannot be
+  imported.
 
 The target focused suite is `tests/gateway/test_composition.py`, with facade
-checks retained in `tests/gateway/test_package_root.py`. Until that move, run:
+checks retained in `tests/gateway/test_package_root.py`. Until focused group
+coverage moves, run:
 
 ```sh
 PYTHONPATH=src uv run python -m unittest tests.gateway.test_package_root tests.test_gateway_operations tests.test_gateway_vertical_slice -v

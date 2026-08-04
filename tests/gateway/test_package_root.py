@@ -22,19 +22,19 @@ from imagent.gateway.admission import ClaimedInbound as AdmissionClaimedInbound
 from imagent.gateway.admission import (
     InboundAdmissionService as AdmissionInboundAdmissionService,
 )
+from imagent.gateway.composition import (
+    GatewayExtensions as CompositionGatewayExtensions,
+)
+from imagent.gateway.composition import GatewayLimits as CompositionGatewayLimits
+from imagent.gateway.composition import (
+    GatewayRepositories as CompositionGatewayRepositories,
+)
 from imagent.gateway.input import InboundContentTransformer as InputInboundContentTransformer
 from imagent.gateway.input import (
     InboundFailurePhase as InputInboundFailurePhase,
 )
 from imagent.gateway.input import (
     InboundFailurePresenter as InputInboundFailurePresenter,
-)
-from imagent.gateway_composition import (
-    GatewayExtensions as CompositionGatewayExtensions,
-)
-from imagent.gateway_composition import GatewayLimits as CompositionGatewayLimits
-from imagent.gateway_composition import (
-    GatewayRepositories as CompositionGatewayRepositories,
 )
 
 
@@ -49,6 +49,13 @@ class GatewayPackageRootTests(unittest.TestCase):
         self.assertIs(GatewayExtensions, CompositionGatewayExtensions)
         self.assertIs(GatewayLimits, CompositionGatewayLimits)
         self.assertIs(GatewayRepositories, CompositionGatewayRepositories)
+        self.assertEqual(GatewayExtensions.__module__, "imagent.gateway.composition")
+        self.assertEqual(GatewayLimits.__module__, "imagent.gateway.composition")
+        self.assertEqual(GatewayRepositories.__module__, "imagent.gateway.composition")
+
+    def test_removed_historical_composition_module_cannot_be_imported(self) -> None:
+        with self.assertRaises(ModuleNotFoundError):
+            importlib.import_module("imagent.gateway_composition")
 
     def test_admission_exports_preserve_exact_object_identity(self) -> None:
         self.assertIs(ClaimedInbound, AdmissionClaimedInbound)

@@ -73,7 +73,6 @@ from ..diagnostics import (
     new_diagnostics_snapshot,
     summarize_projection_health,
 )
-from ..gateway_composition import GatewayExtensions, GatewayLimits, GatewayRepositories
 from ..gateway_startup import (
     GatewayNotRunning,
     GatewayStartupAdmission,
@@ -108,6 +107,7 @@ from .admission import (
     inbound_idempotency_identity,
     start_channel_with_admission,
 )
+from .composition import GatewayExtensions, GatewayLimits, GatewayRepositories
 from .delivery.coordination import DeliveryCoordinator
 from .delivery.outcome_observation import (
     DeliveryOutcomeObserver as DeliveryOutcomeObserver,
