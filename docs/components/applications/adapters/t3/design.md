@@ -36,9 +36,11 @@ duplicate HTTP client.
 ## Dependencies, state, and recovery
 
 T3 depends on Interaction messages/operations/media, common Applications
-contract/capabilities/events/operations/requests, and the live-activity
-presentation leaf. Stable native IDs/history and all process-local poll state
-are finite. The adapter's four explicit state capacities default to 4096
+contract/capabilities/events/operations/requests, the direct canonical
+`applications.diagnostics` owner for Application diagnostic facts, and the
+live-activity presentation leaf. Stable native IDs/history and all
+process-local poll state are finite. The adapter's four explicit state
+capacities default to 4096
 turn-baseline entries, 1024 concurrently held Thread send locks, 8192 seen
 message identities, and 4096 terminal-Turn identities. Baselines are keyed by
 `(native_thread_id, native_turn_id)` and reserve capacity before the typed

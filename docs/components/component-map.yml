@@ -256,7 +256,7 @@ components:
     target_tests: [tests/interaction/test_diagnostics.py]
     authoritative_docs: [docs/components/interaction/diagnostics/design.md, docs/components/interaction/diagnostics/testing.md]
     adrs: [docs/decisions/0014-read-only-diagnostics-surface.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [imagent.diagnostics remains a declared transition facade for these exact objects while Application and Gateway diagnostics finish later owner moves]
+    gaps: ["imagent.diagnostics remains a declared transition facade for these exact objects while Gateway diagnostics finish later in #273"]
 
 
   interaction.controllers.controller-contract:
@@ -1033,15 +1033,15 @@ components:
     id: gateway.diagnostics
     parent: gateway
     purpose: Aggregate immutable redacted bounded process-local infrastructure health.
-    owns: [retained Application/Gateway diagnostic fact implementations, Gateway snapshot aggregation, fixed Gateway failure codes]
+    owns: [retained Gateway diagnostic fact implementations, Gateway snapshot aggregation, fixed Gateway failure codes]
     does_not_own: [Agent health truth, exporters/endpoints, native I/O, free-form errors]
     inputs: [local adapter/runtime diagnostic providers]
     outputs: [DiagnosticsSnapshot]
-    public_contracts: [DiagnosticsSnapshot, DiagnosticsProvider]
+    public_contracts: [DiagnosticsSnapshot]
     public_exports:
-      current: [imagent.diagnostics:DiagnosticsSnapshot, imagent.diagnostics:DiagnosticsProvider]
-      target: [imagent.gateway.diagnostics:DiagnosticsSnapshot, imagent.gateway.diagnostics:DiagnosticsProvider]
-    dependencies: [interaction.channels.channel-contract, interaction.channels.diagnostics, interaction.diagnostics, applications.application-contract]
+      current: [imagent.diagnostics:DiagnosticsSnapshot]
+      target: [imagent.gateway.diagnostics:DiagnosticsSnapshot]
+    dependencies: [interaction.channels.channel-contract, interaction.channels.diagnostics, interaction.diagnostics, applications.application-contract, applications.diagnostics]
     state_recovery: Process-lifetime counters only; snapshot is synchronous, side-effect-free, bounded, and non-authoritative.
     current_code: [src/imagent/diagnostics.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/diagnostics.py]
@@ -1049,7 +1049,7 @@ components:
     target_tests: [tests/gateway/test_diagnostics.py]
     authoritative_docs: [docs/components/diagnostics/design.md, docs/components/diagnostics/testing.md]
     adrs: [docs/decisions/0014-read-only-diagnostics-surface.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [the transition module still physically retains Application/Gateway facts and aggregation while the canonical Interaction contracts have moved]
+    gaps: [the transition module still physically retains Gateway facts and aggregation while the canonical Interaction and Application contracts have moved]
 
   applications.application-contract:
     id: applications.application-contract
@@ -1117,6 +1117,28 @@ components:
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0013-bounded-application-event-admission.md]
     gaps: []
 
+  applications.diagnostics:
+    id: applications.diagnostics
+    parent: applications
+    purpose: Own immutable redacted Application and adapter-owned A1 diagnostic contracts.
+    owns: [ApplicationDiagnosticFacts, ApplicationPresentationFailureCode, ApplicationPresentationDiagnosticFacts, ApplicationArtifactMaterializationFailureCode, ApplicationArtifactMaterializationDiagnosticFacts, ApplicationDiagnosticsProvider, DiagnosticsProvider]
+    does_not_own: [Interaction connection/queue vocabulary, App Server mutable diagnostic state, Gateway snapshot aggregation, native I/O, callbacks, secrets, free-form errors]
+    inputs: [bounded Application adapter and A1 runtime observations plus Interaction connection facts]
+    outputs: [immutable redacted Application diagnostic facts and optional provider capability]
+    public_contracts: [ApplicationDiagnosticFacts, ApplicationPresentationFailureCode, ApplicationPresentationDiagnosticFacts, ApplicationArtifactMaterializationFailureCode, ApplicationArtifactMaterializationDiagnosticFacts, ApplicationDiagnosticsProvider, DiagnosticsProvider]
+    public_exports:
+      current: [imagent.applications.diagnostics:ApplicationDiagnosticFacts, imagent.applications.diagnostics:ApplicationPresentationFailureCode, imagent.applications.diagnostics:ApplicationPresentationDiagnosticFacts, imagent.applications.diagnostics:ApplicationArtifactMaterializationFailureCode, imagent.applications.diagnostics:ApplicationArtifactMaterializationDiagnosticFacts, imagent.applications.diagnostics:ApplicationDiagnosticsProvider, imagent.applications.diagnostics:DiagnosticsProvider, imagent.diagnostics:ApplicationDiagnosticFacts, imagent.diagnostics:ApplicationPresentationFailureCode, imagent.diagnostics:ApplicationPresentationDiagnosticFacts, imagent.diagnostics:ApplicationArtifactMaterializationFailureCode, imagent.diagnostics:ApplicationArtifactMaterializationDiagnosticFacts, imagent.diagnostics:ApplicationDiagnosticsProvider, imagent.diagnostics:DiagnosticsProvider]
+      target: [imagent.applications.diagnostics:ApplicationDiagnosticFacts, imagent.applications.diagnostics:ApplicationPresentationFailureCode, imagent.applications.diagnostics:ApplicationPresentationDiagnosticFacts, imagent.applications.diagnostics:ApplicationArtifactMaterializationFailureCode, imagent.applications.diagnostics:ApplicationArtifactMaterializationDiagnosticFacts, imagent.applications.diagnostics:ApplicationDiagnosticsProvider, imagent.applications.diagnostics:DiagnosticsProvider, imagent.diagnostics:ApplicationDiagnosticFacts, imagent.diagnostics:ApplicationPresentationFailureCode, imagent.diagnostics:ApplicationPresentationDiagnosticFacts, imagent.diagnostics:ApplicationArtifactMaterializationFailureCode, imagent.diagnostics:ApplicationArtifactMaterializationDiagnosticFacts, imagent.diagnostics:ApplicationDiagnosticsProvider, imagent.diagnostics:DiagnosticsProvider]
+    dependencies: [interaction.diagnostics]
+    state_recovery: Stateless frozen values; mutable process-lifetime counters remain in concrete Application adapter/runtime owners and absence is preserved.
+    current_code: [src/imagent/applications/diagnostics.py]
+    target_code: [src/imagent/applications/diagnostics.py]
+    current_tests: [tests/applications/test_diagnostics.py]
+    target_tests: [tests/applications/test_diagnostics.py]
+    authoritative_docs: [docs/components/applications/diagnostics/design.md, docs/components/applications/diagnostics/testing.md]
+    adrs: [docs/decisions/0014-read-only-diagnostics-surface.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    gaps: []
+
   applications.operations:
     id: applications.operations
     parent: applications
@@ -1173,9 +1195,9 @@ components:
     public_exports:
       current: [imagent.applications:CodexLiveActivityPresenter, imagent.applications:T3ActivityPresenter, imagent.applications:ApplicationTextPresentation, imagent.applications:ApplicationPresentationCapacityError, imagent.applications:ApplicationPresentationCancelled, imagent.applications:ApplicationPresentationError, imagent.applications:ApplicationPresentationFailed, imagent.applications:ApplicationPresentationLimits, imagent.applications:ApplicationPresentationTimeout, imagent.applications:CodexLiveActivityFacts, imagent.applications:CodexLiveActivityKind, imagent.applications:CodexLiveActivityMethod, imagent.applications:CodexPlanStep, imagent.applications:T3ActivityFacts, imagent.applications.presentation:ApplicationPresentationCancelled, imagent.applications.presentation:ApplicationPresentationCapacityError, imagent.applications.presentation:ApplicationPresentationError, imagent.applications.presentation:ApplicationPresentationFailed, imagent.applications.presentation:ApplicationPresentationLimits, imagent.applications.presentation:ApplicationPresentationRuntime, imagent.applications.presentation:ApplicationPresentationTimeout, imagent.applications.presentation:ApplicationTextPresentation, imagent.applications.presentation:CodexLiveActivityFacts, imagent.applications.presentation:CodexLiveActivityKind, imagent.applications.presentation:CodexLiveActivityMethod, imagent.applications.presentation:CodexLiveActivityPresenter, imagent.applications.presentation:CodexPlanStep, imagent.applications.presentation:T3ActivityFacts, imagent.applications.presentation:T3ActivityPresenter]
       target: [imagent.applications.presentation:CodexLiveActivityPresenter, imagent.applications.presentation:T3ActivityPresenter, imagent.applications.presentation:ApplicationTextPresentation, imagent.applications.presentation:ApplicationPresentationCapacityError, imagent.applications.presentation:ApplicationPresentationCancelled, imagent.applications.presentation:ApplicationPresentationError, imagent.applications.presentation:ApplicationPresentationFailed, imagent.applications.presentation:ApplicationPresentationLimits, imagent.applications.presentation:ApplicationPresentationRuntime, imagent.applications.presentation:ApplicationPresentationTimeout, imagent.applications.presentation:CodexLiveActivityFacts, imagent.applications.presentation:CodexLiveActivityKind, imagent.applications.presentation:CodexLiveActivityMethod, imagent.applications.presentation:CodexPlanStep, imagent.applications.presentation:T3ActivityFacts]
-    dependencies: [interaction.messages, applications.application-contract, applications.events]
+    dependencies: [interaction.messages, applications.application-contract, applications.events, applications.diagnostics]
     state_recovery: Codex output is live-only; T3 output is recoverable only because history reproduces the same stable association.
-    current_code: [src/imagent/applications/presentation/__init__.py, src/imagent/applications/presentation/live_activity.py, src/imagent/diagnostics.py]
+    current_code: [src/imagent/applications/presentation/__init__.py, src/imagent/applications/presentation/live_activity.py]
     target_code: [src/imagent/applications/presentation/live_activity.py]
     current_tests: [tests/applications/presentation/test_live_activity.py]
     target_tests: [tests/applications/presentation/test_live_activity.py]
@@ -1195,9 +1217,9 @@ components:
     public_exports:
       current: [imagent.applications:AppServerArtifactMaterializer, imagent.applications:ApplicationArtifactMaterialization, imagent.applications:AppServerArtifactCandidate, imagent.applications:AppServerArtifactMaterializationLimits, imagent.applications:AppServerArtifactSourceKind, imagent.applications:AppServerCompletedItemFacts, imagent.applications:AppServerCompletedItemKind, imagent.applications:AppServerCompletedItemPhase, imagent.applications:AppServerTurnTerminalFacts, imagent.applications:AppServerTurnTerminalStatus, imagent.applications:ApplicationArtifactMaterializationCancelled, imagent.applications:ApplicationArtifactMaterializationCapacityError, imagent.applications:ApplicationArtifactMaterializationError, imagent.applications:ApplicationArtifactMaterializationFailed, imagent.applications:ApplicationArtifactMaterializationTimeout, imagent.applications.presentation:AppServerArtifactMaterializer, imagent.applications.presentation:ApplicationArtifactMaterialization, imagent.applications.presentation:AppServerArtifactCandidate, imagent.applications.presentation:AppServerArtifactMaterializationLimits, imagent.applications.presentation:AppServerArtifactSourceKind, imagent.applications.presentation:AppServerCompletedItemFacts, imagent.applications.presentation:AppServerCompletedItemKind, imagent.applications.presentation:AppServerCompletedItemPhase, imagent.applications.presentation:AppServerTurnTerminalFacts, imagent.applications.presentation:AppServerTurnTerminalStatus, imagent.applications.presentation:ApplicationArtifactMaterializationCancelled, imagent.applications.presentation:ApplicationArtifactMaterializationCapacityError, imagent.applications.presentation:ApplicationArtifactMaterializationError, imagent.applications.presentation:ApplicationArtifactMaterializationFailed, imagent.applications.presentation:ApplicationArtifactMaterializationTimeout]
       target: [imagent.applications.presentation:AppServerArtifactMaterializer, imagent.applications.presentation:ApplicationArtifactMaterialization, imagent.applications.presentation:AppServerArtifactCandidate, imagent.applications.presentation:AppServerArtifactMaterializationLimits, imagent.applications.presentation:AppServerArtifactSourceKind, imagent.applications.presentation:AppServerCompletedItemFacts, imagent.applications.presentation:AppServerCompletedItemKind, imagent.applications.presentation:AppServerCompletedItemPhase, imagent.applications.presentation:AppServerTurnTerminalFacts, imagent.applications.presentation:AppServerTurnTerminalStatus, imagent.applications.presentation:ApplicationArtifactMaterializationCancelled, imagent.applications.presentation:ApplicationArtifactMaterializationCapacityError, imagent.applications.presentation:ApplicationArtifactMaterializationError, imagent.applications.presentation:ApplicationArtifactMaterializationFailed, imagent.applications.presentation:ApplicationArtifactMaterializationTimeout]
-    dependencies: [interaction.media, applications.application-contract, applications.events, applications.adapters.appserver.mapping]
+    dependencies: [interaction.media, applications.application-contract, applications.events, applications.diagnostics, applications.adapters.appserver.mapping]
     state_recovery: Live duplicate window is finite; authoritative history may reinvoke and consumer association must be replay-safe.
-    current_code: [src/imagent/applications/presentation/artifact_materialization.py, src/imagent/diagnostics.py]
+    current_code: [src/imagent/applications/presentation/artifact_materialization.py]
     target_code: [src/imagent/applications/presentation/artifact_materialization.py]
     current_tests: [tests/applications/presentation/test_artifact_materialization.py]
     target_tests: [tests/applications/presentation/test_artifact_materialization.py]
@@ -1300,7 +1322,7 @@ components:
     owns: [AppServerDiagnosticState, fixed fact-surface redaction, legacy debug summarization, fixed health emission]
     does_not_own: [Gateway health policy, retry decisions, consumer presentation]
     inputs: [local transport/runtime transitions and received native messages]
-    outputs: [ApplicationDiagnosticFacts-compatible bounded facts and internal debug mappings/logs]
+    outputs: [ConnectionDiagnosticFacts and internal debug mappings/logs]
     public_contracts: [AppServerDiagnosticState]
     public_exports:
       current: [imagent.applications.adapters.appserver.diagnostics:AppServerDiagnosticState]
@@ -1313,7 +1335,7 @@ components:
     target_tests: [tests/applications/adapters/appserver/test_diagnostics.py]
     authoritative_docs: [docs/components/applications/adapters/appserver/diagnostics/design.md, docs/components/applications/adapters/appserver/diagnostics/testing.md]
     adrs: [docs/decisions/0014-read-only-diagnostics-surface.md]
-    gaps: [legacy debug summaries still require focused bounds and redaction; retained Application/Gateway diagnostic definitions remain in the explicitly mapped transition module]
+    gaps: [legacy debug summaries still require focused bounds and redaction; retained Gateway diagnostic definitions remain in the explicitly mapped transition module]
 
   applications.adapters.codex:
     id: applications.adapters.codex
@@ -1327,7 +1349,7 @@ components:
     public_exports:
       current: [imagent.applications:CodexApplicationAdapter, imagent.applications.adapters.codex:CodexApplicationAdapter]
       target: [imagent.applications.adapters.codex:CodexApplicationAdapter]
-    dependencies: [interaction.diagnostics, interaction.messages, interaction.operations, interaction.media, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, applications.adapters.appserver.client, applications.adapters.appserver.mapping, applications.adapters.appserver.requests, applications.adapters.appserver.diagnostics, applications.presentation.live-activity, applications.presentation.artifact-materialization]
+    dependencies: [interaction.diagnostics, interaction.messages, interaction.operations, interaction.media, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, applications.diagnostics, applications.adapters.appserver.client, applications.adapters.appserver.mapping, applications.adapters.appserver.requests, applications.adapters.appserver.diagnostics, applications.presentation.live-activity, applications.presentation.artifact-materialization]
     state_recovery: Native history is authoritative; steer candidate read never authorizes fallback start; ambiguous dispatch is unknown.
     current_code: [src/imagent/applications/adapters/codex.py, src/imagent/applications/adapters/appserver/_base.py]
     target_code: [src/imagent/applications/adapters/codex.py, src/imagent/applications/adapters/appserver/_base.py]
@@ -1349,7 +1371,7 @@ components:
     public_exports:
       current: [imagent.applications:ZenApplicationAdapter, imagent.applications.adapters.zen:ZenApplicationAdapter]
       target: [imagent.applications.adapters.zen:ZenApplicationAdapter]
-    dependencies: [interaction.diagnostics, interaction.messages, interaction.operations, interaction.media, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, applications.adapters.appserver.client, applications.adapters.appserver.mapping, applications.adapters.appserver.requests, applications.adapters.appserver.diagnostics, applications.presentation.artifact-materialization]
+    dependencies: [interaction.diagnostics, interaction.messages, interaction.operations, interaction.media, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, applications.diagnostics, applications.adapters.appserver.client, applications.adapters.appserver.mapping, applications.adapters.appserver.requests, applications.adapters.appserver.diagnostics, applications.presentation.artifact-materialization]
     state_recovery: Starts new native Turns for prefer_active_turn until Zen proves steer; authoritative history handles gaps.
     current_code: [src/imagent/applications/adapters/zen.py, src/imagent/applications/adapters/appserver/_base.py]
     target_code: [src/imagent/applications/adapters/zen.py, src/imagent/applications/adapters/appserver/_base.py]
@@ -1371,7 +1393,7 @@ components:
     public_exports:
       current: [imagent.applications:T3ApplicationAdapter, imagent.applications:HttpT3Client, imagent.applications:T3ClientError, imagent.applications.adapters.t3:T3ApplicationAdapter, imagent.applications.adapters.t3:HttpT3Client, imagent.applications.adapters.t3:T3ClientError]
       target: [imagent.applications.adapters.t3:T3ApplicationAdapter, imagent.applications.adapters.t3:HttpT3Client, imagent.applications.adapters.t3:T3ClientError]
-    dependencies: [interaction.messages, interaction.operations, interaction.media, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, applications.presentation.live-activity]
+    dependencies: [interaction.messages, interaction.operations, interaction.media, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, applications.diagnostics, applications.presentation.live-activity]
     state_recovery: Stable native IDs/history recover activity and finite A1 presentation cursors fail gaps explicitly; baseline, active send-lock, seen-message, and terminal-Turn tables have explicit stable-identity capacities, deterministic eviction/rejection, and active-baseline protection.
     current_code: [src/imagent/applications/adapters/t3.py]
     target_code: [src/imagent/applications/adapters/t3.py]
@@ -1579,8 +1601,8 @@ structural_status:
       owners: [gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation]
       reason: The intentional Gateway delivery package facade re-exports exact public values from focused delivery leaves without implementing any leaf.
     src/imagent/diagnostics.py:
-      owners: [gateway.input.content-transformation, gateway.input.failure-presentation, gateway.presentation, gateway.delivery.outcome-observation, gateway.diagnostics, applications.presentation.live-activity, applications.presentation.artifact-materialization]
-      reason: The transition module retains the not-yet-moved Application/Gateway diagnostic implementations while explicitly re-exporting the moved Interaction contracts; the canonical Channel adapter and App Server call sites now depend on their real Interaction owners directly.
+      owners: [gateway.input.content-transformation, gateway.input.failure-presentation, gateway.presentation, gateway.delivery.outcome-observation, gateway.diagnostics]
+      reason: The transition module retains the not-yet-moved Gateway diagnostic implementations while explicitly re-exporting the moved Interaction and Application contracts; canonical Application, Channel, and App Server call sites depend on their real lower-layer owners directly.
     src/imagent/projection_runtime.py:
       owners: [gateway.input.dispatch, gateway.projection.observation, gateway.projection.recovery]
       reason: Acceptance ordering, one-worker observation, and recovery supervision share one current state machine.

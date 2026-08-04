@@ -24,8 +24,12 @@ protocol envelope. A presenter returns `ApplicationTextPresentation` or
 `None`: finite typed text only, with no power to change item/event identity,
 Thread, Turn, role, metadata, attachments, destination, or recoverability.
 
-The leaf depends on Interaction messages and Application contract/event values.
-Current exports are from `imagent.applications`; the exact finite
+The leaf depends on Interaction messages, Application contract/event values,
+and the direct canonical `applications.diagnostics` owner for its typed
+presentation fact and failure-code diagnostics. The separate App Server
+adapter diagnostics leaf remains the owner of mutable native connection
+state; this presentation leaf does not depend on that state. Current exports
+are from `imagent.applications`; the exact finite
 `imagent.applications.presentation` package facade is authoritative for this
 leaf and the sibling artifact-materialization leaf, backed for live activity
 by `src/imagent/applications/presentation/live_activity.py`.
@@ -51,7 +55,7 @@ Before this slice, implementation was `src/imagent/applications/presentation.py`
 with diagnostic fact types in `src/imagent/diagnostics.py`. The moved owner is
 `src/imagent/applications/presentation/live_activity.py` and its finite facade
 is `src/imagent/applications/presentation/__init__.py`; diagnostic fact
-ownership remains in `src/imagent/diagnostics.py`. Focused evidence is
+ownership is now `src/imagent/applications/diagnostics.py`. Focused evidence is
 `tests/applications/presentation/test_live_activity.py`; adapter integration
 tests remain in their historical suites. The explicit gap is that Codex/T3
 fact shapes share a runtime while remaining irreducibly separate typed

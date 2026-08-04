@@ -11,7 +11,6 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Protocol, cast
 
-from ....diagnostics import ApplicationDiagnosticFacts
 from ....interaction.diagnostics import ConnectionDiagnosticFacts
 from ....interaction.media import (
     AttachmentContent,
@@ -50,6 +49,7 @@ from ...contract import (
     TurnReplyCorrelationPolicy,
     TurnStatus,
 )
+from ...diagnostics import ApplicationDiagnosticFacts
 from ...events import AgentEvent, AgentEventType, EventBroadcaster, EventStreamReset
 from ...operations import (
     ActivateNativeThread,

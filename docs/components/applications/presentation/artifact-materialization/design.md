@@ -30,8 +30,11 @@ The materializer returns `None` or a finite
 `ApplicationArtifactMaterialization` containing validated typed
 `AttachmentContent`. It cannot select message/event identity, role, Thread,
 Turn, terminal status, recovery/checkpoint behavior, or destination. This leaf
-depends on Interaction media, the Application contract/events leaves, and App
-Server mapping. Current exact facades are `imagent.applications` and
+depends on Interaction media, the Application contract/events leaves, the
+direct canonical `applications.diagnostics` owner for its typed artifact
+diagnostics, and App Server mapping. App Server adapter diagnostics remains a
+separate owner of mutable native connection state. Current exact facades are
+`imagent.applications` and
 `imagent.applications.presentation`, both backed by
 `src/imagent/applications/presentation/artifact_materialization.py`.
 
@@ -55,7 +58,7 @@ Crash-safe cleanup remains the consumer's ledger/startup sweep responsibility.
 
 The owner implementation is
 `src/imagent/applications/presentation/artifact_materialization.py`, with
-diagnostic facts remaining in `src/imagent/diagnostics.py`. Focused tests are
+diagnostic facts owned by `src/imagent/applications/diagnostics.py`. Focused tests are
 `tests/applications/presentation/test_artifact_materialization.py`, and the
 finite `src/imagent/applications/presentation/__init__.py` facade re-exports
 the named artifact contracts alongside the live-activity contracts. The

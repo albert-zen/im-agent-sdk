@@ -21,7 +21,6 @@ queue behavior remains covered by
 `tests/interaction/channels/adapters/test_diagnostics_owner.py` and
 `tests/test_native_channels.py`.
 
-Run the focused tests together with the existing diagnostics, Application,
-Gateway, and native Channel suites. The full repository suite is required
-because the transition facade is still used by not-yet-moved Application and
-Gateway definitions.
+Run the focused tests together with the Applications, Gateway, and native
+Channel suites. The full repository suite is required because the transition
+facade still retains Gateway definitions while #273 is pending.

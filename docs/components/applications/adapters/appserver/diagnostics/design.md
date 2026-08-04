@@ -12,10 +12,11 @@ legacy debug summary/logging helpers used inside the adapter. It reports the
 App Server connection epoch and independent dispatch lane state without
 becoming an operator or Gateway health policy.
 
-It does not own common diagnostic enums/value definitions, Gateway
-diagnostics, polling, retry decisions, or consumer presentation. The
-historical aggregate `src/imagent/diagnostics.py` remains the transition
-facade for not-yet-moved Application/Gateway definitions; the
+It does not own common diagnostic enums/value definitions, Application
+diagnostic facts, Gateway diagnostics, polling, retry decisions, or consumer
+presentation. The historical aggregate `src/imagent/diagnostics.py` remains the
+transition facade for not-yet-moved Gateway definitions and exact Application
+re-exports; the
 dependency-neutral connection/queue contracts are owned by
 [`interaction.diagnostics`](../../../../interaction/diagnostics/design.md).
 Only its App Server-specific positions belong here.
@@ -50,9 +51,10 @@ content-derived values may be retained or emitted.
 
 The App Server diagnostic fact, summary, and runtime helpers now co-locate at
 `src/imagent/applications/adapters/appserver/diagnostics.py`.
-`src/imagent/diagnostics.py` remains the explicit transition facade for
-remaining Application/Gateway facts; it is not moved or reclassified as an App
-Server leaf. Common connection/queue values come from
+`src/imagent/applications/diagnostics.py` owns the Application fact contracts;
+`src/imagent/diagnostics.py` remains the explicit mixed transition facade for
+remaining Gateway facts and those exact Application re-exports. It is not
+moved or reclassified as an App Server leaf. Common connection/queue values come from
 `imagent.interaction.diagnostics`.
 Current evidence is `tests/applications/adapters/appserver/test_client.py`,
 `tests/test_appserver_transport.py`, and `tests/test_diagnostics.py`; the target suite is

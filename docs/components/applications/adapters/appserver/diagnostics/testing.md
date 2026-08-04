@@ -16,7 +16,10 @@ redaction boundary: current summaries may retain native identifiers and
 content-derived previews. Focused security tests are still required before
 those helpers may be described as bounded or safe.
 
-The tests also keep T3's no-synthetic-connection result distinct; that is
+Application diagnostic identity is covered by
+`tests/applications/test_diagnostics.py`; the App Server mutable state remains
+owned and tested here, rather than moving into that contract module. The tests
+also keep T3's no-synthetic-connection result distinct; that is
 affected cross-adapter evidence, not an App Server diagnostic dependency.
 
 ## Target evidence and verification

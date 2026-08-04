@@ -295,9 +295,11 @@ components:
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/interaction/diagnostics.py
       - src/imagent/interaction/channels/diagnostics.py
+      - src/imagent/applications/diagnostics.py
       - src/imagent/diagnostics.py
       - tests/interaction/test_diagnostics.py
       - tests/interaction/channels/test_diagnostics.py
+      - tests/applications/test_diagnostics.py
       - tests/test_diagnostics.py
     docs:
       - docs/components/diagnostics/design.md
@@ -306,6 +308,8 @@ components:
       - docs/components/interaction/diagnostics/testing.md
       - docs/components/interaction/channels/diagnostics/design.md
       - docs/components/interaction/channels/diagnostics/testing.md
+      - docs/components/applications/diagnostics/design.md
+      - docs/components/applications/diagnostics/testing.md
     required_docs:
       - design
       - testing
@@ -582,7 +586,11 @@ components:
       - src/imagent/applications/presentation/**
       - examples/reference_consumer/application.py
       - tests/applications/__init__.py
-      - tests/applications/test_*.py
+      - tests/applications/test_capabilities.py
+      - tests/applications/test_contract.py
+      - tests/applications/test_events.py
+      - tests/applications/test_operations.py
+      - tests/applications/test_requests.py
       - tests/applications/presentation/**
     docs:
       - docs/components/applications/README.md
