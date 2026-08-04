@@ -21,6 +21,11 @@ Gateway operation conformance must prove:
 - the per-Conversation lock registry has a finite concurrency-safe lifetime,
   never evicts a lock while it is owned or awaited, and fails explicitly if
   safe capacity cannot be acquired; and
+- an existing key can join at capacity, a new key receives retryable
+  `capacity_exhausted` before any side effect, and cancellation removes usage
+  exactly once;
+- claimed inbound capacity rejection preserves the I2/no-I2 pre-acceptance
+  claim transition and can never authorize native input; and
 - product-only commands and generic extension hooks are absent.
 
 Current evidence is in `tests/test_gateway_operations.py` and

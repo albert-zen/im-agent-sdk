@@ -30,6 +30,10 @@ class CommonOperationVocabularyTests(unittest.TestCase):
                 self.assertIs(getattr(legacy_contracts, name), owner_object)
 
     def test_operation_errors_use_stable_codes(self) -> None:
+        self.assertEqual(
+            OperationErrorCode.CAPACITY_EXHAUSTED.value,
+            "capacity_exhausted",
+        )
         cases = (
             (ValueError("bad input"), OperationErrorCode.INVALID_OPERATION),
             (NotImplementedError("missing"), OperationErrorCode.UNSUPPORTED),

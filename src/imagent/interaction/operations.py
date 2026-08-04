@@ -36,6 +36,7 @@ class OperationErrorCode(StrEnum):
     NOT_FOUND = "not_found"
     CONFLICT = "conflict"
     ADAPTER_FAILURE = "adapter_failure"
+    CAPACITY_EXHAUSTED = "capacity_exhausted"
     UNAUTHORIZED_DESTINATION = "unauthorized_destination"
     REQUEST_DUPLICATE = "request_duplicate"
     REQUEST_RESOLVED = "request_resolved"
