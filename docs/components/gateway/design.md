@@ -47,7 +47,8 @@ grow together:
 - immutable `GatewayLimits` holds every bounded capacity, recovery page/item
   limit, retry delay, and correlation retention value, including the positive
   finite in-memory idempotency and delivery-submission record bounds plus the
-  active Conversation serialization-key bound (all 4096 by default);
+  active Conversation serialization-key and active Thread-observation bounds
+  (all 4096 by default);
 - immutable `GatewayExtensions` holds the optional Controller, Request
   Presenter, I1 inbound-content transformer, I2 inbound-failure presenter, and
   O1 destination-presentation policy and is the only group later Gateway-owned
@@ -252,6 +253,17 @@ failure cannot expose a temporary live-processing window before rollback.
 
 Application and Channel failures remain typed or explicitly reported. Gateway
 does not convert unknown delivery into success.
+
+Observation capacity is separate from durable route or checkpoint state. The
+runtime keys it by stable `ThreadRef`, joins an existing starting/running
+worker or in-flight same-Thread admission before evaluating capacity, and
+rejects only a distinct new worker with a redacted capacity failure before
+subscription, recovery/checkpoint, presentation, or Channel work. The
+admission lease protects the identity until its caller finishes even if its
+worker turns over. A terminal or cancelled worker discards worker-owned health;
+an accepted-input fence, lock, and buffer remain until the final input owner
+has persisted/validated correlation and drained them. A supervised recovery
+retry remains the same worker and keeps its slot.
 
 I2 receives `InboundFailurePhase` plus the original Conversation and reply
 identity and a Gateway-derived stable delivery ID. It receives no exception

@@ -974,9 +974,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
             self.assertIsInstance(switched_b, ConversationBound)
-            health_a = gateway.get_projection_health(thread_a.ref)
-            assert health_a is not None
-            self.assertIs(health_a.state, ProjectionWorkerState.STOPPED)
+            self.assertIsNone(gateway.get_projection_health(thread_a.ref))
             await channel.on_message(_inbound(conversation, "b-first"))
             await _wait_for_deliveries(channel, 4)
 

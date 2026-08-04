@@ -59,6 +59,14 @@ Lifecycle creates no SDK daemon or second runtime. Application and Channel
 instances remain their own lifecycle owners; Gateway only sequences their
 contract methods and waits for bounded cleanup.
 
+Stopping or rolling back a Gateway also cancels and joins every active Thread
+observation worker. Their worker-owned capacity slots and health facts are
+discarded; an active accepted-input fence retains its event lock and buffer
+until its final input owner resolves it, rather than authorizing replay early.
+The established `restore()` boundary then resets all process-local acceptance
+tracking before rebuilding durable route/checkpoint authority. No stopped-worker
+registry or durable capacity state survives lifecycle reset.
+
 ## Contracts and structure
 
 The stable public lifecycle contract is `ImAgentGateway`; startup helper types

@@ -4,7 +4,7 @@ import asyncio
 import inspect
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -85,6 +85,15 @@ class InputDispatchRejected(RuntimeError):
     """Application input was rejected by a bridge invariant before dispatch."""
 
 
+class ProjectionWorkerCapacityError(RuntimeError):
+    """A distinct Thread worker cannot start within the configured active bound."""
+
+
+@dataclass(slots=True)
+class _ProjectionStartReservation:
+    users: int = 1
+
+
 class ThreadProjectionRuntime:
     """Own Thread observation and rebuildable IM projection lifecycle."""
 
@@ -107,6 +116,7 @@ class ThreadProjectionRuntime:
         projection_item_limit: int = 20,
         request_delivery_max_pending: int = 256,
         turn_acceptance_event_max_pending: int = 256,
+        max_active_threads: int = 4096,
         subscription_retry_initial_seconds: float = 0.05,
         subscription_retry_max_seconds: float = 2.0,
         turn_correlation_retention_seconds: float = 7 * 24 * 60 * 60,
@@ -124,6 +134,12 @@ class ThreadProjectionRuntime:
             raise ValueError("projection_item_limit must be positive")
         if turn_acceptance_event_max_pending < 1:
             raise ValueError("turn_acceptance_event_max_pending must be positive")
+        if (
+            not isinstance(max_active_threads, int)
+            or isinstance(max_active_threads, bool)
+            or max_active_threads < 1
+        ):
+            raise ValueError("max_active_threads must be a positive integer")
         if subscription_retry_initial_seconds < 0:
             raise ValueError("initial subscription retry delay must be non-negative")
         if subscription_retry_max_seconds < subscription_retry_initial_seconds:
@@ -144,8 +160,11 @@ class ThreadProjectionRuntime:
             seconds=request_correlation_retention_seconds
         )
         self._turn_acceptance_event_max_pending = turn_acceptance_event_max_pending
+        self._max_active_threads = max_active_threads
         self._tasks: dict[ThreadRef, asyncio.Task[None]] = {}
         self._ready: dict[ThreadRef, asyncio.Event] = {}
+        self._pending_starts: dict[ThreadRef, _ProjectionStartReservation] = {}
+        self._prepared_foreground_starts: dict[str, list[_ProjectionStartReservation]] = {}
         self._event_locks: dict[ThreadRef, asyncio.Lock] = {}
         self._pending_turn_acceptances: dict[ThreadRef, int] = {}
         self._acceptance_ready: dict[ThreadRef, asyncio.Event] = {}
@@ -196,6 +215,7 @@ class ThreadProjectionRuntime:
         self._acceptance_ready.clear()
         self._buffered_events.clear()
         self._buffered_event_overflows.clear()
+        self._event_locks.clear()
         restored_routes = await self._projections.list_projection_routes()
         if self._projection_policy is ProjectionPolicy.FOREGROUND_ONLY:
             active_routes: list[ThreadProjectionRoute] = []
@@ -229,20 +249,18 @@ class ThreadProjectionRuntime:
 
     async def stop(self) -> None:
         self._stopping = True
-        tasks = tuple(self._tasks.values())
-        for task in tasks:
+        tasks = tuple(self._tasks.items())
+        for _, task in tasks:
             task.cancel()
         if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-        self._tasks.clear()
-        self._ready.clear()
+            await asyncio.gather(*(task for _, task in tasks), return_exceptions=True)
+        for thread_ref, task in tasks:
+            self._finish_task(thread_ref, task)
+        self._pending_starts.clear()
+        self._prepared_foreground_starts.clear()
+        self._clear_all_worker_runtime_entries()
         await self._routes.stop()
         self._routes.reset()
-        for thread_ref in tuple(self._health):
-            self._update_health(
-                thread_ref,
-                state=ProjectionWorkerState.STOPPED,
-            )
 
     def get_health(
         self,
@@ -268,13 +286,14 @@ class ThreadProjectionRuntime:
         *,
         reply_to_message_id: str | None,
     ) -> ThreadProjectionRoute:
+        reservation = self._reserve_projection_start(thread_ref)
         route_id = derive_projection_route_id(thread_ref, conversation_ref)
         # Install the barrier before the durable route becomes visible to an
         # already-running Thread worker.  SQLite persistence can yield while
         # publishing the route, so creating the barrier after put() would
         # leave a live-before-baseline window.
-        await self._routes.begin_bootstrap(route_id)
         try:
+            await self._routes.begin_bootstrap(route_id)
             route, _created = await self._remember_route(
                 thread_ref,
                 conversation_ref,
@@ -290,6 +309,7 @@ class ThreadProjectionRuntime:
             return route
         finally:
             self._routes.complete_bootstrap(route_id)
+            self._release_projection_start(thread_ref, reservation)
 
     async def prepare_foreground_binding_route(
         self,
@@ -300,23 +320,41 @@ class ThreadProjectionRuntime:
 
         if self._projection_policy is not ProjectionPolicy.FOREGROUND_ONLY:
             raise RuntimeError("foreground binding route preparation requires foreground_only")
+        reservation = self._reserve_projection_start(thread_ref)
         route_id = derive_projection_route_id(thread_ref, conversation_ref)
-        await self._routes.begin_bootstrap(route_id)
         try:
+            await self._routes.begin_bootstrap(route_id)
             route, created = await self._remember_route(
                 thread_ref,
                 conversation_ref,
                 reply_to_message_id=None,
             )
+            self._prepared_foreground_starts.setdefault(route_id, []).append(reservation)
             return route, created
         except BaseException:
+            self._release_projection_start(thread_ref, reservation)
             self._routes.complete_bootstrap(route_id)
             raise
 
-    def complete_foreground_binding_route(self, route_id: str) -> None:
+    def complete_foreground_binding_route(
+        self,
+        route_id: str,
+        *,
+        complete_bootstrap: bool = True,
+    ) -> None:
         """Release a route barrier after foreground binding convergence or failure."""
 
-        self._routes.complete_bootstrap(route_id)
+        self._release_foreground_start_reservation(route_id)
+        if complete_bootstrap:
+            self._routes.complete_bootstrap(route_id)
+
+    def _release_foreground_start_reservation(self, route_id: str) -> None:
+        reservations = self._prepared_foreground_starts.get(route_id)
+        if reservations:
+            reservation = reservations.pop()
+            if not reservations:
+                self._prepared_foreground_starts.pop(route_id, None)
+            self._release_projection_start_for_reservation(reservation)
 
     async def prepare_input_route(
         self,
@@ -326,14 +364,16 @@ class ThreadProjectionRuntime:
         *,
         thread_was_created: bool,
     ) -> ThreadProjectionRoute:
-        await self.cleanup_stale_correlations()
+        reservation = self._reserve_projection_start(thread_ref)
+        needs_reconcile = False
         route_id = derive_projection_route_id(thread_ref, conversation_ref)
-        existing = await get_projection_route(self._projections, route_id)
-        task = self._tasks.get(thread_ref)
-        needs_reconcile = existing is None or task is None or task.done()
-        if needs_reconcile:
-            await self._routes.begin_bootstrap(route_id)
         try:
+            await self.cleanup_stale_correlations()
+            existing = await get_projection_route(self._projections, route_id)
+            task = self._tasks.get(thread_ref)
+            needs_reconcile = existing is None or task is None or task.done()
+            if needs_reconcile:
+                await self._routes.begin_bootstrap(route_id)
             route, created = await self._remember_route(
                 thread_ref,
                 conversation_ref,
@@ -351,6 +391,7 @@ class ThreadProjectionRuntime:
         finally:
             if needs_reconcile:
                 self._routes.complete_bootstrap(route_id)
+            self._release_projection_start(thread_ref, reservation)
 
     async def send_input(
         self,
@@ -482,6 +523,8 @@ class ThreadProjectionRuntime:
                             "input error",
                             exc_info=drain_error,
                         )
+                finally:
+                    self._clear_acceptance_runtime_entries(thread_ref)
         if primary_error is not None:
             if accepted is not None:
                 raise InputPostAcceptanceError(accepted, primary_error) from primary_error
@@ -608,10 +651,51 @@ class ThreadProjectionRuntime:
             return
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
-        self._update_health(
-            thread_ref,
-            state=ProjectionWorkerState.STOPPED,
-        )
+        self._finish_task(thread_ref, task)
+
+    def _reserve_projection_start(
+        self,
+        thread_ref: ThreadRef,
+    ) -> _ProjectionStartReservation:
+        self._discard_finished_tasks()
+        reservation = self._pending_starts.get(thread_ref)
+        if reservation is not None:
+            reservation.users += 1
+            return reservation
+        active_thread_refs = set(self._tasks) | set(self._pending_starts)
+        if (
+            thread_ref not in active_thread_refs
+            and len(active_thread_refs) >= self._max_active_threads
+        ):
+            raise ProjectionWorkerCapacityError("active Thread observation capacity is exhausted")
+        reservation = _ProjectionStartReservation()
+        self._pending_starts[thread_ref] = reservation
+        return reservation
+
+    def _release_projection_start(
+        self,
+        thread_ref: ThreadRef,
+        reservation: _ProjectionStartReservation,
+    ) -> None:
+        if self._pending_starts.get(thread_ref) is not reservation:
+            return
+        reservation.users -= 1
+        if reservation.users == 0:
+            self._pending_starts.pop(thread_ref, None)
+
+    def _release_projection_start_for_reservation(
+        self,
+        reservation: _ProjectionStartReservation,
+    ) -> None:
+        for thread_ref, current in tuple(self._pending_starts.items()):
+            if current is reservation:
+                self._release_projection_start(thread_ref, reservation)
+                return
+
+    def _discard_finished_tasks(self) -> None:
+        for thread_ref, task in tuple(self._tasks.items()):
+            if task.done():
+                self._finish_task(thread_ref, task)
 
     async def _ensure_projection(
         self,
@@ -620,56 +704,72 @@ class ThreadProjectionRuntime:
         reconcile_existing: bool = False,
         require_checkpoint: bool = True,
     ) -> None:
-        task = self._tasks.get(thread_ref)
-        if task is None or task.done():
-            ready = asyncio.Event()
-            task = asyncio.create_task(
-                self._project_thread(
-                    thread_ref,
-                    ready,
-                    reconcile_existing=reconcile_existing,
-                    require_checkpoint=require_checkpoint,
+        reservation = self._reserve_projection_start(thread_ref)
+        try:
+            task = self._tasks.get(thread_ref)
+            if task is None:
+                ready = asyncio.Event()
+                task = asyncio.create_task(
+                    self._project_thread(
+                        thread_ref,
+                        ready,
+                        reconcile_existing=reconcile_existing,
+                        require_checkpoint=require_checkpoint,
+                    )
                 )
-            )
-            self._tasks[thread_ref] = task
-            self._ready[thread_ref] = ready
-            task.add_done_callback(
-                lambda completed, ref=thread_ref: self._finish_task(
-                    ref,
-                    completed,
+                self._tasks[thread_ref] = task
+                self._ready[thread_ref] = ready
+                task.add_done_callback(
+                    lambda completed, ref=thread_ref: self._finish_task(
+                        ref,
+                        completed,
+                    )
                 )
-            )
-        ready = self._ready[thread_ref]
-        await ready.wait()
-        if task.done():
-            await task
+            ready = self._ready[thread_ref]
+            await ready.wait()
+            if task.done():
+                await task
+        finally:
+            self._release_projection_start(thread_ref, reservation)
 
     def _finish_task(
         self,
         thread_ref: ThreadRef,
         task: asyncio.Task[None],
     ) -> None:
-        if self._tasks.get(thread_ref) is task:
-            self._tasks.pop(thread_ref, None)
-            self._ready.pop(thread_ref, None)
+        if self._tasks.get(thread_ref) is not task:
+            return
+        self._tasks.pop(thread_ref, None)
+        ready = self._ready.pop(thread_ref, None)
+        if ready is not None:
+            ready.set()
+        self._clear_worker_runtime_entries(thread_ref)
         if task.cancelled():
             return
         error = task.exception()
         if error is not None:
-            self._update_health(
-                thread_ref,
-                state=ProjectionWorkerState.STOPPED,
-                last_subscription_error=str(error),
-            )
             logger.exception(
                 "Agent event projection failed",
                 exc_info=(type(error), error, error.__traceback__),
             )
-        else:
-            self._update_health(
-                thread_ref,
-                state=ProjectionWorkerState.STOPPED,
-            )
+
+    def _clear_all_worker_runtime_entries(self) -> None:
+        for thread_ref in set(self._health) | set(self._event_locks):
+            self._clear_worker_runtime_entries(thread_ref)
+
+    def _clear_worker_runtime_entries(self, thread_ref: ThreadRef) -> None:
+        self._health.pop(thread_ref, None)
+        if self._pending_turn_acceptances.get(thread_ref, 0) == 0:
+            self._event_locks.pop(thread_ref, None)
+
+    def _clear_acceptance_runtime_entries(self, thread_ref: ThreadRef) -> None:
+        if self._pending_turn_acceptances.get(thread_ref, 0) > 0:
+            return
+        self._acceptance_ready.pop(thread_ref, None)
+        self._buffered_events.pop(thread_ref, None)
+        self._buffered_event_overflows.discard(thread_ref)
+        if thread_ref not in self._tasks:
+            self._event_locks.pop(thread_ref, None)
 
     async def _project_thread(
         self,

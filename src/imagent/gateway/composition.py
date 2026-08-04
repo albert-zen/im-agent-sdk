@@ -62,6 +62,7 @@ class GatewayLimits:
     delivery_submission_max_records: int = 4096
     conversation_serialization_max_active_keys: int = 4096
     idempotency_max_records: int = 4096
+    projection_max_active_threads: int = 4096
 
     def __post_init__(self) -> None:
         if (
@@ -84,6 +85,12 @@ class GatewayLimits:
             raise ValueError(
                 "conversation_serialization_max_active_keys must be a positive integer"
             )
+        if (
+            not isinstance(self.projection_max_active_threads, int)
+            or isinstance(self.projection_max_active_threads, bool)
+            or self.projection_max_active_threads < 1
+        ):
+            raise ValueError("projection_max_active_threads must be a positive integer")
 
 
 @dataclass(frozen=True, slots=True)

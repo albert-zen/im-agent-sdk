@@ -33,8 +33,8 @@ module has no compatibility shim, so there can never be two implementations.
 
 ## Bounds and absence
 
-`GatewayLimits` carries finite startup, recovery, projection, request,
-extension, in-memory idempotency, delivery-submission, and
+`GatewayLimits` carries finite startup, recovery, projection (including active
+Thread-observation), request, extension, in-memory idempotency, delivery-submission, and
 Conversation-serialization limits. Leaf runtimes validate the limits they
 consume during construction, before startup or external work. The default
 process-local idempotency repository receives its positive record bound only
@@ -50,6 +50,17 @@ ADR 0015 extension preserves the pre-extension path exactly and creates no
 synthetic callback, diagnostic invocation, persistence, or side effect. The
 grouped constructor is the one supported construction shape; composition does
 not preserve an unlimited parallel flat-keyword API.
+
+`projection_max_active_threads` is passed only to the Thread observation
+runtime. It bounds distinct stable `ThreadRef` workers in one Gateway process:
+an existing, starting, or in-flight same-Thread admission joins before
+admission, while a new Thread at capacity fails before its Application
+subscription or projection work begins. The admission lease remains keyed to
+that Thread through task turnover until the caller completes, so a distinct
+Thread cannot consume the final slot after route preparation. The bound never
+persists a slot or replaces route/checkpoint authority; terminal worker cleanup
+discards worker-owned health, while accepted-input fence state remains owned by
+the final input owner until it has safely drained.
 
 ## State and recovery
 

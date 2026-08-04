@@ -34,6 +34,15 @@ Protect these historical and known failure modes:
 - restart losing output because route state was not rebuilt.
 - concurrent first observers regressing the current one-worker/no-orphan
   behavior;
+- a final active-worker slot rejecting only a distinct Thread before
+  subscription/recovery/checkpoint or delivery work, while same-Thread
+  concurrent callers join, a cancelled waiter cannot release their worker, and
+  an admission retains its identity across task turnover before ensure;
+- terminal, cancelled, and start-failed workers leaking an active slot or
+  health across a foreground switch, stop, or restart, while worker terminal
+  during accepted input preserves the correlation fence, event lock, and buffer
+  until the final input owner drains it and the established restore boundary
+  clears process-local acceptance tracking;
 - first observation or restart scanning/delivering an unbounded archive;
 - a live completion during baseline history reading reversing baseline/live
   order or delivering twice;

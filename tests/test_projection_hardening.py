@@ -1338,9 +1338,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                     ProjectionWorkerState.RUNNING,
                 )
             )
-            health_b = second_gateway.get_projection_health(thread_b.ref)
-            assert health_b is not None
-            self.assertIs(health_b.state, ProjectionWorkerState.STOPPED)
+            self.assertIsNone(second_gateway.get_projection_health(thread_b.ref))
             self.assertEqual(application.subscription_threads[-1], thread_a.ref)
         finally:
             await second_gateway.stop()
