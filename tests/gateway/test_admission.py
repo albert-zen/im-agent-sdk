@@ -10,7 +10,7 @@ from typing import cast
 from imagent.contracts import ConversationRef, InboundMessage, TextContent
 from imagent.gateway import GatewayRepositories, ImAgentGateway
 from imagent.gateway.admission import ClaimedInbound, InboundAdmissionService
-from imagent.gateway.persistence import InMemoryIdempotencyRepository
+from imagent.gateway.persistence import IdempotencyCapacityError, InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.interaction.channels import ChannelAdapter
@@ -18,6 +18,24 @@ from imagent.testing import FakeChannelAdapter
 
 
 class InboundAdmissionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_capacity_rejects_a_new_identity_before_inbound_handoff(self) -> None:
+        repository = InMemoryIdempotencyRepository(max_records=1)
+        handed_off: list[ClaimedInbound] = []
+
+        async def handoff(claimed: ClaimedInbound) -> None:
+            handed_off.append(claimed)
+
+        service = InboundAdmissionService(repository, handoff)
+        conversation = ConversationRef("qq-main", "c2c:user-1")
+        first = await service.begin("qq-main", conversation, "message-1")
+        assert first is not None
+        try:
+            with self.assertRaises(IdempotencyCapacityError):
+                await service.begin("qq-main", conversation, "message-2")
+            self.assertEqual(handed_off, [])
+        finally:
+            await first.release()
+
     async def test_cancellation_during_handoff_fencing_releases_claim(self) -> None:
         class BlockingRefreshRepository(InMemoryIdempotencyRepository):
             def __init__(self) -> None:

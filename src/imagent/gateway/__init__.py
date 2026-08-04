@@ -186,7 +186,12 @@ class ImAgentGateway:
         }
         self._bindings = repositories.bindings
         self._projection_policy = projection_policy
-        self._idempotency = repositories.idempotency or InMemoryIdempotencyRepository()
+        idempotency = repositories.idempotency
+        if idempotency is None:
+            idempotency = InMemoryIdempotencyRepository(
+                max_records=limits.idempotency_max_records,
+            )
+        self._idempotency = idempotency
         self._request_correlations = (
             repositories.request_correlations or InMemoryRequestCorrelationRepository()
         )

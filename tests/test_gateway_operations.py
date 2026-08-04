@@ -50,6 +50,7 @@ from imagent.gateway.admission import inbound_idempotency_identity
 from imagent.gateway.delivery import DeliveryCoordinator, DeliveryCoordinatorConfig
 from imagent.gateway.persistence import (
     ConversationBinding,
+    IdempotencyCapacityError,
     InMemoryIdempotencyRepository,
     ProjectionPolicy,
     RequestRouteState,
@@ -148,6 +149,7 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(limits.startup_buffer_max_pending, 256)
         self.assertEqual(limits.subscription_retry_initial_seconds, 0.05)
         self.assertEqual(limits.turn_correlation_retention_seconds, 7 * 24 * 60 * 60)
+        self.assertEqual(limits.idempotency_max_records, 4096)
         self.assertEqual(limits.delivery_submission_max_records, 4096)
         self.assertEqual(limits.inbound_content_transform_timeout_seconds, 30.0)
         self.assertEqual(limits.inbound_content_transform_max_items, 64)
@@ -175,6 +177,9 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
             limits.baseline_history_limit = 4  # type: ignore[misc]
 
         for invalid in (0, -1, True, cast(int, 1.5)):
+            with self.subTest(invalid_idempotency_max_records=invalid):
+                with self.assertRaisesRegex(ValueError, "positive integer"):
+                    GatewayLimits(idempotency_max_records=invalid)
             with self.subTest(invalid_delivery_submission_max_records=invalid):
                 with self.assertRaisesRegex(ValueError, "positive integer"):
                     GatewayLimits(delivery_submission_max_records=invalid)
@@ -198,6 +203,7 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(limits.subscription_retry_initial_seconds, 0.125)
         self.assertEqual(limits.subscription_retry_max_seconds, 3.0)
+        self.assertEqual(limits.idempotency_max_records, 4096)
         self.assertEqual(limits.delivery_submission_max_records, 4096)
         self.assertEqual(limits.conversation_serialization_max_active_keys, 4096)
 
@@ -225,6 +231,37 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
             first._delivery_service._submissions,
             second._delivery_service._submissions,
         )
+
+    def test_default_idempotency_limit_is_injected_without_reconfiguring_a_supplied_repository(
+        self,
+    ) -> None:
+        default = ImAgentGateway(
+            channels=[],
+            applications=[],
+            repositories=GatewayRepositories(bindings=self.bindings),
+            limits=GatewayLimits(idempotency_max_records=1),
+        )
+        default_idempotency = default._idempotency
+        self.assertIsInstance(default_idempotency, InMemoryIdempotencyRepository)
+        assert isinstance(default_idempotency, InMemoryIdempotencyRepository)
+        self.assertEqual(default_idempotency.max_records, 1)
+
+        class FalseyRepository(InMemoryIdempotencyRepository):
+            def __bool__(self) -> bool:
+                return False
+
+        supplied = FalseyRepository(max_records=2)
+        injected = ImAgentGateway(
+            channels=[],
+            applications=[],
+            repositories=GatewayRepositories(
+                bindings=self.bindings,
+                idempotency=supplied,
+            ),
+            limits=GatewayLimits(idempotency_max_records=1),
+        )
+        self.assertIs(injected._idempotency, supplied)
+        self.assertEqual(supplied.max_records, 2)
 
     async def test_conversation_serialization_is_bounded_waiter_safe_and_ephemeral(
         self,
@@ -471,6 +508,75 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
 
 
 class GatewayLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_default_idempotency_capacity_fails_before_planner_coordinator_or_channel_work(
+        self,
+    ) -> None:
+        coordinator = DeliveryCoordinator()
+        channel = FakeChannelAdapter()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[],
+            repositories=GatewayRepositories(bindings=InMemoryBindingRepository()),
+            limits=GatewayLimits(idempotency_max_records=1),
+            delivery_coordinator=coordinator,
+        )
+        conversation = ConversationRef("fake-channel", "idempotency-capacity")
+
+        idempotency = gateway._idempotency
+        self.assertIsInstance(idempotency, InMemoryIdempotencyRepository)
+        assert isinstance(idempotency, InMemoryIdempotencyRepository)
+        self.assertEqual(idempotency.max_records, 1)
+        self.assertIs(
+            await idempotency.claim(
+                "occupied",
+                "record",
+                owner_token="occupied-owner",
+            ),
+            IdempotencyClaimStatus.ACQUIRED,
+        )
+        await gateway.start()
+        try:
+            with (
+                patch.object(
+                    coordinator,
+                    "validate_source_item_count",
+                    wraps=coordinator.validate_source_item_count,
+                ) as validate_source_item_count,
+                patch.object(
+                    coordinator,
+                    "preflight",
+                    wraps=coordinator.preflight,
+                ) as preflight,
+                patch.object(
+                    coordinator,
+                    "submit",
+                    wraps=coordinator.submit,
+                ) as submit,
+                patch.object(
+                    coordinator.planner,
+                    "plan",
+                    wraps=coordinator.planner.plan,
+                ) as plan,
+                patch.object(channel, "send", wraps=channel.send) as send,
+            ):
+                with self.assertRaises(IdempotencyCapacityError):
+                    await gateway._deliver_outbound(
+                        OutboundMessage(
+                            delivery_id="new-identity",
+                            conversation_ref=conversation,
+                            content=(TextContent("new identity"),),
+                            created_at=_now(),
+                        )
+                    )
+        finally:
+            await gateway.stop()
+
+        self.assertEqual(validate_source_item_count.call_count, 0)
+        self.assertEqual(preflight.call_count, 0)
+        self.assertEqual(submit.call_count, 0)
+        self.assertEqual(plan.call_count, 0)
+        self.assertEqual(send.call_count, 0)
+
     async def test_same_gateway_can_restart_with_fresh_delivery_lifecycle(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
         channel = FakeChannelAdapter()

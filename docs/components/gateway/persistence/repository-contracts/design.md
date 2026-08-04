@@ -17,8 +17,9 @@ This leaf owns the complete repository Port and conflict family:
 
 - `BindingRepository` and `ProjectionRouteRepository` for Conversation
   bindings, projection routes, checkpoints, and Turn reply correlations;
-- `IdempotencyRepository` and `IdempotencyClaimStatus` for fenced claim
-  acquisition and terminal transitions;
+- `IdempotencyRepository`, `IdempotencyClaimStatus`, and
+  `IdempotencyCapacityError` for fenced claim acquisition, explicit
+  process-local capacity rejection, and terminal transitions;
 - `RequestCorrelationRepository` and its explicit transition conflict;
 - `DeliverySubmissionRepository` and its typed capacity/conflict outcomes; and
 - `ProjectionCheckpointConflict`, `ProjectionRouteConflict`,
@@ -27,7 +28,10 @@ This leaf owns the complete repository Port and conflict family:
 
 `BindingConflict` remains the existing conflict owner in this leaf. The
 historical `imagent.adapters` module is only an exact compatibility facade for
-these names; it contains no second Protocol, enum, or exception definition.
+the pre-existing names; it contains no second Protocol, enum, or exception
+definition. New `IdempotencyCapacityError` callers use the focused
+`imagent.gateway.persistence` facade rather than expanding that retiring
+historical surface.
 
 It does not own passive record values, SQLite schema or transactions,
 process-local storage, Gateway routing policy, message content, transcript
@@ -78,8 +82,9 @@ tests/gateway/persistence/test_repository_contracts.py
 ```
 
 The focused test module proves clean-process importability, exact
-`imagent.adapters` and `imagent.gateway.persistence` object identity, absence
-of moved definitions in the compatibility facade, Protocol signatures and
+`imagent.gateway.persistence` object identity, exact identity for the
+pre-existing `imagent.adapters` aliases, absence of new capacity aliases or
+moved definitions in that compatibility facade, Protocol signatures and
 runtime `get_type_hints`, enum values, and conflict identity. Memory, SQLite,
 and reusable conformance tests continue to prove the behavior consumed by the
 Ports.

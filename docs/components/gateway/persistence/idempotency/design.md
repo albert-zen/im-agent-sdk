@@ -45,11 +45,32 @@ reclaim.
 
 ## Capacity and state
 
-The implementation is intentionally process-local and currently has no
-independent finite record limit. It is therefore a structural gap for
-long-lived production use, not a durable alternative to SQLite. It stores
-only scope, stable key, state, and owner token; it never stores prepared media,
-rendered errors, content, a callback, or work to replay.
+The process-local map has one positive finite `max_records` bound, defaulting
+to 4096. Its capacity identity is the existing stable `(scope, key)` record
+identity. Under the repository lock, `claim` first resolves an existing
+record: completed records still return `already_completed`, and active or
+protected records still return `in_flight` even when the map is full. Only an
+absent identity at the bound raises the repository-contract-owned
+`IdempotencyCapacityError` before mutating the map. It is never represented as
+a retryable claim, a false replay, or a new owner.
+
+The current owner can still refresh, protect, complete, or safely release its
+existing record at capacity. An owner-checked release is the only transition
+that can free a nonterminal record, and Gateway chooses it only when its
+higher-level side-effect classification proves repetition safe. Completed
+records are retained for the process lifetime: deleting their replay authority
+just to admit a new identity could reauthorize a native or Channel side effect.
+The implementation has no eviction, timed cleanup, tombstone replacement,
+background worker, spool, or outbox.
+
+`ImAgentGateway` passes `GatewayLimits.idempotency_max_records` only when it
+constructs this default repository. An explicitly supplied repository remains
+the deployment's own configuration and is not wrapped or reconfigured. Restart
+still discards the complete process-local map, while SQLite keeps its separate
+durable retention and stale-lease semantics unchanged.
+
+The map stores only scope, stable key, state, and owner token; it never stores
+prepared media, rendered errors, content, a callback, or work to replay.
 
 ## Structure
 

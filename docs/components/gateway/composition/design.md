@@ -34,10 +34,13 @@ module has no compatibility shim, so there can never be two implementations.
 ## Bounds and absence
 
 `GatewayLimits` carries finite startup, recovery, projection, request,
-extension, delivery-submission, and Conversation-serialization limits.
-Leaf runtimes validate the limits they consume during construction, before
-startup or external work. Invalid finite-capacity configuration fails
-explicitly. `GatewayExtensions` contains only the four Gateway-owned ADR 0015
+extension, in-memory idempotency, delivery-submission, and
+Conversation-serialization limits. Leaf runtimes validate the limits they
+consume during construction, before startup or external work. The default
+process-local idempotency repository receives its positive record bound only
+from this group; an explicitly supplied repository remains unmodified. Invalid
+finite-capacity configuration fails explicitly. `GatewayExtensions` contains
+only the four Gateway-owned ADR 0015
 typed positions plus the Controller/request presenter composition points; A1
 stays Application-owned. The group is not an `Any` context, callback stage
 enum, or service bag.
