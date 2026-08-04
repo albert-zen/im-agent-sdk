@@ -11,10 +11,10 @@ page remains current evidence for contract leaves not yet mechanically split.
 Run:
 
 ```sh
-PYTHONPATH=src python -m unittest tests.test_contracts -v
+PYTHONPATH=src python -m unittest tests.interaction.test_contracts -v
 python scripts/validate_schemas.py
-ruff check src/imagent/contracts tests/test_contracts.py scripts
-pyright src/imagent/contracts tests/test_contracts.py scripts
+ruff check src/imagent/contracts tests/interaction/test_contracts.py scripts
+pyright src/imagent/contracts tests/interaction/test_contracts.py scripts
 ```
 
 ## Contract scenarios

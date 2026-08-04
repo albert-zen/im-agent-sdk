@@ -105,7 +105,7 @@ facade for Gateway facts and those exact Application re-exports. It is not moved
 reclassified as an App Server leaf. Common connection/queue values come from
 `imagent.interaction.diagnostics`.
 Current evidence is `tests/applications/adapters/appserver/test_client.py`,
-`tests/test_appserver_transport.py`, and `tests/gateway/test_diagnostics.py`; the target suite is
+`tests/applications/adapters/appserver/test_transport_lifecycle.py`, and `tests/gateway/test_diagnostics.py`; the target suite is
 `tests/applications/adapters/appserver/test_diagnostics.py`. The diagnostic
 owner preserves the common contract and keeps Applications independent of
 Gateway; the legacy debug path is now bounded/redacted rather than a separate

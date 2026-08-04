@@ -67,7 +67,7 @@ is in `tests/applications/adapters/test_codex.py`,
 `tests/applications/adapters/appserver/test_mapping.py`,
 `tests/applications/adapters/appserver/test_requests.py`, and the two
 Applications presentation suites. The retained
-`tests/test_appserver_input.py` and Gateway vertical/request-correlation
+`tests/applications/adapters/appserver/test_input_integration.py` and Gateway vertical/request-correlation
 suites remain affected cross-component evidence. Codex owns the concrete
 facade; Zen has no dependency on this module.
 

@@ -42,9 +42,9 @@ Focused validation currently includes:
 PYTHONPATH=src python -m unittest \
   tests.interaction.controllers.test_contract \
   tests.interaction.controllers.test_optional_controller \
-  tests.test_gateway_operations \
-  tests.test_gateway_vertical_slice \
-  tests.test_projection_hardening -v
+  tests.gateway.test_operations_integration \
+  tests.gateway.test_vertical_slice \
+  tests.gateway.projection.test_hardening -v
 ```
 
 Exact formal-facade identity, owner placement, runtime type hints, and

@@ -53,7 +53,7 @@ The co-located implementation is
 `src/imagent/applications/adapters/appserver/requests.py`. Adapter-owned
 evidence is in `tests/applications/adapters/appserver/test_requests.py`,
 including the Codex/Zen wire fixtures, race/reset, bounds, and diagnostics
-cases. The retained `tests/test_appserver_requests.py` suite contains only the
+cases. The retained `tests/applications/adapters/appserver/test_gateway_request_integration.py` suite contains only the
 Gateway request-correlation/presenter integration evidence. The structural
 move is complete without changing request epoch, response-shape, or
 first-writer behavior.

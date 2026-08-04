@@ -61,5 +61,5 @@ PYTHONPATH=src python -m unittest \
   tests.interaction.controllers.test_registry \
   tests.interaction.controllers.test_common_commands \
   tests.interaction.controllers.test_optional_controller \
-  tests.test_gateway_vertical_slice -v
+  tests.gateway.test_vertical_slice -v
 ```

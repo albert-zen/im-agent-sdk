@@ -77,7 +77,7 @@ PYTHONPATH=src:tests python -m unittest \
   tests.interaction.channels.adapters.test_feishu \
   tests.interaction.channels.adapters.test_weixin \
   tests.conformance.test_adapter_contracts \
-  tests.test_gateway_vertical_slice -v
+  tests.gateway.test_vertical_slice -v
 ```
 
 `tests/engineering/test_release.py` additionally guards package metadata, lockfile,

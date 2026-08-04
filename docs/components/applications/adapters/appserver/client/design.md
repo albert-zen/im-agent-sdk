@@ -69,7 +69,7 @@ The implementation now lives in
 `src/imagent/applications/adapters/appserver/client/`, with the finite owner
 facade at its package boundary. Direct evidence is
 `tests/applications/adapters/appserver/test_client.py`; the client-facing
-portions of `tests/test_appserver_transport.py` remain cross-component
+portions of `tests/applications/adapters/appserver/test_transport_lifecycle.py` remain cross-component
 evidence. The current `client.py` is a large cohesive dispatch implementation
 and remains unchanged in this physical move.
 

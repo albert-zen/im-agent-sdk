@@ -37,7 +37,8 @@ Observation conformance must prove:
   non-redeliverable.
 
 Current evidence: `tests/gateway/projection/test_observation.py`,
-`tests/test_projection_hardening.py`, and `tests/test_projection_routing.py`.
-The focused suite also proves exact finite projection-facade identity and that
-the historical observation runtime/value modules fail in a clean process. The
-target mirrored suite is `tests/gateway/projection/test_observation.py`.
+`tests/gateway/projection/test_hardening.py`, and
+`tests/gateway/routing/test_projection_integration.py`. The focused suite also
+proves exact finite projection-facade identity and that the historical
+observation runtime/value modules fail in a clean process. The target mirrored
+suite is `tests/gateway/projection/test_observation.py`.

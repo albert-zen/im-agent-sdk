@@ -5,7 +5,7 @@
 The focused client evidence now lives in
 `tests/applications/adapters/appserver/test_client.py`
 (`AppServerClientTests`); the client/lifecycle portions of
-`tests/test_appserver_transport.py` remain cross-component evidence. It covers:
+`tests/applications/adapters/appserver/test_transport_lifecycle.py` remain cross-component evidence. It covers:
 
 - stdio and external WebSocket composition, target parsing, supervisor child
   lifecycle, and local-image capability verification;
@@ -45,7 +45,7 @@ Run the focused current suites with:
 
 ```sh
 PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.test_client -v
-uv run python -m unittest tests.test_appserver_transport -v
+uv run python -m unittest tests.applications.adapters.appserver.test_transport_lifecycle -v
 ```
 
 The full Applications adapter block also requires the repository unittest,

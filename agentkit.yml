@@ -24,7 +24,7 @@ components:
       - src/imagent/interaction/operations.py
       - schemas/v1/*.schema.json
       # Tests.
-      - tests/test_contracts.py
+      - tests/interaction/test_contracts.py
       - tests/interaction/__init__.py
       - tests/interaction/test_messages.py
       - tests/interaction/test_operations.py
@@ -216,11 +216,12 @@ components:
       - examples/reference_consumer/main.py
       - tests/gateway/test_lifecycle.py
       - tests/gateway/test_package_root.py
+      - tests/gateway/routing/__init__.py
       - tests/gateway/routing/test_bindings.py
       - tests/gateway/routing/test_operations.py
       - tests/gateway/routing/test_projection_routes.py
-      - tests/test_gateway_operations.py
-      - tests/test_gateway_vertical_slice.py
+      - tests/gateway/test_operations_integration.py
+      - tests/gateway/test_vertical_slice.py
       - tests/gateway/test_reference_consumer.py
       - tests/gateway/test_admission.py
       - tests/gateway/test_concurrency.py
@@ -288,8 +289,8 @@ components:
       - src/imagent/gateway/projection/request_correlation.py
       - src/imagent/gateway/projection/recovery.py
       - tests/gateway/projection/test_observation.py
-      - tests/test_projection_hardening.py
-      - tests/test_projection_routing.py
+      - tests/gateway/projection/test_hardening.py
+      - tests/gateway/routing/test_projection_integration.py
       - tests/gateway/projection/test_checkpoints.py
       - tests/gateway/projection/test_request_correlation.py
       - tests/gateway/projection/test_recovery.py
@@ -533,12 +534,12 @@ components:
       - src/imagent/applications/adapters/codex.py
       - src/imagent/applications/adapters/zen.py
       - src/imagent/applications/adapters/appserver/**
-      - tests/test_appserver_input.py
+      - tests/applications/adapters/appserver/test_input_integration.py
       - tests/applications/adapters/test_codex.py
       - tests/applications/adapters/test_zen.py
       - tests/applications/adapters/_appserver_fakes.py
-      - tests/test_appserver_requests.py
-      - tests/test_appserver_transport.py
+      - tests/applications/adapters/appserver/test_gateway_request_integration.py
+      - tests/applications/adapters/appserver/test_transport_lifecycle.py
       - tests/applications/adapters/__init__.py
       - tests/applications/adapters/appserver/**
     docs:

@@ -5,10 +5,10 @@
 - `tests/gateway/test_package_root.py` checks formal facade identity and the
   current owner module, including the absence of the removed historical
   internal module.
-- `tests/test_gateway_operations.py` checks frozen groups, defaults, finite
+- `tests/gateway/test_operations_integration.py` checks frozen groups, defaults, finite
   limit validation, injected repositories, and removed flat constructor
   arguments.
-- `tests/test_gateway_vertical_slice.py` proves the composed graph preserves
+- `tests/gateway/test_vertical_slice.py` proves the composed graph preserves
   the end-to-end no-extension path.
 
 ## Required invariants
@@ -37,5 +37,5 @@ checks retained in `tests/gateway/test_package_root.py`. Until focused group
 coverage moves, run:
 
 ```sh
-PYTHONPATH=src uv run python -m unittest tests.gateway.test_package_root tests.test_gateway_operations tests.test_gateway_vertical_slice -v
+PYTHONPATH=src uv run python -m unittest tests.gateway.test_package_root tests.gateway.test_operations_integration tests.gateway.test_vertical_slice -v
 ```

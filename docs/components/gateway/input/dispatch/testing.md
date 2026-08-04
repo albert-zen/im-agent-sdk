@@ -1,8 +1,8 @@
 # Gateway input dispatch testing
 
 Focused evidence is `tests/gateway/input/test_dispatch.py`; vertical
-integration remains in `tests/test_gateway_vertical_slice.py`,
-`tests/test_projection_hardening.py`, `tests/gateway/projection/test_recovery.py`,
+integration remains in `tests/gateway/test_vertical_slice.py`,
+`tests/gateway/projection/test_hardening.py`, `tests/gateway/projection/test_recovery.py`,
 and Application adapter conformance.
 
 Tests must prove:
@@ -45,5 +45,5 @@ evidence.
 Run:
 
 ```sh
-PYTHONPATH=src uv run python -m unittest tests.gateway.input.test_dispatch tests.test_gateway_vertical_slice tests.test_projection_hardening tests.gateway.projection.test_recovery -v
+PYTHONPATH=src uv run python -m unittest tests.gateway.input.test_dispatch tests.gateway.test_vertical_slice tests.gateway.projection.test_hardening tests.gateway.projection.test_recovery -v
 ```

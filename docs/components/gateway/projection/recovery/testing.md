@@ -40,7 +40,7 @@ Focused recovery evidence is `tests/gateway/projection/test_recovery.py`,
 including bounded route reads, supervisor classification/backoff, and typed
 request-snapshot coordination. Genuine worker, route-delivery, acceptance,
 and checkpoint integration evidence remains in
-`tests/test_projection_hardening.py` and `tests/test_projection_routing.py`.
+`tests/gateway/projection/test_hardening.py` and `tests/gateway/routing/test_projection_integration.py`.
 The focused suite also proves that the Gateway projection facade re-exports
 the exact owner objects and that the historical `imagent.recovery` module is
 unavailable in a clean process.

@@ -23,7 +23,7 @@ The focused contract tests exercise the Python reference invariants that JSON
 Schema cannot conveniently express:
 
 ```sh
-PYTHONPATH=src uv run python -m unittest tests.test_contracts -v
+PYTHONPATH=src uv run python -m unittest tests.interaction.test_contracts -v
 ```
 
 The documentation and ownership checks should also be run for a schema change:

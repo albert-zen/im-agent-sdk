@@ -7,7 +7,7 @@ direct transport suite. It tests stdio/WebSocket send/receive framing, the one
 configured inbound-frame byte bound, poisoned oversize failure, and
 closed-stream translation. The broader client lifecycle evidence remains in
 `tests/applications/adapters/appserver/test_client.py` and
-`tests/test_appserver_transport.py`; queue policy and connection reset behavior
+`tests/applications/adapters/appserver/test_transport_lifecycle.py`; queue policy and connection reset behavior
 remain owned by the client leaf.
 
 The direct suite must prove:

@@ -70,7 +70,7 @@ Run:
 ```sh
 PYTHONPATH=src python -m unittest \
   tests.gateway.persistence.test_memory \
-  tests.test_projection_routing \
+  tests.gateway.routing.test_projection_integration \
   tests.gateway.persistence.test_sqlite \
   tests.gateway.delivery.test_proactive_delivery \
   tests.gateway.delivery.test_proactive_ingress -v

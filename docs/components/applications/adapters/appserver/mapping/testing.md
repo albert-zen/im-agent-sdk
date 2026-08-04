@@ -6,7 +6,7 @@
 (`AppServerMappingTests`) is the focused normalization suite. It covers native
 containers, status aliases, unknown shapes, Thread/Turn/item content, errors,
 datetime normalization, and the finite native-fact boundary.
-`tests/test_appserver_input.py` supplies affected adapter evidence for Thread
+`tests/applications/adapters/appserver/test_input_integration.py` supplies affected adapter evidence for Thread
 profiles, identity failures, local-image epochs, and Codex/Zen dispatch policy.
 
 The mapping suite proves exact-limit success and limit-plus-one fixed-redacted
@@ -31,7 +31,7 @@ Run the target pure-mapping suite and the affected adapter/input evidence with:
 
 ```sh
 PYTHONPATH=src uv run python -m unittest tests.applications.adapters.appserver.test_mapping -v
-uv run python -m unittest tests.test_appserver_input -v
+uv run python -m unittest tests.applications.adapters.appserver.test_input_integration -v
 ```
 
 The full adapter block also runs unittest discovery, compile/schema/doc-link,

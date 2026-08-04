@@ -79,6 +79,11 @@ physical test owner and its repository-root calculation; component-map rules,
 architecture policy, path ownership, link-check behavior, and AgentKit
 behavior remain unchanged.
 
+Runtime test modules live only in the `tests/interaction`, `tests/gateway`,
+and `tests/applications` mirrors. Direct `tests/test_*.py` modules are
+intentionally absent; maintainability coverage rejects recreating a root-level
+test shim or a new unowned root suite.
+
 ## Maintainability budget policy
 
 Budgets are named responsibility review triggers, not generic file-size goals.

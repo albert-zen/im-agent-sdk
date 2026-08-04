@@ -27,6 +27,6 @@ uv run python -m unittest tests.applications.test_operations -v
 
 # Affected integration evidence (not this leaf's implementation owner)
 PYTHONPATH=src uv run python -m unittest \
-  tests.conformance.test_adapter_contracts tests.test_appserver_input -v
+  tests.conformance.test_adapter_contracts tests.applications.adapters.appserver.test_input_integration -v
 uv run python scripts/validate_schemas.py
 ```

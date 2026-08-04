@@ -33,7 +33,7 @@ from imagent.gateway.projection.recovery import (
 from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.messages import ConversationRef, TextContent
 from imagent.testing import FakeAgentApplicationAdapter
-from tests.test_gateway_vertical_slice import NativeZenClient
+from tests.gateway.test_vertical_slice import NativeZenClient
 
 
 class ThreadRecoveryTests(unittest.IsolatedAsyncioTestCase):

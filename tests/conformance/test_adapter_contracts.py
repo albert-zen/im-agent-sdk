@@ -25,7 +25,7 @@ from imagent.testing import (
     verify_application_adapter,
     verify_channel_adapter,
 )
-from tests.test_gateway_vertical_slice import NativeT3Client, NativeZenClient
+from tests.gateway.test_vertical_slice import NativeT3Client, NativeZenClient
 
 
 class TestingPackageBoundaryTests(unittest.TestCase):

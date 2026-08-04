@@ -32,8 +32,8 @@ The value/trust extraction establishes focused evidence at:
 ```sh
 PYTHONPATH=src python -m unittest \
   tests.interaction.test_media \
-  tests.test_contracts \
-  tests.test_gateway_vertical_slice -v
+  tests.interaction.test_contracts \
+  tests.gateway.test_vertical_slice -v
 ```
 
 `tests/interaction/test_media.py` owns exact facade identity, discriminant,

@@ -189,11 +189,13 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/interaction/test_messages.py": {"contracts"},
             "tests/interaction/test_operations.py": {"contracts"},
             "tests/interaction/test_diagnostics.py": {"diagnostics"},
-            "tests/test_contracts.py": {"contracts"},
+            "tests/interaction/test_contracts.py": {"contracts"},
             "tests/interaction/test_media.py": {"attachments-and-media"},
             "tests/interaction/client_tools/test_send.py": {"interaction-client-tools"},
             "tests/gateway/test_package_root.py": {"gateway"},
-            "tests/test_gateway_operations.py": {"gateway"},
+            "tests/gateway/test_operations_integration.py": {"gateway"},
+            "tests/gateway/test_vertical_slice.py": {"gateway"},
+            "tests/gateway/routing/__init__.py": {"gateway"},
             "tests/gateway/input/test_content_transformation.py": {"gateway"},
             "tests/gateway/input/test_dispatch.py": {"gateway"},
             "tests/gateway/input/test_failure_presentation.py": {"gateway"},
@@ -215,6 +217,8 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/gateway/projection/test_checkpoints.py": {"projections-and-recovery"},
             "tests/gateway/projection/test_request_correlation.py": {"projections-and-recovery"},
             "tests/gateway/projection/test_recovery.py": {"projections-and-recovery"},
+            "tests/gateway/projection/test_hardening.py": {"projections-and-recovery"},
+            "tests/gateway/routing/test_projection_integration.py": {"projections-and-recovery"},
             "tests/gateway/persistence/test_idempotency.py": {"persistence"},
             "tests/gateway/persistence/test_row_mapping.py": {"persistence"},
             "tests/gateway/persistence/test_sqlite.py": {"persistence"},
@@ -234,7 +238,9 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/applications/adapters/appserver/test_client.py": {
                 "application-adapters-appserver"
             },
-            "tests/test_appserver_input.py": {"application-adapters-appserver"},
+            "tests/applications/adapters/appserver/test_input_integration.py": {
+                "application-adapters-appserver"
+            },
             "tests/applications/adapters/test_codex.py": {"application-adapters-appserver"},
             "tests/applications/adapters/test_zen.py": {"application-adapters-appserver"},
             "tests/applications/adapters/appserver/test_mapping.py": {
@@ -243,8 +249,12 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/applications/adapters/appserver/test_requests.py": {
                 "application-adapters-appserver"
             },
-            "tests/test_appserver_requests.py": {"application-adapters-appserver"},
-            "tests/test_appserver_transport.py": {"application-adapters-appserver"},
+            "tests/applications/adapters/appserver/test_gateway_request_integration.py": {
+                "application-adapters-appserver"
+            },
+            "tests/applications/adapters/appserver/test_transport_lifecycle.py": {
+                "application-adapters-appserver"
+            },
             "tests/applications/adapters/appserver/test_transport.py": {
                 "application-adapters-appserver"
             },

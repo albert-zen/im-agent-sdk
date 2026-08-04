@@ -8,7 +8,7 @@ facade identity, and the co-located owner. It also covers baseline admission,
 active-lock capacity, deterministic seen-message/terminal-Turn eviction, and
 native-history recovery after finite dedupe retention.
 `tests/conformance/test_adapter_contracts.py` exercises
-the public Application contract. `tests/test_gateway_vertical_slice.py`
+the public Application contract. `tests/gateway/test_vertical_slice.py`
 covers T3 Projects/Threads/history/input and distinct native behavior.
 `tests/applications/presentation/test_live_activity.py` covers the optional
 recoverable activity presenter, stable identity, its finite presentation
@@ -36,7 +36,7 @@ affected evidence. Run:
 ```sh
 uv run python -m unittest tests.applications.adapters.test_t3 -v
 uv run python -m unittest tests.conformance.test_adapter_contracts -v
-uv run python -m unittest tests.test_gateway_vertical_slice -v
+uv run python -m unittest tests.gateway.test_vertical_slice -v
 ```
 
 Later physical reorganization must run full unittest discovery, all AGENTS

@@ -32,8 +32,8 @@ repository and assert that a failed or unverifiable write never produces
 verified binding authority. They do not claim ownership of Conversation
 locks, foreground route authority, worker recovery, or fan-out.
 
-Current integration evidence remains in `tests/test_gateway_operations.py`,
-`tests/test_projection_routing.py`, and
+Current integration evidence remains in `tests/gateway/test_operations_integration.py`,
+`tests/gateway/routing/test_projection_integration.py`, and
 `tests/gateway/persistence/test_memory.py`. Focused owner, runtime, and facade
 coverage lives in `tests/gateway/routing/test_bindings.py`; it proves that the
 routing facade and historical contracts facade expose the exact binding-owner
