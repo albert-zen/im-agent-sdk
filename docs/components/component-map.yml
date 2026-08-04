@@ -704,7 +704,7 @@ components:
     state_recovery: In-flight/unknown remain ambiguous; immutable snapshots prevent route drift on retry.
     current_code: [schemas/v1/deliveries.schema.json, src/imagent/contracts/delivery.py, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/submissions.py, src/imagent/gateway/delivery/proactive.py]
     target_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/submissions.py]
-    current_tests: [tests/gateway/delivery/test_submissions.py, tests/test_delivery_ingress.py, tests/gateway/delivery/test_proactive_delivery.py, tests/test_storage.py]
+    current_tests: [tests/gateway/delivery/test_submissions.py, tests/gateway/delivery/test_proactive_ingress.py, tests/gateway/delivery/test_proactive_delivery.py, tests/test_storage.py]
     target_tests: [tests/gateway/delivery/test_submissions.py]
     authoritative_docs: [docs/components/gateway/delivery/submissions/design.md, docs/components/gateway/delivery/submissions/testing.md]
     adrs: [docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
@@ -742,17 +742,17 @@ components:
     outputs: [ProactiveDeliveryResult]
     public_contracts: [ProactiveDeliveryService, ProactiveDeliveryJsonHandler, DeliveryIntent, ConversationDeliveryTarget, DeliveryTarget, DeliveryTargetKind, DestinationDeliveryResult, ProactiveDeliveryResult, ThreadRouteDeliveryTarget, validate_delivery_intent]
     public_exports:
-      current: [imagent.gateway.delivery:ProactiveDeliveryService, imagent.delivery_ingress:ProactiveDeliveryJsonHandler, imagent.gateway.delivery:DeliveryIntent, imagent.gateway.delivery:ConversationDeliveryTarget, imagent.gateway.delivery:DeliveryTarget, imagent.gateway.delivery:DeliveryTargetKind, imagent.gateway.delivery:DestinationDeliveryResult, imagent.gateway.delivery:ProactiveDeliveryResult, imagent.gateway.delivery:ThreadRouteDeliveryTarget, imagent.gateway.delivery:validate_delivery_intent, imagent.contracts:DeliveryIntent, imagent.contracts:ConversationDeliveryTarget, imagent.contracts:DeliveryTarget, imagent.contracts:DeliveryTargetKind, imagent.contracts:DestinationDeliveryResult, imagent.contracts:ProactiveDeliveryResult, imagent.contracts:ThreadRouteDeliveryTarget, imagent.contracts:validate_delivery_intent]
+      current: [imagent.gateway.delivery:ProactiveDeliveryService, imagent.gateway.delivery:ProactiveDeliveryJsonHandler, imagent.gateway.delivery:DeliveryIntent, imagent.gateway.delivery:ConversationDeliveryTarget, imagent.gateway.delivery:DeliveryTarget, imagent.gateway.delivery:DeliveryTargetKind, imagent.gateway.delivery:DestinationDeliveryResult, imagent.gateway.delivery:ProactiveDeliveryResult, imagent.gateway.delivery:ThreadRouteDeliveryTarget, imagent.gateway.delivery:validate_delivery_intent, imagent.contracts:DeliveryIntent, imagent.contracts:ConversationDeliveryTarget, imagent.contracts:DeliveryTarget, imagent.contracts:DeliveryTargetKind, imagent.contracts:DestinationDeliveryResult, imagent.contracts:ProactiveDeliveryResult, imagent.contracts:ThreadRouteDeliveryTarget, imagent.contracts:validate_delivery_intent]
       target: [imagent.gateway.delivery:ProactiveDeliveryService, imagent.gateway.delivery:ProactiveDeliveryJsonHandler, imagent.gateway.delivery:DeliveryIntent, imagent.gateway.delivery:ConversationDeliveryTarget, imagent.gateway.delivery:DeliveryTarget, imagent.gateway.delivery:DeliveryTargetKind, imagent.gateway.delivery:DestinationDeliveryResult, imagent.gateway.delivery:ProactiveDeliveryResult, imagent.gateway.delivery:ThreadRouteDeliveryTarget, imagent.gateway.delivery:validate_delivery_intent]
     dependencies: [interaction.messages, interaction.operations, interaction.media, interaction.channels.channel-contract, applications.application-contract, gateway.delivery.proactive-authorization, gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.outcome-observation, gateway.routing.projection-routes, gateway.persistence.repository-contracts]
     state_recovery: Persist identity/snapshots/outcomes only; staged inline bytes live through one synchronous attempt and are removed after join.
-    current_code: [schemas/v1/deliveries.schema.json, src/imagent/contracts/delivery.py, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/proactive.py, src/imagent/delivery_ingress.py, src/imagent/cli/__init__.py, src/imagent/cli/send.py, src/imagent/gateway/__init__.py]
-    target_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/proactive.py]
-    current_tests: [tests/gateway/delivery/test_proactive_delivery.py, tests/test_delivery_ingress.py]
-    target_tests: [tests/gateway/delivery/test_proactive_delivery.py]
+    current_code: [schemas/v1/deliveries.schema.json, src/imagent/contracts/delivery.py, src/imagent/gateway/delivery/__init__.py, src/imagent/gateway/delivery/proactive.py, src/imagent/gateway/delivery/proactive_ingress.py, src/imagent/cli/__init__.py, src/imagent/cli/send.py, src/imagent/gateway/__init__.py]
+    target_code: [schemas/v1/deliveries.schema.json, src/imagent/gateway/delivery/proactive.py, src/imagent/gateway/delivery/proactive_ingress.py]
+    current_tests: [tests/gateway/delivery/test_proactive_delivery.py, tests/gateway/delivery/test_proactive_ingress.py]
+    target_tests: [tests/gateway/delivery/test_proactive_delivery.py, tests/gateway/delivery/test_proactive_ingress.py]
     authoritative_docs: [docs/components/gateway/delivery/proactive-delivery/design.md, docs/components/gateway/delivery/proactive-delivery/testing.md]
     adrs: [docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0010-capability-driven-delivery-coordination.md]
-    gaps: [JSON/CLI ingress remains in historical files and the in-memory submission repository remains co-located pending focused splits]
+    gaps: [reference CLI remains in historical files and the in-memory submission repository remains co-located pending focused splits]
 
   gateway.delivery.outcome-observation:
     id: gateway.delivery.outcome-observation

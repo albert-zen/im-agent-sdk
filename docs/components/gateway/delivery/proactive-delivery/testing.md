@@ -7,9 +7,8 @@ retryable-only resumption and retry-after, partial multi-destination results,
 redaction, SQLite restart, and O2 integration.
 
 Ownership tests additionally prove exact Gateway/contracts facade identity,
-absence of the historical implementation module, and clean package imports.
-The JSON/CLI ingress suite remains at its current path until the focused
-ingress move and continues to cover authorization-before-staging,
+absence of both historical implementation modules, and clean package imports.
+The mirrored Gateway JSON/CLI ingress suite continues to cover authorization-before-staging,
 cancellation join, cleanup, route/result mapping, and loopback CLI policy.
 Pure decoded-byte, path-confinement, digest, and staged-content construction
 cases live in `tests/interaction/test_media_staging.py`.
@@ -17,7 +16,7 @@ cases live in `tests/interaction/test_media_staging.py`.
 Run:
 
 ```sh
-PYTHONPATH=src python -m unittest tests.gateway.delivery.test_proactive_delivery tests.test_delivery_ingress -v
+PYTHONPATH=src python -m unittest tests.gateway.delivery.test_proactive_delivery tests.gateway.delivery.test_proactive_ingress -v
 PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 

@@ -182,7 +182,6 @@ components:
       - src/imagent/gateway/__init__.py
       - src/imagent/gateway_composition.py
       - src/imagent/gateway_startup.py
-      - src/imagent/delivery_ingress.py
       - src/imagent/cli/**
       - tests/gateway/test_package_root.py
       - tests/test_gateway_operations.py
@@ -190,7 +189,6 @@ components:
       - tests/test_inbound_admission.py
       - tests/test_inbound_content_transformer.py
       - tests/test_inbound_failure_presenter.py
-      - tests/test_delivery_ingress.py
     docs:
       - docs/components/gateway/README.md
       - docs/components/gateway/design.md

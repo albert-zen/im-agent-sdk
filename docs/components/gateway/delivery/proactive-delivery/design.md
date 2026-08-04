@@ -33,9 +33,10 @@ process-local repository remains co-located in this module as an explicit
 
 ## Ingress boundary
 
-The existing transport-neutral JSON handler and CLI remain in their current
-files for a later focused ingress/test convergence slice. The handler imports
-the bounded encoded-artifact staging mechanics from `interaction.media`, but
+The transport-neutral JSON handler now lives with its Gateway proactive-
+delivery owner in `gateway.delivery.proactive_ingress`; the reference CLI
+remains a separate client for a later focused move. The handler imports the
+bounded encoded-artifact staging mechanics from `interaction.media`, but
 continues to own JSON parsing, authorization-before-decode, the synchronous
 attempt lifetime, cancellation join, cleanup, delivery, and result mapping.
 Caller-supplied server paths remain unsupported. The staging helper cannot
@@ -45,7 +46,9 @@ spool, background worker, or retry scheduler.
 ## Public surface
 
 `imagent.gateway.delivery` is the finite target facade for the service and
-typed intent/target/result vocabulary. `imagent.contracts` remains the formal
+JSON handler plus typed intent/target/result vocabulary. The historical
+`imagent.delivery_ingress` implementation path is removed rather than retained
+as a compatibility module. `imagent.contracts` remains the formal
 exact-object contract facade while its broader state-contract split is
 pending. The old `imagent.proactive_delivery` implementation path is removed.
 

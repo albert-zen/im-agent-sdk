@@ -8,8 +8,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
-from .adapters import DeliverySubmissionConflict
-from .contracts import (
+from ...adapters import DeliverySubmissionConflict
+from ...contracts import (
     ConversationDeliveryTarget,
     DeliveryIntent,
     DeliveryTarget,
@@ -18,18 +18,18 @@ from .contracts import (
     ThreadRef,
     ThreadRouteDeliveryTarget,
 )
-from .gateway.delivery.proactive import DeliveryRouteError
-from .gateway.delivery.proactive_authorization import DeliveryAuthorizationError
-from .interaction.media import AttachmentContent
-from .interaction.media_staging import (
+from ...interaction.media import AttachmentContent
+from ...interaction.media_staging import (
     InlineArtifactStagingInput,
     create_inline_staging_directory,
     stage_inline_artifacts,
     validated_inline_artifact_size,
 )
-from .interaction.messages import ConversationRef, TextContent, TextFormat
-from .interaction.operations import ContractViolation
-from .keyed_locks import KeyedLockRegistry
+from ...interaction.messages import ConversationRef, TextContent, TextFormat
+from ...interaction.operations import ContractViolation
+from ...keyed_locks import KeyedLockRegistry
+from .proactive import DeliveryRouteError
+from .proactive_authorization import DeliveryAuthorizationError
 
 
 class ProactiveDeliveryEndpoint(Protocol):

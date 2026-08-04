@@ -13,7 +13,7 @@ Conversation identity.
 Run:
 
 ```sh
-PYTHONPATH=src python -m unittest tests.gateway.delivery.test_proactive_authorization tests.gateway.delivery.test_proactive_delivery tests.test_delivery_ingress -v
+PYTHONPATH=src python -m unittest tests.gateway.delivery.test_proactive_authorization tests.gateway.delivery.test_proactive_delivery tests.gateway.delivery.test_proactive_ingress -v
 PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
