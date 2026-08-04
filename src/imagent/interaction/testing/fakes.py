@@ -89,7 +89,7 @@ from imagent.contracts import (
     validate_application_operation_result,
     validate_request_response,
 )
-from imagent.interaction.channels import (
+from imagent.interaction.channels.contract import (
     ChannelCapabilities,
     DeliveryReceipt,
     DeliveryReceiptStatus,

@@ -96,7 +96,12 @@ class NativeChannelBaseOwnershipTests(unittest.TestCase):
         ):
             with self.subTest(adapter_type=adapter_type.__name__):
                 self.assertIs(adapter_type.__mro__[1], BaseChannelAdapter)
-        self.assertIs(runtime.ChannelRouteContext, ChannelRouteContext)
+        self.assertFalse(hasattr(runtime, "ChannelRouteContext"))
+        self.assertFalse(hasattr(runtime, "_InboundMiddleware"))
+        self.assertEqual(
+            ingress._InboundMiddleware.__module__,
+            "imagent.interaction.channels.ingress",
+        )
         self.assertEqual(
             BaseChannelAdapter.__module__,
             "imagent.interaction.channels.adapters.base",
@@ -148,6 +153,46 @@ class NativeChannelBaseOwnershipTests(unittest.TestCase):
             ],
         )
         self.assertEqual(middleware.handoff_count, 0)
+
+    def test_admitted_ingress_handoff_records_route_context_on_base_owner(self) -> None:
+        delivered: list[object] = []
+
+        async def capture(message: object) -> None:
+            delivered.append(message)
+
+        middleware = ingress._InboundMiddleware(
+            channel_instance_id="virtual-main",
+            on_message=capture,
+            on_admission=None,
+        )
+        adapter = _VirtualSurfaceAdapter(
+            middleware=middleware,
+            access_policy=ChannelAccessPolicy.allow_all(),
+        )
+        adapter.inbound_result = True
+        inbound = InboundMessage(
+            channel_id="virtual",
+            conversation_id="conversation-1",
+            user_id="user-1",
+            message_id="message-2",
+            text="admitted",
+        )
+
+        asyncio.run(adapter.dispatch_inbound(inbound))
+
+        self.assertEqual(len(delivered), 1)
+        context = adapter._route_context(
+            OutboundMessage(
+                channel_id="virtual",
+                conversation_id="conversation-1",
+                message_type="text",
+                text="reply",
+            )
+        )
+        self.assertIsNotNone(context)
+        assert context is not None
+        self.assertEqual(context.admitted_user_id, "user-1")
+        self.assertEqual(context.last_inbound_message_id, "message-2")
 
     def test_outbound_access_uses_overrides_and_lazy_fallback(self) -> None:
         message = OutboundMessage(

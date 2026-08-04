@@ -217,7 +217,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/interaction/channels/test_outbound_delivery.py": {"channel-adapters"},
             "tests/interaction/channels/test_diagnostics.py": {"diagnostics"},
             "tests/interaction/channels/test_ingress.py": {"channel-adapters"},
-            "tests/test_native_channels.py": {"channel-adapters"},
+            "tests/interaction/channels/adapters/test_native_channels.py": {"channel-adapters"},
             "tests/interaction/channels/adapters/test_qq.py": {"channel-adapters"},
             "tests/interaction/channels/adapters/test_telegram.py": {"channel-adapters"},
             "tests/interaction/channels/adapters/test_feishu.py": {"channel-adapters"},

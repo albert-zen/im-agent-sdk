@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -21,6 +22,8 @@ from .diagnostics import (
 )
 
 logger = logging.getLogger(__name__)
+
+_TRANSIENT_ROUTE_LIMIT = 4_096
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +46,7 @@ class BaseChannelAdapter(ABC):
         self.access_policy = access_policy or ChannelAccessPolicy()
         self._access_denial_limiter = _ingress._AccessDenialLimiter()
         self._diagnostic_state = NativeChannelDiagnosticState()
+        self._route_contexts: dict[tuple[str, str], ChannelRouteContext] = {}
 
     def mark_health(self, **state: object) -> None:
         self._diagnostic_state.update(**state)
@@ -134,11 +138,19 @@ class BaseChannelAdapter(ABC):
     def _last_inbound_message_id(self, message: OutboundMessage) -> str | None:
         return _outbound_delivery.route_context_message_id(self._route_context(message))
 
+    def _record_route_context(self, inbound: InboundMessage) -> None:
+        route_key = (str(inbound.channel_id), str(inbound.conversation_id))
+        self._route_contexts.pop(route_key, None)
+        self._route_contexts[route_key] = ChannelRouteContext(
+            admitted_user_id=str(inbound.user_id),
+            last_inbound_message_id=str(inbound.message_id),
+            last_inbound_seen_at=time.time(),
+        )
+        while len(self._route_contexts) > _TRANSIENT_ROUTE_LIMIT:
+            del self._route_contexts[next(iter(self._route_contexts))]
+
     def _route_context(self, message: OutboundMessage) -> ChannelRouteContext | None:
-        resolver = getattr(self.middleware, "get_route_context", None)
-        if not callable(resolver):
-            return None
-        context = resolver(message.channel_id, message.conversation_id)
+        context = self._route_contexts.get((message.channel_id, message.conversation_id))
         if not isinstance(context, ChannelRouteContext):
             return None
         return context

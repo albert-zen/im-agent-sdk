@@ -63,6 +63,12 @@ for Channel/profile fields even though its three wire values match
 `SupportLevel`; `SupportLevel` remains the Application capability type and is
 not accepted as the typed Channel API.
 
+The contract module is the canonical owner, including its finite `__all__` and
+runtime-resolvable annotations. Adapter runtime composition imports these
+objects but does not define, validate, or lazily recreate any Channel contract
+value. The private route-context value used by native adapters is not a second
+Channel contract or public facade.
+
 The historical `imagent.adapters` facade no longer exports
 `ChannelAdapter`, `ChannelStartupConfigurationValidator`, `MessageHandler`,
 `InboundAdmission`, or `InboundAdmissionHandler`. The historical

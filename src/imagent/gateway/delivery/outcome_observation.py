@@ -13,7 +13,7 @@ from ...diagnostics import (
     DeliveryOutcomeObserverDiagnosticFacts,
     DeliveryOutcomeObserverFailureCode,
 )
-from ...interaction.channels import (
+from ...interaction.channels.contract import (
     DeliveryItemReceipt,
     DeliveryReceipt,
     DeliverySegmentReceipt,

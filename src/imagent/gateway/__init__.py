@@ -55,7 +55,7 @@ from ..diagnostics import (
     new_diagnostics_snapshot,
     summarize_projection_health,
 )
-from ..interaction.channels import ChannelAdapter, InboundAdmission
+from ..interaction.channels.contract import ChannelAdapter, InboundAdmission
 from ..interaction.controllers import ControllerActions, ControllerLifecycle
 from ..interaction.controllers.contract import (
     CommandInvocationFacts,

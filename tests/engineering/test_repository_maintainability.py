@@ -304,7 +304,12 @@ class ComponentMapTests(unittest.TestCase):
         )
         self.assertTrue(
             all(
-                export.startswith("imagent.interaction.channels:")
+                export.startswith(
+                    (
+                        "imagent.interaction.channels:",
+                        "imagent.interaction.channels.contract:",
+                    )
+                )
                 for export in channel_contract["public_exports"]["current"]
             )
         )

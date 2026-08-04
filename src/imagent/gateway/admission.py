@@ -5,7 +5,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from uuid import uuid4
 
-from ..interaction.channels import (
+from ..interaction.channels.contract import (
     ChannelAdapter,
     InboundAdmission,
     InboundAdmissionHandler,

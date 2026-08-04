@@ -4,6 +4,7 @@ import inspect
 import subprocess
 import sys
 import unittest
+from typing import get_type_hints
 
 from imagent import adapters, contracts
 from imagent.channels import (
@@ -58,6 +59,44 @@ class ChannelReceiptContractTests(unittest.TestCase):
         for name in channels.__all__:
             with self.subTest(name=name):
                 self.assertIs(getattr(channels, name), getattr(contract_owner, name))
+
+    def test_canonical_owner_has_finite_exports_and_resolvable_hints(self) -> None:
+        self.assertEqual(tuple(contract_owner.__all__), tuple(channels.__all__))
+        self.assertEqual(
+            inspect.signature(contract_owner.ChannelAdapter.start),
+            inspect.signature(channels.ChannelAdapter.start),
+        )
+        self.assertIn(
+            "on_admission",
+            get_type_hints(contract_owner.ChannelAdapter.start),
+        )
+
+    def test_canonical_facade_identity_and_hints_hold_in_clean_process(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import inspect; import sys; import typing; "
+                    "from imagent.interaction import channels as facade; "
+                    "from imagent.interaction.channels import contract as owner; "
+                    "assert facade.__all__ == owner.__all__; "
+                    "assert facade.ChannelAdapter is owner.ChannelAdapter; "
+                    "assert inspect.signature(facade.ChannelAdapter.start) == "
+                    "inspect.signature(owner.ChannelAdapter.start); "
+                    "assert typing.get_type_hints("
+                    "owner.ChannelAdapter.capabilities.fget)['return'] "
+                    "is owner.ChannelCapabilities; "
+                    "assert typing.get_type_hints(owner.ChannelAdapter.start)['on_message']; "
+                    "assert 'imagent.interaction.channels.adapters.runtime' "
+                    "not in sys.modules"
+                ),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_historical_facades_omit_only_retired_channel_names(self) -> None:
         for name in self.RETIRED_ADAPTER_NAMES:

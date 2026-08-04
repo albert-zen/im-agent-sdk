@@ -416,8 +416,9 @@ components:
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - docs/migrations/issue-9-imcodex-owner-transfer.md
       - docs/migrations/imcodex-followup-blockers.md
-      # Issue #281 keeps this aggregate route shared while the component map
-      # records ingress/outbound ownership and the adapter-base delegator.
+      # Issue #293 closes the historical Channel runtime split: contract,
+      # ingress, and outbound leaves own semantics; adapters/runtime composes
+      # only native transport and the approved facades.
       - src/imagent/interaction/channels/__init__.py
       - src/imagent/interaction/channels/contract.py
       - src/imagent/interaction/channels/ingress.py
@@ -439,7 +440,6 @@ components:
       - tests/interaction/channels/test_ingress_security.py
       - tests/interaction/channels/test_outbound_delivery.py
       - tests/interaction/channels/adapters/**
-      - tests/test_native_channels.py
       - tests/interaction/channels/adapters/test_qq.py
       - tests/interaction/channels/adapters/test_telegram.py
       - tests/interaction/channels/adapters/test_feishu.py

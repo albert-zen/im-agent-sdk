@@ -19,7 +19,7 @@ Channel-scoped facts and provider identity are covered by the focused
 `tests/interaction/channels/test_diagnostics.py` suite. Native lifecycle and
 queue behavior remains covered by
 `tests/interaction/channels/adapters/test_diagnostics_owner.py` and
-`tests/test_native_channels.py`.
+`tests/interaction/channels/adapters/test_native_channels.py`.
 
 Run the focused tests together with the Applications, Gateway, and native
 Channel suites. The full repository suite is required because the transition

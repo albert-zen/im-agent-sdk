@@ -24,10 +24,11 @@ leaf imports Gateway or an Application implementation. Gateway supplies an
 opaque admission handler and planned outbound work through the contract, not
 repositories or orchestration context.
 
-The machine-readable [component map](../../component-map.yml) records current
-mixed files as split candidates until focused mechanical moves establish the
-target source and test tree. Existing broad Channel/platform documents remain
-evidence during that migration but do not replace these leaf contracts.
+The machine-readable [component map](../../component-map.yml) records the
+focused source and test tree as the ownership authority. The native runtime
+wrapper is adapter composition only; it does not re-own Channel contract,
+ingress, or outbound semantics. Existing broad Channel/platform documents are
+navigation evidence and do not define a second Channel model.
 
 Channel diagnostics are a separate structural capability governed by ADR 0014.
 The contract lives in `imagent.interaction.channels.diagnostics` and depends

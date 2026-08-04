@@ -59,5 +59,8 @@ middleware, outbound route-user overrides remain lazy, and policy-raised
 native Channel, access-policy, diagnostics, ingress, outbound, and Gateway
 vertical tests remain the behavior-preservation suite for the mechanical move.
 Runtime parity also proves that route-context updates remain adapter-runtime
-state while complete inbound content and envelope normalization is delegated
-to the Interaction ingress owner.
+Runtime parity also proves that the Base adapter retains bounded route-context
+state, the ingress middleware records it at the established point, and
+complete inbound content and envelope normalization is delegated to the
+Interaction ingress owner. Runtime contains no duplicate middleware,
+normalizer, admission transaction, or outbound receipt helper.

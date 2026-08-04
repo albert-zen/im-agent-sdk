@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import contextlib
-import time
 from collections.abc import Callable
 from dataclasses import replace
 from typing import Protocol
 
 from ...media import AttachmentSourceKind
-from ...messages import InboundMessage, OutboundMessage
+from ...messages import OutboundMessage
 from .. import ingress as _ingress
 from .. import outbound_delivery as _outbound_delivery
 from ..contract import (
@@ -21,7 +20,6 @@ from ..diagnostics import ChannelDiagnosticFacts
 from ..outbound_delivery import (
     NativeDeliveryResult,
 )
-from .base import ChannelRouteContext
 from .diagnostics import NativeChannelDiagnosticSnapshot, NativeConnectionDiagnosticSnapshot
 
 
@@ -73,8 +71,6 @@ _CHANNEL_CAPABILITIES = {
         max_text_length=4_000,
     ),
 }
-
-_TRANSIENT_ROUTE_LIMIT = 4_096
 
 
 class NativeTransportChannelAdapter:
@@ -138,7 +134,7 @@ class NativeTransportChannelAdapter:
     ) -> None:
         if self._native is not None:
             raise RuntimeError("channel is already started")
-        middleware = _InboundMiddleware(
+        middleware = _ingress._InboundMiddleware(
             channel_instance_id=self._channel_instance_id,
             on_message=on_message,
             on_admission=on_admission,
@@ -263,65 +259,3 @@ def channel_from_config(
             resolved_config
         ),
     )
-
-
-class _InboundMiddleware:
-    def __init__(
-        self,
-        *,
-        channel_instance_id: str,
-        on_message: MessageHandler,
-        on_admission: InboundAdmissionHandler | None,
-    ) -> None:
-        self._channel_instance_id = channel_instance_id
-        self._routes: dict[tuple[str, str], object] = {}
-        self._inbound_transaction = _ingress._InboundAdmissionTransaction(
-            channel_instance_id=channel_instance_id,
-            on_message=on_message,
-            on_admission=on_admission,
-        )
-
-    async def handle_inbound(
-        self,
-        _adapter,
-        inbound: _ingress.InboundMessage,
-        *,
-        reply_to_message_id: str | None = None,
-        prepare_inbound: _ingress._InboundPreparation | None = None,
-        pending_attachment_count: int = 0,
-        **_options,
-    ) -> None:
-        del pending_attachment_count
-        await self._inbound_transaction.run(
-            inbound,
-            normalize_inbound=self._normalize_inbound,
-            prepare_inbound=prepare_inbound,
-            reply_to_message_id=reply_to_message_id,
-        )
-
-    def _normalize_inbound(
-        self,
-        inbound: _ingress.InboundMessage,
-        *,
-        reply_to_message_id: str | None,
-    ) -> InboundMessage:
-        route_key = (str(inbound.channel_id), str(inbound.conversation_id))
-        self._routes.pop(route_key, None)
-        self._routes[route_key] = ChannelRouteContext(
-            admitted_user_id=str(inbound.user_id),
-            last_inbound_message_id=str(inbound.message_id),
-            last_inbound_seen_at=time.time(),
-        )
-        while len(self._routes) > _TRANSIENT_ROUTE_LIMIT:
-            del self._routes[next(iter(self._routes))]
-        return _ingress._normalize_inbound_message(
-            channel_instance_id=self._channel_instance_id,
-            inbound=inbound,
-            reply_to_message_id=reply_to_message_id,
-        )
-
-    def get_route_context(self, channel_id: str, conversation_id: str):
-        return self._routes.get(
-            (channel_id, conversation_id),
-            ChannelRouteContext(),
-        )

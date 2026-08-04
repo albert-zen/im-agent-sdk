@@ -4,7 +4,7 @@ import asyncio
 import math
 from dataclasses import dataclass
 
-from ...interaction.channels import (
+from ...interaction.channels.contract import (
     ChannelAdapter,
     DeliveryItemReceipt,
     DeliveryItemStatus,
