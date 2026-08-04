@@ -40,7 +40,14 @@ class DeliveryAuthorizationError(PermissionError):
 class ScopedDeliveryAuthorizer:
     """Reference process-local capability registry; consumers may replace it."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, max_principals: int = 4096) -> None:
+        if (
+            not isinstance(max_principals, int)
+            or isinstance(max_principals, bool)
+            or max_principals < 1
+        ):
+            raise ValueError("max_principals must be a positive integer")
+        self._max_principals = max_principals
         self._principals: dict[str, DeliveryPrincipal] = {}
         self._lock = asyncio.Lock()
 
@@ -57,6 +64,8 @@ class ScopedDeliveryAuthorizer:
         async with self._lock:
             if token in self._principals:
                 raise ValueError("delivery credential already exists")
+            if len(self._principals) >= self._max_principals:
+                raise ValueError("delivery credential registry capacity is exhausted")
             self._principals[token] = principal
         return token
 
