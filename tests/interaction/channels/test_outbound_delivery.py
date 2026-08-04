@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -18,12 +19,21 @@ from imagent.interaction.channels.outbound_delivery import (
     PermanentArtifactDeliveryError,
     _artifact_item_receipts,
     _to_native_artifact,
+    _to_native_outbound,
     deliver_artifact_batch,
     read_managed_artifact,
     split_text,
     stable_artifact_identity,
 )
 from imagent.interaction.media import AttachmentContent, LocalPath, RemoteUrl
+from imagent.interaction.messages import (
+    ConversationRef,
+    TextContent,
+    TextFormat,
+)
+from imagent.interaction.messages import (
+    OutboundMessage as PublicOutboundMessage,
+)
 
 
 class ChannelOutboundTextTests(unittest.TestCase):
@@ -119,6 +129,54 @@ class ChannelOutboundTextTests(unittest.TestCase):
                     size_bytes=4,
                 )
             )
+
+    def test_native_message_conversion_has_one_outbound_owner(self) -> None:
+        from imagent.interaction.channels.adapters import runtime
+
+        self.assertFalse(hasattr(runtime, "_NATIVE_OWNED_METADATA_KEYS"))
+        self.assertFalse(hasattr(runtime, "_to_native_outbound"))
+        native = _to_native_outbound(
+            channel_id="qq",
+            message=PublicOutboundMessage(
+                delivery_id="delivery-1",
+                conversation_ref=ConversationRef("qq-main", "group:1"),
+                content=(
+                    TextContent("first"),
+                    AttachmentContent(
+                        attachment_id="attachment-1",
+                        media_type="image/png",
+                        source=LocalPath("/staged/image.png"),
+                        filename="image.png",
+                        size_bytes=3,
+                    ),
+                    TextContent("second", format=TextFormat.MARKDOWN),
+                ),
+                created_at=datetime.now(UTC),
+                reply_to="reply-1",
+                metadata={
+                    "custom": "kept",
+                    "delivery_id": "forged",
+                    "message_id": "forged",
+                    "artifact_receipts": [],
+                    "reply_to_message_id": "forged",
+                    "qq_reply_identity_pinned": True,
+                },
+            ),
+        )
+
+        self.assertEqual(native.channel_id, "qq")
+        self.assertEqual(native.conversation_id, "group:1")
+        self.assertEqual(native.message_type, "markdown")
+        self.assertEqual(native.text, "first\nsecond")
+        self.assertEqual(
+            native.metadata,
+            {
+                "custom": "kept",
+                "delivery_id": "delivery-1",
+                "reply_to_message_id": "reply-1",
+            },
+        )
+        self.assertEqual(tuple(item.attachment_id for item in native.artifacts), ("attachment-1",))
 
     def test_native_artifact_receipts_are_sorted_and_ignore_unknown_entries(self) -> None:
         receipts = _artifact_item_receipts(

@@ -8,7 +8,27 @@ from pathlib import Path
 from typing import Any, Literal
 
 from ..media import AttachmentContent, LocalPath
+from ..messages import (
+    OutboundMessage as PublicOutboundMessage,
+)
+from ..messages import (
+    TextContent,
+    TextFormat,
+)
 from .contract import DeliveryItemReceipt, DeliveryItemStatus
+
+_NATIVE_OWNED_METADATA_KEYS = frozenset(
+    {
+        "artifact_failures",
+        "artifact_receipts",
+        "delivery_id",
+        "message_id",
+        "qq_reply_identity_pinned",
+        "qq_reply_to_message_id",
+        "reply_to_message_id",
+        "reply_to_seen_at",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,6 +130,40 @@ class OutboundMessage:
             item if isinstance(item, OutboundArtifact) else OutboundArtifact(**item)
             for item in self.artifacts
         ]
+
+
+def _to_native_outbound(
+    *,
+    channel_id: str,
+    message: PublicOutboundMessage,
+) -> OutboundMessage:
+    text_parts = [item.text for item in message.content if isinstance(item, TextContent)]
+    artifacts = [
+        _to_native_artifact(item) for item in message.content if isinstance(item, AttachmentContent)
+    ]
+    markdown = any(
+        isinstance(item, TextContent) and item.format is TextFormat.MARKDOWN
+        for item in message.content
+    )
+    metadata = {
+        key: value
+        for key, value in message.metadata.items()
+        if key not in _NATIVE_OWNED_METADATA_KEYS
+    }
+    metadata.update(
+        {
+            "delivery_id": message.delivery_id,
+            "reply_to_message_id": message.reply_to,
+        }
+    )
+    return OutboundMessage(
+        channel_id=channel_id,
+        conversation_id=message.conversation_ref.native_conversation_id,
+        message_type="markdown" if markdown else "text",
+        text="\n".join(text_parts),
+        metadata=metadata,
+        artifacts=artifacts,
+    )
 
 
 def split_text(text: str, *, limit: int) -> list[str]:
