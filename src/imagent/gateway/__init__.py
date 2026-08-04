@@ -73,10 +73,6 @@ from ..diagnostics import (
     new_diagnostics_snapshot,
     summarize_projection_health,
 )
-from ..gateway_startup import (
-    GatewayNotRunning,
-    GatewayStartupAdmission,
-)
 from ..interaction.channels import ChannelAdapter, InboundAdmission
 from ..interaction.controllers import ControllerActions, ControllerLifecycle
 from ..interaction.controllers.contract import (
@@ -122,6 +118,10 @@ from .input.content_transformation import InboundContentTransformRuntime
 from .input.failure_presentation import InboundFailurePhase as InboundFailurePhase
 from .input.failure_presentation import InboundFailurePresentationRuntime, handle_claimed_inbound
 from .input.failure_presentation import InboundFailurePresenter as InboundFailurePresenter
+from .lifecycle import (
+    GatewayNotRunning,
+    GatewayStartupAdmission,
+)
 from .persistence import BindingConflict
 from .persistence.memory import (
     InMemoryDeliverySubmissionRepository,

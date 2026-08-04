@@ -182,8 +182,9 @@ components:
       - src/imagent/gateway/input/failure_presentation.py
       - src/imagent/gateway/__init__.py
       - src/imagent/gateway/composition.py
-      - src/imagent/gateway_startup.py
+      - src/imagent/gateway/lifecycle.py
       - src/imagent/cli/**
+      - tests/gateway/test_lifecycle.py
       - tests/gateway/test_package_root.py
       - tests/test_gateway_operations.py
       - tests/test_gateway_vertical_slice.py

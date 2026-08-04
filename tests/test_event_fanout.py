@@ -25,8 +25,8 @@ from imagent.contracts import (
 )
 from imagent.events import EventBroadcaster, EventStreamOverflow, EventStreamReset
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway.lifecycle import GatewayNotRunning, GatewayStartupOverflow
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
-from imagent.gateway_startup import GatewayNotRunning, GatewayStartupOverflow
 from imagent.request_correlations import InMemoryRequestCorrelationRepository
 from imagent.request_projection_runtime import InteractiveRequestProjection
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
