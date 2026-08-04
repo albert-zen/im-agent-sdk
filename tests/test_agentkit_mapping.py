@@ -194,6 +194,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/test_t3_client.py": {"application-adapters-t3"},
             "tests/conformance/test_adapter_contracts.py": {"testing-and-conformance"},
             "tests/engineering/test_schema_conformance.py": {"schema-conformance"},
+            "tests/engineering/test_repository_maintainability.py": {"repository-maintainability"},
             "tests/test_package_independence.py": {"release"},
         }
         for path, owners in expected.items():

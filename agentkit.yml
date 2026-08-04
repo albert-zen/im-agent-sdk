@@ -601,7 +601,7 @@ components:
       - AGENTS.md
       - scripts/check_doc_links.py
       - scripts/validate_component_map.py
-      - tests/test_component_map.py
+      - tests/engineering/test_repository_maintainability.py
       - docs/README.md
       - docs/ARCHITECTURE.md
       - docs/REUSE.md
@@ -615,7 +615,6 @@ components:
       - docs/engineering/README.md
       - docs/engineering/repository-maintainability/design.md
       - docs/engineering/repository-maintainability/testing.md
-      - tests/test_documentation_links.py
     docs:
       - docs/engineering/repository-maintainability/design.md
       - docs/engineering/repository-maintainability/testing.md

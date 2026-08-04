@@ -51,7 +51,7 @@ separates SDK ownership work from the later IMCodex consumer migration.
 | `interaction/testing/**` and the `imagent.testing` facade | [conformance design](engineering/testing-and-conformance/design.md), [testing](engineering/testing-and-conformance/testing.md) | `tests/conformance/test_adapter_contracts.py`, package/import-order checks |
 | `schemas/v1/**`, `scripts/validate_schemas.py` | [schema-conformance design](engineering/schema-conformance/design.md), [testing](engineering/schema-conformance/testing.md), and [contracts protocol](components/contracts/protocol.md) | schema validator, focused schema-conformance tests, and runtime contract tests |
 | AgentKit lifecycle and routing | [AgentKit design](engineering/agentkit/design.md), [testing](engineering/agentkit/testing.md) | AgentKit doctor/check and review guidance |
-| CI, root guidance, docs navigation, and maintainability budgets | [repository maintainability design](engineering/repository-maintainability/design.md), [testing](engineering/repository-maintainability/testing.md) | mapping, link, inventory, and maintainability checks |
+| CI, root guidance, docs navigation, and maintainability budgets | [repository maintainability design](engineering/repository-maintainability/design.md), [testing](engineering/repository-maintainability/testing.md) | `tests/engineering/test_repository_maintainability.py`, mapping, link, inventory, and maintainability checks |
 | `pyproject.toml`, package facades, `py.typed`, wheels, clean install | [release design](engineering/release/design.md), [testing](engineering/release/testing.md) | build and isolated wheel smoke |
 
 Use `python scripts/agentkit.py orient --path <path>` for the executable
