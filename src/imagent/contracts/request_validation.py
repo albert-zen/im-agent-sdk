@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ..applications.contract import validate_thread_ref
 from ..applications.requests import (
     validate_request_ref as _validate_request_ref,
 )
@@ -7,7 +8,6 @@ from ..applications.requests import (
     validate_request_response_shape as _validate_request_response_shape,
 )
 from ..interaction.operations import ContractViolation, require_identifier
-from ._validation import validate_thread_ref
 from .model import RequestRouteCorrelation, RequestRouteState
 
 

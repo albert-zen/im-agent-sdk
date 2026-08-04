@@ -11,6 +11,8 @@ from typing import get_type_hints
 from imagent import contracts
 from imagent import events as legacy_events
 from imagent.applications import capabilities, events
+from imagent.applications.contract import AgentMessage, ThreadRef
+from imagent.interaction.messages import MessageRole, TextContent
 from imagent.interaction.operations import ContractViolation
 
 
@@ -64,6 +66,26 @@ class ApplicationEventTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(contracts.validate_agent_event, events.validate_agent_event)
         self.assertIs(legacy_events.EventBroadcaster, events.EventBroadcaster)
         self.assertIs(legacy_events.EventStreamGap, events.EventStreamGap)
+        self.assertFalse(hasattr(events, "AgentMessage"))
+
+    def test_canonical_event_data_consumes_the_application_agent_message(self) -> None:
+        message = AgentMessage(
+            agent_item_id="item-1",
+            thread_ref=ThreadRef("app-1", "thread-1"),
+            role=MessageRole.ASSISTANT,
+            content=(TextContent("answer"),),
+            created_at=datetime.now(UTC),
+        )
+        event = events.AgentEvent(
+            event_id="event-message-1",
+            application_instance_id="app-1",
+            type=events.AgentEventType.MESSAGE_COMPLETED,
+            data={"message": message},
+            created_at=message.created_at,
+            thread_ref=message.thread_ref,
+        )
+        events.validate_agent_event(event, _capabilities())
+        self.assertIs(event.data["message"], message)
 
     def test_event_annotations_keep_exact_resource_and_request_types(self) -> None:
         hints = get_type_hints(events.AgentEvent)

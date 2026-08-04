@@ -11,10 +11,9 @@ from itertools import islice
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
+from .applications.contract import AgentMessage, ThreadRef
 from .contracts import (
-    AgentMessage,
     ThreadProjectionRoute,
-    ThreadRef,
 )
 from .interaction.messages import ConversationRef, OutboundMessage, TextContent, TextFormat
 

@@ -45,17 +45,81 @@ architecture_lint:
   formal_facade_policy: declared-reexports-only
   current_import_exceptions:
     - from: src/imagent/applications/events.py
-      to: src/imagent/contracts/_validation.py
+      to: src/imagent/applications/contract.py
+      symbol: ProjectRef
+      reason: Event runtime annotations resolve the Applications-owned resource identity without introducing a second event or resource contract during the mechanical move.
+    - from: src/imagent/applications/events.py
+      to: src/imagent/applications/contract.py
+      symbol: ThreadRef
+      reason: Event runtime annotations resolve the Applications-owned resource identity without introducing a second event or resource contract during the mechanical move.
+    - from: src/imagent/applications/events.py
+      to: src/imagent/applications/contract.py
       symbol: validate_thread_ref
-      reason: Event validation preserves the existing ThreadRef invariant through the unmoved Application contract validator; moving that resource value is a later focused leaf.
+      reason: Event validation delegates the Applications-owned ThreadRef invariant while preserving runtime validation behavior during the mechanical move.
     - from: src/imagent/applications/operations.py
-      to: src/imagent/contracts/_validation.py
+      to: src/imagent/applications/contract.py
+      symbol: ApplicationRef
+      reason: Application operation runtime annotations resolve the Applications-owned resource identity without a duplicate historical model.
+    - from: src/imagent/applications/operations.py
+      to: src/imagent/applications/contract.py
+      symbol: Page
+      reason: Application operation runtime annotations resolve the Applications-owned result value without a duplicate historical model.
+    - from: src/imagent/applications/operations.py
+      to: src/imagent/applications/contract.py
+      symbol: ProjectRef
+      reason: Application operation runtime annotations resolve the Applications-owned resource identity without a duplicate historical model.
+    - from: src/imagent/applications/operations.py
+      to: src/imagent/applications/contract.py
+      symbol: ProjectSummary
+      reason: Application operation runtime annotations resolve the Applications-owned result value without a duplicate historical model.
+    - from: src/imagent/applications/operations.py
+      to: src/imagent/applications/contract.py
+      symbol: ThreadHistory
+      reason: Application operation runtime annotations resolve the Applications-owned history value without a duplicate historical model.
+    - from: src/imagent/applications/operations.py
+      to: src/imagent/applications/contract.py
+      symbol: ThreadRef
+      reason: Application operation runtime annotations resolve the Applications-owned resource identity without a duplicate historical model.
+    - from: src/imagent/applications/operations.py
+      to: src/imagent/applications/contract.py
+      symbol: ThreadStatus
+      reason: Application operation runtime annotations resolve the Applications-owned status value without a duplicate historical model.
+    - from: src/imagent/applications/operations.py
+      to: src/imagent/applications/contract.py
+      symbol: ThreadSummary
+      reason: Application operation runtime annotations resolve the Applications-owned result value without a duplicate historical model.
+    - from: src/imagent/applications/operations.py
+      to: src/imagent/applications/contract.py
+      symbol: TurnCatchup
+      reason: Application operation runtime annotations resolve the Applications-owned history value without a duplicate historical model.
+    - from: src/imagent/applications/operations.py
+      to: src/imagent/applications/contract.py
       symbol: validate_thread_ref
-      reason: Application operation validation preserves the existing ThreadRef invariant through the unmoved Application contract validator; moving that resource value is a later focused leaf.
+      reason: Application operation validation delegates the Applications-owned ThreadRef invariant while preserving runtime validation behavior during the mechanical move.
     - from: src/imagent/applications/requests.py
-      to: src/imagent/contracts/_validation.py
+      to: src/imagent/applications/contract.py
+      symbol: ApplicationRef
+      reason: Application request runtime annotations resolve the Applications-owned resource identity without a duplicate historical model.
+    - from: src/imagent/applications/requests.py
+      to: src/imagent/applications/contract.py
+      symbol: ThreadRef
+      reason: Application request runtime annotations resolve the Applications-owned resource identity without a duplicate historical model.
+    - from: src/imagent/applications/requests.py
+      to: src/imagent/applications/contract.py
       symbol: validate_thread_ref
-      reason: Request validation preserves the existing ThreadRef invariant through the unmoved Application contract validator while this mechanical slice moves only request-owned values.
+      reason: Application request validation delegates the Applications-owned ThreadRef invariant while preserving runtime validation behavior during the mechanical move.
+    - from: src/imagent/contracts/__init__.py
+      to: src/imagent/contracts/validators.py
+      symbol: validate_binding
+      reason: The historical contracts facade re-exports the Gateway validator from its split implementation without becoming a second owner.
+    - from: src/imagent/contracts/__init__.py
+      to: src/imagent/contracts/validators.py
+      symbol: validate_projection_route
+      reason: The historical contracts facade re-exports the Gateway validator from its split implementation without becoming a second owner.
+    - from: src/imagent/contracts/__init__.py
+      to: src/imagent/contracts/validators.py
+      symbol: validate_turn_reply_correlation
+      reason: The historical contracts facade re-exports the Gateway validator from its split implementation without becoming a second owner.
     - from: src/imagent/contracts/request_validation.py
       to: src/imagent/interaction/operations.py
       symbol: ContractViolation
@@ -117,24 +181,24 @@ components:
   interaction.messages:
     id: interaction.messages
     parent: interaction
-    purpose: Define content-bearing inbound, outbound, and canonical Agent message envelopes.
+    purpose: Define content-bearing inbound and outbound IM message envelopes.
     owns: [message envelopes, text content, content ordering, stable message identity]
     does_not_own: [control intent, native delivery, transcript authority]
     inputs: [native-normalized content facts]
-    outputs: [InboundMessage, OutboundMessage, AgentMessage, TextContent]
-    public_contracts: [InboundMessage, OutboundMessage, AgentMessage, Content, TextContent, ConversationRef, MessageRole, Metadata, TextFormat, TextLengthUnit]
+    outputs: [InboundMessage, OutboundMessage, TextContent]
+    public_contracts: [InboundMessage, OutboundMessage, Content, TextContent, ConversationRef, MessageRole, Metadata, TextFormat, TextLengthUnit]
     public_exports:
-      current: [imagent.contracts:InboundMessage, imagent.contracts:OutboundMessage, imagent.contracts:AgentMessage, imagent.contracts:Content, imagent.contracts:TextContent, imagent.contracts:ConversationRef, imagent.contracts:MessageRole, imagent.contracts:Metadata, imagent.contracts:TextFormat, imagent.contracts:TextLengthUnit, imagent.interaction.messages:InboundMessage, imagent.interaction.messages:OutboundMessage, imagent.interaction.messages:Content, imagent.interaction.messages:TextContent, imagent.interaction.messages:ConversationRef, imagent.interaction.messages:MessageRole, imagent.interaction.messages:Metadata, imagent.interaction.messages:TextFormat, imagent.interaction.messages:TextLengthUnit]
-      target: [imagent.contracts:InboundMessage, imagent.contracts:OutboundMessage, imagent.contracts:AgentMessage, imagent.contracts:Content, imagent.contracts:TextContent, imagent.contracts:ConversationRef, imagent.contracts:MessageRole, imagent.contracts:Metadata, imagent.contracts:TextFormat, imagent.contracts:TextLengthUnit, imagent.interaction.messages:InboundMessage, imagent.interaction.messages:OutboundMessage, imagent.interaction.messages:AgentMessage, imagent.interaction.messages:Content, imagent.interaction.messages:TextContent, imagent.interaction.messages:ConversationRef, imagent.interaction.messages:MessageRole, imagent.interaction.messages:Metadata, imagent.interaction.messages:TextFormat, imagent.interaction.messages:TextLengthUnit]
+      current: [imagent.contracts:InboundMessage, imagent.contracts:OutboundMessage, imagent.contracts:Content, imagent.contracts:TextContent, imagent.contracts:ConversationRef, imagent.contracts:MessageRole, imagent.contracts:Metadata, imagent.contracts:TextFormat, imagent.contracts:TextLengthUnit, imagent.interaction.messages:InboundMessage, imagent.interaction.messages:OutboundMessage, imagent.interaction.messages:Content, imagent.interaction.messages:TextContent, imagent.interaction.messages:ConversationRef, imagent.interaction.messages:MessageRole, imagent.interaction.messages:Metadata, imagent.interaction.messages:TextFormat, imagent.interaction.messages:TextLengthUnit]
+      target: [imagent.contracts:InboundMessage, imagent.contracts:OutboundMessage, imagent.contracts:Content, imagent.contracts:TextContent, imagent.contracts:ConversationRef, imagent.contracts:MessageRole, imagent.contracts:Metadata, imagent.contracts:TextFormat, imagent.contracts:TextLengthUnit, imagent.interaction.messages:InboundMessage, imagent.interaction.messages:OutboundMessage, imagent.interaction.messages:Content, imagent.interaction.messages:TextContent, imagent.interaction.messages:ConversationRef, imagent.interaction.messages:MessageRole, imagent.interaction.messages:Metadata, imagent.interaction.messages:TextFormat, imagent.interaction.messages:TextLengthUnit]
     dependencies: [interaction.media]
     state_recovery: Stateless values; stable IDs, never text or timestamps, drive replay identity.
-    current_code: [schemas/v1/common.schema.json, schemas/v1/messages.schema.json, src/imagent/contracts/model.py, src/imagent/interaction/messages.py]
+    current_code: [schemas/v1/common.schema.json, schemas/v1/messages.schema.json, src/imagent/interaction/messages.py]
     target_code: [schemas/v1/common.schema.json, schemas/v1/messages.schema.json, src/imagent/interaction/messages.py]
     current_tests: [tests/interaction/test_messages.py, tests/test_contracts.py]
     target_tests: [tests/interaction/test_messages.py]
     authoritative_docs: [docs/components/interaction/messages/design.md, docs/components/interaction/messages/testing.md, docs/components/contracts/protocol.md]
     adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0002-design-authority-and-control-boundaries.md]
-    gaps: [AgentMessage remains in the mixed model until its Applications-owned ThreadRef dependency can be separated without a cycle; the language-neutral message schema remains a declared cross-owner union]
+    gaps: [the language-neutral message schema remains a declared cross-owner union]
 
   interaction.operations:
     id: interaction.operations
@@ -954,23 +1018,23 @@ components:
     id: applications.application-contract
     parent: applications
     purpose: Define the common native Application lifecycle/resource/input/history/subscription boundary.
-    owns: [AgentApplicationAdapter, ApplicationInputDispatchHandler, ApplicationSummary, native dispatch outcome classification]
+    owns: [Page, ApplicationRef, ProjectRef, ThreadRef, InputContinuationPreference, InputDisposition, TurnReplyCorrelationPolicy, ThreadStatus, ApplicationSummary, ProjectSummary, ThreadSummary, AgentInput, AgentMessage, TurnStatus, TurnCatchup, TurnHistoryEntry, ThreadHistory, ThreadSnapshot, AcceptedTurn, ApplicationInputDispatch, validate_thread_ref, AgentApplicationAdapter, ApplicationInputDispatchHandler, native dispatch outcome classification]
     does_not_own: [Gateway routing, product commands, native implementation details]
     inputs: [typed Application operations and AgentInput]
-    outputs: [typed native results, accepted dispatch, Thread event subscription]
-    public_contracts: [AgentApplicationAdapter, ApplicationInputDispatchHandler, ApplicationSummary, ApplicationInputDispatch, AcceptedTurn, InputContinuationPreference, TurnReplyCorrelationPolicy, ApplicationInputOutcomeUnknown, AgentInput, ApplicationRef, InputDisposition, Page, ProjectRef, ProjectSummary, ThreadHistory, ThreadRef, ThreadSnapshot, ThreadStatus, ThreadSummary, TurnCatchup, TurnHistoryEntry, TurnStatus, validate_thread_ref]
+    outputs: [typed native results, accepted dispatch, authoritative resource/history values, Thread event subscription]
+    public_contracts: [Page, ApplicationRef, ProjectRef, ThreadRef, InputContinuationPreference, InputDisposition, TurnReplyCorrelationPolicy, ThreadStatus, ApplicationSummary, ProjectSummary, ThreadSummary, AgentInput, AgentMessage, TurnStatus, TurnCatchup, TurnHistoryEntry, ThreadHistory, ThreadSnapshot, AcceptedTurn, ApplicationInputDispatch, validate_thread_ref, AgentApplicationAdapter, ApplicationInputDispatchHandler, ApplicationInputOutcomeUnknown]
     public_exports:
-      current: [imagent.adapters:AgentApplicationAdapter, imagent.adapters:ApplicationInputDispatchHandler, imagent.applications:AgentApplicationAdapter, imagent.applications:ApplicationInputDispatchHandler, imagent.contracts:ApplicationSummary, imagent.contracts:ApplicationInputDispatch, imagent.contracts:AcceptedTurn, imagent.contracts:InputContinuationPreference, imagent.contracts:TurnReplyCorrelationPolicy, imagent.contracts:ApplicationInputOutcomeUnknown, imagent.contracts:AgentInput, imagent.contracts:ApplicationRef, imagent.contracts:InputDisposition, imagent.contracts:Page, imagent.contracts:ProjectRef, imagent.contracts:ProjectSummary, imagent.contracts:ThreadHistory, imagent.contracts:ThreadRef, imagent.contracts:ThreadSnapshot, imagent.contracts:ThreadStatus, imagent.contracts:ThreadSummary, imagent.contracts:TurnCatchup, imagent.contracts:TurnHistoryEntry, imagent.contracts:TurnStatus, imagent.contracts:validate_thread_ref]
-      target: [imagent.applications:AgentApplicationAdapter, imagent.applications:ApplicationInputDispatchHandler, imagent.applications:ApplicationSummary, imagent.applications:ApplicationInputDispatch, imagent.applications:AcceptedTurn, imagent.applications:InputContinuationPreference, imagent.applications:TurnReplyCorrelationPolicy, imagent.applications:ApplicationInputOutcomeUnknown, imagent.applications:AgentInput, imagent.applications:ApplicationRef, imagent.applications:InputDisposition, imagent.applications:Page, imagent.applications:ProjectRef, imagent.applications:ProjectSummary, imagent.applications:ThreadHistory, imagent.applications:ThreadRef, imagent.applications:ThreadSnapshot, imagent.applications:ThreadStatus, imagent.applications:ThreadSummary, imagent.applications:TurnCatchup, imagent.applications:TurnHistoryEntry, imagent.applications:TurnStatus, imagent.applications:validate_thread_ref]
+      current: [imagent.adapters:AgentApplicationAdapter, imagent.adapters:ApplicationInputDispatchHandler, imagent.applications:AgentApplicationAdapter, imagent.applications:ApplicationInputDispatchHandler, imagent.applications.contract:AgentApplicationAdapter, imagent.applications.contract:ApplicationInputDispatchHandler, imagent.applications.contract:Page, imagent.applications.contract:ApplicationRef, imagent.applications.contract:ProjectRef, imagent.applications.contract:ThreadRef, imagent.applications.contract:InputContinuationPreference, imagent.applications.contract:InputDisposition, imagent.applications.contract:TurnReplyCorrelationPolicy, imagent.applications.contract:ThreadStatus, imagent.applications.contract:ApplicationSummary, imagent.applications.contract:ProjectSummary, imagent.applications.contract:ThreadSummary, imagent.applications.contract:AgentInput, imagent.applications.contract:AgentMessage, imagent.applications.contract:TurnStatus, imagent.applications.contract:TurnCatchup, imagent.applications.contract:TurnHistoryEntry, imagent.applications.contract:ThreadHistory, imagent.applications.contract:ThreadSnapshot, imagent.applications.contract:AcceptedTurn, imagent.applications.contract:ApplicationInputDispatch, imagent.applications.contract:validate_thread_ref, imagent.applications:Page, imagent.applications:ApplicationRef, imagent.applications:ProjectRef, imagent.applications:ThreadRef, imagent.applications:InputContinuationPreference, imagent.applications:InputDisposition, imagent.applications:TurnReplyCorrelationPolicy, imagent.applications:ThreadStatus, imagent.applications:ApplicationSummary, imagent.applications:ProjectSummary, imagent.applications:ThreadSummary, imagent.applications:AgentInput, imagent.applications:AgentMessage, imagent.applications:TurnStatus, imagent.applications:TurnCatchup, imagent.applications:TurnHistoryEntry, imagent.applications:ThreadHistory, imagent.applications:ThreadSnapshot, imagent.applications:AcceptedTurn, imagent.applications:ApplicationInputDispatch, imagent.applications:validate_thread_ref, imagent.contracts:Page, imagent.contracts:ApplicationRef, imagent.contracts:ProjectRef, imagent.contracts:ThreadRef, imagent.contracts:InputContinuationPreference, imagent.contracts:InputDisposition, imagent.contracts:TurnReplyCorrelationPolicy, imagent.contracts:ThreadStatus, imagent.contracts:ApplicationSummary, imagent.contracts:ProjectSummary, imagent.contracts:ThreadSummary, imagent.contracts:AgentInput, imagent.contracts:AgentMessage, imagent.contracts:TurnStatus, imagent.contracts:TurnCatchup, imagent.contracts:TurnHistoryEntry, imagent.contracts:ThreadHistory, imagent.contracts:ThreadSnapshot, imagent.contracts:AcceptedTurn, imagent.contracts:ApplicationInputDispatch, imagent.contracts:ApplicationInputOutcomeUnknown, imagent.contracts:validate_thread_ref]
+      target: [imagent.applications.contract:Page, imagent.applications.contract:ApplicationRef, imagent.applications.contract:ProjectRef, imagent.applications.contract:ThreadRef, imagent.applications.contract:InputContinuationPreference, imagent.applications.contract:InputDisposition, imagent.applications.contract:TurnReplyCorrelationPolicy, imagent.applications.contract:ThreadStatus, imagent.applications.contract:ApplicationSummary, imagent.applications.contract:ProjectSummary, imagent.applications.contract:ThreadSummary, imagent.applications.contract:AgentInput, imagent.applications.contract:AgentMessage, imagent.applications.contract:TurnStatus, imagent.applications.contract:TurnCatchup, imagent.applications.contract:TurnHistoryEntry, imagent.applications.contract:ThreadHistory, imagent.applications.contract:ThreadSnapshot, imagent.applications.contract:AcceptedTurn, imagent.applications.contract:ApplicationInputDispatch, imagent.applications.contract:validate_thread_ref, imagent.applications.contract:AgentApplicationAdapter, imagent.applications.contract:ApplicationInputDispatchHandler, imagent.applications:Page, imagent.applications:ApplicationRef, imagent.applications:ProjectRef, imagent.applications:ThreadRef, imagent.applications:InputContinuationPreference, imagent.applications:InputDisposition, imagent.applications:TurnReplyCorrelationPolicy, imagent.applications:ThreadStatus, imagent.applications:ApplicationSummary, imagent.applications:ProjectSummary, imagent.applications:ThreadSummary, imagent.applications:AgentInput, imagent.applications:AgentMessage, imagent.applications:TurnStatus, imagent.applications:TurnCatchup, imagent.applications:TurnHistoryEntry, imagent.applications:ThreadHistory, imagent.applications:ThreadSnapshot, imagent.applications:AcceptedTurn, imagent.applications:ApplicationInputDispatch, imagent.applications:validate_thread_ref, imagent.applications:AgentApplicationAdapter, imagent.applications:ApplicationInputDispatchHandler, imagent.applications:ApplicationInputOutcomeUnknown]
     dependencies: [interaction.messages, interaction.operations, applications.capabilities, applications.events, applications.operations, applications.requests]
     state_recovery: Adapter reports only evidenced replay/order; dispatched unknown outcomes never become retry permission.
-    current_code: [schemas/v1/common.schema.json, schemas/v1/history.schema.json, schemas/v1/messages.schema.json, schemas/v1/resources.schema.json, src/imagent/adapters.py, src/imagent/applications/contract.py, src/imagent/contracts/_validation.py, src/imagent/contracts/errors.py, src/imagent/contracts/model.py, src/imagent/contracts/validators.py, src/imagent/applications/__init__.py, src/imagent/diagnostics.py]
+    current_code: [schemas/v1/common.schema.json, schemas/v1/history.schema.json, schemas/v1/messages.schema.json, schemas/v1/resources.schema.json, src/imagent/adapters.py, src/imagent/applications/contract.py, src/imagent/contracts/errors.py, src/imagent/applications/__init__.py]
     target_code: [schemas/v1/common.schema.json, schemas/v1/history.schema.json, schemas/v1/messages.schema.json, schemas/v1/resources.schema.json, src/imagent/applications/contract.py]
     current_tests: [tests/applications/test_contract.py, tests/conformance/test_adapter_contracts.py]
     target_tests: [tests/applications/test_contract.py]
     authoritative_docs: [docs/components/applications/application-contract/design.md, docs/components/applications/application-contract/testing.md]
     adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
-    gaps: [historical adapters.py remains a split candidate because Channel/admission and Gateway aliases still share the compatibility facade; the Application Protocol and callback now have one Applications owner]
+    gaps: [historical adapters.py remains a split candidate because Channel/admission and Gateway aliases still share the compatibility facade; imagent.contracts remains a deliberate exact-alias facade]
 
   applications.capabilities:
     id: applications.capabilities
@@ -1014,7 +1078,7 @@ components:
     target_tests: [tests/applications/test_events.py]
     authoritative_docs: [docs/components/applications/events/design.md, docs/components/applications/events/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0013-bounded-application-event-admission.md]
-    gaps: [event resource annotations still delegate to the unmoved Application contract values]
+    gaps: []
 
   applications.operations:
     id: applications.operations
@@ -1403,7 +1467,7 @@ structural_status:
       rationale: Stable package/version facade; it must delegate to one implementation per public symbol.
     - path: src/imagent/applications/__init__.py
       owner: applications.application-contract
-      rationale: Current public Applications facade; its closed named lazy re-exports preserve exact identities without retaining old implementations or initializing concrete adapters for an unrelated capability import.
+      rationale: Current public Applications facade; it directly re-exports the complete Application contract family and keeps only the remaining concrete-adapter exports behind their existing finite named facade.
     - path: src/imagent/applications/presentation/__init__.py
       owner: applications.presentation.live-activity
       rationale: Finite Applications presentation facade; it re-exports the live-activity and artifact-materialization leaves exactly and retains no runtime or compatibility implementation.
@@ -1456,9 +1520,6 @@ structural_status:
     src/imagent/adapters.py:
       owners: [interaction.channels.channel-contract, gateway.delivery.proactive-authorization, gateway.persistence.repository-contracts, applications.application-contract]
       reason: Channel/admission, the exact proactive-authorization compatibility Port, exact repository-contract aliases, and Application Ports share one historical facade module.
-    src/imagent/contracts/model.py:
-      owners: [interaction.messages, gateway.persistence.state-contracts, applications.application-contract]
-      reason: Shared non-request values and Gateway route correlation still share the historical model after request-owned values moved to the Applications leaf.
     src/imagent/contracts/delivery.py:
       owners: [interaction.media, gateway.delivery.submissions, gateway.delivery.proactive-delivery, gateway.persistence.state-contracts]
       reason: Media identity, proactive intent/results, submission identity, and passive delivery state share one contract module after authorization moved to its Gateway leaf.
@@ -1466,8 +1527,8 @@ structural_status:
       owners: [gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.projection.request-correlation]
       reason: Gateway binding, routing, observation, and request-correlation operations remain physically combined in the historical module after request response values moved to their Applications leaf.
     src/imagent/contracts/validators.py:
-      owners: [gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.dispatch, gateway.projection.request-correlation, applications.application-contract]
-      reason: Gateway, dispatch, projection, and common Application contract validation remains in the historical aggregation until each focused validator leaf moves.
+      owners: [gateway.routing.bindings, gateway.routing.gateway-operations, gateway.routing.projection-routes, gateway.input.dispatch, gateway.projection.request-correlation]
+      reason: Gateway, dispatch, projection, and request-correlation validation remains in the historical aggregation while it consumes the Applications-owned ThreadRef validator.
     src/imagent/contracts/request_validation.py:
       owners: [gateway.projection.request-correlation, gateway.persistence.state-contracts]
       reason: Gateway-owned request route correlation validation remains in the historical module after Application request response-shape validators moved to their focused leaf.
@@ -1487,8 +1548,8 @@ structural_status:
       owners: [gateway.delivery.planning, gateway.delivery.coordination, gateway.delivery.submissions, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation]
       reason: The intentional Gateway delivery package facade re-exports exact public values from focused delivery leaves without implementing any leaf.
     src/imagent/diagnostics.py:
-      owners: [interaction.channels.adapters, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.presentation, gateway.delivery.outcome-observation, gateway.diagnostics, applications.application-contract, applications.presentation.live-activity, applications.presentation.artifact-materialization, applications.adapters.appserver.diagnostics]
-      reason: Channel, fixed I1/I2/O1/O2/A1, Application provider, and Gateway aggregate diagnostic facts share one historical public vocabulary module.
+      owners: [interaction.channels.adapters, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.presentation, gateway.delivery.outcome-observation, gateway.diagnostics, applications.presentation.live-activity, applications.presentation.artifact-materialization, applications.adapters.appserver.diagnostics]
+      reason: Channel, fixed I1/I2/O1/O2/A1, Application presentation, and Gateway aggregate diagnostic facts share one historical public vocabulary module.
     src/imagent/projection_runtime.py:
       owners: [gateway.input.dispatch, gateway.projection.observation, gateway.projection.recovery]
       reason: Acceptance ordering, one-worker observation, and recovery supervision share one current state machine.

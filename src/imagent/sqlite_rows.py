@@ -3,12 +3,10 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime
 
+from .applications.contract import ApplicationRef, ProjectRef, ThreadRef
 from .contracts import (
-    ApplicationRef,
     ConversationBinding,
-    ProjectRef,
     ThreadProjectionRoute,
-    ThreadRef,
     TurnReplyCorrelation,
     validate_binding,
     validate_projection_route,

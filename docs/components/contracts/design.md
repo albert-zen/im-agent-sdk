@@ -6,8 +6,8 @@
 > and trust authority in [media](../interaction/media/design.md). Application
 > capability authority now lives in
 > [Applications capabilities](../applications/capabilities/design.md). This
-> broad document remains current evidence for contract leaves and the
-> canonical `AgentMessage` dependency that have not yet been physically split.
+> broad document remains current evidence for the versioned schema union and
+> Gateway-owned bridge values that have not yet been physically split.
 
 ## Purpose
 
@@ -18,18 +18,22 @@ framework.
 
 ## Ownership
 
-This component owns:
+This component records the remaining cross-owner schema and facade surface; it
+does not own the Application model family. Its current mixed modules still
+contain the following Gateway bridge values:
 
-- resource references and summaries;
-- the remaining canonical `AgentMessage` dependency and the language-neutral
-  schema union that references Interaction-owned message/media values;
-- typed Application and Gateway operations and results;
-- capabilities and explicit error shapes;
-- Agent events, ordering fields, history projections, bindings, projection
-  route checkpoints, and minimal Turn reply-correlation value objects;
-- Application input continuation preference, pre-dispatch disposition/policy,
-  and truthful accepted-Turn result values;
-- Python validators and the matching JSON Schemas.
+- Conversation bindings, projection routes, and minimal Turn reply-correlation
+  state;
+- Gateway operations and results;
+- the cross-owner language-neutral schema union and its remaining validators;
+- the deliberate `imagent.contracts` compatibility facade.
+
+The complete Application model family is owned by
+[`applications.application-contract`](../applications/application-contract/design.md):
+`Page`, `ApplicationRef`, `ProjectRef`, `ThreadRef`, input continuation and
+dispatch values, Project/Thread/Turn summaries and statuses, `AgentInput`,
+`AgentMessage`, history/catch-up/snapshot values, `AcceptedTurn`,
+`ApplicationInputDispatch`, and `validate_thread_ref`.
 
 It does not own:
 
@@ -47,7 +51,9 @@ unions, and validators are the reference implementation. Neither is a
 database. Contract objects describe or reference state owned by the
 appropriate system:
 
-- Agent Application resources and events remain application-owned.
+- Agent Application resources, items, Turns, history, and events remain
+  application-owned; the typed Python model family lives in the Applications
+  contract owner.
 - Conversation bindings and Thread projection routes are Gateway-owned.
 - native message IDs and delivery receipts are Channel observations.
 

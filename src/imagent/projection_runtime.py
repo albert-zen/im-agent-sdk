@@ -9,29 +9,30 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .applications.capabilities import SupportLevel
-from .applications.contract import AgentApplicationAdapter
+from .applications.contract import (
+    AcceptedTurn,
+    AgentApplicationAdapter,
+    AgentInput,
+    AgentMessage,
+    ApplicationInputDispatch,
+    InputContinuationPreference,
+    InputDisposition,
+    ThreadRef,
+    TurnReplyCorrelationPolicy,
+)
 from .applications.events import (
     AgentEvent,
     AgentEventType,
     EventBufferOverflow,
     EventStreamGap,
 )
+from .applications.operations import ApplicationOperation, ApplicationOperationResult
+from .applications.requests import RequestRef
 from .contracts import (
-    AcceptedTurn,
-    AgentInput,
-    AgentMessage,
-    ApplicationInputDispatch,
-    ApplicationOperation,
-    ApplicationOperationResult,
     ConversationBinding,
-    InputContinuationPreference,
-    InputDisposition,
     ProjectionPolicy,
-    RequestRef,
     ThreadProjectionRoute,
-    ThreadRef,
     TurnReplyCorrelation,
-    TurnReplyCorrelationPolicy,
 )
 from .gateway.persistence.repository_contracts import (
     BindingRepository,

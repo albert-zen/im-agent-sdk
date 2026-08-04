@@ -6,6 +6,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TypeAlias
 
+from ..applications.contract import ThreadRef, validate_thread_ref
 from ..interaction.channels import DeliveryReceipt, validate_delivery_receipt
 from ..interaction.media import (
     AttachmentContent,
@@ -15,8 +16,6 @@ from ..interaction.media import (
 )
 from ..interaction.messages import Content, ConversationRef, Metadata, TextContent
 from ..interaction.operations import ContractViolation, require_identifier
-from ._validation import validate_thread_ref
-from .model import ThreadRef
 
 MAX_DELIVERY_SUBMISSION_DESTINATIONS = 64
 

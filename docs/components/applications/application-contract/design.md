@@ -10,8 +10,9 @@ This leaf defines the common typed boundary through which Gateway uses one
 native Agent Application without claiming its truth. Consumer Controllers use
 typed `ControllerActions`; they do not depend directly on an adapter.
 It owns `AgentApplicationAdapter`, `ApplicationSummary`, typed input dispatch
-facts/results, resource/history reference values, and the classification of a
-native input outcome as known or unknown.
+facts/results, the complete Project/Thread/Turn/resource/history model family,
+`AgentMessage`, `validate_thread_ref`, and the classification of a native
+input outcome as known or unknown.
 
 It does not own Gateway admission, Conversation binding, projection routes,
 checkpoints, request-destination correlation, product commands, a native wire
@@ -23,23 +24,36 @@ Projects, Threads, Turns, requests, execution, and authoritative history.
 The adapter accepts typed Application Operations and `AgentInput`; it returns
 typed operation results, an `AcceptedTurn`, and independent Thread event
 subscriptions. `send_input()` defaults to `prefer_active_turn`, invokes the
-typed pre-dispatch callback exactly once immediately before a native mutation, and
-reports the actual `started/create_new` or `steered/preserve_existing` result.
+typed pre-dispatch callback exactly once immediately before a native mutation,
+and reports the actual `started/create_new` or `steered/preserve_existing`
+result. `AgentMessage` is the immutable, strong-`ThreadRef`-scoped item shared
+by authoritative history and canonical live-event normalization.
 
-The owner contracts/exports are `AgentApplicationAdapter` and
-`ApplicationInputDispatchHandler` from `src/imagent/applications/contract.py`.
+The owner contracts/exports are the complete family listed below, plus
+`AgentApplicationAdapter` and `ApplicationInputDispatchHandler`, from
+`src/imagent/applications/contract.py`:
+
+`Page`, `ApplicationRef`, `ProjectRef`, `ThreadRef`,
+`InputContinuationPreference`, `InputDisposition`,
+`TurnReplyCorrelationPolicy`, `ThreadStatus`, `ApplicationSummary`,
+`ProjectSummary`, `ThreadSummary`, `AgentInput`, `AgentMessage`, `TurnStatus`,
+`TurnCatchup`, `TurnHistoryEntry`, `ThreadHistory`, `ThreadSnapshot`,
+`AcceptedTurn`, `ApplicationInputDispatch`, and `validate_thread_ref`.
+
 The finite `imagent.applications` facade exposes those exact objects. The
-historical `imagent.adapters` surface remains a temporary exact-object
-compatibility facade for these two names while it continues to serve
-Channel/Gateway aliases owned elsewhere. The `ApplicationSummary`, resource,
-history, input, and validation values remain in their existing contract
-owners; this slice does not move them or create a second Application contract.
+deliberate `imagent.contracts` facade may retain exact compatibility aliases,
+but it contains no second implementation. The historical `imagent.adapters`
+surface remains a temporary exact-object compatibility facade for the adapter
+Protocol and callback while it continues to serve Channel/Gateway aliases
+owned elsewhere.
 
 ## Dependency, state, and recovery boundary
 
-This leaf consumes Interaction message/operation values and the Applications
-capability, event, operation, and request leaves. It does not depend on
-Gateway implementation. Native adapters declare only the replay/order facts
+This leaf consumes Interaction `Content`, `MessageRole`, and `Metadata` values
+and the Applications capability, event, operation, and request leaves. It does
+not depend on Gateway implementation. The events leaf consumes the owned
+`AgentMessage`; that dependency does not transfer item, history, or Thread
+authority to events. Native adapters declare only the replay/order facts
 that their Application actually supports. After a native input may have been
 dispatched, timeout, cancellation, disconnect, or lost response is
 `ApplicationInputOutcomeUnknown` unless native truth proves otherwise; it
@@ -54,15 +68,16 @@ Turn.
 ## Current and target structure
 
 The owner implementation is `src/imagent/applications/contract.py` with
-focused ownership evidence in `tests/applications/test_contract.py`; shared
-JSON Schemas and the Application resource/model values remain in their
-existing owners. `src/imagent/adapters.py` retains only exact compatibility
-aliases for these Application names alongside Channel and Gateway aliases; it
-does not define a second Protocol or callback alias. The `imagent.applications`
-facade uses a closed, named lazy re-export set so importing the contract does
-not initialize a concrete adapter; it remains a finite exact facade, not a
-registry or service locator. The conformance suite remains affected evidence
-for all concrete adapters.
+focused ownership evidence in `tests/applications/test_contract.py`. Shared
+JSON Schemas remain cross-owner language-neutral documents; their Python
+reference values are not duplicated in `imagent.contracts.model` or
+Interaction. `imagent.contracts` re-exports exact owner objects for temporary
+compatibility, while `imagent.applications` directly exposes the complete
+family and does not use a module-level lazy export to hide ownership or solve
+an import cycle. `src/imagent/adapters.py` retains only exact compatibility
+aliases for the Application Protocol and callback alongside unrelated Channel
+and Gateway aliases. The conformance suite remains affected evidence for all
+concrete adapters.
 
 ## Authority
 

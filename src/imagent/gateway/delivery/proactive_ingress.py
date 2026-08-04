@@ -8,10 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
-from ...contracts.model import (
-    ProjectRef,
-    ThreadRef,
-)
+from ...applications.contract import ProjectRef, ThreadRef
 from ...interaction.media import AttachmentContent
 from ...interaction.media_staging import (
     InlineArtifactStagingInput,

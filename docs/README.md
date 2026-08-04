@@ -25,7 +25,7 @@ separates SDK ownership work from the later IMCodex consumer migration.
 
 | Change area | Read first | Validate first |
 |---|---|---|
-| Interaction message values in `contracts/**`, `schemas/v1/messages.schema.json` | [messages design](components/interaction/messages/design.md), [testing](components/interaction/messages/testing.md), [protocol](components/contracts/protocol.md#message-envelopes) | `test_contracts.py`, schema validator |
+| Interaction message values in `contracts/**`, `schemas/v1/messages.schema.json` | [messages design](components/interaction/messages/design.md), [testing](components/interaction/messages/testing.md), [protocol](components/contracts/protocol.md#message-envelopes) | `tests/interaction/test_messages.py`, schema validator |
 | Common operation values in `contracts/**`, `schemas/v1/operations.schema.json` | [operations design](components/interaction/operations/design.md), [testing](components/interaction/operations/testing.md), [protocol](components/contracts/protocol.md#typed-operations) | `test_contracts.py`, schema validator |
 | Remaining unsplit `contracts/**` and contract schemas | [contracts design](components/contracts/design.md), [protocol](components/contracts/protocol.md), [testing](components/contracts/testing.md) | `test_contracts.py`, schema validator |
 | `adapters.py` | [ports design](components/ports/design.md), [testing](components/ports/testing.md) | adapter contract kit and static typing |

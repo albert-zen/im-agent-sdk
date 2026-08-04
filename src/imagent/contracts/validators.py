@@ -4,6 +4,7 @@ import hashlib
 import json
 from typing import TYPE_CHECKING
 
+from ..applications.contract import validate_thread_ref
 from ..applications.requests import (
     ApprovalResponse,
     UserInputResponse,
@@ -11,7 +12,6 @@ from ..applications.requests import (
 )
 from ..interaction.messages import ConversationRef
 from ..interaction.operations import ContractViolation, require_identifier
-from ._validation import validate_thread_ref
 from .model import ConversationBinding, ThreadProjectionRoute, TurnReplyCorrelation
 from .operations import (
     ApplicationsListed,

@@ -5,18 +5,11 @@ from collections.abc import AsyncIterator, Callable, Hashable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Generic, TypeVar, cast
+from typing import Generic, TypeVar, cast
 
 from ..interaction.messages import Metadata
 from ..interaction.operations import ContractViolation, require_identifier
 from .capabilities import ApplicationCapabilities, EventSequenceScope, SupportLevel
-
-if TYPE_CHECKING:
-    from ..contracts.model import (
-        ProjectRef,
-        ThreadRef,
-    )
-    from .requests import InteractiveRequest, RequestResolution
 
 K = TypeVar("K", bound=Hashable)
 V = TypeVar("V")
@@ -61,14 +54,6 @@ def validate_agent_event(
     capabilities: ApplicationCapabilities,
 ) -> None:
     """Validate event facts without claiming request/resource ownership."""
-
-    # Event validation delegates request facts to the request leaf and keeps
-    # its event ownership/semantics intact.
-    from ..contracts._validation import validate_thread_ref
-    from .requests import (
-        validate_interactive_request,
-        validate_request_resolution,
-    )
 
     require_identifier(event.event_id, "event_id")
     require_identifier(event.application_instance_id, "application_instance_id")
@@ -296,8 +281,13 @@ class EventBroadcaster(Generic[K, V]):
             self._subscribers.pop(key, None)
 
 
-# Bind the remaining historical resource/request references only after the
-# event owner is fully defined, so `get_type_hints(AgentEvent)` stays stable
-# without an import-time cycle through the contracts facade.
-from ..contracts.model import ProjectRef, ThreadRef  # noqa: E402
-from .requests import InteractiveRequest, RequestResolution  # noqa: E402
+# Bind the Applications-owned resource/item and request references only after
+# this event owner is defined. These module-level imports preserve runtime type
+# hints without a function-local reverse import or a second model contract.
+from .contract import ProjectRef, ThreadRef, validate_thread_ref  # noqa: E402
+from .requests import (  # noqa: E402
+    InteractiveRequest,
+    RequestResolution,
+    validate_interactive_request,
+    validate_request_resolution,
+)

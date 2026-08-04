@@ -8,13 +8,11 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Protocol
 
+from .applications.contract import ApplicationRef, ProjectRef, ThreadRef
+from .applications.requests import RequestRef
 from .contracts import (
-    ApplicationRef,
-    ProjectRef,
-    RequestRef,
     RequestRouteCorrelation,
     RequestRouteState,
-    ThreadRef,
     validate_request_route_correlation,
 )
 from .gateway.persistence.repository_contracts import RequestCorrelationConflict

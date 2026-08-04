@@ -7,13 +7,16 @@ import subprocess
 import sys
 import unittest
 from collections.abc import AsyncIterator, Awaitable, Callable
+from dataclasses import FrozenInstanceError, is_dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast, get_type_hints
 
 import imagent.adapters as compatibility
 import imagent.applications as facade
+from imagent import contracts
 from imagent.applications import contract as owner
-from imagent.applications.events import AgentEvent
+from imagent.applications.events import AgentEvent, AgentEventType
 from imagent.contracts import (
     AcceptedTurn,
     AgentInput,
@@ -25,6 +28,32 @@ from imagent.contracts import (
     InteractiveRequest,
     ThreadRef,
 )
+from imagent.interaction.messages import MessageRole, TextContent
+from imagent.interaction.operations import ContractViolation
+
+_APPLICATION_MODEL_FAMILY = (
+    "Page",
+    "ApplicationRef",
+    "ProjectRef",
+    "ThreadRef",
+    "InputContinuationPreference",
+    "InputDisposition",
+    "TurnReplyCorrelationPolicy",
+    "ThreadStatus",
+    "ApplicationSummary",
+    "ProjectSummary",
+    "ThreadSummary",
+    "AgentInput",
+    "AgentMessage",
+    "TurnStatus",
+    "TurnCatchup",
+    "TurnHistoryEntry",
+    "ThreadHistory",
+    "ThreadSnapshot",
+    "AcceptedTurn",
+    "ApplicationInputDispatch",
+    "validate_thread_ref",
+)
 
 
 def _summary_getter() -> Callable[..., object]:
@@ -34,6 +63,98 @@ def _summary_getter() -> Callable[..., object]:
 
 
 class ApplicationContractOwnershipTests(unittest.TestCase):
+    def test_complete_application_model_family_has_one_owner_and_exact_aliases(self) -> None:
+        for name in _APPLICATION_MODEL_FAMILY:
+            with self.subTest(name=name):
+                owner_object = getattr(owner, name)
+                self.assertIs(getattr(facade, name), owner_object)
+                self.assertIs(getattr(contracts, name), owner_object)
+                self.assertEqual(owner_object.__module__, "imagent.applications.contract")
+                self.assertIn(name, owner.__all__)
+                self.assertIn(name, facade.__all__)
+
+    def test_model_family_is_frozen_slotted_and_history_live_item_is_shared(self) -> None:
+        model_names = tuple(
+            name for name in _APPLICATION_MODEL_FAMILY if name != "validate_thread_ref"
+        )
+        for name in model_names:
+            with self.subTest(name=name):
+                model = getattr(owner, name)
+                if is_dataclass(model):
+                    params = getattr(model, "__dataclass_params__", None)
+                    self.assertTrue(getattr(params, "frozen", False))
+                    self.assertTrue(hasattr(model, "__slots__"))
+
+        thread = owner.ThreadRef("app-1", "thread-1")
+        message = owner.AgentMessage(
+            agent_item_id="item-1",
+            thread_ref=thread,
+            role=MessageRole.ASSISTANT,
+            content=(TextContent("answer"),),
+            created_at=datetime.now(UTC),
+        )
+        catchup = owner.TurnCatchup(
+            thread_ref=thread,
+            turn_id="turn-1",
+            status=owner.TurnStatus.COMPLETED,
+            messages=(message,),
+        )
+        history = owner.ThreadHistory(
+            thread_ref=thread,
+            turns=(
+                owner.TurnHistoryEntry(
+                    turn_id="turn-1",
+                    status=owner.TurnStatus.COMPLETED,
+                    agent_messages=(message,),
+                ),
+            ),
+        )
+        snapshot = owner.ThreadSnapshot(
+            thread=owner.ThreadSummary(
+                ref=thread,
+                status=owner.ThreadStatus.COMPLETED,
+            ),
+            messages=(message,),
+        )
+        event = AgentEvent(
+            event_id="event-1",
+            application_instance_id="app-1",
+            type=AgentEventType.MESSAGE_COMPLETED,
+            data={"message": message},
+            created_at=message.created_at,
+            thread_ref=thread,
+            turn_id="turn-1",
+        )
+
+        self.assertIs(catchup.messages[0], message)
+        self.assertIs(history.turns[0].agent_messages[0], message)
+        self.assertIs(snapshot.messages[0], message)
+        self.assertIs(event.data["message"], message)
+        with self.assertRaises(FrozenInstanceError):
+            message.agent_item_id = "changed"  # type: ignore[misc]
+
+    def test_thread_scope_validation_and_historical_model_have_no_duplicate_definitions(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(ContractViolation, "different application"):
+            owner.validate_thread_ref(
+                owner.ThreadRef(
+                    "app-1",
+                    "thread-1",
+                    owner.ProjectRef("app-2", "project-1"),
+                )
+            )
+
+        repository_root = Path(__file__).resolve().parents[2]
+        model_path = repository_root / "src" / "imagent" / "contracts" / "model.py"
+        tree = ast.parse(model_path.read_text(encoding="utf-8"))
+        class_names = {node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
+        self.assertTrue(class_names.isdisjoint(_APPLICATION_MODEL_FAMILY))
+        from imagent.interaction import messages
+
+        self.assertFalse(hasattr(messages, "AgentMessage"))
+        self.assertNotIn("imagent.applications", messages.__dict__)
+
     def test_owner_and_public_facades_export_exact_objects(self) -> None:
         names = (
             "AgentApplicationAdapter",

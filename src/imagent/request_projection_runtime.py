@@ -5,16 +5,17 @@ from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 
 from .applications.capabilities import SupportLevel
-from .applications.contract import AgentApplicationAdapter
+from .applications.contract import AgentApplicationAdapter, ThreadRef
 from .applications.events import AgentEvent, AgentEventType
-from .contracts import (
+from .applications.requests import (
     InteractiveRequest,
     RequestRef,
     RequestResolutionStatus,
+    validate_interactive_request,
+)
+from .contracts import (
     RequestRouteState,
     ThreadProjectionRoute,
-    ThreadRef,
-    validate_interactive_request,
 )
 from .gateway.persistence.repository_contracts import (
     RequestCorrelationConflict,

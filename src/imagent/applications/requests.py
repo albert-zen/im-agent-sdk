@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TypeAlias
 
 from ..interaction.messages import Metadata
 from ..interaction.operations import (
@@ -15,9 +15,6 @@ from ..interaction.operations import (
 from ..interaction.operations import (
     OperationErrorCode as _OperationErrorCode,
 )
-
-if TYPE_CHECKING:
-    from ..contracts.model import ApplicationRef, ThreadRef
 
 
 class InteractiveRequestKind(StrEnum):
@@ -161,8 +158,6 @@ MAX_INTERACTIVE_REQUEST_CHOICES = 64
 def validate_interactive_request(
     request: ApprovalRequest | UserInputRequest,
 ) -> None:
-    from ..contracts._validation import validate_thread_ref
-
     validate_request_ref(request.request_ref)
     validate_thread_ref(request.thread_ref)
     if (
@@ -336,6 +331,10 @@ def _validate_choice_count(count: int) -> None:
 
 
 # Bind shared Application resource identities only after this leaf is fully
-# defined, preserving the historical runtime annotations without creating a
-# second request contract or an import-time cycle through the facade.
-from ..contracts.model import ApplicationRef, ThreadRef  # noqa: E402
+# defined, preserving runtime annotations without a function-local reverse
+# import or a second request contract.
+from .contract import (  # noqa: E402
+    ApplicationRef,
+    ThreadRef,
+    validate_thread_ref,
+)

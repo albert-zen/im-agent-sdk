@@ -7,10 +7,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from . import sqlite_rows
+from .applications.contract import ThreadRef
 from .contracts import (
     ConversationBinding,
     ThreadProjectionRoute,
-    ThreadRef,
     TurnReplyCorrelation,
     validate_binding,
     validate_projection_route,
