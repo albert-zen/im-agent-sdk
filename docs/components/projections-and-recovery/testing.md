@@ -1,4 +1,8 @@
-# Projections and recovery testing
+# Historical projection/recovery aggregate testing
+
+The authoritative target test obligations are now the
+[Gateway projection subtree](../gateway/projection/README.md). This aggregate
+records current broad-suite evidence until the focused test moves are complete.
 
 Current tests prove independent fan-out, explicit Turn terminal events, honest
 ordering/replay declarations, foreground/remembered routing, bounded
