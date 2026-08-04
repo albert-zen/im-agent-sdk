@@ -5,7 +5,6 @@ from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from ...adapters import DeliverySubmissionConflict, DeliverySubmissionRepository
 from ...contracts import (
     ConversationDeliveryTarget,
     DeliveryIntent,
@@ -38,6 +37,10 @@ from ...interaction.channels import ChannelAdapter
 from ...interaction.media import AttachmentContent, LocalPath
 from ...interaction.messages import OutboundMessage
 from ...interaction.operations import ContractViolation
+from ..persistence.repository_contracts import (
+    DeliverySubmissionConflict,
+    DeliverySubmissionRepository,
+)
 from ..persistence.submission_identity import (
     ensure_same_delivery_submission_reservation,
 )

@@ -8,7 +8,6 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Protocol
 
-from .adapters import RequestCorrelationConflict
 from .contracts import (
     ApplicationRef,
     ProjectRef,
@@ -18,6 +17,7 @@ from .contracts import (
     ThreadRef,
     validate_request_route_correlation,
 )
+from .gateway.persistence.repository_contracts import RequestCorrelationConflict
 from .interaction.messages import ConversationRef
 from .sqlite_rows import decode_datetime, empty_storage_text, required_text
 

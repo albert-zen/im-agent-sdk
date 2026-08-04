@@ -15,10 +15,6 @@ if TYPE_CHECKING:
 
 from ..adapters import (
     AgentApplicationAdapter,
-    DeliverySubmissionCapacityError,
-    DeliverySubmissionConflict,
-    IdempotencyClaimStatus,
-    RequestCorrelationConflict,
 )
 from ..applications.capabilities import ProjectMode
 from ..contracts import (
@@ -128,6 +124,12 @@ from .persistence.memory import (
     InMemoryDeliverySubmissionRepository,
     InMemoryProjectionRouteRepository,
     InMemoryRequestCorrelationRepository,
+)
+from .persistence.repository_contracts import (
+    DeliverySubmissionCapacityError,
+    DeliverySubmissionConflict,
+    IdempotencyClaimStatus,
+    RequestCorrelationConflict,
 )
 from .presentation import (
     OutboundPresentationContext,

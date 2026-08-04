@@ -4,12 +4,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
-from .adapters import (
-    AgentApplicationAdapter,
-    IdempotencyClaimStatus,
-    ProjectionRouteRepository,
-    RequestCorrelationRepository,
-)
+from .adapters import AgentApplicationAdapter
 from .contracts import (
     ApplicationOperation,
     ApplicationOperationResult,
@@ -20,6 +15,11 @@ from .contracts import (
     ThreadProjectionRoute,
     ThreadRef,
     derive_request_response_shape,
+)
+from .gateway.persistence.repository_contracts import (
+    IdempotencyClaimStatus,
+    ProjectionRouteRepository,
+    RequestCorrelationRepository,
 )
 from .gateway.projection.recovery import read_bounded_authoritative_projection
 from .interaction.controllers import RequestPresenter

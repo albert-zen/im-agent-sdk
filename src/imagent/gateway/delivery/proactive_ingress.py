@@ -8,7 +8,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
-from ...adapters import DeliverySubmissionCapacityError, DeliverySubmissionConflict
 from ...contracts import (
     ConversationDeliveryTarget,
     DeliveryIntent,
@@ -28,6 +27,10 @@ from ...interaction.media_staging import (
 from ...interaction.messages import ConversationRef, TextContent, TextFormat
 from ...interaction.operations import ContractViolation
 from ...keyed_locks import KeyedLockRegistry
+from ..persistence.repository_contracts import (
+    DeliverySubmissionCapacityError,
+    DeliverySubmissionConflict,
+)
 from .proactive import DeliveryRouteError
 from .proactive_authorization import DeliveryAuthorizationError
 

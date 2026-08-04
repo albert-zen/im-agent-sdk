@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..adapters import (
+from ..interaction.controllers import InboundController, RequestPresenter
+from .delivery.outcome_observation import DeliveryOutcomeObserver
+from .input import InboundContentTransformer
+from .input.failure_presentation import InboundFailurePresenter
+from .persistence.repository_contracts import (
     BindingRepository,
     DeliverySubmissionRepository,
     IdempotencyRepository,
     ProjectionRouteRepository,
     RequestCorrelationRepository,
 )
-from ..interaction.controllers import InboundController, RequestPresenter
-from .delivery.outcome_observation import DeliveryOutcomeObserver
-from .input import InboundContentTransformer
-from .input.failure_presentation import InboundFailurePresenter
 from .presentation import OutboundPresentationPolicy
 
 

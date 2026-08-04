@@ -5,10 +5,6 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from uuid import uuid4
 
-from ..adapters import (
-    IdempotencyClaimStatus,
-    IdempotencyRepository,
-)
 from ..interaction.channels import (
     ChannelAdapter,
     InboundAdmission,
@@ -16,6 +12,10 @@ from ..interaction.channels import (
     MessageHandler,
 )
 from ..interaction.messages import ConversationRef, InboundMessage
+from .persistence.repository_contracts import (
+    IdempotencyClaimStatus,
+    IdempotencyRepository,
+)
 
 
 @dataclass(frozen=True, slots=True)

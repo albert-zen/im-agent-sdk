@@ -11,10 +11,6 @@ from itertools import islice
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from .adapters import (
-    IdempotencyClaimStatus,
-    ProjectionRouteRepository,
-)
 from .contracts import (
     AgentMessage,
     ThreadProjectionRoute,
@@ -23,13 +19,17 @@ from .contracts import (
 from .interaction.messages import ConversationRef, OutboundMessage, TextContent, TextFormat
 
 if TYPE_CHECKING:
+    from .gateway.persistence.repository_contracts import (
+        IdempotencyClaimStatus,
+        ProjectionRouteRepository,
+    )
     from .gateway.presentation import OutboundPresentationContext
 
 DeliverOutbound = Callable[
     [OutboundMessage, "OutboundPresentationContext"],
-    Awaitable[IdempotencyClaimStatus],
+    Awaitable["IdempotencyClaimStatus"],
 ]
-DeliverRequestOutbound = Callable[[OutboundMessage], Awaitable[IdempotencyClaimStatus]]
+DeliverRequestOutbound = Callable[[OutboundMessage], Awaitable["IdempotencyClaimStatus"]]
 
 _PROJECTION_METADATA_MAX_ITEMS = 16
 _PROJECTION_METADATA_MAX_KEY_LENGTH = 64
@@ -214,6 +214,7 @@ async def deliver_projected_message(
     authoritative: bool,
 ) -> ThreadProjectionRoute:
     """Make one ordered route decision without adding retry/backpressure."""
+    from .gateway.persistence.repository_contracts import IdempotencyClaimStatus
     from .gateway.presentation import (
         OutboundPresentationContext,
         ProjectionPresentationOrigin,

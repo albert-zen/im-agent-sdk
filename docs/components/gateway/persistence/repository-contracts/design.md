@@ -13,9 +13,21 @@ another deployment implementation.
 
 ## Ownership
 
-This leaf owns repository Protocols, conflict types, compare-and-swap inputs,
-and typed acquisition outcomes for bindings, projection routes, correlations,
-idempotency, and delivery submissions.
+This leaf owns the complete repository Port and conflict family:
+
+- `BindingRepository` and `ProjectionRouteRepository` for Conversation
+  bindings, projection routes, checkpoints, and Turn reply correlations;
+- `IdempotencyRepository` and `IdempotencyClaimStatus` for fenced claim
+  acquisition and terminal transitions;
+- `RequestCorrelationRepository` and its explicit transition conflict;
+- `DeliverySubmissionRepository` and its typed capacity/conflict outcomes; and
+- `ProjectionCheckpointConflict`, `ProjectionRouteConflict`,
+  `RequestCorrelationConflict`, `TurnReplyCorrelationConflict`,
+  `DeliverySubmissionConflict`, and `DeliverySubmissionCapacityError`.
+
+`BindingConflict` remains the existing conflict owner in this leaf. The
+historical `imagent.adapters` module is only an exact compatibility facade for
+these names; it contains no second Protocol, enum, or exception definition.
 
 It does not own passive record values, SQLite schema or transactions,
 process-local storage, Gateway routing policy, message content, transcript
@@ -28,10 +40,11 @@ satisfy an expected Conversation binding revision. Both process-local and
 SQLite implementations raise the exact same type. The conflict carries no
 authority to retry, replace a later binding, or infer Application state.
 
-The `BindingRepository` Port remains in its historical compatibility module
-until the separate repository-Port extraction moves the complete protocol
-surface. This slice moves only the already shared conflict type and does not
-change a method signature or add a second facade.
+The `BindingRepository` Port now lives beside `BindingConflict` in this leaf.
+The move is mechanical: every method signature, annotation, default, and
+runtime type-hint result remains unchanged. Memory and SQLite implementations
+continue to raise the same conflict object and enforce the same expected
+revision fence.
 
 ## Dependencies and recovery
 
@@ -64,9 +77,12 @@ src/imagent/gateway/persistence/repository_contracts.py
 tests/gateway/persistence/test_repository_contracts.py
 ```
 
-The test module is added when protocol conformance moves from the historical
-Ports suite. Until then, implementation suites prove the shared conflict type
-across memory and SQLite.
+The focused test module proves clean-process importability, exact
+`imagent.adapters` and `imagent.gateway.persistence` object identity, absence
+of moved definitions in the compatibility facade, Protocol signatures and
+runtime `get_type_hints`, enum values, and conflict identity. Memory, SQLite,
+and reusable conformance tests continue to prove the behavior consumed by the
+Ports.
 
 ## Authority
 

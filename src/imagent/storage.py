@@ -7,11 +7,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from . import sqlite_rows
-from .adapters import (
-    IdempotencyClaimStatus,
-    ProjectionCheckpointConflict,
-    TurnReplyCorrelationConflict,
-)
 from .contracts import (
     ConversationBinding,
     ThreadProjectionRoute,
@@ -25,7 +20,12 @@ from .gateway.delivery.submissions import (
     SQLiteDeliverySubmissionMixin,
     initialize_delivery_submission_schema,
 )
-from .gateway.persistence import BindingConflict
+from .gateway.persistence.repository_contracts import (
+    BindingConflict,
+    IdempotencyClaimStatus,
+    ProjectionCheckpointConflict,
+    TurnReplyCorrelationConflict,
+)
 from .interaction.messages import ConversationRef
 from .request_correlations import (
     SQLiteRequestCorrelationMixin,

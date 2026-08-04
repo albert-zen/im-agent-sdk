@@ -3,7 +3,6 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime
 
-from .adapters import ProjectionCheckpointConflict, ProjectionRouteConflict
 from .contracts import (
     ApplicationRef,
     ConversationBinding,
@@ -14,6 +13,10 @@ from .contracts import (
     validate_binding,
     validate_projection_route,
     validate_turn_reply_correlation,
+)
+from .gateway.persistence.repository_contracts import (
+    ProjectionCheckpointConflict,
+    ProjectionRouteConflict,
 )
 from .interaction.messages import ConversationRef
 
