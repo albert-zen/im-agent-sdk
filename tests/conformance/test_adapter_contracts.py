@@ -12,10 +12,10 @@ from imagent.applications import (
     T3ApplicationAdapter,
     ZenApplicationAdapter,
 )
-from imagent.contracts import (
+from imagent.applications.capabilities import ProjectMode
+from imagent.interaction.messages import (
     ConversationRef,
     InboundMessage,
-    ProjectMode,
     TextContent,
 )
 from imagent.interaction.channels import ChannelStartupConfigurationValidator

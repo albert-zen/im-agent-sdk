@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 
-from ...contracts import (
+from ...applications.requests import (
     ApprovalRequest,
     InteractiveRequest,
     UserInputQuestion,

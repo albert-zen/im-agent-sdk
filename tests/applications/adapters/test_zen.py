@@ -9,18 +9,16 @@ from typing import Any, cast
 
 from imagent.applications import ZenApplicationAdapter
 from imagent.applications.adapters.zen import ZenApplicationAdapter as ZenApplicationAdapterOwner
-from imagent.contracts import (
+from imagent.applications.contract import (
     AgentInput,
     ApplicationInputDispatch,
-    AttachmentContent,
-    CreateThread,
     InputDisposition,
-    LocalPath,
-    TextContent,
-    ThreadCreated,
     ThreadRef,
     TurnReplyCorrelationPolicy,
 )
+from imagent.applications.operations import CreateThread, ThreadCreated
+from imagent.interaction.media import AttachmentContent, LocalPath
+from imagent.interaction.messages import TextContent
 
 
 class _ZenInputClient:

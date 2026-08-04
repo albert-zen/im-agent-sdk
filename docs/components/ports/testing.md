@@ -48,10 +48,11 @@ continuation preference, invoke the hook once immediately before native
 mutation, and return a result matching the authorized disposition/policy.
 
 The focused Applications contract tests additionally prove that
-`imagent.applications` and the temporary `imagent.adapters` export the exact
-same `AgentApplicationAdapter` and `ApplicationInputDispatchHandler` objects,
-that the historical facade contains no second Protocol/callback definition,
-and that cold-import/runtime type-hint evidence stays Gateway-independent.
+`imagent.applications` exposes the exact owner objects for
+`AgentApplicationAdapter` and `ApplicationInputDispatchHandler`, while
+`imagent.adapters` rejects both retired Application names. Cold-process import
+order and runtime type-hint evidence must stay independent of concrete
+adapters and Gateway implementation.
 
 Delivery Port coverage must include atomic concurrent reservation, identity
 conflict, immutable snapshots, per-destination compare-and-set updates, and

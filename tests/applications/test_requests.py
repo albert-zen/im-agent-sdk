@@ -8,6 +8,8 @@ from importlib import import_module
 from typing import get_type_hints
 
 from imagent import contracts
+import imagent.applications as applications
+from imagent.applications import contract
 from imagent.applications import requests
 from imagent.gateway.persistence import RequestRouteCorrelation
 from imagent.interaction.operations import (
@@ -19,12 +21,12 @@ from imagent.interaction.operations import (
 
 class ApplicationRequestTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.application = contracts.ApplicationRef("codex-local")
+        self.application = contract.ApplicationRef("codex-local")
         self.request_ref = requests.RequestRef(
             self.application,
             "epoch-4:request-7",
         )
-        self.thread = contracts.ThreadRef("codex-local", "thread-1")
+        self.thread = contract.ThreadRef("codex-local", "thread-1")
 
     def _approval(
         self,
@@ -43,7 +45,7 @@ class ApplicationRequestTests(unittest.TestCase):
             choices=choices,
         )
 
-    def test_facade_exports_preserve_exact_owner_identities(self) -> None:
+    def test_owner_has_exact_finite_exports_and_facades_are_negative(self) -> None:
         for name in (
             "ApprovalRequest",
             "ApprovalResponse",
@@ -74,7 +76,11 @@ class ApplicationRequestTests(unittest.TestCase):
             "validate_request_response_shape",
         ):
             with self.subTest(name=name):
-                self.assertIs(getattr(contracts, name), getattr(requests, name))
+                self.assertTrue(hasattr(requests, name))
+                self.assertIn(name, requests.__all__)
+                self.assertFalse(hasattr(contracts, name))
+                self.assertNotIn(name, contracts.__all__)
+                self.assertNotIn(name, applications.__all__)
 
     def test_historical_contract_modules_no_longer_define_request_contract(self) -> None:
         with self.assertRaises(ModuleNotFoundError):
@@ -92,10 +98,10 @@ class ApplicationRequestTests(unittest.TestCase):
     def test_request_annotations_and_gateway_route_annotations_resolve(self) -> None:
         request_hints = get_type_hints(requests.ApprovalRequest)
         self.assertIs(request_hints["request_ref"], requests.RequestRef)
-        self.assertIs(request_hints["thread_ref"], contracts.ThreadRef)
+        self.assertIs(request_hints["thread_ref"], contract.ThreadRef)
         self.assertIs(
             get_type_hints(requests.RequestRef)["application_ref"],
-            contracts.ApplicationRef,
+            contract.ApplicationRef,
         )
 
         route_hints = get_type_hints(RequestRouteCorrelation)
@@ -108,9 +114,13 @@ class ApplicationRequestTests(unittest.TestCase):
             "import imagent.gateway.persistence.state_contracts",
             "import imagent.applications.operations",
             (
-                "from imagent.applications.requests import RequestRef; "
-                "from imagent.contracts import RequestRef as FacadeRequestRef; "
-                "assert RequestRef is FacadeRequestRef"
+                "from imagent.applications.requests import RequestRef\n"
+                "try:\n"
+                "    from imagent.contracts import RequestRef\n"
+                "except ImportError:\n"
+                "    pass\n"
+                "else:\n"
+                "    raise AssertionError('retired RequestRef import')"
             ),
         )
         for import_order in import_orders:
@@ -130,7 +140,7 @@ class ApplicationRequestTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractViolation, "application_instance_id"):
             requests.validate_request_ref(
                 requests.RequestRef(
-                    contracts.ApplicationRef(""),
+                    contract.ApplicationRef(""),
                     self.request_ref.native_request_id,
                 )
             )
@@ -143,7 +153,7 @@ class ApplicationRequestTests(unittest.TestCase):
             requests.validate_interactive_request(
                 requests.ApprovalRequest(
                     request_ref=requests.RequestRef(
-                        contracts.ApplicationRef("other-application"),
+                        contract.ApplicationRef("other-application"),
                         self.request_ref.native_request_id,
                     ),
                     thread_ref=self.thread,

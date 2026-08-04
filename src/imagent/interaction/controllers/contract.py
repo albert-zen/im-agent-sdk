@@ -4,9 +4,11 @@ import hashlib
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
-from ...contracts import (
+from ...applications.operations import (
     ApplicationOperation,
     ApplicationOperationResult,
+)
+from ...contracts import (
     GatewayOperation,
     GatewayOperationResult,
 )

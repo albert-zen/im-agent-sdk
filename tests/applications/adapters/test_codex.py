@@ -15,25 +15,23 @@ from imagent.applications.adapters.codex import (
     CodexApplicationAdapter as CodexApplicationAdapterOwner,
 )
 from imagent.applications.contract import ApplicationInputOutcomeUnknown
+from imagent.applications.contract import (
+    AgentInput,
+    AgentMessage,
+    ApplicationInputDispatch,
+    InputContinuationPreference,
+    InputDisposition,
+    ThreadRef,
+    TurnReplyCorrelationPolicy,
+)
 from imagent.applications.events import (
     AgentEventType,
     EventStreamOverflow,
     EventStreamReset,
 )
-from imagent.contracts import (
-    AgentInput,
-    AgentMessage,
-    ApplicationInputDispatch,
-    AttachmentContent,
-    CreateThread,
-    InputContinuationPreference,
-    InputDisposition,
-    LocalPath,
-    TextContent,
-    ThreadCreated,
-    ThreadRef,
-    TurnReplyCorrelationPolicy,
-)
+from imagent.applications.operations import CreateThread, ThreadCreated
+from imagent.interaction.media import AttachmentContent, LocalPath
+from imagent.interaction.messages import TextContent
 from tests.applications.adapters._appserver_fakes import NativeZenClient
 
 

@@ -99,3 +99,16 @@ def validate_application_capabilities(capabilities: ApplicationCapabilities) -> 
         raise ContractViolation(
             f"{projects.mode.value} project mode cannot advertise project operations"
         )
+
+
+__all__ = [
+    "ApplicationCapabilities",
+    "ProjectCapabilities",
+    "ThreadCapabilities",
+    "RuntimeCapabilities",
+    "SupportLevel",
+    "ProjectMode",
+    "ThreadDeletionCapability",
+    "EventSequenceScope",
+    "validate_application_capabilities",
+]

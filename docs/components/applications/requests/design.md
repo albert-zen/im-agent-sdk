@@ -25,17 +25,13 @@ resource identity, not Gateway implementation. Request IDs are scoped by
 `ApplicationRef`; a reused native ID after transport reset must be epoch-scoped
 by the adapter rather than merged by SDK inference.
 
-During the physical rollout, `ApplicationRef` and `ThreadRef` live in the
-Applications contract leaf. The retired broader contracts model module
-contract also consumes request types through the Application Port, so declaring
-both target component edges now would create a cycle and would misrepresent the
-unfinished split. The component map records this resource-identity reference as
-an explicit structural gap until the Application contract is separated at its
-accepted target boundary; it is not a second request owner.
-
-Current public contracts are in `imagent.contracts`; target exports are
+`ApplicationRef` and `ThreadRef` are owned by the Applications contract leaf,
+and this owner imports them only for typed validation/signatures. The
+canonical request values and validators are exported only from
 `imagent.applications.requests`, implemented in
-`src/imagent/applications/requests.py`.
+`src/imagent/applications/requests.py`. The package root and
+`imagent.contracts` do not expose this request family; Gateway route
+correlation remains a separate Gateway-owned contract.
 
 ## State, recovery, and structure
 
@@ -45,21 +41,18 @@ authoritative pending-request snapshot must not manufacture an open request.
 Gateway may retain a bounded delivered response shape, but never prompt text,
 answers, permission policy, or a second request state machine.
 
-Before this slice, the implementation was split across
-`schemas/v1/{events,operations,resources}.schema.json` and
-`src/imagent/contracts/{model.py,request_validation.py,operations.py}`.
-This slice makes the request-owned values, errors, response values, and
-validators authoritative at `src/imagent/applications/requests.py` while the
-historical modules retain only their remaining owners: shared non-request model
-values, Gateway route correlation, and Gateway operations. Current tests are
+The implementation is the request portions of
+`schemas/v1/{events,operations,resources}.schema.json` plus
+`src/imagent/applications/requests.py`; historical aggregate model and
+validation modules no longer define this request contract. Gateway route
+correlation and Gateway operations retain their own owners. Current tests are
 `tests/test_contracts.py` and
 `tests/applications/adapters/appserver/test_requests.py`; the retained Gateway
 request-correlation/presenter integration remains in
 `tests/test_appserver_requests.py`. Focused ownership evidence moves to
 `tests/applications/test_requests.py` while other affected integration tests
-remain in place. The versioned schemas remain deliberate cross-owner contracts, and
-the temporary resource-identity import remains visible in the component gap
-above rather than being disguised as the final dependency graph.
+remain in place. The versioned schemas remain deliberate cross-owner
+contracts.
 
 The mechanical move preserves dataclass fields, discriminants, public aliases,
 bounded choice/question and text validation, request application scope, and

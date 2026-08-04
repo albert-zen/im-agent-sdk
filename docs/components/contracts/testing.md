@@ -38,4 +38,6 @@ Coverage must preserve:
 
 Any schema change requires a matching Python model/validator change and the
 reverse. Concrete Codex, Zen, T3, IMCodex, and fake adapters must still satisfy
-the affected contract.
+the affected contract. Applications facade tests additionally prove exact
+owner identity, clean-process failure for retired `imagent.contracts` names,
+and import-order independence without relying on module cache.

@@ -31,8 +31,12 @@ script (`qq`, `telegram`, `feishu`, `weixin`, and `appserver`). All six cases
 exercise the retained `imagent.channels` adapter facade and exact owner
 identity; the base case additionally verifies the focused
 `imagent.interaction.channels` contract facade and clean-process absence of
-every retired `imagent.adapters`/`imagent.contracts` Channel name. The base
-case also verifies the formal `imagent.interaction.controllers` and Application
+every retired `imagent.adapters`/`imagent.contracts` Channel name. It also
+proves that only `ApplicationInputOutcomeUnknown` from the Applications block
+remains on `imagent.contracts`, that the retired Application names fail from
+both historical facades in multiple import orders, and that importing the
+Applications root does not eagerly load concrete adapters or Gateway modules.
+The base case also verifies the formal `imagent.interaction.controllers` and Application
 event facade identities, runtime type hints, exact Codex/Zen adapter owner identities, and
 clean-process absence/unimportability of `imagent.controllers` and the
 historical shared App Server module. Every case checks expected public imports, native

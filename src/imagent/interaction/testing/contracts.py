@@ -22,7 +22,7 @@ from imagent.applications.contract import (
     validate_thread_ref,
 )
 from imagent.applications.events import AgentEvent, AgentEventType, validate_agent_event
-from imagent.contracts import (
+from imagent.applications.operations import (
     ActivateNativeThread,
     ApplicationOperationFailed,
     CreateThread,
@@ -45,10 +45,10 @@ from imagent.contracts import (
     ThreadsListed,
     ThreadStatusRead,
     TurnCatchupRead,
-    derive_client_message_id,
     validate_application_operation_result,
 )
 from imagent.interaction.channels.contract import ChannelAdapter, DeliverySupportLevel
+from imagent.contracts import derive_client_message_id
 from imagent.interaction.messages import InboundMessage, OutboundMessage, TextContent
 
 

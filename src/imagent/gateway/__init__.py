@@ -20,28 +20,32 @@ from ..applications.contract import (
     ApplicationSummary,
     ThreadRef,
 )
-from ..contracts import (
+from ..applications.operations import (
     ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,
     CreateThread,
     GetProject,
     GetThread,
-    ObserveThread,
     ProjectRead,
-    RequestDuplicateError,
-    RequestResolvedError,
     RequestResponded,
-    RequestResponseRouted,
-    RequestStaleError,
     RespondRequest,
-    RespondToRequest,
     ThreadCreated,
-    ThreadObserved,
     ThreadRead,
     validate_application_operation,
     validate_application_operation_result,
+)
+from ..applications.requests import (
+    RequestDuplicateError,
+    RequestResolvedError,
+    RequestStaleError,
     validate_request_response,
+)
+from ..contracts import (
+    ObserveThread,
+    RequestResponseRouted,
+    RespondToRequest,
+    ThreadObserved,
 )
 from ..contracts.validators import derive_client_message_id
 from ..interaction.channels.contract import ChannelAdapter, InboundAdmission

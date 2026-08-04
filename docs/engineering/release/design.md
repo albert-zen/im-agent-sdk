@@ -45,9 +45,9 @@ reviewable. The formal `imagent.contracts` facade deliberately omits the
 retired Channel capability/profile/support/reply-scope and delivery-receipt
 names, as well as the retired proactive vocabulary and closed
 submission-identity helper names; `DeliverySubmissionOrigin` remains a
-documented Gateway persistence/delivery export. The historical `imagent.adapters` facade
-likewise retains only its unrelated Application/Gateway,
-proactive-authorization, and passive-state names. The focused Interaction
+documented Gateway persistence/delivery export. The historical
+`imagent.adapters` facade retains only its Gateway repository and
+proactive-authorization aliases; it has no Applications exports. The focused Interaction
 Channel facade and `imagent.channels` adapter facade re-export exact owner
 objects and never hide a duplicate or lazy compatibility implementation. The
  Application event surface follows the same rule: `imagent.events`, the event
