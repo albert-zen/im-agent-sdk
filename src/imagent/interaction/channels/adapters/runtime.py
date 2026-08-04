@@ -11,13 +11,8 @@ from ....contracts import (
     DeliveryReceipt,
     DeliverySupportLevel,
 )
-from ...media import AttachmentContent, AttachmentSourceKind, LocalPath
-from ...messages import (
-    InboundMessage,
-    OutboundMessage,
-    TextContent,
-    TextFormat,
-)
+from ...media import AttachmentSourceKind
+from ...messages import InboundMessage, OutboundMessage
 from .. import InboundAdmissionHandler, MessageHandler
 from .. import ingress as _ingress
 from .. import outbound_delivery as _outbound_delivery
@@ -316,29 +311,9 @@ class _InboundMiddleware:
         )
         while len(self._routes) > _TRANSIENT_ROUTE_LIMIT:
             del self._routes[next(iter(self._routes))]
-        content: list[TextContent | AttachmentContent] = []
-        if str(inbound.text or ""):
-            content.append(TextContent(str(inbound.text), TextFormat.PLAIN))
-        for index, attachment in enumerate(getattr(inbound, "attachments", ())):
-            content.append(
-                AttachmentContent(
-                    attachment_id=(
-                        str(getattr(attachment, "source_message_id", "") or "")
-                        or f"{inbound.message_id}:attachment:{index}"
-                    ),
-                    media_type=str(attachment.content_type),
-                    filename=str(getattr(attachment, "filename", "") or "") or None,
-                    size_bytes=int(attachment.size_bytes),
-                    source=LocalPath(str(attachment.local_path)),
-                    metadata={
-                        "kind": str(attachment.kind),
-                    },
-                )
-            )
         return _ingress._normalize_inbound_message(
             channel_instance_id=self._channel_instance_id,
             inbound=inbound,
-            content=tuple(content),
             reply_to_message_id=reply_to_message_id,
         )
 

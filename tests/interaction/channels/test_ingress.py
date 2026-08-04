@@ -115,6 +115,8 @@ class InboundNormalizationTests(unittest.TestCase):
                 conversation_id="c2c:user-1",
                 user_id="user-1",
                 message_id="native-message-1",
+                text="hello",
+                attachments=(),
                 reply_to_message_id=42,
                 sent_at="2026-08-04T12:34:56Z",
                 input_error="attachment warning",
@@ -122,12 +124,9 @@ class InboundNormalizationTests(unittest.TestCase):
                 metadata={"forged": "ignored"},
             ),
         )
-        content = (TextContent("hello"),)
-
         message = _normalize_inbound_message(
             channel_instance_id="qq-main",
             inbound=inbound,
-            content=content,
             reply_to_message_id="override-message",
         )
 
@@ -137,7 +136,7 @@ class InboundNormalizationTests(unittest.TestCase):
             ConversationRef("qq-main", "c2c:user-1"),
         )
         self.assertEqual(message.sender, "user-1")
-        self.assertEqual(message.content, content)
+        self.assertEqual(message.content, (TextContent("hello"),))
         self.assertEqual(
             message.created_at,
             datetime(2026, 8, 4, 12, 34, 56, tzinfo=UTC),
@@ -155,10 +154,64 @@ class InboundNormalizationTests(unittest.TestCase):
         fallback_reply = _normalize_inbound_message(
             channel_instance_id="qq-main",
             inbound=inbound,
-            content=(),
             reply_to_message_id=None,
         )
         self.assertEqual(fallback_reply.reply_to, 42)
+
+    def test_ingress_assembles_text_and_attachments_with_stable_metadata(self) -> None:
+        inbound = InboundMessage(
+            channel_id="qq",
+            conversation_id="c2c:user-1",
+            user_id="user-1",
+            message_id="native-message-3",
+            text="hello",
+            attachments=(
+                InboundAttachment(
+                    kind="image",
+                    content_type="image/png",
+                    local_path="/staged/image.png",
+                    size_bytes=3,
+                    source_message_id="",
+                ),
+                InboundAttachment(
+                    kind="file",
+                    content_type="text/plain",
+                    local_path="/staged/report.txt",
+                    size_bytes=7,
+                    filename="report.txt",
+                    source_message_id="native-attachment-2",
+                ),
+            ),
+        )
+
+        message = _normalize_inbound_message(
+            channel_instance_id="qq-main",
+            inbound=inbound,
+            reply_to_message_id=None,
+        )
+
+        self.assertEqual(
+            message.content,
+            (
+                TextContent("hello"),
+                AttachmentContent(
+                    attachment_id="native-message-3:attachment:0",
+                    media_type="image/png",
+                    filename=None,
+                    size_bytes=3,
+                    source=LocalPath("/staged/image.png"),
+                    metadata={"kind": "image"},
+                ),
+                AttachmentContent(
+                    attachment_id="native-attachment-2",
+                    media_type="text/plain",
+                    filename="report.txt",
+                    size_bytes=7,
+                    source=LocalPath("/staged/report.txt"),
+                    metadata={"kind": "file"},
+                ),
+            ),
+        )
 
     def test_runtime_keeps_text_then_attachment_order_and_route_context(self) -> None:
         async def ignore(_message) -> None:
@@ -184,6 +237,7 @@ class InboundNormalizationTests(unittest.TestCase):
                     source_message_id="native-attachment-1",
                 ),
             ),
+            sent_at="2026-08-04T12:34:56Z",
         )
 
         message = middleware._normalize_inbound(
@@ -203,6 +257,14 @@ class InboundNormalizationTests(unittest.TestCase):
                     source=LocalPath("/staged/image.png"),
                     metadata={"kind": "image"},
                 ),
+            ),
+        )
+        self.assertEqual(
+            message,
+            _normalize_inbound_message(
+                channel_instance_id="qq-main",
+                inbound=inbound,
+                reply_to_message_id=None,
             ),
         )
         self.assertEqual(
@@ -238,7 +300,6 @@ class InboundNormalizationTests(unittest.TestCase):
                         user_id="user-1",
                     ),
                 ),
-                content=(),
                 reply_to_message_id=None,
             )
 
@@ -246,6 +307,10 @@ class InboundNormalizationTests(unittest.TestCase):
 
         self.assertFalse(hasattr(runtime, "_normalize_inbound_message"))
         self.assertFalse(hasattr(runtime, "_parse_datetime"))
+        self.assertFalse(hasattr(runtime, "AttachmentContent"))
+        self.assertFalse(hasattr(runtime, "LocalPath"))
+        self.assertFalse(hasattr(runtime, "TextContent"))
+        self.assertFalse(hasattr(runtime, "TextFormat"))
 
 
 class InboundAdmissionTransactionTests(unittest.IsolatedAsyncioTestCase):
@@ -267,7 +332,6 @@ class InboundAdmissionTransactionTests(unittest.IsolatedAsyncioTestCase):
         return _normalize_inbound_message(
             channel_instance_id="qq-main",
             inbound=inbound,
-            content=(TextContent(inbound.text),),
             reply_to_message_id=reply_to_message_id,
         )
 

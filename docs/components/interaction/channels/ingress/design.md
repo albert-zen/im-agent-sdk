@@ -24,9 +24,9 @@ The required order is:
 2. normalize the bounded stable identities needed for access and admission;
 3. apply sender/Conversation access policy;
 4. acquire the opaque durable admission lease;
-5. retrieve, validate, and stage permitted media under explicit quotas/trust,
-   then assemble the ordered content tuple;
-6. normalize the final public inbound envelope and deliver exactly one complete
+5. retrieve, validate, and stage permitted media under explicit quotas/trust;
+6. assemble the ordered content tuple, normalize the final public inbound
+   envelope, and deliver exactly one complete
    matching message, or release only a confirmed pre-handoff preparation
    failure.
 
@@ -37,16 +37,18 @@ Provider acknowledgements/cursors remain adapter state and never replace SDK
 stable identity.
 
 The private `_normalize_inbound_message` helper in `ingress.py` is the single
-leaf-owned public-envelope boundary after runtime has assembled the ordered
-content tuple. It preserves direct required native message, Conversation, and
-sender identity coercion; the explicit reply override and native reply
-fallback; the selected `channel_id`, `input_error`, and `trace_id` metadata;
-and `_parse_datetime` ISO/`Z` parsing with its current fallback behavior. It
-does not update route context, assemble or reorder text and attachments,
-retrieve or decrypt provider media, or acknowledge a provider. Route-context
-and content assembly remain in runtime; provider-native work remains in the
-adapters. The ingress-owned admission transaction is the separate boundary
-described below.
+leaf-owned content and public-envelope boundary. It assembles text before
+attachments in native order, uses a stable source-message identity or the
+bounded per-message attachment fallback, preserves media type, optional
+filename, size, explicit untrusted `LocalPath`, and fixed `kind` metadata, and
+then preserves direct required native message, Conversation, and sender
+identity coercion; the explicit reply override and native reply fallback; the
+selected `channel_id`, `input_error`, and `trace_id` metadata; and
+`_parse_datetime` ISO/`Z` parsing with its current fallback behavior. It does
+not update route context, retrieve or decrypt provider media, or acknowledge
+a provider. Runtime retains only route-context updates before invoking this
+helper; provider-native work remains in the adapters. The ingress-owned
+admission transaction is the separate boundary described below.
 
 The private `_InboundAdmissionTransaction` owns the provider-neutral
 transaction after access policy: it retains only the bounded transient
@@ -57,8 +59,8 @@ the no-lease key discard, transfer fence before `InboundAdmission.deliver`,
 release-failure note, original-error precedence, and failure key discard. The
 stage callables are narrow ingress-specific Protocols; they are invoked for
 one transaction and are not a generic middleware or hook chain. Runtime keeps
-route-context updates and ordered content assembly and supplies the normalizer;
-the current BaseChannelAdapter access-policy invocation and concrete provider
+bounded route-context updates and supplies the normalizer; the current
+BaseChannelAdapter access-policy invocation and concrete provider
 authentication, retrieval/decryption, and acknowledgement remain in adapters.
 
 ## Capacity, trust, and recovery
@@ -79,11 +81,11 @@ shared value before admission and media work.
 
 The obsolete provider-native access module is not a compatibility facade:
 access policy is an internal owning-leaf contract, so repository callers use
-the Interaction path directly. Runtime still owns route-context updates and
-content/attachment assembly, while it invokes the ingress-owned admission
-transaction and public identity/time/metadata envelope helper. Platform-
-specific authentication, retrieval/decryption, and acknowledgement remain
-under adapters.
+the Interaction path directly. Runtime still owns bounded route-context
+updates, while it invokes the ingress-owned admission transaction and complete
+content/identity/time/metadata envelope helper. Platform-specific
+authentication, retrieval/decryption, and acknowledgement remain under
+adapters.
 
 `ingress_security.py` owns the private Windows staging-path DACL helper. On
 Windows it resolves the current process user SID and replaces each staged file
