@@ -25,9 +25,10 @@ protocol envelope. A presenter returns `ApplicationTextPresentation` or
 Thread, Turn, role, metadata, attachments, destination, or recoverability.
 
 The leaf depends on Interaction messages and Application contract/event values.
-Current exports are from `imagent.applications`; this slice makes the exact
-`imagent.applications.presentation` package facade authoritative, backed by
-`src/imagent/applications/presentation/live_activity.py`.
+Current exports are from `imagent.applications`; the exact finite
+`imagent.applications.presentation` package facade is authoritative for this
+leaf and the sibling artifact-materialization leaf, backed for live activity
+by `src/imagent/applications/presentation/live_activity.py`.
 
 ## State and recovery
 
@@ -54,7 +55,7 @@ ownership remains in `src/imagent/diagnostics.py`. Focused evidence is
 `tests/applications/presentation/test_live_activity.py`; adapter integration
 tests remain in their historical suites. The explicit gap is that Codex/T3
 fact shapes share a runtime while remaining irreducibly separate typed
-positions, and artifact materialization remains a later leaf.
+positions.
 
 ## Authority
 

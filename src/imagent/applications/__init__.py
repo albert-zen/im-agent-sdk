@@ -5,13 +5,21 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .appserver import CodexApplicationAdapter, ZenApplicationAdapter
-    from .appserver_artifacts import (
+    from .appserver_client import codex_app_server_client
+    from .presentation import (
         ApplicationArtifactMaterialization,
         ApplicationArtifactMaterializationCancelled,
         ApplicationArtifactMaterializationCapacityError,
         ApplicationArtifactMaterializationError,
         ApplicationArtifactMaterializationFailed,
         ApplicationArtifactMaterializationTimeout,
+        ApplicationPresentationCancelled,
+        ApplicationPresentationCapacityError,
+        ApplicationPresentationError,
+        ApplicationPresentationFailed,
+        ApplicationPresentationLimits,
+        ApplicationPresentationTimeout,
+        ApplicationTextPresentation,
         AppServerArtifactCandidate,
         AppServerArtifactMaterializationLimits,
         AppServerArtifactMaterializer,
@@ -21,16 +29,6 @@ if TYPE_CHECKING:
         AppServerCompletedItemPhase,
         AppServerTurnTerminalFacts,
         AppServerTurnTerminalStatus,
-    )
-    from .appserver_client import codex_app_server_client
-    from .presentation import (
-        ApplicationPresentationCancelled,
-        ApplicationPresentationCapacityError,
-        ApplicationPresentationError,
-        ApplicationPresentationFailed,
-        ApplicationPresentationLimits,
-        ApplicationPresentationTimeout,
-        ApplicationTextPresentation,
         CodexLiveActivityFacts,
         CodexLiveActivityKind,
         CodexLiveActivityMethod,
@@ -126,7 +124,7 @@ def __getattr__(name: str) -> object:
     if name in _APPSERVER_EXPORTS:
         module = import_module("imagent.applications.appserver")
     elif name in _ARTIFACT_EXPORTS:
-        module = import_module("imagent.applications.appserver_artifacts")
+        module = import_module("imagent.applications.presentation")
     elif name in _PRESENTATION_EXPORTS:
         module = import_module("imagent.applications.presentation")
     elif name in _T3_EXPORTS:

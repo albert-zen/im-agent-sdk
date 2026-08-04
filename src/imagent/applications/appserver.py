@@ -65,21 +65,6 @@ from ..interaction.media import (
 )
 from ..interaction.messages import MessageRole, TextContent, TextFormat
 from ..interaction.operations import operation_error
-from .appserver_artifacts import (
-    ApplicationArtifactMaterialization,
-    ApplicationArtifactMaterializationCancelled,
-    ApplicationArtifactMaterializationCapacityError,
-    ApplicationArtifactMaterializationError,
-    ApplicationArtifactMaterializationFailed,
-    ApplicationArtifactMaterializationTimeout,
-    AppServerArtifactMaterializationLimits,
-    AppServerArtifactMaterializationRuntime,
-    AppServerArtifactMaterializer,
-    AppServerCompletedItemFacts,
-    AppServerTurnTerminalFacts,
-    AppServerTurnTerminalStatus,
-    appserver_completed_item_facts,
-)
 from .appserver_mapping import (
     is_agent_item as _is_agent_item,
 )
@@ -152,6 +137,21 @@ from .presentation import (
     CodexLiveActivityMethod,
     CodexLiveActivityPresenter,
     CodexPlanStep,
+)
+from .presentation.artifact_materialization import (
+    ApplicationArtifactMaterialization,
+    ApplicationArtifactMaterializationCancelled,
+    ApplicationArtifactMaterializationCapacityError,
+    ApplicationArtifactMaterializationError,
+    ApplicationArtifactMaterializationFailed,
+    ApplicationArtifactMaterializationTimeout,
+    AppServerArtifactMaterializationLimits,
+    AppServerArtifactMaterializationRuntime,
+    AppServerArtifactMaterializer,
+    AppServerCompletedItemFacts,
+    AppServerTurnTerminalFacts,
+    AppServerTurnTerminalStatus,
+    appserver_completed_item_facts,
 )
 
 _ARTIFACT_OBSERVATION_ERRORS = (

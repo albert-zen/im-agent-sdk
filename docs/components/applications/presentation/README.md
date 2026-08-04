@@ -16,6 +16,7 @@ never receive raw payloads, Application clients, credentials, bindings,
 routes, checkpoints, byte values, or trusted filesystem authority.
 
 The `imagent.applications.presentation` package is a finite exact facade for
-the currently moved live-activity leaf; its `__init__.py` contains no runtime
-or compatibility implementation. Artifact materialization remains at its
-historical `appserver_artifacts.py` path until its own focused slice.
+both presentation leaves; its `__init__.py` contains only their named
+re-exports and no runtime or compatibility implementation. Artifact
+materialization is owned by
+`src/imagent/applications/presentation/artifact_materialization.py`.

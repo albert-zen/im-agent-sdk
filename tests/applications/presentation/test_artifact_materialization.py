@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
+import subprocess
+import sys
 import unittest
 from datetime import UTC, datetime
-from typing import Any, cast
+from pathlib import Path
+from typing import Any, cast, get_type_hints
 
+import imagent.applications as applications
 from imagent.applications import (
     ApplicationArtifactMaterialization,
     ApplicationArtifactMaterializationCapacityError,
@@ -17,12 +22,14 @@ from imagent.applications import (
     AppServerTurnTerminalFacts,
     CodexApplicationAdapter,
     ZenApplicationAdapter,
+    presentation,
 )
-from imagent.applications.appserver_artifacts import (
+from imagent.applications.appserver_client import AppServerClient as NativeAppServerClient
+from imagent.applications.presentation import artifact_materialization
+from imagent.applications.presentation.artifact_materialization import (
     AppServerArtifactMaterializationRuntime,
     appserver_completed_item_facts,
 )
-from imagent.applications.appserver_client import AppServerClient as NativeAppServerClient
 from imagent.contracts import (
     AgentEventType,
     AgentMessage,
@@ -143,6 +150,106 @@ class _LeaseReleaseObserver:
             if isinstance(item, AttachmentContent):
                 self.released_attachment_ids.append(item.attachment_id)
         self.called.set()
+
+
+class ApplicationArtifactFacadeTests(unittest.TestCase):
+    def test_artifact_contracts_have_one_finite_facade_identity(self) -> None:
+        artifact_exports = {
+            "AppServerArtifactCandidate",
+            "AppServerArtifactMaterializationLimits",
+            "AppServerArtifactMaterializer",
+            "AppServerArtifactSourceKind",
+            "AppServerCompletedItemFacts",
+            "AppServerCompletedItemKind",
+            "AppServerCompletedItemPhase",
+            "AppServerTurnTerminalFacts",
+            "AppServerTurnTerminalStatus",
+            "ApplicationArtifactMaterialization",
+            "ApplicationArtifactMaterializationCancelled",
+            "ApplicationArtifactMaterializationCapacityError",
+            "ApplicationArtifactMaterializationError",
+            "ApplicationArtifactMaterializationFailed",
+            "ApplicationArtifactMaterializationTimeout",
+        }
+        self.assertEqual(
+            {name for name in presentation.__all__ if name in artifact_exports},
+            artifact_exports,
+        )
+        for name in artifact_exports:
+            with self.subTest(name=name):
+                self.assertIs(getattr(applications, name), getattr(presentation, name))
+                self.assertIs(
+                    getattr(presentation, name),
+                    getattr(artifact_materialization, name),
+                )
+
+        self.assertNotIn("AppServerArtifactMaterializationRuntime", presentation.__all__)
+        self.assertNotIn("appserver_completed_item_facts", presentation.__all__)
+
+    def test_historical_artifact_module_is_absent(self) -> None:
+        owner_path = Path(artifact_materialization.__file__ or "")
+        self.assertFalse((owner_path.parent.parent / "appserver_artifacts.py").exists())
+        self.assertIsNone(importlib.util.find_spec("imagent.applications.appserver_artifacts"))
+
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import imagent.applications.appserver_artifacts",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("ModuleNotFoundError", completed.stderr)
+
+    def test_presentation_artifact_facade_cold_import_is_adapter_independent(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import sys; "
+                "import imagent.applications.presentation as presentation; "
+                "from imagent.applications import AppServerArtifactCandidate as top; "
+                "assert top is presentation.AppServerArtifactCandidate; "
+                "assert 'imagent.applications.appserver' not in sys.modules; "
+                "assert 'imagent.applications.appserver_client' not in sys.modules; "
+                "assert 'imagent.applications.appserver_artifacts' not in sys.modules",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_owner_type_hints_resolve_without_historical_module(self) -> None:
+        item_hints = get_type_hints(
+            artifact_materialization.AppServerArtifactMaterializer.materialize_completed_item
+        )
+        terminal_hints = get_type_hints(
+            artifact_materialization.AppServerArtifactMaterializer.materialize_turn_terminal
+        )
+        invoke_hints = get_type_hints(
+            artifact_materialization.AppServerArtifactMaterializationRuntime.invoke
+        )
+
+        self.assertIs(item_hints["facts"], artifact_materialization.AppServerCompletedItemFacts)
+        self.assertEqual(
+            item_hints["return"],
+            artifact_materialization.ApplicationArtifactMaterialization | None,
+        )
+        self.assertIs(terminal_hints["facts"], artifact_materialization.AppServerTurnTerminalFacts)
+        self.assertEqual(
+            terminal_hints["return"],
+            artifact_materialization.ApplicationArtifactMaterialization | None,
+        )
+        self.assertEqual(
+            invoke_hints["return"],
+            artifact_materialization.ApplicationArtifactMaterialization | None,
+        )
+        for hints in (item_hints, terminal_hints, invoke_hints):
+            self.assertNotIn("appserver_artifacts", repr(hints))
 
 
 class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):

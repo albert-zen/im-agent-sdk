@@ -9,18 +9,18 @@ from itertools import islice
 from types import MappingProxyType
 from typing import Protocol
 
-from ..contracts import ThreadRef
-from ..diagnostics import (
+from ...contracts import ThreadRef
+from ...diagnostics import (
     ApplicationArtifactMaterializationDiagnosticFacts,
     ApplicationArtifactMaterializationFailureCode,
 )
-from ..interaction.media import (
+from ...interaction.media import (
     AttachmentContent,
     AttachmentHandle,
     LocalPath,
     RemoteUrl,
 )
-from .appserver_mapping import normalized_item_type
+from ..appserver_mapping import normalized_item_type
 
 _IDENTITY_MAX_CHARACTERS = 512
 _METADATA_MAX_ITEMS = 16
