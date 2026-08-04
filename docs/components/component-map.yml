@@ -609,7 +609,7 @@ components:
     target_tests: [tests/gateway/input/test_content_transformation.py]
     authoritative_docs: [docs/components/gateway/input/content-transformation/design.md, docs/components/gateway/input/content-transformation/testing.md, docs/components/gateway/design.md, docs/components/gateway/testing.md]
     adrs: [docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [orchestration remains in the Gateway package root; diagnostic facts have one canonical owner in gateway.diagnostics]
+    gaps: [orchestration remains in the Gateway package root]
 
   gateway.input.dispatch:
     id: gateway.input.dispatch
@@ -653,7 +653,7 @@ components:
     target_tests: [tests/gateway/input/test_failure_presentation.py]
     authoritative_docs: [docs/components/gateway/input/failure-presentation/design.md, docs/components/gateway/input/failure-presentation/testing.md, docs/components/gateway/design.md, docs/components/persistence/design.md]
     adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [Gateway orchestration remains in the package root; diagnostic facts have one canonical owner in gateway.diagnostics]
+    gaps: [Gateway orchestration remains in the package root]
 
   gateway.projection.observation:
     id: gateway.projection.observation
@@ -763,7 +763,7 @@ components:
     target_tests: [tests/gateway/test_presentation.py]
     authoritative_docs: [docs/components/gateway/presentation/design.md, docs/components/gateway/presentation/testing.md]
     adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [projection delivery sequencing remains in projections.py; O1 diagnostic facts are owned by gateway.diagnostics]
+    gaps: [projection delivery sequencing remains in projections.py]
 
   gateway.delivery.planning:
     id: gateway.delivery.planning
@@ -807,7 +807,7 @@ components:
     target_tests: [tests/gateway/delivery/test_coordination.py]
     authoritative_docs: [docs/components/gateway/delivery/coordination/design.md, docs/components/gateway/delivery/coordination/testing.md]
     adrs: [docs/decisions/0010-capability-driven-delivery-coordination.md]
-    gaps: [KeyedLockRegistry remains a shared utility used by coordination, Gateway request serialization, and proactive delivery ingress while ownership is intentionally shared]
+    gaps: [KeyedLockRegistry remains a shared utility used by coordination, Gateway request serialization, and proactive delivery ingress until a focused ownership split]
 
   gateway.delivery.submissions:
     id: gateway.delivery.submissions
@@ -895,7 +895,7 @@ components:
     target_tests: [tests/gateway/delivery/test_outcome_observation.py]
     authoritative_docs: [docs/components/gateway/delivery/outcome-observation/design.md, docs/components/gateway/delivery/outcome-observation/testing.md]
     adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [O2 diagnostic enum/facts are owned by gateway.diagnostics]
+    gaps: []
 
   gateway.persistence.state-contracts:
     id: gateway.persistence.state-contracts
@@ -1181,7 +1181,7 @@ components:
     target_tests: [tests/applications/test_requests.py]
     authoritative_docs: [docs/components/applications/requests/design.md, docs/components/applications/requests/testing.md]
     adrs: [docs/decisions/0008-interactive-request-routing.md]
-    gaps: [versioned schemas remain cross-owner, Application resource identity annotations remain in historical model.py while the physical cycle is resolved, Gateway route correlation remains in historical model/validation modules]
+    gaps: [versioned schemas remain cross-owner, Application resource identity annotations remain in historical model.py until the Application contract split breaks the physical cycle, Gateway route correlation remains in historical model/validation modules]
 
   applications.presentation.live-activity:
     id: applications.presentation.live-activity
@@ -1532,7 +1532,7 @@ structural_status:
       rationale: Finite Applications presentation facade; it re-exports the live-activity and artifact-materialization leaves exactly and retains no runtime or compatibility implementation.
     - path: src/imagent/contracts/__init__.py
       owner: engineering.release
-      rationale: Deliberate finite cross-layer public contract facade; Gateway binding/operation/validator names have exact TYPE_CHECKING imports and finite runtime resolution solely to break the legacy aggregate cycle, then cache the exact mapped owner without compatibility code or service lookup.
+      rationale: Deliberate finite cross-layer public contract facade; Gateway binding/operation/validator names have exact TYPE_CHECKING imports and finite runtime resolution solely to break the historical aggregate cycle, then cache the exact mapped owner without compatibility code or service lookup.
     - path: src/imagent/events.py
       owner: engineering.release
       rationale: Stable public Application-event facade; every symbol is an exact re-export from the focused events owner and no implementation remains here.

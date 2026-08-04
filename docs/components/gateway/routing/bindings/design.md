@@ -44,7 +44,7 @@ not become part of this leaf.
 `__getattr__` handles only the declared Gateway operation, binding, validator,
 and delivery-facade names, while its `TYPE_CHECKING` branch imports the exact
 public symbols for static typing. This finite cycle break exists only because
-the legacy operation module still assembles a mixed union; it is
+the historical aggregate operation module still assembles a mixed union; it is
 not a compatibility implementation, service locator, arbitrary module
 lookup, or second contract definition. Each resolved name is cached as the
 same owner object.
