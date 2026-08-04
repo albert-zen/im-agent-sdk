@@ -15,8 +15,8 @@ This leaf owns:
   policy semantics;
 - stable route identity and per-Conversation destination references;
 - active-route resolution at delivery time;
-- route refresh rules and route persistence that preserve completed projection
-  checkpoints.
+- route refresh rules and route persistence shape that preserve completed
+  projection checkpoints without advancing them.
 
 It does not own Channel delivery, presentation, delivery idempotency claims,
 checkpoint advancement, request response authority, Application history, or
@@ -49,9 +49,10 @@ output to A while leaving every other Conversation observing Thread 1 intact.
 Routes persist only stable endpoint references, optional destination reply
 context, the per-destination completed projection checkpoint, and update time.
 An ordinary route refresh preserves checkpoint fields. Checkpoint advancement
-belongs to the projection checkpoint owner and uses expected-value
+belongs solely to the projection checkpoint owner. It uses expected-value
 compare-and-swap after stable delivery idempotency completion or durable O1
-suppression. Opaque Agent item IDs are never ordered or used to infer progress.
+suppression; this route leaf never invokes that CAS. Opaque Agent item IDs are
+never ordered or used to infer progress.
 
 On restart, active routes and bindings determine which Thread-scoped workers
 must exist. Baseline/history recovery and the per-route bootstrap barrier
@@ -82,9 +83,9 @@ truth validation, then delegates the route mutation through its existing typed
 private method. The route authority returns route-refresh facts to that
 orchestration site, so remembered-route cleanup remains explicitly with the
 request/delivery coordinator owners. Observation workers, bootstrap barriers,
-checkpoint CAS, bounded recovery, request correlation, Channel delivery, and
-proactive snapshotting continue to consume the same route state and do not
-gain a second repository, subscription, runtime, or authority.
+the checkpoint authority, bounded recovery, request correlation, Channel
+delivery, and proactive snapshotting continue to consume the same route state
+and do not gain a second repository, subscription, runtime, or authority.
 
 `imagent.gateway.routing` is the finite public facade for the moved route
 operation values. The historical `imagent.contracts` facade and its internal

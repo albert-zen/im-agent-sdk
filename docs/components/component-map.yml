@@ -164,6 +164,34 @@ architecture_lint:
       to: src/imagent/gateway/routing/operations.py
       symbol: _complete_gateway_union
       reason: The finite named facade bootstrap completes the one closed aggregate after exact projection-route values load; it is not a runtime lookup or service locator.
+    - from: src/imagent/gateway/projection/recovery.py
+      to: src/imagent/projections.py
+      symbol: AuthoritativeProjectionSlice
+      reason: Bounded recovery temporarily consumes the historical projected-slice value while physical observation-value relocation remains outside this checkpoint-authority slice.
+    - from: src/imagent/gateway/projection/recovery.py
+      to: src/imagent/projections.py
+      symbol: ProjectedAgentMessage
+      reason: Bounded recovery temporarily consumes the historical projected-message value while physical observation-value relocation remains outside this checkpoint-authority slice.
+    - from: src/imagent/projection_routes.py
+      to: src/imagent/projections.py
+      symbol: DeliverOutbound
+      reason: Route coordination temporarily consumes the historical typed outbound Port while the checkpoint-authority slice removes only the former checkpoint decision.
+    - from: src/imagent/projection_routes.py
+      to: src/imagent/projections.py
+      symbol: DeliverRequestOutbound
+      reason: Route coordination temporarily consumes the historical typed request-delivery Port while the checkpoint-authority slice removes only the former checkpoint decision.
+    - from: src/imagent/projection_routes.py
+      to: src/imagent/projections.py
+      symbol: ProjectedAgentMessage
+      reason: Route coordination temporarily consumes the historical projection value while the checkpoint-authority slice removes only the former checkpoint decision.
+    - from: src/imagent/projection_routes.py
+      to: src/imagent/projections.py
+      symbol: RetryableDeliveryError
+      reason: Route coordination temporarily consumes the historical delivery failure type while the checkpoint-authority slice removes only the former checkpoint decision.
+    - from: src/imagent/projection_routes.py
+      to: src/imagent/projections.py
+      symbol: deliver_projected_message
+      reason: Route coordination temporarily invokes the historical delivery helper, now with an injected checkpoint authority, until its remaining physical move is separately scoped.
     - from: src/imagent/interaction/controllers/contract.py
       to: src/imagent/contracts/__init__.py
       reason: Controller action annotations use the declared finite contracts facade to resolve exact Gateway operation and ConversationBinding objects after clean package initialization, without importing Gateway orchestration from the Interaction contract module.
@@ -722,24 +750,24 @@ components:
   gateway.projection.checkpoints:
     id: gateway.projection.checkpoints
     parent: gateway.projection
-    purpose: Advance per-route opaque completion boundaries only after a durable destination decision.
-    owns: [checkpoint merge/CAS semantics, stable projection delivery identity]
-    does_not_own: [Agent sequence ordering, transcript, live-only completion]
-    inputs: [route, authoritative Agent item, delivery/idempotency outcome]
-    outputs: [advanced or conflicting checkpoint]
+    purpose: Advance per-route opaque completion boundaries only after durable destination evidence through one expected-current CAS authority.
+    owns: [checkpoint convergence decision, expected-current checkpoint CAS, stable projection delivery identity]
+    does_not_own: [Agent sequence ordering, transcript, route identity/refresh shape, Channel delivery, O1 invocation, live-only completion, bounded recovery scans]
+    inputs: [route, opaque Agent item identity, checkpointable flag, delivery/idempotency outcome, authoritative recovery evidence]
+    outputs: [unchanged, advanced, or explicitly conflicting checkpoint route]
     public_contracts: [derive_projection_delivery_id]
     public_exports:
       current: [imagent.gateway.projection:derive_projection_delivery_id]
       target: [imagent.gateway.projection:derive_projection_delivery_id]
-    dependencies: [interaction.messages, applications.application-contract, gateway.persistence.repository-contracts, gateway.delivery.coordination]
-    state_recovery: Completed idempotency converges lagging CAS during authoritative recovery; in_flight never advances.
-    current_code: [src/imagent/gateway/projection/checkpoints.py, src/imagent/projections.py, src/imagent/projection_routes.py]
+    dependencies: [interaction.messages, applications.application-contract, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
+    state_recovery: Completed idempotency converges a lagging CAS only from bounded authoritative evidence; in_flight and live-only outcomes never advance.
+    current_code: [src/imagent/gateway/projection/checkpoints.py]
     target_code: [src/imagent/gateway/projection/checkpoints.py]
     current_tests: [tests/gateway/projection/test_checkpoints.py, tests/test_projection_hardening.py, tests/test_projection_routing.py, tests/gateway/persistence/test_sqlite.py]
     target_tests: [tests/gateway/projection/test_checkpoints.py]
     authoritative_docs: [docs/components/gateway/projection/checkpoints/design.md, docs/components/gateway/projection/checkpoints/testing.md, docs/components/gateway/persistence/state-contracts/design.md]
     adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [checkpoint logic is mixed with route repository and delivery orchestration]
+    gaps: []
 
   gateway.projection.request-correlation:
     id: gateway.projection.request-correlation
@@ -776,7 +804,7 @@ components:
       current: [imagent.gateway.projection:ThreadRecovery, imagent.gateway.projection:RecoveryMode, imagent.gateway.projection:ProjectionRecoveryUnavailable]
       target: [imagent.gateway.projection:ThreadRecovery, imagent.gateway.projection:RecoveryMode, imagent.gateway.projection:ProjectionRecoveryUnavailable]
     dependencies: [interaction.messages, applications.application-contract, applications.capabilities, applications.events, applications.operations, gateway.routing.projection-routes, gateway.projection.checkpoints, gateway.persistence.state-contracts]
-    state_recovery: Subscribe-before-history when replay is absent; missing checkpoints and bounded-scan exhaustion stay explicit.
+    state_recovery: Subscribe-before-history when replay is absent; missing checkpoints and bounded-scan exhaustion stay explicit, while completed evidence is passed to the checkpoint owner for convergence.
     current_code: [src/imagent/gateway/projection/__init__.py, src/imagent/gateway/projection/recovery.py, src/imagent/projection_runtime.py, src/imagent/projection_routes.py, src/imagent/request_projection_runtime.py]
     target_code: [src/imagent/gateway/projection/recovery.py]
     current_tests: [tests/gateway/projection/test_recovery.py, tests/test_projection_hardening.py, tests/test_projection_routing.py]
@@ -798,7 +826,7 @@ components:
       current: [imagent.gateway.presentation:OutboundPresentationPolicy, imagent.gateway.presentation:OutboundPresentationContext, imagent.gateway.presentation:ProjectionPresentationOrigin]
       target: [imagent.gateway.presentation:OutboundPresentationPolicy, imagent.gateway.presentation:OutboundPresentationContext, imagent.gateway.presentation:ProjectionPresentationOrigin]
     dependencies: [interaction.messages, interaction.media, applications.application-contract, gateway.projection.checkpoints, gateway.persistence.idempotency, gateway.diagnostics]
-    state_recovery: Replay-safe suppression completes outbound idempotency before checkpoint CAS; live-only never checkpoints.
+    state_recovery: Replay-safe suppression completes outbound idempotency before the checkpoint owner evaluates CAS; live-only never checkpoints.
     current_code: [src/imagent/gateway/presentation.py, src/imagent/projections.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/presentation.py]
     current_tests: [tests/gateway/test_presentation.py, tests/test_projection_hardening.py]
@@ -1742,11 +1770,11 @@ structural_status:
       owners: [gateway.projection.request-correlation, gateway.projection.recovery]
       reason: Request delivery/correlation and authoritative pending-request gap/restart reconciliation share one runtime.
     src/imagent/projection_routes.py:
-      owners: [gateway.projection.checkpoints, gateway.projection.request-correlation, gateway.projection.recovery]
-      reason: Per-route ordering coordinates checkpoint, request-correlation, and recovery decisions after canonical route authority moved to gateway.routing.projection-routes.
+      owners: [gateway.projection.request-correlation, gateway.projection.recovery]
+      reason: Per-route ordering coordinates request-correlation and bounded recovery after the injected checkpoint authority moved to gateway.projection.checkpoints and canonical route authority moved to gateway.routing.projection-routes.
     src/imagent/projections.py:
-      owners: [gateway.projection.observation, gateway.projection.checkpoints, gateway.presentation]
-      reason: Projection values, delivery helper, and health types remain co-located after canonical route identity moved to gateway.routing.projection-routes and the in-memory repository moved to its persistence owner.
+      owners: [gateway.projection.observation, gateway.presentation]
+      reason: Projection values, outbound-message construction, and health types remain co-located after canonical route identity moved to gateway.routing.projection-routes, checkpoint convergence moved to gateway.projection.checkpoints, and the in-memory repository moved to its persistence owner.
     src/imagent/gateway/delivery/submissions.py:
       owners: [gateway.delivery.submissions, gateway.delivery.proactive-delivery]
       reason: Delivery identity, canonical metadata, and planning-facing helpers remain in delivery; SQLite SQL and schema now have one owner in gateway.persistence.sqlite.

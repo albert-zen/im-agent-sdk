@@ -21,6 +21,7 @@ from .gateway.persistence.state_contracts import (
     RequestRouteState,
     ThreadProjectionRoute,
 )
+from .gateway.projection.checkpoints import _ProjectionCheckpointAuthority
 from .gateway.projection.recovery import read_bounded_authoritative_projection
 from .gateway.projection.request_correlation import (
     derive_request_correlation_id,
@@ -75,6 +76,9 @@ class ProjectionRouteCoordinator:
         if request_delivery_max_pending < 1:
             raise ValueError("request_delivery_max_pending must be positive")
         self._projections = projections
+        self._checkpoint_authority = _ProjectionCheckpointAuthority(
+            projections=projections,
+        )
         self._request_correlations = request_correlations
         self._request_presenter = request_presenter
         self._execute_application = execute_application
@@ -484,6 +488,7 @@ class ProjectionRouteCoordinator:
                     current,
                     projected,
                     deliver_outbound=self._deliver_outbound,
+                    checkpoint_authority=self._checkpoint_authority,
                     authoritative=False,
                 )
             except RetryableDeliveryError:
@@ -512,6 +517,7 @@ class ProjectionRouteCoordinator:
                     current,
                     projected,
                     deliver_outbound=self._deliver_outbound,
+                    checkpoint_authority=self._checkpoint_authority,
                     authoritative=authoritative,
                 )
             except RetryableDeliveryError:

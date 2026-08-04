@@ -38,6 +38,7 @@ from imagent.applications.presentation import (
 )
 from imagent.gateway.persistence import ThreadProjectionRoute
 from imagent.gateway.persistence.memory import InMemoryProjectionRouteRepository
+from imagent.gateway.projection.checkpoints import _ProjectionCheckpointAuthority
 from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.messages import ConversationRef, MessageRole, TextContent
 from imagent.projections import (
@@ -834,6 +835,9 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
             route,
             projected,
             deliver_outbound=deliver,
+            checkpoint_authority=_ProjectionCheckpointAuthority(
+                projections=repository,
+            ),
             authoritative=False,
         )
         self.assertEqual(first.checkpoint_agent_item_id, "history-item-1")
@@ -853,6 +857,9 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
             stored,
             projected,
             deliver_outbound=already_completed,
+            checkpoint_authority=_ProjectionCheckpointAuthority(
+                projections=repository,
+            ),
             authoritative=False,
         )
         self.assertEqual(second.checkpoint_agent_item_id, "history-item-1")

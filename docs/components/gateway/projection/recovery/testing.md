@@ -12,8 +12,9 @@ Recovery conformance must prove:
   toward its own checkpoint without weakening other routes;
 - baseline/recovery completes before that route drains live events, and a
   failure keeps its bootstrap fence closed;
-- completed idempotency can converge a lagging checkpoint during authoritative
-  recovery, while `in_flight` or live-only output cannot;
+- completed idempotency can give the checkpoint owner bounded authoritative
+  evidence to converge a lagging checkpoint, while `in_flight` or live-only
+  output cannot;
 - subscription/recovery failure uses bounded retry and is isolated per Thread;
   one Channel destination failure does not restart observation;
 - native request snapshots are reconciled only for the affected Thread and

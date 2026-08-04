@@ -12,7 +12,8 @@ or Channel delivery policy.
 - [observation](observation/design.md) and [testing](observation/testing.md) —
   one bounded active Thread worker and independent live fan-out.
 - [checkpoints](checkpoints/design.md) and [testing](checkpoints/testing.md) —
-  per-route durable completion boundaries and idempotent convergence.
+  per-route durable completion boundaries, expected-current checkpoint CAS,
+  and idempotent convergence from completed delivery evidence.
 - [request correlation](request-correlation/design.md) and
   [testing](request-correlation/testing.md) — minimal Turn reply and
   interactive-request destination authority.

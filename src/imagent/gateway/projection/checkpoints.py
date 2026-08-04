@@ -1,10 +1,18 @@
-"""Stable completion delivery identity owned by Gateway projection checkpoints."""
+"""Per-route completed-delivery checkpoint authority."""
+
+from __future__ import annotations
 
 import hashlib
 import json
+from datetime import UTC, datetime
 
 from ...applications.contract import ThreadRef
 from ...interaction.messages import ConversationRef
+from ..persistence.repository_contracts import (
+    IdempotencyClaimStatus,
+    ProjectionRouteRepository,
+)
+from ..persistence.state_contracts import ThreadProjectionRoute
 
 
 def derive_projection_delivery_id(
@@ -34,3 +42,46 @@ def derive_projection_delivery_id(
     )
     digest = hashlib.sha256(identity.encode()).hexdigest()
     return f"imagent:delivery:sha256:{digest}"
+
+
+class _ProjectionCheckpointAuthority:
+    """Apply typed completed-delivery evidence to one route checkpoint."""
+
+    def __init__(
+        self,
+        *,
+        projections: ProjectionRouteRepository,
+    ) -> None:
+        self._projections = projections
+
+    async def apply_delivery_outcome(
+        self,
+        route: ThreadProjectionRoute,
+        *,
+        agent_item_id: str,
+        checkpointable: bool,
+        delivery_outcome: IdempotencyClaimStatus,
+        authoritative: bool,
+        delivery_id: str,
+    ) -> ThreadProjectionRoute:
+        """Advance only from completed checkpointable destination evidence."""
+
+        if delivery_outcome is IdempotencyClaimStatus.IN_FLIGHT:
+            raise RuntimeError(f"delivery remains in flight: {delivery_id}")
+        if not checkpointable:
+            return route
+        if delivery_outcome is IdempotencyClaimStatus.ALREADY_COMPLETED and not authoritative:
+            return route
+        if (
+            delivery_outcome is not IdempotencyClaimStatus.ACQUIRED
+            and delivery_outcome is not IdempotencyClaimStatus.ALREADY_COMPLETED
+        ):
+            raise RuntimeError(f"delivery did not durably complete: {delivery_id}")
+        if route.checkpoint_agent_item_id == agent_item_id:
+            return route
+        return await self._projections.advance_projection_checkpoint(
+            route.route_id,
+            expected_agent_item_id=route.checkpoint_agent_item_id,
+            agent_item_id=agent_item_id,
+            checkpointed_at=datetime.now(UTC),
+        )
