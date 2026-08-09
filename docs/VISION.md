@@ -1,5 +1,10 @@
 # Vision
 
+The normative first-formal-SDK resource and consumer-action model is defined
+by [V1_DESIGN.md](V1_DESIGN.md) and ADR 0016. Any pre-v1 optional-Project or
+implicit-onboarding wording elsewhere is superseded during the v1
+transformation.
+
 ## Purpose
 
 IM Agent SDK is a thin semantic bridge between multiple instant-messaging

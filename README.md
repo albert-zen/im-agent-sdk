@@ -27,6 +27,12 @@ The SDK is not an Agent runtime and does not own a second transcript. Each
 Agent application remains authoritative for its projects, threads, history,
 turns, approvals, and execution status.
 
+The first formal SDK is governed by the
+[v1 architecture and consumer contract](docs/V1_DESIGN.md) and its
+[executable specification](docs/V1_EXECUTABLE_SPEC.md). The
+[repository audit](docs/V1_REPOSITORY_AUDIT.md) records which pre-v1 behavior
+must be reused, rewritten, or removed.
+
 ## Status
 
 The accepted design now has runnable vertical slices:

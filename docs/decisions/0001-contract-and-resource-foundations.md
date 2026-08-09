@@ -1,6 +1,6 @@
 # ADR 0001: Contract and resource foundations
 
-Status: Accepted
+Status: Accepted; Project-less flat/fixed representation superseded by ADR 0016
 
 ## Context
 
@@ -15,16 +15,17 @@ model would misrepresent real integrations.
 Semantic contracts are published as JSON Schema. Python is the first reference
 implementation and test kit, not the wire protocol.
 
-### Project is first-class but optional at runtime
+### Project is first-class and uniform at runtime
 
 Applications declare:
 
 - `managed`: authoritative Projects contain Threads;
-- `flat`: Threads live directly under the Application;
-- `fixed`: one externally configured workspace/cwd contains flat Threads.
+- `flat`: one stable adapter workspace Project contains Threads;
+- `fixed`: one stable configured workspace Project contains Threads.
 
-Flat/fixed adapters omit `ProjectRef` instead of synthesizing a misleading
-Project.
+ADR 0016 supersedes the original Project-less flat/fixed representation.
+Flat/fixed adapters expose an honest stable workspace scope while continuing
+to reject unsupported native Project management.
 
 ### Conversation-level selection
 
@@ -39,6 +40,7 @@ Permanent deletion cannot be silently implemented as archive.
 
 ## Consequences
 
-References remain scoped by configured Application instances. Adapters expose
-their real Project and deletion shape. Cross-language implementations validate
-against the same schema.
+References remain scoped by configured Application instances. Every Thread has
+one Project/Workspace ancestor, while adapters expose their real management and
+deletion capabilities. Cross-language implementations validate against the
+same schema.

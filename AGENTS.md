@@ -4,12 +4,21 @@ IM Agent SDK is a thin semantic bridge between IM Channels and Agent
 Applications. It is not an Agent runtime, transcript store, policy engine, or
 general orchestrator.
 
-Before changing behavior or boundaries, read [docs/VISION.md](docs/VISION.md),
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), any applicable accepted decision
+Before changing behavior or boundaries, read the normative
+[v1 design](docs/V1_DESIGN.md), its
+[executable specification](docs/V1_EXECUTABLE_SPEC.md),
+[docs/VISION.md](docs/VISION.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
+any applicable accepted decision
 in [docs/decisions/README.md](docs/decisions/README.md), and the affected
 authority: runtime component docs under `docs/components/` or repository-support
 docs under `docs/engineering/`. The human navigation map is
 [docs/README.md](docs/README.md).
+
+During the v1 transformation, pre-v1 code and documents are evidence rather
+than constraints. When they conflict with the normative v1 design or ADR 0016,
+change or remove them without adding a compatibility layer. Keep
+[the repository audit and DAG](docs/V1_REPOSITORY_AUDIT.md) current as blocks
+land.
 
 Non-negotiable rules:
 

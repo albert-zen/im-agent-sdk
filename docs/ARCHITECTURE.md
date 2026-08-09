@@ -1,5 +1,11 @@
 # Architecture
 
+The normative v1 public architecture and executable acceptance contract are
+[V1_DESIGN.md](V1_DESIGN.md) and
+[V1_EXECUTABLE_SPEC.md](V1_EXECUTABLE_SPEC.md). This pre-v1 system map remains
+implementation evidence while its Project-less paths, low-level consumer
+actions, persistence composition, and implicit onboarding are reconciled.
+
 ## System shape
 
 ```text
@@ -377,7 +383,12 @@ IM admission. Attachments cannot grant shared-filesystem trust.
 ## Documentation authority
 
 - [Vision](VISION.md): purpose, non-goals, Core admission.
-- this document: system map, ownership, dependencies, flows.
+- [V1 architecture and consumer contract](V1_DESIGN.md): normative v1 resource
+  model, ownership boundaries, public API, workflows, and durability rules.
+- [V1 executable specification](V1_EXECUTABLE_SPEC.md): normative acceptance
+  behavior for the neutral reference consumer and every conforming adapter.
+- this document: the pre-v1 implementation map and evidence to reconcile; it
+  does not override either v1 authority when their shapes conflict.
 - [accepted ADRs](decisions/README.md): reviewed cross-component decisions.
 - `components/<layer>/<leaf>/`: local design, testing, and focused supporting
   documents where needed.

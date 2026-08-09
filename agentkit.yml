@@ -2,8 +2,8 @@ version: 1
 
 docs:
   root: docs
-  design: docs/VISION.md
-  workflow: docs/ARCHITECTURE.md
+  design: docs/V1_DESIGN.md
+  workflow: docs/V1_EXECUTABLE_SPEC.md
   decisions: docs/decisions
 
 # AgentKit v1 uses `code` as the generic change-matching field. Source and test
@@ -17,6 +17,8 @@ components:
       # Global cross-component intent.
       - docs/VISION.md
       - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
       - docs/decisions/**
       # Source and schemas.
       - src/imagent/interaction/__init__.py
@@ -56,6 +58,8 @@ components:
     code:
       - docs/VISION.md
       - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
       - docs/decisions/README.md
       - docs/decisions/0001-contract-and-resource-foundations.md
       - docs/decisions/0002-design-authority-and-control-boundaries.md
@@ -64,6 +68,7 @@ components:
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
+      - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/adapters.py
     docs:
@@ -83,6 +88,8 @@ components:
     code:
       - docs/VISION.md
       - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
       - docs/decisions/README.md
       - docs/decisions/0003-attachment-sources-and-trust.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
@@ -114,6 +121,8 @@ components:
     code:
       - docs/VISION.md
       - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
       - docs/decisions/README.md
       - docs/decisions/0002-design-authority-and-control-boundaries.md
       - docs/decisions/0003-attachment-sources-and-trust.md
@@ -140,6 +149,8 @@ components:
     code:
       - docs/VISION.md
       - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
       - docs/decisions/README.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
@@ -185,6 +196,8 @@ components:
     code:
       - docs/VISION.md
       - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
       - docs/decisions/README.md
       - docs/decisions/0002-design-authority-and-control-boundaries.md
       - docs/decisions/0004-event-fanout-and-recovery.md
@@ -193,6 +206,7 @@ components:
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0009-proactive-delivery-routing.md
+      - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/migrations/imcodex-followup-blockers.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
@@ -272,6 +286,8 @@ components:
     code:
       - docs/VISION.md
       - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
       - docs/decisions/README.md
       - docs/decisions/0004-event-fanout-and-recovery.md
       - docs/decisions/0005-input-activation-and-projection.md
@@ -280,6 +296,7 @@ components:
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/decisions/0013-bounded-application-event-admission.md
+      - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - docs/migrations/imcodex-followup-blockers.md
@@ -323,6 +340,8 @@ components:
     code:
       - docs/VISION.md
       - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
       - docs/decisions/README.md
       - docs/decisions/0014-read-only-diagnostics-surface.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
@@ -358,6 +377,8 @@ components:
     code:
       - docs/VISION.md
       - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
       - docs/decisions/README.md
       - docs/decisions/0004-event-fanout-and-recovery.md
       - docs/decisions/0005-input-activation-and-projection.md
@@ -366,6 +387,7 @@ components:
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/decisions/0009-proactive-delivery-routing.md
+      - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
@@ -403,12 +425,15 @@ components:
     code:
       - docs/VISION.md
       - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
       - docs/decisions/README.md
       - docs/decisions/0002-design-authority-and-control-boundaries.md
       - docs/decisions/0005-input-activation-and-projection.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
+      - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - src/imagent/interaction/controllers/**
       - examples/reference_consumer/interaction.py
       - tests/interaction/controllers/**
@@ -439,6 +464,8 @@ components:
     code:
       - docs/VISION.md
       - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
       - docs/decisions/README.md
       - docs/decisions/0003-attachment-sources-and-trust.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
@@ -447,6 +474,7 @@ components:
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
       - docs/decisions/0014-read-only-diagnostics-surface.md
+      - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - docs/migrations/issue-9-imcodex-owner-transfer.md
       - docs/migrations/imcodex-followup-blockers.md
@@ -515,6 +543,8 @@ components:
     code:
       - docs/VISION.md
       - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
       - docs/decisions/README.md
       - docs/decisions/0001-contract-and-resource-foundations.md
       - docs/decisions/0002-design-authority-and-control-boundaries.md
@@ -523,6 +553,7 @@ components:
       - docs/decisions/0005-input-activation-and-projection.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
+      - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/decisions/0013-bounded-application-event-admission.md
@@ -585,6 +616,8 @@ components:
     code:
       - docs/VISION.md
       - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
       - docs/decisions/README.md
       - docs/decisions/0001-contract-and-resource-foundations.md
       - docs/decisions/0002-design-authority-and-control-boundaries.md
@@ -593,6 +626,7 @@ components:
       - docs/decisions/0005-input-activation-and-projection.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
+      - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/decisions/0013-bounded-application-event-admission.md
@@ -620,6 +654,12 @@ components:
   applications-common:
     description: Typed Application contract, capability, event, operation, request, and adapter-owned A1 presentation boundaries.
     code:
+      - docs/VISION.md
+      - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
+      - docs/decisions/README.md
+      - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - src/imagent/applications/contract.py
       # The root facade and the formal cross-layer facade carry the
       # Applications edge of this public-surface slice.
@@ -673,6 +713,8 @@ components:
     code:
       - docs/VISION.md
       - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
       - docs/decisions/README.md
       - docs/decisions/0001-contract-and-resource-foundations.md
       - docs/decisions/0002-design-authority-and-control-boundaries.md
@@ -681,6 +723,7 @@ components:
       - docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md
       - docs/decisions/0008-interactive-request-routing.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
+      - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
       - docs/decisions/0013-bounded-application-event-admission.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
@@ -713,6 +756,9 @@ components:
       - tests/engineering/test_repository_maintainability.py
       - docs/README.md
       - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
+      - docs/V1_REPOSITORY_AUDIT.md
       - docs/REUSE.md
       - docs/ROADMAP.md
       - docs/migrations/**
@@ -745,6 +791,9 @@ components:
     description: Versioned JSON Schema inventory, reference validation, and schema navigation.
     code:
       - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
+      - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - scripts/validate_schemas.py
       - tests/engineering/__init__.py
       - tests/engineering/test_schema_conformance.py
@@ -765,6 +814,9 @@ components:
     description: Pinned AgentKit launcher, lifecycle routing, architecture gates, and review guidance.
     code:
       - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
+      - docs/V1_REPOSITORY_AUDIT.md
       - .agents/plugins/**
       - agentkit.yml
       - plugins/agentkit/**
@@ -789,6 +841,9 @@ components:
     description: Package metadata, public facades, typing marker, wheels, and clean-install verification.
     code:
       - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
+      - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - README.md
       - pyproject.toml
       - uv.lock

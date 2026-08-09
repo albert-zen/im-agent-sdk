@@ -24,7 +24,15 @@ PRODUCT_COMPONENTS = {
     "channel-adapters",
     "application-adapters-appserver",
     "application-adapters-t3",
+    "applications-common",
     "testing-and-conformance",
+}
+
+V1_AUTHORITY_COMPONENTS = PRODUCT_COMPONENTS | {
+    "agentkit",
+    "release",
+    "repository-maintainability",
+    "schema-conformance",
 }
 
 # This namespace initializer is intentionally shared because AgentKit v1 has
@@ -287,6 +295,14 @@ class AgentKitMappingTests(unittest.TestCase):
 
     def test_global_intent_changes_have_cross_component_impact(self) -> None:
         self.assertEqual(_components_for("docs/VISION.md"), PRODUCT_COMPONENTS)
+        self.assertEqual(
+            _components_for("docs/V1_DESIGN.md"),
+            V1_AUTHORITY_COMPONENTS,
+        )
+        self.assertEqual(
+            _components_for("docs/V1_EXECUTABLE_SPEC.md"),
+            V1_AUTHORITY_COMPONENTS,
+        )
         self.assertTrue(
             {"schema-conformance", "agentkit", "release"} <= _components_for("docs/ARCHITECTURE.md")
         )
@@ -363,8 +379,8 @@ class AgentKitMappingTests(unittest.TestCase):
         )
 
     def test_authoritative_paths_and_component_docs_exist(self) -> None:
-        self.assertEqual(CONFIG["docs"]["design"], "docs/VISION.md")
-        self.assertEqual(CONFIG["docs"]["workflow"], "docs/ARCHITECTURE.md")
+        self.assertEqual(CONFIG["docs"]["design"], "docs/V1_DESIGN.md")
+        self.assertEqual(CONFIG["docs"]["workflow"], "docs/V1_EXECUTABLE_SPEC.md")
         self.assertEqual(CONFIG["docs"]["decisions"], "docs/decisions")
         for component in COMPONENTS.values():
             for path in component.get("docs", []):

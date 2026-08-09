@@ -2,19 +2,30 @@
 
 Start with:
 
-1. [Vision](VISION.md) for product purpose, non-goals, and the threshold for
+1. [V1 architecture and consumer contract](V1_DESIGN.md) for the normative
+   target, public experience, and repository transformation rule.
+2. [V1 executable specification](V1_EXECUTABLE_SPEC.md) for the one neutral
+   consumer and full acceptance matrix.
+3. [V1 repository audit and DAG](V1_REPOSITORY_AUDIT.md) for the baseline
+   conflicts and implementation order.
+4. [Vision](VISION.md) for product purpose, non-goals, and the threshold for
    common abstractions.
-2. [Architecture](ARCHITECTURE.md) for components, ownership, dependency
-   direction, and system flows.
-3. [Accepted decisions](decisions/README.md) for cross-component choices that have
+5. [Architecture](ARCHITECTURE.md) for the pre-v1 implementation map and
+   evidence that must be audited during the transformation.
+6. [Accepted decisions](decisions/README.md) for cross-component choices that have
    completed design review.
-4. The approved [three-layer component tree](components/README.md) and its
+7. The approved [three-layer component tree](components/README.md) and its
    machine-readable [component map](components/component-map.yml).
-5. The affected component's design and testing documents below.
-6. [Engineering support](engineering/README.md) for conformance, schema,
+8. The affected component's design and testing documents below.
+9. [Engineering support](engineering/README.md) for conformance, schema,
    maintainability, AgentKit, and release mechanics.
-7. The neutral [reference consumer onboarding](onboarding/README.md) for a
+10. The neutral [reference consumer onboarding](onboarding/README.md) for a
    runnable composition of the public contracts.
+
+The v1 documents supersede conflicting pre-v1 resource, consumer-action, and
+implicit-onboarding shapes. Existing code and lower-level documents must be
+reconciled to them; passing tests for a superseded shape do not make that shape
+authoritative.
 
 `REUSE.md` owns source provenance and extraction rules. `ROADMAP.md` contains
 future or unresolved work and is not authority for current runtime behavior.
