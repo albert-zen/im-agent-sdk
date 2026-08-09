@@ -66,6 +66,7 @@ from ...operations import (
     ApplicationOperationResult,
     CreateProject,
     CreateThread,
+    DeleteProject,
     DeleteThread,
     GetProject,
     GetThread,
@@ -575,7 +576,7 @@ class _AppServerApplicationAdapter:
             )
         if isinstance(
             operation,
-            (CreateProject, DeleteThread),
+            (CreateProject, DeleteProject, DeleteThread),
         ):
             raise NotImplementedError(f"{operation.type.value} is unsupported by this application")
         raise NotImplementedError(f"unsupported operation: {operation.type.value}")

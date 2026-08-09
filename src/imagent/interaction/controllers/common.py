@@ -6,59 +6,47 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import TYPE_CHECKING, Generic, Protocol, TypeVar
 
 from ...applications.capabilities import ThreadDeletionCapability
 from ...applications.contract import (
     ApplicationRef,
     ApplicationSummary,
     ProjectSummary,
+    ThreadRef,
     ThreadSummary,
 )
-from ...applications.operations import (
-    ApplicationOperationFailed,
-    CreateThread,
-    DeleteThread,
-    GetThreadHistory,
-    GetThreadStatus,
-    GetTurnCatchup,
-    ListProjects,
-    ListThreads,
-    ProjectsListed,
-    ThreadCreated,
-    ThreadDeleted,
-    ThreadDeletionMode,
-    ThreadHistoryRead,
-    ThreadsListed,
-    ThreadStatusRead,
-    TurnCatchupRead,
-)
+from ...applications.operations import ThreadDeletionMode
 from ...applications.requests import ApprovalResponse, RequestRef, UserInputResponse
-from ...contracts import (
-    ApplicationsListed,
-    BindConversationToProject,
-    BindConversationToThread,
-    ClearConversationThread,
-    ConversationBound,
-    GatewayOperationFailed,
-    ListApplications,
-    SelectApplication,
-)
+from ...gateway.outcomes import Failed, OutcomeUnknown, Partial, Succeeded
 from ...gateway.persistence.state_contracts import ConversationBinding
-from ...gateway.projection import RequestResponseRouted, RespondToRequest
-from ...gateway.routing import ObserveThread, ThreadObserved
-from ..messages import ConversationRef, InboundMessage, OutboundMessage, TextContent
+from ..messages import ConversationRef, InboundMessage, TextContent
 from .common_presentation import MarkdownSlashPresenter
-from .contract import CommandHandlerActions, ControllerActions
 from .registry import (
     CommandArgumentContract,
     CommandDefinition,
     CommandExecutionSafety,
     CommandInvocation,
+    CommandLimits,
     CommandRegistry,
-    CommandRegistryLimits,
     CommandResult,
 )
+
+if TYPE_CHECKING:
+    from ...gateway.actions import ActionResult, ActionValue, ConversationActions, ReadOutcome
+
+
+class _ErrorCodeView(Protocol):
+    @property
+    def value(self) -> str: ...
+
+
+class _ActionErrorView(Protocol):
+    @property
+    def code(self) -> _ErrorCodeView: ...
+
+    @property
+    def operation_error_code(self) -> _ErrorCodeView | None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,7 +69,7 @@ def parse_slash_command(message: InboundMessage) -> SlashCommand | None:
     )
     if not command_line or not command_line.startswith("/"):
         return None
-    limits = CommandRegistryLimits()
+    limits = CommandLimits()
     if len(command_line) > limits.max_input_line_length:
         raise ValueError("Slash command exceeds the configured line limit.")
     try:
@@ -117,7 +105,7 @@ class _CommonCommandRuntime:
     def __init__(
         self,
         presenter: MarkdownSlashPresenter,
-        limits: CommandRegistryLimits,
+        limits: CommandLimits,
         *,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
@@ -136,7 +124,7 @@ class _CommonCommandRuntime:
     async def handle_command(
         self,
         invocation: CommandInvocation,
-        actions: CommandHandlerActions,
+        actions: ConversationActions,
     ) -> CommandResult:
         message = InboundMessage(
             message_id=invocation.message_id,
@@ -160,7 +148,7 @@ class _CommonCommandRuntime:
         self,
         message: InboundMessage,
         command: SlashCommand,
-        actions: CommandHandlerActions,
+        actions: ConversationActions,
     ) -> str:
         if command.name in {"help", "start"}:
             return self._presenter.help()
@@ -174,7 +162,6 @@ class _CommonCommandRuntime:
         context = await self._ensure_application_binding(
             message,
             actions,
-            allow_binding_mutation=command.name in {"use", "pick", "new", "delete"},
         )
         if command.name == "projects":
             projects = await self._list_projects(
@@ -201,7 +188,7 @@ class _CommonCommandRuntime:
         if command.name == "new":
             return await self._create_thread(message, command, actions, context)
         if command.name in {"delete", "archive"}:
-            return await self._delete_thread(message, actions, context)
+            return await self._delete_thread(message, command, actions, context)
         if command.name == "status":
             return await self._thread_status(message, actions, context)
         if command.name == "catchup":
@@ -214,7 +201,7 @@ class _CommonCommandRuntime:
         self,
         message: InboundMessage,
         command: SlashCommand,
-        actions: CommandHandlerActions,
+        actions: ConversationActions,
     ) -> str:
         if len(command.arguments) < 3:
             raise _CommandError(
@@ -240,49 +227,27 @@ class _CommonCommandRuntime:
             response = UserInputResponse(
                 {question_id: tuple(values) for question_id, values in answers.items()}
             )
-        result = await actions.execute_gateway(
-            RespondToRequest(
-                operation_id=_operation_id(
-                    message,
-                    "conversation.respond_request",
-                ),
-                conversation_ref=message.conversation_ref,
-                actor=message.sender,
-                request_ref=request_ref,
-                response=response,
-                created_at=message.created_at,
-            )
+        result = await actions.respond_request(
+            request_ref,
+            response,
+            action_id=_operation_id(message, command, "conversation.respond_request"),
         )
-        if isinstance(result, GatewayOperationFailed):
-            raise _CommandError(result.error.message)
-        if not isinstance(result, RequestResponseRouted):
-            raise _CommandError("Request response returned an incompatible result.")
+        _require_action_success(result)
         return "Response submitted to the Agent application."
 
     async def _applications(
         self,
         message: InboundMessage,
-        actions: CommandHandlerActions,
+        actions: ConversationActions,
     ) -> tuple[ApplicationSummary, ...]:
-        result = await actions.execute_gateway(
-            ListApplications(
-                operation_id=_operation_id(message, "application.list"),
-                conversation_ref=message.conversation_ref,
-                actor=message.sender,
-                created_at=message.created_at,
-            )
-        )
-        if isinstance(result, GatewayOperationFailed):
-            raise _CommandError(result.error.message)
-        if not isinstance(result, ApplicationsListed):
-            raise _CommandError("Application listing returned an incompatible result.")
-        return result.applications
+        result = await actions.list_applications()
+        return _require_read_success(result)
 
     async def _select_application(
         self,
         message: InboundMessage,
         command: SlashCommand,
-        actions: CommandHandlerActions,
+        actions: ConversationActions,
     ) -> str:
         applications = await self._applications(message, actions)
         if not command.arguments:
@@ -295,18 +260,13 @@ class _CommonCommandRuntime:
         )
         if selected is None:
             raise _CommandError("Agent application not found.")
-        current = await actions.get_binding(message.conversation_ref)
-        result = await actions.execute_gateway(
-            SelectApplication(
-                operation_id=_operation_id(message, "application.select"),
-                conversation_ref=message.conversation_ref,
-                actor=message.sender,
-                application_ref=selected.ref,
-                expected_generation=current.generation if current is not None else None,
-                created_at=message.created_at,
-            )
+        current = await actions.get_binding()
+        result = await actions.select_application(
+            selected.ref,
+            action_id=_operation_id(message, command, "application.select"),
+            expected_generation=current.generation if current is not None else None,
         )
-        _require_bound(result)
+        _require_action_success(result)
         self._clear_views(message)
         return (
             f"Selected application **{selected.display_name}** "
@@ -316,11 +276,9 @@ class _CommonCommandRuntime:
     async def _ensure_application_binding(
         self,
         message: InboundMessage,
-        actions: CommandHandlerActions,
-        *,
-        allow_binding_mutation: bool,
+        actions: ConversationActions,
     ) -> _ApplicationContext:
-        binding = await actions.get_binding(message.conversation_ref)
+        binding = await actions.get_binding()
         applications = await self._applications(message, actions)
         if binding is not None and binding.application_ref is not None:
             application = next(
@@ -330,51 +288,27 @@ class _CommonCommandRuntime:
             if application is None:
                 raise _CommandError("Selected Agent application is unavailable.")
             return _ApplicationContext(binding=binding, application=application)
-        if len(applications) != 1:
-            raise _CommandError("Choose an Agent application with `/apps` and `/app <number>`.")
-        application = applications[0]
-        if not allow_binding_mutation:
-            return _ApplicationContext(binding=binding, application=application)
-        result = await actions.execute_gateway(
-            SelectApplication(
-                operation_id=_operation_id(message, "application.select"),
-                conversation_ref=message.conversation_ref,
-                actor=message.sender,
-                application_ref=application.ref,
-                expected_generation=binding.generation if binding is not None else None,
-                created_at=message.created_at,
-            )
-        )
-        selected = _require_bound(result)
-        return _ApplicationContext(binding=selected, application=application)
+        raise _CommandError("Choose an Agent application with `/apps` and `/app <number>`.")
 
     async def _list_projects(
         self,
         message: InboundMessage,
-        actions: CommandHandlerActions,
+        actions: ConversationActions,
         context: _ApplicationContext,
         *,
         query: str | None = None,
     ) -> tuple[ProjectSummary, ...]:
-        result = await actions.execute_application(
-            ListProjects(
-                operation_id=_operation_id(message, "project.list"),
-                application_ref=context.application.ref,
-                query=query,
-                created_at=message.created_at,
-            )
+        result = await actions.list_projects(
+            context.application.ref,
+            query=query,
         )
-        if isinstance(result, ApplicationOperationFailed):
-            raise _CommandError(result.error.message)
-        if not isinstance(result, ProjectsListed):
-            raise _CommandError("Project listing returned an incompatible result.")
-        return result.projects.items
+        return _require_read_success(result).items
 
     async def _select_project(
         self,
         message: InboundMessage,
         command: SlashCommand,
-        actions: CommandHandlerActions,
+        actions: ConversationActions,
         context: _ApplicationContext,
     ) -> str:
         if not command.arguments:
@@ -392,24 +326,19 @@ class _CommonCommandRuntime:
         if project is None:
             raise _CommandError("Project not found.")
         binding = _require_context_binding(context)
-        result = await actions.execute_gateway(
-            BindConversationToProject(
-                operation_id=_operation_id(message, "conversation.bind_project"),
-                conversation_ref=message.conversation_ref,
-                actor=message.sender,
-                project_ref=project.ref,
-                expected_generation=binding.generation,
-                created_at=message.created_at,
-            )
+        result = await actions.select_project(
+            project.ref,
+            action_id=_operation_id(message, command, "conversation.bind_project"),
+            expected_generation=binding.generation,
         )
-        _require_bound(result)
+        _require_action_success(result)
         self._thread_views.pop(message.conversation_ref, None)
         return f"Selected project **{project.display_name}** (`{project.ref.project_id}`)."
 
     async def _list_threads(
         self,
         message: InboundMessage,
-        actions: CommandHandlerActions,
+        actions: ConversationActions,
         context: _ApplicationContext,
         *,
         query: str | None = None,
@@ -417,26 +346,17 @@ class _CommonCommandRuntime:
         binding = _require_context_binding(context)
         if binding.project_ref is None:
             raise _CommandError("Choose a project first with `/projects` and `/use <number>`.")
-        result = await actions.execute_application(
-            ListThreads(
-                operation_id=_operation_id(message, "thread.list"),
-                application_ref=context.application.ref,
-                project_ref=binding.project_ref,
-                query=query,
-                created_at=message.created_at,
-            )
+        result = await actions.list_threads(
+            binding.project_ref,
+            query=query,
         )
-        if isinstance(result, ApplicationOperationFailed):
-            raise _CommandError(result.error.message)
-        if not isinstance(result, ThreadsListed):
-            raise _CommandError("Thread listing returned an incompatible result.")
-        return result.threads.items
+        return _require_read_success(result).items
 
     async def _select_thread(
         self,
         message: InboundMessage,
         command: SlashCommand,
-        actions: CommandHandlerActions,
+        actions: ConversationActions,
         context: _ApplicationContext,
     ) -> str:
         if not command.arguments:
@@ -454,27 +374,17 @@ class _CommonCommandRuntime:
         if thread is None:
             raise _CommandError("Thread not found.")
         binding = _require_context_binding(context)
-        result = await actions.execute_gateway(
-            BindConversationToThread(
-                operation_id=_operation_id(message, "conversation.bind_thread"),
-                conversation_ref=message.conversation_ref,
-                actor=message.sender,
-                thread_ref=thread.ref,
-                expected_generation=binding.generation,
-                created_at=message.created_at,
-            )
+        result = await actions.bind_thread(
+            thread.ref,
+            action_id=_operation_id(message, command, "conversation.bind_thread"),
+            expected_generation=binding.generation,
         )
-        _require_bound(result)
-        _require_observed(
-            await actions.execute_gateway(
-                ObserveThread(
-                    operation_id=_operation_id(message, "thread.observe"),
-                    conversation_ref=message.conversation_ref,
-                    actor=message.sender,
-                    thread_ref=thread.ref,
-                    reply_to_message_id=message.message_id,
-                    created_at=message.created_at,
-                )
+        _require_action_success(result)
+        _require_action_success(
+            await actions.observe_thread(
+                thread.ref,
+                action_id=_operation_id(message, command, "thread.observe"),
+                reply_to_message_id=message.message_id,
             )
         )
         return (
@@ -486,58 +396,37 @@ class _CommonCommandRuntime:
         self,
         message: InboundMessage,
         command: SlashCommand,
-        actions: CommandHandlerActions,
+        actions: ConversationActions,
         context: _ApplicationContext,
     ) -> str:
         binding = _require_context_binding(context)
         if binding.project_ref is None:
             raise _CommandError("Choose a project first with `/projects` and `/use <number>`.")
-        result = await actions.execute_application(
-            CreateThread(
-                operation_id=_operation_id(message, "thread.create"),
-                application_ref=context.application.ref,
-                project_ref=binding.project_ref,
-                title=" ".join(command.arguments) or "IM task",
-                created_at=message.created_at,
-            )
+        result = await actions.create_and_bind_thread(
+            binding.project_ref,
+            title=" ".join(command.arguments) or "IM task",
+            action_id=_operation_id(message, command, "create_and_bind_thread"),
         )
-        if isinstance(result, ApplicationOperationFailed):
-            raise _CommandError(result.error.message)
-        if not isinstance(result, ThreadCreated):
-            raise _CommandError("Thread creation returned an incompatible result.")
-        thread = result.thread
-        bound = await actions.execute_gateway(
-            BindConversationToThread(
-                operation_id=_operation_id(message, "conversation.bind_thread"),
-                conversation_ref=message.conversation_ref,
-                actor=message.sender,
-                thread_ref=thread.ref,
-                expected_generation=binding.generation,
-                created_at=message.created_at,
-            )
-        )
-        _require_bound(bound)
-        _require_observed(
-            await actions.execute_gateway(
-                ObserveThread(
-                    operation_id=_operation_id(message, "thread.observe"),
-                    conversation_ref=message.conversation_ref,
-                    actor=message.sender,
-                    thread_ref=thread.ref,
-                    reply_to_message_id=message.message_id,
-                    created_at=message.created_at,
-                )
+        value = _require_action_success(result)
+        if not isinstance(value.ref, ThreadRef):
+            raise _CommandError("Thread workflow returned an incompatible result.")
+        thread_ref = value.ref
+        _require_action_success(
+            await actions.observe_thread(
+                thread_ref,
+                action_id=_operation_id(message, command, "thread.observe"),
+                reply_to_message_id=message.message_id,
             )
         )
         self._thread_views.pop(message.conversation_ref, None)
-        return (
-            f"Created thread **{thread.title or thread.ref.thread_id}** (`{thread.ref.thread_id}`)."
-        )
+        title = " ".join(command.arguments) or thread_ref.thread_id
+        return f"Created thread **{title}** (`{thread_ref.thread_id}`)."
 
     async def _delete_thread(
         self,
         message: InboundMessage,
-        actions: CommandHandlerActions,
+        command: SlashCommand,
+        actions: ConversationActions,
         context: _ApplicationContext,
     ) -> str:
         binding = _require_context_binding(context)
@@ -547,62 +436,35 @@ class _CommonCommandRuntime:
         capability = context.application.capabilities.threads.deletion
         if capability is ThreadDeletionCapability.UNSUPPORTED:
             raise _CommandError("Thread deletion is unsupported.")
-        result = await actions.execute_application(
-            DeleteThread(
-                operation_id=_operation_id(message, "thread.delete"),
-                application_ref=context.application.ref,
-                thread_ref=thread_ref,
-                mode=ThreadDeletionMode(capability.value),
-                created_at=message.created_at,
-            )
+        mode = ThreadDeletionMode(capability.value)
+        result = await actions.delete_thread(
+            thread_ref,
+            mode=mode,
+            action_id=_operation_id(message, command, "thread.delete"),
         )
-        if isinstance(result, ApplicationOperationFailed):
-            raise _CommandError(result.error.message)
-        if not isinstance(result, ThreadDeleted):
-            raise _CommandError("Thread deletion returned an incompatible result.")
-        clear = await actions.execute_gateway(
-            ClearConversationThread(
-                operation_id=_operation_id(message, "conversation.clear_thread"),
-                conversation_ref=message.conversation_ref,
-                actor=message.sender,
-                expected_generation=binding.generation,
-                created_at=message.created_at,
-            )
-        )
-        _require_bound(clear)
+        _require_action_success(result)
         self._thread_views.pop(message.conversation_ref, None)
-        if result.mode is ThreadDeletionMode.ARCHIVE:
+        if mode is ThreadDeletionMode.ARCHIVE:
             return f"Archived thread `{thread_ref.thread_id}`."
         return f"Deleted thread `{thread_ref.thread_id}`."
 
     async def _thread_status(
         self,
         message: InboundMessage,
-        actions: CommandHandlerActions,
+        actions: ConversationActions,
         context: _ApplicationContext,
     ) -> str:
         thread_ref = context.binding.thread_ref if context.binding is not None else None
         if thread_ref is None:
             raise _CommandError("No thread is selected.")
-        result = await actions.execute_application(
-            GetThreadStatus(
-                operation_id=_operation_id(message, "thread.status"),
-                application_ref=context.application.ref,
-                thread_ref=thread_ref,
-                created_at=message.created_at,
-            )
-        )
-        if isinstance(result, ApplicationOperationFailed):
-            raise _CommandError(result.error.message)
-        if not isinstance(result, ThreadStatusRead):
-            raise _CommandError("Thread status returned an incompatible result.")
-        return f"Thread `{thread_ref.thread_id}` is **{result.thread_status.value}**."
+        status = _require_read_success(await actions.get_thread_status(thread_ref))
+        return f"Thread `{thread_ref.thread_id}` is **{status.value}**."
 
     async def _turn_catchup(
         self,
         message: InboundMessage,
         command: SlashCommand,
-        actions: CommandHandlerActions,
+        actions: ConversationActions,
         context: _ApplicationContext,
     ) -> str:
         thread_ref = context.binding.thread_ref if context.binding is not None else None
@@ -612,26 +474,14 @@ class _CommonCommandRuntime:
             limit = _positive_limit(command.arguments, default=5)
         except ValueError as error:
             raise _CommandError(str(error)) from error
-        result = await actions.execute_application(
-            GetTurnCatchup(
-                operation_id=_operation_id(message, "turn.catchup"),
-                application_ref=context.application.ref,
-                thread_ref=thread_ref,
-                limit=limit,
-                created_at=message.created_at,
-            )
-        )
-        if isinstance(result, ApplicationOperationFailed):
-            raise _CommandError(result.error.message)
-        if not isinstance(result, TurnCatchupRead):
-            raise _CommandError("Turn catch-up returned an incompatible result.")
-        return self._presenter.turn_catchup(result.catchup)
+        catchup = _require_read_success(await actions.read_turn_catchup(thread_ref, limit=limit))
+        return self._presenter.turn_catchup(catchup)
 
     async def _thread_history(
         self,
         message: InboundMessage,
         command: SlashCommand,
-        actions: CommandHandlerActions,
+        actions: ConversationActions,
         context: _ApplicationContext,
     ) -> str:
         thread_ref = context.binding.thread_ref if context.binding is not None else None
@@ -641,32 +491,21 @@ class _CommonCommandRuntime:
             limit, page = _history_options(command.arguments)
         except ValueError as error:
             raise _CommandError(str(error)) from error
-        result = await actions.execute_application(
-            GetThreadHistory(
-                operation_id=_operation_id(message, "thread.history"),
-                application_ref=context.application.ref,
-                thread_ref=thread_ref,
-                limit=limit,
-                page=page,
-                created_at=message.created_at,
-            )
+        history = _require_read_success(
+            await actions.read_history(thread_ref, limit=limit, page=page)
         )
-        if isinstance(result, ApplicationOperationFailed):
-            raise _CommandError(result.error.message)
-        if not isinstance(result, ThreadHistoryRead):
-            raise _CommandError("Thread history returned an incompatible result.")
-        return self._presenter.thread_history(result.history)
+        return self._presenter.thread_history(history)
 
     def _clear_views(self, message: InboundMessage) -> None:
         self._project_views.pop(message.conversation_ref, None)
         self._thread_views.pop(message.conversation_ref, None)
 
 
-def register_common_commands(
+def include_common_commands(
     registry: CommandRegistry,
     *,
     presenter: MarkdownSlashPresenter | None = None,
-    include: tuple[str, ...] | None = None,
+    names: tuple[str, ...] | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> None:
     """Register the selected SDK common definitions into one local registry."""
@@ -677,7 +516,7 @@ def register_common_commands(
         clock=clock,
     )
     definitions = _common_command_definitions(runtime, registry.limits)
-    selected = set(definitions) if include is None else set(include)
+    selected = set(definitions) if names is None else set(names)
     unknown = selected.difference(definitions)
     if unknown:
         raise ValueError(f"unknown common command selection: {sorted(unknown)!r}")
@@ -686,42 +525,9 @@ def register_common_commands(
             registry.register(definition)
 
 
-class SlashController:
-    """Default frozen registry containing every SDK common Slash command."""
-
-    def __init__(
-        self,
-        presenter: MarkdownSlashPresenter | None = None,
-        *,
-        limits: CommandRegistryLimits | None = None,
-        clock: Callable[[], float] = time.monotonic,
-    ) -> None:
-        registry = CommandRegistry(limits)
-        register_common_commands(
-            registry,
-            presenter=presenter,
-            clock=clock,
-        )
-        registry.freeze()
-        self._registry = registry
-
-    async def handle(
-        self,
-        message: InboundMessage,
-        actions: ControllerActions,
-    ) -> tuple[OutboundMessage, ...] | None:
-        return await self._registry.handle(message, actions)
-
-    def validate_startup(self) -> None:
-        self._registry.validate_startup()
-
-    async def close(self) -> None:
-        await self._registry.close()
-
-
 def _common_command_definitions(
     runtime: _CommonCommandRuntime,
-    limits: CommandRegistryLimits,
+    limits: CommandLimits,
 ) -> dict[str, CommandDefinition]:
     read_only = CommandExecutionSafety.READ_ONLY
     effectful = CommandExecutionSafety.EFFECTFUL
@@ -854,6 +660,7 @@ def _common_command_definitions(
 
 
 TView = TypeVar("TView")
+TRead = TypeVar("TRead")
 
 
 class _BoundedViewCache(Generic[TView]):
@@ -905,27 +712,49 @@ def _require_context_binding(context: _ApplicationContext) -> ConversationBindin
     return context.binding
 
 
-def _require_bound(result) -> ConversationBinding:
-    if isinstance(result, GatewayOperationFailed):
-        raise _CommandError(result.error.message)
-    if not isinstance(result, ConversationBound):
-        raise _CommandError("Binding operation returned an incompatible result.")
-    return result.binding
+def _require_read_success(result: ReadOutcome[TRead]) -> TRead:
+    if isinstance(result, Succeeded):
+        return result.value
+    if isinstance(result, Failed):
+        raise _CommandError(_action_error_text(result.error))
+    raise _CommandError("Read returned an incompatible result.")
 
 
-def _require_observed(result) -> None:
-    if isinstance(result, GatewayOperationFailed):
-        raise _CommandError(result.error.message)
-    if not isinstance(result, ThreadObserved):
-        raise _CommandError("Thread observation returned an incompatible result.")
+def _require_action_success(result: ActionResult) -> ActionValue:
+    if isinstance(result, Succeeded):
+        return result.value
+    if isinstance(result, Partial):
+        raise _CommandError(
+            f"Action completed only partially ({_action_error_text(result.error)})."
+        )
+    if isinstance(result, OutcomeUnknown):
+        raise _CommandError(
+            f"Action outcome is unknown ({_action_error_text(result.error)}); do not retry blindly."
+        )
+    if isinstance(result, Failed):
+        raise _CommandError(_action_error_text(result.error))
+    raise _CommandError("Action returned an incompatible result.")
 
 
-def _operation_id(message: InboundMessage, operation_type: str) -> str:
+def _action_error_text(error: _ActionErrorView) -> str:
+    detail = (
+        f" ({error.operation_error_code.value})" if error.operation_error_code is not None else ""
+    )
+    return f"{error.code.value.replace('_', ' ')}{detail}"
+
+
+def _operation_id(
+    message: InboundMessage,
+    command: SlashCommand,
+    operation_type: str,
+) -> str:
     digest = hashlib.sha256()
     for value in (
         message.conversation_ref.channel_instance_id,
         message.conversation_ref.native_conversation_id,
         message.message_id,
+        command.name,
+        *command.arguments,
         operation_type,
     ):
         encoded = value.encode("utf-8")

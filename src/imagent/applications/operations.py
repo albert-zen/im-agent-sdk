@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import TypeAlias
+from typing import TypeAlias, TypeVar
 
-from ..interaction.messages import Content
+from ..interaction.media import AttachmentContent, AttachmentHandle, LocalPath, RemoteUrl
+from ..interaction.messages import Content, TextContent, TextFormat
 from ..interaction.operations import (
     ContractError,
     ContractViolation,
@@ -16,12 +19,24 @@ from .requests import ApprovalResponse, UserInputResponse, validate_request_ref
 
 MAX_PROJECT_CWD_LENGTH = 4096
 MAX_PROJECT_DISPLAY_NAME_LENGTH = 128
+MAX_LIST_QUERY_LENGTH = 4096
+MAX_LIST_CURSOR_LENGTH = 4096
+MAX_LIST_PAGE_ITEMS = 1000
+MAX_THREAD_TITLE_LENGTH = 512
+MAX_THREAD_INITIAL_CONTEXT_ITEMS = 32
+MAX_THREAD_INITIAL_CONTEXT_TEXT_LENGTH = 65_536
+MAX_THREAD_INITIAL_CONTEXT_ATTACHMENT_FIELD_LENGTH = 4096
+MAX_THREAD_INITIAL_CONTEXT_HANDLE_LENGTH = 512
+MAX_THREAD_INITIAL_CONTEXT_METADATA_ITEMS = 64
+MAX_THREAD_INITIAL_CONTEXT_METADATA_BYTES = 65_536
+TPage = TypeVar("TPage")
 
 
 class ApplicationOperationType(StrEnum):
     PROJECT_LIST = "project.list"
     PROJECT_GET = "project.get"
     PROJECT_CREATE = "project.create"
+    PROJECT_DELETE = "project.delete"
     THREAD_CREATE = "thread.create"
     THREAD_LIST = "thread.list"
     THREAD_GET = "thread.get"
@@ -72,6 +87,15 @@ class CreateProject(_ApplicationOperation):
     type: ApplicationOperationType = field(
         init=False,
         default=ApplicationOperationType.PROJECT_CREATE,
+    )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DeleteProject(_ApplicationOperation):
+    project_ref: ProjectRef
+    type: ApplicationOperationType = field(
+        init=False,
+        default=ApplicationOperationType.PROJECT_DELETE,
     )
 
 
@@ -180,6 +204,23 @@ ApplicationOperation: TypeAlias = (
     ListProjects
     | GetProject
     | CreateProject
+    | DeleteProject
+    | CreateThread
+    | ListThreads
+    | GetThread
+    | ActivateNativeThread
+    | DeleteThread
+    | GetThreadStatus
+    | GetThreadHistory
+    | GetTurnCatchup
+    | InterruptTurn
+    | RespondRequest
+)
+
+_LegacyApplicationOperation: TypeAlias = (
+    ListProjects
+    | GetProject
+    | CreateProject
     | CreateThread
     | ListThreads
     | GetThread
@@ -227,6 +268,15 @@ class ProjectCreated(_ApplicationOperationSucceeded):
     type: ApplicationOperationType = field(
         init=False,
         default=ApplicationOperationType.PROJECT_CREATE,
+    )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ProjectDeleted(_ApplicationOperationSucceeded):
+    project_ref: ProjectRef
+    type: ApplicationOperationType = field(
+        init=False,
+        default=ApplicationOperationType.PROJECT_DELETE,
     )
 
 
@@ -339,6 +389,7 @@ ApplicationOperationResult: TypeAlias = (
     ProjectsListed
     | ProjectRead
     | ProjectCreated
+    | ProjectDeleted
     | ThreadCreated
     | ThreadsListed
     | ThreadRead
@@ -361,7 +412,7 @@ def validate_application_operation(operation: ApplicationOperation) -> None:
     require_identifier(application_id, "application_instance_id")
 
     project_ref = None
-    if isinstance(operation, (GetProject, CreateThread, ListThreads)):
+    if isinstance(operation, (GetProject, DeleteProject, CreateThread, ListThreads)):
         project_ref = operation.project_ref
     if project_ref is not None:
         validate_project_ref(project_ref)
@@ -401,6 +452,25 @@ def validate_application_operation(operation: ApplicationOperation) -> None:
                 "display_name",
                 MAX_PROJECT_DISPLAY_NAME_LENGTH,
             )
+    if isinstance(operation, (ListProjects, ListThreads)):
+        _require_optional_bounded_text(
+            operation.query,
+            "query",
+            MAX_LIST_QUERY_LENGTH,
+        )
+        _require_optional_bounded_text(
+            operation.cursor,
+            "cursor",
+            MAX_LIST_CURSOR_LENGTH,
+        )
+    if isinstance(operation, CreateThread):
+        if operation.title is not None:
+            _require_bounded_text(
+                operation.title,
+                "title",
+                MAX_THREAD_TITLE_LENGTH,
+            )
+        _validate_initial_context(operation.initial_context)
 
     if isinstance(operation, GetThreadHistory):
         if not 1 <= operation.limit <= 20:
@@ -448,6 +518,7 @@ def validate_application_operation_result(
         ListProjects: ProjectsListed,
         GetProject: ProjectRead,
         CreateProject: ProjectCreated,
+        DeleteProject: ProjectDeleted,
         CreateThread: ThreadCreated,
         ListThreads: ThreadsListed,
         GetThread: ThreadRead,
@@ -467,6 +538,7 @@ def validate_application_operation_result(
 
     application_id = operation.application_ref.application_instance_id
     if isinstance(result, ProjectsListed):
+        _validate_page(result.projects)
         for project in result.projects.items:
             validate_project_summary(project)
         refs = tuple(item.ref for item in result.projects.items)
@@ -480,6 +552,13 @@ def validate_application_operation_result(
                 raise ContractViolation("project.get returned a different project")
         elif not isinstance(operation, CreateProject):
             raise ContractViolation("project.create returned for a different operation")
+    elif isinstance(result, ProjectDeleted):
+        if not isinstance(operation, DeleteProject):
+            raise ContractViolation("project.delete returned for a different operation")
+        validate_project_ref(result.project_ref)
+        refs = (result.project_ref,)
+        if result.project_ref != operation.project_ref:
+            raise ContractViolation("project.delete returned a different project")
     elif isinstance(result, ThreadCreated):
         if not isinstance(operation, CreateThread):
             raise ContractViolation("thread.create returned for a different operation")
@@ -490,6 +569,7 @@ def validate_application_operation_result(
     elif isinstance(result, ThreadsListed):
         if not isinstance(operation, ListThreads):
             raise ContractViolation("thread.list returned for a different operation")
+        _validate_page(result.threads)
         for thread in result.threads.items:
             validate_thread_summary(thread)
         refs = tuple(item.ref for item in result.threads.items)
@@ -532,6 +612,8 @@ def validate_application_operation_result(
         refs = (result.history.thread_ref,)
         if result.history.thread_ref != operation.thread_ref:
             raise ContractViolation("thread.history returned a different thread")
+        if len(result.history.turns) > operation.limit:
+            raise ContractViolation("thread.history returned more Turns than requested")
     elif isinstance(result, TurnCatchupRead):
         if not isinstance(operation, GetTurnCatchup):
             raise ContractViolation("turn.catchup returned for a different operation")
@@ -539,6 +621,8 @@ def validate_application_operation_result(
         refs = (result.catchup.thread_ref,)
         if result.catchup.thread_ref != operation.thread_ref:
             raise ContractViolation("turn.catchup returned a different thread")
+        if len(result.catchup.messages) > operation.limit:
+            raise ContractViolation("turn.catchup returned more messages than requested")
     elif isinstance(result, TurnInterrupted):
         if not isinstance(operation, InterruptTurn):
             raise ContractViolation("turn.interrupt returned for a different operation")
@@ -581,6 +665,124 @@ def _require_bounded_text(value: str, name: str, limit: int) -> None:
         raise ContractViolation(f"{name} must be a non-empty string of at most {limit} characters")
 
 
+def _require_optional_bounded_text(
+    value: str | None,
+    name: str,
+    limit: int,
+) -> None:
+    if value is not None and (not isinstance(value, str) or len(value) > limit):
+        raise ContractViolation(f"{name} must contain at most {limit} characters")
+
+
+def _validate_page(value: Page[TPage]) -> None:
+    if len(value.items) > MAX_LIST_PAGE_ITEMS:
+        raise ContractViolation(f"list result must contain at most {MAX_LIST_PAGE_ITEMS} items")
+    _require_optional_bounded_text(
+        value.next_cursor,
+        "next_cursor",
+        MAX_LIST_CURSOR_LENGTH,
+    )
+
+
+def _validate_initial_context(value: tuple[Content, ...]) -> None:
+    if not isinstance(value, tuple):
+        raise ContractViolation("initial_context must be a tuple")
+    if len(value) > MAX_THREAD_INITIAL_CONTEXT_ITEMS:
+        raise ContractViolation(
+            f"initial_context must contain at most {MAX_THREAD_INITIAL_CONTEXT_ITEMS} items"
+        )
+    for item in value:
+        if isinstance(item, TextContent):
+            if not isinstance(item.text, str):
+                raise ContractViolation("initial_context text must be a string")
+            if not isinstance(item.format, TextFormat):
+                raise ContractViolation("initial_context text format must be plain or markdown")
+            if len(item.text) > MAX_THREAD_INITIAL_CONTEXT_TEXT_LENGTH:
+                raise ContractViolation(
+                    "initial_context text must contain at most "
+                    f"{MAX_THREAD_INITIAL_CONTEXT_TEXT_LENGTH} characters"
+                )
+            continue
+        if not isinstance(item, AttachmentContent):
+            raise ContractViolation("initial_context contains unsupported content")
+        require_identifier(item.attachment_id, "attachment_id")
+        _require_bounded_text(
+            item.media_type,
+            "media_type",
+            MAX_THREAD_INITIAL_CONTEXT_ATTACHMENT_FIELD_LENGTH,
+        )
+        if item.filename is not None:
+            _require_bounded_text(
+                item.filename,
+                "filename",
+                MAX_THREAD_INITIAL_CONTEXT_ATTACHMENT_FIELD_LENGTH,
+            )
+        if item.size_bytes is not None:
+            if not isinstance(item.size_bytes, int) or isinstance(item.size_bytes, bool):
+                raise ContractViolation("size_bytes must be a non-negative integer")
+            if item.size_bytes < 0:
+                raise ContractViolation("size_bytes cannot be negative")
+        source = item.source
+        if isinstance(source, LocalPath):
+            source_value = source.path
+            source_name = "path"
+            source_limit = MAX_THREAD_INITIAL_CONTEXT_ATTACHMENT_FIELD_LENGTH
+        elif isinstance(source, RemoteUrl):
+            source_value = source.url
+            source_name = "url"
+            source_limit = MAX_THREAD_INITIAL_CONTEXT_ATTACHMENT_FIELD_LENGTH
+        elif isinstance(source, AttachmentHandle):
+            source_value = source.handle_id
+            source_name = "handle_id"
+            source_limit = MAX_THREAD_INITIAL_CONTEXT_HANDLE_LENGTH
+        else:
+            raise ContractViolation("initial_context contains unsupported attachment source")
+        _require_bounded_text(
+            source_value,
+            source_name,
+            source_limit,
+        )
+        _validate_initial_context_metadata(item.metadata)
+
+
+def _validate_initial_context_metadata(value: Mapping[str, object]) -> None:
+    if not isinstance(value, Mapping):
+        raise ContractViolation("initial_context metadata must be a mapping")
+    if len(value) > MAX_THREAD_INITIAL_CONTEXT_METADATA_ITEMS:
+        raise ContractViolation(
+            "initial_context metadata must contain at most "
+            f"{MAX_THREAD_INITIAL_CONTEXT_METADATA_ITEMS} items"
+        )
+    if not all(isinstance(key, str) for key in value):
+        raise ContractViolation("initial_context metadata keys must be strings")
+    try:
+        encoded = json.dumps(
+            _metadata_json_value(value),
+            allow_nan=False,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    except (TypeError, ValueError) as error:
+        raise ContractViolation(
+            "initial_context metadata must be finite JSON-compatible values"
+        ) from error
+    if len(encoded) > MAX_THREAD_INITIAL_CONTEXT_METADATA_BYTES:
+        raise ContractViolation("initial_context metadata exceeds its canonical byte limit")
+
+
+def _metadata_json_value(value: object) -> object:
+    if isinstance(value, Mapping):
+        if not all(isinstance(key, str) for key in value):
+            raise TypeError("metadata keys must be strings")
+        return {
+            key: _metadata_json_value(item) for key, item in value.items() if isinstance(key, str)
+        }
+    if isinstance(value, (tuple, list)):
+        return [_metadata_json_value(item) for item in value]
+    return value
+
+
 from .contract import (  # noqa: E402
     ApplicationRef,
     Page,
@@ -610,6 +812,7 @@ __all__ = [
     "ApplicationOperationType",
     "CreateProject",
     "CreateThread",
+    "DeleteProject",
     "DeleteThread",
     "GetProject",
     "GetThread",
@@ -621,6 +824,7 @@ __all__ = [
     "ListThreads",
     "NativeThreadActivated",
     "ProjectCreated",
+    "ProjectDeleted",
     "ProjectRead",
     "ProjectsListed",
     "RespondRequest",
@@ -636,6 +840,16 @@ __all__ = [
     "TurnInterrupted",
     "MAX_PROJECT_CWD_LENGTH",
     "MAX_PROJECT_DISPLAY_NAME_LENGTH",
+    "MAX_LIST_CURSOR_LENGTH",
+    "MAX_LIST_PAGE_ITEMS",
+    "MAX_LIST_QUERY_LENGTH",
+    "MAX_THREAD_INITIAL_CONTEXT_ATTACHMENT_FIELD_LENGTH",
+    "MAX_THREAD_INITIAL_CONTEXT_HANDLE_LENGTH",
+    "MAX_THREAD_INITIAL_CONTEXT_ITEMS",
+    "MAX_THREAD_INITIAL_CONTEXT_METADATA_BYTES",
+    "MAX_THREAD_INITIAL_CONTEXT_METADATA_ITEMS",
+    "MAX_THREAD_INITIAL_CONTEXT_TEXT_LENGTH",
+    "MAX_THREAD_TITLE_LENGTH",
     "validate_application_operation",
     "validate_application_operation_result",
 ]

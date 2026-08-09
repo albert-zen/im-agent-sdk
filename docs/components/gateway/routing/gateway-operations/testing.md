@@ -29,8 +29,8 @@ Gateway operation conformance must prove:
   documented `foreground_only` route preparation;
 - native Application operations are passed through the Application contract
   and are not interpreted as Gateway business logic;
-- ControllerActions can invoke the public typed operations without receiving a
-  repository or mutable Gateway context; and
+- ConversationActions maps public primitives without exposing the aggregate
+  executor, a repository, or mutable Gateway context; and
 - the per-Conversation lock registry has a finite concurrency-safe lifetime,
   never evicts a lock while it is owned or awaited, and fails explicitly if
   safe capacity cannot be acquired; and

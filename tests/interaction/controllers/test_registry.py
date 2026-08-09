@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import unittest
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import cast
 
-from imagent.adapters import IdempotencyClaimStatus
 from imagent.applications.capabilities import ProjectMode
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
-from imagent.gateway.admission import inbound_idempotency_identity
+from imagent.gateway.actions import ConversationActions
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.interaction.controllers import (
@@ -17,17 +16,15 @@ from imagent.interaction.controllers import (
     CommandDefinition,
     CommandExecutionSafety,
     CommandHandler,
-    CommandHandlerActions,
     CommandInvocation,
     CommandInvocationFacts,
+    CommandLimits,
     CommandRegistry,
     CommandRegistryError,
     CommandRegistryFailureCode,
-    CommandRegistryLimits,
     CommandRegistryNotFrozenError,
     CommandResult,
     CommandResultError,
-    ControllerActions,
 )
 from imagent.interaction.media import AttachmentContent, LocalPath
 from imagent.interaction.messages import (
@@ -38,7 +35,7 @@ from imagent.interaction.messages import (
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 
-class _Actions(ControllerActions):
+class _Actions:
     def __init__(self, *, fence_error: Exception | None = None) -> None:
         self.events: list[tuple[str, object]] = []
         self.fence_error = fence_error
@@ -55,22 +52,10 @@ class _Actions(ControllerActions):
         self.events.append(("binding", conversation_ref))
         return None
 
-    async def enter_effectful_command(self, invocation: CommandInvocationFacts) -> None:
+    async def _enter_effectful_command(self, invocation: CommandInvocationFacts) -> None:
         self.events.append(("fence", invocation))
         if self.fence_error is not None:
             raise self.fence_error
-
-
-class _FailingFenceRepository(InMemoryIdempotencyRepository):
-    async def mark_side_effect_started(
-        self,
-        scope: str,
-        key: str,
-        *,
-        owner_token: str | None = None,
-    ) -> None:
-        del scope, key, owner_token
-        raise RuntimeError("fence persistence failed")
 
 
 class _BlockingFenceActions(_Actions):
@@ -79,42 +64,21 @@ class _BlockingFenceActions(_Actions):
         self.entered = asyncio.Event()
         self.release = asyncio.Event()
 
-    async def enter_effectful_command(self, invocation: CommandInvocationFacts) -> None:
+    async def _enter_effectful_command(self, invocation: CommandInvocationFacts) -> None:
         self.events.append(("fence", invocation))
         self.entered.set()
         await self.release.wait()
 
 
-@dataclass(frozen=True, slots=True)
-class _ForgedInvocation:
-    invocation_id: str
-    conversation_ref: ConversationRef
-    message_id: str
-    actor: str
-    command_name: str
-    arguments: tuple[str, ...]
-    created_at: datetime
+def _surface(value: object) -> ConversationActions:
+    """Keep focused registry fakes outside the public nominal action contract."""
 
-
-class _ForgingController:
-    async def handle(self, message: InboundMessage, actions: ControllerActions):
-        await actions.enter_effectful_command(
-            _ForgedInvocation(
-                invocation_id="forged",
-                conversation_ref=message.conversation_ref,
-                message_id=message.message_id,
-                actor=message.sender,
-                command_name="mutate",
-                arguments=(),
-                created_at=message.created_at,
-            )
-        )
-        return ()
+    return cast(ConversationActions, value)
 
 
 class CommandRegistryDefinitionTests(unittest.TestCase):
     def test_limits_reject_non_positive_and_non_finite_values(self) -> None:
-        defaults = CommandRegistryLimits()
+        defaults = CommandLimits()
         invalid = {
             "max_commands": 0,
             "max_aliases": False,
@@ -143,7 +107,7 @@ class CommandRegistryDefinitionTests(unittest.TestCase):
         @first.command("Echo", aliases=("say",))
         async def echo(
             invocation: CommandInvocation,
-            actions: CommandHandlerActions,
+            actions: ConversationActions,
         ) -> CommandResult:
             del actions
             return CommandResult.text(" ".join(invocation.arguments))
@@ -172,7 +136,7 @@ class CommandRegistryDefinitionTests(unittest.TestCase):
             del invocation, actions
             return CommandResult()
 
-        limits = CommandRegistryLimits(
+        limits = CommandLimits(
             max_commands=1,
             max_aliases=1,
             max_aliases_per_command=1,
@@ -222,7 +186,7 @@ class CommandRegistryRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
         async def handler(
             invocation: CommandInvocation,
-            actions: CommandHandlerActions,
+            actions: ConversationActions,
         ) -> CommandResult:
             del actions
             seen.append(invocation)
@@ -239,13 +203,16 @@ class CommandRegistryRuntimeTests(unittest.IsolatedAsyncioTestCase):
         )
         registry.freeze()
         actions = _Actions()
-        outputs = await registry.handle(_message("\n  /SAY one\nignored two"), actions)
+        outputs = await registry.handle(
+            _message("\n  /SAY one\nignored two"),
+            _surface(actions),
+        )
         assert outputs is not None
         self.assertEqual(_text(outputs), "ok")
         self.assertEqual(seen[0].command_name, "echo")
         self.assertEqual(seen[0].arguments, ("one",))
-        self.assertIsNone(await registry.handle(_message("ordinary"), actions))
-        unknown = await registry.handle(_message("/missing"), actions)
+        self.assertIsNone(await registry.handle(_message("ordinary"), _surface(actions)))
+        unknown = await registry.handle(_message("/missing"), _surface(actions))
         assert unknown is not None
         self.assertIn("Unknown command", _text(unknown))
         self.assertEqual(
@@ -258,9 +225,9 @@ class CommandRegistryRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
         async def handler(
             invocation: CommandInvocation,
-            actions: CommandHandlerActions,
+            actions: ConversationActions,
         ) -> CommandResult:
-            self.assertFalse(hasattr(actions, "enter_effectful_command"))
+            self.assertIs(actions, actions_events)
             actions_events.events.append(("handler", invocation))
             return CommandResult.text("done")
 
@@ -274,7 +241,7 @@ class CommandRegistryRuntimeTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         registry.freeze()
-        outputs = await registry.handle(_message("/mutate"), actions)
+        outputs = await registry.handle(_message("/mutate"), _surface(actions))
         assert outputs is not None
         self.assertEqual(_text(outputs), "done")
         self.assertEqual([event[0] for event in actions.events], ["fence", "handler"])
@@ -288,7 +255,7 @@ class CommandRegistryRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
         async def handler(
             invocation: CommandInvocation,
-            actions: CommandHandlerActions,
+            actions: ConversationActions,
         ) -> CommandResult:
             del invocation, actions
             nonlocal called
@@ -307,7 +274,7 @@ class CommandRegistryRuntimeTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(RuntimeError, "fence failed"):
             await registry.handle(
                 _message("/mutate"),
-                _Actions(fence_error=RuntimeError("fence failed")),
+                _surface(_Actions(fence_error=RuntimeError("fence failed"))),
             )
         self.assertFalse(called)
 
@@ -320,7 +287,7 @@ class CommandRegistryRuntimeTests(unittest.IsolatedAsyncioTestCase):
         registry.register(CommandDefinition("bad", cast(CommandHandler, handler)))
         registry.freeze()
         with self.assertRaises(CommandResultError):
-            await registry.handle(_message("/bad"), _Actions())
+            await registry.handle(_message("/bad"), _surface(_Actions()))
 
     async def test_parser_and_result_bounds_fail_at_their_boundary(self) -> None:
         async def handler(invocation, actions):
@@ -329,7 +296,7 @@ class CommandRegistryRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 return CommandResult(content=(TextContent("a"), TextContent("b")))
             return CommandResult.text("x" * 65)
 
-        limits = CommandRegistryLimits(
+        limits = CommandLimits(
             max_input_line_length=12,
             max_arguments=1,
             max_argument_length=3,
@@ -350,13 +317,13 @@ class CommandRegistryRuntimeTests(unittest.IsolatedAsyncioTestCase):
             ("/text 1234567", "line limit"),
         ):
             with self.subTest(message=message):
-                outputs = await registry.handle(_message(message), actions)
+                outputs = await registry.handle(_message(message), _surface(actions))
                 assert outputs is not None
                 self.assertIn(expected, _text(outputs))
         with self.assertRaisesRegex(CommandResultError, "text limit"):
-            await registry.handle(_message("/text"), actions)
+            await registry.handle(_message("/text"), _surface(actions))
         with self.assertRaisesRegex(CommandResultError, "item limit"):
-            await registry.handle(_message("/items"), actions)
+            await registry.handle(_message("/items"), _surface(actions))
 
     async def test_non_text_result_content_is_rejected(self) -> None:
         async def handler(invocation, actions):
@@ -373,14 +340,14 @@ class CommandRegistryRuntimeTests(unittest.IsolatedAsyncioTestCase):
         registry.register(CommandDefinition("attachment", handler))
         registry.freeze()
         with self.assertRaisesRegex(CommandResultError, "invalid content"):
-            await registry.handle(_message("/attachment"), _Actions())
+            await registry.handle(_message("/attachment"), _surface(_Actions()))
 
     async def test_effectful_fence_reserves_concurrency_before_waiting(self) -> None:
         async def handler(invocation, actions):
             del invocation, actions
             return CommandResult.text("done")
 
-        registry = CommandRegistry(CommandRegistryLimits(max_concurrency=1))
+        registry = CommandRegistry(CommandLimits(max_concurrency=1))
         registry.register(
             CommandDefinition(
                 "mutate",
@@ -390,12 +357,12 @@ class CommandRegistryRuntimeTests(unittest.IsolatedAsyncioTestCase):
         )
         registry.freeze()
         first_actions = _BlockingFenceActions()
-        first = asyncio.create_task(registry.handle(_message("/mutate"), first_actions))
+        first = asyncio.create_task(registry.handle(_message("/mutate"), _surface(first_actions)))
         await first_actions.entered.wait()
         self.assertEqual(registry.diagnostic_facts().active_handler_count, 1)
         rejected = await registry.handle(
             _message("/mutate", message_id="message-2"),
-            _Actions(),
+            _surface(_Actions()),
         )
         assert rejected is not None
         self.assertIn("capacity", _text(rejected).lower())
@@ -414,11 +381,11 @@ class CommandRegistryRuntimeTests(unittest.IsolatedAsyncioTestCase):
         registry.freeze()
         first = await registry.handle(
             _message_for(ConversationRef("channel", "a:b"), "c", "/read"),
-            _Actions(),
+            _surface(_Actions()),
         )
         second = await registry.handle(
             _message_for(ConversationRef("channel", "a"), "b:c", "/read"),
-            _Actions(),
+            _surface(_Actions()),
         )
         assert first is not None and second is not None
         self.assertNotEqual(first[0].delivery_id, second[0].delivery_id)
@@ -429,7 +396,7 @@ class CommandRegistryRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
         async def overrun(
             invocation: CommandInvocation,
-            actions: CommandHandlerActions,
+            actions: ConversationActions,
         ) -> CommandResult:
             del invocation, actions
             try:
@@ -440,7 +407,7 @@ class CommandRegistryRuntimeTests(unittest.IsolatedAsyncioTestCase):
             raise AssertionError("unreachable")
 
         registry = CommandRegistry(
-            CommandRegistryLimits(
+            CommandLimits(
                 max_concurrency=1,
                 handler_timeout_seconds=0.01,
                 cancellation_join_timeout_seconds=0.01,
@@ -449,9 +416,12 @@ class CommandRegistryRuntimeTests(unittest.IsolatedAsyncioTestCase):
         registry.register(CommandDefinition("slow", overrun))
         registry.freeze()
         with self.assertRaises(TimeoutError):
-            await registry.handle(_message("/slow"), _Actions())
+            await registry.handle(_message("/slow"), _surface(_Actions()))
         self.assertEqual(registry.diagnostic_facts().active_handler_count, 1)
-        rejected = await registry.handle(_message("/slow", message_id="message-2"), _Actions())
+        rejected = await registry.handle(
+            _message("/slow", message_id="message-2"),
+            _surface(_Actions()),
+        )
         assert rejected is not None
         self.assertIn("capacity", _text(rejected).lower())
         release.set()
@@ -475,7 +445,7 @@ class CommandRegistryRuntimeTests(unittest.IsolatedAsyncioTestCase):
         registry = CommandRegistry()
         registry.register(CommandDefinition("wait", handler))
         registry.freeze()
-        invocation = asyncio.create_task(registry.handle(_message("/wait"), _Actions()))
+        invocation = asyncio.create_task(registry.handle(_message("/wait"), _surface(_Actions())))
         await entered.wait()
         await registry.close()
         with self.assertRaises(asyncio.CancelledError):
@@ -499,142 +469,24 @@ class CommandRegistryGatewayFenceTests(unittest.IsolatedAsyncioTestCase):
             await gateway.start()
         self.assertFalse(channel.started)
 
-    async def test_effectful_exception_keeps_claim_terminal_unknown(self) -> None:
+    async def test_frozen_registry_is_rejected_without_v1_action_factory(self) -> None:
         registry = CommandRegistry()
 
-        @registry.command("boom", safety=CommandExecutionSafety.EFFECTFUL)
-        async def boom(invocation, actions):
+        async def handler(invocation, actions):
             del invocation, actions
-            raise RuntimeError("unknown product outcome")
-
-        registry.freeze()
-        idempotency = InMemoryIdempotencyRepository()
-        channel = FakeChannelAdapter("channel-a")
-        gateway = _gateway(channel, registry, idempotency)
-        await gateway.start()
-        message = _message("/boom")
-        try:
-            with self.assertRaisesRegex(RuntimeError, "unknown product outcome"):
-                await channel.emit_message(message)
-        finally:
-            await gateway.stop()
-        scope, key = inbound_idempotency_identity(message.conversation_ref, message.message_id)
-        self.assertEqual(
-            await idempotency.claim(scope, key, owner_token="replacement"),
-            IdempotencyClaimStatus.IN_FLIGHT,
-        )
-
-    async def test_fence_repository_failure_releases_without_handler(self) -> None:
-        called = False
-        registry = CommandRegistry()
-
-        @registry.command("mutate", safety=CommandExecutionSafety.EFFECTFUL)
-        async def mutate(invocation, actions):
-            del invocation, actions
-            nonlocal called
-            called = True
             return CommandResult()
 
+        registry.register(CommandDefinition("read", handler))
         registry.freeze()
-        idempotency = _FailingFenceRepository()
         channel = FakeChannelAdapter("channel-a")
-        gateway = _gateway(channel, registry, idempotency)
-        await gateway.start()
-        message = _message("/mutate")
-        try:
-            with self.assertRaisesRegex(RuntimeError, "fence persistence failed"):
-                await channel.emit_message(message)
-        finally:
-            await gateway.stop()
-        self.assertFalse(called)
-        scope, key = inbound_idempotency_identity(message.conversation_ref, message.message_id)
-        self.assertEqual(
-            await idempotency.claim(scope, key, owner_token="replacement"),
-            IdempotencyClaimStatus.ACQUIRED,
+        gateway = _gateway(
+            channel,
+            registry,
+            InMemoryIdempotencyRepository(),
         )
-
-    async def test_cancellation_after_effect_fence_keeps_claim_terminal_unknown(self) -> None:
-        entered = asyncio.Event()
-        registry = CommandRegistry()
-
-        @registry.command("wait", safety=CommandExecutionSafety.EFFECTFUL)
-        async def wait(invocation, actions):
-            del invocation, actions
-            entered.set()
-            await asyncio.Future()
-            return CommandResult()
-
-        registry.freeze()
-        idempotency = InMemoryIdempotencyRepository()
-        channel = FakeChannelAdapter("channel-a")
-        gateway = _gateway(channel, registry, idempotency)
-        await gateway.start()
-        message = _message("/wait")
-        task = asyncio.create_task(channel.emit_message(message))
-        await entered.wait()
-        task.cancel()
-        with self.assertRaises(asyncio.CancelledError):
-            await task
-        await gateway.stop()
-        scope, key = inbound_idempotency_identity(message.conversation_ref, message.message_id)
-        self.assertEqual(
-            await idempotency.claim(scope, key, owner_token="replacement"),
-            IdempotencyClaimStatus.IN_FLIGHT,
-        )
-
-    async def test_read_only_cancellation_releases_before_effect_fence(self) -> None:
-        entered = asyncio.Event()
-        registry = CommandRegistry()
-
-        @registry.command("wait")
-        async def wait(invocation, actions):
-            del invocation, actions
-            entered.set()
-            await asyncio.Future()
-            return CommandResult()
-
-        registry.freeze()
-        idempotency = InMemoryIdempotencyRepository()
-        channel = FakeChannelAdapter("channel-a")
-        gateway = _gateway(channel, registry, idempotency)
-        await gateway.start()
-        message = _message("/wait")
-        task = asyncio.create_task(channel.emit_message(message))
-        await entered.wait()
-        task.cancel()
-        with self.assertRaises(asyncio.CancelledError):
-            await task
-        await gateway.stop()
-        scope, key = inbound_idempotency_identity(message.conversation_ref, message.message_id)
-        self.assertEqual(
-            await idempotency.claim(scope, key, owner_token="replacement"),
-            IdempotencyClaimStatus.ACQUIRED,
-        )
-
-    async def test_gateway_rejects_forged_command_identity_before_fence(self) -> None:
-        idempotency = InMemoryIdempotencyRepository()
-        channel = FakeChannelAdapter("channel-a")
-        gateway = ImAgentGateway(
-            channels=[channel],
-            applications=[FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)],
-            repositories=GatewayRepositories(
-                bindings=InMemoryBindingRepository(),
-                idempotency=idempotency,
-            ),
-            extensions=GatewayExtensions(controller=_ForgingController()),
-        )
-        await gateway.start()
-        message = _message("/mutate")
-        try:
-            with self.assertRaisesRegex(ValueError, "does not match"):
-                await channel.emit_message(message)
-        finally:
-            await gateway.stop()
-        scope, key = inbound_idempotency_identity(message.conversation_ref, message.message_id)
-        self.assertEqual(
-            await idempotency.claim(scope, key, owner_token="replacement"),
-            IdempotencyClaimStatus.ACQUIRED,
-        )
+        with self.assertRaisesRegex(RuntimeError, "coherent GatewayStore action wiring"):
+            await gateway.start()
+        self.assertFalse(channel.started)
 
 
 def _conversation() -> ConversationRef:

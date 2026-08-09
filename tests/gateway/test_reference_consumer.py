@@ -30,9 +30,7 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         report = await run_demo()
 
         self.assertIs(report.projection_policy, ProjectionPolicy.FOREGROUND_ONLY)
-        self.assertEqual(len(report.command_outputs), 2)
-        self.assertIn("IM Agent commands", report.command_outputs[0])
-        self.assertIn("Neutral reference consumer", report.command_outputs[1])
+        self.assertEqual(report.command_outputs, ())
 
         conversation_a = ConversationRef("reference-channel", "conversation-a")
         conversation_b = ConversationRef("reference-channel", "conversation-b")

@@ -36,7 +36,7 @@ from imagent.contracts import (
     ConversationBound,
     GatewayOperationFailed,
 )
-from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.input.dispatch import TurnAcceptanceBufferOverflow
 from imagent.gateway.persistence import (
     ConversationBinding,
@@ -62,7 +62,6 @@ from imagent.gateway.projection.request_correlation import (
 from imagent.gateway.routing import ObserveThread, ProjectionPolicy
 from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.channels import DeliveryReceipt, DeliveryReceiptStatus
-from imagent.interaction.controllers import ControllerActions
 from imagent.interaction.messages import (
     ConversationRef,
     InboundMessage,
@@ -2513,32 +2512,15 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                     await self.finish_release.wait()
                 await super().release(scope, key, owner_token=owner_token)
 
-        class RecordingController:
-            def __init__(self) -> None:
-                self.messages: list[InboundMessage] = []
-
-            async def handle(
-                self,
-                message: InboundMessage,
-                actions: ControllerActions,
-            ) -> tuple[OutboundMessage, ...] | None:
-                del actions
-                self.messages.append(message)
-                return ()
-
         conversation = ConversationRef("eager-channel", "conversation")
         channel = EagerInboundChannel(_inbound(conversation, "startup-message"))
         idempotency = BlockingReleaseRepository()
-        controller = RecordingController()
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[],
             repositories=GatewayRepositories(
                 bindings=InMemoryBindingRepository(),
                 idempotency=idempotency,
-            ),
-            extensions=GatewayExtensions(
-                controller=controller,
             ),
         )
 
@@ -2554,71 +2536,6 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaisesRegex(RuntimeError, "reconciliation failed"):
             await start_task
-        self.assertEqual(controller.messages, [])
-
-    async def test_startup_drain_failure_keeps_racing_inbound_buffered(self) -> None:
-        class BlockingReleaseRepository(InMemoryIdempotencyRepository):
-            def __init__(self) -> None:
-                super().__init__()
-                self.release_started = asyncio.Event()
-                self.finish_release = asyncio.Event()
-
-            async def release(self, scope, key, *, owner_token=None) -> None:
-                if key == "conversation:startup-message":
-                    self.release_started.set()
-                    await self.finish_release.wait()
-                await super().release(scope, key, owner_token=owner_token)
-
-        class FailingController:
-            def __init__(self) -> None:
-                self.messages: list[InboundMessage] = []
-
-            async def handle(
-                self,
-                message: InboundMessage,
-                actions: ControllerActions,
-            ) -> tuple[OutboundMessage, ...] | None:
-                del actions
-                self.messages.append(message)
-                if message.message_id == "startup-message":
-                    raise RuntimeError("startup message failed")
-                return ()
-
-        conversation = ConversationRef("eager-channel", "conversation")
-        channel = EagerInboundChannel(_inbound(conversation, "startup-message"))
-        idempotency = BlockingReleaseRepository()
-        controller = FailingController()
-        gateway = ImAgentGateway(
-            channels=[channel],
-            applications=[],
-            repositories=GatewayRepositories(
-                bindings=InMemoryBindingRepository(),
-                idempotency=idempotency,
-            ),
-            extensions=GatewayExtensions(
-                controller=controller,
-            ),
-        )
-
-        start_task = asyncio.create_task(gateway.start())
-        await idempotency.release_started.wait()
-        await channel.emit_message(_inbound(conversation, "racing-message"))
-        idempotency.finish_release.set()
-
-        with self.assertRaisesRegex(RuntimeError, "startup message failed"):
-            await start_task
-        self.assertEqual(
-            [message.message_id for message in controller.messages],
-            ["startup-message"],
-        )
-        self.assertEqual(
-            await idempotency.claim(
-                "inbound:eager-channel",
-                "conversation:racing-message",
-                owner_token="retry-owner",
-            ),
-            IdempotencyClaimStatus.ACQUIRED,
-        )
 
     async def test_buffered_inbound_is_refenced_after_startup_wait(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

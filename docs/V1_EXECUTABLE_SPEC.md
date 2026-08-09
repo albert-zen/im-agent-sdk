@@ -208,6 +208,13 @@ tested through its public Conversation surface:
 - after a newer action changes the binding or route, retrying the older
   terminal action returns its stored result and does not reapply its mutation.
 
+The public action-to-store matrix also proves that `foreground_only` primitive
+Thread binding commits its matching route with the binding, guarded
+clear-observation preserves that route while the binding still matches, and a
+fresh guarded clear removes it after the Conversation becomes unbound. Other
+projection policies neither manufacture a route during binding nor protect an
+explicit route from removal.
+
 The matrix covers every store-only Gateway mutation listed in
 `docs/V1_DESIGN.md`, not only Project/Thread selection.
 
@@ -361,22 +368,22 @@ clean-wheel executions both pass.
 | public composition and owned lifecycle | async context manager, start/stop rollback | redesign required |
 | uniform Application → Project → Thread → Turn resources | managed/fixed/flat tests; every Thread has ProjectRef | implemented in DAG A |
 | managed Project CWD creation | success, capability honesty, stable action identity | contract and deterministic fake evidence implemented in A; native support remains capability-gated |
-| store-only Gateway mutation fencing | atomic terminal receipt; old same-ID retry never overwrites newer intent | missing |
-| primitive native mutation fencing | lost ack/restart/unknown for create, activate, delete, interrupt, request response | missing |
-| managed Project deletion | typed action, capability honesty, stale binding, durable native fence | missing |
-| Project create-and-select workflow | success/partial/unknown/conflict | missing |
-| Thread create-and-bind workflow | success/partial/unknown/conflict | missing |
-| scoped consumer actions | principal, Conversation isolation, no adapter/store escape | missing |
+| store-only Gateway mutation fencing | atomic terminal receipt; old same-ID retry never overwrites newer intent | B memory/SQLite executor parity and C scoped request mapping implemented; public lifecycle wiring remains |
+| primitive native mutation fencing | lost ack/restart/unknown for create, activate, delete, interrupt, request response | B durable executor parity and C scoped callback mapping implemented; public lifecycle wiring remains |
+| managed Project deletion | typed action, capability honesty, stale binding, durable native fence | B/C seam acceptance implemented; concrete native support remains capability-gated |
+| Project create-and-select workflow | success/partial/unknown/conflict | B/C durable coordinator and scoped action mapping implemented |
+| Thread create-and-bind workflow | success/partial/unknown/conflict | B/C durable coordinator and scoped action mapping implemented |
+| scoped consumer actions | principal, Conversation isolation, no adapter/store escape | implemented in DAG C; public composition factory integration follows coherent B store wiring |
 | ordinary Channel → Agent → Channel text | no direct fake mutation | missing from reference flow |
 | multi-Conversation one-Thread fan-out | one worker, two destinations | existing evidence requires public-path review |
 | foreground switch and switch-back | route authority in both directions, no duplicates | partial existing evidence |
 | SQLite restart recovery | fresh Gateway/store objects, no SDK content truth | missing |
-| local common and product commands | read-only plus effectful typed service/action | partial existing evidence |
+| local common and product commands | read-only plus effectful typed service/action | implemented in DAG C focused registry/action evidence |
 | unsupported/stale/capacity/partial/unknown | typed consumer-visible outcomes | incomplete |
-| request response routing | recipient correlation and native first-writer truth | existing evidence requires integration |
+| request response routing | recipient correlation and native first-writer truth | B replay-before-preflight and C authorized scoped action implemented; final lifecycle/projection integration remains |
 | media/artifact boundaries | trust, bounds, consumer-owned bytes/cleanup | existing evidence requires integration |
 | diagnostics and graceful shutdown | redaction, finite cleanup, late callback rejection | partial existing evidence |
-| installed-wheel usability | same executable specification from clean wheel | missing |
+| installed-wheel usability | same executable specification from clean wheel | DAG C public action/registry import and negative-export wheel gate passes; full golden executable remains |
 | downstream experimental rewrites | IMCodex, IMT3, IMZen isolated worktrees on exact SDK candidate | final acceptance only |
 
 No pre-v1 test name, module boundary, or passing count is itself acceptance

@@ -11,8 +11,10 @@ Gateway operation, persistence, routing, projection, and recovery owners:
   different target;
 - an invalid same-target generation fails before route preparation and cannot
   release an existing recovery fence;
-- project bind, Thread bind, and Thread clear return the documented typed
-  postconditions without activating native UI state;
+- Project bind, Thread bind, and all three hierarchical clears return the
+  documented typed postconditions without activating native UI state;
+- Project/Application clear variants expose strict non-Boolean
+  `expected_generation` integers and no revision alias;
 - every Thread binding carries and equals its Project ancestor in managed,
   fixed, and flat modes; Project-less and cross-Project bindings fail;
 - mutations for one Conversation serialize while unrelated Conversations can

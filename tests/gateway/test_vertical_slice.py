@@ -21,13 +21,12 @@ from imagent.contracts import (
     BindConversationToThread,
     ConversationBound,
 )
-from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
+from imagent.gateway import GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence import ConversationBinding
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.interaction.channels.adapters.qq import QQChannelAdapter
 from imagent.interaction.channels.outbound_delivery import NativeDeliveryResult
-from imagent.interaction.controllers import SlashController
 from imagent.interaction.media import AttachmentContent, AttachmentSourceKind, LocalPath, RemoteUrl
 from imagent.interaction.messages import ConversationRef, TextContent
 from tests.applications.adapters._appserver_fakes import NativeZenClient
@@ -273,175 +272,6 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(native_app.resumed_threads, ["codex-thread"])
-
-    async def test_appserver_catchup_and_history_restore_user_context(self) -> None:
-        native_channel = NativeQQChannel()
-        channel = NativeTransportChannelAdapter(
-            channel_instance_id="qq-main",
-            channel_id="qq",
-            startup_validator=lambda: None,
-            native_factory=lambda middleware: self._bind_channel(
-                native_channel,
-                middleware,
-            ),
-        )
-        application = CodexApplicationAdapter(
-            application_instance_id="codex-main",
-            client=NativeZenClient(),
-            workspace_id="workspace",
-            cwd="/repo",
-        )
-        bindings = InMemoryBindingRepository()
-        await bindings.put(
-            ConversationBinding(
-                conversation_ref=ConversationRef(
-                    "qq-main",
-                    "c2c:user-1",
-                ),
-                application_ref=ApplicationRef("codex-main"),
-                project_ref=ThreadRef(
-                    ProjectRef("codex-main", "workspace"), "codex-thread"
-                ).project_ref,
-                thread_ref=ThreadRef(ProjectRef("codex-main", "workspace"), "codex-thread"),
-            )
-        )
-        gateway = ImAgentGateway(
-            channels=[channel],
-            applications=[application],
-            repositories=GatewayRepositories(
-                bindings=bindings,
-            ),
-            extensions=GatewayExtensions(
-                controller=SlashController(),
-            ),
-        )
-
-        await gateway.start()
-        try:
-            await native_channel.receive("/catchup 2", message_id="catchup-1")
-            await native_channel.receive("/history 2", message_id="history-1")
-        finally:
-            await gateway.stop()
-
-        catchup, history = [message.text for message in native_channel.sent]
-        self.assertIn("## Recent Activity", catchup)
-        self.assertIn("Inspecting the existing adapters.", catchup)
-        self.assertIn("Running the focused tests.", catchup)
-        self.assertNotIn("Design the SDK", catchup)
-        self.assertIn("## Thread History", history)
-        self.assertIn("Design the SDK", history)
-        self.assertIn("The SDK design is complete.", history)
-        self.assertIn("Refactor the adapters", history)
-        self.assertIn("Inspecting the existing adapters.", history)
-        self.assertIn("Running the focused tests.", history)
-
-    async def test_t3_catchup_and_history_use_native_turn_grouping(self) -> None:
-        native_channel = NativeQQChannel()
-        channel = NativeTransportChannelAdapter(
-            channel_instance_id="qq-main",
-            channel_id="qq",
-            startup_validator=lambda: None,
-            native_factory=lambda middleware: self._bind_channel(
-                native_channel,
-                middleware,
-            ),
-        )
-        native_app = NativeT3Client()
-        native_app.threads["t3-thread"] = {
-            "id": "t3-thread",
-            "projectId": "project-1",
-            "title": "SDK",
-            "modelSelection": {"instanceId": "codex", "model": "gpt"},
-            "runtimeMode": "full-access",
-            "latestTurn": {
-                "turnId": "turn-live",
-                "state": "running",
-                "assistantMessageId": "assistant-live",
-            },
-            "messages": [
-                {
-                    "id": "user-old",
-                    "role": "user",
-                    "text": "Create the first adapter",
-                    "turnId": "turn-old",
-                },
-                {
-                    "id": "assistant-old",
-                    "role": "assistant",
-                    "text": "The first adapter works.",
-                    "turnId": "turn-old",
-                    "streaming": False,
-                },
-                {
-                    "id": "user-live",
-                    "role": "user",
-                    "text": "Add history support",
-                    "turnId": "turn-live",
-                },
-                {
-                    "id": "assistant-live",
-                    "role": "assistant",
-                    "text": "Inspecting the T3 read model.",
-                    "turnId": "turn-live",
-                    "streaming": True,
-                },
-            ],
-            "activities": [
-                {
-                    "id": "activity-live",
-                    "kind": "task.progress",
-                    "summary": "Mapping messages by turn",
-                    "payload": {"detail": "Grouping native messages by turnId."},
-                    "turnId": "turn-live",
-                }
-            ],
-            "checkpoints": [{"turnId": "turn-old"}],
-            "archivedAt": None,
-            "deletedAt": None,
-        }
-        application = T3ApplicationAdapter(
-            application_instance_id="t3-main",
-            client=native_app,
-        )
-        bindings = InMemoryBindingRepository()
-        project = ProjectRef("t3-main", "project-1")
-        await bindings.put(
-            ConversationBinding(
-                conversation_ref=ConversationRef(
-                    "qq-main",
-                    "c2c:user-1",
-                ),
-                application_ref=ApplicationRef("t3-main"),
-                project_ref=project,
-                thread_ref=ThreadRef(project, "t3-thread"),
-            )
-        )
-        gateway = ImAgentGateway(
-            channels=[channel],
-            applications=[application],
-            repositories=GatewayRepositories(
-                bindings=bindings,
-            ),
-            extensions=GatewayExtensions(
-                controller=SlashController(),
-            ),
-        )
-
-        await gateway.start()
-        try:
-            await native_channel.receive("/catchup 2", message_id="catchup-t3")
-            await native_channel.receive("/history 2", message_id="history-t3")
-        finally:
-            await gateway.stop()
-
-        catchup, history = [message.text for message in native_channel.sent]
-        self.assertIn("## Recent Activity", catchup)
-        self.assertIn("Inspecting the T3 read model.", catchup)
-        self.assertIn("Grouping native messages by turnId.", catchup)
-        self.assertIn("## Thread History", history)
-        self.assertIn("Create the first adapter", history)
-        self.assertIn("The first adapter works.", history)
-        self.assertIn("Add history support", history)
 
     async def test_image_messages_map_to_native_codex_and_t3_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -767,76 +597,6 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             native_channel.sent[0].metadata["reply_to_message_id"],
             "qq-quoted-message",
         )
-
-    async def test_slash_commands_manage_a_t3_project_and_thread(self) -> None:
-        native_channel = NativeQQChannel()
-        channel = NativeTransportChannelAdapter(
-            channel_instance_id="qq-main",
-            channel_id="qq",
-            startup_validator=lambda: None,
-            native_factory=lambda middleware: self._bind_channel(
-                native_channel,
-                middleware,
-            ),
-        )
-        native_app = NativeT3Client()
-        application = T3ApplicationAdapter(
-            application_instance_id="t3-main",
-            client=native_app,
-            runtime_mode="full-access",
-        )
-        gateway = ImAgentGateway(
-            channels=[channel],
-            applications=[application],
-            repositories=GatewayRepositories(
-                bindings=InMemoryBindingRepository(),
-            ),
-            extensions=GatewayExtensions(
-                controller=SlashController(),
-            ),
-        )
-
-        await gateway.start()
-        try:
-            await native_channel.receive("/projects", message_id="t3-1")
-            await native_channel.receive("/use 1", message_id="t3-2")
-            await native_channel.receive("/new SDK task", message_id="t3-3")
-            await native_channel.receive("Build it", message_id="t3-4")
-            async with asyncio.timeout(1):
-                while not any(
-                    message.text == "## T3 done\n\nThe same pipeline works."
-                    for message in native_channel.sent
-                ):
-                    await asyncio.sleep(0)
-        finally:
-            await gateway.stop()
-
-        self.assertEqual(
-            [command["type"] for command in native_app.commands],
-            ["thread.create", "thread.turn.start"],
-        )
-        self.assertEqual(native_app.commands[0]["runtimeMode"], "full-access")
-        rendered = [message.text for message in native_channel.sent]
-        self.assertTrue(any("SDK" in text and "project-1" in text for text in rendered))
-        self.assertTrue(any("Selected project" in text for text in rendered))
-        self.assertTrue(any("Created thread" in text for text in rendered))
-        self.assertIn(
-            "## T3 done\n\nThe same pipeline works.",
-            rendered,
-        )
-        t3_output = next(
-            message
-            for message in native_channel.sent
-            if message.text == "## T3 done\n\nThe same pipeline works."
-        )
-        self.assertEqual(
-            t3_output.metadata["reply_to_message_id"],
-            "t3-4",
-        )
-        self.assertEqual(t3_output.metadata["native_application"], "t3")
-        self.assertIs(t3_output.metadata["streaming"], False)
-        self.assertNotIn("turn_id", t3_output.metadata)
-        self.assertTrue(all(message.message_type == "markdown" for message in native_channel.sent))
 
     async def test_t3_concurrent_inputs_return_distinct_accepted_turns(
         self,

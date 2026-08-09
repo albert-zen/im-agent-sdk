@@ -9,8 +9,8 @@ activate native UI state, or create an Application subscription.
 
 This leaf owns:
 
-- the typed `ObserveThread` and `ThreadObserved` values and their specific
-  postcondition validation;
+- the typed `ObserveThread`, `ThreadObserved`, `ClearThreadObservation`, and
+  `ThreadObservationCleared` values and their specific postcondition validation;
 - `foreground_only`, `remembered_last_recipient`, and `all_observers` route
   policy semantics;
 - stable route identity and per-Conversation destination references;
@@ -78,7 +78,8 @@ movement.
 
 The canonical implementation is
 `src/imagent/gateway/routing/projection_routes.py`. It owns the exact
-`ObserveThread`, `ThreadObserved`, and `ProjectionPolicy` objects, the
+`ObserveThread`, `ThreadObserved`, `ClearThreadObservation`,
+`ThreadObservationCleared`, and `ProjectionPolicy` objects, the
 operation/result validators, stable route-ID derivation, active-route
 resolution, and checkpoint-preserving repository refresh/replacement. The
 route values resolve their `ThreadProjectionRoute` annotation directly from
@@ -96,5 +97,5 @@ and do not gain a second repository, subscription, runtime, or authority.
 
 `imagent.gateway.routing` is the finite public facade for the moved route
 operation values. The historical `imagent.contracts` facade and its internal
-operation/validator modules deliberately have no `ObserveThread` or
-`ThreadObserved` attribute or `__all__` entry.
+operation/validator modules deliberately have no route-operation attributes or
+`__all__` entries.

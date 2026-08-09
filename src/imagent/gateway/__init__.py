@@ -21,24 +21,21 @@ from ..applications.contract import (
     ThreadRef,
 )
 from ..applications.operations import (
-    ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,
     CreateThread,
+    DeleteProject,
     GetProject,
     GetThread,
     ProjectRead,
     ThreadCreated,
     ThreadRead,
+    _LegacyApplicationOperation,
     validate_application_operation,
     validate_application_operation_result,
 )
 from ..interaction.channels.contract import ChannelAdapter, InboundAdmission
-from ..interaction.controllers import ControllerActions, ControllerLifecycle
-from ..interaction.controllers.contract import (
-    CommandInvocationFacts,
-    _derive_command_invocation_id,
-)
+from ..interaction.controllers import ControllerLifecycle
 from ..interaction.diagnostics import QueueDiagnosticFacts, QueueDiagnosticName
 from ..interaction.messages import (
     ConversationRef,
@@ -140,6 +137,13 @@ from .routing.bindings import (
     ConversationBound,
     _BindingRuntime,
 )
+from .routing.bindings import (
+    ClearConversationApplication as ClearConversationApplication,
+)
+from .routing.bindings import (
+    ClearConversationProject as ClearConversationProject,
+)
+from .routing.operations import _LegacyGatewayOperation
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +158,15 @@ _GATEWAY_OPERATION_EXPORTS = frozenset(
         "SelectApplication",
         "validate_gateway_operation",
         "validate_gateway_operation_result",
+    }
+)
+_ACTION_EXPORTS = frozenset(
+    {
+        "ActionResult",
+        "ActionValue",
+        "ApplicationActions",
+        "ConversationActions",
+        "ReadOutcome",
     }
 )
 
@@ -310,6 +323,11 @@ class ImAgentGateway:
     async def start(self) -> None:
         if isinstance(self._controller, ControllerLifecycle):
             self._controller.validate_startup()
+        if self._controller is not None:
+            raise RuntimeError(
+                "ImAgentGateway cannot compose a v1 Controller until coherent "
+                "GatewayStore action wiring is present"
+            )
         self._delivery_coordinator.start()
         if self._delivery_outcome_observer_runtime is not None:
             self._delivery_outcome_observer_runtime.start()
@@ -378,8 +396,6 @@ class ImAgentGateway:
             await self._delivery_coordinator.close()
             for channel in reversed(started_channels):
                 await channel.stop()
-            if isinstance(self._controller, ControllerLifecycle):
-                await self._controller.close()
             if self._inbound_content_transform_runtime is not None:
                 await self._inbound_content_transform_runtime.close()
             if self._inbound_failure_presentation_runtime is not None:
@@ -399,8 +415,6 @@ class ImAgentGateway:
         await self._delivery_coordinator.close()
         for channel in reversed(tuple(self._channels.values())):
             await channel.stop()
-        if isinstance(self._controller, ControllerLifecycle):
-            await self._controller.close()
         if self._inbound_content_transform_runtime is not None:
             await self._inbound_content_transform_runtime.close()
         if self._inbound_failure_presentation_runtime is not None:
@@ -463,9 +477,20 @@ class ImAgentGateway:
 
     async def execute_application(
         self,
-        operation: ApplicationOperation,
+        operation: _LegacyApplicationOperation,
     ) -> ApplicationOperationResult:
         """Route one typed application operation without mutating a binding."""
+        if isinstance(operation, DeleteProject):
+            return ApplicationOperationFailed(
+                operation_id=operation.operation_id,
+                type=operation.type,
+                completed_at=datetime.now(UTC),
+                error=_contract_error(
+                    NotImplementedError(
+                        "project.delete requires principal-scoped ApplicationActions"
+                    )
+                ),
+            )
         try:
             validate_application_operation(operation)
             application = self._applications[operation.application_ref.application_instance_id]
@@ -482,7 +507,7 @@ class ImAgentGateway:
 
     async def execute_gateway(
         self,
-        operation: contracts_facade.GatewayOperation,
+        operation: _LegacyGatewayOperation,
     ) -> contracts_facade.GatewayOperationResult:
         """Execute one typed Gateway operation under Conversation serialization."""
         return await self._gateway_operations.execute(operation)
@@ -513,7 +538,7 @@ class ImAgentGateway:
 
     async def _execute_gateway_locked(
         self,
-        operation: contracts_facade.GatewayOperation,
+        operation: _LegacyGatewayOperation,
     ) -> contracts_facade.GatewayOperationResult:
         return await self._gateway_operations.execute_locked(operation)
 
@@ -851,23 +876,6 @@ class ImAgentGateway:
                 owner_token=idempotency_owner_token,
             )
             thread_was_created = False
-            if self._controller is not None:
-                outputs = await self._controller.handle(
-                    message,
-                    _LockedControllerActions(
-                        self,
-                        message=message,
-                        enter_effect_fence=before_application_send,
-                    ),
-                )
-                if outputs is not None:
-                    for output in outputs:
-                        if output.conversation_ref != message.conversation_ref:
-                            raise ValueError(
-                                "Controller output belongs to a different Conversation"
-                            )
-                        await self._deliver_outbound(output)
-                    return
             content = (
                 await self._inbound_content_transform_runtime.transform(message)
                 if self._inbound_content_transform_runtime is not None
@@ -1155,62 +1163,6 @@ class ImAgentGateway:
             ) from error
 
 
-class _LockedControllerActions(ControllerActions):
-    def __init__(
-        self,
-        gateway: ImAgentGateway,
-        *,
-        message: InboundMessage,
-        enter_effect_fence: Callable[[], Awaitable[None]],
-    ) -> None:
-        self._gateway = gateway
-        self._message = message
-        self._enter_effect_fence = enter_effect_fence
-        self._effect_fence_entered = False
-
-    async def execute_application(
-        self,
-        operation: ApplicationOperation,
-    ) -> ApplicationOperationResult:
-        return await self._gateway.execute_application(operation)
-
-    async def execute_gateway(
-        self,
-        operation: contracts_facade.GatewayOperation,
-    ) -> contracts_facade.GatewayOperationResult:
-        return await self._gateway._execute_gateway_locked(operation)
-
-    async def get_binding(
-        self,
-        conversation_ref: ConversationRef,
-    ) -> ConversationBinding | None:
-        return await self._gateway.get_binding(conversation_ref)
-
-    async def enter_effectful_command(
-        self,
-        invocation: CommandInvocationFacts,
-    ) -> None:
-        if self._effect_fence_entered:
-            raise RuntimeError("effectful command fence may be entered only once")
-        message = self._message
-        if (
-            invocation.conversation_ref != message.conversation_ref
-            or invocation.message_id != message.message_id
-            or invocation.actor != message.sender
-            or invocation.created_at != message.created_at
-            or invocation.invocation_id
-            != _derive_command_invocation_id(
-                invocation.conversation_ref,
-                invocation.message_id,
-                invocation.command_name,
-                invocation.arguments,
-            )
-        ):
-            raise ValueError("effectful command invocation does not match owned inbound identity")
-        self._effect_fence_entered = True
-        await self._enter_effect_fence()
-
-
 def _contract_error(error: Exception) -> ContractError:
     if isinstance(error, BindingConflict):
         return operation_error(error, code=OperationErrorCode.CONFLICT)
@@ -1238,6 +1190,12 @@ def __getattr__(name: str) -> object:
         from .routing import operations as operations_owner
 
         value = getattr(operations_owner, name)
+        globals()[name] = value
+        return value
+    if name in _ACTION_EXPORTS:
+        from . import actions as action_owner
+
+        value = getattr(action_owner, name)
         globals()[name] = value
         return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

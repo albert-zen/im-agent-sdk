@@ -41,7 +41,7 @@ definition; it cannot silently replace or shadow an existing name.
 
 A registry composition uses these public values:
 
-- `CommandRegistryLimits` fixes every registry, parser, result, task, and
+- `CommandLimits` fixes every registry, parser, result, task, and
   common-view bound;
 - `CommandArgumentContract` fixes per-command minimum and maximum argument
   counts;
@@ -52,8 +52,9 @@ A registry composition uses these public values:
   canonical command, bounded arguments, actor, and creation time;
 - `CommandInvocationFacts` is the read-only structural view accepted only by
   the runtime effect-fence method, avoiding a contract-to-registry dependency;
-- `CommandHandlerActions` is the fence-free typed Application/Gateway action
-  view available to handlers;
+- `ConversationActions` is the immutable Conversation/actor-scoped surface
+  available to handlers; native UI actions obtain the same surface directly
+  from Gateway composition without manufacturing Slash text;
 - `CommandResult` carries only bounded `TextContent` plus a closed completed or
   known-failure status; media delivery remains on the normal validated
   Interaction/Gateway path and registry-owned output identity is not handler
@@ -71,11 +72,10 @@ A `CommandInvocation` contains the stable inbound identity, Conversation,
 actor, canonical command, and bounded parsed arguments. It contains no `Any`
 context, repository, Gateway, adapter, credential, or raw native event.
 
-The registry alone receives the full `ControllerActions` runtime surface. For
-an effectful definition it calls the one-way fence method with that
-`CommandInvocation` identity, waits for the durable transition, then invokes
-the handler with a separate action view that omits the fence. Read-only
-definitions receive only the narrow handler view and do not enter the fence.
+The registry and handler receive the exact same `ConversationActions` object.
+For an effectful definition the registry calls its private one-way inbound
+fence with that `CommandInvocation` identity, waits for the durable transition,
+then invokes the handler. Read-only definitions do not enter that fence.
 
 A handler returns a closed typed `CommandResult`; it does not manufacture an
 `OutboundMessage`, choose Conversation/delivery/reply identity, return
@@ -84,9 +84,9 @@ The registry creates at most one scoped-hash, fixed-identity response message;
 an empty completed result is intentionally silent. Delimiter-bearing Channel,
 Conversation, and message IDs cannot alias one another.
 Product handlers receive strongly typed product services through constructor
-injection. Public binding/Application behavior uses `ControllerActions`.
-Product-specific services such as a Codex credits reader remain typed concrete
-adapter/client services and do not become public `ApplicationOperation`s
+injection. Public binding/Application behavior uses `ConversationActions`.
+Product-specific services remain typed consumer-owned services and do not
+become public `ApplicationOperation`s
 without evidence from two real Applications.
 
 ## Bounds
@@ -126,8 +126,8 @@ handler starts.
 decorator are the only registration paths. `freeze()` is irreversible.
 `validate_startup()` rejects an unfrozen registry before Gateway accepts input;
 `close()` cancels and boundedly joins admitted handler tasks. The registry
-itself implements `InboundController`. The default `SlashController` is only a
-convenience wrapper around one explicitly populated, frozen registry.
+itself implements `InboundController`. There is no default controller wrapper;
+composition explicitly includes common definitions and freezes this registry.
 
 ## Failure, replay, and cancellation
 
@@ -146,7 +146,9 @@ The typed result/outcome boundary distinguishes:
   the effect fence.
 
 Stable typed action IDs provide idempotency where the called action supports
-it. The registry does not claim exactly-once execution and does not convert an
+it. SDK common handlers derive those IDs from the stable Channel,
+Conversation, message, canonical command, bounded arguments, and semantic
+action kind. The registry does not claim exactly-once execution and does not convert an
 unknown result into success, retry, queueing, or normal Application input.
 Failure while presenting or delivering a completed handler result never
 reauthorizes the handler effect.
@@ -172,10 +174,10 @@ composition and relies on stable inbound/action identity for convergence.
 The standalone registry slice replaces the fixed dispatcher, adds the
 registry-to-Gateway effect-fence handshake, scopes operation IDs by the full
 inbound identity, and bounds common selection views. It preserves
-`SlashController` as the default common-command convenience composition while
-making `CommandRegistry` the public consumer-composition surface. The common
+`CommandRegistry` is the only public consumer-composition surface. The common
 command implementation now resides under Interaction; the historical internal
 modules and the historical `imagent.controllers` compatibility package have
 been removed. The formal public surface is
 `imagent.interaction.controllers`, and this path cleanup changes no registry,
-handler, grammar, fence, capacity, or result behavior.
+handler, grammar, fence, capacity, or result behavior. The v1 migration removes
+the old generic action protocols and wrapper without compatibility aliases.

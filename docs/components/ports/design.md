@@ -47,8 +47,8 @@ optional structural `ChannelStartupConfigurationValidator`, and the opaque
 `imagent.interaction.channels` is the sole formal facade for those objects.
 The historical `imagent.adapters` facade no longer exports those five Channel
 names. The historical `OperationHandler[GatewayOperation]` is removed:
-Channel lifecycle accepts messages/admission only, while Controllers invoke
-typed operations through `ControllerActions`.
+Channel lifecycle accepts messages/admission only, while Controllers receive
+one scoped `ConversationActions` surface.
 
 It does not own:
 

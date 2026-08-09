@@ -58,6 +58,7 @@ from imagent.applications.operations import (
     ApplicationOperationResult,
     CreateProject,
     CreateThread,
+    DeleteProject,
     DeleteThread,
     GetProject,
     GetThread,
@@ -69,6 +70,7 @@ from imagent.applications.operations import (
     ListThreads,
     NativeThreadActivated,
     ProjectCreated,
+    ProjectDeleted,
     ProjectRead,
     ProjectsListed,
     RequestResponded,
@@ -126,6 +128,11 @@ def make_capabilities(project_mode: ProjectMode) -> ApplicationCapabilities:
             discovery=project_support,
             reading=project_support,
             creation=(
+                SupportLevel.NATIVE
+                if project_mode is ProjectMode.MANAGED
+                else SupportLevel.UNSUPPORTED
+            ),
+            deletion=(
                 SupportLevel.NATIVE
                 if project_mode is ProjectMode.MANAGED
                 else SupportLevel.UNSUPPORTED
@@ -363,6 +370,20 @@ class FakeAgentApplicationAdapter:
                 self._created_projects_by_operation[operation.operation_id] = created
                 self._projects[project.ref] = project
             return created
+        if isinstance(operation, DeleteProject):
+            if self._capabilities.projects.deletion is SupportLevel.UNSUPPORTED:
+                raise NotImplementedError(
+                    f"{self._capabilities.projects.mode.value} project mode cannot delete projects"
+                )
+            await self.get_project(operation.project_ref)
+            if any(thread_ref.project_ref == operation.project_ref for thread_ref in self._threads):
+                raise ValueError("fake adapter cannot delete a Project containing Threads")
+            del self._projects[operation.project_ref]
+            return ProjectDeleted(
+                operation_id=operation.operation_id,
+                completed_at=now,
+                project_ref=operation.project_ref,
+            )
         if isinstance(operation, ListThreads):
             return ThreadsListed(
                 operation_id=operation.operation_id,
@@ -416,7 +437,9 @@ class FakeAgentApplicationAdapter:
                     thread_ref=operation.thread_ref,
                     turn_ref=latest.turn_ref if latest is not None else None,
                     status=latest.status if latest is not None else TurnStatus.IDLE,
-                    messages=latest.agent_messages if latest is not None else (),
+                    messages=(
+                        latest.agent_messages[-operation.limit :] if latest is not None else ()
+                    ),
                 ),
             )
         if isinstance(operation, GetThreadHistory):

@@ -7,8 +7,13 @@ affected evidence rather than alternate owners.
 
 Tests cover closed operation/result discriminants, stable operation IDs,
 required Project scoping for Thread list/create and every Thread-targeted
-operation, bounded managed Project CWD creation, explicit unsupported/error
-results, archive versus permanent
+operation, bounded managed Project CWD creation, exact managed Project deletion,
+bounded Thread title/context payloads, bounded list queries/cursors/pages,
+history/catch-up adapters that exceed the requested limit, schema parity for
+opaque attachment handles, strict non-Boolean attachment sizes, typed text
+content/format validation, legacy generic Project-delete rejection, explicit
+unsupported/error results,
+archive versus permanent
 deletion honesty, and exact result matching. They prove native activation is
 separate from binding, a concrete native Thread-create option mapping cannot
 widen `CreateThread`, and a consumer-only command never enters the common
@@ -24,9 +29,10 @@ Gateway operation/result values and validators remain outside this leaf.
 Input-mutating operations must preserve the pre-dispatch/unknown-outcome
 boundary and must not auto-retry after an ambiguous native mutation.
 The deterministic managed fake must converge repeated Project creation by the
-same stable operation ID; fixed/flat fakes and native adapters must return
-typed unsupported without mutating their one workspace Project. Durable native
-mutation receipts and workflow outcome algebra remain block B.
+same stable operation ID and reject deletion of a non-empty Project;
+fixed/flat fakes and native adapters return typed unsupported without mutating
+their one workspace Project. Durable native mutation receipts and workflow
+outcome algebra remain block B.
 
 ```sh
 uv run python -m unittest tests.applications.test_operations -v

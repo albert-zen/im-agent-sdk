@@ -214,11 +214,7 @@ class ComponentMapTests(unittest.TestCase):
         )
         self.assertNotIn("src/imagent/gateway_composition.py", composition["current_code"])
 
-        controller_action_edges = {
-            "applications.operations",
-            "gateway.routing.gateway-operations",
-            "gateway.persistence.state-contracts",
-        }
+        controller_action_edges = {"gateway.actions"}
         self.assertGreaterEqual(
             set(components["interaction.controllers.controller-contract"]["dependencies"]),
             controller_action_edges,
@@ -228,12 +224,15 @@ class ComponentMapTests(unittest.TestCase):
             "applications.capabilities",
             "applications.operations",
             "applications.requests",
-            "gateway.routing.bindings",
-            "gateway.routing.gateway-operations",
-            "gateway.routing.projection-routes",
-            "gateway.projection.request-correlation",
+            "gateway.actions",
+            "gateway.outcomes",
             "gateway.persistence.state-contracts",
         }
+        command_registry_edges = {"gateway.actions"}
+        self.assertGreaterEqual(
+            set(components["interaction.controllers.command-registry"]["dependencies"]),
+            command_registry_edges,
+        )
         self.assertGreaterEqual(
             set(components["interaction.controllers.common-commands"]["dependencies"]),
             common_command_edges,
@@ -245,6 +244,10 @@ class ComponentMapTests(unittest.TestCase):
                 *(
                     ("interaction.controllers.controller-contract", target)
                     for target in controller_action_edges
+                ),
+                *(
+                    ("interaction.controllers.command-registry", target)
+                    for target in command_registry_edges
                 ),
                 *(
                     ("interaction.controllers.common-commands", target)

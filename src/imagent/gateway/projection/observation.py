@@ -24,9 +24,9 @@ from ...applications.events import (
     AgentEventType,
     EventStreamGap,
 )
-from ...applications.operations import ApplicationOperation, ApplicationOperationResult
+from ...applications.operations import ApplicationOperationResult, _LegacyApplicationOperation
 from ...applications.requests import InteractiveRequest, RequestRef
-from ...interaction.controllers import RequestPresenter
+from ...interaction.controllers.request_presentation import RequestPresenter
 from ...interaction.messages import (
     ConversationRef,
     OutboundMessage,
@@ -229,7 +229,7 @@ async def deliver_projected_message(
 
 
 ExecuteApplication = Callable[
-    [ApplicationOperation],
+    [_LegacyApplicationOperation],
     Awaitable[ApplicationOperationResult],
 ]
 

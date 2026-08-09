@@ -4,10 +4,18 @@ from . import operations as _operations
 from .bindings import (
     BindConversationToProject,
     BindConversationToThread,
+    ClearConversationApplication,
+    ClearConversationProject,
     ClearConversationThread,
     ConversationBound,
 )
-from .projection_routes import ObserveThread, ProjectionPolicy, ThreadObserved
+from .projection_routes import (
+    ClearThreadObservation,
+    ObserveThread,
+    ProjectionPolicy,
+    ThreadObservationCleared,
+    ThreadObserved,
+)
 
 _operations._complete_gateway_union()
 
@@ -50,7 +58,10 @@ __all__ = [
     "ApplicationsListed",
     "BindConversationToProject",
     "BindConversationToThread",
+    "ClearConversationApplication",
+    "ClearConversationProject",
     "ClearConversationThread",
+    "ClearThreadObservation",
     "ConversationBound",
     "GatewayOperation",
     "GatewayOperationFailed",
@@ -61,6 +72,7 @@ __all__ = [
     "ProjectionPolicy",
     "SelectApplication",
     "ThreadObserved",
+    "ThreadObservationCleared",
     "validate_gateway_operation",
     "validate_gateway_operation_result",
 ]

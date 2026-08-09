@@ -109,10 +109,9 @@ extraction now has one implementation in
 
 `imagent.gateway.persistence` is the primary Python facade. The permanent,
 finite `imagent.contracts:ConversationBinding` delegate is also an exact
-re-export of this leaf: it exists only so the Interaction-owned
-`ControllerActions.get_binding` return annotation resolves without making the
-Controller contract import Gateway orchestration during package initialization.
-It is not a compatibility model, fallback value, or second state contract.
+re-export of this leaf. It is not a compatibility model, fallback value, or
+second state contract; scoped actions consume the focused persistence-state
+owner directly.
 
 ## Authority
 

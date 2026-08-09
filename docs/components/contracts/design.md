@@ -74,11 +74,10 @@ Contracts import no Python runtime port, Gateway orchestration, Controller,
 persistence, or concrete adapter implementation. The finite
 `imagent.contracts` facade resolves exact Gateway operation and binding owners
 without implementing them. Its permanent finite
-`ConversationBinding` delegate resolves to the Gateway persistence-state owner
-so the Interaction-owned `ControllerActions.get_binding` annotation can be
-resolved in a clean process without importing Gateway orchestration during
-Controller module initialization. It is an exact object facade, not a
-compatibility model or an additional binding contract. [Python
+`ConversationBinding` delegate resolves to the Gateway persistence-state owner.
+The scoped action surface imports that owner directly; the facade remains a
+finite exact object facade, not a compatibility model or an additional binding
+contract. [Python
 Ports](../ports/design.md) depend on contract types. Every other runtime
 component may depend on the public contract facade.
 

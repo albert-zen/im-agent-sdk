@@ -1,6 +1,6 @@
 # V1 repository audit and transformation DAG
 
-Status: DAG blocks A–B implemented; blocks C–I remain transformation targets
+Status: DAG blocks A–C implemented; blocks D–I remain transformation targets
 
 This audit compares the repository with `V1_DESIGN.md`. Existing behavior is
 not retained merely because it has tests. Safety evidence is reused; conflicting
@@ -43,34 +43,42 @@ Required transformation:
 - preserve durable admission and unknown-outcome protection while removing the
   hidden workflow.
 
-### P0: consumers manually compose cross-authority workflows
+### Resolved in B/C: scoped actions, workflows, and durable execution seam
 
-Current `CommandHandlerActions` exposes only low-level
-`execute_application`, `execute_gateway`, and `get_binding`. Common `/new`
-creates a Thread, binds it, and observes it manually. There is no workflow
-receipt, phase fingerprint, partial-success result, or safe resume boundary.
+The public low-level Controller action protocols and default Slash wrapper are
+removed. Commands and native UI integrations use the same immutable
+`ConversationActions`; trusted native administration uses
+`ApplicationActions`. Common `/new` submits one
+`CreateBindingWorkflowRequest`, and primitive delete never clears a binding.
 
-Required transformation:
+Landed C boundary:
 
 - introduce `ApplicationActions` and Conversation-scoped
   `ConversationActions`;
 - implement `create_and_select_project` and `create_and_bind_thread` once in
   Gateway;
-- add minimal memory/SQLite effect receipts for store-only Gateway mutations,
-  primitive native mutations, request response, and workflows, with atomic
-  Gateway commits or a durable `native_side_effect_started` fence, stable phase
-  IDs, monotonic binding-generation CAS, and conflict detection;
+- map every mutation to the exact B-owned `GatewayEffectExecutor` request seam,
+  with no C store/session/repository access;
 - represent success, failure, partial, and unknown explicitly;
 - use finite non-evicting receipt capacity, failing before effects when full;
-- remove hand-coded workflow sequences from common/product handlers.
+- remove hand-coded workflow sequences from common/product handlers; and
+- record concrete memory/SQLite replay, lease, unknown-outcome, and workflow
+  CAS as the required B integration acceptance rather than implementing a
+  second transaction path in C.
 
 Block B now supplies the closed outcomes, fingerprints, durable receipts, and
-typed store/native/workflow executor seam. Block C remains responsible for
-the scoped public actions and removal of manual consumer composition. For
-foreground-safe clear-observation, C sets
+typed store/native/workflow executor seam, with memory/SQLite parity coverage.
+Block C consumes that exact seam and owns the scoped public actions and removal
+of manual consumer composition. For foreground-safe clear-observation, C sets
 `StoreMutationPlan.route_delete_condition` to
 `RouteDeleteCondition.UNLESS_BOUND_TO_ROUTE_THREAD`; B evaluates it atomically
 against resulting binding state and C performs no store/session pre-read.
+The retiring repository-wired
+`ImAgentGateway` cannot create those actions, so it rejects Controller
+configuration before input rather than substituting its old generic wrapper.
+The executable reference Controller path remains block E work over the final
+coherent store/lifecycle composition; C's registry acceptance is focused at
+the exact action/handler boundary.
 
 ### Resolved in A: Project-creation evidence revised onto the uniform model
 
@@ -217,6 +225,9 @@ its leased session, and inject only `GatewayEffectExecutor` into C; neither B
 nor C bridges the retiring repository bundle.
 
 ### C. Scoped consumer actions and commands
+
+Status: implemented over the reviewed B executor/store seam; final public
+Gateway factory and lifecycle wiring remain later DAG work.
 
 1. Expose `ApplicationActions` and `ConversationActions` without concrete
    adapter/Gateway context.

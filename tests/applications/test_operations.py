@@ -3,12 +3,13 @@ from __future__ import annotations
 import unittest
 from datetime import UTC, datetime
 from importlib import import_module
-from typing import get_type_hints
+from typing import get_args, get_type_hints
 
 import imagent.applications as applications
 from imagent import contracts
 from imagent.applications import contract, operations, requests
-from imagent.interaction.messages import MessageRole, TextContent
+from imagent.interaction.media import AttachmentContent, AttachmentHandle
+from imagent.interaction.messages import Content, MessageRole, TextContent, TextFormat
 from imagent.interaction.operations import ContractError, ContractViolation
 
 
@@ -22,6 +23,7 @@ class ApplicationOperationTests(unittest.TestCase):
             "ApplicationOperationType",
             "CreateProject",
             "CreateThread",
+            "DeleteProject",
             "DeleteThread",
             "GetProject",
             "GetThread",
@@ -31,11 +33,22 @@ class ApplicationOperationTests(unittest.TestCase):
             "InterruptTurn",
             "ListProjects",
             "ListThreads",
+            "MAX_LIST_CURSOR_LENGTH",
+            "MAX_LIST_PAGE_ITEMS",
+            "MAX_LIST_QUERY_LENGTH",
             "MAX_PROJECT_CWD_LENGTH",
             "MAX_PROJECT_DISPLAY_NAME_LENGTH",
+            "MAX_THREAD_INITIAL_CONTEXT_ATTACHMENT_FIELD_LENGTH",
+            "MAX_THREAD_INITIAL_CONTEXT_HANDLE_LENGTH",
+            "MAX_THREAD_INITIAL_CONTEXT_ITEMS",
+            "MAX_THREAD_INITIAL_CONTEXT_METADATA_BYTES",
+            "MAX_THREAD_INITIAL_CONTEXT_METADATA_ITEMS",
+            "MAX_THREAD_INITIAL_CONTEXT_TEXT_LENGTH",
+            "MAX_THREAD_TITLE_LENGTH",
             "NativeThreadActivated",
             "ProjectRead",
             "ProjectCreated",
+            "ProjectDeleted",
             "ProjectsListed",
             "RespondRequest",
             "RequestResponded",
@@ -69,6 +82,10 @@ class ApplicationOperationTests(unittest.TestCase):
         self.assertIs(hints["application_ref"], contract.ApplicationRef)
         self.assertIs(hints["request_ref"], requests.RequestRef)
         self.assertEqual(hints["response"], requests.RequestResponse)
+        self.assertNotIn(
+            operations.DeleteProject,
+            get_args(operations._LegacyApplicationOperation),
+        )
 
     def test_project_creation_is_bounded_and_result_scope_is_application_owned(self) -> None:
         application = contract.ApplicationRef("managed-app")
@@ -101,9 +118,128 @@ class ApplicationOperationTests(unittest.TestCase):
                 )
             )
 
+    def test_managed_project_deletion_is_primitive_and_exactly_scoped(self) -> None:
+        application = contract.ApplicationRef("managed-app")
+        project = contract.ProjectRef("managed-app", "project-1")
+        operation = operations.DeleteProject(
+            operation_id="op-project-delete",
+            application_ref=application,
+            project_ref=project,
+            created_at=datetime.now(UTC),
+        )
+        operations.validate_application_operation(operation)
+        operations.validate_application_operation_result(
+            operation,
+            operations.ProjectDeleted(
+                operation_id=operation.operation_id,
+                completed_at=datetime.now(UTC),
+                project_ref=project,
+            ),
+        )
+        with self.assertRaisesRegex(ContractViolation, "different application"):
+            operations.validate_application_operation(
+                operations.DeleteProject(
+                    operation_id="op-project-delete-foreign",
+                    application_ref=application,
+                    project_ref=contract.ProjectRef("other-app", "project-1"),
+                    created_at=datetime.now(UTC),
+                )
+            )
+        with self.assertRaisesRegex(ContractViolation, "different project"):
+            operations.validate_application_operation_result(
+                operation,
+                operations.ProjectDeleted(
+                    operation_id=operation.operation_id,
+                    completed_at=datetime.now(UTC),
+                    project_ref=contract.ProjectRef("managed-app", "project-2"),
+                ),
+            )
+
+    def test_thread_creation_payload_is_bounded_before_native_execution(self) -> None:
+        application = contract.ApplicationRef("managed-app")
+        project = contract.ProjectRef("managed-app", "project-1")
+
+        def operation(
+            *,
+            title: str | None = None,
+            initial_context: tuple[Content, ...] = (),
+        ) -> operations.CreateThread:
+            return operations.CreateThread(
+                operation_id="op-thread-create",
+                application_ref=application,
+                project_ref=project,
+                title=title,
+                initial_context=initial_context,
+                created_at=datetime.now(UTC),
+            )
+
+        operations.validate_application_operation(
+            operation(title="Thread", initial_context=(TextContent("context"),))
+        )
+        for invalid in (
+            operation(title="x" * (operations.MAX_THREAD_TITLE_LENGTH + 1)),
+            operation(
+                initial_context=(TextContent("context"),)
+                * (operations.MAX_THREAD_INITIAL_CONTEXT_ITEMS + 1)
+            ),
+            operation(
+                initial_context=(
+                    TextContent("x" * (operations.MAX_THREAD_INITIAL_CONTEXT_TEXT_LENGTH + 1)),
+                )
+            ),
+            operation(
+                initial_context=(
+                    AttachmentContent(
+                        attachment_id="attachment-1",
+                        media_type="application/octet-stream",
+                        source=AttachmentHandle(
+                            "h" * (operations.MAX_THREAD_INITIAL_CONTEXT_HANDLE_LENGTH + 1)
+                        ),
+                    ),
+                )
+            ),
+        ):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ContractViolation):
+                    operations.validate_application_operation(invalid)
+
+        for invalid_size in (True, 1.5, "1"):
+            with self.subTest(invalid_size=invalid_size):
+                invalid = operation(
+                    initial_context=(
+                        AttachmentContent(
+                            attachment_id="attachment-1",
+                            media_type="application/octet-stream",
+                            source=AttachmentHandle("handle-1"),
+                            size_bytes=invalid_size,  # type: ignore[arg-type]
+                        ),
+                    )
+                )
+                with self.assertRaisesRegex(ContractViolation, "size_bytes"):
+                    operations.validate_application_operation(invalid)
+
+        for invalid_text in (
+            TextContent([], TextFormat.PLAIN),  # type: ignore[arg-type]
+            TextContent("context", "bogus"),  # type: ignore[arg-type]
+        ):
+            with self.subTest(invalid_text=invalid_text):
+                with self.assertRaisesRegex(ContractViolation, "initial_context text"):
+                    operations.validate_application_operation(
+                        operation(initial_context=(invalid_text,))
+                    )
+
     def test_operation_validation_preserves_scope_and_bounds(self) -> None:
         application = contract.ApplicationRef("zen-local")
         thread = contract.ThreadRef(contract.ProjectRef("zen-local", "workspace"), "thread-1")
+        with self.assertRaisesRegex(ContractViolation, "query"):
+            operations.validate_application_operation(
+                operations.ListProjects(
+                    operation_id="op-list-oversized",
+                    application_ref=application,
+                    query="x" * (operations.MAX_LIST_QUERY_LENGTH + 1),
+                    created_at=datetime.now(UTC),
+                )
+            )
         operations.validate_application_operation(
             operations.GetTurnCatchup(
                 operation_id="op-catchup",
@@ -227,3 +363,65 @@ class ApplicationOperationTests(unittest.TestCase):
                         ),
                     ),
                 )
+
+    def test_history_and_catchup_reject_adapters_that_ignore_requested_limits(self) -> None:
+        thread = contract.ThreadRef(
+            contract.ProjectRef("managed-app", "project-a"),
+            "thread-a",
+        )
+        now = datetime.now(UTC)
+        history_operation = operations.GetThreadHistory(
+            operation_id="op-history-limit",
+            application_ref=contract.ApplicationRef("managed-app"),
+            thread_ref=thread,
+            limit=1,
+            created_at=now,
+        )
+        turns = tuple(
+            contract.TurnHistoryEntry(
+                turn_ref=contract.TurnRef(thread, f"turn-{index}"),
+                status=contract.TurnStatus.COMPLETED,
+            )
+            for index in range(2)
+        )
+        with self.assertRaisesRegex(ContractViolation, "more Turns than requested"):
+            operations.validate_application_operation_result(
+                history_operation,
+                operations.ThreadHistoryRead(
+                    operation_id=history_operation.operation_id,
+                    completed_at=now,
+                    history=contract.ThreadHistory(thread_ref=thread, turns=turns),
+                ),
+            )
+
+        catchup_operation = operations.GetTurnCatchup(
+            operation_id="op-catchup-limit",
+            application_ref=contract.ApplicationRef("managed-app"),
+            thread_ref=thread,
+            limit=1,
+            created_at=now,
+        )
+        messages = tuple(
+            contract.AgentMessage(
+                agent_item_id=f"message-{index}",
+                thread_ref=thread,
+                role=MessageRole.ASSISTANT,
+                content=(TextContent("bounded"),),
+                created_at=now,
+            )
+            for index in range(2)
+        )
+        with self.assertRaisesRegex(ContractViolation, "more messages than requested"):
+            operations.validate_application_operation_result(
+                catchup_operation,
+                operations.TurnCatchupRead(
+                    operation_id=catchup_operation.operation_id,
+                    completed_at=now,
+                    catchup=contract.TurnCatchup(
+                        thread_ref=thread,
+                        turn_ref=contract.TurnRef(thread, "turn-live"),
+                        status=contract.TurnStatus.RUNNING,
+                        messages=messages,
+                    ),
+                ),
+            )

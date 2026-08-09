@@ -8,7 +8,7 @@ Parent: `applications`
 
 This leaf expresses the common typed control intent and results for one native
 Application: Project/Thread reads and lists, managed Project creation from a
-bounded CWD, Thread creation/deletion,
+bounded CWD, explicit managed Project deletion, Thread creation/deletion,
 history/catch-up/status reads, interruption, optional native activation, and
 the native `request.respond` mutation. It owns `ApplicationOperation`,
 `ApplicationOperationResult`, their closed variants and validators.
@@ -22,9 +22,9 @@ by ADR 0006.
 ## Inputs, outputs, and dependencies
 
 Gateway calls an adapter with a typed common operation; it returns the matching
-typed success result or an explicit `ApplicationOperationFailed`. Consumer
-Controller handlers request public operations through `ControllerActions`
-rather than calling an adapter directly. Operation identifiers are stable.
+typed success result or an explicit `ApplicationOperationFailed`. Consumers
+request these semantics through scoped actions rather than calling an adapter
+or submitting a generic operation. Operation identifiers are stable.
 This leaf depends on Interaction operation primitives and consumes the canonical
 request response shapes owned by `applications.requests`; it never depends on
 Gateway implementation.
@@ -37,14 +37,30 @@ operations schema remains a shared language-neutral contract.
 
 ## State, recovery, and structure
 
-`CreateProject`/`ProjectCreated` are common typed variants, but only a managed
-adapter with evidenced native creation advertises success. Fixed/flat adapters
-return the ordinary typed unsupported result and never change their configured
-workspace. `CreateThread` and `ListThreads` always name a Project because there
-is no Project-less resource branch.
+`CreateProject`/`ProjectCreated` and `DeleteProject`/`ProjectDeleted` are common
+typed variants, but only a managed adapter with evidenced native management
+advertises success. Fixed/flat adapters return the ordinary typed unsupported
+result and never change their configured workspace. Project deletion is a
+primitive native intent and never silently clears a Conversation binding.
+`CreateThread` and `ListThreads` always name a Project because there is no
+Project-less resource branch. Thread creation bounds the title, context item
+count, text, attachment fields, 512-character opaque handle, and canonical
+metadata before native execution.
+The scoped action layer takes an immutable snapshot of that validated context
+before deriving its fingerprint, so later caller mutation cannot change the
+native effect associated with a durable receipt.
+List queries, cursors, result cardinality, and returned cursors are also
+bounded at the operation boundary; a read cannot turn the scoped surface into
+an unbounded native enumeration.
 Operation result validation walks history and catch-up recursively: every
 nested `TurnRef` and `AgentMessage` must belong to the requested Thread rather
-than merely the same Application.
+than merely the same Application, and neither result may contain more entries
+than the requested limit.
+
+The retiring repository-wired `ImAgentGateway.execute_application` executes
+only its historical operation subset. A `DeleteProject` submission is rejected
+as typed unsupported before adapter dispatch; managed deletion enters only
+through principal-scoped `ApplicationActions` and B's durable native fence.
 
 Operations do not establish an SDK Agent state machine. A native mutation that
 may have begun but has no truthful result remains ambiguous; adapters do not

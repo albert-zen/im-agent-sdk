@@ -223,6 +223,24 @@ class ClearConversationThread(_GatewayOperation):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class ClearConversationProject(_GatewayOperation):
+    expected_generation: int | None = None
+    type: _GatewayOperationType = field(
+        init=False,
+        default=_GatewayOperationType.CONVERSATION_CLEAR_PROJECT,
+    )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ClearConversationApplication(_GatewayOperation):
+    expected_generation: int | None = None
+    type: _GatewayOperationType = field(
+        init=False,
+        default=_GatewayOperationType.CONVERSATION_CLEAR_APPLICATION,
+    )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ConversationBound(_GatewayOperationSucceeded):
     type: _GatewayOperationType
     binding: ConversationBinding
@@ -234,7 +252,11 @@ ConversationBound.__annotations__["binding"] = ForwardRef(
 )
 
 BindingOperation: TypeAlias = (
-    BindConversationToProject | BindConversationToThread | ClearConversationThread
+    BindConversationToProject
+    | BindConversationToThread
+    | ClearConversationThread
+    | ClearConversationProject
+    | ClearConversationApplication
 )
 
 
@@ -270,6 +292,25 @@ def _validate_binding_operation_result(operation: BindingOperation, result: obje
     elif isinstance(operation, BindConversationToThread):
         if result.binding.thread_ref != operation.thread_ref:
             raise ContractViolation("conversation.bind_thread returned a different thread")
+    elif isinstance(operation, ClearConversationProject):
+        if (
+            result.binding.application_ref is None
+            or result.binding.project_ref is not None
+            or result.binding.thread_ref is not None
+        ):
+            raise ContractViolation("conversation.clear_project returned an incompatible binding")
+    elif isinstance(operation, ClearConversationApplication):
+        if any(
+            value is not None
+            for value in (
+                result.binding.application_ref,
+                result.binding.project_ref,
+                result.binding.thread_ref,
+            )
+        ):
+            raise ContractViolation(
+                "conversation.clear_application returned an incompatible binding"
+            )
     elif result.binding.thread_ref is not None:
         raise ContractViolation("conversation.clear_thread did not clear the thread")
 
@@ -277,6 +318,8 @@ def _validate_binding_operation_result(operation: BindingOperation, result: obje
 __all__ = [
     "BindConversationToProject",
     "BindConversationToThread",
+    "ClearConversationApplication",
+    "ClearConversationProject",
     "ClearConversationThread",
     "ConversationBound",
 ]

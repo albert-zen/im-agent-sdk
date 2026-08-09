@@ -39,11 +39,22 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     import imagent.gateway.routing.projection_routes as owner
     from imagent.gateway.persistence import ThreadProjectionRoute
 
-    for name in ("ObserveThread", "ProjectionPolicy", "ThreadObserved"):
+    for name in (
+        "ClearThreadObservation",
+        "ObserveThread",
+        "ProjectionPolicy",
+        "ThreadObservationCleared",
+        "ThreadObserved",
+    ):
         assert getattr(routing_facade, name) is getattr(owner, name)
         assert getattr(owner, name).__module__ == "imagent.gateway.routing.projection_routes"
     for module in (contracts_facade,):
-        for name in ("ObserveThread", "ThreadObserved"):
+        for name in (
+            "ClearThreadObservation",
+            "ObserveThread",
+            "ThreadObservationCleared",
+            "ThreadObserved",
+        ):
             assert not hasattr(module, name)
             assert name not in getattr(module, "__all__", ())
     assert not hasattr(persistence_facade, "ProjectionPolicy")
@@ -75,7 +86,13 @@ class ProjectionRouteContractOwnershipTests(unittest.TestCase):
     def test_public_facade_identity_and_historical_negative_surface(self) -> None:
         self.assertEqual(
             owner.__all__,
-            ["ObserveThread", "ProjectionPolicy", "ThreadObserved"],
+            [
+                "ClearThreadObservation",
+                "ObserveThread",
+                "ProjectionPolicy",
+                "ThreadObservationCleared",
+                "ThreadObserved",
+            ],
         )
         for name in owner.__all__:
             with self.subTest(name=name):
@@ -83,7 +100,12 @@ class ProjectionRouteContractOwnershipTests(unittest.TestCase):
                 self.assertIs(getattr(routing_facade, name), value)
                 self.assertEqual(value.__module__, owner.__name__)
         for module in (contracts_facade,):
-            for name in ("ObserveThread", "ThreadObserved"):
+            for name in (
+                "ClearThreadObservation",
+                "ObserveThread",
+                "ThreadObservationCleared",
+                "ThreadObserved",
+            ):
                 with self.subTest(module=module.__name__, name=name):
                     self.assertFalse(hasattr(module, name))
                     self.assertNotIn(name, getattr(module, "__all__", ()))
@@ -97,7 +119,12 @@ class ProjectionRouteContractOwnershipTests(unittest.TestCase):
             "imagent.contracts.operations",
             "imagent.contracts.validators",
         ):
-            for name in ("ObserveThread", "ThreadObserved"):
+            for name in (
+                "ClearThreadObservation",
+                "ObserveThread",
+                "ThreadObservationCleared",
+                "ThreadObserved",
+            ):
                 with self.subTest(module=module_name, name=name):
                     with self.assertRaises(ImportError):
                         exec(f"from {module_name} import {name}")
@@ -203,6 +230,35 @@ class ProjectionRouteContractOwnershipTests(unittest.TestCase):
             ),
         )
         self.assertTrue(route_id.startswith("imagent:projection:sha256:"))
+
+    def test_clear_observation_is_closed_and_exactly_scoped(self) -> None:
+        conversation = ConversationRef("channel-a", "conversation-a")
+        thread = ThreadRef(ProjectRef("application-a", "workspace"), "thread-a")
+        operation = owner.ClearThreadObservation(
+            operation_id="clear-observation-a",
+            conversation_ref=conversation,
+            actor="user-a",
+            thread_ref=thread,
+            created_at=datetime.now(UTC),
+        )
+        owner._validate_observe_operation(operation)
+        owner._validate_observe_operation_result(
+            operation,
+            owner.ThreadObservationCleared(
+                operation_id=operation.operation_id,
+                completed_at=datetime.now(UTC),
+                thread_ref=thread,
+            ),
+        )
+        with self.assertRaisesRegex(ContractViolation, "different Thread"):
+            owner._validate_observe_operation_result(
+                operation,
+                owner.ThreadObservationCleared(
+                    operation_id=operation.operation_id,
+                    completed_at=datetime.now(UTC),
+                    thread_ref=ThreadRef(thread.project_ref, "thread-b"),
+                ),
+            )
 
 
 class ProjectionRouteAuthorityTests(unittest.IsolatedAsyncioTestCase):

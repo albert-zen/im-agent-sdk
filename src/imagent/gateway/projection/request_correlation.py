@@ -22,11 +22,11 @@ from ...applications.contract import (
 )
 from ...applications.events import AgentEvent, AgentEventType
 from ...applications.operations import (
-    ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,
     RequestResponded,
     RespondRequest,
+    _LegacyApplicationOperation,
 )
 from ...applications.requests import (
     ApprovalResponse,
@@ -88,7 +88,7 @@ DeliverRequestOutbound = Callable[
     Awaitable[IdempotencyClaimStatus],
 ]
 ExecuteApplication = Callable[
-    [ApplicationOperation],
+    [_LegacyApplicationOperation],
     Awaitable[ApplicationOperationResult],
 ]
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import shlex
 import tempfile
 import unittest
 from dataclasses import FrozenInstanceError, replace
@@ -15,7 +14,9 @@ from imagent.applications.capabilities import ProjectMode, SupportLevel
 from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef, TurnRef
 from imagent.applications.operations import (
     ActivateNativeThread,
+    ApplicationOperationFailed,
     CreateThread,
+    DeleteProject,
     ListProjects,
     ListThreads,
     NativeThreadActivated,
@@ -59,7 +60,7 @@ from imagent.gateway.projection import RequestResponseRouted, RespondToRequest
 from imagent.gateway.routing import ObserveThread, ProjectionPolicy
 from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.channels import DeliveryReceipt
-from imagent.interaction.controllers import MarkdownRequestPresenter, SlashController
+from imagent.interaction.controllers import MarkdownRequestPresenter
 from imagent.interaction.messages import (
     ConversationRef,
     InboundMessage,
@@ -538,6 +539,24 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(threads, ThreadsListed)
         self.assertEqual(await self.bindings.get(self.conversation), original)
 
+    async def test_legacy_application_executor_rejects_managed_project_delete(self) -> None:
+        operation = DeleteProject(
+            operation_id="legacy-project-delete",
+            application_ref=self.application.summary.ref,
+            project_ref=self.application.default_project_ref,
+            created_at=_now(),
+        )
+        with patch.object(
+            self.application,
+            "execute",
+            AsyncMock(side_effect=AssertionError("adapter must not receive project.delete")),
+        ) as execute:
+            result = await self.gateway.execute_application(operation)  # type: ignore[arg-type]
+        self.assertIsInstance(result, ApplicationOperationFailed)
+        assert isinstance(result, ApplicationOperationFailed)
+        self.assertEqual(result.error.code, OperationErrorCode.UNSUPPORTED.value)
+        execute.assert_not_awaited()
+
     async def test_binding_thread_does_not_activate_native_thread(self) -> None:
         created = await self.gateway.execute_application(
             CreateThread(
@@ -713,7 +732,6 @@ class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
                 request_correlations=self.correlations,
             ),
             extensions=GatewayExtensions(
-                controller=SlashController(),
                 request_presenter=MarkdownRequestPresenter(),
             ),
             projection_policy=ProjectionPolicy.ALL_OBSERVERS,
@@ -761,7 +779,6 @@ class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
                 request_correlations=self.correlations,
             ),
             extensions=GatewayExtensions(
-                controller=SlashController(),
                 request_presenter=MarkdownRequestPresenter(),
             ),
             projection_policy=ProjectionPolicy.ALL_OBSERVERS,
@@ -1483,65 +1500,6 @@ class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             result.error.code,
             OperationErrorCode.REQUEST_RESOLVED.value,
-        )
-
-    async def test_typed_action_and_markdown_use_same_response_operation(
-        self,
-    ) -> None:
-        native_request = await self.application.open_approval_request(
-            self.thread.ref,
-            turn_id="turn-native-action",
-        )
-        await _wait_for_correlation_count(
-            self.correlations,
-            native_request.request_ref,
-            2,
-        )
-        result = await self.gateway.execute_gateway(
-            RespondToRequest(
-                operation_id="typed-action-response",
-                conversation_ref=self.conversation_a,
-                actor="user-a",
-                request_ref=native_request.request_ref,
-                response=ApprovalResponse("accept"),
-                created_at=_now(),
-            )
-        )
-        self.assertNotIsInstance(result, GatewayOperationFailed)
-        self.assertEqual(
-            self.application.request_responses[native_request.request_ref],
-            ApprovalResponse("accept"),
-        )
-
-        markdown_request = await self.application.open_approval_request(
-            self.thread.ref,
-            turn_id="turn-markdown-response",
-        )
-        await _wait_for_correlation_count(
-            self.correlations,
-            markdown_request.request_ref,
-            2,
-        )
-        command = " ".join(
-            (
-                "/respond",
-                shlex.quote(markdown_request.request_ref.application_ref.application_instance_id),
-                shlex.quote(markdown_request.request_ref.native_request_id),
-                shlex.quote("decline"),
-            )
-        )
-        await self.channel.on_message(
-            InboundMessage(
-                message_id="markdown-response",
-                conversation_ref=self.conversation_a,
-                sender="user-a",
-                content=(TextContent(command),),
-                created_at=_now(),
-            )
-        )
-        self.assertEqual(
-            self.application.request_responses[markdown_request.request_ref],
-            ApprovalResponse("decline"),
         )
 
     async def test_unknown_request_locks_do_not_accumulate(self) -> None:

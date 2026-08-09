@@ -14,17 +14,23 @@ This leaf owns:
 - `ListApplications`, `SelectApplication`, `ApplicationsListed`, and
   `GatewayOperationFailed`;
 - aggregate field, discriminant, identity, and postcondition validation;
-- typed dispatch and finite per-Conversation execution serialization;
+- validation for every closed variant and finite per-Conversation execution
+  serialization for the quarantined pre-v1 executor subset;
 - delegation to the binding, projection-route, and request-correlation owners
   through explicit typed methods or ports. `ApplicationOperation` remains a
   separate closed contract and is not a Gateway aggregate variant.
 
-The composition implementation is the private
-`_GatewayOperationExecutor`. It is not an accepted public contract and is not
-re-exported by `imagent.gateway.routing` or the Gateway package facade. Its
-constructor is used only by the Gateway root with the private, statically
-typed delegate port; consumers receive the existing `ControllerActions` and
-Gateway methods instead.
+The composition implementation is the private `_GatewayOperationExecutor`.
+It is not an accepted public contract and is not re-exported by
+`imagent.gateway.routing` or the Gateway package facade. Its constructor is
+used only by the retiring `ImAgentGateway` root with the private, statically
+typed delegate port. That root and executor accept only the seven historical
+variants for which the loose repository composition already has an owner
+delegate. The C-owned clear-project, clear-application, and clear-observation
+variants remain members of the public closed operation contract for validation
+and schema identity, but execute only through `ConversationActions` mapped to
+B's coherent effect executor. The legacy path never reports them as accepted
+and never implements a competing repository sequence.
 
 It does not own slash syntax, product commands, permissions, presentation,
 native Application operation semantics, or native Application state. It also
@@ -32,19 +38,20 @@ does not own binding values, binding repository/CAS or same-target authority;
 projection observation values, route policy or route persistence;
 request-response values, response validation, claim/transition fences,
 correlation persistence or replay; or generic persistence repositories. A
-Controller recognizes interaction grammar and invokes typed actions;
-`ControllerActions` is the public composition path. Application operations
-remain a separate closed contract and enter through the existing
-`ImAgentGateway.execute_application` and `ControllerActions.execute_application`
-paths; the Gateway aggregate does not dispatch or call them.
+Controller recognizes interaction grammar and invokes typed actions; scoped
+actions are the public composition path. Application operations remain a
+separate closed contract and enter through `ApplicationActions`; the Gateway
+aggregate does not dispatch or call them.
 
 ## Contract and execution
 
 Every variant has behavior-specific inputs and a behavior-specific success
-result. Free-form metadata, `Any` contexts, service locators, generic pipeline
-hooks, and stage callbacks are not extension mechanisms. Unknown operation
-types and unsupported capabilities fail explicitly instead of falling back to
-text commands or approximate native behavior.
+result. The v1 scoped action path validates every variant before mapping its
+closed fields to the durable executor. Free-form metadata, `Any` contexts,
+service locators, generic pipeline hooks, and stage callbacks are not extension
+mechanisms. Unknown operation types and unsupported capabilities fail
+explicitly instead of falling back to text commands or approximate native
+behavior.
 
 Conversation-scoped mutations execute under the stable Conversation key so
 local contenders cannot reorder binding, route, or response authority. Work

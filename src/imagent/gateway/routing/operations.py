@@ -9,7 +9,11 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Protocol, TypeAlias
 
-from ...applications.contract import ApplicationRef, ApplicationSummary
+from ...applications.contract import (
+    ApplicationRef,
+    ApplicationSummary,
+    validate_application_summary,
+)
 from ...interaction.messages import ConversationRef
 from ...interaction.operations import (
     ContractError,
@@ -27,14 +31,22 @@ if TYPE_CHECKING:
     from .bindings import (
         BindConversationToProject,
         BindConversationToThread,
+        ClearConversationApplication,
+        ClearConversationProject,
         ClearConversationThread,
         ConversationBound,
     )
-    from .projection_routes import ObserveThread, ThreadObserved
+    from .projection_routes import (
+        ClearThreadObservation,
+        ObserveThread,
+        ThreadObservationCleared,
+        ThreadObserved,
+    )
 
 
 _UNION_COMPLETED = False
 _UNION_COMPLETING = False
+_MAX_APPLICATION_LIST_ITEMS = 1000
 
 
 class GatewayOperationType(StrEnum):
@@ -43,8 +55,11 @@ class GatewayOperationType(StrEnum):
     CONVERSATION_BIND_PROJECT = "conversation.bind_project"
     CONVERSATION_BIND_THREAD = "conversation.bind_thread"
     CONVERSATION_CLEAR_THREAD = "conversation.clear_thread"
+    CONVERSATION_CLEAR_PROJECT = "conversation.clear_project"
+    CONVERSATION_CLEAR_APPLICATION = "conversation.clear_application"
     CONVERSATION_RESPOND_REQUEST = "conversation.respond_request"
     THREAD_OBSERVE = "thread.observe"
+    THREAD_CLEAR_OBSERVATION = "thread.clear_observation"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -105,7 +120,7 @@ class GatewayOperationFailed:
 
 
 if TYPE_CHECKING:
-    GatewayOperation: TypeAlias = (
+    _LegacyGatewayOperation: TypeAlias = (
         ListApplications
         | SelectApplication
         | BindConversationToProject
@@ -114,10 +129,23 @@ if TYPE_CHECKING:
         | ObserveThread
         | RespondToRequest
     )
+    GatewayOperation: TypeAlias = (
+        ListApplications
+        | SelectApplication
+        | BindConversationToProject
+        | BindConversationToThread
+        | ClearConversationThread
+        | ClearConversationProject
+        | ClearConversationApplication
+        | ObserveThread
+        | ClearThreadObservation
+        | RespondToRequest
+    )
     GatewayOperationResult: TypeAlias = (
         ApplicationsListed
         | ConversationBound
         | ThreadObserved
+        | ThreadObservationCleared
         | RequestResponseRouted
         | GatewayOperationFailed
     )
@@ -201,11 +229,15 @@ def _complete_gateway_union() -> None:
         binding_names = (
             "BindConversationToProject",
             "BindConversationToThread",
+            "ClearConversationApplication",
+            "ClearConversationProject",
             "ClearConversationThread",
             "ConversationBound",
         )
         projection_route_names = (
+            "ClearThreadObservation",
             "ObserveThread",
+            "ThreadObservationCleared",
             "ThreadObserved",
         )
         request_names = (
@@ -228,6 +260,18 @@ def _complete_gateway_union() -> None:
             | binding_values["BindConversationToProject"]
             | binding_values["BindConversationToThread"]
             | binding_values["ClearConversationThread"]
+            | binding_values["ClearConversationProject"]
+            | binding_values["ClearConversationApplication"]
+            | projection_route_values["ObserveThread"]
+            | projection_route_values["ClearThreadObservation"]
+            | request_values["RespondToRequest"]
+        )
+        legacy_operation_union = (
+            ListApplications
+            | SelectApplication
+            | binding_values["BindConversationToProject"]
+            | binding_values["BindConversationToThread"]
+            | binding_values["ClearConversationThread"]
             | projection_route_values["ObserveThread"]
             | request_values["RespondToRequest"]
         )
@@ -235,6 +279,7 @@ def _complete_gateway_union() -> None:
             ApplicationsListed
             | binding_values["ConversationBound"]
             | projection_route_values["ThreadObserved"]
+            | projection_route_values["ThreadObservationCleared"]
             | request_values["RequestResponseRouted"]
             | GatewayOperationFailed
         )
@@ -243,6 +288,7 @@ def _complete_gateway_union() -> None:
         globals().update({name: request_values[name] for name in request_names})
         globals()["GatewayOperation"] = operation_union
         globals()["GatewayOperationResult"] = result_union
+        globals()["_LegacyGatewayOperation"] = legacy_operation_union
         _UNION_COMPLETED = True
     finally:
         _UNION_COMPLETING = False
@@ -276,8 +322,11 @@ def validate_gateway_operation(operation: GatewayOperation) -> None:
     require_identifier(operation.conversation_ref.channel_instance_id, "channel_instance_id")
     require_identifier(operation.conversation_ref.native_conversation_id, "native_conversation_id")
     expected_generation = getattr(operation, "expected_generation", None)
-    if expected_generation is not None and expected_generation < 0:
-        raise ContractViolation("expected_generation cannot be negative")
+    if expected_generation is not None:
+        if not isinstance(expected_generation, int) or isinstance(expected_generation, bool):
+            raise ContractViolation("expected_generation must be a non-negative integer")
+        if expected_generation < 0:
+            raise ContractViolation("expected_generation cannot be negative")
     if isinstance(operation, SelectApplication):
         require_identifier(
             operation.application_ref.application_instance_id,
@@ -285,12 +334,18 @@ def validate_gateway_operation(operation: GatewayOperation) -> None:
         )
     if isinstance(
         operation,
-        (BindConversationToProject, BindConversationToThread, ClearConversationThread),
+        (
+            BindConversationToProject,
+            BindConversationToThread,
+            ClearConversationThread,
+            ClearConversationProject,
+            ClearConversationApplication,
+        ),
     ):
         from .bindings import _validate_binding_operation
 
         _validate_binding_operation(operation)
-    elif isinstance(operation, ObserveThread):
+    elif isinstance(operation, (ObserveThread, ClearThreadObservation)):
         from .projection_routes import _validate_observe_operation
 
         _validate_observe_operation(operation)
@@ -323,19 +378,33 @@ def validate_gateway_operation_result(
     if isinstance(operation, ListApplications):
         if not isinstance(result, ApplicationsListed):
             raise ContractViolation("application.list must return ApplicationsListed")
+        if not isinstance(result.applications, tuple):
+            raise ContractViolation("application.list must return an applications tuple")
+        if len(result.applications) > _MAX_APPLICATION_LIST_ITEMS:
+            raise ContractViolation(
+                f"application.list returned more than {_MAX_APPLICATION_LIST_ITEMS} applications"
+            )
+        for application in result.applications:
+            validate_application_summary(application)
         return
     if isinstance(operation, SelectApplication):
         _validate_application_selection_result(operation, result)
         return
     if isinstance(
         operation,
-        (BindConversationToProject, BindConversationToThread, ClearConversationThread),
+        (
+            BindConversationToProject,
+            BindConversationToThread,
+            ClearConversationThread,
+            ClearConversationProject,
+            ClearConversationApplication,
+        ),
     ):
         from .bindings import _validate_binding_operation_result
 
         _validate_binding_operation_result(operation, result)
         return
-    if isinstance(operation, ObserveThread):
+    if isinstance(operation, (ObserveThread, ClearThreadObservation)):
         from .projection_routes import _validate_observe_operation_result
 
         _validate_observe_operation_result(operation, result)
@@ -398,7 +467,7 @@ class _GatewayOperationExecutor:
     ) -> AbstractAsyncContextManager[None]:
         return self._conversation_locks.hold(conversation_ref)
 
-    async def execute(self, operation: GatewayOperation) -> GatewayOperationResult:
+    async def execute(self, operation: _LegacyGatewayOperation) -> GatewayOperationResult:
         try:
             async with self._conversation_locks.hold(operation.conversation_ref):
                 return await self.execute_locked(operation)
@@ -412,7 +481,7 @@ class _GatewayOperationExecutor:
 
     async def execute_locked(
         self,
-        operation: GatewayOperation,
+        operation: _LegacyGatewayOperation,
     ) -> GatewayOperationResult:
         try:
             validate_gateway_operation(operation)
@@ -430,7 +499,10 @@ class _GatewayOperationExecutor:
             error=contract_error,
         )
 
-    async def _dispatch(self, operation: GatewayOperation) -> GatewayOperationResult:
+    async def _dispatch(
+        self,
+        operation: _LegacyGatewayOperation,
+    ) -> GatewayOperationResult:
         completed_at = datetime.now(UTC)
         if isinstance(operation, ListApplications):
             return ApplicationsListed(

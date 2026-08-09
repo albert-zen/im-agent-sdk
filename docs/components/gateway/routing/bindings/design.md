@@ -3,8 +3,9 @@
 ## Purpose and ownership
 
 `gateway.routing.bindings` owns the typed contract values for binding a
-Conversation to a Project or Thread, clearing its Thread, and reporting the
-result. It also owns their pure field/postcondition validation, the binding
+Conversation to a Project or Thread, clearing its Thread, Project, or
+Application selection, and reporting the result. It also owns their pure
+field/postcondition validation, the binding
 repository/CAS authority, and same-target convergence. One private, typed,
 constructor-injected binding runtime is the sole caller that mutates the
 binding repository; Gateway composition supplies validated Application truth
@@ -12,7 +13,7 @@ and sequences that runtime with projection-route work.
 
 This leaf owns:
 
-- typed project/Thread bind and Thread-clear operation/result values;
+- typed Project/Thread bind and hierarchical clear operation/result values;
 - pure binding-operation field validation;
 - pure binding-result identity and postcondition validation;
 - binding repository mutation and optimistic CAS; and
@@ -41,8 +42,12 @@ explicit typed methods; it does not perform repository reads, writes, CAS, or
 same-target comparison itself.
 
 The public operation/result contracts are `BindConversationToProject`,
-`BindConversationToThread`, `ClearConversationThread`, and
-`ConversationBound`. Their focused implementation owner is
+`BindConversationToThread`, `ClearConversationThread`,
+`ClearConversationProject`, `ClearConversationApplication`, and
+`ConversationBound`. Clear Thread retains Project, clear Project retains
+Application, and clear Application leaves the Conversation unbound. The new
+clear precondition fields use `expected_generation` exclusively, with no
+revision alias, and accept only non-Boolean non-negative integers. Their focused implementation owner is
 `imagent.gateway.routing.bindings`; `imagent.gateway.routing` and the stable
 `imagent.contracts` facade re-export those exact objects. Their current and
 target exports are recorded in the [component map](../../../component-map.yml).

@@ -31,7 +31,7 @@ the registry before Gateway startup:
 
 ```python
 registry = CommandRegistry()
-register_common_commands(registry, include=("help",))
+include_common_commands(registry, names=("help",))
 registry.register(CommandDefinition("about", handler=about))
 registry.freeze()
 
@@ -45,9 +45,10 @@ is not global state, a service locator, or an SDK Core command. A frozen
 registry makes startup validation explicit and lets the bounded registry own
 handler lifetime and diagnostics.
 
-An effectful command must use the typed `ControllerActions` surface. A
-read-only command can return bounded `CommandResult` content. Neither command
-receives a mutable Gateway context or a raw native callback.
+Every command receives the exact Conversation-scoped `ConversationActions`
+surface assembled for its authenticated inbound message. A read-only command
+can return bounded `CommandResult` content. Neither command receives a mutable
+Gateway context or a raw native callback.
 
 ## Boundary rules
 

@@ -4,9 +4,7 @@ from importlib import import_module
 from typing import TYPE_CHECKING
 
 from .contract import (
-    CommandHandlerActions,
     CommandInvocationFacts,
-    ControllerActions,
     ControllerLifecycle,
     InboundController,
 )
@@ -17,12 +15,12 @@ from .registry import (
     CommandHandler,
     CommandHandlerTimeout,
     CommandInvocation,
+    CommandLimits,
     CommandRegistry,
     CommandRegistryDiagnostics,
     CommandRegistryError,
     CommandRegistryFailureCode,
     CommandRegistryFrozenError,
-    CommandRegistryLimits,
     CommandRegistryNotFrozenError,
     CommandResult,
     CommandResultError,
@@ -36,18 +34,16 @@ from .request_presentation import (
 )
 
 if TYPE_CHECKING:
-    from .common import SlashController, register_common_commands
+    from .common import include_common_commands
 
-_COMMON_COMMAND_EXPORTS = frozenset({"SlashController", "register_common_commands"})
+_COMMON_COMMAND_EXPORTS = frozenset({"include_common_commands"})
 
 __all__ = [
-    "ControllerActions",
     "ControllerLifecycle",
     "CommandArgumentContract",
     "CommandDefinition",
     "CommandExecutionSafety",
     "CommandHandler",
-    "CommandHandlerActions",
     "CommandHandlerTimeout",
     "CommandInvocation",
     "CommandInvocationFacts",
@@ -56,7 +52,7 @@ __all__ = [
     "CommandRegistryError",
     "CommandRegistryFailureCode",
     "CommandRegistryFrozenError",
-    "CommandRegistryLimits",
+    "CommandLimits",
     "CommandRegistryNotFrozenError",
     "CommandResult",
     "CommandResultError",
@@ -65,9 +61,8 @@ __all__ = [
     "MarkdownRequestPresenter",
     "RequestPresentation",
     "RequestPresenter",
-    "SlashController",
     "derive_command_invocation_id",
-    "register_common_commands",
+    "include_common_commands",
 ]
 
 

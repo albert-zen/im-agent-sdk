@@ -8,7 +8,8 @@ Parent: `applications`
 
 This leaf defines the common typed boundary through which Gateway uses one
 native Agent Application without claiming its truth. Consumer Controllers use
-typed `ControllerActions`; they do not depend directly on an adapter.
+the scoped `ConversationActions` or `ApplicationActions` surfaces; they do not
+depend directly on an adapter.
 It owns `AgentApplicationAdapter`, `ApplicationSummary`, typed input dispatch
 facts/results, the complete Project/Thread/Turn/resource/history model family,
 `AgentMessage`, `ApplicationInputOutcomeUnknown`, `validate_thread_ref`, and

@@ -12,6 +12,8 @@ if TYPE_CHECKING:
     from ..gateway.routing.bindings import (
         BindConversationToProject,
         BindConversationToThread,
+        ClearConversationApplication,
+        ClearConversationProject,
         ClearConversationThread,
         ConversationBound,
     )
@@ -63,6 +65,8 @@ _BINDING_EXPORTS = frozenset(
     {
         "BindConversationToProject",
         "BindConversationToThread",
+        "ClearConversationApplication",
+        "ClearConversationProject",
         "ClearConversationThread",
         "ConversationBound",
     }
@@ -109,6 +113,8 @@ __all__ = [
     "ApplicationsListed",
     "BindConversationToProject",
     "BindConversationToThread",
+    "ClearConversationApplication",
+    "ClearConversationProject",
     "ClearConversationThread",
     "ConversationBound",
     "GatewayOperation",

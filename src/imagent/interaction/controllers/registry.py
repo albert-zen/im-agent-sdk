@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Protocol
+from typing import TYPE_CHECKING, ForwardRef, Protocol
 
 from ..messages import (
     ConversationRef,
@@ -18,12 +18,10 @@ from ..messages import (
     TextContent,
     TextFormat,
 )
-from .contract import (
-    CommandHandlerActions,
-    ControllerActions,
-    _derive_command_invocation_id,
-    _narrow_handler_actions,
-)
+from .contract import _derive_command_invocation_id
+
+if TYPE_CHECKING:
+    from ...gateway.actions import ConversationActions
 
 _COMMAND_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
@@ -49,7 +47,7 @@ class CommandRegistryFailureCode(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class CommandRegistryLimits:
+class CommandLimits:
     max_commands: int = 64
     max_aliases: int = 256
     max_aliases_per_command: int = 8
@@ -152,8 +150,14 @@ class CommandHandler(Protocol):
     async def __call__(
         self,
         invocation: CommandInvocation,
-        actions: CommandHandlerActions,
+        actions: ConversationActions,
     ) -> CommandResult: ...
+
+
+CommandHandler.__call__.__annotations__["actions"] = ForwardRef(
+    "ConversationActions",
+    module="imagent.gateway.actions",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,8 +217,8 @@ class _ParsedCommand:
 class CommandRegistry:
     """One explicit, frozen, bounded command composition."""
 
-    def __init__(self, limits: CommandRegistryLimits | None = None) -> None:
-        self._limits = limits or CommandRegistryLimits()
+    def __init__(self, limits: CommandLimits | None = None) -> None:
+        self._limits = limits or CommandLimits()
         self._definitions: dict[str, CommandDefinition] = {}
         self._names: dict[str, str] = {}
         self._frozen = False
@@ -231,7 +235,7 @@ class CommandRegistry:
         self._last_failure_code: CommandRegistryFailureCode | None = None
 
     @property
-    def limits(self) -> CommandRegistryLimits:
+    def limits(self) -> CommandLimits:
         return self._limits
 
     @property
@@ -299,7 +303,7 @@ class CommandRegistry:
     async def handle(
         self,
         message: InboundMessage,
-        actions: ControllerActions,
+        actions: ConversationActions,
     ) -> tuple[OutboundMessage, ...] | None:
         self.validate_startup()
         try:
@@ -346,14 +350,14 @@ class CommandRegistry:
         self._admitted_count += 1
         if definition.safety is CommandExecutionSafety.EFFECTFUL:
             try:
-                await actions.enter_effectful_command(invocation)
+                await actions._enter_effectful_command(invocation)
             except BaseException:
                 self._admitted_count -= 1
                 raise
         result = await self._invoke(
             definition,
             invocation,
-            _narrow_handler_actions(actions),
+            actions,
         )
         result = self._validate_result(result)
         if result.status is CommandResultStatus.KNOWN_FAILURE:
@@ -397,7 +401,7 @@ class CommandRegistry:
         self,
         definition: CommandDefinition,
         invocation: CommandInvocation,
-        actions: CommandHandlerActions,
+        actions: ConversationActions,
     ) -> CommandResult:
         timeout = definition.handler_timeout_seconds or self._limits.handler_timeout_seconds
         try:
@@ -563,6 +567,12 @@ class CommandRegistry:
 
     def _record_failure(self, code: CommandRegistryFailureCode) -> None:
         self._last_failure_code = code
+
+
+CommandRegistry.handle.__annotations__["actions"] = ForwardRef(
+    "ConversationActions",
+    module="imagent.gateway.actions",
+)
 
 
 def derive_command_invocation_id(

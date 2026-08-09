@@ -43,5 +43,6 @@ suites, Gateway admission tests, schema validation, and Pyright. Exact sole-faca
 historical imports, and `imagent.channels` adapter identity live in
 `tests/interaction/channels/test_contract.py`; native Channel suites and
 planner tests provide behavioral parity. Gateway operation tests enter through
-`ControllerActions` or the public typed Gateway execution surface rather than
-injecting an operation through a fake Channel lifecycle callback.
+the focused primitive executor and scoped-action tests enter through
+`ConversationActions`, rather than injecting an operation through a fake
+Channel lifecycle callback.

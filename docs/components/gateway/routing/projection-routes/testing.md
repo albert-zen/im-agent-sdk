@@ -3,6 +3,8 @@
 Projection-route conformance must prove:
 
 - stable route identity and uniqueness for each Thread/Conversation edge;
+- explicit clear-observation is a closed scoped operation and never changes
+  input binding or native UI state;
 - required same-Application Project ancestry in every route and rejection of
   Project-less persisted or in-memory Thread references;
 - one Thread can fan out to multiple Conversations without creating multiple

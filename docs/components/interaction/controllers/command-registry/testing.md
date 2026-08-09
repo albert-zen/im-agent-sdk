@@ -22,15 +22,14 @@ Required scenarios:
   content stays unconsumed;
 - SDK common and consumer product commands compose in one registry without
   replacement or shadowing;
-- product handlers receive only their constructor-injected typed service plus
-  the documented invocation/action surface;
+- product handlers receive the exact scoped `ConversationActions` instance
+  plus constructor-injected typed services;
 - replay-safe/read-only and effectful definitions have a closed typed safety
   classification;
 - an effectful handler/product service is not invoked before durable fence
   success, and fence failure remains known pre-side-effect;
-- the registry passes the complete scoped invocation identity to the one-way
-  fence, Gateway rejects an internally inconsistent identity, and handlers get
-  only the fence-free action view;
+- the registry passes the complete scoped invocation identity to the private
+  one-way fence and Gateway rejects an internally inconsistent identity;
 - known pre-side-effect failure can be distinguished from an unknown outcome;
 - the registry never retries a handler automatically;
 - cancellation before the effect fence is replay-safe, while cancellation
@@ -42,8 +41,8 @@ Required scenarios:
   identity;
 - presentation/delivery failure after an effect cannot invoke the handler a
   second time;
-- omission of the registry/controller preserves existing ordinary input and
-  common-command behavior counterexamples remain explicit;
+- omission of the registry/controller preserves ordinary input and
+  common-command counterexamples remain explicit;
 - a clean process/import-order check proves the historical
   `imagent.controllers` package is absent and unimportable while every
   `imagent.interaction.controllers` registry export retains exact identity and

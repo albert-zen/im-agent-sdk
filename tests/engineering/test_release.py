@@ -126,7 +126,7 @@ import typing
 
 import imagent
 
-owner_modules = {
+module_exports = {
     "adapters": "imagent.adapters",
     "contracts": "imagent.contracts",
     "delivery_coordination": "imagent.gateway.delivery.coordination",
@@ -134,10 +134,45 @@ owner_modules = {
     "diagnostics": "imagent.diagnostics",
     "events": "imagent.events",
 }
-assert imagent.__all__ == list(owner_modules)
+value_exports = {
+    "ActionResult": "imagent.gateway.actions",
+    "ActionValue": "imagent.gateway.actions",
+    "ApplicationActions": "imagent.gateway.actions",
+    "ConversationActions": "imagent.gateway.actions",
+    "ReadOutcome": "imagent.gateway.actions",
+    "CommandArgumentContract": "imagent.interaction.controllers",
+    "CommandDefinition": "imagent.interaction.controllers",
+    "CommandExecutionSafety": "imagent.interaction.controllers",
+    "CommandHandler": "imagent.interaction.controllers",
+    "CommandLimits": "imagent.interaction.controllers",
+    "CommandRegistry": "imagent.interaction.controllers",
+    "CommandResult": "imagent.interaction.controllers",
+    "include_common_commands": "imagent.interaction.controllers",
+}
+assert imagent.__all__ == [
+    "ActionResult",
+    "ActionValue",
+    "ApplicationActions",
+    "CommandArgumentContract",
+    "CommandDefinition",
+    "CommandExecutionSafety",
+    "CommandHandler",
+    "CommandLimits",
+    "CommandRegistry",
+    "CommandResult",
+    "ConversationActions",
+    "ReadOutcome",
+    "adapters",
+    "contracts",
+    "delivery_coordination",
+    "delivery_planning",
+    "diagnostics",
+    "events",
+    "include_common_commands",
+]
 assert not hasattr(imagent, "projections")
 assert typing.get_type_hints(imagent.__getattr__) == {"name": str, "return": object}
-assert all(name not in imagent.__dict__ for name in owner_modules)
+assert all(name not in imagent.__dict__ for name in (*module_exports, *value_exports))
 assert not any(
     name == "imagent.gateway" or name.startswith("imagent.gateway.")
     for name in sys.modules
@@ -148,9 +183,16 @@ assert not any(
 )
 assert not hasattr(imagent, "unsupported_root_export")
 
-for name, module_name in owner_modules.items():
+for name, module_name in module_exports.items():
     first = getattr(imagent, name)
     owner = importlib.import_module(module_name)
+    assert first is owner
+    assert getattr(imagent, name) is owner
+    assert imagent.__dict__[name] is owner
+
+for name, module_name in value_exports.items():
+    first = getattr(imagent, name)
+    owner = getattr(importlib.import_module(module_name), name)
     assert first is owner
     assert getattr(imagent, name) is owner
     assert imagent.__dict__[name] is owner

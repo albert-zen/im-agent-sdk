@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import get_args, get_type_hints
 from unittest.mock import patch
 
+import imagent.applications.operations as application_operations_owner
 import imagent.contracts as contracts_facade
 import imagent.gateway as gateway_facade
 import imagent.gateway.projection as projection_facade
@@ -26,6 +27,8 @@ from imagent.contracts import (
     ApplicationsListed,
     BindConversationToProject,
     BindConversationToThread,
+    ClearConversationApplication,
+    ClearConversationProject,
     ClearConversationThread,
     ContractError,
     ConversationBound,
@@ -40,7 +43,12 @@ from imagent.contracts import (
 from imagent.gateway.concurrency import KeyedLockCapacityError
 from imagent.gateway.persistence import ConversationBinding, ThreadProjectionRoute
 from imagent.gateway.projection import RequestResponseRouted, RespondToRequest
-from imagent.gateway.routing import ObserveThread, ThreadObserved
+from imagent.gateway.routing import (
+    ClearThreadObservation,
+    ObserveThread,
+    ThreadObservationCleared,
+    ThreadObserved,
+)
 from imagent.interaction.operations import OperationErrorCode, operation_error
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -121,14 +129,13 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
         assert callable(getattr(gateway_facade.ImAgentGateway, private_name))
     assert "GatewayOperationExecutor" not in operations_owner.__all__
     assert "GatewayOperationExecutor" not in routing_facade.__all__
-    controller_hints = typing.get_type_hints(controllers_facade.ControllerActions.execute_gateway)
-    assert controller_hints["operation"] is contracts_facade.GatewayOperation
-    assert controller_hints["return"] is contracts_facade.GatewayOperationResult
+    assert not hasattr(controllers_facade, "ControllerActions")
+    assert not hasattr(controllers_facade, "CommandHandlerActions")
 
     assert typing.get_args(contracts_facade.GatewayOperation)
     assert typing.get_args(contracts_facade.GatewayOperationResult)
-    assert len(typing.get_args(operations_owner.GatewayOperation)) == 7
-    assert len(typing.get_args(operations_owner.GatewayOperationResult)) == 5
+    assert len(typing.get_args(operations_owner.GatewayOperation)) == 10
+    assert len(typing.get_args(operations_owner.GatewayOperationResult)) == 6
     assert typing.get_type_hints(contracts_facade.__getattr__)["return"] is object
     assert typing.get_type_hints(gateway_facade.__getattr__)["return"] is object
     root_delegate_hints = {
@@ -425,7 +432,10 @@ class GatewayOperationsOwnerTests(unittest.IsolatedAsyncioTestCase):
                 BindConversationToProject,
                 BindConversationToThread,
                 ClearConversationThread,
+                ClearConversationProject,
+                ClearConversationApplication,
                 ObserveThread,
+                ClearThreadObservation,
                 RespondToRequest,
             },
         )
@@ -435,9 +445,30 @@ class GatewayOperationsOwnerTests(unittest.IsolatedAsyncioTestCase):
                 ApplicationsListed,
                 ConversationBound,
                 ThreadObserved,
+                ThreadObservationCleared,
                 RequestResponseRouted,
                 GatewayOperationFailed,
             },
+        )
+        self.assertEqual(
+            set(get_args(operations_owner._LegacyGatewayOperation)),
+            {
+                ListApplications,
+                SelectApplication,
+                BindConversationToProject,
+                BindConversationToThread,
+                ClearConversationThread,
+                ObserveThread,
+                RespondToRequest,
+            },
+        )
+        self.assertEqual(
+            get_type_hints(gateway_facade.ImAgentGateway.execute_gateway)["operation"],
+            operations_owner._LegacyGatewayOperation,
+        )
+        self.assertEqual(
+            get_type_hints(gateway_facade.ImAgentGateway.execute_application)["operation"],
+            application_operations_owner._LegacyApplicationOperation,
         )
 
     def test_owner_annotations_remain_exact(self) -> None:

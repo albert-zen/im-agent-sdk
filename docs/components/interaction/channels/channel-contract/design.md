@@ -28,9 +28,9 @@ device display.
 
 The Channel lifecycle carries no Gateway operation callback. A native button,
 card, or other product action is normalized by the consumer's Controller and
-invokes the same typed `ControllerActions`/Gateway operation surface as a text
-command. Channel implementations therefore import neither `GatewayOperation`
-nor Gateway orchestration.
+invokes the same scoped `ConversationActions` surface as a text command.
+Channel implementations therefore import neither `GatewayOperation` nor
+Gateway orchestration.
 
 `ChannelCapabilities` is the single capability authority. Channel delivery
 support uses the Interaction-owned `DeliverySupportLevel` values `native`,

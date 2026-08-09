@@ -20,6 +20,8 @@ from imagent.contracts import (
     ApplicationsListed,
     BindConversationToProject,
     BindConversationToThread,
+    ClearConversationApplication,
+    ClearConversationProject,
     ClearConversationThread,
     ConversationBound,
     GatewayOperation,
@@ -49,6 +51,8 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     binding_names = (
         "BindConversationToProject",
         "BindConversationToThread",
+        "ClearConversationApplication",
+        "ClearConversationProject",
         "ClearConversationThread",
         "ConversationBound",
     )
@@ -151,6 +155,8 @@ class BindingOwnerTests(unittest.TestCase):
         names = (
             "BindConversationToProject",
             "BindConversationToThread",
+            "ClearConversationApplication",
+            "ClearConversationProject",
             "ClearConversationThread",
             "ConversationBound",
         )
@@ -189,6 +195,8 @@ class BindingOwnerTests(unittest.TestCase):
             {
                 BindConversationToProject,
                 BindConversationToThread,
+                ClearConversationApplication,
+                ClearConversationProject,
                 ClearConversationThread,
             }.issubset(union_types)
         )
@@ -287,6 +295,83 @@ class BindingOwnerTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ContractViolation, "did not clear the thread"):
             validate_gateway_operation_result(operation, result)
+
+    def test_hierarchical_clear_results_preserve_retained_ancestors(self) -> None:
+        project_clear = ClearConversationProject(
+            operation_id="op-clear-project",
+            conversation_ref=self.conversation,
+            actor="user-1",
+            expected_generation=7,
+            created_at=datetime.now(UTC),
+        )
+        application_clear = ClearConversationApplication(
+            operation_id="op-clear-application",
+            conversation_ref=self.conversation,
+            actor="user-1",
+            expected_generation=8,
+            created_at=datetime.now(UTC),
+        )
+        validate_gateway_operation(project_clear)
+        validate_gateway_operation(application_clear)
+        validate_gateway_operation_result(
+            project_clear,
+            ConversationBound(
+                operation_id=project_clear.operation_id,
+                type=project_clear.type,
+                completed_at=datetime.now(UTC),
+                binding=ConversationBinding(
+                    conversation_ref=self.conversation,
+                    application_ref=self.application,
+                ),
+            ),
+        )
+        validate_gateway_operation_result(
+            application_clear,
+            ConversationBound(
+                operation_id=application_clear.operation_id,
+                type=application_clear.type,
+                completed_at=datetime.now(UTC),
+                binding=ConversationBinding(conversation_ref=self.conversation),
+            ),
+        )
+        with self.assertRaisesRegex(ContractViolation, "incompatible binding"):
+            validate_gateway_operation_result(
+                project_clear,
+                ConversationBound(
+                    operation_id=project_clear.operation_id,
+                    type=project_clear.type,
+                    completed_at=datetime.now(UTC),
+                    binding=ConversationBinding(conversation_ref=self.conversation),
+                ),
+            )
+
+    def test_new_clear_preconditions_use_generation_only(self) -> None:
+        for operation_type in (ClearConversationProject, ClearConversationApplication):
+            with self.subTest(operation_type=operation_type.__name__):
+                self.assertIn("expected_generation", operation_type.__annotations__)
+                self.assertNotIn("expected_revision", operation_type.__annotations__)
+                with self.assertRaisesRegex(ContractViolation, "expected_generation"):
+                    validate_gateway_operation(
+                        operation_type(
+                            operation_id=f"op-{operation_type.__name__}",
+                            conversation_ref=self.conversation,
+                            actor="user-1",
+                            expected_generation=-1,
+                            created_at=datetime.now(UTC),
+                        )
+                    )
+                for invalid in (True, 1.5, "1"):
+                    with self.subTest(invalid=invalid):
+                        with self.assertRaisesRegex(ContractViolation, "expected_generation"):
+                            validate_gateway_operation(
+                                operation_type(
+                                    operation_id=f"op-invalid-{operation_type.__name__}",
+                                    conversation_ref=self.conversation,
+                                    actor="user-1",
+                                    expected_generation=invalid,  # type: ignore[arg-type]
+                                    created_at=datetime.now(UTC),
+                                )
+                            )
 
 
 class BindingRuntimeTests(unittest.IsolatedAsyncioTestCase):

@@ -40,11 +40,29 @@ class ObserveThread(_GatewayOperation):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class ClearThreadObservation(_GatewayOperation):
+    thread_ref: ThreadRef
+    type: _GatewayOperationType = field(
+        init=False,
+        default=_GatewayOperationType.THREAD_CLEAR_OBSERVATION,
+    )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ThreadObserved(_GatewayOperationSucceeded):
     route: ThreadProjectionRoute
     type: _GatewayOperationType = field(
         init=False,
         default=_GatewayOperationType.THREAD_OBSERVE,
+    )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ThreadObservationCleared(_GatewayOperationSucceeded):
+    thread_ref: ThreadRef
+    type: _GatewayOperationType = field(
+        init=False,
+        default=_GatewayOperationType.THREAD_CLEAR_OBSERVATION,
     )
 
 
@@ -83,16 +101,23 @@ async def get_projection_route(
     )
 
 
-def _validate_observe_operation(operation: ObserveThread) -> None:
+def _validate_observe_operation(operation: ObserveThread | ClearThreadObservation) -> None:
     validate_thread_ref(operation.thread_ref)
-    if operation.reply_to_message_id is not None:
+    if isinstance(operation, ObserveThread) and operation.reply_to_message_id is not None:
         require_identifier(operation.reply_to_message_id, "reply_to_message_id")
 
 
 def _validate_observe_operation_result(
-    operation: ObserveThread,
+    operation: ObserveThread | ClearThreadObservation,
     result: object,
 ) -> None:
+    if isinstance(operation, ClearThreadObservation):
+        if not isinstance(result, ThreadObservationCleared):
+            raise ContractViolation("thread.clear_observation must return ThreadObservationCleared")
+        validate_thread_ref(result.thread_ref)
+        if result.thread_ref != operation.thread_ref:
+            raise ContractViolation("thread.clear_observation returned a different Thread")
+        return
     if not isinstance(result, ThreadObserved):
         raise ContractViolation("thread.observe must return ThreadObserved")
     validate_projection_route(result.route)
@@ -203,7 +228,9 @@ _complete_gateway_union()
 
 
 __all__ = [
+    "ClearThreadObservation",
     "ObserveThread",
     "ProjectionPolicy",
+    "ThreadObservationCleared",
     "ThreadObserved",
 ]

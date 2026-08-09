@@ -205,6 +205,7 @@ Application operations mutate or read one native Agent Application:
 | `project.list` | `ProjectsListed` | list authoritative Projects |
 | `project.get` | `ProjectRead` | validate/read one Project |
 | `project.create` | `ProjectCreated` | create one managed native Project from a bounded CWD |
+| `project.delete` | `ProjectDeleted` | delete one empty managed native Project without changing any Conversation binding |
 | `thread.create` | `ThreadCreated` | create a native Thread |
 | `thread.list` | `ThreadsListed` | list native Threads |
 | `thread.get` | `ThreadRead` | validate/read one Thread |
@@ -225,7 +226,10 @@ Gateway operations mutate only Gateway-owned selection or routing:
 | `conversation.bind_project` | `ConversationBound` | validate/select Project and clear Thread |
 | `conversation.bind_thread` | `ConversationBound` | select future input destination; under `foreground_only`, atomically prepare its policy-required output edge before binding CAS |
 | `conversation.clear_thread` | `ConversationBound` | clear selected Thread |
+| `conversation.clear_project` | `ConversationBound` | clear selected Project and Thread while retaining Application |
+| `conversation.clear_application` | `ConversationBound` | clear all selected Application resources |
 | `thread.observe` | `ThreadObserved` | establish/refresh output route |
+| `thread.clear_observation` | `ThreadObservationCleared` | remove one output projection route without changing input binding |
 | `conversation.respond_request` | `RequestResponseRouted` | validate one delivered destination and route a native response |
 
 Application and Gateway operation unions have discriminated variants with

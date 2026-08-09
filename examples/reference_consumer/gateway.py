@@ -12,7 +12,7 @@ from imagent.contracts import (
     GatewayOperationFailed,
 )
 from imagent.gateway import ImAgentGateway
-from imagent.gateway.composition import GatewayExtensions, GatewayRepositories
+from imagent.gateway.composition import GatewayRepositories
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,
@@ -106,7 +106,6 @@ def build_reference_consumer() -> ReferenceConsumer:
             bindings=bindings,
             projections=projections,
         ),
-        extensions=GatewayExtensions(controller=registry),
         projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
     )
     return ReferenceConsumer(

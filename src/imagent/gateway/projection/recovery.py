@@ -24,13 +24,13 @@ from ...applications.events import (
     EventStreamGap,
 )
 from ...applications.operations import (
-    ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,
     GetThreadHistory,
     GetTurnCatchup,
     ThreadHistoryRead,
     TurnCatchupRead,
+    _LegacyApplicationOperation,
 )
 from ...applications.requests import InteractiveRequest
 from ...interaction.messages import ConversationRef
@@ -73,7 +73,7 @@ class AuthoritativeProjectionSlice:
 
 
 ExecuteApplication = Callable[
-    [ApplicationOperation],
+    [_LegacyApplicationOperation],
     Awaitable[ApplicationOperationResult],
 ]
 

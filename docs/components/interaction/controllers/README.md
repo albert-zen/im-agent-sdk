@@ -17,8 +17,9 @@ Application authority.
 ## Dependency boundary
 
 Controller leaves may depend on Interaction messages/operations and the exact
-typed Application/Gateway contracts listed in the component map. A configured
-Controller receives only `ControllerActions`; it never receives Gateway,
+scoped action/outcome contracts listed in the component map. A configured
+Controller receives only the frozen `ConversationActions` for the authenticated
+Conversation and actor; it never receives Gateway,
 repositories, adapters, a mutable context bag, or another extension seam.
 Product handlers receive their own strongly typed services through constructor
 injection in the consumer.

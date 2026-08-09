@@ -27,7 +27,6 @@ from imagent.gateway.input.content_transformation import (
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.gateway.persistence.state_contracts import ConversationBinding
-from imagent.interaction.controllers import SlashController
 from imagent.interaction.media import AttachmentContent, LocalPath
 from imagent.interaction.messages import (
     ConversationRef,
@@ -119,33 +118,6 @@ class InboundContentTransformerTests(unittest.IsolatedAsyncioTestCase):
             application.continuations,
             [InputContinuationPreference.PREFER_ACTIVE_TURN],
         )
-
-    async def test_controller_consumption_bypasses_transformer(self) -> None:
-        async def must_not_run(_message: InboundMessage):
-            raise AssertionError("I1 ran for Controller-consumed input")
-
-        channel = FakeChannelAdapter("fake-channel")
-        gateway = ImAgentGateway(
-            channels=[channel],
-            applications=[],
-            repositories=GatewayRepositories(bindings=InMemoryBindingRepository()),
-            extensions=GatewayExtensions(
-                controller=SlashController(),
-                inbound_content_transformer=_FunctionTransformer(must_not_run),
-            ),
-        )
-
-        await gateway.start()
-        try:
-            await channel.emit_message(self._message("help", text="/help"))
-        finally:
-            await gateway.stop()
-
-        self.assertEqual(len(channel.sent), 1)
-        facts = gateway.diagnostics_snapshot().gateway.inbound_content_transformer
-        assert facts is not None
-        self.assertIsNone(facts.last_failure_code)
-        self.assertEqual(facts.invocation_count, 0)
 
     async def test_invalid_output_releases_claim_and_redelivery_can_transform(self) -> None:
         calls = 0

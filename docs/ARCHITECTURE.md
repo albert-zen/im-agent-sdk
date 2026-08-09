@@ -91,9 +91,9 @@ split candidates live in the machine-readable
 
 Versioned language-neutral schemas bind the applicable owning leaves and remain
 the semantic source of truth. Interaction message/operation contracts are the
-lowest runtime surface. Applications implement their typed native boundary without importing Gateway. ControllerActions
-and SDK common commands may consume only the exact public typed Application/Gateway
-contracts and passive ConversationBinding value recorded in the component map. A Controller request
+lowest runtime surface. Applications implement their typed native boundary without importing Gateway.
+Scoped consumer actions compose exact typed Application/Gateway primitives;
+SDK common commands receive only `ConversationActions`. A Controller request
 presenter may consume the public typed Application request contract. Those exact
 contract exceptions are recorded in the component map; they do not allow
 Controller or Channel code to import an Application or Gateway implementation.

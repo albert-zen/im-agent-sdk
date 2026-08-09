@@ -8,6 +8,7 @@
         "project.list",
         "project.get",
         "project.create",
+        "project.delete",
         "thread.create",
         "thread.list",
         "thread.get",
@@ -27,8 +28,11 @@
         "conversation.bind_project",
         "conversation.bind_thread",
         "conversation.clear_thread",
+        "conversation.clear_project",
+        "conversation.clear_application",
         "conversation.respond_request",
-        "thread.observe"
+        "thread.observe",
+        "thread.clear_observation"
       ]
     },
     "ApplicationOperationIdentity": {
@@ -70,8 +74,8 @@
           "required": ["type"],
           "properties": {
             "type": { "const": "project.list" },
-            "query": { "type": ["string", "null"] },
-            "cursor": { "type": ["string", "null"] }
+            "query": { "type": ["string", "null"], "maxLength": 4096 },
+            "cursor": { "type": ["string", "null"], "maxLength": 4096 }
           }
         }
       ],
@@ -112,6 +116,98 @@
       ],
       "unevaluatedProperties": false
     },
+    "DeleteProject": {
+      "allOf": [
+        { "$ref": "#/$defs/ApplicationOperationIdentity" },
+        {
+          "type": "object",
+          "required": ["type", "projectRef"],
+          "properties": {
+            "type": { "const": "project.delete" },
+            "projectRef": {
+              "$ref": "resources.schema.json#/$defs/ProjectRef"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "CreateThreadTextContent": {
+      "allOf": [
+        { "$ref": "messages.schema.json#/$defs/TextContent" },
+        {
+          "type": "object",
+          "properties": {
+            "text": { "type": "string", "maxLength": 65536 }
+          }
+        }
+      ]
+    },
+    "CreateThreadAttachmentSource": {
+      "oneOf": [
+        {
+          "allOf": [
+            { "$ref": "messages.schema.json#/$defs/LocalPath" },
+            {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string", "minLength": 1, "maxLength": 4096 }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "messages.schema.json#/$defs/RemoteUrl" },
+            {
+              "type": "object",
+              "properties": {
+                "url": { "type": "string", "format": "uri", "maxLength": 4096 }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "messages.schema.json#/$defs/AttachmentHandle" },
+            {
+              "type": "object",
+              "properties": {
+                "handleId": { "type": "string", "minLength": 1, "maxLength": 512 }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "CreateThreadAttachmentContent": {
+      "allOf": [
+        { "$ref": "messages.schema.json#/$defs/AttachmentContent" },
+        {
+          "type": "object",
+          "properties": {
+            "mediaType": { "type": "string", "minLength": 1, "maxLength": 4096 },
+            "source": { "$ref": "#/$defs/CreateThreadAttachmentSource" },
+            "filename": {
+              "type": ["string", "null"],
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "metadata": {
+              "type": "object",
+              "maxProperties": 64,
+              "additionalProperties": true
+            }
+          }
+        }
+      ]
+    },
+    "CreateThreadContent": {
+      "oneOf": [
+        { "$ref": "#/$defs/CreateThreadTextContent" },
+        { "$ref": "#/$defs/CreateThreadAttachmentContent" }
+      ]
+    },
     "CreateThread": {
       "allOf": [
         { "$ref": "#/$defs/ApplicationOperationIdentity" },
@@ -123,10 +219,15 @@
             "projectRef": {
               "$ref": "resources.schema.json#/$defs/ProjectRef"
             },
-            "title": { "type": ["string", "null"] },
+            "title": {
+              "type": ["string", "null"],
+              "minLength": 1,
+              "maxLength": 512
+            },
             "initialContext": {
               "type": "array",
-              "items": { "$ref": "messages.schema.json#/$defs/Content" }
+              "maxItems": 32,
+              "items": { "$ref": "#/$defs/CreateThreadContent" }
             }
           }
         }
@@ -144,8 +245,8 @@
             "projectRef": {
               "$ref": "resources.schema.json#/$defs/ProjectRef"
             },
-            "query": { "type": ["string", "null"] },
-            "cursor": { "type": ["string", "null"] }
+            "query": { "type": ["string", "null"], "maxLength": 4096 },
+            "cursor": { "type": ["string", "null"], "maxLength": 4096 }
           }
         }
       ],
@@ -315,6 +416,7 @@
         { "$ref": "#/$defs/ListProjects" },
         { "$ref": "#/$defs/GetProject" },
         { "$ref": "#/$defs/CreateProject" },
+        { "$ref": "#/$defs/DeleteProject" },
         { "$ref": "#/$defs/CreateThread" },
         { "$ref": "#/$defs/ListThreads" },
         { "$ref": "#/$defs/GetThread" },
@@ -403,6 +505,34 @@
       ],
       "unevaluatedProperties": false
     },
+    "ClearConversationProject": {
+      "allOf": [
+        { "$ref": "#/$defs/GatewayOperationIdentity" },
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "conversation.clear_project" },
+            "expectedGeneration": { "type": ["integer", "null"], "minimum": 0 }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "ClearConversationApplication": {
+      "allOf": [
+        { "$ref": "#/$defs/GatewayOperationIdentity" },
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "conversation.clear_application" },
+            "expectedGeneration": { "type": ["integer", "null"], "minimum": 0 }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
     "ObserveThread": {
       "allOf": [
         { "$ref": "#/$defs/GatewayOperationIdentity" },
@@ -419,6 +549,22 @@
                 { "$ref": "common.schema.json#/$defs/Identifier" },
                 { "type": "null" }
               ]
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "ClearThreadObservation": {
+      "allOf": [
+        { "$ref": "#/$defs/GatewayOperationIdentity" },
+        {
+          "type": "object",
+          "required": ["type", "threadRef"],
+          "properties": {
+            "type": { "const": "thread.clear_observation" },
+            "threadRef": {
+              "$ref": "resources.schema.json#/$defs/ThreadRef"
             }
           }
         }
@@ -449,7 +595,10 @@
         { "$ref": "#/$defs/BindConversationToProject" },
         { "$ref": "#/$defs/BindConversationToThread" },
         { "$ref": "#/$defs/ClearConversationThread" },
+        { "$ref": "#/$defs/ClearConversationProject" },
+        { "$ref": "#/$defs/ClearConversationApplication" },
         { "$ref": "#/$defs/ObserveThread" },
+        { "$ref": "#/$defs/ClearThreadObservation" },
         { "$ref": "#/$defs/RespondToRequest" }
       ]
     },
@@ -459,9 +608,10 @@
       "properties": {
         "items": {
           "type": "array",
+          "maxItems": 1000,
           "items": { "$ref": "resources.schema.json#/$defs/ProjectSummary" }
         },
-        "nextCursor": { "type": ["string", "null"] }
+        "nextCursor": { "type": ["string", "null"], "maxLength": 4096 }
       },
       "additionalProperties": false
     },
@@ -471,9 +621,10 @@
       "properties": {
         "items": {
           "type": "array",
+          "maxItems": 1000,
           "items": { "$ref": "resources.schema.json#/$defs/ThreadSummary" }
         },
-        "nextCursor": { "type": ["string", "null"] }
+        "nextCursor": { "type": ["string", "null"], "maxLength": 4096 }
       },
       "additionalProperties": false
     },
@@ -526,6 +677,22 @@
           "properties": {
             "type": { "const": "project.create" },
             "project": { "$ref": "resources.schema.json#/$defs/ProjectSummary" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "ProjectDeleted": {
+      "allOf": [
+        { "$ref": "#/$defs/ApplicationSuccessIdentity" },
+        {
+          "type": "object",
+          "required": ["type", "projectRef"],
+          "properties": {
+            "type": { "const": "project.delete" },
+            "projectRef": {
+              "$ref": "resources.schema.json#/$defs/ProjectRef"
+            }
           }
         }
       ],
@@ -712,6 +879,7 @@
         { "$ref": "#/$defs/ProjectsListed" },
         { "$ref": "#/$defs/ProjectRead" },
         { "$ref": "#/$defs/ProjectCreated" },
+        { "$ref": "#/$defs/ProjectDeleted" },
         { "$ref": "#/$defs/ThreadCreated" },
         { "$ref": "#/$defs/ThreadsListed" },
         { "$ref": "#/$defs/ThreadRead" },
@@ -745,6 +913,7 @@
             "type": { "const": "application.list" },
             "applications": {
               "type": "array",
+              "maxItems": 1000,
               "items": {
                 "$ref": "resources.schema.json#/$defs/ApplicationSummary"
               }
@@ -766,7 +935,9 @@
                 "application.select",
                 "conversation.bind_project",
                 "conversation.bind_thread",
-                "conversation.clear_thread"
+                "conversation.clear_thread",
+                "conversation.clear_project",
+                "conversation.clear_application"
               ]
             },
             "binding": {
@@ -787,6 +958,22 @@
             "type": { "const": "thread.observe" },
             "route": {
               "$ref": "projections.schema.json#/$defs/ThreadProjectionRoute"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "ThreadObservationCleared": {
+      "allOf": [
+        { "$ref": "#/$defs/GatewaySuccessIdentity" },
+        {
+          "type": "object",
+          "required": ["type", "threadRef"],
+          "properties": {
+            "type": { "const": "thread.clear_observation" },
+            "threadRef": {
+              "$ref": "resources.schema.json#/$defs/ThreadRef"
             }
           }
         }
@@ -826,6 +1013,7 @@
         { "$ref": "#/$defs/ApplicationsListed" },
         { "$ref": "#/$defs/ConversationBound" },
         { "$ref": "#/$defs/ThreadObserved" },
+        { "$ref": "#/$defs/ThreadObservationCleared" },
         { "$ref": "#/$defs/RequestResponseRouted" },
         { "$ref": "#/$defs/GatewayOperationFailed" }
       ]

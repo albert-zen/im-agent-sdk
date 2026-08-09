@@ -63,7 +63,7 @@ def _conversation_ids(messages: tuple[OutboundMessage, ...]) -> tuple[Conversati
 
 
 async def run_demo() -> DemoReport:
-    """Exercise commands, binding, observation, switching, recovery, and stop."""
+    """Exercise binding, observation, switching, recovery, and stop."""
 
     consumer = build_reference_consumer()
     application = consumer.application
@@ -78,34 +78,11 @@ async def run_demo() -> DemoReport:
 
     await consumer.start()
     diagnostics = None
-    command_outputs: list[str] = []
     shared_thread_messages: tuple[OutboundMessage, ...] = ()
     switched_old_thread_messages: tuple[OutboundMessage, ...] = ()
     switched_new_thread_messages: tuple[OutboundMessage, ...] = ()
     recovered_messages: tuple[OutboundMessage, ...] = ()
     try:
-        before = len(consumer.channel.sent)
-        await consumer.channel.emit_text(
-            conversation_a,
-            "/help",
-            message_id="reference-command-help",
-        )
-        async with asyncio.timeout(2):
-            while len(consumer.channel.sent) <= before:
-                await asyncio.sleep(0)
-        command_outputs.extend(_message_text(message) for message in consumer.channel.sent[before:])
-
-        before = len(consumer.channel.sent)
-        await consumer.channel.emit_text(
-            conversation_a,
-            "/about",
-            message_id="reference-command-about",
-        )
-        async with asyncio.timeout(2):
-            while len(consumer.channel.sent) <= before:
-                await asyncio.sleep(0)
-        command_outputs.extend(_message_text(message) for message in consumer.channel.sent[before:])
-
         await consumer.bind(
             conversation_a,
             first_thread.ref,
@@ -190,7 +167,7 @@ async def run_demo() -> DemoReport:
         raise AssertionError("the running Gateway must provide diagnostics")
     return DemoReport(
         projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
-        command_outputs=tuple(command_outputs),
+        command_outputs=(),
         shared_thread_conversations=_conversation_ids(shared_thread_messages),
         switched_old_thread_conversations=_conversation_ids(switched_old_thread_messages),
         switched_new_thread_conversations=_conversation_ids(switched_new_thread_messages),

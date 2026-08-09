@@ -14,6 +14,7 @@ from imagent.diagnostics import (
     ConnectionDiagnosticFacts,
     ConnectionDiagnosticState,
 )
+from imagent.gateway.actions import ConversationActions
 from imagent.interaction.channels import (
     ChannelCapabilities,
     DeliveryReceipt,
@@ -25,11 +26,10 @@ from imagent.interaction.channels import (
 from imagent.interaction.controllers import (
     CommandDefinition,
     CommandExecutionSafety,
-    CommandHandlerActions,
     CommandInvocation,
     CommandRegistry,
     CommandResult,
-    register_common_commands,
+    include_common_commands,
 )
 from imagent.interaction.messages import (
     ConversationRef,
@@ -170,7 +170,7 @@ class ReferenceChannel:
 
 async def _about_command(
     invocation: CommandInvocation,
-    actions: CommandHandlerActions,
+    actions: ConversationActions,
 ) -> CommandResult:
     """One product-owned command, deliberately independent of SDK Core."""
 
@@ -185,7 +185,7 @@ def build_command_registry() -> CommandRegistry:
     """Build and freeze the example's explicit local command registry."""
 
     registry = CommandRegistry()
-    register_common_commands(registry, include=("help",))
+    include_common_commands(registry, names=("help",))
     registry.register(
         CommandDefinition(
             name="about",
