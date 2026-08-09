@@ -14,6 +14,7 @@ from imagent.gateway.persistence.effects import (
     EffectPhase,
     EffectReceipt,
     EffectValue,
+    RouteDeleteCondition,
     StableReference,
     StoreMutationPlan,
     StoreMutationRequest,
@@ -145,6 +146,45 @@ class GatewayEffectContractTests(unittest.TestCase):
                             updated_at=now,
                         )
                     )
+
+    def test_route_delete_condition_is_closed_and_requires_deletion(self) -> None:
+        conversation = ConversationRef("channel", "conversation")
+        fingerprint = derive_action_fingerprint(
+            ActionIdentity("gateway", "principal", "observation.clear", "action", conversation),
+            (),
+        )
+        validate_store_mutation_request(
+            StoreMutationRequest(
+                fingerprint,
+                StoreMutationPlan(
+                    conversation_ref=conversation,
+                    route_delete_id="route",
+                    route_delete_condition=(RouteDeleteCondition.UNLESS_BOUND_TO_ROUTE_THREAD),
+                ),
+            )
+        )
+        with self.assertRaises(ContractViolation):
+            validate_store_mutation_request(
+                StoreMutationRequest(
+                    fingerprint,
+                    StoreMutationPlan(
+                        conversation_ref=conversation,
+                        binding_clear=BindingClearScope.THREAD,
+                        route_delete_condition=(RouteDeleteCondition.UNLESS_BOUND_TO_ROUTE_THREAD),
+                    ),
+                )
+            )
+        with self.assertRaises(ContractViolation):
+            validate_store_mutation_request(
+                StoreMutationRequest(
+                    fingerprint,
+                    StoreMutationPlan(
+                        conversation_ref=conversation,
+                        route_delete_id="route",
+                        route_delete_condition="unsafe",  # type: ignore[arg-type]
+                    ),
+                )
+            )
 
 
 if __name__ == "__main__":

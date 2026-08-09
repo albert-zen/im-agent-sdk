@@ -21,6 +21,10 @@ prove:
 - atomic capacity reservation, fingerprint, binding/route/generation, and
   terminal store-action receipt commits, including rollback and lost
   acknowledgement replay before current-state inspection;
+- guarded route deletion preserves a route matching the resulting bound Thread,
+  deletes it once that binding is cleared or differs, and replays the earlier
+  protected terminal receipt before inspecting newer state, with exact
+  memory/SQLite outcome parity;
 - one shared exact receipt bound across store, native, request-response, and
   workflow categories, with no eviction or time-based retry permission;
 - `native_side_effect_started` durability before callbacks, sticky unknown

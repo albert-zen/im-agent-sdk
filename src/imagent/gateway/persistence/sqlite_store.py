@@ -32,6 +32,7 @@ from .effects import (
     EffectPhase,
     EffectReceipt,
     EffectValue,
+    RouteDeleteCondition,
     StableReference,
     StoreMutationPlan,
     StoreMutationRequest,
@@ -438,9 +439,15 @@ class SQLiteGatewayStore:
                                 conversation,
                                 generation=result_generation,
                             )
+                        resulting_binding = _read_current_binding(connection, conversation)
+                        delete_route = _route_delete_is_allowed(
+                            plan,
+                            stored_route,
+                            binding=resulting_binding,
+                        )
                         if stored_route is not None and plan.route_upsert is not None:
                             self._state._write_projection_route(stored_route)
-                        elif plan.route_delete_id is not None:
+                        elif plan.route_delete_id is not None and delete_route:
                             connection.execute(
                                 "DELETE FROM thread_projection_routes WHERE route_id = ?",
                                 (plan.route_delete_id,),
@@ -1175,6 +1182,20 @@ def _prepare_route(
         state._read_projection_route(candidate.route_id)
         or state._read_projection_route_for_endpoints(candidate),
         candidate,
+    )
+
+
+def _route_delete_is_allowed(
+    plan: StoreMutationPlan,
+    route: ThreadProjectionRoute | None,
+    *,
+    binding: ConversationBinding | None,
+) -> bool:
+    return not (
+        route is not None
+        and plan.route_delete_condition is RouteDeleteCondition.UNLESS_BOUND_TO_ROUTE_THREAD
+        and binding is not None
+        and binding.thread_ref == route.thread_ref
     )
 
 

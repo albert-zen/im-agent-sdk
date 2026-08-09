@@ -24,6 +24,7 @@ from imagent.gateway.persistence.effects import (
     BindingTarget,
     EffectCategory,
     EffectValue,
+    RouteDeleteCondition,
     StableReference,
     StoreMutationPlan,
     StoreMutationRequest,
@@ -281,6 +282,7 @@ class GatewayStoreParityTests(unittest.IsolatedAsyncioTestCase):
                     StoreMutationPlan(
                         conversation_ref=conversation,
                         route_delete_id=route.route_id,
+                        route_delete_condition=(RouteDeleteCondition.UNLESS_BOUND_TO_ROUTE_THREAD),
                         expected_generation=0,
                     ),
                 )
@@ -302,6 +304,105 @@ class GatewayStoreParityTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         self.assertEqual(clear_outcomes, [expected, expected])
+
+    async def test_guarded_route_delete_preserves_current_bound_thread_atomically(self) -> None:
+        conversation = ConversationRef("channel", "conversation-bound")
+        application = ApplicationRef("app")
+        project = ProjectRef("app", "project")
+        thread = ThreadRef(project, "thread")
+        route = ThreadProjectionRoute("route-bound", thread, conversation)
+        protected_outcomes = []
+        deleted_outcomes = []
+        for factory in self._factories():
+            store = factory()
+            with self.subTest(store=type(store).__name__):
+                session = await store.acquire_runtime(
+                    gateway_id="gateway",
+                    owner_token="owner",
+                    lease_duration_seconds=30,
+                )
+                bound = StoreMutationRequest(
+                    _fingerprint("bind-foreground", "conversation.bind_thread", conversation),
+                    StoreMutationPlan(
+                        conversation_ref=conversation,
+                        binding_target=BindingTarget(
+                            conversation,
+                            application,
+                            project,
+                            thread,
+                        ),
+                        route_upsert=route,
+                        expected_generation=0,
+                    ),
+                )
+                await session.commit_store_mutation(bound)
+
+                guarded_clear = StoreMutationRequest(
+                    _fingerprint(
+                        "clear-protected",
+                        "conversation.clear_observation",
+                        conversation,
+                    ),
+                    StoreMutationPlan(
+                        conversation_ref=conversation,
+                        route_delete_id=route.route_id,
+                        route_delete_condition=(RouteDeleteCondition.UNLESS_BOUND_TO_ROUTE_THREAD),
+                        expected_generation=1,
+                    ),
+                )
+                protected = await session.commit_store_mutation(guarded_clear)
+                protected_outcomes.append(protected.outcome)
+                stored_routes = await session.list_projection_routes(thread)
+                self.assertEqual(tuple(item.route_id for item in stored_routes), (route.route_id,))
+
+                clear_binding = _clear_request(
+                    "clear-bound-thread",
+                    conversation,
+                    BindingClearScope.THREAD,
+                    expected_generation=1,
+                )
+                await session.commit_store_mutation(clear_binding)
+                self.assertEqual(await session.commit_store_mutation(guarded_clear), protected)
+                stored_routes = await session.list_projection_routes(thread)
+                self.assertEqual(tuple(item.route_id for item in stored_routes), (route.route_id,))
+
+                deletable_clear = StoreMutationRequest(
+                    _fingerprint(
+                        "clear-unbound-route",
+                        "conversation.clear_observation",
+                        conversation,
+                    ),
+                    StoreMutationPlan(
+                        conversation_ref=conversation,
+                        route_delete_id=route.route_id,
+                        route_delete_condition=(RouteDeleteCondition.UNLESS_BOUND_TO_ROUTE_THREAD),
+                        expected_generation=2,
+                    ),
+                )
+                deleted = await session.commit_store_mutation(deletable_clear)
+                deleted_outcomes.append(deleted.outcome)
+                self.assertEqual(await session.list_projection_routes(thread), ())
+                await session.release_runtime()
+                await store.close()
+
+        protected_expected = Succeeded(
+            EffectValue(
+                reference=StableReference.from_value(thread),
+                conversation_ref=conversation,
+                binding_generation=1,
+                route_id=route.route_id,
+            )
+        )
+        deleted_expected = Succeeded(
+            EffectValue(
+                reference=StableReference.from_value(thread),
+                conversation_ref=conversation,
+                binding_generation=2,
+                route_id=route.route_id,
+            )
+        )
+        self.assertEqual(protected_outcomes, [protected_expected, protected_expected])
+        self.assertEqual(deleted_outcomes, [deleted_expected, deleted_expected])
 
     async def test_store_mutation_rejects_cross_conversation_route(self) -> None:
         conversation = ConversationRef("channel", "conversation")

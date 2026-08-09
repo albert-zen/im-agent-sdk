@@ -195,6 +195,10 @@ class BindingClearScope(StrEnum):
     APPLICATION = "application"
 
 
+class RouteDeleteCondition(StrEnum):
+    UNLESS_BOUND_TO_ROUTE_THREAD = "unless_bound_to_route_thread"
+
+
 @dataclass(frozen=True, slots=True)
 class StoreMutationPlan:
     conversation_ref: ConversationRef
@@ -202,6 +206,7 @@ class StoreMutationPlan:
     binding_clear: BindingClearScope | None = None
     route_upsert: ThreadProjectionRoute | None = None
     route_delete_id: str | None = None
+    route_delete_condition: RouteDeleteCondition | None = None
     expected_generation: int | None = None
 
 
@@ -412,6 +417,11 @@ def validate_store_mutation_request(request: StoreMutationRequest) -> None:
         raise ContractViolation("route upsert and delete are mutually exclusive")
     if plan.route_delete_id is not None:
         require_identifier(plan.route_delete_id, "route_delete_id")
+    if plan.route_delete_condition is not None:
+        if not isinstance(plan.route_delete_condition, RouteDeleteCondition):
+            raise ContractViolation("route delete condition is invalid")
+        if plan.route_delete_id is None:
+            raise ContractViolation("route delete condition requires a route deletion")
     if plan.binding_clear is not None and not isinstance(plan.binding_clear, BindingClearScope):
         raise ContractViolation("binding clear scope is invalid")
     _validate_generation(plan.expected_generation, "expected_generation")
@@ -803,6 +813,7 @@ __all__ = [
     "MAX_ACTION_FINGERPRINT_PAYLOAD_BYTES",
     "MAX_ACTION_FINGERPRINT_VALUES",
     "NativeMutationRequest",
+    "RouteDeleteCondition",
     "StableReference",
     "StableReferenceKind",
     "StoreMutationPlan",

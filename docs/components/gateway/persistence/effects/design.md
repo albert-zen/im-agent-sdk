@@ -30,6 +30,11 @@ Hierarchical clear uses the closed `BindingClearScope` (`thread`, `project`,
 or `application`) rather than a caller-pre-read `BindingTarget`. The store
 derives retained ancestors inside the receipt/CAS transaction; replacement
 and clear intent are mutually exclusive.
+Route removal may carry the closed `RouteDeleteCondition` value
+`unless_bound_to_route_thread`. The condition is valid only with
+`route_delete_id`; it asks the store to preserve that route when its Thread is
+the Conversation's resulting current binding, without requiring a caller-side
+binding read.
 Any binding target or route in the plan must belong to that exact
 Conversation. Persisted errors combine the fixed `ActionErrorCode` with, when
 needed, the existing closed common `OperationErrorCode`; arbitrary strings are

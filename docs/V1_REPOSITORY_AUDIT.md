@@ -66,7 +66,11 @@ Required transformation:
 
 Block B now supplies the closed outcomes, fingerprints, durable receipts, and
 typed store/native/workflow executor seam. Block C remains responsible for
-the scoped public actions and removal of manual consumer composition.
+the scoped public actions and removal of manual consumer composition. For
+foreground-safe clear-observation, C sets
+`StoreMutationPlan.route_delete_condition` to
+`RouteDeleteCondition.UNLESS_BOUND_TO_ROUTE_THREAD`; B evaluates it atomically
+against resulting binding state and C performs no store/session pre-read.
 
 ### Resolved in A: Project-creation evidence revised onto the uniform model
 

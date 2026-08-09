@@ -30,6 +30,7 @@ from .effects import (
     EffectPhase,
     EffectReceipt,
     EffectValue,
+    RouteDeleteCondition,
     StableReference,
     StoreMutationPlan,
     StoreMutationRequest,
@@ -306,7 +307,12 @@ class MemoryGatewayStore:
                     elif delete_binding:
                         bindings.pop(conversation_ref, None)
                         generation_floors[conversation_ref] = result_generation
-                    stored_route = _apply_route_plan(routes, plan, now=now)
+                    stored_route = _apply_route_plan(
+                        routes,
+                        plan,
+                        binding=bindings.get(conversation_ref),
+                        now=now,
+                    )
                     reference = _binding_or_route_reference(
                         target,
                         stored_route,
@@ -1129,6 +1135,7 @@ def _apply_route_plan(
     routes: dict[tuple[ThreadRef, ConversationRef], ThreadProjectionRoute],
     plan: StoreMutationPlan,
     *,
+    binding: ConversationBinding | None,
     now: datetime,
 ) -> ThreadProjectionRoute | None:
     route_upsert = plan.route_upsert
@@ -1145,6 +1152,12 @@ def _apply_route_plan(
             if route.route_id == route_delete_id:
                 if route.conversation_ref != plan.conversation_ref:
                     raise ProjectionRouteConflict("route deletion belongs to another Conversation")
+                if (
+                    plan.route_delete_condition is RouteDeleteCondition.UNLESS_BOUND_TO_ROUTE_THREAD
+                    and binding is not None
+                    and binding.thread_ref == route.thread_ref
+                ):
+                    return route
                 routes.pop(key)
                 return route
     return None

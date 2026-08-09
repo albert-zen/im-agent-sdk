@@ -15,6 +15,8 @@ operation-error vocabulary, and codecs reject every unknown JSON member.
 Plan tests also cover every `BindingClearScope`, reject simultaneous
 replacement/clear intent, and prove hierarchical clears require no caller-side
 binding read.
+Route-delete-condition tests reject unknown values and a condition without a
+route deletion.
 Generation tests reject Boolean, negative, floating-point, and textual values
 uniformly in effect values, mutation preconditions, receipts, and persisted
 decoding. Executor parity tests prove an invalid post-fence value is recorded

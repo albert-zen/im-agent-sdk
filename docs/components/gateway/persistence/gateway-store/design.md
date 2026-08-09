@@ -66,8 +66,8 @@ lease-fenced transaction the store:
 3. reserves shared receipt capacity for a new identity;
 4. checks an optional binding-generation precondition;
 5. applies the complete binding target or derives hierarchical-clear retained
-   ancestors from binding state read inside this transaction, plus any route
-   upsert/removal;
+   ancestors from binding state read inside this transaction, then applies any
+   route upsert/removal against the resulting binding state;
 6. advances and retains the binding generation when binding state changes;
 7. writes the minimal terminal outcome receipt; and
 8. commits or rolls back the complete transaction.
@@ -77,10 +77,14 @@ observe, and clear-observation. The request is operation-agnostic: block C owns
 the public closed operation variants and maps them to this validated plan.
 Its Conversation is explicit even for route-only work, so observation changes
 do not create a binding or advance the binding generation.
-Clear-observation success retains the deleted route's stable Thread reference
-and route ID in its terminal value. A missing route still succeeds with the
-requested route ID and no invented Thread reference; memory and SQLite replay
-the same complete outcome.
+When route removal carries `unless_bound_to_route_thread`, the same transaction
+preserves the route if its Thread remains the Conversation's resulting current
+binding and removes it otherwise. Thus an explicit foreground clear cannot
+silence bound output, while an unbound or differently bound route remains
+clearable without an upsert or caller-side read. Success retains the matched
+route's stable Thread reference and route ID whether it was protected or
+deleted. A missing route still succeeds with the requested route ID and no
+invented Thread reference; memory and SQLite replay the same complete outcome.
 Every hierarchical clear does advance the generation, including an
 already-cleared or unbound Conversation; application clear removes the current
 row while retaining the successor generation tombstone. This prevents a
