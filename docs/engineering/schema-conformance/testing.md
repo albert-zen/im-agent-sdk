@@ -64,6 +64,11 @@ For a schema semantic change, add evidence at the owning runtime leaf:
 4. run the conformance kit when the changed value is shared; and
 5. record an accepted decision when the change crosses a component boundary.
 
+For resource-contract changes, focused semantic tests must also reject the
+former flat `applicationInstanceId + threadId` Thread shape, require Project
+fields for Thread-bearing bindings, and require Thread/Turn references for
+the corresponding event families.
+
 Do not treat schema validation as proof of adapter behavior. It proves the
 language-neutral document is structurally sound; contract and native adapter
 tests prove the implementation tells the truth.

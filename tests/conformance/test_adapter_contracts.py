@@ -13,6 +13,7 @@ from imagent.applications import (
     ZenApplicationAdapter,
 )
 from imagent.applications.capabilities import ProjectMode
+from imagent.applications.operations import CreateProject, ProjectCreated
 from imagent.interaction.channels import ChannelStartupConfigurationValidator
 from imagent.interaction.messages import (
     ConversationRef,
@@ -106,16 +107,76 @@ class AgentApplicationContractKitTests(unittest.IsolatedAsyncioTestCase):
                     report.check_names,
                 )
 
+    async def test_fake_managed_project_creation_replays_by_stable_operation_id(self) -> None:
+        adapter = FakeAgentApplicationAdapter(project_mode=ProjectMode.MANAGED)
+        operation = CreateProject(
+            operation_id="stable-project-operation",
+            application_ref=adapter.summary.ref,
+            cwd="/requested/repository",
+            display_name="Repository",
+            created_at=datetime.now(UTC),
+        )
+        first = await adapter.execute(operation)
+        second = await adapter.execute(operation)
+
+        self.assertIsInstance(first, ProjectCreated)
+        self.assertEqual(first, second)
+
+    def test_workspace_project_identity_is_independent_of_root_and_display_text(self) -> None:
+        canonical = FakeAgentApplicationAdapter(
+            project_mode=ProjectMode.FIXED,
+            workspace_id="workspace-1",
+            workspace_root="/repo/root",
+        )
+        equivalent = FakeAgentApplicationAdapter(
+            project_mode=ProjectMode.FIXED,
+            workspace_id="workspace-1",
+            workspace_root="/repo/child/../root",
+        )
+        moved = FakeAgentApplicationAdapter(
+            project_mode=ProjectMode.FIXED,
+            workspace_id="workspace-1",
+            workspace_root="/repo/moved",
+        )
+        replacement = FakeAgentApplicationAdapter(
+            project_mode=ProjectMode.FIXED,
+            workspace_id="workspace-2",
+            workspace_root="/repo/root",
+        )
+
+        assert canonical.summary.workspace_identity is not None
+        assert equivalent.summary.workspace_identity is not None
+        assert moved.summary.workspace_identity is not None
+        assert replacement.summary.workspace_identity is not None
+        self.assertEqual(
+            canonical.summary.workspace_identity,
+            equivalent.summary.workspace_identity,
+        )
+        self.assertEqual(
+            canonical.summary.workspace_identity.project_ref,
+            moved.summary.workspace_identity.project_ref,
+        )
+        self.assertNotEqual(
+            canonical.summary.workspace_identity.root_fingerprint,
+            moved.summary.workspace_identity.root_fingerprint,
+        )
+        self.assertNotEqual(
+            canonical.summary.workspace_identity.project_ref,
+            replacement.summary.workspace_identity.project_ref,
+        )
+
     async def test_codex_and_zen_adapters_pass_contract_kit(self) -> None:
         for adapter in (
             CodexApplicationAdapter(
                 application_instance_id="codex-contract",
                 client=NativeZenClient(),
+                workspace_id="workspace",
                 cwd="/repo",
             ),
             ZenApplicationAdapter(
                 application_instance_id="zen-contract",
                 client=NativeZenClient(),
+                workspace_id="workspace",
                 cwd="/repo",
             ),
         ):
@@ -131,7 +192,7 @@ class AgentApplicationContractKitTests(unittest.IsolatedAsyncioTestCase):
                 client=NativeT3Client(),
             )
         )
-        self.assertIn("managed project list and read", report.check_names)
+        self.assertIn("project list and read", report.check_names)
         self.assertIn("declared thread deletion", report.check_names)
 
 

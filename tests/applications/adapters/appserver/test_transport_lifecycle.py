@@ -4,6 +4,7 @@ import asyncio
 import json
 import unittest
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, cast
 from unittest.mock import patch
 
@@ -23,7 +24,7 @@ from imagent.applications.adapters.appserver.mapping import (
     AppServerMappingError,
     normalize_appserver_message,
 )
-from imagent.applications.contract import ApplicationInputOutcomeUnknown
+from imagent.applications.contract import ApplicationInputOutcomeUnknown, ProjectRef
 from imagent.applications.operations import CreateThread, ThreadCreated
 from imagent.interaction.diagnostics import (
     ConnectionDiagnosticState,
@@ -183,6 +184,7 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
         adapter = ZenApplicationAdapter(
             application_instance_id="zen-main",
             client=cast(Any, _client(process)),
+            workspace_id="workspace",
             cwd="D:/repo",
             thread_start_options={
                 "sandbox": "danger-full-access",
@@ -194,6 +196,9 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
                 CreateThread(
                     operation_id="create-zen-never",
                     application_ref=adapter.summary.ref,
+                    project_ref=ProjectRef(
+                        adapter.summary.ref.application_instance_id, "workspace"
+                    ),
                     created_at=datetime.now(UTC),
                 )
             )
@@ -212,12 +217,12 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
                 [request["params"] for request in requests],
                 [
                     {
-                        "cwd": "D:/repo",
+                        "cwd": str(Path("D:/repo").resolve()),
                         "sandbox": "danger-full-access",
                         "approvalPolicy": "never",
                     },
                     {
-                        "cwd": "D:/repo",
+                        "cwd": str(Path("D:/repo").resolve()),
                         "sandbox": "danger-full-access",
                         "approvalPolicy": "on-request",
                     },

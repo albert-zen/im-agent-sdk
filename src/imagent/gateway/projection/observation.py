@@ -121,13 +121,9 @@ def derive_live_projection_delivery_id(
             "live_event",
             conversation_ref.channel_instance_id,
             conversation_ref.native_conversation_id,
-            thread_ref.application_instance_id,
-            (
-                thread_ref.project_ref.native_project_id
-                if thread_ref.project_ref is not None
-                else None
-            ),
-            thread_ref.native_thread_id,
+            thread_ref.project_ref.application_instance_id,
+            thread_ref.project_ref.project_id,
+            thread_ref.thread_id,
             event_id,
         ],
         ensure_ascii=False,
@@ -567,7 +563,7 @@ class ThreadProjectionRuntime:
                 return
             await self._routes.begin_bootstrap(activated_route.route_id)
             await self._recovery.reconcile_route(
-                self._application(current.thread_ref.application_instance_id),
+                self._application(current.thread_ref.project_ref.application_instance_id),
                 activated_route,
                 require_checkpoint=require_checkpoint,
                 retain_barrier_on_failure=True,
@@ -580,7 +576,7 @@ class ThreadProjectionRuntime:
             await asyncio.gather(
                 *(
                     self._recovery.reconcile_route(
-                        self._application(current.thread_ref.application_instance_id),
+                        self._application(current.thread_ref.project_ref.application_instance_id),
                         route,
                         require_checkpoint=(
                             require_checkpoint
@@ -757,7 +753,7 @@ class ThreadProjectionRuntime:
             try:
                 if not await self._observation_required(thread_ref):
                     return
-                application = self._application(thread_ref.application_instance_id)
+                application = self._application(thread_ref.project_ref.application_instance_id)
                 ordering_gap = self._ordering_recovery_gaps.pop(thread_ref, None)
                 if ordering_gap is not None:
                     if not await self._recover_after_failure(
@@ -955,7 +951,7 @@ class ThreadProjectionRuntime:
                     await self._active_routes(thread_ref),
                     ProjectedAgentMessage(
                         message=agent_message,
-                        turn_id=event.turn_id,
+                        turn_id=(event.turn_ref.turn_id if event.turn_ref is not None else None),
                         event_id=event.event_id,
                         checkpoint=event.type is AgentEventType.MESSAGE_COMPLETED,
                     ),
@@ -967,11 +963,11 @@ class ThreadProjectionRuntime:
                 AgentEventType.TURN_FAILED,
                 AgentEventType.TURN_INTERRUPTED,
             }
-            and event.turn_id is not None
+            and event.turn_ref is not None
         ):
             await self._request_projection.delete_terminal_turn(
                 thread_ref,
-                event.turn_id,
+                event.turn_ref.turn_id,
             )
         if event.type is AgentEventType.THREAD_DELETED:
             routes = await self._projections.list_projection_routes(thread_ref)

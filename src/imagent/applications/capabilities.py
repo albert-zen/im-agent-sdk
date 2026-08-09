@@ -84,21 +84,31 @@ def validate_application_capabilities(capabilities: ApplicationCapabilities) -> 
     ):
         raise ContractViolation("gap detection requires a declared event sequence scope")
     projects = capabilities.projects
-    project_operations = (
-        projects.discovery,
-        projects.reading,
-        projects.creation,
-        projects.deletion,
-    )
     if projects.mode is ProjectMode.MANAGED:
-        if projects.discovery is SupportLevel.UNSUPPORTED:
-            raise ContractViolation("managed project mode requires project discovery")
-        if projects.reading is SupportLevel.UNSUPPORTED:
-            raise ContractViolation("managed project mode requires project reads")
-    elif any(level is not SupportLevel.UNSUPPORTED for level in project_operations):
-        raise ContractViolation(
-            f"{projects.mode.value} project mode cannot advertise project operations"
-        )
+        if projects.discovery is not SupportLevel.NATIVE:
+            raise ContractViolation("managed project mode requires native project discovery")
+        if projects.reading is not SupportLevel.NATIVE:
+            raise ContractViolation("managed project mode requires native project reads")
+        if projects.creation is SupportLevel.FALLBACK:
+            raise ContractViolation("managed project creation cannot use fallback support")
+        if projects.deletion is SupportLevel.FALLBACK:
+            raise ContractViolation("managed project deletion cannot use fallback support")
+    else:
+        if projects.discovery is not SupportLevel.FALLBACK:
+            raise ContractViolation(
+                f"{projects.mode.value} project discovery must be an adapter projection"
+            )
+        if projects.reading is not SupportLevel.FALLBACK:
+            raise ContractViolation(
+                f"{projects.mode.value} project reads must be an adapter projection"
+            )
+        if (
+            projects.creation is not SupportLevel.UNSUPPORTED
+            or projects.deletion is not SupportLevel.UNSUPPORTED
+        ):
+            raise ContractViolation(
+                f"{projects.mode.value} project mode cannot advertise native management"
+            )
 
 
 __all__ = [

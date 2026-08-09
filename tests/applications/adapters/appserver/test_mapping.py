@@ -14,6 +14,7 @@ from imagent.applications.adapters.appserver.mapping import (
     MAX_NATIVE_TEXT_CHARACTERS,
     MAX_NATIVE_TOTAL_VALUES,
     AppServerMappingError,
+    derive_appserver_event_id,
     is_agent_item,
     is_unsupported_method_error,
     item_id,
@@ -46,6 +47,23 @@ class AppServerMappingTests(unittest.TestCase):
             f"^{APP_SERVER_MAPPING_ERROR_MESSAGE}$",
         ):
             callback()
+
+    def test_event_identity_includes_workspace_project_scope(self) -> None:
+        first = derive_appserver_event_id(
+            "codex-main",
+            project_id="workspace-1",
+            event_type="turn.completed",
+            thread_id="thread-1",
+            turn_id="turn-1",
+        )
+        second = derive_appserver_event_id(
+            "codex-main",
+            project_id="workspace-2",
+            event_type="turn.completed",
+            thread_id="thread-1",
+            turn_id="turn-1",
+        )
+        self.assertNotEqual(first, second)
 
     def test_native_container_shapes_are_validated_copied_and_filtered(self) -> None:
         thread = {"id": "thread-1"}
@@ -199,6 +217,7 @@ class AppServerMappingTests(unittest.TestCase):
                     self.assert_mapping_error(lambda: normalize_appserver_message(message))
 
         for method, params in (
+            ("item/agentMessage/delta", {"threadId": "thread-1", "delta": "partial"}),
             ("turn/completed", {"threadId": "thread-1"}),
             ("turn/completed", {"turnId": "turn-1"}),
             ("serverRequest/resolved", {}),

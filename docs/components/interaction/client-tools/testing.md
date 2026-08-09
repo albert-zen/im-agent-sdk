@@ -13,8 +13,8 @@ Applications implementation. The suite covers:
 - exactly-one credential input, empty and unreadable credential failures, and
   credential secrecy on validation and transport failures;
 - exclusive Thread-route versus Conversation target construction, required
-  identity pairs, optional project/route shape, and Conversation route
-  rejection;
+  nested Application/Project/Thread identity, optional route shape, rejection
+  of the former Project-less target, and Conversation route rejection;
 - plain and Markdown text, explicitly enumerated regular-file encoding,
   basename/media type/size/base64/SHA-256 identity, empty content, missing
   files, and non-regular-file failures;

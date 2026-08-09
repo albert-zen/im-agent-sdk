@@ -25,7 +25,9 @@ class ApplicationRequestTests(unittest.TestCase):
             self.application,
             "epoch-4:request-7",
         )
-        self.thread = contract.ThreadRef("codex-local", "thread-1")
+        self.thread = contract.ThreadRef(
+            contract.ProjectRef("codex-local", "workspace"), "thread-1"
+        )
 
     def _approval(
         self,
@@ -38,8 +40,7 @@ class ApplicationRequestTests(unittest.TestCase):
     ) -> requests.ApprovalRequest:
         return requests.ApprovalRequest(
             request_ref=self.request_ref,
-            thread_ref=self.thread,
-            turn_id="turn-1",
+            turn_ref=contract.TurnRef(self.thread, "turn-1"),
             prompt=prompt,
             choices=choices,
         )
@@ -95,7 +96,7 @@ class ApplicationRequestTests(unittest.TestCase):
     def test_request_annotations_and_gateway_route_annotations_resolve(self) -> None:
         request_hints = get_type_hints(requests.ApprovalRequest)
         self.assertIs(request_hints["request_ref"], requests.RequestRef)
-        self.assertIs(request_hints["thread_ref"], contract.ThreadRef)
+        self.assertIs(request_hints["turn_ref"], contract.TurnRef)
         self.assertIs(
             get_type_hints(requests.RequestRef)["application_ref"],
             contract.ApplicationRef,
@@ -103,6 +104,7 @@ class ApplicationRequestTests(unittest.TestCase):
 
         route_hints = get_type_hints(RequestRouteCorrelation)
         self.assertIs(route_hints["request_ref"], requests.RequestRef)
+        self.assertIs(route_hints["turn_ref"], contract.TurnRef)
         self.assertEqual(route_hints["response_shape"], requests.RequestResponseShape)
 
     def test_request_and_historical_resource_import_orders_are_clean(self) -> None:
@@ -153,8 +155,7 @@ class ApplicationRequestTests(unittest.TestCase):
                         contract.ApplicationRef("other-application"),
                         self.request_ref.native_request_id,
                     ),
-                    thread_ref=self.thread,
-                    turn_id="turn-1",
+                    turn_ref=contract.TurnRef(self.thread, "turn-1"),
                     prompt="Run the command?",
                     choices=(requests.RequestChoice("accept", "Approve"),),
                 )
@@ -189,8 +190,7 @@ class ApplicationRequestTests(unittest.TestCase):
         requests.validate_interactive_request(
             requests.UserInputRequest(
                 request_ref=self.request_ref,
-                thread_ref=self.thread,
-                turn_id="turn-1",
+                turn_ref=contract.TurnRef(self.thread, "turn-1"),
                 questions=boundary_questions,
             )
         )
@@ -198,8 +198,7 @@ class ApplicationRequestTests(unittest.TestCase):
             requests.validate_interactive_request(
                 requests.UserInputRequest(
                     request_ref=self.request_ref,
-                    thread_ref=self.thread,
-                    turn_id="turn-1",
+                    turn_ref=contract.TurnRef(self.thread, "turn-1"),
                     questions=boundary_questions
                     + (
                         requests.UserInputQuestion(
@@ -234,8 +233,7 @@ class ApplicationRequestTests(unittest.TestCase):
         )
         user_request = requests.UserInputRequest(
             request_ref=self.request_ref,
-            thread_ref=self.thread,
-            turn_id="turn-1",
+            turn_ref=contract.TurnRef(self.thread, "turn-1"),
             questions=(question,),
         )
         user_shape = requests.derive_request_response_shape(user_request)
@@ -267,6 +265,7 @@ class ApplicationRequestTests(unittest.TestCase):
         requests.validate_request_resolution(
             requests.RequestResolution(
                 request_ref=self.request_ref,
+                turn_ref=contract.TurnRef(self.thread, "turn-1"),
                 status=requests.RequestResolutionStatus.RESOLVED,
                 resolved_at=datetime.now(UTC),
             )
@@ -275,8 +274,24 @@ class ApplicationRequestTests(unittest.TestCase):
             requests.validate_request_resolution(
                 requests.RequestResolution(
                     request_ref=self.request_ref,
+                    turn_ref=contract.TurnRef(self.thread, "turn-1"),
                     status=requests.RequestResolutionStatus.STALE,
                     resolved_at=datetime(2026, 1, 1),
+                )
+            )
+        with self.assertRaisesRegex(ContractViolation, "different application"):
+            requests.validate_request_resolution(
+                requests.RequestResolution(
+                    request_ref=self.request_ref,
+                    turn_ref=contract.TurnRef(
+                        contract.ThreadRef(
+                            contract.ProjectRef("other-app", "project-1"),
+                            "thread-1",
+                        ),
+                        "turn-1",
+                    ),
+                    status=requests.RequestResolutionStatus.RESOLVED,
+                    resolved_at=datetime.now(UTC),
                 )
             )
 

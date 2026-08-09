@@ -87,7 +87,7 @@ method-specific:
   the Thread, Turn, and item IDs that its resulting fact carries;
 - `item/completed` requires Thread, Turn, and item identity before a canonical
   message or artifact fact; `turn/completed` requires Thread and Turn;
-- `item/agentMessage/delta` requires Thread identity but remains an
+- `item/agentMessage/delta` requires Thread and Turn identity but remains an
   unprojected transient delta when its native event ID is absent; configured
   Codex A1 live activity additionally requires a native event ID before it can
   invoke a presenter or emit `message.created`;
@@ -132,3 +132,4 @@ Gateway.
 - [Applications adapter overview](../../../../application-adapters/design.md)
 - [ADR 0001](../../../../../decisions/0001-contract-and-resource-foundations.md)
 - [ADR 0015](../../../../../decisions/0015-typed-extension-seams-and-composition.md)
+- [ADR 0016](../../../../../decisions/0016-uniform-workspace-and-consumer-actions.md)

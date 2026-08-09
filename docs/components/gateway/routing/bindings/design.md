@@ -27,9 +27,13 @@ cache. Controllers may submit the public typed actions, but product UX such as
 
 ## Contract and dependencies
 
-A stable Conversation key and its one current binding are represented and
-mutated through the binding owner. Multiple Conversations may independently
-bind the same Application Thread. The binding repository stores only the
+A stable Conversation key and its one current hierarchical binding are
+represented and mutated through the binding owner. Multiple Conversations may
+independently bind the same Application Thread. Application-only and Project-
+only selections remain valid, but every Thread selection requires and exactly
+matches the binding's Project ancestor in every Project mode. Fixed/flat
+workspace Projects are therefore ordinary stable binding scopes; mode never
+authorizes a Project-less Thread. The binding repository stores only the
 bridge-owned binding reference and revision; it never persists or copies
 Project, Thread, transcript, Turn, or execution state. Gateway composition
 constructs the binding runtime with the configured repository and calls its
@@ -56,6 +60,11 @@ immediately preceding revision. Commit then converges that accepted
 same-target retry without a write or revision bump. A non-foreground,
 revisionless same-target bind remains an ordinary repository write and
 advances the revision; revisionless input is not a general idempotency key.
+
+Block A preserves the current optimistic revision contract. The monotonic
+binding generation, store-only action receipts, workflow CAS, and atomic
+receipt/foreground-route transaction required by ADR 0016 belong to block B;
+no local compatibility receipt or second persistence path is introduced here.
 
 `imagent.contracts` remains a finite exact public facade. Its runtime
 `__getattr__` handles only the declared Gateway operation, binding, validator,

@@ -10,7 +10,7 @@ from typing import cast
 import imagent.gateway.projection.observation as projection_semantics
 import imagent.gateway.projection.request_correlation as request_policy_owner
 from imagent.adapters import DeliverySubmissionCapacityError, DeliverySubmissionConflict
-from imagent.applications.contract import ApplicationRef, ThreadRef
+from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef
 from imagent.gateway.delivery import DeliverySubmissionOrigin
 from imagent.gateway.delivery import proactive as proactive_owner
 from imagent.gateway.persistence import (
@@ -57,7 +57,8 @@ class InMemoryBindingRepositoryTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=self.conversation,
                 application_ref=ApplicationRef("zen-local"),
-                thread_ref=ThreadRef("zen-local", "thread-1"),
+                project_ref=ProjectRef("zen-local", "workspace"),
+                thread_ref=ThreadRef(ProjectRef("zen-local", "workspace"), "thread-1"),
             ),
             expected_revision=first.revision,
         )
@@ -95,7 +96,10 @@ class InMemoryBindingRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 ConversationBinding(
                     conversation_ref=self.conversation,
                     application_ref=ApplicationRef("zen-local"),
-                    thread_ref=ThreadRef("t3-local", "thread-other"),
+                    project_ref=ThreadRef(
+                        ProjectRef("t3-local", "workspace"), "thread-other"
+                    ).project_ref,
+                    thread_ref=ThreadRef(ProjectRef("t3-local", "workspace"), "thread-other"),
                 ),
                 expected_revision=stored.revision,
             )

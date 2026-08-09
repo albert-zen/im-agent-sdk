@@ -4,6 +4,8 @@ State-contract tests must prove:
 
 - bindings preserve one stable Conversation identity, validate consistent
   Application/Project/Thread references, and reject invalid revisions;
+- every Thread-bearing state value has mandatory Project ancestry, including
+  fixed/flat workspaces, and rejects a partial or mismatched hierarchy;
 - route identity binds one stable route ID to one exact Thread/Conversation
   endpoint pair;
 - checkpoint identity and time are present or absent together and are never

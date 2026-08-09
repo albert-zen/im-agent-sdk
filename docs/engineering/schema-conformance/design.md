@@ -60,6 +60,13 @@ credentials, transcript state, execution state, or an unbounded payload. Keep
 stable identities explicit and preserve the distinction between Message
 content and Operation control intent.
 
+The v1 resource schemas encode the same unconditional hierarchy as Python:
+`ProjectRef(applicationInstanceId, projectId)`,
+`ThreadRef(projectRef, threadId)`, and `TurnRef(threadRef, turnId)`. Schemas for
+events, history, requests, bindings, correlations, operations, and proactive
+targets reuse those definitions; they do not publish nullable or duplicate
+Project ancestry.
+
 Schema conformance is a repository check. It must remain stateless and must
 not introduce generated code, a schema registry, a persistence layer, or a
 runtime admission path.

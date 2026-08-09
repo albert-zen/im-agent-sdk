@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Callable
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 
 from imagent.applications.capabilities import (
     ApplicationCapabilities,
@@ -18,6 +19,7 @@ from imagent.applications.capabilities import (
     validate_application_capabilities,
 )
 from imagent.applications.contract import (
+    MAX_WORKSPACE_ROOT_LENGTH,
     AcceptedTurn,
     AgentInput,
     AgentMessage,
@@ -29,14 +31,20 @@ from imagent.applications.contract import (
     InputDisposition,
     Page,
     ProjectRef,
+    ProjectSummary,
     ThreadHistory,
     ThreadRef,
     ThreadStatus,
     ThreadSummary,
     TurnCatchup,
     TurnHistoryEntry,
+    TurnRef,
     TurnReplyCorrelationPolicy,
     TurnStatus,
+    WorkspaceIdentity,
+    fingerprint_canonical_workspace_root,
+    validate_application_summary,
+    validate_project_summary,
 )
 from imagent.applications.events import (
     AgentEvent,
@@ -60,6 +68,8 @@ from imagent.applications.operations import (
     InterruptTurn,
     ListProjects,
     ListThreads,
+    ProjectRead,
+    ProjectsListed,
     ThreadCreated,
     ThreadHistoryRead,
     ThreadRead,
@@ -95,6 +105,18 @@ def _require_positive_int(value: int, name: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < 1:
         raise ValueError(f"{name} must be a positive integer")
     return value
+
+
+def _canonical_workspace_root(root: str | Path) -> str:
+    raw = str(root)
+    if not raw or len(raw) > MAX_WORKSPACE_ROOT_LENGTH:
+        raise ValueError(
+            "workspace root must be a non-empty path of at most "
+            f"{MAX_WORKSPACE_ROOT_LENGTH} characters"
+        )
+    canonical = str(Path(raw).expanduser().resolve(strict=False))
+    fingerprint_canonical_workspace_root(canonical)
+    return canonical
 
 
 class _CountingSubscription(AsyncIterator[AgentEvent]):
@@ -136,6 +158,8 @@ class ReferenceApplication:
         self,
         application_instance_id: str = "reference-agent",
         *,
+        workspace_id: str = "reference-workspace",
+        workspace_root: str = "/reference/workspace",
         max_threads: int = 8,
         max_turns_per_thread: int = 8,
         max_events_per_thread: int = 64,
@@ -152,8 +176,8 @@ class ReferenceApplication:
         capabilities = ApplicationCapabilities(
             projects=ProjectCapabilities(
                 mode=ProjectMode.FLAT,
-                discovery=SupportLevel.UNSUPPORTED,
-                reading=SupportLevel.UNSUPPORTED,
+                discovery=SupportLevel.FALLBACK,
+                reading=SupportLevel.FALLBACK,
             ),
             threads=ThreadCapabilities(
                 listing=SupportLevel.NATIVE,
@@ -172,12 +196,26 @@ class ReferenceApplication:
             ),
         )
         validate_application_capabilities(capabilities)
+        canonical_root = _canonical_workspace_root(workspace_root)
+        root_fingerprint = fingerprint_canonical_workspace_root(canonical_root)
+        self._workspace_project = ProjectSummary(
+            ref=ProjectRef(application_instance_id, workspace_id),
+            display_name="Reference Workspace",
+            root_path=canonical_root,
+            workspace_root_fingerprint=root_fingerprint,
+        )
         self._summary = ApplicationSummary(
             ref=ApplicationRef(application_instance_id),
             kind="reference",
             display_name="Neutral Reference Agent",
             capabilities=capabilities,
+            workspace_identity=WorkspaceIdentity(
+                self._workspace_project.ref,
+                root_fingerprint,
+            ),
         )
+        validate_project_summary(self._workspace_project)
+        validate_application_summary(self._summary)
         self._threads: dict[ThreadRef, ThreadSummary] = {}
         self._turn_history: dict[ThreadRef, list[TurnHistoryEntry]] = {}
         self._event_history: dict[ThreadRef, list[AgentEvent]] = {}
@@ -220,6 +258,10 @@ class ReferenceApplication:
     def max_events_per_thread(self) -> int:
         return self._max_events_per_thread
 
+    @property
+    def default_project_ref(self) -> ProjectRef:
+        return self._workspace_project.ref
+
     async def start(self) -> None:
         if self._started:
             return
@@ -234,16 +276,16 @@ class ReferenceApplication:
 
     async def create_thread(
         self,
-        project_ref: ProjectRef | None = None,
+        project_ref: ProjectRef,
         title: str | None = None,
     ) -> ThreadSummary:
-        if project_ref is not None:
-            raise NotImplementedError("the flat reference Application has no Projects")
+        if project_ref != self._workspace_project.ref:
+            raise ValueError("Thread belongs to a different workspace Project")
         if len(self._threads) >= self._max_threads:
             raise _CapacityExceeded("reference Application Thread capacity is exhausted")
         thread_ref = ThreadRef(
-            application_instance_id=self.summary.ref.application_instance_id,
-            native_thread_id=f"reference-thread-{self._next_thread}",
+            project_ref=self._workspace_project.ref,
+            thread_id=f"reference-thread-{self._next_thread}",
         )
         self._next_thread += 1
         summary = ThreadSummary(
@@ -320,7 +362,7 @@ class ReferenceApplication:
             )
             self._turn_history[thread_ref].append(
                 TurnHistoryEntry(
-                    turn_id=turn_id,
+                    turn_ref=TurnRef(thread_ref, turn_id),
                     status=TurnStatus.COMPLETED,
                     user_message=user_message,
                     agent_messages=(agent_message,),
@@ -350,8 +392,7 @@ class ReferenceApplication:
                 {"status": TurnStatus.COMPLETED.value},
             )
             return AcceptedTurn(
-                thread_ref=thread_ref,
-                turn_id=turn_id,
+                turn_ref=TurnRef(thread_ref, turn_id),
                 client_message_id=message.client_message_id,
                 disposition=InputDisposition.STARTED,
                 correlation_policy=TurnReplyCorrelationPolicy.CREATE_NEW,
@@ -436,9 +477,26 @@ class ReferenceApplication:
     async def _execute(self, operation: ApplicationOperation) -> ApplicationOperationResult:
         completed_at = _now()
         if isinstance(operation, ListProjects):
-            raise NotImplementedError("the flat reference Application has no Projects")
+            if operation.cursor is not None:
+                raise ValueError("reference Project listing does not support cursors")
+            projects = (self._workspace_project,)
+            if operation.query and operation.query.casefold() not in (
+                self._workspace_project.display_name.casefold()
+            ):
+                projects = ()
+            return ProjectsListed(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                projects=Page(projects),
+            )
         if isinstance(operation, GetProject):
-            raise NotImplementedError("the flat reference Application has no Projects")
+            if operation.project_ref != self._workspace_project.ref:
+                raise ValueError("Project belongs to a different reference workspace")
+            return ProjectRead(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                project=self._workspace_project,
+            )
         if isinstance(operation, CreateThread):
             return ThreadCreated(
                 operation_id=operation.operation_id,
@@ -446,11 +504,9 @@ class ReferenceApplication:
                 thread=await self.create_thread(operation.project_ref, operation.title),
             )
         if isinstance(operation, ListThreads):
+            if operation.project_ref != self._workspace_project.ref:
+                raise ValueError("Project belongs to a different reference workspace")
             threads = tuple(self._threads.values())
-            if operation.project_ref is not None:
-                threads = tuple(
-                    thread for thread in threads if thread.ref.project_ref == operation.project_ref
-                )
             if operation.query:
                 query = operation.query.casefold()
                 threads = tuple(
@@ -500,7 +556,7 @@ class ReferenceApplication:
                 completed_at=completed_at,
                 catchup=TurnCatchup(
                     thread_ref=operation.thread_ref,
-                    turn_id=latest.turn_id if latest is not None else None,
+                    turn_ref=latest.turn_ref if latest is not None else None,
                     status=latest.status if latest is not None else TurnStatus.IDLE,
                     messages=latest.agent_messages if latest is not None else (),
                     updated_at=(await self.get_thread(operation.thread_ref)).updated_at,
@@ -577,17 +633,18 @@ class ReferenceApplication:
         event = AgentEvent(
             event_id=(
                 f"{self.summary.ref.application_instance_id}:"
-                f"{thread_ref.native_thread_id}:{sequence}:{event_type.value}"
+                f"{thread_ref.thread_id}:{sequence}:{event_type.value}"
             ),
             application_instance_id=self.summary.ref.application_instance_id,
+            project_ref=thread_ref.project_ref,
             type=event_type,
             data=data,
             created_at=_now(),
             thread_ref=thread_ref,
-            turn_id=turn_id,
+            turn_ref=TurnRef(thread_ref, turn_id),
             sequence=sequence,
             sequence_epoch=self._event_epoch,
-            cursor=f"reference:{self._event_epoch}:{thread_ref.native_thread_id}:{sequence}",
+            cursor=f"reference:{self._event_epoch}:{thread_ref.thread_id}:{sequence}",
         )
         history = self._event_history[thread_ref]
         history.append(event)

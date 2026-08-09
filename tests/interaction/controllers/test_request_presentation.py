@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from importlib.util import find_spec
 
 import imagent.interaction.controllers as controllers_facade
-from imagent.applications.contract import ApplicationRef, ThreadRef
+from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef, TurnRef
 from imagent.applications.requests import (
     RequestChoice,
     RequestRef,
@@ -49,8 +49,9 @@ class MarkdownRequestPresenterTests(unittest.TestCase):
                     ApplicationRef("codex-local"),
                     "epoch-1:request-7",
                 ),
-                thread_ref=ThreadRef("codex-local", "thread-1"),
-                turn_id="turn-1",
+                turn_ref=TurnRef(
+                    ThreadRef(ProjectRef("codex-local", "workspace"), "thread-1"), "turn-1"
+                ),
                 questions=(
                     UserInputQuestion(
                         question_id="token",
@@ -85,8 +86,9 @@ class MarkdownRequestPresenterTests(unittest.TestCase):
                     ApplicationRef(application_id),
                     native_request_id,
                 ),
-                thread_ref=ThreadRef(application_id, "thread-1"),
-                turn_id="turn-1",
+                turn_ref=TurnRef(
+                    ThreadRef(ProjectRef(application_id, "workspace"), "thread-1"), "turn-1"
+                ),
                 questions=(
                     UserInputQuestion(
                         question_id="deployment target",

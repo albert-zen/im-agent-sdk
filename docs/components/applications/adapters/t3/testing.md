@@ -17,7 +17,14 @@ window, cancellation, and replay-safe history association.
 Evidence must preserve native acceptance before observation/presenter work,
 stable IDs, explicit gaps, authoritative history recovery, no synthetic
 connection diagnostics, and unsupported interactive requests. Focused owner
-tests must prove callback failure performs zero dispatch; dispatch, follow-up
+tests also reject native Threads without Project ancestry and prove
+`project.create` is typed unsupported without guessing a native endpoint.
+They also use a same-Application, different-Project `ThreadRef` to prove native
+reads return no projection, input does not reach its pre-dispatch callback,
+delete/interrupt perform no mutation, and polling publishes no event.
+Malformed live assistant messages without native Turn ancestry produce the
+fixed recovery gap before seen-state admission or canonical publication.
+Focused owner tests must prove callback failure performs zero dispatch; dispatch, follow-up
 read, cancellation, and missing-ID failures become one
 `ApplicationInputOutcomeUnknown` with no fallback; the baseline reservation is
 released for later capacity use; and `AcceptedTurn` returns before any

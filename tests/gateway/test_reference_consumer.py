@@ -10,6 +10,7 @@ from examples.reference_consumer.main import run_demo
 from imagent.applications.contract import (
     AgentInput,
     ApplicationRef,
+    ProjectRef,
     ThreadHistory,
     ThreadRef,
 )
@@ -100,14 +101,14 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
             ReferenceApplication(max_threads=True)
 
         application = ReferenceApplication(max_threads=1)
-        await application.create_thread()
+        await application.create_thread(application.default_project_ref)
         with self.assertRaises(ValueError):
-            await application.create_thread()
+            await application.create_thread(application.default_project_ref)
         with self.assertRaises(KeyError):
             await application.get_thread(
                 ThreadRef(
-                    application_instance_id="reference-agent",
-                    native_thread_id="reference-thread-2",
+                    project_ref=ProjectRef("reference-agent", "workspace"),
+                    thread_id="reference-thread-2",
                 )
             )
 
@@ -115,7 +116,7 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
             max_turns_per_thread=1,
             max_events_per_thread=6,
         )
-        turn_thread = await turn_limited.create_thread()
+        turn_thread = await turn_limited.create_thread(turn_limited.default_project_ref)
         await turn_limited.emit_native_turn(turn_thread.ref, "first")
         callback_calls: list[str] = []
 
@@ -138,7 +139,7 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
             max_turns_per_thread=2,
             max_events_per_thread=3,
         )
-        event_thread = await event_limited.create_thread()
+        event_thread = await event_limited.create_thread(event_limited.default_project_ref)
         await event_limited.emit_native_turn(event_thread.ref, "first")
         event_callback_calls: list[str] = []
 

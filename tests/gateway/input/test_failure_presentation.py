@@ -9,7 +9,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from imagent.adapters import IdempotencyClaimStatus
-from imagent.applications.contract import AcceptedTurn, ApplicationInputOutcomeUnknown, ThreadRef
+from imagent.applications.contract import (
+    AcceptedTurn,
+    ApplicationInputOutcomeUnknown,
+    ProjectRef,
+    ThreadRef,
+    TurnRef,
+)
 from imagent.gateway import (
     GatewayExtensions,
     GatewayLimits,
@@ -191,8 +197,7 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
         async def process(_before_application_send) -> None:
             raise InputPostAcceptanceError(
                 AcceptedTurn(
-                    thread_ref=ThreadRef("app", "thread"),
-                    turn_id="turn",
+                    turn_ref=TurnRef(ThreadRef(ProjectRef("app", "workspace"), "thread"), "turn"),
                     client_message_id="client",
                 ),
                 RuntimeError("secret correlation failure"),
@@ -370,7 +375,10 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
                             RuntimeError("unknown"),
                         )
                     raise InputPostAcceptanceError(
-                        AcceptedTurn(ThreadRef("app", "thread"), "turn", "client"),
+                        AcceptedTurn(
+                            TurnRef(ThreadRef(ProjectRef("app", "workspace"), "thread"), "turn"),
+                            "client",
+                        ),
                         RuntimeError("post"),
                     )
 
@@ -679,7 +687,9 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
             return unknown
         return self._raising(
             InputPostAcceptanceError(
-                AcceptedTurn(ThreadRef("app", "thread"), "turn", "client"),
+                AcceptedTurn(
+                    TurnRef(ThreadRef(ProjectRef("app", "workspace"), "thread"), "turn"), "client"
+                ),
                 RuntimeError("post"),
             )
         )

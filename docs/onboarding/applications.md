@@ -10,7 +10,9 @@ The neutral adapter is
 [`ReferenceApplication`](../../examples/reference_consumer/application.py).
 It implements the minimum useful surface for the example:
 
-- a flat Application with stable `ApplicationRef` and `ThreadRef` values;
+- a flat Application with one stable workspace `ProjectSummary`, immutable
+  `workspaceId`/canonical-root fingerprint evidence, and Project-scoped
+  `ThreadRef`/`TurnRef` values;
 - typed `send_input()` with truthful `started` acceptance and a
   `before_dispatch` fence;
 - canonical `AgentEvent` values published through independent bounded fan-out;
@@ -25,6 +27,12 @@ SDK transcript. The sample’s stop/start recovery therefore reuses this same
 Application object. A real adapter replaces this class with native resource,
 input, event, and durable history calls while preserving the same typed
 contracts.
+
+All Application modes expose Project list/read truth. Managed adapters return
+native Projects. Fixed and flat adapters return exactly one stable workspace
+Project with `fallback` discovery/reading and typed unsupported management.
+Callers must pass that Project explicitly when creating or listing Threads;
+there is no Project-less constructor or implicit single-workspace selection.
 
 `max_threads`, `max_turns_per_thread`, and `max_events_per_thread` are
 positive explicit bounds. Thread creation, a new Turn, and the three replay

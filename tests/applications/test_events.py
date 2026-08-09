@@ -12,7 +12,7 @@ import imagent
 from imagent import contracts
 from imagent import events as legacy_events
 from imagent.applications import capabilities, events
-from imagent.applications.contract import AgentMessage, ProjectRef, ThreadRef
+from imagent.applications.contract import AgentMessage, ProjectRef, ThreadRef, TurnRef
 from imagent.applications.requests import InteractiveRequest, RequestResolution
 from imagent.interaction.messages import MessageRole, TextContent
 from imagent.interaction.operations import ContractViolation
@@ -26,8 +26,8 @@ def _capabilities(
     return capabilities.ApplicationCapabilities(
         projects=capabilities.ProjectCapabilities(
             mode=capabilities.ProjectMode.FLAT,
-            discovery=capabilities.SupportLevel.UNSUPPORTED,
-            reading=capabilities.SupportLevel.UNSUPPORTED,
+            discovery=capabilities.SupportLevel.FALLBACK,
+            reading=capabilities.SupportLevel.FALLBACK,
         ),
         threads=capabilities.ThreadCapabilities(
             listing=capabilities.SupportLevel.NATIVE,
@@ -92,7 +92,7 @@ class ApplicationEventTests(unittest.IsolatedAsyncioTestCase):
     def test_canonical_event_data_consumes_the_application_agent_message(self) -> None:
         message = AgentMessage(
             agent_item_id="item-1",
-            thread_ref=ThreadRef("app-1", "thread-1"),
+            thread_ref=ThreadRef(ProjectRef("app-1", "workspace"), "thread-1"),
             role=MessageRole.ASSISTANT,
             content=(TextContent("answer"),),
             created_at=datetime.now(UTC),
@@ -100,18 +100,44 @@ class ApplicationEventTests(unittest.IsolatedAsyncioTestCase):
         event = events.AgentEvent(
             event_id="event-message-1",
             application_instance_id="app-1",
+            project_ref=message.thread_ref.project_ref,
             type=events.AgentEventType.MESSAGE_COMPLETED,
             data={"message": message},
             created_at=message.created_at,
             thread_ref=message.thread_ref,
+            turn_ref=TurnRef(message.thread_ref, "turn-1"),
         )
         events.validate_agent_event(event, _capabilities())
         self.assertIs(event.data["message"], message)
 
+    def test_message_event_rejects_foreign_nested_message_ancestry(self) -> None:
+        outer_thread = ThreadRef(ProjectRef("app-1", "project-a"), "thread-a")
+        foreign_message = AgentMessage(
+            agent_item_id="item-foreign",
+            thread_ref=ThreadRef(ProjectRef("app-1", "project-b"), "thread-b"),
+            role=MessageRole.ASSISTANT,
+            content=(TextContent("foreign"),),
+            created_at=datetime.now(UTC),
+        )
+        event = events.AgentEvent(
+            event_id="event-foreign-message",
+            application_instance_id="app-1",
+            project_ref=outer_thread.project_ref,
+            type=events.AgentEventType.MESSAGE_COMPLETED,
+            data={"message": foreign_message},
+            created_at=datetime.now(UTC),
+            thread_ref=outer_thread,
+            turn_ref=TurnRef(outer_thread, "turn-1"),
+        )
+
+        with self.assertRaisesRegex(ContractViolation, "different Thread"):
+            events.validate_agent_event(event, _capabilities())
+
     def test_event_annotations_keep_exact_resource_and_request_types(self) -> None:
         hints = get_type_hints(events.AgentEvent)
-        self.assertEqual(hints["project_ref"], ProjectRef | None)
+        self.assertIs(hints["project_ref"], ProjectRef)
         self.assertEqual(hints["thread_ref"], ThreadRef | None)
+        self.assertEqual(hints["turn_ref"], TurnRef | None)
         self.assertEqual(hints["request"], InteractiveRequest | None)
         self.assertEqual(hints["request_resolution"], RequestResolution | None)
 
@@ -121,12 +147,17 @@ class ApplicationEventTests(unittest.IsolatedAsyncioTestCase):
 
     def test_ordering_fields_require_declared_native_guarantees(self) -> None:
         created_at = datetime.now(UTC)
+        thread = ThreadRef(ProjectRef("app-1", "workspace"), "thread-1")
+        turn = TurnRef(thread, "turn-1")
         honest = events.AgentEvent(
             event_id="event-1",
             application_instance_id="app-1",
+            project_ref=ProjectRef("app-1", "workspace"),
             type=events.AgentEventType.TURN_COMPLETED,
             data={},
             created_at=created_at,
+            thread_ref=thread,
+            turn_ref=turn,
         )
         events.validate_agent_event(honest, _capabilities())
 
@@ -135,9 +166,12 @@ class ApplicationEventTests(unittest.IsolatedAsyncioTestCase):
                 events.AgentEvent(
                     event_id="event-2",
                     application_instance_id="app-1",
+                    project_ref=ProjectRef("app-1", "workspace"),
                     type=events.AgentEventType.TURN_COMPLETED,
                     data={},
                     created_at=created_at,
+                    thread_ref=thread,
+                    turn_ref=turn,
                     cursor="unsupported",
                 ),
                 _capabilities(),
@@ -152,9 +186,12 @@ class ApplicationEventTests(unittest.IsolatedAsyncioTestCase):
                 events.AgentEvent(
                     event_id="event-3",
                     application_instance_id="app-1",
+                    project_ref=ProjectRef("app-1", "workspace"),
                     type=events.AgentEventType.TURN_COMPLETED,
                     data={},
                     created_at=created_at,
+                    thread_ref=thread,
+                    turn_ref=turn,
                     sequence=1,
                     cursor="cursor-1",
                 ),
@@ -164,9 +201,12 @@ class ApplicationEventTests(unittest.IsolatedAsyncioTestCase):
             events.AgentEvent(
                 event_id="event-4",
                 application_instance_id="app-1",
+                project_ref=ProjectRef("app-1", "workspace"),
                 type=events.AgentEventType.TURN_COMPLETED,
                 data={},
                 created_at=created_at,
+                thread_ref=thread,
+                turn_ref=turn,
                 sequence=1,
                 sequence_epoch="epoch-1",
                 cursor="cursor-1",

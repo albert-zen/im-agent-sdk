@@ -13,6 +13,7 @@ from imagent.applications import CodexApplicationAdapter
 from imagent.applications.capabilities import ProjectMode, SupportLevel
 from imagent.applications.contract import (
     ApplicationRef,
+    ProjectRef,
     ThreadRef,
 )
 from imagent.applications.operations import GetThreadHistory
@@ -91,7 +92,7 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
     async def test_concurrent_turns_on_one_thread_do_not_steal_events(self) -> None:
         channel = FakeChannelAdapter()
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         bindings = InMemoryBindingRepository()
         first_conversation = ConversationRef("fake-channel", "first")
         second_conversation = ConversationRef("fake-channel", "second")
@@ -100,6 +101,7 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
                 ConversationBinding(
                     conversation_ref=conversation,
                     application_ref=ApplicationRef("fake-agent"),
+                    project_ref=thread.ref.project_ref,
                     thread_ref=thread.ref,
                 )
             )
@@ -135,8 +137,8 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
             project_mode=ProjectMode.FLAT,
             event_buffer_max_pending=2,
         )
-        overflow_thread = await application.create_thread()
-        healthy_thread = await application.create_thread()
+        overflow_thread = await application.create_thread(application.default_project_ref)
+        healthy_thread = await application.create_thread(application.default_project_ref)
         bindings = InMemoryBindingRepository()
         overflow_conversation = ConversationRef("fake-channel", "overflow")
         healthy_conversation = ConversationRef("fake-channel", "healthy")
@@ -148,6 +150,7 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
                 ConversationBinding(
                     conversation_ref=conversation,
                     application_ref=ApplicationRef("fake-agent"),
+                    project_ref=thread.ref.project_ref,
                     thread_ref=thread.ref,
                 )
             )
@@ -192,11 +195,12 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
         application = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=native,
+            workspace_id="workspace",
             cwd="/repo",
         )
-        thread_ref = ThreadRef("codex-main", "thread-1")
-        native.threads[thread_ref.native_thread_id] = {
-            "id": thread_ref.native_thread_id,
+        thread_ref = ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
+        native.threads[thread_ref.thread_id] = {
+            "id": thread_ref.thread_id,
             "cwd": "/repo",
             "preview": "Recover reset output",
             "status": {"type": "idle"},
@@ -207,6 +211,7 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread_ref.project_ref,
                 thread_ref=thread_ref,
             )
         )
@@ -264,13 +269,14 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
                 ),
             ),
         )
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "degraded")
         bindings = InMemoryBindingRepository()
         await bindings.put(
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -314,8 +320,12 @@ class GatewayThreadObservationCapacityTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_final_slot_rejects_distinct_thread_before_projection_work(self) -> None:
         application = _CapacityRecordingApplication()
-        first_thread = await application.create_thread(title="first")
-        rejected_thread = await application.create_thread(title="rejected")
+        first_thread = await application.create_thread(
+            application.default_project_ref, title="first"
+        )
+        rejected_thread = await application.create_thread(
+            application.default_project_ref, title="rejected"
+        )
         channel = FakeChannelAdapter()
         projections = InMemoryProjectionRouteRepository()
         gateway = ImAgentGateway(
@@ -353,7 +363,7 @@ class GatewayThreadObservationCapacityTests(unittest.IsolatedAsyncioTestCase):
                 rejected.error.message,
                 "active Thread observation capacity is exhausted",
             )
-            self.assertNotIn(rejected_thread.ref.native_thread_id, rejected.error.message)
+            self.assertNotIn(rejected_thread.ref.thread_id, rejected.error.message)
             self.assertEqual(application.subscription_threads, [first_thread.ref])
             self.assertEqual(tuple(application.history_threads), history_before)
             self.assertEqual(channel.sent, [])
@@ -365,8 +375,12 @@ class GatewayThreadObservationCapacityTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = _CapacityRecordingApplication()
-        first_thread = await application.create_thread(title="first")
-        rejected_thread = await application.create_thread(title="rejected")
+        first_thread = await application.create_thread(
+            application.default_project_ref, title="first"
+        )
+        rejected_thread = await application.create_thread(
+            application.default_project_ref, title="rejected"
+        )
         conversation = ConversationRef("fake-channel", "foreground-capacity")
         channel = FakeChannelAdapter()
         projections = InMemoryProjectionRouteRepository()
@@ -455,8 +469,8 @@ class GatewayThreadObservationCapacityTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_same_thread_waiter_cancellation_keeps_final_slot(self) -> None:
         runtime = self._runtime(max_active_threads=1)
-        first = ThreadRef("fake-agent", "first")
-        second = ThreadRef("fake-agent", "second")
+        first = ThreadRef(ProjectRef("fake-agent", "workspace"), "first")
+        second = ThreadRef(ProjectRef("fake-agent", "workspace"), "second")
         worker_started = asyncio.Event()
         release_worker = asyncio.Event()
 
@@ -499,8 +513,8 @@ class GatewayThreadObservationCapacityTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
         runtime = self._runtime(max_active_threads=1)
-        first = ThreadRef("fake-agent", "first")
-        second = ThreadRef("fake-agent", "second")
+        first = ThreadRef(ProjectRef("fake-agent", "workspace"), "first")
+        second = ThreadRef(ProjectRef("fake-agent", "workspace"), "second")
         first_worker_started = asyncio.Event()
         replacement_worker_started = asyncio.Event()
         release_first_worker = asyncio.Event()
@@ -584,8 +598,8 @@ class GatewayThreadObservationCapacityTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_terminal_start_failure_and_lifecycle_reset_release_runtime_entries(self) -> None:
         runtime = self._runtime(max_active_threads=1)
-        first = ThreadRef("fake-agent", "first")
-        second = ThreadRef("fake-agent", "second")
+        first = ThreadRef(ProjectRef("fake-agent", "workspace"), "first")
+        second = ThreadRef(ProjectRef("fake-agent", "workspace"), "second")
         worker_started = asyncio.Event()
         release_worker = asyncio.Event()
 

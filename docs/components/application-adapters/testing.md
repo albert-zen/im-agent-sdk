@@ -3,7 +3,13 @@
 Every adapter should prove:
 
 - instance-scoped Project/Thread references;
-- managed/flat/fixed project shape;
+- managed/flat/fixed Project-management shape over one unconditional resource
+  hierarchy;
+- exactly one stable listable/readable workspace Project for fixed/flat
+  adapters, with explicit immutable workspace ID and canonical-root
+  fingerprint stable across reconstruction;
+- every returned Thread/event/history/request identity carries that same
+  Project, while fixed/flat create/delete remain typed unsupported;
 - create/read/list and side-effect-free pagination;
 - App Server Thread creation preserves default behavior, isolates caller- and
   client-owned native option objects, and rejects attempts to replace
@@ -87,6 +93,10 @@ Every adapter should prove:
 - request open/respond/resolve wire mapping from a native protocol fixture;
 - stale response after transport reset when no pending snapshot exists;
 - native resolution racing response writeback remains resolved;
+- fixed-workspace request scope is verified before state admission or native
+  response dispatch, callback verification failures become explicit gaps, and
+  publication/cache maintenance does not re-read scope after a successful
+  native effect;
 - bounded terminal diagnostics emit stale before evicting an unresolved
   responded request's final Thread/Turn routing scope;
 - App Server notification/server-request queue overflow remains explicit and

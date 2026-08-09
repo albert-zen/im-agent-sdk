@@ -412,7 +412,9 @@ async def recover_thread(
         raise ValueError("history_limit must be positive")
     if catchup_limit < 1:
         raise ValueError("catchup_limit must be positive")
-    if thread_ref.application_instance_id != (application.summary.ref.application_instance_id):
+    if thread_ref.project_ref.application_instance_id != (
+        application.summary.ref.application_instance_id
+    ):
         raise ValueError("recovery Thread belongs to a different application")
 
     cursor_expired = False
@@ -521,7 +523,7 @@ async def read_bounded_authoritative_projection(
         page_messages = tuple(
             ProjectedAgentMessage(
                 message=message,
-                turn_id=turn.turn_id,
+                turn_id=turn.turn_ref.turn_id,
             )
             for turn in history_result.history.turns
             for message in turn.agent_messages
@@ -562,7 +564,11 @@ async def read_bounded_authoritative_projection(
         messages.extend(
             ProjectedAgentMessage(
                 message=message,
-                turn_id=catchup_result.catchup.turn_id,
+                turn_id=(
+                    catchup_result.catchup.turn_ref.turn_id
+                    if catchup_result.catchup.turn_ref is not None
+                    else None
+                ),
             )
             for message in catchup_result.catchup.messages
         )

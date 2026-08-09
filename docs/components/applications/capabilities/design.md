@@ -16,6 +16,13 @@ It does not own a fallback, product configuration, a synthetic capability, or
 native behavior. A consumer must not convert an absent capability into a
 pretended native operation; unsupported behavior remains an explicit outcome.
 
+All three Project modes support discovery and reading of the public workspace
+resource tree. Managed mode reports the evidenced native level. Fixed/flat
+mode reports a declared adapter projection for its one stable workspace
+Project, while creation, deletion, and native switching remain unsupported.
+This distinction exposes real execution scope without advertising native
+Project management.
+
 ## Inputs, outputs, and dependencies
 
 Concrete adapter evidence supplies facts; this leaf outputs one bounded,
@@ -52,3 +59,4 @@ semantics are unchanged by this mechanical move.
 - [Common protocol](../../contracts/protocol.md)
 - [ADR 0001](../../../decisions/0001-contract-and-resource-foundations.md)
 - [ADR 0003](../../../decisions/0003-attachment-sources-and-trust.md)
+- [ADR 0016](../../../decisions/0016-uniform-workspace-and-consumer-actions.md)

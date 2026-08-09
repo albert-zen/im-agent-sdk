@@ -11,8 +11,9 @@ timestamps never define identity or deduplication.
 
 ```text
 ApplicationRef = applicationInstanceId
-ProjectRef = (applicationInstanceId, nativeProjectId)
-ThreadRef = (applicationInstanceId, nativeThreadId, projectRef?)
+ProjectRef = (applicationInstanceId, projectId)
+ThreadRef = (projectRef, threadId)
+TurnRef = (threadRef, turnId)
 ConversationRef = (channelInstanceId, nativeConversationId)
 ```
 
@@ -20,9 +21,9 @@ Native IDs are opaque and scoped by one configured Application or Channel
 instance. A native Thread ID from one Application instance cannot be used with
 another.
 
-The Python reference owner for `ApplicationRef`, `ProjectRef`, `ThreadRef`,
+The Python reference owner for `ApplicationRef`, `ProjectRef`, `ThreadRef`, `TurnRef`,
 the Project/Thread/Turn summaries and statuses, input/history values, and
-`validate_thread_ref` is
+the workspace identity/fingerprint values, and their validators are
 [`applications.application-contract`](../applications/application-contract/design.md).
 The complete Application contract family is exposed by that owner and the
 finite `imagent.applications` facade. `imagent.contracts` retains only the
@@ -36,16 +37,34 @@ The full organization model is:
 AgentApplication
   └── Project
         └── Thread
+              └── Turn
 ```
 
-An Application declares its real project shape:
+An Application declares its real Project-management shape while every runtime
+Thread remains Project/Workspace scoped:
 
 - `managed`: Projects are authoritative selectable resources.
-- `flat`: Threads live directly under the Application.
-- `fixed`: one externally configured workspace/cwd contains flat Threads.
+- `flat`: one stable adapter workspace Project represents the native
+  execution context; native Project management is unsupported.
+- `fixed`: one stable configured workspace Project represents the configured
+  workspace/CWD; native Project management and switching are unsupported.
 
-Flat and fixed Applications omit `ProjectRef`; adapters do not synthesize fake
-Projects.
+Fixed/flat discovery and reading are declared adapter projections rather than
+native management. They return exactly one honest `ProjectSummary` whose
+`ProjectRef.projectId` is the configured immutable `workspaceId` and
+whose `workspaceRootFingerprint` is the lowercase SHA-256 digest of the UTF-8
+canonical execution-root text, bounded to 4096 encoded bytes. The adapter canonicalizes the configured root
+before hashing and keeps both values stable for its lifetime. Reusing one
+workspace ID with a different fingerprint is a Gateway-startup conflict once
+block B supplies the coherent store; an intentional replacement uses a new
+workspace ID. The fingerprint is typed identity evidence, not Metadata, and
+Gateway persistence never needs the root path itself.
+
+Every `ThreadRef` requires its `ProjectRef`, and both references must name the
+same configured Application instance. Consequently all Thread, Turn, event,
+history, request, binding, route, checkpoint, and correlation identity reaches
+the Project ancestor through the same required reference. No Project-less
+wire or Python branch remains.
 
 ## Resources and bridge state
 
@@ -166,15 +185,16 @@ ApplicationInputDispatch {
   clientMessageId
   disposition = started | steered
   correlationPolicy = create_new | preserve_existing
-  expectedTurnId?
+  expectedTurnRef?
 }
 ```
 
 `started` requires `create_new` and no expected Turn. `steered` requires
-`preserve_existing` and an expected Turn ID. The accepted result repeats the
-Thread, native Turn, client-message identity, disposition, and correlation
-policy. These values describe native acceptance and bridge routing policy;
-they do not transfer Turn authority into the SDK.
+`preserve_existing` and an expected `TurnRef` nested under the same Thread.
+The accepted result carries that exact native `TurnRef`, client-message
+identity, disposition, and correlation policy. These values describe native
+acceptance and bridge routing policy; they do not transfer Turn authority into
+the SDK.
 
 ## Typed operations
 
@@ -184,6 +204,7 @@ Application operations mutate or read one native Agent Application:
 |---|---|---|
 | `project.list` | `ProjectsListed` | list authoritative Projects |
 | `project.get` | `ProjectRead` | validate/read one Project |
+| `project.create` | `ProjectCreated` | create one managed native Project from a bounded CWD |
 | `thread.create` | `ThreadCreated` | create a native Thread |
 | `thread.list` | `ThreadsListed` | list native Threads |
 | `thread.get` | `ThreadRead` | validate/read one Thread |
@@ -248,14 +269,16 @@ Turn.
 
 ## Agent events and ordering
 
-Every `AgentEvent` has:
+Every `AgentEvent` has one required Project ancestor. When `threadRef` is
+present, its required Project must equal `projectRef`; request events inherit
+the same ancestry through their required Thread.
 
 ```text
 eventId
 applicationInstanceId
-projectRef?
+projectRef
 threadRef?
-turnId?
+turnRef?
 sequence?
 sequenceEpoch?
 cursor?
@@ -293,20 +316,20 @@ as restart-safe recovery.
 
 ```text
 ApprovalRequest {
-  requestRef{applicationRef, nativeRequestId}, threadRef, turnId, prompt,
+  requestRef{applicationRef, nativeRequestId}, turnRef, prompt,
   choices[{choiceId, label, description?}], expiresAt?, metadata
 }
 
 UserInputRequest {
-  requestRef{applicationRef, nativeRequestId}, threadRef, turnId, prompt?,
+  requestRef{applicationRef, nativeRequestId}, turnRef, prompt?,
   questions[{ questionId, prompt, header?, choices[], allowsOther, secret,
               minAnswers, maxAnswers }],
   expiresAt?, metadata
 }
 ```
 
-`request.resolved` carries a typed resolution with the same `RequestRef` and one
-of `resolved` or `stale`. `stale` means the adapter can prove that the response
+`request.resolved` carries a typed resolution with the same `RequestRef`, the
+exact originating `TurnRef`, and one of `resolved` or `stale`. `stale` means the adapter can prove that the response
 handle is no longer usable, including a transport reset without a native
 pending-request snapshot. It does not claim that the native Turn or request
 was otherwise deleted.
@@ -394,13 +417,13 @@ nullable pair. They identify one destination's last completed ordered
 delivery decision; the Agent item ID is opaque and not a sortable SDK
 sequence.
 
-`TurnReplyCorrelation` contains Thread/Turn/client-message identity plus the
+`TurnReplyCorrelation` contains one nested `TurnRef` plus client-message identity and the
 originating Conversation, reply ID, and creation time. It is minimal bridge
 state, not a copy of Turn status or request truth. It applies only when the
 projection destination matches its Conversation.
 
 `RequestRouteCorrelation` is also per destination. It contains only the
-application-scoped request, Thread, Turn, Conversation, delivery, expiry, and bridge
+application-scoped request, nested `TurnRef`, Conversation, delivery, expiry, and bridge
 projection-state identity plus only the response shape required to validate a
 choice/cardinality. This response shape is routing-validation state, not a
 copy or assertion of native pending-request truth. It never contains the

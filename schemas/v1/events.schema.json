@@ -18,16 +18,14 @@
       "required": [
         "kind",
         "requestRef",
-        "threadRef",
-        "turnId",
+        "turnRef",
         "prompt",
         "choices"
       ],
       "properties": {
         "kind": { "const": "approval" },
         "requestRef": { "$ref": "resources.schema.json#/$defs/RequestRef" },
-        "threadRef": { "$ref": "resources.schema.json#/$defs/ThreadRef" },
-        "turnId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "turnRef": { "$ref": "resources.schema.json#/$defs/TurnRef" },
         "prompt": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
         "choices": {
           "type": "array",
@@ -77,15 +75,13 @@
       "required": [
         "kind",
         "requestRef",
-        "threadRef",
-        "turnId",
+        "turnRef",
         "questions"
       ],
       "properties": {
         "kind": { "const": "user_input" },
         "requestRef": { "$ref": "resources.schema.json#/$defs/RequestRef" },
-        "threadRef": { "$ref": "resources.schema.json#/$defs/ThreadRef" },
-        "turnId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "turnRef": { "$ref": "resources.schema.json#/$defs/TurnRef" },
         "prompt": { "type": ["string", "null"] },
         "questions": {
           "type": "array",
@@ -169,9 +165,10 @@
     },
     "RequestResolution": {
       "type": "object",
-      "required": ["requestRef", "status", "resolvedAt"],
+      "required": ["requestRef", "turnRef", "status", "resolvedAt"],
       "properties": {
         "requestRef": { "$ref": "resources.schema.json#/$defs/RequestRef" },
+        "turnRef": { "$ref": "resources.schema.json#/$defs/TurnRef" },
         "status": { "enum": ["resolved", "stale"] },
         "resolvedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
       },
@@ -200,6 +197,7 @@
       "required": [
         "eventId",
         "applicationInstanceId",
+        "projectRef",
         "type",
         "data",
         "createdAt"
@@ -210,10 +208,7 @@
           "$ref": "common.schema.json#/$defs/Identifier"
         },
         "projectRef": {
-          "oneOf": [
-            { "$ref": "resources.schema.json#/$defs/ProjectRef" },
-            { "type": "null" }
-          ]
+          "$ref": "resources.schema.json#/$defs/ProjectRef"
         },
         "threadRef": {
           "oneOf": [
@@ -221,9 +216,9 @@
             { "type": "null" }
           ]
         },
-        "turnId": {
+        "turnRef": {
           "oneOf": [
-            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "$ref": "resources.schema.json#/$defs/TurnRef" },
             { "type": "null" }
           ]
         },
@@ -252,6 +247,85 @@
         }
       },
       "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "message.created",
+                  "message.delta",
+                  "message.completed",
+                  "thread.created",
+                  "thread.updated",
+                  "thread.deleted",
+                  "turn.started",
+                  "turn.completed",
+                  "turn.failed",
+                  "turn.interrupted",
+                  "status.changed",
+                  "request.opened",
+                  "request.resolved"
+                ]
+              }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["threadRef"],
+            "properties": {
+              "threadRef": { "$ref": "resources.schema.json#/$defs/ThreadRef" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "message.created",
+                  "message.delta",
+                  "message.completed",
+                  "turn.started",
+                  "turn.completed",
+                  "turn.failed",
+                  "turn.interrupted",
+                  "request.opened",
+                  "request.resolved"
+                ]
+              }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["turnRef"],
+            "properties": {
+              "turnRef": { "$ref": "resources.schema.json#/$defs/TurnRef" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": ["message.created", "message.completed"]
+              }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": ["message"],
+                "properties": {
+                  "message": {
+                    "$ref": "messages.schema.json#/$defs/AgentMessage"
+                  }
+                }
+              }
+            }
+          }
+        },
         {
           "if": {
             "required": ["sequence"],

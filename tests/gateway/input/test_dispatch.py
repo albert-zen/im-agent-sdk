@@ -19,6 +19,7 @@ from imagent.applications.contract import (
     ApplicationInputDispatchHandler,
     InputContinuationPreference,
     InputDisposition,
+    ProjectRef,
     ThreadRef,
     TurnReplyCorrelationPolicy,
 )
@@ -142,7 +143,7 @@ class GatewayInputDispatchTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = _RecordingApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         correlator = _RecordingCorrelator()
         event_applier = _RecordingEventApplier()
         runtime = self._runtime(correlator, event_applier)
@@ -179,7 +180,7 @@ class GatewayInputDispatchTests(unittest.IsolatedAsyncioTestCase):
         correlator = _RecordingCorrelator()
         event_applier = _RecordingEventApplier()
         runtime = self._runtime(correlator, event_applier)
-        thread_ref = ThreadRef("app", "thread")
+        thread_ref = ThreadRef(ProjectRef("app", "workspace"), "thread")
         side_effect_fence_calls = 0
 
         async def mark_side_effect_started() -> None:
@@ -202,7 +203,7 @@ class GatewayInputDispatchTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = _RecordingApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         correlator = _RecordingCorrelator()
         correlator.correlation_error = RuntimeError("correlation write failed")
         event_applier = _RecordingEventApplier()
@@ -233,7 +234,7 @@ class GatewayInputDispatchTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         gate = TurnAcceptanceOrderingGate(max_pending=2)
         event_applier = _RecordingEventApplier()
-        thread_ref = ThreadRef("app", "thread")
+        thread_ref = ThreadRef(ProjectRef("app", "workspace"), "thread")
         first = self._event(thread_ref, "first")
         second = self._event(thread_ref, "second")
 
@@ -253,7 +254,7 @@ class GatewayInputDispatchTests(unittest.IsolatedAsyncioTestCase):
     async def test_acceptance_ordering_overflow_is_an_explicit_drain_error(self) -> None:
         gate = TurnAcceptanceOrderingGate(max_pending=1)
         event_applier = _RecordingEventApplier()
-        thread_ref = ThreadRef("app", "thread")
+        thread_ref = ThreadRef(ProjectRef("app", "workspace"), "thread")
 
         gate.begin_acceptance(thread_ref)
         await gate.handle_event(self._event(thread_ref, "first"), event_applier=event_applier)
@@ -267,7 +268,7 @@ class GatewayInputDispatchTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         gate = TurnAcceptanceOrderingGate(max_pending=1)
         event_applier = _FailingEventApplier()
-        thread_ref = ThreadRef("app", "thread")
+        thread_ref = ThreadRef(ProjectRef("app", "workspace"), "thread")
 
         gate.begin_acceptance(thread_ref)
         await gate.handle_event(self._event(thread_ref, "failed"), event_applier=event_applier)
@@ -284,7 +285,7 @@ class GatewayInputDispatchTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         gate = TurnAcceptanceOrderingGate(max_pending=1)
         event_applier = _RecoverySchedulingFailingEventApplier()
-        thread_ref = ThreadRef("app", "thread")
+        thread_ref = ThreadRef(ProjectRef("app", "workspace"), "thread")
 
         gate.begin_acceptance(thread_ref)
         await gate.handle_event(self._event(thread_ref, "failed"), event_applier=event_applier)
@@ -304,7 +305,7 @@ class GatewayInputDispatchTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         gate = TurnAcceptanceOrderingGate(max_pending=1)
         event_applier = _CancellationRecoverySchedulingFailingEventApplier()
-        thread_ref = ThreadRef("app", "thread")
+        thread_ref = ThreadRef(ProjectRef("app", "workspace"), "thread")
 
         gate.begin_acceptance(thread_ref)
         await gate.handle_event(self._event(thread_ref, "cancelled"), event_applier=event_applier)
@@ -323,13 +324,14 @@ class GatewayInputDispatchTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = _PausingAcceptanceApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "drain-recovery")
         bindings = InMemoryBindingRepository()
         await bindings.put(
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -400,13 +402,14 @@ class GatewayInputDispatchTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "terminal-worker")
         bindings = InMemoryBindingRepository()
         await bindings.put(
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -464,7 +467,7 @@ class GatewayInputDispatchTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         channel = FakeChannelAdapter()
         gateway = ImAgentGateway(
             channels=[channel],
@@ -533,7 +536,8 @@ class GatewayInputDispatchTests(unittest.IsolatedAsyncioTestCase):
     def _event(thread_ref: ThreadRef, event_id: str) -> AgentEvent:
         return AgentEvent(
             event_id=event_id,
-            application_instance_id=thread_ref.application_instance_id,
+            application_instance_id=thread_ref.project_ref.application_instance_id,
+            project_ref=thread_ref.project_ref,
             type=AgentEventType.STATUS_CHANGED,
             data={},
             created_at=datetime.now(UTC),

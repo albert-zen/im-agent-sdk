@@ -105,23 +105,23 @@ def _read_credential(arguments: argparse.Namespace) -> str:
 
 
 def _target(arguments: argparse.Namespace) -> dict[str, object]:
-    thread_target = bool(arguments.application or arguments.thread or arguments.project)
+    thread_target = bool(arguments.application or arguments.project or arguments.thread)
     conversation_target = bool(arguments.channel or arguments.conversation)
     if thread_target == conversation_target:
         raise ValueError("choose either --application/--thread or --channel/--conversation")
     if thread_target:
-        if not arguments.application or not arguments.thread:
-            raise ValueError("--application and --thread are both required")
+        if not arguments.application or not arguments.project or not arguments.thread:
+            raise ValueError("--application, --project, and --thread are all required")
         target: dict[str, object] = {
             "kind": "threadRoutes",
-            "applicationInstanceId": arguments.application,
-            "nativeThreadId": arguments.thread,
+            "threadRef": {
+                "projectRef": {
+                    "applicationInstanceId": arguments.application,
+                    "projectId": arguments.project,
+                },
+                "threadId": arguments.thread,
+            },
         }
-        if arguments.project:
-            target["projectRef"] = {
-                "applicationInstanceId": arguments.application,
-                "nativeProjectId": arguments.project,
-            }
         if arguments.route:
             target["routeId"] = arguments.route
         return target

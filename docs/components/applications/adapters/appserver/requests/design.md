@@ -47,6 +47,14 @@ authority; duplicate, resolved, stale, invalid-shape, and unsupported cases
 retain their current explicit errors. The terminal outcome cache is finite and
 process-local; no request truth is persisted by the SDK.
 
+For fixed-workspace adapters, the native Thread ID and canonical execution
+root are verified before request state is admitted, resolved, or a native
+response is dispatched. Publication and finite terminal-cache maintenance
+reuse that verified typed scope: they do not perform a second native read that
+could hide committed request state or reinterpret a successful native effect.
+An ingress verification failure produces the adapter's explicit observation
+gap instead of silently dropping the callback.
+
 ## Current, target, and structural gap
 
 The co-located implementation is
@@ -64,3 +72,4 @@ first-writer behavior.
 - [Applications request design](../../../requests/design.md)
 - [Applications adapter overview](../../../../application-adapters/design.md)
 - [ADR 0008](../../../../../decisions/0008-interactive-request-routing.md)
+- [ADR 0016](../../../../../decisions/0016-uniform-workspace-and-consumer-actions.md)

@@ -7,6 +7,7 @@
       "enum": [
         "project.list",
         "project.get",
+        "project.create",
         "thread.create",
         "thread.list",
         "thread.get",
@@ -92,19 +93,35 @@
       ],
       "unevaluatedProperties": false
     },
+    "CreateProject": {
+      "allOf": [
+        { "$ref": "#/$defs/ApplicationOperationIdentity" },
+        {
+          "type": "object",
+          "required": ["type", "cwd"],
+          "properties": {
+            "type": { "const": "project.create" },
+            "cwd": { "type": "string", "minLength": 1, "maxLength": 4096 },
+            "displayName": {
+              "type": ["string", "null"],
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
     "CreateThread": {
       "allOf": [
         { "$ref": "#/$defs/ApplicationOperationIdentity" },
         {
           "type": "object",
-          "required": ["type", "initialContext"],
+          "required": ["type", "projectRef", "initialContext"],
           "properties": {
             "type": { "const": "thread.create" },
             "projectRef": {
-              "oneOf": [
-                { "$ref": "resources.schema.json#/$defs/ProjectRef" },
-                { "type": "null" }
-              ]
+              "$ref": "resources.schema.json#/$defs/ProjectRef"
             },
             "title": { "type": ["string", "null"] },
             "initialContext": {
@@ -121,14 +138,11 @@
         { "$ref": "#/$defs/ApplicationOperationIdentity" },
         {
           "type": "object",
-          "required": ["type"],
+          "required": ["type", "projectRef"],
           "properties": {
             "type": { "const": "thread.list" },
             "projectRef": {
-              "oneOf": [
-                { "$ref": "resources.schema.json#/$defs/ProjectRef" },
-                { "type": "null" }
-              ]
+              "$ref": "resources.schema.json#/$defs/ProjectRef"
             },
             "query": { "type": ["string", "null"] },
             "cursor": { "type": ["string", "null"] }
@@ -235,9 +249,9 @@
           "required": ["type"],
           "properties": {
             "type": { "const": "turn.interrupt" },
-            "turnId": {
+            "turnRef": {
               "oneOf": [
-                { "$ref": "common.schema.json#/$defs/Identifier" },
+                { "$ref": "resources.schema.json#/$defs/TurnRef" },
                 { "type": "null" }
               ]
             }
@@ -283,18 +297,13 @@
         { "$ref": "#/$defs/ApplicationOperationIdentity" },
         {
           "type": "object",
-          "required": ["type", "requestRef", "response"],
+          "required": ["type", "requestRef", "turnRef", "response"],
           "properties": {
             "type": { "const": "request.respond" },
             "requestRef": {
               "$ref": "resources.schema.json#/$defs/RequestRef"
             },
-            "threadRef": {
-              "oneOf": [
-                { "$ref": "resources.schema.json#/$defs/ThreadRef" },
-                { "type": "null" }
-              ]
-            },
+            "turnRef": { "$ref": "resources.schema.json#/$defs/TurnRef" },
             "response": { "$ref": "#/$defs/RequestResponse" }
           }
         }
@@ -305,6 +314,7 @@
       "oneOf": [
         { "$ref": "#/$defs/ListProjects" },
         { "$ref": "#/$defs/GetProject" },
+        { "$ref": "#/$defs/CreateProject" },
         { "$ref": "#/$defs/CreateThread" },
         { "$ref": "#/$defs/ListThreads" },
         { "$ref": "#/$defs/GetThread" },
@@ -507,6 +517,20 @@
       ],
       "unevaluatedProperties": false
     },
+    "ProjectCreated": {
+      "allOf": [
+        { "$ref": "#/$defs/ApplicationSuccessIdentity" },
+        {
+          "type": "object",
+          "required": ["type", "project"],
+          "properties": {
+            "type": { "const": "project.create" },
+            "project": { "$ref": "resources.schema.json#/$defs/ProjectSummary" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
     "ThreadCreated": {
       "allOf": [
         { "$ref": "#/$defs/ApplicationSuccessIdentity" },
@@ -638,15 +662,15 @@
         { "$ref": "#/$defs/ApplicationSuccessIdentity" },
         {
           "type": "object",
-          "required": ["type", "threadRef", "turnId"],
+          "required": ["type", "threadRef", "turnRef"],
           "properties": {
             "type": { "const": "turn.interrupt" },
             "threadRef": {
               "$ref": "resources.schema.json#/$defs/ThreadRef"
             },
-            "turnId": {
+            "turnRef": {
               "oneOf": [
-                { "$ref": "common.schema.json#/$defs/Identifier" },
+                { "$ref": "resources.schema.json#/$defs/TurnRef" },
                 { "type": "null" }
               ]
             }
@@ -687,6 +711,7 @@
       "oneOf": [
         { "$ref": "#/$defs/ProjectsListed" },
         { "$ref": "#/$defs/ProjectRead" },
+        { "$ref": "#/$defs/ProjectCreated" },
         { "$ref": "#/$defs/ThreadCreated" },
         { "$ref": "#/$defs/ThreadsListed" },
         { "$ref": "#/$defs/ThreadRead" },

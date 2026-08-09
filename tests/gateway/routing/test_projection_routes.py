@@ -15,7 +15,7 @@ import imagent.gateway as gateway_facade
 import imagent.gateway.persistence as persistence_facade
 import imagent.gateway.routing as routing_facade
 import imagent.gateway.routing.projection_routes as owner
-from imagent.applications.contract import ApplicationRef, ThreadRef
+from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef
 from imagent.gateway.persistence import ConversationBinding, ThreadProjectionRoute
 from imagent.gateway.persistence import state_contracts as state_contract_owner
 from imagent.gateway.persistence.memory import (
@@ -135,7 +135,7 @@ class ProjectionRouteContractOwnershipTests(unittest.TestCase):
 
     def test_observe_specific_validation_is_owned_with_the_route_values(self) -> None:
         conversation = ConversationRef("channel-a", "conversation-a")
-        thread = ThreadRef("application-a", "thread-a")
+        thread = ThreadRef(ProjectRef("application-a", "workspace"), "thread-a")
         operation = owner.ObserveThread(
             operation_id="observe-a",
             conversation_ref=conversation,
@@ -183,7 +183,7 @@ class ProjectionRouteContractOwnershipTests(unittest.TestCase):
             )
 
     def test_route_identity_depends_only_on_stable_endpoints(self) -> None:
-        thread = ThreadRef("application-a", "thread-a")
+        thread = ThreadRef(ProjectRef("application-a", "workspace"), "thread-a")
         conversation = ConversationRef("channel-a", "conversation-a")
         route_id = owner.derive_projection_route_id(thread, conversation)
 
@@ -198,7 +198,7 @@ class ProjectionRouteContractOwnershipTests(unittest.TestCase):
         self.assertNotEqual(
             route_id,
             owner.derive_projection_route_id(
-                ThreadRef("application-a", "thread-b"),
+                ThreadRef(ProjectRef("application-a", "workspace"), "thread-b"),
                 conversation,
             ),
         )
@@ -208,8 +208,8 @@ class ProjectionRouteContractOwnershipTests(unittest.TestCase):
 class ProjectionRouteAuthorityTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.application = ApplicationRef("application-a")
-        self.thread = ThreadRef("application-a", "thread-a")
-        self.other_thread = ThreadRef("application-a", "thread-b")
+        self.thread = ThreadRef(ProjectRef("application-a", "workspace"), "thread-a")
+        self.other_thread = ThreadRef(ProjectRef("application-a", "workspace"), "thread-b")
         self.first = ConversationRef("channel-a", "conversation-a")
         self.second = ConversationRef("channel-a", "conversation-b")
 
@@ -231,6 +231,7 @@ class ProjectionRouteAuthorityTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=self.first,
                 application_ref=self.application,
+                project_ref=self.thread.project_ref,
                 thread_ref=self.thread,
             )
         )
@@ -239,6 +240,7 @@ class ProjectionRouteAuthorityTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=self.first,
                 application_ref=self.application,
+                project_ref=self.other_thread.project_ref,
                 thread_ref=self.other_thread,
             )
         )

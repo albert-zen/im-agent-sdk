@@ -26,12 +26,12 @@
     },
     "ProjectRef": {
       "type": "object",
-      "required": ["applicationInstanceId", "nativeProjectId"],
+      "required": ["applicationInstanceId", "projectId"],
       "properties": {
         "applicationInstanceId": {
           "$ref": "common.schema.json#/$defs/Identifier"
         },
-        "nativeProjectId": {
+        "projectId": {
           "$ref": "common.schema.json#/$defs/Identifier"
         }
       },
@@ -39,19 +39,34 @@
     },
     "ThreadRef": {
       "type": "object",
-      "required": ["applicationInstanceId", "nativeThreadId"],
+      "required": ["projectRef", "threadId"],
       "properties": {
-        "applicationInstanceId": {
-          "$ref": "common.schema.json#/$defs/Identifier"
-        },
-        "nativeThreadId": {
+        "threadId": {
           "$ref": "common.schema.json#/$defs/Identifier"
         },
         "projectRef": {
-          "oneOf": [
-            { "$ref": "#/$defs/ProjectRef" },
-            { "type": "null" }
-          ]
+          "$ref": "#/$defs/ProjectRef"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TurnRef": {
+      "type": "object",
+      "required": ["threadRef", "turnId"],
+      "properties": {
+        "threadRef": { "$ref": "#/$defs/ThreadRef" },
+        "turnId": { "$ref": "common.schema.json#/$defs/Identifier" }
+      },
+      "additionalProperties": false
+    },
+    "WorkspaceIdentity": {
+      "type": "object",
+      "required": ["projectRef", "rootFingerprint"],
+      "properties": {
+        "projectRef": { "$ref": "#/$defs/ProjectRef" },
+        "rootFingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
         }
       },
       "additionalProperties": false
@@ -66,8 +81,41 @@
         "capabilities": {
           "$ref": "capabilities.schema.json#/$defs/ApplicationCapabilities"
         },
+        "workspaceIdentity": {
+          "oneOf": [
+            { "$ref": "#/$defs/WorkspaceIdentity" },
+            { "type": "null" }
+          ]
+        },
         "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
       },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "capabilities": {
+                "properties": {
+                  "projects": {
+                    "properties": { "mode": { "enum": ["flat", "fixed"] } },
+                    "required": ["mode"]
+                  }
+                },
+                "required": ["projects"]
+              }
+            },
+            "required": ["capabilities"]
+          },
+          "then": {
+            "required": ["workspaceIdentity"],
+            "properties": {
+              "workspaceIdentity": { "$ref": "#/$defs/WorkspaceIdentity" }
+            }
+          },
+          "else": {
+            "properties": { "workspaceIdentity": { "type": "null" } }
+          }
+        }
+      ],
       "additionalProperties": false
     },
     "ProjectSummary": {
@@ -78,6 +126,10 @@
         "displayName": { "$ref": "common.schema.json#/$defs/NonEmptyString" },
         "rootPath": { "type": ["string", "null"] },
         "repoUrl": { "type": ["string", "null"], "format": "uri" },
+        "workspaceRootFingerprint": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        },
         "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
       },
       "additionalProperties": false

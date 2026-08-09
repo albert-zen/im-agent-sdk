@@ -12,7 +12,7 @@ from imagent.adapters import (
     ProjectionRouteRepository,
 )
 from imagent.applications.capabilities import ProjectMode
-from imagent.applications.contract import AgentInput, ApplicationRef, ThreadRef
+from imagent.applications.contract import AgentInput, ApplicationRef, ProjectRef, ThreadRef
 from imagent.applications.operations import (
     ActivateNativeThread,
     ApplicationOperation,
@@ -222,7 +222,7 @@ class ProjectionRouteRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 await repository.put_projection_route(original)
                 conflicting = ThreadProjectionRoute(
                     route_id=original.route_id,
-                    thread_ref=ThreadRef("fake-agent", "other-thread"),
+                    thread_ref=ThreadRef(ProjectRef("fake-agent", "workspace"), "other-thread"),
                     conversation_ref=ConversationRef(
                         "fake-channel",
                         "second",
@@ -279,7 +279,7 @@ class ProjectionRouteRepositoryTests(unittest.IsolatedAsyncioTestCase):
 class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
     async def test_binding_observation_and_native_activation_are_independent(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = InMemoryBindingRepository()
         projections = InMemoryProjectionRouteRepository()
@@ -346,7 +346,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread(title="prepared")
+        thread = await application.create_thread(application.default_project_ref, title="prepared")
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = _CrashBindingRepository()
         initial = await bindings.put(
@@ -431,7 +431,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread(title="prepared")
+        thread = await application.create_thread(application.default_project_ref, title="prepared")
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = _CrashBindingRepository()
         initial = await bindings.put(
@@ -478,8 +478,8 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread_a = await application.create_thread(title="A")
-        thread_b = await application.create_thread(title="B")
+        thread_a = await application.create_thread(application.default_project_ref, title="A")
+        thread_b = await application.create_thread(application.default_project_ref, title="B")
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = _CrashBindingRepository()
         initial = await bindings.put(
@@ -581,7 +581,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread(title="shared")
+        thread = await application.create_thread(application.default_project_ref, title="shared")
         bindings = InMemoryBindingRepository()
         projections = InMemoryProjectionRouteRepository()
         gateway = ImAgentGateway(
@@ -630,7 +630,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread(title="shared")
+        thread = await application.create_thread(application.default_project_ref, title="shared")
         first = ConversationRef("fake-channel", "first")
         second = ConversationRef("fake-channel", "second")
         bindings = _CrashBindingRepository()
@@ -703,7 +703,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = _DelayedHistoryApplication()
-        thread = await application.create_thread(title="history")
+        thread = await application.create_thread(application.default_project_ref, title="history")
         await application.send_input(
             thread.ref,
             AgentInput(
@@ -775,7 +775,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = _DelayedHistoryApplication()
-        thread = await application.create_thread(title="history")
+        thread = await application.create_thread(application.default_project_ref, title="history")
         await application.send_input(
             thread.ref,
             AgentInput(
@@ -866,7 +866,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread(title="shared")
+        thread = await application.create_thread(application.default_project_ref, title="shared")
         first = ConversationRef("fake-channel", "first")
         second = ConversationRef("fake-channel", "second")
         bindings = _CrashBindingRepository()
@@ -934,14 +934,15 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_foreground_switch_a_to_b_to_a_reconciles_missed_output(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread_a = await application.create_thread(title="A")
-        thread_b = await application.create_thread(title="B")
+        thread_a = await application.create_thread(application.default_project_ref, title="A")
+        thread_b = await application.create_thread(application.default_project_ref, title="B")
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = InMemoryBindingRepository()
         await bindings.put(
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=ApplicationRef("fake-agent"),
+                project_ref=thread_a.ref.project_ref,
                 thread_ref=thread_a.ref,
             )
         )
@@ -1035,14 +1036,15 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread_a = await application.create_thread(title="A")
-        thread_b = await application.create_thread(title="B")
+        thread_a = await application.create_thread(application.default_project_ref, title="A")
+        thread_b = await application.create_thread(application.default_project_ref, title="B")
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = InMemoryBindingRepository()
         await bindings.put(
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=ApplicationRef("fake-agent"),
+                project_ref=thread_a.ref.project_ref,
                 thread_ref=thread_a.ref,
             )
         )
@@ -1087,8 +1089,8 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_concurrent_threads_keep_independent_projection_routes(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread_a = await application.create_thread(title="A")
-        thread_b = await application.create_thread(title="B")
+        thread_a = await application.create_thread(application.default_project_ref, title="A")
+        thread_b = await application.create_thread(application.default_project_ref, title="B")
         first = ConversationRef("fake-channel", "first")
         second = ConversationRef("fake-channel", "second")
         bindings = InMemoryBindingRepository()
@@ -1097,6 +1099,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
                 ConversationBinding(
                     conversation_ref=conversation,
                     application_ref=ApplicationRef("fake-agent"),
+                    project_ref=thread.ref.project_ref,
                     thread_ref=thread.ref,
                 )
             )
@@ -1133,13 +1136,14 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "gateway.sqlite3"
             application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-            thread = await application.create_thread()
+            thread = await application.create_thread(application.default_project_ref)
             conversation = ConversationRef("fake-channel", "conversation")
             first_state = SQLiteGatewayState(path)
             await first_state.put(
                 ConversationBinding(
                     conversation_ref=conversation,
                     application_ref=ApplicationRef("fake-agent"),
+                    project_ref=thread.ref.project_ref,
                     thread_ref=thread.ref,
                 )
             )
@@ -1209,10 +1213,7 @@ async def _wait_for_deliveries(
 
 
 def _thread_ref() -> ThreadRef:
-    return ThreadRef(
-        application_instance_id="fake-agent",
-        native_thread_id="thread-1",
-    )
+    return ThreadRef(project_ref=ProjectRef("fake-agent", "workspace"), thread_id="thread-1")
 
 
 def _projection_route(

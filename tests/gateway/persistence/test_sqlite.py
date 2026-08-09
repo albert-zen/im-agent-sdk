@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import sqlite3
 import tempfile
 import unittest
@@ -13,9 +12,8 @@ from imagent.adapters import (
     TurnReplyCorrelationConflict,
 )
 from imagent.applications.capabilities import ProjectMode
-from imagent.applications.contract import AgentInput, ApplicationRef, ProjectRef, ThreadRef
+from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef, TurnRef
 from imagent.applications.requests import ApprovalResponseShape, RequestRef
-from imagent.gateway import GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import DeliverySubmissionOrigin
 from imagent.gateway.persistence import (
     MAX_DELIVERY_SUBMISSION_DESTINATIONS,
@@ -40,9 +38,9 @@ from imagent.gateway.projection.request_correlation import (
     derive_turn_reply_correlation_id,
 )
 from imagent.gateway.routing.projection_routes import derive_projection_route_id
-from imagent.interaction.messages import ConversationRef, TextContent
+from imagent.interaction.messages import ConversationRef
 from imagent.interaction.operations import ContractViolation
-from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
+from imagent.testing import FakeAgentApplicationAdapter
 
 
 class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
@@ -65,8 +63,10 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                 conversation,
             ),
             request_ref=request_ref,
-            thread_ref=ThreadRef(application_id, f"thread-{application_id}"),
-            turn_id=f"turn-{application_id}",
+            turn_ref=TurnRef(
+                ThreadRef(ProjectRef(application_id, "workspace"), f"thread-{application_id}"),
+                f"turn-{application_id}",
+            ),
             conversation_ref=conversation,
             delivery_id=f"delivery-{application_id}-{conversation_id}",
             response_shape=ApprovalResponseShape(
@@ -81,11 +81,10 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         now = datetime.now(UTC)
-        thread = ThreadRef("codex-main", "thread-1")
+        thread = ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
         original = TurnReplyCorrelation(
-            correlation_id=derive_turn_reply_correlation_id(thread, "turn-active"),
-            thread_ref=thread,
-            turn_id="turn-active",
+            correlation_id=derive_turn_reply_correlation_id(TurnRef(thread, "turn-active")),
+            turn_ref=TurnRef(thread, "turn-active"),
             client_message_id="client-a",
             conversation_ref=ConversationRef("qq-main", "conversation-a"),
             reply_to_message_id="message-a",
@@ -93,8 +92,7 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
         )
         conflicting = TurnReplyCorrelation(
             correlation_id=original.correlation_id,
-            thread_ref=thread,
-            turn_id=original.turn_id,
+            turn_ref=TurnRef(thread, original.turn_ref.turn_id),
             client_message_id="client-b",
             conversation_ref=ConversationRef("qq-main", "conversation-b"),
             reply_to_message_id="message-b",
@@ -110,8 +108,7 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                     repeated = await repository.put_turn_reply_correlation(
                         TurnReplyCorrelation(
                             correlation_id=original.correlation_id,
-                            thread_ref=thread,
-                            turn_id=original.turn_id,
+                            turn_ref=TurnRef(thread, original.turn_ref.turn_id),
                             client_message_id=original.client_message_id,
                             conversation_ref=original.conversation_ref,
                             reply_to_message_id=original.reply_to_message_id,
@@ -377,11 +374,7 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                     conversation_ref=conversation,
                     application_ref=ApplicationRef("t3-main"),
                     project_ref=project,
-                    thread_ref=ThreadRef(
-                        "t3-main",
-                        "thread-1",
-                        project,
-                    ),
+                    thread_ref=ThreadRef(project, "thread-1"),
                 )
             )
             self.assertEqual(
@@ -511,7 +504,7 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
             now = datetime.now(UTC)
             conversation = ConversationRef("qq-main", "c2c:user-1")
             project = ProjectRef("t3-main", "project-1")
-            thread = ThreadRef("t3-main", "thread-1", project)
+            thread = ThreadRef(project, "thread-1")
             route_id = derive_projection_route_id(thread, conversation)
             connection = sqlite3.connect(path)
             try:
@@ -627,12 +620,8 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                 )
 
                 correlation = TurnReplyCorrelation(
-                    correlation_id=derive_turn_reply_correlation_id(
-                        thread,
-                        "turn-1",
-                    ),
-                    thread_ref=thread,
-                    turn_id="turn-1",
+                    correlation_id=derive_turn_reply_correlation_id(TurnRef(thread, "turn-1")),
+                    turn_ref=TurnRef(thread, "turn-1"),
                     client_message_id="client-message-1",
                     conversation_ref=conversation,
                     reply_to_message_id="origin-message-1",
@@ -688,7 +677,7 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                 application_instance_id="fake-agent",
                 project_mode=ProjectMode.FLAT,
             )
-            thread = await application.create_thread()
+            thread = await application.create_thread(application.default_project_ref)
             conversation = ConversationRef("fake-channel", "conversation")
             route_id = derive_projection_route_id(thread.ref, conversation)
             connection = sqlite3.connect(path)
@@ -721,9 +710,9 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                     """,
                     (
                         route_id,
-                        thread.ref.application_instance_id,
+                        thread.ref.project_ref.application_instance_id,
                         "",
-                        thread.ref.native_thread_id,
+                        thread.ref.thread_id,
                         conversation.channel_instance_id,
                         conversation.native_conversation_id,
                         "stale-latest-inbound",
@@ -735,43 +724,10 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                 connection.close()
 
             state = SQLiteGatewayState(path)
-            channel = FakeChannelAdapter()
-            await state.put(
-                ConversationBinding(
-                    conversation_ref=conversation,
-                    application_ref=application.summary.ref,
-                    thread_ref=thread.ref,
-                )
-            )
-            gateway = ImAgentGateway(
-                channels=[channel],
-                applications=[application],
-                repositories=GatewayRepositories(
-                    bindings=state,
-                    idempotency=state,
-                    projections=state,
-                ),
-            )
-            await gateway.start()
             try:
-                migrated = (await state.list_projection_routes(thread.ref))[0]
-                self.assertIsNone(migrated.reply_to_message_id)
-                await application.send_input(
-                    thread.ref,
-                    AgentInput(
-                        client_message_id="external-after-upgrade",
-                        content=(TextContent("external"),),
-                    ),
-                )
-                async with asyncio.timeout(1):
-                    while len(channel.sent) < 2:
-                        await asyncio.sleep(0)
-                self.assertEqual(
-                    [message.reply_to for message in channel.sent],
-                    [None, None],
-                )
+                with self.assertRaisesRegex(ValueError, "project_id"):
+                    await state.list_projection_routes()
             finally:
-                await gateway.stop()
                 await state.close()
 
     async def test_valid_legacy_route_upgrade_survives_restart(self) -> None:
@@ -815,16 +771,15 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
 
             first = SQLiteGatewayState(path)
             try:
-                migrated = (await first.list_projection_routes())[0]
-                self.assertIsNone(migrated.reply_to_message_id)
-                self.assertIsNone(migrated.checkpoint_agent_item_id)
+                with self.assertRaisesRegex(ValueError, "project_id"):
+                    await first.list_projection_routes()
             finally:
                 await first.close()
 
             second = SQLiteGatewayState(path)
             try:
-                recovered = (await second.list_projection_routes())[0]
-                self.assertEqual(recovered, migrated)
+                with self.assertRaisesRegex(ValueError, "project_id"):
+                    await second.list_projection_routes()
             finally:
                 await second.close()
 
@@ -840,7 +795,7 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
             )
             route = ThreadProjectionRoute(
                 route_id="route",
-                thread_ref=ThreadRef("app", "thread"),
+                thread_ref=ThreadRef(ProjectRef("app", "workspace"), "thread"),
                 conversation_ref=ConversationRef("qq", "route"),
                 updated_at=now,
             )
@@ -858,8 +813,7 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
             )
             turn_correlation = TurnReplyCorrelation(
                 correlation_id="turn-correlation",
-                thread_ref=ThreadRef("app", "turn-thread"),
-                turn_id="turn",
+                turn_ref=TurnRef(ThreadRef(ProjectRef("app", "workspace"), "turn-thread"), "turn"),
                 client_message_id="client",
                 conversation_ref=ConversationRef("qq", "turn"),
                 reply_to_message_id="reply",

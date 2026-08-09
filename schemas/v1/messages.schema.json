@@ -183,9 +183,9 @@
         "correlationPolicy": {
           "$ref": "#/$defs/TurnReplyCorrelationPolicy"
         },
-        "expectedTurnId": {
+        "expectedTurnRef": {
           "oneOf": [
-            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "$ref": "resources.schema.json#/$defs/TurnRef" },
             { "type": "null" }
           ]
         }
@@ -199,7 +199,7 @@
           "then": {
             "properties": {
               "correlationPolicy": { "const": "create_new" },
-              "expectedTurnId": { "type": "null" }
+              "expectedTurnRef": { "type": "null" }
             }
           }
         },
@@ -209,11 +209,11 @@
             "required": ["disposition"]
           },
           "then": {
-            "required": ["expectedTurnId"],
+            "required": ["expectedTurnRef"],
             "properties": {
               "correlationPolicy": { "const": "preserve_existing" },
-              "expectedTurnId": {
-                "$ref": "common.schema.json#/$defs/Identifier"
+              "expectedTurnRef": {
+                "$ref": "resources.schema.json#/$defs/TurnRef"
               }
             }
           }
@@ -224,17 +224,13 @@
     "AcceptedTurn": {
       "type": "object",
       "required": [
-        "threadRef",
-        "turnId",
+        "turnRef",
         "clientMessageId",
         "disposition",
         "correlationPolicy"
       ],
       "properties": {
-        "threadRef": {
-          "$ref": "resources.schema.json#/$defs/ThreadRef"
-        },
-        "turnId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "turnRef": { "$ref": "resources.schema.json#/$defs/TurnRef" },
         "clientMessageId": {
           "$ref": "common.schema.json#/$defs/Identifier"
         },

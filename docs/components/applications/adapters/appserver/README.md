@@ -44,6 +44,16 @@ facts, and documented SHA-256 fingerprints. It never logs native IDs, native
 text, endpoints, paths, credentials, arbitrary payload keys, or arbitrary
 payload values.
 
+The fixed workspace Project is also an admission boundary. Before any native
+Thread read, history/catch-up, input or control mutation, notification, or
+server-request publication, the adapter authoritatively reads that native
+Thread and requires its stable ID plus canonical `cwd` to match the configured
+immutable workspace. Missing or foreign `cwd` evidence fails closed. Native
+Thread listing filters those entries without discarding an otherwise valid
+page, while native creation validates the returned Thread before exposing it.
+This check does not claim native Project management or introduce persisted
+workspace truth.
+
 No leaf owns Gateway request correlation, IM delivery, persistence, product
 approval/command policy, raw native event exposure, durable spool/outbox,
 checkpoint/replay state, or a second subscription. A missing authoritative

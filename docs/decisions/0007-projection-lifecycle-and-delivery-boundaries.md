@@ -72,7 +72,7 @@ For IM-originated input, Gateway records only:
 - correlation creation time.
 
 The mapping is created from `AcceptedTurn`, never Metadata or a route's latest
-inbound message. Live projection preserves `AgentEvent.turn_id`; recovery uses
+inbound message. Live projection preserves `AgentEvent.turn_ref`; recovery uses
 native history Turn envelopes. An explicit terminal Turn event removes the
 correlation. Configurable time retention and route/Thread cleanup bound stale
 entries when a terminal event is missing. A correlation applies only when its

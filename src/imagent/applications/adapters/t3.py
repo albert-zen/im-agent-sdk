@@ -54,8 +54,10 @@ from ..contract import (
     ThreadSummary,
     TurnCatchup,
     TurnHistoryEntry,
+    TurnRef,
     TurnReplyCorrelationPolicy,
     TurnStatus,
+    validate_application_summary,
 )
 from ..diagnostics import ApplicationDiagnosticFacts
 from ..events import (
@@ -283,18 +285,18 @@ class T3ApplicationAdapter:
         self._send_lock_max_threads = send_lock_max_threads
         self._seen_message_max_entries = seen_message_max_entries
         self._terminal_turn_max_entries = terminal_turn_max_entries
-        self._turn_baselines: OrderedDict[tuple[str, str], frozenset[str]] = OrderedDict()
-        self._active_turn_baselines: set[tuple[str, str]] = set()
+        self._turn_baselines: OrderedDict[TurnRef, frozenset[str]] = OrderedDict()
+        self._active_turn_baselines: set[TurnRef] = set()
         self._reserved_turn_baselines = 0
-        self._events = EventBroadcaster[str, AgentEvent](max_pending=event_buffer_max_pending)
-        self._poll_tasks: dict[str, asyncio.Task[None]] = {}
-        self._send_locks: dict[str, _T3SendLockEntry] = {}
-        self._presentation_states: dict[str, _T3PresentationState] = {}
-        self._seen_messages: dict[str, set[str]] = {}
-        self._seen_message_order: OrderedDict[tuple[str, str], None] = OrderedDict()
-        self._terminal_turns: dict[str, set[str]] = {}
-        self._terminal_turn_order: OrderedDict[tuple[str, str], None] = OrderedDict()
-        self._initialized_threads: set[str] = set()
+        self._events = EventBroadcaster[ThreadRef, AgentEvent](max_pending=event_buffer_max_pending)
+        self._poll_tasks: dict[ThreadRef, asyncio.Task[None]] = {}
+        self._send_locks: dict[ThreadRef, _T3SendLockEntry] = {}
+        self._presentation_states: dict[ThreadRef, _T3PresentationState] = {}
+        self._seen_messages: dict[ThreadRef, set[str]] = {}
+        self._seen_message_order: OrderedDict[tuple[ThreadRef, str], None] = OrderedDict()
+        self._terminal_turns: dict[ThreadRef, set[str]] = {}
+        self._terminal_turn_order: OrderedDict[tuple[ThreadRef, str], None] = OrderedDict()
+        self._initialized_threads: set[ThreadRef] = set()
         self._summary = ApplicationSummary(
             ref=ApplicationRef(application_instance_id),
             kind="t3",
@@ -333,6 +335,7 @@ class T3ApplicationAdapter:
                 "protocol": "t3-orchestration",
             },
         )
+        validate_application_summary(self._summary)
 
     @property
     def summary(self) -> ApplicationSummary:
@@ -408,7 +411,7 @@ class T3ApplicationAdapter:
                 and (
                     not query
                     or query in summary.display_name.casefold()
-                    or query in summary.ref.native_project_id.casefold()
+                    or query in summary.ref.project_id.casefold()
                 )
             )
             return ProjectsListed(
@@ -417,9 +420,9 @@ class T3ApplicationAdapter:
                 projects=Page(items=projects),
             )
         if isinstance(operation, GetProject):
-            project = await self._find_project(operation.project_ref.native_project_id)
+            project = await self._find_project(operation.project_ref.project_id)
             if project is None:
-                raise ValueError(f"T3 project not found: {operation.project_ref.native_project_id}")
+                raise ValueError(f"T3 project not found: {operation.project_ref.project_id}")
             return ProjectRead(
                 operation_id=operation.operation_id,
                 completed_at=completed_at,
@@ -433,11 +436,11 @@ class T3ApplicationAdapter:
                 summary
                 for thread in _object_list(snapshot.get("threads"))
                 if (summary := self._thread_summary(thread)) is not None
-                and (project_ref is None or summary.ref.project_ref == project_ref)
+                and summary.ref.project_ref == project_ref
                 and (
                     not query
                     or query in (summary.title or "").casefold()
-                    or query in summary.ref.native_thread_id.casefold()
+                    or query in summary.ref.thread_id.casefold()
                 )
             )
             return ThreadsListed(
@@ -447,13 +450,11 @@ class T3ApplicationAdapter:
             )
         if isinstance(operation, CreateThread):
             project_ref = operation.project_ref
-            if project_ref is None:
-                raise ValueError("thread.create requires project_ref")
             if operation.initial_context:
                 raise NotImplementedError("initial thread context is unsupported by T3")
-            project = await self._find_project(project_ref.native_project_id)
+            project = await self._find_project(project_ref.project_id)
             if project is None:
-                raise ValueError(f"T3 project not found: {project_ref.native_project_id}")
+                raise ValueError(f"T3 project not found: {project_ref.project_id}")
             model_selection = project.metadata.get("default_model_selection")
             if not isinstance(model_selection, Mapping):
                 raise ValueError("T3 project has no default Agent/model selection")
@@ -465,7 +466,7 @@ class T3ApplicationAdapter:
                     "type": "thread.create",
                     "commandId": _stable_id(operation.operation_id, "create"),
                     "threadId": thread_id,
-                    "projectId": project_ref.native_project_id,
+                    "projectId": project_ref.project_id,
                     "title": title,
                     "modelSelection": dict(model_selection),
                     "runtimeMode": self._runtime_mode,
@@ -480,9 +481,8 @@ class T3ApplicationAdapter:
                 completed_at=completed_at,
                 thread=ThreadSummary(
                     ref=ThreadRef(
-                        application_instance_id=self._application_instance_id,
-                        native_thread_id=thread_id,
                         project_ref=project_ref,
+                        thread_id=thread_id,
                     ),
                     title=title,
                     status=ThreadStatus.IDLE,
@@ -495,9 +495,8 @@ class T3ApplicationAdapter:
             )
         if isinstance(operation, (GetThread, GetThreadStatus)):
             thread_ref = operation.thread_ref
-            self._require_own_thread(thread_ref)
-            detail = await self._client.thread_detail(thread_ref.native_thread_id)
-            summary = self._thread_summary(_object(detail.get("thread"), "thread"))
+            thread = await self._read_scoped_thread(thread_ref)
+            summary = self._thread_summary(thread)
             if summary is None:
                 raise ValueError("T3 thread is archived or deleted")
             if isinstance(operation, GetThreadStatus):
@@ -514,9 +513,7 @@ class T3ApplicationAdapter:
             )
         if isinstance(operation, GetTurnCatchup):
             thread_ref = operation.thread_ref
-            self._require_own_thread(thread_ref)
-            detail = await self._client.thread_detail(thread_ref.native_thread_id)
-            thread = _object(detail.get("thread"), "thread")
+            thread = await self._read_scoped_thread(thread_ref)
             latest_turn = _optional_object(thread.get("latestTurn"))
             if latest_turn is None:
                 return TurnCatchupRead(
@@ -524,7 +521,7 @@ class T3ApplicationAdapter:
                     completed_at=completed_at,
                     catchup=TurnCatchup(
                         thread_ref=thread_ref,
-                        turn_id=None,
+                        turn_ref=None,
                         status=TurnStatus.IDLE,
                         messages=(),
                     ),
@@ -542,7 +539,7 @@ class T3ApplicationAdapter:
                 completed_at=completed_at,
                 catchup=TurnCatchup(
                     thread_ref=thread_ref,
-                    turn_id=turn_id,
+                    turn_ref=TurnRef(thread_ref, turn_id),
                     status=_turn_status(latest_turn.get("state") or latest_turn.get("status")),
                     messages=messages[-operation.limit :],
                     updated_at=_parse_optional_datetime(
@@ -556,9 +553,7 @@ class T3ApplicationAdapter:
             )
         if isinstance(operation, GetThreadHistory):
             thread_ref = operation.thread_ref
-            self._require_own_thread(thread_ref)
-            detail = await self._client.thread_detail(thread_ref.native_thread_id)
-            thread = _object(detail.get("thread"), "thread")
+            thread = await self._read_scoped_thread(thread_ref)
             turns = await self._t3_history_entries(thread_ref, thread)
             end = max(0, len(turns) - ((operation.page - 1) * operation.limit))
             start = max(0, end - operation.limit)
@@ -575,14 +570,14 @@ class T3ApplicationAdapter:
             )
         if isinstance(operation, DeleteThread):
             thread_ref = operation.thread_ref
-            self._require_own_thread(thread_ref)
             if operation.mode is not ThreadDeletionMode.ARCHIVE:
                 raise NotImplementedError("T3 supports archive, not permanent deletion")
+            await self._read_scoped_thread(thread_ref)
             await self._client.dispatch(
                 {
                     "type": "thread.archive",
                     "commandId": _stable_id(operation.operation_id, "archive"),
-                    "threadId": thread_ref.native_thread_id,
+                    "threadId": thread_ref.thread_id,
                 }
             )
             return ThreadDeleted(
@@ -593,22 +588,22 @@ class T3ApplicationAdapter:
             )
         if isinstance(operation, InterruptTurn):
             thread_ref = operation.thread_ref
-            self._require_own_thread(thread_ref)
+            await self._read_scoped_thread(thread_ref)
             command: dict[str, object] = {
                 "type": "thread.turn.interrupt",
                 "commandId": _stable_id(operation.operation_id, "interrupt"),
-                "threadId": thread_ref.native_thread_id,
+                "threadId": thread_ref.thread_id,
                 "createdAt": _utc_now(),
             }
-            turn_id = operation.turn_id
-            if turn_id:
-                command["turnId"] = turn_id
+            turn_ref = operation.turn_ref
+            if turn_ref is not None:
+                command["turnId"] = turn_ref.turn_id
             await self._client.dispatch(command)
             return TurnInterrupted(
                 operation_id=operation.operation_id,
                 completed_at=completed_at,
                 thread_ref=thread_ref,
-                turn_id=turn_id,
+                turn_ref=turn_ref,
             )
         if isinstance(operation, (ActivateNativeThread, RespondRequest)):
             raise NotImplementedError(f"{operation.type.value} is unsupported by T3")
@@ -713,7 +708,7 @@ class T3ApplicationAdapter:
             )
             entries.append(
                 TurnHistoryEntry(
-                    turn_id=turn_id,
+                    turn_ref=TurnRef(thread_ref, turn_id),
                     status=status,
                     user_message=user_message,
                     agent_messages=agent_messages,
@@ -736,7 +731,7 @@ class T3ApplicationAdapter:
         if not isinstance(continuation, InputContinuationPreference):
             raise ValueError("unknown input continuation preference")
         self._require_own_thread(thread_ref)
-        async with self._hold_send_lock(thread_ref.native_thread_id):
+        async with self._hold_send_lock(thread_ref):
             return await self._send_input_locked(
                 thread_ref,
                 message,
@@ -744,13 +739,13 @@ class T3ApplicationAdapter:
             )
 
     @asynccontextmanager
-    async def _hold_send_lock(self, thread_id: str) -> AsyncIterator[None]:
-        entry = self._send_locks.get(thread_id)
+    async def _hold_send_lock(self, thread_ref: ThreadRef) -> AsyncIterator[None]:
+        entry = self._send_locks.get(thread_ref)
         if entry is None:
             if len(self._send_locks) >= self._send_lock_max_threads:
                 raise _T3StateCapacityError("T3 active Thread send-lock capacity is exhausted")
             entry = _T3SendLockEntry()
-            self._send_locks[thread_id] = entry
+            self._send_locks[thread_ref] = entry
         entry.users += 1
         acquired = False
         try:
@@ -761,8 +756,8 @@ class T3ApplicationAdapter:
             if acquired:
                 entry.lock.release()
             entry.users -= 1
-            if entry.users == 0 and self._send_locks.get(thread_id) is entry:
-                self._send_locks.pop(thread_id, None)
+            if entry.users == 0 and self._send_locks.get(thread_ref) is entry:
+                self._send_locks.pop(thread_ref, None)
 
     async def _send_input_locked(
         self,
@@ -777,16 +772,14 @@ class T3ApplicationAdapter:
         attachments = tuple(part for part in message.content if isinstance(part, AttachmentContent))
         if not text and not attachments:
             raise ValueError("T3 input requires text or image")
-        before = await self._client.thread_detail(thread_ref.native_thread_id)
+        before = await self._read_scoped_thread(thread_ref)
         baseline = frozenset(
-            _message_id(item)
-            for item in _object_list(_object(before.get("thread"), "thread").get("messages"))
-            if _message_id(item)
+            _message_id(item) for item in _object_list(before.get("messages")) if _message_id(item)
         )
         command = {
             "type": "thread.turn.start",
             "commandId": _stable_id(message.client_message_id, "turn"),
-            "threadId": thread_ref.native_thread_id,
+            "threadId": thread_ref.thread_id,
             "message": {
                 "messageId": _stable_id(message.client_message_id, "message"),
                 "role": "user",
@@ -814,8 +807,7 @@ class T3ApplicationAdapter:
                 )
             try:
                 await self._client.dispatch(command)
-                detail = await self._client.thread_detail(thread_ref.native_thread_id)
-                thread = _object(detail.get("thread"), "thread")
+                thread = await self._read_scoped_thread(thread_ref)
                 latest_turn = _object(thread.get("latestTurn"), "latestTurn")
                 turn_id = str(latest_turn.get("turnId") or latest_turn.get("id") or "")
                 if not turn_id:
@@ -833,7 +825,7 @@ class T3ApplicationAdapter:
                     cause,
                 ) from cause
             self._record_turn_baseline(
-                thread_ref.native_thread_id,
+                thread_ref,
                 turn_id,
                 baseline,
             )
@@ -842,8 +834,7 @@ class T3ApplicationAdapter:
             if reserved:
                 self._release_turn_baseline_reservation()
         return AcceptedTurn(
-            thread_ref=thread_ref,
-            turn_id=turn_id,
+            turn_ref=TurnRef(thread_ref, turn_id),
             client_message_id=message.client_message_id,
             disposition=InputDisposition.STARTED,
             correlation_policy=TurnReplyCorrelationPolicy.CREATE_NEW,
@@ -870,26 +861,26 @@ class T3ApplicationAdapter:
 
     def _record_turn_baseline(
         self,
-        thread_id: str,
+        thread_ref: ThreadRef,
         turn_id: str,
         baseline: frozenset[str],
     ) -> None:
         if self._reserved_turn_baselines <= 0:
             raise RuntimeError("T3 turn-baseline was not reserved")
-        key = (thread_id, turn_id)
+        key = TurnRef(thread_ref, turn_id)
         self._turn_baselines[key] = baseline
         self._turn_baselines.move_to_end(key)
         self._active_turn_baselines.add(key)
         self._reserved_turn_baselines -= 1
 
-    def _mark_turn_terminal(self, thread_id: str, turn_id: str) -> None:
-        self._active_turn_baselines.discard((thread_id, turn_id))
+    def _mark_turn_terminal(self, thread_ref: ThreadRef, turn_id: str) -> None:
+        self._active_turn_baselines.discard(TurnRef(thread_ref, turn_id))
 
-    def _remember_seen_message(self, thread_id: str, message_id: str) -> None:
+    def _remember_seen_message(self, thread_ref: ThreadRef, message_id: str) -> None:
         if not message_id:
             return
-        seen = self._seen_messages.setdefault(thread_id, set())
-        key = (thread_id, message_id)
+        seen = self._seen_messages.setdefault(thread_ref, set())
+        key = (thread_ref, message_id)
         if message_id in seen:
             return
         seen.add(message_id)
@@ -903,11 +894,11 @@ class T3ApplicationAdapter:
             if not evicted_seen:
                 self._seen_messages.pop(evicted_thread_id, None)
 
-    def _remember_terminal_turn(self, thread_id: str, turn_id: str) -> bool:
-        terminal_turns = self._terminal_turns.setdefault(thread_id, set())
+    def _remember_terminal_turn(self, thread_ref: ThreadRef, turn_id: str) -> bool:
+        terminal_turns = self._terminal_turns.setdefault(thread_ref, set())
         if turn_id in terminal_turns:
             return False
-        key = (thread_id, turn_id)
+        key = (thread_ref, turn_id)
         terminal_turns.add(turn_id)
         self._terminal_turn_order[key] = None
         while len(self._terminal_turn_order) > self._terminal_turn_max_entries:
@@ -928,39 +919,36 @@ class T3ApplicationAdapter:
         if after_cursor is not None:
             raise NotImplementedError("T3 does not support event replay")
         self._require_own_thread(thread_ref)
-        thread_id = thread_ref.native_thread_id
-        subscription = self._events.subscribe(thread_id)
-        task = self._poll_tasks.get(thread_id)
+        subscription = self._events.subscribe(thread_ref)
+        task = self._poll_tasks.get(thread_ref)
         if task is None or task.done():
             task = asyncio.create_task(self._poll_thread(thread_ref))
-            self._poll_tasks[thread_id] = task
+            self._poll_tasks[thread_ref] = task
             task.add_done_callback(
-                lambda completed, subscribed_thread_id=thread_id: self._finish_poll_task(
-                    subscribed_thread_id,
+                lambda completed, subscribed_thread_ref=thread_ref: self._finish_poll_task(
+                    subscribed_thread_ref,
                     completed,
                 )
             )
         return subscription
 
     async def _poll_thread(self, thread_ref: ThreadRef) -> None:
-        thread_id = thread_ref.native_thread_id
         presentation_state = (
-            self._presentation_state(thread_id) if self._activity_presenter is not None else None
+            self._presentation_state(thread_ref) if self._activity_presenter is not None else None
         )
         if presentation_state is not None:
             presentation_state.pinned_by_poll = True
         try:
-            while self._events.subscriber_count(thread_id):
-                detail = await self._client.thread_detail(thread_ref.native_thread_id)
-                thread = _object(detail.get("thread"), "thread")
-                initialize = thread_id not in self._initialized_threads
+            while self._events.subscriber_count(thread_ref):
+                thread = await self._read_scoped_thread(thread_ref)
+                initialize = thread_ref not in self._initialized_threads
                 await self._publish_thread_state(
                     thread_ref,
                     thread,
                     initialize=initialize,
                     _presentation_state_override=presentation_state,
                 )
-                self._initialized_threads.add(thread_id)
+                self._initialized_threads.add(thread_ref)
                 await asyncio.sleep(self._poll_interval)
         finally:
             if presentation_state is not None:
@@ -976,7 +964,7 @@ class T3ApplicationAdapter:
         _presentation_state_override: _T3PresentationState | None = None,
     ) -> None:
         state = (
-            _presentation_state_override or self._presentation_state(thread_ref.native_thread_id)
+            _presentation_state_override or self._presentation_state(thread_ref)
             if self._activity_presenter is not None
             else _T3PresentationState()
         )
@@ -998,15 +986,14 @@ class T3ApplicationAdapter:
         only_turn_id: str | None = None,
         initialize: bool = False,
     ) -> None:
-        thread_id = thread_ref.native_thread_id
-        seen = self._seen_messages.get(thread_id, set())
+        seen = self._seen_messages.get(thread_ref, set())
         messages = _object_list(thread.get("messages"))
         if self._activity_presenter is None:
             for message in messages:
                 message_id = _message_id(message)
                 turn_id = str(message.get("turnId") or "")
                 if not self._should_publish_t3_message(
-                    thread_id,
+                    thread_ref,
                     message_id,
                     turn_id,
                     message,
@@ -1015,7 +1002,7 @@ class T3ApplicationAdapter:
                     initialize=initialize,
                 ):
                     continue
-                self._remember_seen_message(thread_id, message_id)
+                self._remember_seen_message(thread_ref, message_id)
                 self._publish_t3_message(thread_ref, message, message_id, turn_id)
 
         if self._activity_presenter is not None:
@@ -1032,7 +1019,7 @@ class T3ApplicationAdapter:
                 message_id = _message_id(message)
                 turn_id = str(message.get("turnId") or "")
                 if not self._should_publish_t3_message(
-                    thread_id,
+                    thread_ref,
                     message_id,
                     turn_id,
                     message,
@@ -1059,7 +1046,10 @@ class T3ApplicationAdapter:
                     or (only_turn_id is not None and activity_turn_id != only_turn_id)
                 ):
                     continue
-                if initialize and self._turn_baselines.get((thread_id, activity_turn_id)) is None:
+                if (
+                    initialize
+                    and self._turn_baselines.get(TurnRef(thread_ref, activity_turn_id)) is None
+                ):
                     seen_activities.add(activity_id)
                     continue
                 ordered.append(
@@ -1076,7 +1066,7 @@ class T3ApplicationAdapter:
                 if candidate_kind == "message":
                     message_id = _message_id(candidate)
                     turn_id = str(candidate.get("turnId") or "")
-                    self._remember_seen_message(thread_id, message_id)
+                    self._remember_seen_message(thread_ref, message_id)
                     self._publish_t3_message(thread_ref, candidate, message_id, turn_id)
                     continue
                 activity_id = str(candidate.get("id") or "")
@@ -1088,7 +1078,7 @@ class T3ApplicationAdapter:
                 seen_activities.add(activity_id)
                 if projected is not None:
                     self._events.publish(
-                        thread_id,
+                        thread_ref,
                         self._event(
                             AgentEventType.MESSAGE_COMPLETED,
                             thread_ref,
@@ -1125,13 +1115,13 @@ class T3ApplicationAdapter:
         }.get(state)
         if event_type is None or not turn_id:
             return
-        self._mark_turn_terminal(thread_id, turn_id)
-        if not self._remember_terminal_turn(thread_id, turn_id):
+        self._mark_turn_terminal(thread_ref, turn_id)
+        if not self._remember_terminal_turn(thread_ref, turn_id):
             return
-        if initialize and (thread_id, turn_id) not in self._turn_baselines:
+        if initialize and TurnRef(thread_ref, turn_id) not in self._turn_baselines:
             return
         self._events.publish(
-            thread_id,
+            thread_ref,
             self._event(
                 event_type,
                 thread_ref,
@@ -1140,8 +1130,8 @@ class T3ApplicationAdapter:
             ),
         )
 
-    def _presentation_state(self, thread_id: str) -> _T3PresentationState:
-        state = self._presentation_states.pop(thread_id, None)
+    def _presentation_state(self, thread_ref: ThreadRef) -> _T3PresentationState:
+        state = self._presentation_states.pop(thread_ref, None)
         if state is None:
             if len(self._presentation_states) >= self._presentation_limits.max_seen_identities:
                 eviction_key = next(
@@ -1158,7 +1148,7 @@ class T3ApplicationAdapter:
                     )
                 self._presentation_states.pop(eviction_key)
             state = _T3PresentationState()
-        self._presentation_states[thread_id] = state
+        self._presentation_states[thread_ref] = state
         return state
 
     def _new_t3_activities(
@@ -1201,7 +1191,7 @@ class T3ApplicationAdapter:
 
     def _should_publish_t3_message(
         self,
-        thread_id: str,
+        thread_ref: ThreadRef,
         message_id: str,
         turn_id: str,
         message: Mapping[str, object],
@@ -1210,19 +1200,18 @@ class T3ApplicationAdapter:
         only_turn_id: str | None,
         initialize: bool,
     ) -> bool:
-        if (
-            not message_id
-            or message_id in seen
-            or str(message.get("role") or "") != "assistant"
-            or (only_turn_id is not None and turn_id != only_turn_id)
-        ):
+        if not message_id or str(message.get("role") or "") != "assistant":
             return False
-        baseline = self._turn_baselines.get((thread_id, turn_id))
+        if not turn_id:
+            raise EventStreamReset("application_native_mapping_failed")
+        if message_id in seen or (only_turn_id is not None and turn_id != only_turn_id):
+            return False
+        baseline = self._turn_baselines.get(TurnRef(thread_ref, turn_id))
         if initialize and baseline is None:
-            self._remember_seen_message(thread_id, message_id)
+            self._remember_seen_message(thread_ref, message_id)
             return False
         if baseline is not None and message_id in baseline:
-            self._remember_seen_message(thread_id, message_id)
+            self._remember_seen_message(thread_ref, message_id)
             return False
         return True
 
@@ -1233,8 +1222,10 @@ class T3ApplicationAdapter:
         message_id: str,
         turn_id: str,
     ) -> None:
+        if not turn_id:
+            raise EventStreamReset("application_native_mapping_failed")
         self._events.publish(
-            thread_ref.native_thread_id,
+            thread_ref,
             self._event(
                 AgentEventType.MESSAGE_COMPLETED,
                 thread_ref,
@@ -1292,12 +1283,12 @@ class T3ApplicationAdapter:
 
     def _finish_poll_task(
         self,
-        thread_id: str,
+        thread_ref: ThreadRef,
         task: asyncio.Task[None],
     ) -> None:
-        if self._poll_tasks.get(thread_id) is task:
-            self._poll_tasks.pop(thread_id, None)
-        self._initialized_threads.discard(thread_id)
+        if self._poll_tasks.get(thread_ref) is task:
+            self._poll_tasks.pop(thread_ref, None)
+        self._initialized_threads.discard(thread_ref)
         if task.cancelled():
             return
         error = task.exception()
@@ -1308,7 +1299,7 @@ class T3ApplicationAdapter:
                 else "application_event_poll_failed"
             )
             self._events.fail(
-                thread_id,
+                thread_ref,
                 lambda: EventStreamReset(gap_code),
                 discard_pending=False,
             )
@@ -1324,6 +1315,39 @@ class T3ApplicationAdapter:
                 return self._project_summary(project)
         return None
 
+    async def _read_scoped_thread(
+        self,
+        thread_ref: ThreadRef,
+    ) -> Mapping[str, object]:
+        """Read native authority and require its full identity to match the SDK ref."""
+
+        self._require_own_thread(thread_ref)
+        detail = await self._client.thread_detail(thread_ref.thread_id)
+        thread = _object(detail.get("thread"), "thread")
+        self._require_native_thread_scope(thread_ref, thread)
+        return thread
+
+    def _require_native_thread_scope(
+        self,
+        thread_ref: ThreadRef,
+        thread: Mapping[str, object],
+    ) -> None:
+        self._require_own_thread(thread_ref)
+        native_thread_id = str(thread.get("id") or "")
+        if not native_thread_id:
+            raise RuntimeError("T3 Thread did not contain a Thread identity")
+        if native_thread_id != thread_ref.thread_id:
+            raise ValueError("T3 Thread identity does not match the requested Thread")
+        native_project_id = str(thread.get("projectId") or "")
+        if not native_project_id:
+            raise RuntimeError("T3 Thread did not contain a Project identity")
+        native_project_ref = ProjectRef(
+            application_instance_id=self._application_instance_id,
+            project_id=native_project_id,
+        )
+        if native_project_ref != thread_ref.project_ref:
+            raise ValueError("T3 Thread belongs to a different Project")
+
     def _project_summary(
         self,
         project: Mapping[str, object],
@@ -1336,7 +1360,7 @@ class T3ApplicationAdapter:
         return ProjectSummary(
             ref=ProjectRef(
                 application_instance_id=self._application_instance_id,
-                native_project_id=project_id,
+                project_id=project_id,
             ),
             display_name=str(project.get("title") or project.get("name") or project_id),
             root_path=_optional_string(project.get("workspaceRoot") or project.get("path")),
@@ -1355,18 +1379,19 @@ class T3ApplicationAdapter:
         project_id = str(thread.get("projectId") or "")
         if not thread_id:
             return None
+        if not project_id:
+            raise RuntimeError("T3 Thread did not contain a Project identity")
         latest_turn = _optional_object(thread.get("latestTurn"))
         state = (
             latest_turn.get("state") or latest_turn.get("status")
             if latest_turn is not None
             else "idle"
         )
-        project_ref = ProjectRef(self._application_instance_id, project_id) if project_id else None
+        project_ref = ProjectRef(self._application_instance_id, project_id)
         return ThreadSummary(
             ref=ThreadRef(
-                application_instance_id=self._application_instance_id,
-                native_thread_id=thread_id,
                 project_ref=project_ref,
+                thread_id=thread_id,
             ),
             status=_thread_status(state),
             title=_optional_string(thread.get("title")),
@@ -1384,6 +1409,8 @@ class T3ApplicationAdapter:
         turn_id: str | None,
         data: dict[str, object],
     ) -> AgentEvent:
+        if not turn_id:
+            raise EventStreamReset("application_native_mapping_failed")
         message = data.get("message")
         if isinstance(message, AgentMessage):
             native_identity = f"message:{message.agent_item_id}"
@@ -1391,7 +1418,8 @@ class T3ApplicationAdapter:
             native_identity = f"turn:{turn_id or 'unknown'}:{event_type.value}"
         return AgentEvent(
             event_id=(
-                f"{self._application_instance_id}:thread:{thread_ref.native_thread_id}:"
+                f"{self._application_instance_id}:project:{thread_ref.project_ref.project_id}:"
+                f"thread:{thread_ref.thread_id}:"
                 f"{native_identity}"
             ),
             application_instance_id=self._application_instance_id,
@@ -1400,11 +1428,11 @@ class T3ApplicationAdapter:
             created_at=datetime.now(UTC),
             project_ref=thread_ref.project_ref,
             thread_ref=thread_ref,
-            turn_id=turn_id,
+            turn_ref=TurnRef(thread_ref, turn_id) if turn_id is not None else None,
         )
 
     def _require_own_thread(self, thread_ref: ThreadRef) -> None:
-        if thread_ref.application_instance_id != self._application_instance_id:
+        if thread_ref.project_ref.application_instance_id != self._application_instance_id:
             raise ValueError("thread belongs to a different application instance")
 
 

@@ -109,6 +109,30 @@
         "creation": { "$ref": "#/$defs/SupportLevel" },
         "deletion": { "$ref": "#/$defs/SupportLevel" }
       },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "mode": { "const": "managed" } },
+            "required": ["mode"]
+          },
+          "then": {
+            "properties": {
+              "discovery": { "const": "native" },
+              "reading": { "const": "native" },
+              "creation": { "enum": ["native", "unsupported"] },
+              "deletion": { "enum": ["native", "unsupported"] }
+            }
+          },
+          "else": {
+            "properties": {
+              "discovery": { "const": "fallback" },
+              "reading": { "const": "fallback" },
+              "creation": { "const": "unsupported" },
+              "deletion": { "const": "unsupported" }
+            }
+          }
+        }
+      ],
       "additionalProperties": false
     },
     "ThreadDeletionCapability": {

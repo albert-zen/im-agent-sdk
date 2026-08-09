@@ -27,6 +27,7 @@ from imagent.applications import (
 from imagent.applications.contract import (
     AgentInput,
     AgentMessage,
+    ProjectRef,
     ThreadRef,
 )
 from imagent.applications.diagnostics import ApplicationPresentationFailureCode
@@ -67,12 +68,11 @@ class _AppServerClient:
         return {"data": []}
 
     async def start_thread(self, **params):
-        del params
-        return {"thread": {"id": "thread-1"}}
+        return {"thread": {"id": "thread-1", "cwd": params["cwd"]}}
 
     async def read_thread(self, thread_id: str, *, include_turns: bool = False):
         del include_turns
-        return {"thread": {"id": thread_id}}
+        return {"thread": {"id": thread_id, "cwd": "/workspace"}}
 
     async def resume_thread(self, **params):
         del params
@@ -108,6 +108,7 @@ class _AcceptedT3Client(_T3Client):
         return {
             "thread": {
                 "id": thread_id,
+                "projectId": "workspace",
                 "messages": [],
                 "activities": (
                     [
@@ -143,6 +144,7 @@ class _PollingFailureT3Client(_T3Client):
         return {
             "thread": {
                 "id": thread_id,
+                "projectId": "workspace",
                 "messages": [],
                 "activities": (
                     []
@@ -273,10 +275,11 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
         application = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/workspace",
             live_activity_presenter=presenter,
         )
-        thread_ref = ThreadRef("codex-main", "thread-1")
+        thread_ref = ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
         events = application.subscribe_thread(thread_ref)
         try:
             await client.handlers[0](
@@ -299,7 +302,8 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
             event = await anext(events)
             self.assertEqual(event.type, AgentEventType.MESSAGE_CREATED)
             self.assertEqual(event.event_id, "event-plan-1")
-            self.assertEqual(event.turn_id, "turn-1")
+            assert event.turn_ref is not None
+            self.assertEqual(event.turn_ref.turn_id, "turn-1")
             message = cast(AgentMessage, event.data["message"])
             self.assertIsInstance(message, AgentMessage)
             self.assertEqual(message.agent_item_id, "event-plan-1")
@@ -335,9 +339,12 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
         codex = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/workspace",
         )
-        events = codex.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        events = codex.subscribe_thread(
+            ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
+        )
         try:
             self.assertIsNone(codex.diagnostic_facts().presentation)
             pending = asyncio.ensure_future(anext(events))
@@ -372,10 +379,13 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
         application = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/workspace",
             live_activity_presenter=presenter,
         )
-        events = application.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        events = application.subscribe_thread(
+            ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
+        )
         try:
             await client.handlers[0](
                 {
@@ -402,10 +412,13 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
         application = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/workspace",
             live_activity_presenter=presenter,
         )
-        events = application.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        events = application.subscribe_thread(
+            ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
+        )
         try:
             await client.handlers[0](
                 {
@@ -432,7 +445,7 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
             client=_T3Client(),
             activity_presenter=presenter,
         )
-        thread_ref = ThreadRef("t3-main", "thread-1")
+        thread_ref = ThreadRef(ProjectRef("t3-main", "workspace"), "thread-1")
         activity = {
             "id": "activity-1",
             "turnId": "turn-1",
@@ -465,8 +478,8 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
             client=_T3Client(),
             activity_presenter=presenter,
         )
-        thread_ref = ThreadRef("t3-main", "thread-1")
-        events = application._events.subscribe("thread-1")
+        thread_ref = ThreadRef(ProjectRef("t3-main", "workspace"), "thread-1")
+        events = application._events.subscribe(thread_ref)
         thread = {
             "messages": [],
             "activities": [
@@ -584,13 +597,13 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
         )
         try:
             accepted = await application.send_input(
-                ThreadRef("t3-main", "thread-1"),
+                ThreadRef(ProjectRef("t3-main", "workspace"), "thread-1"),
                 AgentInput(
                     client_message_id="input-1",
                     content=(TextContent("Run"),),
                 ),
             )
-            self.assertEqual(accepted.turn_id, "turn-accepted")
+            self.assertEqual(accepted.turn_ref.turn_id, "turn-accepted")
             diagnostics = application.diagnostic_facts().presentation
             self.assertIsNotNone(diagnostics)
             self.assertEqual(cast(Any, diagnostics).invocation_count, 0)
@@ -604,7 +617,9 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
             poll_interval=0,
             activity_presenter=_FailingT3Presenter(),
         )
-        events = application.subscribe_thread(ThreadRef("t3-main", "thread-1"))
+        events = application.subscribe_thread(
+            ThreadRef(ProjectRef("t3-main", "workspace"), "thread-1")
+        )
         try:
             with self.assertRaisesRegex(EventStreamReset, "application_event_poll_failed"):
                 await asyncio.wait_for(anext(events), 1)
@@ -622,8 +637,8 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
             client=_T3Client(),
             activity_presenter=presenter,
         )
-        thread_ref = ThreadRef("t3-main", "thread-1")
-        events = application._events.subscribe("thread-1")
+        thread_ref = ThreadRef(ProjectRef("t3-main", "workspace"), "thread-1")
+        events = application._events.subscribe(thread_ref)
         thread = {
             "messages": [
                 {
@@ -664,10 +679,16 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
         try:
             for index in range(3):
                 await application._publish_thread_state(
-                    ThreadRef("t3-main", f"thread-{index}"),
+                    ThreadRef(ProjectRef("t3-main", "workspace"), f"thread-{index}"),
                     {"messages": [], "activities": []},
                 )
-            self.assertEqual(tuple(application._presentation_states), ("thread-1", "thread-2"))
+            self.assertEqual(
+                tuple(application._presentation_states),
+                (
+                    ThreadRef(ProjectRef("t3-main", "workspace"), "thread-1"),
+                    ThreadRef(ProjectRef("t3-main", "workspace"), "thread-2"),
+                ),
+            )
         finally:
             await application.stop()
 
@@ -679,11 +700,13 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
             presentation_limits=ApplicationPresentationLimits(max_seen_identities=1),
         )
         try:
-            state = application._presentation_state("thread-1")
+            first = ThreadRef(ProjectRef("t3-main", "workspace"), "thread-1")
+            second = ThreadRef(ProjectRef("t3-main", "workspace"), "thread-2")
+            state = application._presentation_state(first)
             state.pinned_by_poll = True
             with self.assertRaises(ApplicationPresentationCapacityError):
-                application._presentation_state("thread-2")
-            self.assertIs(application._presentation_states["thread-1"], state)
+                application._presentation_state(second)
+            self.assertIs(application._presentation_states[first], state)
         finally:
             await application.stop()
 
@@ -694,7 +717,7 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
             activity_presenter=_T3Presenter(),
             presentation_limits=ApplicationPresentationLimits(max_seen_identities=2),
         )
-        thread_ref = ThreadRef("t3-main", "thread-1")
+        thread_ref = ThreadRef(ProjectRef("t3-main", "workspace"), "thread-1")
 
         def activity(index: int) -> dict[str, object]:
             return {
@@ -717,7 +740,7 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
                     "activities": [activity(0), activity(1), activity(2), activity(3)],
                 },
             )
-            state = application._presentation_states["thread-1"]
+            state = application._presentation_states[thread_ref]
             self.assertEqual(state.seen_activity_ids, {"activity-2", "activity-3"})
         finally:
             await application.stop()
@@ -729,7 +752,7 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
             activity_presenter=_T3Presenter(),
             presentation_limits=ApplicationPresentationLimits(max_seen_identities=2),
         )
-        thread_ref = ThreadRef("t3-main", "thread-1")
+        thread_ref = ThreadRef(ProjectRef("t3-main", "workspace"), "thread-1")
         try:
             await application._publish_thread_state(
                 thread_ref,
@@ -764,7 +787,7 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
             client=_T3Client(),
             activity_presenter=presenter,
         )
-        thread_ref = ThreadRef("t3-main", "thread-1")
+        thread_ref = ThreadRef(ProjectRef("t3-main", "workspace"), "thread-1")
         thread = {
             "messages": [],
             "activities": [
@@ -795,6 +818,7 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
         codex = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/workspace",
             live_activity_presenter=codex_presenter,
         )
@@ -823,7 +847,7 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
         )
         try:
             await t3._t3_activity_message(
-                ThreadRef("t3-main", "thread-1"),
+                ThreadRef(ProjectRef("t3-main", "workspace"), "thread-1"),
                 {
                     "id": "activity-1",
                     "turnId": "turn-1",
@@ -840,7 +864,7 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_live_projection_is_idempotent_without_advancing_checkpoint(self) -> None:
         repository = InMemoryProjectionRouteRepository()
-        thread_ref = ThreadRef("codex-main", "thread-1")
+        thread_ref = ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
         conversation_ref = ConversationRef("qq-main", "conversation-1")
         route = await repository.put_projection_route(
             ThreadProjectionRoute(

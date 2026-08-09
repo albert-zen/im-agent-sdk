@@ -16,7 +16,9 @@ from imagent.applications.contract import (
     ApplicationInputDispatch,
     ApplicationRef,
     InputDisposition,
+    ProjectRef,
     ThreadRef,
+    TurnRef,
     TurnReplyCorrelationPolicy,
 )
 from imagent.applications.requests import (
@@ -74,8 +76,7 @@ def _correlation(
     return RequestRouteCorrelation(
         correlation_id=derive_request_correlation_id(request_ref, conversation_ref),
         request_ref=request_ref,
-        thread_ref=ThreadRef("application-1", "thread-1"),
-        turn_id="turn-1",
+        turn_ref=TurnRef(ThreadRef(ProjectRef("application-1", "workspace"), "thread-1"), "turn-1"),
         conversation_ref=conversation_ref,
         delivery_id=derive_request_delivery_id(request_ref, conversation_ref),
         response_shape=ApprovalResponseShape(("approve",)),
@@ -224,7 +225,9 @@ class InteractiveRequestProjectionRuntimeTests(unittest.IsolatedAsyncioTestCase)
             application_instance_id="application-1",
             project_mode=ProjectMode.FLAT,
         )
-        self.thread_ref = (await self.application.create_thread()).ref
+        self.thread_ref = (
+            await self.application.create_thread(self.application.default_project_ref)
+        ).ref
         self.conversation_ref = ConversationRef("qq-main", "conversation-1")
         self.route = ThreadProjectionRoute(
             route_id="route-1",
@@ -270,9 +273,7 @@ class InteractiveRequestProjectionRuntimeTests(unittest.IsolatedAsyncioTestCase)
             client_message_id="client-1",
         )
         accepted = AcceptedTurn(
-            thread_ref=self.thread_ref,
-            turn_id="turn-1",
-            client_message_id="client-1",
+            turn_ref=TurnRef(self.thread_ref, "turn-1"), client_message_id="client-1"
         )
         await self.runtime.correlate_accepted_turn(
             accepted,
@@ -292,11 +293,9 @@ class InteractiveRequestProjectionRuntimeTests(unittest.IsolatedAsyncioTestCase)
             stored,
             TurnReplyCorrelation(
                 correlation_id=owner.derive_turn_reply_correlation_id(
-                    self.thread_ref,
-                    "turn-1",
+                    TurnRef(self.thread_ref, "turn-1")
                 ),
-                thread_ref=self.thread_ref,
-                turn_id="turn-1",
+                turn_ref=TurnRef(self.thread_ref, "turn-1"),
                 client_message_id="client-1",
                 conversation_ref=self.conversation_ref,
                 reply_to_message_id="message-1",
@@ -308,7 +307,7 @@ class InteractiveRequestProjectionRuntimeTests(unittest.IsolatedAsyncioTestCase)
                 replace(
                     dispatch,
                     correlation_policy=TurnReplyCorrelationPolicy.PRESERVE_EXISTING,
-                    expected_turn_id="turn-1",
+                    expected_turn_ref=TurnRef(self.thread_ref, "turn-1"),
                 ),
                 thread_ref=self.thread_ref,
                 client_message_id="client-1",
@@ -332,9 +331,7 @@ class InteractiveRequestProjectionRuntimeTests(unittest.IsolatedAsyncioTestCase)
         )
         await self.runtime.correlate_accepted_turn(
             AcceptedTurn(
-                thread_ref=self.thread_ref,
-                turn_id="turn-active",
-                client_message_id="client-start",
+                turn_ref=TurnRef(self.thread_ref, "turn-active"), client_message_id="client-start"
             ),
             started,
             thread_ref=self.thread_ref,
@@ -351,7 +348,7 @@ class InteractiveRequestProjectionRuntimeTests(unittest.IsolatedAsyncioTestCase)
             client_message_id="client-steer",
             disposition=InputDisposition.STEERED,
             correlation_policy=TurnReplyCorrelationPolicy.PRESERVE_EXISTING,
-            expected_turn_id="turn-active",
+            expected_turn_ref=TurnRef(self.thread_ref, "turn-active"),
         )
         await self.runtime.authorize_input_dispatch(
             dispatch,
@@ -360,8 +357,7 @@ class InteractiveRequestProjectionRuntimeTests(unittest.IsolatedAsyncioTestCase)
         )
         await self.runtime.correlate_accepted_turn(
             AcceptedTurn(
-                thread_ref=self.thread_ref,
-                turn_id="turn-active",
+                turn_ref=TurnRef(self.thread_ref, "turn-active"),
                 client_message_id="client-steer",
                 disposition=InputDisposition.STEERED,
                 correlation_policy=TurnReplyCorrelationPolicy.PRESERVE_EXISTING,
@@ -382,8 +378,7 @@ class InteractiveRequestProjectionRuntimeTests(unittest.IsolatedAsyncioTestCase)
         with self.assertRaises(RuntimeError):
             await self.runtime.correlate_accepted_turn(
                 AcceptedTurn(
-                    thread_ref=self.thread_ref,
-                    turn_id="turn-retargeted",
+                    turn_ref=TurnRef(self.thread_ref, "turn-retargeted"),
                     client_message_id="client-steer",
                     disposition=InputDisposition.STEERED,
                     correlation_policy=TurnReplyCorrelationPolicy.PRESERVE_EXISTING,
@@ -396,7 +391,10 @@ class InteractiveRequestProjectionRuntimeTests(unittest.IsolatedAsyncioTestCase)
             )
         with self.assertRaises(ValueError):
             await self.runtime.authorize_input_dispatch(
-                replace(dispatch, expected_turn_id="turn-missing"),
+                replace(
+                    dispatch,
+                    expected_turn_ref=TurnRef(self.thread_ref, "turn-missing"),
+                ),
                 thread_ref=self.thread_ref,
                 client_message_id="client-steer",
             )
@@ -473,7 +471,9 @@ class InteractiveRequestProjectionRuntimeTests(unittest.IsolatedAsyncioTestCase)
         self.assertEqual(self.runtime._request_locks.active_key_count, 0)
 
     async def test_pending_snapshot_gap_reconciliation_is_thread_scoped(self) -> None:
-        second_thread_ref = (await self.application.create_thread()).ref
+        second_thread_ref = (
+            await self.application.create_thread(self.application.default_project_ref)
+        ).ref
         first_request = await self.application.open_approval_request(
             self.thread_ref,
             turn_id="turn-first",

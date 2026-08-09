@@ -17,6 +17,7 @@ from ..contract import (
     InputDisposition,
     ThreadRef,
     ThreadStatus,
+    TurnRef,
     TurnReplyCorrelationPolicy,
     TurnStatus,
 )
@@ -45,12 +46,7 @@ from .appserver.mapping import (
 from .appserver.mapping import (
     AppServerMappingError as _AppServerMappingError,
 )
-from .appserver.mapping import (
-    native_object as _native_object,
-)
-from .appserver.mapping import (
-    native_turn_id as _native_turn_id,
-)
+from .appserver.mapping import native_turn_id as _native_turn_id
 from .appserver.mapping import (
     thread_status as _thread_status,
 )
@@ -81,6 +77,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
         *,
         application_instance_id: str,
         client: AppServerClient,
+        workspace_id: str,
         cwd: str,
         shared_filesystem_root: str | Path | None = None,
         event_buffer_max_pending: int = 1024,
@@ -102,6 +99,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
             kind="codex",
             display_name="Codex",
             client=client,
+            workspace_id=workspace_id,
             cwd=cwd,
             shared_filesystem_root=shared_filesystem_root,
             server_request_mapper=map_appserver_request,
@@ -135,7 +133,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
             self._steer_active_turn
             and continuation is InputContinuationPreference.PREFER_ACTIVE_TURN
         ):
-            active_turn_id = await self._read_active_turn_id(thread_ref.native_thread_id)
+            active_turn_id = await self._read_active_turn_id(thread_ref)
         if active_turn_id is None:
             return await self._start_prepared_input(
                 thread_ref,
@@ -154,12 +152,12 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
                     client_message_id=message.client_message_id,
                     disposition=InputDisposition.STEERED,
                     correlation_policy=TurnReplyCorrelationPolicy.PRESERVE_EXISTING,
-                    expected_turn_id=active_turn_id,
+                    expected_turn_ref=TurnRef(thread_ref, active_turn_id),
                 )
             )
         result = await self._steer_input(
             steer_client,
-            thread_id=thread_ref.native_thread_id,
+            thread_id=thread_ref.thread_id,
             turn_id=active_turn_id,
             prepared=prepared,
             expected_local_image_epoch=expected_local_image_epoch,
@@ -178,16 +176,17 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
                 cause,
             ) from cause
         return AcceptedTurn(
-            thread_ref=thread_ref,
-            turn_id=turn_id,
+            turn_ref=TurnRef(thread_ref, turn_id),
             client_message_id=message.client_message_id,
             disposition=InputDisposition.STEERED,
             correlation_policy=TurnReplyCorrelationPolicy.PRESERVE_EXISTING,
         )
 
-    async def _read_active_turn_id(self, thread_id: str) -> str | None:
-        result = await self._client.read_thread(thread_id, include_turns=True)
-        thread = _native_object(result, "thread")
+    async def _read_active_turn_id(self, thread_ref: ThreadRef) -> str | None:
+        thread = await self._require_native_thread_scope(
+            thread_ref,
+            include_turns=True,
+        )
         turns = thread.get("turns")
         if not isinstance(turns, list):
             raise RuntimeError("active-Turn steering requires an authoritative native turn list")

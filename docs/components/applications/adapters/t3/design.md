@@ -43,15 +43,29 @@ process-local poll state are finite. The adapter's four explicit state
 capacities default to 4096
 turn-baseline entries, 1024 concurrently held Thread send locks, 8192 seen
 message identities, and 4096 terminal-Turn identities. Baselines are keyed by
-`(native_thread_id, native_turn_id)` and reserve capacity before the typed
+`TurnRef` and reserve capacity before the typed
 pre-dispatch callback; only baselines already observed terminal may be
 evicted, oldest first. If every baseline is active, input fails before native
 mutation rather than dropping active authority. Send-lock entries are retained
 only while a Thread has a waiter or owner and reject a new Thread when the
 active-key capacity is full. Seen-message and terminal-Turn windows use stable
-`(native_thread_id, native_id)` keys and deterministic oldest-first eviction;
+`(ThreadRef, native_id)` keys and deterministic oldest-first eviction;
 eviction can cause replay from native history but never changes native truth or
 creates a local transcript/spool.
+
+Every mapped T3 Thread must carry a stable native Project ID; a malformed
+Project-less Thread is rejected rather than omitted or normalized. T3 keeps
+native Project list/read capability, while CWD Project creation remains typed
+unsupported because the evidenced client has no such mutation.
+Every assistant message that can enter live observation must likewise carry a
+stable native Turn ID. Missing Turn ancestry terminates the affected poll with
+the fixed native-mapping recovery gap before the message is marked seen or a
+canonical event is published.
+Every supplied `ThreadRef` is also preflighted against an authoritative native
+Thread detail `(projectId, id)` before a read projection, input, polling, or
+Thread/Turn mutation. A missing or mismatched native identity fails closed;
+same-Application ancestry alone is insufficient and no caller-supplied Project
+may key state or events until native scope matches.
 
 A missing cursor or polling gap ends the affected subscription with explicit
 recoverable gap semantics; history/catch-up may recover the association.
@@ -87,3 +101,4 @@ rules are the finite capacities and explicit active-authority behavior above.
 - [ADR 0004](../../../../decisions/0004-event-fanout-and-recovery.md)
 - [ADR 0012](../../../../decisions/0012-input-continuation-and-reply-correlation.md)
 - [ADR 0015](../../../../decisions/0015-typed-extension-seams-and-composition.md)
+- [ADR 0016](../../../../decisions/0016-uniform-workspace-and-consumer-actions.md)

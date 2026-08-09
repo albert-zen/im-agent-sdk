@@ -6,6 +6,11 @@ continues to own Projects, Threads, Turns, transcript/history, requests, and
 execution. Gateway may consume these contracts but Applications never imports
 Gateway implementation or product Controller policy.
 
+The resource hierarchy is unconditional: `ProjectRef` scopes every
+`ThreadRef`, and `ThreadRef` scopes every escaped `TurnRef`. Fixed/flat
+adapters expose exactly one stable workspace Project plus canonical-root
+fingerprint evidence; managed adapters preserve native Project identity.
+
 ## Common leaves
 
 | Leaf | Responsibility | Design | Testing |

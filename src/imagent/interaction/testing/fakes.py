@@ -4,6 +4,7 @@ import uuid
 from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 
 from imagent.applications.capabilities import (
     ApplicationCapabilities,
@@ -16,6 +17,7 @@ from imagent.applications.capabilities import (
     ThreadDeletionCapability,
 )
 from imagent.applications.contract import (
+    MAX_WORKSPACE_ROOT_LENGTH,
     AcceptedTurn,
     AgentInput,
     AgentMessage,
@@ -35,8 +37,13 @@ from imagent.applications.contract import (
     ThreadSummary,
     TurnCatchup,
     TurnHistoryEntry,
+    TurnRef,
     TurnReplyCorrelationPolicy,
     TurnStatus,
+    WorkspaceIdentity,
+    fingerprint_canonical_workspace_root,
+    validate_application_summary,
+    validate_project_summary,
 )
 from imagent.applications.events import (
     AgentEvent,
@@ -49,6 +56,7 @@ from imagent.applications.operations import (
     ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,
+    CreateProject,
     CreateThread,
     DeleteThread,
     GetProject,
@@ -60,6 +68,7 @@ from imagent.applications.operations import (
     ListProjects,
     ListThreads,
     NativeThreadActivated,
+    ProjectCreated,
     ProjectRead,
     ProjectsListed,
     RequestResponded,
@@ -109,13 +118,18 @@ from imagent.interaction.operations import operation_error
 
 def make_capabilities(project_mode: ProjectMode) -> ApplicationCapabilities:
     project_support = (
-        SupportLevel.NATIVE if project_mode is ProjectMode.MANAGED else SupportLevel.UNSUPPORTED
+        SupportLevel.NATIVE if project_mode is ProjectMode.MANAGED else SupportLevel.FALLBACK
     )
     return ApplicationCapabilities(
         projects=ProjectCapabilities(
             mode=project_mode,
             discovery=project_support,
             reading=project_support,
+            creation=(
+                SupportLevel.NATIVE
+                if project_mode is ProjectMode.MANAGED
+                else SupportLevel.UNSUPPORTED
+            ),
         ),
         threads=ThreadCapabilities(
             listing=SupportLevel.NATIVE,
@@ -135,6 +149,18 @@ def make_capabilities(project_mode: ProjectMode) -> ApplicationCapabilities:
             event_sequence_scope=EventSequenceScope.THREAD,
         ),
     )
+
+
+def _canonical_workspace_root(root: str | Path) -> str:
+    raw = str(root)
+    if not raw or len(raw) > MAX_WORKSPACE_ROOT_LENGTH:
+        raise ValueError(
+            "workspace root must be a non-empty path of at most "
+            f"{MAX_WORKSPACE_ROOT_LENGTH} characters"
+        )
+    canonical = str(Path(raw).expanduser().resolve(strict=False))
+    fingerprint_canonical_workspace_root(canonical)
+    return canonical
 
 
 class FakeChannelAdapter:
@@ -187,6 +213,8 @@ class FakeAgentApplicationAdapter:
         self,
         application_instance_id: str = "fake-agent",
         project_mode: ProjectMode = ProjectMode.MANAGED,
+        workspace_id: str = "contract-workspace",
+        workspace_root: str = "/contract/workspace",
         event_history_limit: int = 100,
         event_buffer_max_pending: int = 1024,
     ) -> None:
@@ -194,16 +222,43 @@ class FakeAgentApplicationAdapter:
             raise ValueError("event_history_limit must be positive")
         self._application_id = application_instance_id
         self._capabilities = make_capabilities(project_mode)
+        canonical_workspace_root = _canonical_workspace_root(workspace_root)
+        self._workspace_project = (
+            None
+            if project_mode is ProjectMode.MANAGED
+            else ProjectSummary(
+                ref=ProjectRef(application_instance_id, workspace_id),
+                display_name="Contract Workspace",
+                root_path=canonical_workspace_root,
+                workspace_root_fingerprint=fingerprint_canonical_workspace_root(
+                    canonical_workspace_root
+                ),
+            )
+        )
         self._summary = ApplicationSummary(
             ref=ApplicationRef(application_instance_id),
             kind="fake",
             display_name="Fake Agent",
             capabilities=self._capabilities,
+            workspace_identity=(
+                WorkspaceIdentity(
+                    project_ref=self._workspace_project.ref,
+                    root_fingerprint=(self._workspace_project.workspace_root_fingerprint or ""),
+                )
+                if self._workspace_project is not None
+                else None
+            ),
         )
+        validate_application_summary(self._summary)
         self._projects: dict[ProjectRef, ProjectSummary] = {}
+        self._created_projects_by_operation: dict[str, ProjectCreated] = {}
         if project_mode is ProjectMode.MANAGED:
             ref = ProjectRef(application_instance_id, "contract-project")
             self._projects[ref] = ProjectSummary(ref=ref, display_name="Contract Project")
+        else:
+            assert self._workspace_project is not None
+            validate_project_summary(self._workspace_project)
+            self._projects[self._workspace_project.ref] = self._workspace_project
         self._threads: dict[ThreadRef, ThreadSummary] = {}
         self._inputs: list[tuple[ThreadRef, AgentInput]] = []
         self._turn_history: dict[ThreadRef, list[TurnHistoryEntry]] = {}
@@ -226,6 +281,12 @@ class FakeAgentApplicationAdapter:
     @property
     def capabilities(self) -> ApplicationCapabilities:
         return self._capabilities
+
+    @property
+    def default_project_ref(self) -> ProjectRef:
+        """Return the deterministic seed Project used by focused test setup."""
+
+        return next(iter(self._projects))
 
     async def start(self) -> None:
         return None
@@ -275,6 +336,33 @@ class FakeAgentApplicationAdapter:
                 completed_at=now,
                 project=await self.get_project(operation.project_ref),
             )
+        if isinstance(operation, CreateProject):
+            if self._capabilities.projects.creation is SupportLevel.UNSUPPORTED:
+                raise NotImplementedError(
+                    f"{self._capabilities.projects.mode.value} project mode cannot create projects"
+                )
+            created = self._created_projects_by_operation.get(operation.operation_id)
+            if created is None:
+                project = ProjectSummary(
+                    ref=ProjectRef(
+                        self._application_id,
+                        "created-"
+                        + uuid.uuid5(
+                            uuid.NAMESPACE_URL,
+                            f"imagent.fake.project:{operation.operation_id}",
+                        ).hex,
+                    ),
+                    display_name=operation.display_name or "Project",
+                    root_path=operation.cwd,
+                )
+                created = ProjectCreated(
+                    operation_id=operation.operation_id,
+                    completed_at=now,
+                    project=project,
+                )
+                self._created_projects_by_operation[operation.operation_id] = created
+                self._projects[project.ref] = project
+            return created
         if isinstance(operation, ListThreads):
             return ThreadsListed(
                 operation_id=operation.operation_id,
@@ -326,7 +414,7 @@ class FakeAgentApplicationAdapter:
                 completed_at=now,
                 catchup=TurnCatchup(
                     thread_ref=operation.thread_ref,
-                    turn_id=latest.turn_id if latest is not None else None,
+                    turn_ref=latest.turn_ref if latest is not None else None,
                     status=latest.status if latest is not None else TurnStatus.IDLE,
                     messages=latest.agent_messages if latest is not None else (),
                 ),
@@ -346,14 +434,20 @@ class FakeAgentApplicationAdapter:
                 ),
             )
         if isinstance(operation, InterruptTurn):
-            await self.interrupt_turn(operation.thread_ref, operation.turn_id)
+            await self.interrupt_turn(
+                operation.thread_ref,
+                operation.turn_ref.turn_id if operation.turn_ref is not None else None,
+            )
             return TurnInterrupted(
                 operation_id=operation.operation_id,
                 completed_at=now,
                 thread_ref=operation.thread_ref,
-                turn_id=operation.turn_id,
+                turn_ref=operation.turn_ref,
             )
         if isinstance(operation, RespondRequest):
+            request = self._open_requests.get(operation.request_ref)
+            if request is None or request.turn_ref != operation.turn_ref:
+                raise RequestStaleError("fake request belongs to a different Turn")
             await self.respond_request(operation.request_ref, operation.response)
             return RequestResponded(
                 operation_id=operation.operation_id,
@@ -365,20 +459,22 @@ class FakeAgentApplicationAdapter:
     async def get_project(self, project_ref: ProjectRef) -> ProjectSummary:
         return self._projects[project_ref]
 
-    async def list_threads(self, project_ref=None, cursor=None) -> Page[ThreadSummary]:
+    async def list_threads(self, project_ref: ProjectRef, cursor=None) -> Page[ThreadSummary]:
         return Page(
             tuple(
-                thread
-                for thread in self._threads.values()
-                if project_ref is None or thread.ref.project_ref == project_ref
+                thread for thread in self._threads.values() if thread.ref.project_ref == project_ref
             )
         )
 
-    async def create_thread(self, project_ref=None, title=None) -> ThreadSummary:
+    async def create_thread(
+        self,
+        project_ref: ProjectRef,
+        title=None,
+    ) -> ThreadSummary:
+        await self.get_project(project_ref)
         ref = ThreadRef(
-            application_instance_id=self._application_id,
-            native_thread_id=f"thread-{self._next_thread}",
             project_ref=project_ref,
+            thread_id=f"thread-{self._next_thread}",
         )
         self._next_thread += 1
         summary = ThreadSummary(
@@ -458,7 +554,7 @@ class FakeAgentApplicationAdapter:
         )
         self._turn_history[thread_ref].append(
             TurnHistoryEntry(
-                turn_id=turn_id,
+                turn_ref=TurnRef(thread_ref, turn_id),
                 status=TurnStatus.COMPLETED,
                 user_message=AgentMessage(
                     agent_item_id=f"{turn_id}:user",
@@ -472,8 +568,7 @@ class FakeAgentApplicationAdapter:
             )
         )
         return AcceptedTurn(
-            thread_ref=thread_ref,
-            turn_id=turn_id,
+            turn_ref=TurnRef(thread_ref, turn_id),
             client_message_id=message.client_message_id,
         )
 
@@ -519,18 +614,17 @@ class FakeAgentApplicationAdapter:
         else:
             native_identity = f"turn:{turn_id}:{event_type.value}"
         event = AgentEvent(
-            event_id=(
-                f"{self._application_id}:thread:{thread_ref.native_thread_id}:{native_identity}"
-            ),
+            event_id=(f"{self._application_id}:thread:{thread_ref.thread_id}:{native_identity}"),
             application_instance_id=self._application_id,
+            project_ref=thread_ref.project_ref,
             sequence=sequence,
             sequence_epoch=self._event_epoch,
             type=event_type,
             data=data,
             created_at=datetime.now(UTC),
             thread_ref=thread_ref,
-            turn_id=turn_id,
-            cursor=(f"fake:{self._event_epoch}:{thread_ref.native_thread_id}:{sequence}"),
+            turn_ref=TurnRef(thread_ref, turn_id),
+            cursor=(f"fake:{self._event_epoch}:{thread_ref.thread_id}:{sequence}"),
             request=request,
             request_resolution=request_resolution,
         )
@@ -564,8 +658,7 @@ class FakeAgentApplicationAdapter:
     ) -> ApprovalRequest:
         request = ApprovalRequest(
             request_ref=self._new_request_ref(),
-            thread_ref=thread_ref,
-            turn_id=turn_id,
+            turn_ref=TurnRef(thread_ref, turn_id),
             prompt=prompt,
             choices=choices,
             expires_at=expires_at,
@@ -590,8 +683,7 @@ class FakeAgentApplicationAdapter:
     ) -> UserInputRequest:
         request = UserInputRequest(
             request_ref=self._new_request_ref(),
-            thread_ref=thread_ref,
-            turn_id=turn_id,
+            turn_ref=TurnRef(thread_ref, turn_id),
             questions=questions,
             prompt=prompt,
         )
@@ -617,13 +709,14 @@ class FakeAgentApplicationAdapter:
         self._resolved_requests.add(request_ref)
         resolution = RequestResolution(
             request_ref=request_ref,
+            turn_ref=request.turn_ref,
             status=status,
             resolved_at=datetime.now(UTC),
         )
         self._publish(
-            request.thread_ref,
+            request.turn_ref.thread_ref,
             AgentEventType.REQUEST_RESOLVED,
-            request.turn_id,
+            request.turn_ref.turn_id,
             {},
             request_resolution=resolution,
         )

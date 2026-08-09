@@ -135,8 +135,8 @@ class BindingOwnerTests(unittest.TestCase):
         self.conversation = ConversationRef("qq-primary", "c2c:user-1")
         self.application_id = "zen-local"
         self.application = ApplicationRef("zen-local")
-        self.thread = ThreadRef(self.application_id, "thread-1")
-        self.other_thread = ThreadRef(self.application_id, "thread-2")
+        self.thread = ThreadRef(ProjectRef(self.application_id, "workspace"), "thread-1")
+        self.other_thread = ThreadRef(ProjectRef(self.application_id, "workspace"), "thread-2")
 
     def _bind_thread(self) -> BindConversationToThread:
         return BindConversationToThread(
@@ -239,6 +239,7 @@ class BindingOwnerTests(unittest.TestCase):
             binding=ConversationBinding(
                 conversation_ref=self.conversation,
                 application_ref=self.application,
+                project_ref=self.other_thread.project_ref,
                 thread_ref=self.other_thread,
             ),
         )
@@ -280,6 +281,7 @@ class BindingOwnerTests(unittest.TestCase):
             binding=ConversationBinding(
                 conversation_ref=self.conversation,
                 application_ref=self.application,
+                project_ref=self.thread.project_ref,
                 thread_ref=self.thread,
             ),
         )
@@ -293,8 +295,8 @@ class BindingRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.runtime = binding_owner._BindingRuntime(self.repository)
         self.application = ApplicationRef("zen-local")
         self.project = ProjectRef("zen-local", "project-1")
-        self.thread = ThreadRef("zen-local", "thread-1", self.project)
-        self.other_thread = ThreadRef("zen-local", "thread-2", self.project)
+        self.thread = ThreadRef(self.project, "thread-1")
+        self.other_thread = ThreadRef(self.project, "thread-2")
         self.conversation = ConversationRef("qq-primary", "c2c:user-1")
         self.other_conversation = ConversationRef("qq-primary", "c2c:user-2")
 

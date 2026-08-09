@@ -33,8 +33,8 @@ the one synchronous request; the client performs no retry.
 
 Exactly one target shape is constructed:
 
-- a Thread-route target requires both Application and native Thread identity,
-  with optional project and route identity; or
+- a Thread-route target requires Application, Project, and native Thread
+  identity in one nested `ThreadRef`, with only the route selector optional; or
 - an explicit Conversation target requires both Channel and native
   Conversation identity and rejects a route selector.
 

@@ -549,19 +549,14 @@ def _validate_thread_ref(thread_ref: ThreadRef) -> None:
     if not isinstance(thread_ref, ThreadRef):
         raise TypeError("artifact facts Thread must use ThreadRef")
     _require_identity(
-        thread_ref.application_instance_id,
+        thread_ref.project_ref.application_instance_id,
         "artifact Application identity",
     )
-    _require_identity(thread_ref.native_thread_id, "artifact Thread identity")
-    if thread_ref.project_ref is not None:
-        _require_identity(
-            thread_ref.project_ref.application_instance_id,
-            "artifact Project Application identity",
-        )
-        _require_identity(
-            thread_ref.project_ref.native_project_id,
-            "artifact Project identity",
-        )
+    _require_identity(thread_ref.thread_id, "artifact Thread identity")
+    _require_identity(
+        thread_ref.project_ref.project_id,
+        "artifact Project identity",
+    )
 
 
 async def _cancel_and_join(

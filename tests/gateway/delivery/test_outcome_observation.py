@@ -6,7 +6,7 @@ import sys
 import unittest
 from datetime import UTC, datetime
 
-from imagent.applications.contract import AgentMessage, ThreadRef
+from imagent.applications.contract import AgentMessage, ProjectRef, ThreadRef
 from imagent.contracts import DeliveryPrincipal
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import (
@@ -631,7 +631,7 @@ class DeliveryOutcomeObserverTests(unittest.IsolatedAsyncioTestCase):
             ),
             extensions=GatewayExtensions(delivery_outcome_observer=observer),
         )
-        thread = ThreadRef("fake-agent", "thread-recovery")
+        thread = ThreadRef(ProjectRef("fake-agent", "workspace"), "thread-recovery")
         route = ThreadProjectionRoute(
             route_id=derive_projection_route_id(thread, self.conversation),
             thread_ref=thread,

@@ -34,6 +34,16 @@ the affected live projection through the fixed
 and any sequence/cursor fields describe only native guarantees; text and time
 do not establish identity.
 
+Every canonical event carries a required `ProjectRef`. When it also carries a
+`ThreadRef`, the two Project references must match exactly. This holds for
+message, Thread, Turn, status, and request events in managed, fixed, and flat
+modes; adapters may not omit ancestry merely because the native protocol has
+no Project object. Turn-scoped event families additionally require a
+`TurnRef` whose nested Thread equals the event `ThreadRef`; request-opened and
+request-resolved events use that same ancestry. Message-created and
+message-completed events carry one typed `AgentMessage` whose Thread equals the
+event Thread.
+
 The sole implementation owner is `imagent.applications.events`, in
 `src/imagent/applications/events.py`. The stable formal facades are explicit
 re-exports only: `imagent.events` exposes the complete event surface,
@@ -59,9 +69,9 @@ The implementation is `schemas/v1/events.schema.json` plus
 `tests/applications/test_events.py`; native adapter fan-out evidence is kept
 with the Codex adapter, and Gateway observation/lifecycle/recovery evidence is
 kept with its Gateway owners. The former root fan-out file is not an internal
-compatibility path. The schema and event semantics are unchanged by this
-mechanical consolidation, and the event module contains no duplicate
-`AgentMessage` or resource model.
+compatibility path. The versioned schema uses the same required Project and
+nested Thread/Turn shapes as the Python validator. The event module contains
+no duplicate `AgentMessage` or resource model.
 
 ## Authority
 
@@ -69,3 +79,4 @@ mechanical consolidation, and the event module contains no duplicate
 - [Projection/recovery design](../../projections-and-recovery/design.md)
 - [ADR 0004](../../../decisions/0004-event-fanout-and-recovery.md)
 - [ADR 0013](../../../decisions/0013-bounded-application-event-admission.md)
+- [ADR 0016](../../../decisions/0016-uniform-workspace-and-consumer-actions.md)

@@ -9,7 +9,10 @@ that control surface.
 ## Mapping
 
 - SDK Thread maps to a native Codex Thread/session.
-- Fixed workspace/cwd is adapter configuration, not a synthetic Project.
+- Fixed workspace/CWD is adapter configuration exposed as one honest stable
+  workspace Project. Its required immutable workspace ID and canonical-root
+  fingerprint do not claim that App Server implements native Project
+  management.
 - `thread.list/get/create/delete/status`, history, catch-up, interruption, and
   input map to native App Server calls when supported.
 - native user and Agent items become canonical completed message events;
@@ -138,6 +141,13 @@ Deployment-owned `thread_start_options` may provide App Server-native defaults
 for newly created Threads. The adapter copies the mapping, rejects ambiguous
 aliases and attempts to replace its configured `cwd`, and does not persist the
 mapping as SDK Thread state.
+
+Construction requires the deployment's stable `workspace_id` in addition to
+`cwd`. `project.list` and `project.get` return that one workspace Project;
+`project.create` and deletion/switching remain typed unsupported. Every mapped
+Thread, event, history value, and request uses that ProjectRef. Reusing the ID
+with a changed root yields a changed typed fingerprint for the block-B Gateway
+startup check; intentional replacement uses a new ID.
 
 Local images also carry the connection epoch that proved shared-filesystem
 access. A reconnect between verification and dispatch therefore fails closed.

@@ -9,6 +9,8 @@ intentionally absent and is not an internal compatibility path.
 
 Verify required stable event identity, optional ordering fields only when their
 native scope is truthful, canonical event discriminants, and schema parity.
+Every event must carry a same-Application Project ancestor, and a Thread-scoped
+event must reject a missing or different Project.
 Fan-out tests must prove independent subscriptions receive the same live event,
 publication does not await a consumer, and one finite queue overflow removes
 only that subscription and raises a typed gap. They also prove no synthetic

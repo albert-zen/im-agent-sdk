@@ -1,6 +1,6 @@
 # V1 repository audit and transformation DAG
 
-Status: design-baseline audit at `8558068093e917c6b19cdc71049989cf78723dc4`
+Status: DAG block A implemented; blocks B–I remain transformation targets
 
 This audit compares the repository with `V1_DESIGN.md`. Existing behavior is
 not retained merely because it has tests. Safety evidence is reused; conflicting
@@ -8,21 +8,24 @@ semantics and public shapes are replaced without compatibility layers.
 
 ## Structural divergences
 
-### P0: two resource trees instead of one
+### Resolved in A: two resource trees instead of one
 
-Current `ThreadRef.project_ref` is optional. Binding validation rejects a
-Project for flat/fixed modes, and many tests construct Project-less Threads.
-This conflicts with the uniform Application → Project/Workspace → Thread →
-Turn model.
+The old optional-Project tree has been deleted. `ProjectRef`, `ThreadRef`, and
+`TurnRef` now use the exact nested identities from `V1_DESIGN.md`. Events,
+history, requests, operations, bindings, routes, correlations, delivery
+targets, row mapping, schemas, fakes, adapters, and tests carry the same stable
+Project ancestry.
 
-Required transformation:
+Landed evidence:
 
-- make `ThreadRef` ancestry unambiguous and always Project-scoped;
-- expose one stable workspace Project from fixed/flat adapters;
-- make list/get truthful for that scope while creation/native switching remain
-  unsupported;
-- migrate schemas, events, history, requests, bindings, routes, correlations,
-  adapters, persistence rows, and tests together.
+- managed Applications preserve native Project identity and reject native
+  Threads without it;
+- fixed/flat Applications expose exactly one immutable workspace Project,
+  advertise list/get as `fallback`, and return typed unsupported management;
+- workspace identity uses configured stable IDs plus a typed SHA-256
+  fingerprint over one adapter-canonicalized execution root;
+- legacy Project-less persistence rows fail closed instead of being inferred
+  from path, display text, timestamps, or empty sentinels.
 
 ### P0: product onboarding policy inside Gateway input
 
@@ -61,17 +64,19 @@ Required transformation:
 - use finite non-evicting receipt capacity, failing before effects when full;
 - remove hand-coded workflow sequences from common/product handlers.
 
-### P0: current Project-creation worker preserves the old resource model
+### Resolved in A: Project-creation evidence revised onto the uniform model
 
 Commit `bef9cec5a6fea93e0c8c96f3ab8682074db83213` provides useful evidence:
 bounded `CreateProject(cwd)`, `ProjectCreated`, stable operation identity,
 managed fake idempotency, honest unsupported native adapters, schema coverage,
 and no guessed endpoint.
 
-It is not mergeable as the v1 contract because it retains optional
-`ProjectRef`, Project-less fixed/flat semantics, and primitive-only results.
-Its reusable implementation and tests should be transplanted or revised after
-the uniform resource contract lands.
+The bounded `CreateProject`/`ProjectCreated` variants and stable operation ID
+seam were transplanted without the old optional Project shapes. The managed
+fake replays one deterministic result for the same operation ID. Fixed/flat
+and currently unsupported managed adapters return a typed `unsupported`
+failure. Durable effect receipts, crash fencing, and workflow outcomes remain
+block B work.
 
 ### P1: persistence is exposed as repository wiring
 
@@ -113,10 +118,11 @@ Required transformation:
 
 ### P1: the reference consumer bypasses its intended contract
 
-The current example is useful routing evidence but directly creates Threads on
-the fake Application and directly emits native Turns. It uses a flat
-Project-less Application, switches only away, and demonstrates restart by
-reusing the same in-memory objects.
+The current example is useful routing evidence but still directly creates
+Threads on the fake Application and directly emits native Turns. Its flat
+Application now exposes one stable workspace Project and Project-scoped
+Thread/Turn/event identities, but it still switches only away and demonstrates
+restart by reusing the same in-memory objects.
 
 Required transformation is defined by `V1_EXECUTABLE_SPEC.md`: public Project
 and Thread workflows, ordinary Channel input, switch-back, SQLite reconstruction,
@@ -124,10 +130,10 @@ capability honesty, typed failures, and clean-wheel execution.
 
 ### P1: authority documents conflict
 
-Pre-v1 Vision, Architecture, ADR 0001, protocol, component docs, schemas, and
-onboarding encode optional Project ancestry, low-level Controller executors,
-and the old reference path. Passing link/schema tests currently proves internal
-consistency with the wrong target.
+The authority/resource-contract part of Vision, Architecture, protocol,
+component docs, schemas, onboarding, and AgentKit mapping is reconciled with
+ADR 0016. Low-level Controller executors and the old reference workflow remain
+later-block evidence.
 
 Required transformation:
 
@@ -141,6 +147,8 @@ Required transformation:
 
 ### A. Authority and uniform resource contract
 
+Status: complete.
+
 1. Reconcile Vision, Architecture, protocol, ADRs, component docs, schemas,
    and AgentKit mapping with ADR 0016.
 2. Make Project/Workspace ancestry mandatory in resources, Application
@@ -149,8 +157,12 @@ Required transformation:
    honest scopes.
 4. Revise the Project-creation evidence on top of this contract.
 
-This block is serial and uses a strong model because it changes the public
-resource model and nearly every stable identity path.
+The clean boundary left for B is the immutable
+`WorkspaceIdentity(project_ref, root_fingerprint)` exposed by fixed/flat
+Application summaries. B will persist and compare that value, reject the same
+workspace ID with a changed fingerprint at startup, and introduce coherent
+stores/effect receipts. A does not add those persistence or receipt semantics
+to the old repository bundle.
 
 ### B. Outcome algebra, store, and effect receipts
 

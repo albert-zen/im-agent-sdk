@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 
 import imagent.contracts as contracts_facade
 
-from ..applications.capabilities import ProjectMode
 from ..applications.contract import (
     AgentApplicationAdapter,
     ApplicationSummary,
@@ -596,7 +595,9 @@ class ImAgentGateway:
     ) -> ConversationBound:
         from .routing.operations import _GatewayActionError
 
-        application = self._require_application(operation.thread_ref.application_instance_id)
+        application = self._require_application(
+            operation.thread_ref.project_ref.application_instance_id
+        )
         read = await self.execute_application(
             GetThread(
                 operation_id=f"{operation.operation_id}:validate-thread",
@@ -714,7 +715,9 @@ class ImAgentGateway:
     ) -> _projection_routes.ThreadObserved:
         from .routing.operations import _GatewayActionError
 
-        application = self._require_application(operation.thread_ref.application_instance_id)
+        application = self._require_application(
+            operation.thread_ref.project_ref.application_instance_id
+        )
         read = await self.execute_application(
             GetThread(
                 operation_id=f"{operation.operation_id}:validate-thread",
@@ -894,10 +897,7 @@ class ImAgentGateway:
             if application is None:
                 raise RuntimeError("bound Agent application is unavailable")
             if binding.thread_ref is None:
-                if (
-                    application.summary.capabilities.projects.mode is ProjectMode.MANAGED
-                    and binding.project_ref is None
-                ):
+                if binding.project_ref is None:
                     await self._deliver_error(message, "No project is selected.")
                     return
                 result = await self.execute_application(

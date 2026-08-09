@@ -9,7 +9,7 @@ from imagent.applications import ZenApplicationAdapter
 from imagent.applications.adapters.appserver.requests import (
     derive_appserver_request_ref,
 )
-from imagent.applications.contract import ThreadRef
+from imagent.applications.contract import ProjectRef, ThreadRef
 from imagent.applications.requests import ApprovalResponse
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence.memory import (
@@ -87,6 +87,7 @@ class AppServerGatewayRequestIntegrationTests(unittest.IsolatedAsyncioTestCase):
         adapter = ZenApplicationAdapter(
             application_instance_id="zen-gateway",
             client=cast(Any, client),
+            workspace_id="workspace",
             cwd="D:/repo",
         )
         channel = FakeChannelAdapter("zen-channel")
@@ -105,7 +106,7 @@ class AppServerGatewayRequestIntegrationTests(unittest.IsolatedAsyncioTestCase):
             projection_policy=ProjectionPolicy.ALL_OBSERVERS,
         )
         conversation = ConversationRef("zen-channel", "conversation-1")
-        thread = ThreadRef("zen-gateway", "thread-1")
+        thread = ThreadRef(ProjectRef("zen-gateway", "workspace"), "thread-1")
         await gateway.start()
         try:
             observed = await gateway.execute_gateway(

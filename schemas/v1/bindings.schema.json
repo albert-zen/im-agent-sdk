@@ -31,6 +31,41 @@
         "revision": { "type": "integer", "minimum": 0 },
         "updatedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
       },
+      "allOf": [
+        {
+          "if": {
+            "required": ["projectRef"],
+            "properties": {
+              "projectRef": { "$ref": "resources.schema.json#/$defs/ProjectRef" }
+            }
+          },
+          "then": {
+            "required": ["applicationRef"],
+            "properties": {
+              "applicationRef": {
+                "$ref": "resources.schema.json#/$defs/ApplicationRef"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["threadRef"],
+            "properties": {
+              "threadRef": { "$ref": "resources.schema.json#/$defs/ThreadRef" }
+            }
+          },
+          "then": {
+            "required": ["applicationRef", "projectRef"],
+            "properties": {
+              "applicationRef": {
+                "$ref": "resources.schema.json#/$defs/ApplicationRef"
+              },
+              "projectRef": { "$ref": "resources.schema.json#/$defs/ProjectRef" }
+            }
+          }
+        }
+      ],
       "additionalProperties": false
     }
   }

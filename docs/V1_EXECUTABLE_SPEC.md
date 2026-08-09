@@ -359,8 +359,8 @@ clean-wheel executions both pass.
 | Capability | Required executable evidence | State at design baseline |
 |---|---|---|
 | public composition and owned lifecycle | async context manager, start/stop rollback | redesign required |
-| uniform Application → Project → Thread → Turn resources | managed/fixed/flat tests; every Thread has ProjectRef | redesign required |
-| managed Project CWD creation | success, capability honesty, stable action identity | existing work requires review |
+| uniform Application → Project → Thread → Turn resources | managed/fixed/flat tests; every Thread has ProjectRef | implemented in DAG A |
+| managed Project CWD creation | success, capability honesty, stable action identity | contract and deterministic fake evidence implemented in A; native support remains capability-gated |
 | store-only Gateway mutation fencing | atomic terminal receipt; old same-ID retry never overwrites newer intent | missing |
 | primitive native mutation fencing | lost ack/restart/unknown for create, activate, delete, interrupt, request response | missing |
 | managed Project deletion | typed action, capability honesty, stale binding, durable native fence | missing |

@@ -243,7 +243,7 @@ def _validate_binding_operation(operation: BindingOperation) -> None:
 
     if isinstance(operation, BindConversationToProject):
         require_identifier(operation.project_ref.application_instance_id, "application_instance_id")
-        require_identifier(operation.project_ref.native_project_id, "native_project_id")
+        require_identifier(operation.project_ref.project_id, "project_id")
     elif isinstance(operation, BindConversationToThread):
         from ...applications.contract import validate_thread_ref
 

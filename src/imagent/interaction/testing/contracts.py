@@ -19,12 +19,14 @@ from imagent.applications.contract import (
     InputContinuationPreference,
     InputDisposition,
     TurnReplyCorrelationPolicy,
+    validate_application_summary,
     validate_thread_ref,
 )
 from imagent.applications.events import AgentEvent, AgentEventType, validate_agent_event
 from imagent.applications.operations import (
     ActivateNativeThread,
     ApplicationOperationFailed,
+    CreateProject,
     CreateThread,
     DeleteThread,
     GetProject,
@@ -35,6 +37,7 @@ from imagent.applications.operations import (
     ListProjects,
     ListThreads,
     NativeThreadActivated,
+    ProjectCreated,
     ProjectRead,
     ProjectsListed,
     ThreadCreated,
@@ -132,33 +135,80 @@ async def verify_application_adapter(
     summary = adapter.summary
     capabilities = summary.capabilities
     validate_application_capabilities(capabilities)
+    validate_application_summary(summary)
     checks.append(ContractCheck("valid application capabilities"))
     await adapter.start()
     checks.append(ContractCheck("application start lifecycle"))
 
-    project_ref = None
-    if capabilities.projects.mode is ProjectMode.MANAGED:
-        list_projects = ListProjects(
-            operation_id="contract:project.list",
-            application_ref=summary.ref,
-            created_at=_now(),
-        )
-        projects_result = await adapter.execute(list_projects)
-        validate_application_operation_result(list_projects, projects_result)
-        projects = _require_result(projects_result, ProjectsListed).projects
-        if not projects.items:
-            raise AssertionError("managed project adapter must expose a contract-test project")
+    list_projects = ListProjects(
+        operation_id="contract:project.list",
+        application_ref=summary.ref,
+        created_at=_now(),
+    )
+    projects_result = await adapter.execute(list_projects)
+    validate_application_operation_result(list_projects, projects_result)
+    projects = _require_result(projects_result, ProjectsListed).projects
+    if not projects.items:
+        raise AssertionError("application must expose at least one Project")
+    if capabilities.projects.mode in {ProjectMode.FIXED, ProjectMode.FLAT}:
+        if len(projects.items) != 1 or summary.workspace_identity is None:
+            raise AssertionError("fixed/flat application must expose one workspace Project")
+        if projects.items[0].ref != summary.workspace_identity.project_ref:
+            raise AssertionError("workspace Project identity disagrees with application summary")
+        if (
+            projects.items[0].workspace_root_fingerprint
+            != summary.workspace_identity.root_fingerprint
+        ):
+            raise AssertionError("workspace Project fingerprint disagrees with application summary")
 
-        get_project = GetProject(
-            operation_id="contract:project.get",
+    get_project = GetProject(
+        operation_id="contract:project.get",
+        application_ref=summary.ref,
+        project_ref=projects.items[0].ref,
+        created_at=_now(),
+    )
+    project_result = await adapter.execute(get_project)
+    validate_application_operation_result(get_project, project_result)
+    project_ref = _require_result(project_result, ProjectRead).project.ref
+    checks.append(ContractCheck("project list and read"))
+
+    if capabilities.projects.creation is SupportLevel.NATIVE:
+        create_project = CreateProject(
+            operation_id="contract:project.create",
             application_ref=summary.ref,
-            project_ref=projects.items[0].ref,
+            cwd="/contract/created-project",
+            display_name="Created Contract Project",
             created_at=_now(),
         )
-        project_result = await adapter.execute(get_project)
-        validate_application_operation_result(get_project, project_result)
-        project_ref = _require_result(project_result, ProjectRead).project.ref
-        checks.append(ContractCheck("managed project list and read"))
+        created_project_result = await adapter.execute(create_project)
+        validate_application_operation_result(create_project, created_project_result)
+        created_project = _require_result(created_project_result, ProjectCreated).project
+        visible_result = await adapter.execute(
+            ListProjects(
+                operation_id="contract:project.list:created",
+                application_ref=summary.ref,
+                created_at=_now(),
+            )
+        )
+        visible = _require_result(visible_result, ProjectsListed).projects.items
+        if created_project.ref not in {project.ref for project in visible}:
+            raise AssertionError("created Project is absent from authoritative listing")
+        project_ref = created_project.ref
+        checks.append(ContractCheck("declared project creation"))
+    else:
+        unsupported_create = CreateProject(
+            operation_id="contract:project.create:unsupported",
+            application_ref=summary.ref,
+            cwd="/contract/unsupported-project",
+            created_at=_now(),
+        )
+        unsupported_result = await adapter.execute(unsupported_create)
+        validate_application_operation_result(unsupported_create, unsupported_result)
+        if not isinstance(unsupported_result, ApplicationOperationFailed):
+            raise AssertionError("unsupported project creation must fail explicitly")
+        if unsupported_result.error.code != "unsupported":
+            raise AssertionError("unsupported project creation returned the wrong error code")
+        checks.append(ContractCheck("unsupported project creation is explicit"))
 
     list_before = ListThreads(
         operation_id="contract:thread.list:before",
@@ -256,7 +306,7 @@ async def verify_application_adapter(
         continuation=InputContinuationPreference.PREFER_ACTIVE_TURN,
         before_dispatch=record_dispatch,
     )
-    if accepted.thread_ref != created.ref:
+    if accepted.turn_ref.thread_ref != created.ref:
         raise AssertionError("accepted turn belongs to a different thread")
     if accepted.client_message_id != client_message_id:
         raise AssertionError("client message ID was not preserved")
@@ -274,22 +324,22 @@ async def verify_application_adapter(
     if accepted.disposition is InputDisposition.STARTED:
         if accepted.correlation_policy is not TurnReplyCorrelationPolicy.CREATE_NEW:
             raise AssertionError("started input did not create a new correlation")
-        if dispatch.expected_turn_id is not None:
+        if dispatch.expected_turn_ref is not None:
             raise AssertionError("started input declared an expected active Turn")
     else:
         if accepted.correlation_policy is not TurnReplyCorrelationPolicy.PRESERVE_EXISTING:
             raise AssertionError("steered input did not preserve its existing correlation")
-        if dispatch.expected_turn_id is None:
+        if dispatch.expected_turn_ref is None:
             raise AssertionError("steered input omitted its expected active Turn")
-        if accepted.turn_id != dispatch.expected_turn_id:
+        if accepted.turn_ref != dispatch.expected_turn_ref:
             raise AssertionError("steered input accepted a different Turn than it declared")
     checks.append(ContractCheck("stable client message ID round-trip"))
     checks.append(ContractCheck("truthful input dispatch result"))
 
     first_observation, second_observation = await asyncio.wait_for(
         asyncio.gather(
-            _collect_turn_events(first_events, accepted.turn_id),
-            _collect_turn_events(second_events, accepted.turn_id),
+            _collect_turn_events(first_events, accepted.turn_ref),
+            _collect_turn_events(second_events, accepted.turn_ref),
         ),
         timeout=2,
     )
@@ -334,6 +384,10 @@ async def verify_application_adapter(
         history = _require_result(history_result, ThreadHistoryRead).history
         if catchup.thread_ref != created.ref or history.thread_ref != created.ref:
             raise AssertionError("history result belongs to a different thread")
+        if catchup.turn_ref is not None and catchup.turn_ref.thread_ref != created.ref:
+            raise AssertionError("catch-up Turn belongs to a different thread")
+        if any(turn.turn_ref.thread_ref != created.ref for turn in history.turns):
+            raise AssertionError("history Turn belongs to a different thread")
         checks.append(ContractCheck("catch-up and history result scoping"))
 
     deletion = capabilities.threads.deletion
@@ -383,12 +437,12 @@ def _now() -> datetime:
 
 async def _collect_turn_events(
     events: AsyncIterator[AgentEvent],
-    turn_id: str,
+    turn_ref,
 ) -> tuple[AgentEvent, ...]:
     observed: list[AgentEvent] = []
     try:
         async for event in events:
-            if event.turn_id not in {None, turn_id}:
+            if event.turn_ref not in {None, turn_ref}:
                 continue
             observed.append(event)
             if event.type in {

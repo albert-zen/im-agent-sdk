@@ -54,7 +54,7 @@ class FeishuChannelTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "must be 'feishu' or 'lark'"):
             self._adapter(domain="example.com")
 
-    def test_direct_and_topic_messages_preserve_native_thread_identity(self) -> None:
+    def test_direct_and_topic_messages_preserve_thread_identity(self) -> None:
         adapter = self._adapter()
         direct = adapter.parse_inbound_message(_message())
         topic = adapter.parse_inbound_message(

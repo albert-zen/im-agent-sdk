@@ -56,13 +56,9 @@ def derive_projection_route_id(
 
     identity = json.dumps(
         [
-            thread_ref.application_instance_id,
-            (
-                thread_ref.project_ref.native_project_id
-                if thread_ref.project_ref is not None
-                else None
-            ),
-            thread_ref.native_thread_id,
+            thread_ref.project_ref.application_instance_id,
+            thread_ref.project_ref.project_id,
+            thread_ref.thread_id,
             conversation_ref.channel_instance_id,
             conversation_ref.native_conversation_id,
         ],

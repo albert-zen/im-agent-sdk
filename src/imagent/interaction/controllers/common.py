@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
-from ...applications.capabilities import ProjectMode, ThreadDeletionCapability
+from ...applications.capabilities import ThreadDeletionCapability
 from ...applications.contract import (
     ApplicationRef,
     ApplicationSummary,
@@ -386,7 +386,7 @@ class _CommonCommandRuntime:
         project = _select(
             projects,
             " ".join(command.arguments),
-            id_of=lambda item: item.ref.native_project_id,
+            id_of=lambda item: item.ref.project_id,
             label_of=lambda item: item.display_name,
         )
         if project is None:
@@ -404,7 +404,7 @@ class _CommonCommandRuntime:
         )
         _require_bound(result)
         self._thread_views.pop(message.conversation_ref, None)
-        return f"Selected project **{project.display_name}** (`{project.ref.native_project_id}`)."
+        return f"Selected project **{project.display_name}** (`{project.ref.project_id}`)."
 
     async def _list_threads(
         self,
@@ -414,11 +414,14 @@ class _CommonCommandRuntime:
         *,
         query: str | None = None,
     ) -> tuple[ThreadSummary, ...]:
+        binding = _require_context_binding(context)
+        if binding.project_ref is None:
+            raise _CommandError("Choose a project first with `/projects` and `/use <number>`.")
         result = await actions.execute_application(
             ListThreads(
                 operation_id=_operation_id(message, "thread.list"),
                 application_ref=context.application.ref,
-                project_ref=context.binding.project_ref if context.binding is not None else None,
+                project_ref=binding.project_ref,
                 query=query,
                 created_at=message.created_at,
             )
@@ -445,7 +448,7 @@ class _CommonCommandRuntime:
         thread = _select(
             threads,
             " ".join(command.arguments),
-            id_of=lambda item: item.ref.native_thread_id,
+            id_of=lambda item: item.ref.thread_id,
             label_of=lambda item: item.title or "",
         )
         if thread is None:
@@ -475,8 +478,8 @@ class _CommonCommandRuntime:
             )
         )
         return (
-            f"Selected thread **{thread.title or thread.ref.native_thread_id}** "
-            f"(`{thread.ref.native_thread_id}`)."
+            f"Selected thread **{thread.title or thread.ref.thread_id}** "
+            f"(`{thread.ref.thread_id}`)."
         )
 
     async def _create_thread(
@@ -487,10 +490,7 @@ class _CommonCommandRuntime:
         context: _ApplicationContext,
     ) -> str:
         binding = _require_context_binding(context)
-        if (
-            context.application.capabilities.projects.mode is ProjectMode.MANAGED
-            and binding.project_ref is None
-        ):
+        if binding.project_ref is None:
             raise _CommandError("Choose a project first with `/projects` and `/use <number>`.")
         result = await actions.execute_application(
             CreateThread(
@@ -531,8 +531,7 @@ class _CommonCommandRuntime:
         )
         self._thread_views.pop(message.conversation_ref, None)
         return (
-            f"Created thread **{thread.title or thread.ref.native_thread_id}** "
-            f"(`{thread.ref.native_thread_id}`)."
+            f"Created thread **{thread.title or thread.ref.thread_id}** (`{thread.ref.thread_id}`)."
         )
 
     async def _delete_thread(
@@ -573,8 +572,8 @@ class _CommonCommandRuntime:
         _require_bound(clear)
         self._thread_views.pop(message.conversation_ref, None)
         if result.mode is ThreadDeletionMode.ARCHIVE:
-            return f"Archived thread `{thread_ref.native_thread_id}`."
-        return f"Deleted thread `{thread_ref.native_thread_id}`."
+            return f"Archived thread `{thread_ref.thread_id}`."
+        return f"Deleted thread `{thread_ref.thread_id}`."
 
     async def _thread_status(
         self,
@@ -597,7 +596,7 @@ class _CommonCommandRuntime:
             raise _CommandError(result.error.message)
         if not isinstance(result, ThreadStatusRead):
             raise _CommandError("Thread status returned an incompatible result.")
-        return f"Thread `{thread_ref.native_thread_id}` is **{result.thread_status.value}**."
+        return f"Thread `{thread_ref.thread_id}` is **{result.thread_status.value}**."
 
     async def _turn_catchup(
         self,

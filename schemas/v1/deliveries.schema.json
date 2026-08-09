@@ -389,14 +389,10 @@
     },
     "IngressThreadTarget": {
       "type": "object",
-      "required": ["kind", "applicationInstanceId", "nativeThreadId"],
+      "required": ["kind", "threadRef"],
       "properties": {
         "kind": { "const": "threadRoutes" },
-        "applicationInstanceId": {
-          "$ref": "common.schema.json#/$defs/Identifier"
-        },
-        "nativeThreadId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "projectRef": { "$ref": "resources.schema.json#/$defs/ProjectRef" },
+        "threadRef": { "$ref": "resources.schema.json#/$defs/ThreadRef" },
         "routeId": {
           "oneOf": [
             { "$ref": "common.schema.json#/$defs/Identifier" },

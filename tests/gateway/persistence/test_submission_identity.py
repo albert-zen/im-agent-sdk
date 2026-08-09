@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from imagent.adapters import DeliverySubmissionConflict
-from imagent.applications.contract import ThreadRef
+from imagent.applications.contract import ProjectRef, ThreadRef
 from imagent.gateway.delivery import DeliverySubmissionOrigin
 from imagent.gateway.persistence import (
     DeliveryRouteSnapshot,
@@ -23,7 +23,7 @@ from imagent.interaction.messages import ConversationRef
 
 def _submission() -> DeliverySubmissionRecord:
     now = datetime.now(UTC)
-    thread_ref = ThreadRef("app", "thread-1")
+    thread_ref = ThreadRef(ProjectRef("app", "workspace"), "thread-1")
     return DeliverySubmissionRecord(
         submission_id="submission-1",
         delivery_id="delivery-1",
@@ -96,7 +96,9 @@ def _identity_mutations(
         ),
         "thread_ref": replace(
             destination,
-            snapshot=replace(snapshot, thread_ref=ThreadRef("app", "thread-new")),
+            snapshot=replace(
+                snapshot, thread_ref=ThreadRef(ProjectRef("app", "workspace"), "thread-new")
+            ),
         ),
         "route_id": replace(
             destination,

@@ -14,6 +14,11 @@ Adapter conformance
 must prove a capability maps to real native behavior or an explicit
 unsupported result—never a hidden fallback or product policy.
 
+Managed discovery/reading must remain native when advertised. Fixed/flat
+discovery and reading must expose exactly one stable adapter workspace Project;
+their creation/deletion support must remain unsupported, and capability
+preflight must agree with the runtime typed result.
+
 Run:
 
 ```sh

@@ -59,9 +59,15 @@ returned result must match the authorized plan; native replacement after a
 steer is accepted native truth but an explicit post-acceptance bridge
 degradation, never permission to retarget or retry.
 
-Managed Applications expose real Projects. Flat/fixed Applications omit them.
-Thread lookup is independent of Conversation selection. Native activation is
-an explicit optional operation.
+Managed Applications expose real native Projects and only advertise evidenced
+management. Flat/fixed Applications expose exactly one stable workspace
+Project representing their real execution context. Their immutable configured
+workspace ID becomes that Project's stable ID; their canonical execution root
+produces the typed SHA-256 fingerprint used by Gateway startup identity checks.
+Discovery/read are honest adapter projections, while creation, deletion, and
+native switching remain unsupported. Every returned Thread belongs to that
+Project. Thread lookup is independent of Conversation selection. Native
+activation is an explicit optional operation.
 
 An App Server adapter may receive an immutable, deployment-supplied native
 Thread-start option mapping. This is an adapter configuration seam for native

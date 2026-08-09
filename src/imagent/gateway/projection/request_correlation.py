@@ -17,6 +17,7 @@ from ...applications.contract import (
     ApplicationInputDispatch,
     InputDisposition,
     ThreadRef,
+    TurnRef,
     TurnReplyCorrelationPolicy,
 )
 from ...applications.events import AgentEvent, AgentEventType
@@ -143,19 +144,15 @@ def _validate_respond_operation_result(
 
 
 def derive_turn_reply_correlation_id(
-    thread_ref: ThreadRef,
-    turn_id: str,
+    turn_ref: TurnRef,
 ) -> str:
+    thread_ref = turn_ref.thread_ref
     identity = json.dumps(
         [
-            thread_ref.application_instance_id,
-            (
-                thread_ref.project_ref.native_project_id
-                if thread_ref.project_ref is not None
-                else None
-            ),
-            thread_ref.native_thread_id,
-            turn_id,
+            thread_ref.project_ref.application_instance_id,
+            thread_ref.project_ref.project_id,
+            thread_ref.thread_id,
+            turn_ref.turn_id,
         ],
         ensure_ascii=False,
         separators=(",", ":"),
@@ -246,19 +243,20 @@ class InteractiveRequestProjection:
         if dispatch.disposition is InputDisposition.STARTED:
             if (
                 dispatch.correlation_policy is not TurnReplyCorrelationPolicy.CREATE_NEW
-                or dispatch.expected_turn_id is not None
+                or dispatch.expected_turn_ref is not None
             ):
                 raise ValueError("started input must create a new Turn correlation")
             return
         if dispatch.disposition is InputDisposition.STEERED:
             if (
                 dispatch.correlation_policy is not TurnReplyCorrelationPolicy.PRESERVE_EXISTING
-                or not dispatch.expected_turn_id
+                or dispatch.expected_turn_ref is None
+                or dispatch.expected_turn_ref.thread_ref != thread_ref
             ):
                 raise ValueError("steered input must preserve an expected Turn correlation")
             existing = await self._projections.get_turn_reply_correlation(
                 thread_ref,
-                dispatch.expected_turn_id,
+                dispatch.expected_turn_ref.turn_id,
             )
             if existing is None:
                 raise ValueError("cannot steer a Turn without an existing reply correlation")
@@ -275,7 +273,7 @@ class InteractiveRequestProjection:
         conversation_ref: ConversationRef,
         reply_to_message_id: str,
     ) -> None:
-        if accepted.thread_ref != thread_ref:
+        if accepted.turn_ref.thread_ref != thread_ref:
             raise ValueError("AcceptedTurn belongs to a different Thread")
         if accepted.client_message_id != client_message_id:
             raise ValueError("AcceptedTurn client_message_id does not match input")
@@ -288,11 +286,9 @@ class InteractiveRequestProjection:
             await self._projections.put_turn_reply_correlation(
                 TurnReplyCorrelation(
                     correlation_id=derive_turn_reply_correlation_id(
-                        thread_ref,
-                        accepted.turn_id,
+                        accepted.turn_ref,
                     ),
-                    thread_ref=thread_ref,
-                    turn_id=accepted.turn_id,
+                    turn_ref=accepted.turn_ref,
                     client_message_id=accepted.client_message_id,
                     conversation_ref=conversation_ref,
                     reply_to_message_id=reply_to_message_id,
@@ -300,12 +296,12 @@ class InteractiveRequestProjection:
                 )
             )
             return
-        expected_turn_id = dispatch.expected_turn_id
-        if accepted.turn_id != expected_turn_id:
+        expected_turn_ref = dispatch.expected_turn_ref
+        if accepted.turn_ref != expected_turn_ref:
             raise RuntimeError("native steer accepted a different Turn than was authorized")
         preserved = await self._projections.get_turn_reply_correlation(
             thread_ref,
-            accepted.turn_id,
+            accepted.turn_ref.turn_id,
         )
         if preserved is None:
             raise RuntimeError("authorized steer reply correlation disappeared after dispatch")
@@ -383,7 +379,7 @@ class InteractiveRequestProjection:
                 self._validate_snapshot_request(application, request)
                 pending_refs.add(request.request_ref)
                 await deliver_request(
-                    await self._active_routes(request.thread_ref),
+                    await self._active_routes(request.turn_ref.thread_ref),
                     request,
                 )
         for request_ref in restart_open_refs - pending_refs:
@@ -408,17 +404,17 @@ class InteractiveRequestProjection:
             correlation.request_ref
             for correlation in await self._correlations.list_request_correlations()
             if correlation.request_ref.application_ref == application_ref
-            and correlation.thread_ref == thread_ref
+            and correlation.turn_ref.thread_ref == thread_ref
             and correlation.state is RequestRouteState.OPEN
         }
         pending_refs: set[RequestRef] = set()
         for request in await application.list_pending_requests():
             self._validate_snapshot_request(application, request)
-            if request.thread_ref != thread_ref:
+            if request.turn_ref.thread_ref != thread_ref:
                 continue
             pending_refs.add(request.request_ref)
             await deliver_request(
-                await self._active_routes(request.thread_ref),
+                await self._active_routes(request.turn_ref.thread_ref),
                 request,
             )
         for request_ref in open_refs - pending_refs:
@@ -492,8 +488,8 @@ class InteractiveRequestProjection:
             conversation_ref=route.conversation_ref,
             delivery_id=delivery_id,
             reply_to_message_id=await self.reply_to_message_id(
-                request.thread_ref,
-                request.turn_id,
+                request.turn_ref.thread_ref,
+                request.turn_ref.turn_id,
                 route.conversation_ref,
             ),
         )
@@ -530,8 +526,7 @@ class InteractiveRequestProjection:
                     current.conversation_ref,
                 ),
                 request_ref=request.request_ref,
-                thread_ref=request.thread_ref,
-                turn_id=request.turn_id,
+                turn_ref=request.turn_ref,
                 conversation_ref=current.conversation_ref,
                 delivery_id=delivery_id,
                 response_shape=derive_request_response_shape(request),
@@ -605,7 +600,7 @@ class InteractiveRequestProjection:
                 application_ref=application.summary.ref,
                 request_ref=operation.request_ref,
                 response=operation.response,
-                thread_ref=destination.thread_ref,
+                turn_ref=destination.turn_ref,
                 created_at=operation.created_at,
             )
         )
@@ -739,8 +734,7 @@ def _merge_correlation(
     if (
         existing.correlation_id != replacement.correlation_id
         or existing.request_ref != replacement.request_ref
-        or existing.thread_ref != replacement.thread_ref
-        or existing.turn_id != replacement.turn_id
+        or existing.turn_ref != replacement.turn_ref
         or existing.conversation_ref != replacement.conversation_ref
         or existing.response_shape != replacement.response_shape
     ):
@@ -837,7 +831,7 @@ def _matches(
 ) -> bool:
     return (
         (request_ref is None or correlation.request_ref == request_ref)
-        and (thread_ref is None or correlation.thread_ref == thread_ref)
+        and (thread_ref is None or correlation.turn_ref.thread_ref == thread_ref)
         and (conversation_ref is None or correlation.conversation_ref == conversation_ref)
         and (older_than is None or correlation.updated_at < older_than)
     )

@@ -18,7 +18,7 @@ from imagent.adapters import (
     IdempotencyClaimStatus,
 )
 from imagent.applications.capabilities import ProjectMode
-from imagent.applications.contract import ThreadRef
+from imagent.applications.contract import ProjectRef, ThreadRef
 from imagent.contracts import DeliveryPrincipal
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import (
@@ -219,7 +219,7 @@ class _FalseySubmissionRepository(InMemoryDeliverySubmissionRepository):
 
 class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.thread_ref = ThreadRef("app", "thread")
+        self.thread_ref = ThreadRef(ProjectRef("app", "workspace"), "thread")
         self.conversation_a = ConversationRef("channel-a", "conversation-a")
         self.conversation_b = ConversationRef("channel-b", "conversation-b")
         self.channel_a = _OutcomeChannel("channel-a")

@@ -13,7 +13,7 @@ from typing import get_type_hints
 
 import imagent.adapters as adapters_facade
 import imagent.gateway.persistence as persistence_facade
-from imagent.applications.contract import ApplicationRef, ThreadRef
+from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef, TurnRef
 from imagent.applications.requests import ApprovalResponseShape, RequestRef
 from imagent.gateway.persistence import (
     ConversationBinding,
@@ -502,8 +502,9 @@ def _correlation(
     return RequestRouteCorrelation(
         correlation_id=derive_request_correlation_id(request_ref, conversation),
         request_ref=request_ref,
-        thread_ref=ThreadRef("app-main", "thread-main"),
-        turn_id="turn-main",
+        turn_ref=TurnRef(
+            ThreadRef(ProjectRef("app-main", "workspace"), "thread-main"), "turn-main"
+        ),
         conversation_ref=conversation,
         delivery_id=f"delivery-{request_id}",
         response_shape=ApprovalResponseShape(("approve", "decline")),

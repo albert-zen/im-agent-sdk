@@ -26,6 +26,7 @@ from imagent.gateway.input.content_transformation import (
 )
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
+from imagent.gateway.persistence.state_contracts import ConversationBinding
 from imagent.interaction.controllers import SlashController
 from imagent.interaction.media import AttachmentContent, LocalPath
 from imagent.interaction.messages import (
@@ -482,11 +483,21 @@ class InboundContentTransformerTests(unittest.IsolatedAsyncioTestCase):
     ) -> tuple[ImAgentGateway, FakeChannelAdapter, _RecordingApplication]:
         channel = FakeChannelAdapter("fake-channel")
         application = _RecordingApplication()
+        binding_repository = bindings or InMemoryBindingRepository()
+        conversation = ConversationRef("fake-channel", "conversation-1")
+        if conversation not in binding_repository._bindings:
+            binding_repository._bindings[conversation] = ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+                project_ref=application.default_project_ref,
+                revision=1,
+                updated_at=datetime.now(UTC),
+            )
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
             repositories=GatewayRepositories(
-                bindings=bindings or InMemoryBindingRepository(),
+                bindings=binding_repository,
                 idempotency=idempotency,
             ),
             limits=limits,

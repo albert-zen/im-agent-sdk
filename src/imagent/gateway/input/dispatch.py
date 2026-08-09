@@ -65,7 +65,7 @@ class InputPostAcceptanceError(RuntimeError):
     def __init__(self, accepted_turn: AcceptedTurn, cause: BaseException) -> None:
         super().__init__(
             "Agent input was accepted before bridge post-processing failed: "
-            f"{accepted_turn.turn_id}"
+            f"{accepted_turn.turn_ref.turn_id}"
         )
         self.accepted_turn = accepted_turn
         self.cause = cause

@@ -132,7 +132,7 @@ The Applications-owned `AgentApplicationAdapter.send_input` defaults to
 implementation accepts that preference even if its evidenced native mapping
 can only return `started`. Immediately before mutation it calls the supplied
 dispatch hook with `started/create_new` or
-`steered/preserve_existing(expected_turn_id)`. This is a common Port because
+`steered/preserve_existing(expected_turn_ref)`. This is a common Port because
 Codex continuation and the T3/Zen start paths all need the same Gateway
 correlation boundary; the Port does not expose a native `steer_turn` method.
 

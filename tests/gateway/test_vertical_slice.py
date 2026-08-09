@@ -239,6 +239,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         application = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=native_app,
+            workspace_id="workspace",
             cwd="/repo",
         )
         gateway = ImAgentGateway(
@@ -248,7 +249,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
                 bindings=InMemoryBindingRepository(),
             ),
         )
-        thread_ref = ThreadRef("codex-main", "codex-thread")
+        thread_ref = ThreadRef(ProjectRef("codex-main", "workspace"), "codex-thread")
         bound = await gateway.execute_gateway(
             BindConversationToThread(
                 operation_id="bind-codex-thread",
@@ -287,6 +288,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         application = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=NativeZenClient(),
+            workspace_id="workspace",
             cwd="/repo",
         )
         bindings = InMemoryBindingRepository()
@@ -297,7 +299,10 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
                     "c2c:user-1",
                 ),
                 application_ref=ApplicationRef("codex-main"),
-                thread_ref=ThreadRef("codex-main", "codex-thread"),
+                project_ref=ThreadRef(
+                    ProjectRef("codex-main", "workspace"), "codex-thread"
+                ).project_ref,
+                thread_ref=ThreadRef(ProjectRef("codex-main", "workspace"), "codex-thread"),
             )
         )
         gateway = ImAgentGateway(
@@ -408,7 +413,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
                 ),
                 application_ref=ApplicationRef("t3-main"),
                 project_ref=project,
-                thread_ref=ThreadRef("t3-main", "t3-thread", project),
+                thread_ref=ThreadRef(project, "t3-thread"),
             )
         )
         gateway = ImAgentGateway(
@@ -454,11 +459,12 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             codex = CodexApplicationAdapter(
                 application_instance_id="codex-main",
                 client=codex_client,
+                workspace_id="workspace",
                 cwd="/repo",
                 shared_filesystem_root=directory,
             )
             await codex.send_input(
-                ThreadRef("codex-main", "codex-thread"),
+                ThreadRef(ProjectRef("codex-main", "workspace"), "codex-thread"),
                 AgentInput(
                     client_message_id="codex-image",
                     content=(attachment,),
@@ -467,7 +473,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
 
             t3_client = NativeT3Client()
             t3_project = ProjectRef("t3-main", "project-1")
-            t3_thread = ThreadRef("t3-main", "t3-thread", t3_project)
+            t3_thread = ThreadRef(t3_project, "t3-thread")
             t3_client.threads["t3-thread"] = {
                 "id": "t3-thread",
                 "projectId": "project-1",
@@ -520,17 +526,18 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         codex = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=NativeZenClient(),
+            workspace_id="workspace",
             cwd="/repo",
         )
 
         with self.assertRaisesRegex(ValueError, "shared_filesystem_root"):
             await codex.send_input(
-                ThreadRef("codex-main", "codex-thread"),
+                ThreadRef(ProjectRef("codex-main", "workspace"), "codex-thread"),
                 AgentInput(client_message_id="local-untrusted", content=(local,)),
             )
         with self.assertRaisesRegex(NotImplementedError, "remote_url"):
             await codex.send_input(
-                ThreadRef("codex-main", "codex-thread"),
+                ThreadRef(ProjectRef("codex-main", "workspace"), "codex-thread"),
                 AgentInput(client_message_id="remote-unsupported", content=(remote,)),
             )
         self.assertEqual(codex.summary.capabilities.attachment_sources, ())
@@ -586,11 +593,13 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         codex = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=codex_client,
+            workspace_id="workspace",
             cwd="/repo",
         )
         zen = ZenApplicationAdapter(
             application_instance_id="zen-main",
             client=zen_client,
+            workspace_id="workspace",
             cwd="/repo",
         )
 
@@ -613,13 +622,22 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         application = ZenApplicationAdapter(
             application_instance_id="zen-main",
             client=native_app,
+            workspace_id="workspace",
             cwd="/repo",
+        )
+        bindings = InMemoryBindingRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=ConversationRef("qq-main", "c2c:user-1"),
+                application_ref=application.summary.ref,
+                project_ref=ProjectRef("zen-main", "workspace"),
+            )
         )
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
             repositories=GatewayRepositories(
-                bindings=InMemoryBindingRepository(),
+                bindings=bindings,
             ),
         )
 
@@ -695,13 +713,22 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         application = ZenApplicationAdapter(
             application_instance_id="zen-main",
             client=native_app,
+            workspace_id="workspace",
             cwd="/repo",
+        )
+        bindings = InMemoryBindingRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=ConversationRef("qq-main", "c2c:user-1"),
+                application_ref=application.summary.ref,
+                project_ref=ProjectRef("zen-main", "workspace"),
+            )
         )
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
             repositories=GatewayRepositories(
-                bindings=InMemoryBindingRepository(),
+                bindings=bindings,
             ),
         )
 
@@ -832,11 +859,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             client=native_app,
             poll_interval=0,
         )
-        thread_ref = ThreadRef(
-            "t3-main",
-            "thread-1",
-            ProjectRef("t3-main", "project-1"),
-        )
+        thread_ref = ThreadRef(ProjectRef("t3-main", "project-1"), "thread-1")
         first, second = await asyncio.gather(
             application.send_input(
                 thread_ref,
@@ -853,7 +876,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
                 ),
             ),
         )
-        self.assertNotEqual(first.turn_id, second.turn_id)
+        self.assertNotEqual(first.turn_ref.turn_id, second.turn_ref.turn_id)
 
     async def test_t3_slow_subscription_overflow_does_not_stop_fast_subscription(
         self,
@@ -877,11 +900,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             poll_interval=60,
             event_buffer_max_pending=1,
         )
-        thread_ref = ThreadRef(
-            "t3-main",
-            "thread-1",
-            ProjectRef("t3-main", "project-1"),
-        )
+        thread_ref = ThreadRef(ProjectRef("t3-main", "project-1"), "thread-1")
         fast = application.subscribe_thread(thread_ref)
         slow = application.subscribe_thread(thread_ref)
         try:

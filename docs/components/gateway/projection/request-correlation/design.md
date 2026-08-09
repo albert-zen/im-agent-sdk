@@ -111,6 +111,8 @@ storage only. SQLite schema and SQL mutation live only in
 `gateway/persistence/sqlite.py`, and row conversion remains in the pure
 row-mapping leaf.
 
+- [ADR 0007](../../../../decisions/0007-projection-lifecycle-and-delivery-boundaries.md)
 - [ADR 0008](../../../../decisions/0008-interactive-request-routing.md)
 - [ADR 0012](../../../../decisions/0012-input-continuation-and-reply-correlation.md)
 - [ADR 0013](../../../../decisions/0013-bounded-application-event-admission.md)
+- [ADR 0016](../../../../decisions/0016-uniform-workspace-and-consumer-actions.md)

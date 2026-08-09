@@ -20,6 +20,14 @@ The tests must keep Zen's truthful `started/create_new` result, native history
 recovery, request cardinality/bounds, and explicit unsupported capability. A
 shared transport fixture is not evidence for a Codex-only Zen feature.
 
+They also prove one stable workspace Project/list/get surface across adapter
+reconstruction, canonical-root fingerprint changes when the configured root
+changes, mandatory Project ancestry throughout mapping, and explicit
+unsupported native Project creation without a client call.
+Shared App Server request evidence additionally proves that workspace scope is
+verified before request state or native effects and is not re-read after a
+successful native response.
+
 ## Target evidence and verification
 
 The target owner suite is `tests/applications/adapters/test_zen.py`; the

@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, patch
 
 from imagent.adapters import IdempotencyClaimStatus
 from imagent.applications.capabilities import ProjectMode, SupportLevel
-from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef
+from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef, TurnRef
 from imagent.applications.operations import (
     ActivateNativeThread,
     CreateThread,
@@ -693,7 +693,7 @@ class GatewayLifecycleTests(unittest.IsolatedAsyncioTestCase):
 class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        self.thread = await self.application.create_thread()
+        self.thread = await self.application.create_thread(self.application.default_project_ref)
         self.channel = _DelayedRequestChannel()
         self.correlations = InMemoryRequestCorrelationRepository()
         self.bindings = InMemoryBindingRepository()
@@ -1277,7 +1277,7 @@ class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_inactive_cancellation_is_scoped_to_one_thread(self) -> None:
-        other_thread = await self.application.create_thread()
+        other_thread = await self.application.create_thread(self.application.default_project_ref)
         routes = self.gateway._projection_runtime._routes
 
         async def pending_forever() -> None:
@@ -1318,8 +1318,7 @@ class InteractiveRequestGatewayTests(unittest.IsolatedAsyncioTestCase):
                 self.application.summary.ref,
                 "request-active-route-failure",
             ),
-            thread_ref=self.thread.ref,
-            turn_id="turn-active-route-failure",
+            turn_ref=TurnRef(self.thread.ref, "turn-active-route-failure"),
             prompt="Approve?",
             choices=(RequestChoice("accept", "Approve"),),
         )
@@ -1595,7 +1594,7 @@ class RequestRestartTests(unittest.IsolatedAsyncioTestCase):
                 ),
             ),
         )
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         application.start_thread_ref = thread.ref
         conversation = ConversationRef("fake-channel", "startup-request")
         projections = InMemoryProjectionRouteRepository()
@@ -1664,7 +1663,7 @@ class RequestRestartTests(unittest.IsolatedAsyncioTestCase):
                     application.summary,
                     capabilities=capabilities,
                 )
-            thread = await application.create_thread()
+            thread = await application.create_thread(application.default_project_ref)
             conversation = ConversationRef("fake-channel", "conversation")
             first_channel = FakeChannelAdapter()
             first = ImAgentGateway(

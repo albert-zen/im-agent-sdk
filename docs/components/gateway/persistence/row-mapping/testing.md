@@ -8,6 +8,8 @@ Row-mapping tests must prove:
 - target validation distinguishes `NULL` from empty identifiers and rejects
   malformed timestamps, JSON, enums, references, cross-Application scopes,
   checkpoint pairs, and receipts explicitly;
+- every decoded Thread-bearing row requires a non-empty same-Application
+  Project ID; the historical empty Project sentinel is rejected;
 - decoding performs no SQL mutation, migration, clock read, file/native I/O,
   policy selection, retry, or recovery side effect;
 - the target pure mapper excludes `merge_projection_route`; endpoint-conflict

@@ -12,6 +12,7 @@ from imagent.contracts import (
 )
 from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
+from imagent.gateway.routing.bindings import ConversationBinding
 from imagent.interaction.controllers import SlashController
 from imagent.interaction.controllers.common import parse_slash_command
 from imagent.interaction.messages import (
@@ -53,11 +54,19 @@ class OptionalControllerTests(unittest.IsolatedAsyncioTestCase):
     async def test_gateway_does_not_parse_slash_when_controller_is_omitted(self) -> None:
         channel = FakeChannelAdapter()
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        bindings = InMemoryBindingRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=ConversationRef("fake-channel", "conversation-1"),
+                application_ref=application.summary.ref,
+                project_ref=application.default_project_ref,
+            )
+        )
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
             repositories=GatewayRepositories(
-                bindings=InMemoryBindingRepository(),
+                bindings=bindings,
             ),
         )
         await gateway.start()

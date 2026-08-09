@@ -15,7 +15,7 @@ def _capabilities(mode: capabilities.ProjectMode) -> capabilities.ApplicationCap
     project_support = (
         capabilities.SupportLevel.NATIVE
         if mode is capabilities.ProjectMode.MANAGED
-        else capabilities.SupportLevel.UNSUPPORTED
+        else capabilities.SupportLevel.FALLBACK
     )
     return capabilities.ApplicationCapabilities(
         projects=capabilities.ProjectCapabilities(
@@ -97,7 +97,7 @@ class ApplicationCapabilitiesTests(unittest.TestCase):
             threads=flat_with_discovery.threads,
             runtime=flat_with_discovery.runtime,
         )
-        with self.assertRaisesRegex(ContractViolation, "flat project mode"):
+        with self.assertRaisesRegex(ContractViolation, "adapter projection"):
             capabilities.validate_application_capabilities(flat_with_discovery)
 
         duplicate_sources = capabilities.ApplicationCapabilities(

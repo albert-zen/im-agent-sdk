@@ -23,7 +23,9 @@ from imagent.applications.contract import (
     ApplicationRef,
     InputContinuationPreference,
     InputDisposition,
+    ProjectRef,
     ThreadRef,
+    TurnRef,
     TurnReplyCorrelationPolicy,
 )
 from imagent.applications.events import (
@@ -32,13 +34,24 @@ from imagent.applications.events import (
     EventStreamReset,
 )
 from imagent.applications.operations import (
+    ActivateNativeThread,
     ApplicationOperationFailed,
+    CreateProject,
     CreateThread,
+    GetProject,
+    GetThread,
     GetThreadHistory,
+    InterruptTurn,
+    ListProjects,
+    ListThreads,
+    ProjectRead,
+    ProjectsListed,
     ThreadCreated,
+    ThreadsListed,
 )
 from imagent.interaction.media import AttachmentContent, LocalPath
 from imagent.interaction.messages import TextContent
+from imagent.interaction.operations import ContractViolation
 from tests.applications.adapters._appserver_fakes import NativeZenClient
 
 
@@ -48,15 +61,19 @@ class _InputClient:
         *,
         active_turn_id: str | None = None,
         local_image_epoch: int | None = 7,
+        workspace_cwd: str | None = "/repo",
     ) -> None:
         self.active_turn_id = active_turn_id
         self.local_image_epoch = local_image_epoch
+        self.workspace_cwd = workspace_cwd
         self.notification_handlers = []
         self.read_calls: list[tuple[str, bool]] = []
         self.trace: list[str] = []
         self.started: list[dict[str, object]] = []
         self.created_threads: list[dict[str, object]] = []
         self.steered: list[dict[str, object]] = []
+        self.resumed: list[str] = []
+        self.interrupted: list[tuple[str, str]] = []
 
     def add_notification_handler(self, handler) -> None:
         self.notification_handlers.append(handler)
@@ -78,10 +95,10 @@ class _InputClient:
 
     async def start_thread(self, **params: object) -> dict[str, object]:
         self.created_threads.append(deepcopy(dict(params)))
-        return {"thread": {"id": "thread-created"}}
+        return {"thread": {"id": "thread-created", "cwd": params["cwd"]}}
 
     async def resume_thread(self, **params: object) -> dict[str, object]:
-        del params
+        self.resumed.append(str(params["threadId"]))
         return {"thread": {"id": "thread-resumed"}}
 
     async def interrupt_turn(
@@ -89,7 +106,7 @@ class _InputClient:
         thread_id: str,
         turn_id: str,
     ) -> dict[str, object]:
-        del thread_id, turn_id
+        self.interrupted.append((thread_id, turn_id))
         return {}
 
     async def read_thread(
@@ -108,6 +125,7 @@ class _InputClient:
         return {
             "thread": {
                 "id": thread_id,
+                "cwd": self.workspace_cwd,
                 "status": {"type": "active" if turns else "idle"},
                 "turns": turns if include_turns else None,
             }
@@ -208,6 +226,7 @@ class _ActiveTurnWithoutIdentityClient(_InputClient):
         return {
             "thread": {
                 "id": thread_id,
+                "cwd": self.workspace_cwd,
                 "status": {"type": "active"},
                 "turns": [] if include_turns else None,
             }
@@ -222,11 +241,156 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIs(CodexApplicationAdapter, CodexApplicationAdapterOwner)
 
+    def test_workspace_root_must_be_explicit_and_bounded(self) -> None:
+        for root in ("", "x" * 4097):
+            with (
+                self.subTest(root_length=len(root)),
+                self.assertRaisesRegex(ValueError, "workspace root"),
+            ):
+                CodexApplicationAdapter(
+                    application_instance_id="codex-main",
+                    client=_InputClient(),
+                    workspace_id="workspace",
+                    cwd=root,
+                )
+        with self.assertRaisesRegex(ContractViolation, "project_id"):
+            CodexApplicationAdapter(
+                application_instance_id="codex-main",
+                client=_InputClient(),
+                workspace_id="",
+                cwd="/repo",
+            )
+
+    async def test_workspace_project_projection_is_stable_and_management_is_local(self) -> None:
+        client = _InputClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        project_ref = ProjectRef("codex-main", "workspace")
+        listed = await adapter.execute(
+            ListProjects(
+                operation_id="list-projects",
+                application_ref=adapter.summary.ref,
+                created_at=datetime.now(UTC),
+            )
+        )
+        read = await adapter.execute(
+            GetProject(
+                operation_id="get-project",
+                application_ref=adapter.summary.ref,
+                project_ref=project_ref,
+                created_at=datetime.now(UTC),
+            )
+        )
+        unsupported = await adapter.execute(
+            CreateProject(
+                operation_id="create-project",
+                application_ref=adapter.summary.ref,
+                cwd="/other",
+                created_at=datetime.now(UTC),
+            )
+        )
+
+        self.assertIsInstance(listed, ProjectsListed)
+        assert isinstance(listed, ProjectsListed)
+        self.assertEqual(tuple(item.ref for item in listed.projects.items), (project_ref,))
+        self.assertIsInstance(read, ProjectRead)
+        assert isinstance(read, ProjectRead)
+        self.assertEqual(read.project, listed.projects.items[0])
+        self.assertIsNotNone(read.project.workspace_root_fingerprint)
+        self.assertIsInstance(unsupported, ApplicationOperationFailed)
+        assert isinstance(unsupported, ApplicationOperationFailed)
+        self.assertEqual(unsupported.error.code, "unsupported")
+        self.assertEqual(client.created_threads, [])
+        self.assertEqual(client.read_calls, [])
+
+    async def test_foreign_workspace_is_rejected_before_native_io(self) -> None:
+        client = _InputClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        foreign_project = ProjectRef("codex-main", "other-workspace")
+        create = await adapter.execute(
+            CreateThread(
+                operation_id="foreign-create",
+                application_ref=adapter.summary.ref,
+                project_ref=foreign_project,
+                created_at=datetime.now(UTC),
+            )
+        )
+        read = await adapter.execute(
+            GetThread(
+                operation_id="foreign-read",
+                application_ref=adapter.summary.ref,
+                thread_ref=ThreadRef(foreign_project, "thread-1"),
+                created_at=datetime.now(UTC),
+            )
+        )
+
+        self.assertIsInstance(create, ApplicationOperationFailed)
+        self.assertIsInstance(read, ApplicationOperationFailed)
+        self.assertEqual(client.created_threads, [])
+        self.assertEqual(client.read_calls, [])
+
+    async def test_native_thread_without_matching_cwd_cannot_be_mutated(self) -> None:
+        thread_ref = ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
+        for native_cwd in (None, "/other-workspace"):
+            with self.subTest(native_cwd=native_cwd):
+                client = _InputClient(
+                    workspace_cwd=native_cwd,
+                    active_turn_id="turn-active",
+                )
+                adapter = CodexApplicationAdapter(
+                    application_instance_id="codex-main",
+                    client=client,
+                    workspace_id="workspace",
+                    cwd="/repo",
+                )
+                with self.assertRaisesRegex(ValueError, "configured workspace cwd"):
+                    await adapter.send_input(
+                        thread_ref,
+                        AgentInput(
+                            client_message_id="blocked-input",
+                            content=(TextContent("must not dispatch"),),
+                        ),
+                    )
+                activated = await adapter.execute(
+                    ActivateNativeThread(
+                        operation_id="blocked-activation",
+                        application_ref=adapter.summary.ref,
+                        thread_ref=thread_ref,
+                        created_at=datetime.now(UTC),
+                    )
+                )
+                interrupted = await adapter.execute(
+                    InterruptTurn(
+                        operation_id="blocked-interrupt",
+                        application_ref=adapter.summary.ref,
+                        thread_ref=thread_ref,
+                        turn_ref=TurnRef(thread_ref, "turn-active"),
+                        created_at=datetime.now(UTC),
+                    )
+                )
+
+                self.assertIsInstance(activated, ApplicationOperationFailed)
+                self.assertIsInstance(interrupted, ApplicationOperationFailed)
+                self.assertEqual(client.started, [])
+                self.assertEqual(client.steered, [])
+                self.assertEqual(client.resumed, [])
+                self.assertEqual(client.interrupted, [])
+
     async def test_thread_creation_without_profile_preserves_cwd_only(self) -> None:
         client = _InputClient()
         adapter = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/repo",
         )
 
@@ -234,6 +398,7 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
             CreateThread(
                 operation_id="create-default-thread",
                 application_ref=adapter.summary.ref,
+                project_ref=ProjectRef(adapter.summary.ref.application_instance_id, "workspace"),
                 created_at=datetime.now(UTC),
             )
         )
@@ -241,20 +406,78 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(result, ThreadCreated)
         self.assertEqual(client.created_threads, [{"cwd": "/repo"}])
 
+    async def test_thread_create_and_list_require_native_cwd_evidence(self) -> None:
+        class ScopedListingClient(_InputClient):
+            async def list_threads(self, **params: object) -> dict[str, object]:
+                del params
+                return {
+                    "data": [
+                        {"id": "own", "cwd": "/repo"},
+                        {"id": "missing"},
+                        {"id": "foreign", "cwd": "/other-workspace"},
+                    ]
+                }
+
+        class MissingCreatedScopeClient(ScopedListingClient):
+            async def start_thread(self, **params: object) -> dict[str, object]:
+                self.created_threads.append(deepcopy(dict(params)))
+                return {"thread": {"id": "thread-created"}}
+
+        project_ref = ProjectRef("codex-main", "workspace")
+        client = ScopedListingClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        listed = await adapter.execute(
+            ListThreads(
+                operation_id="list-scoped-threads",
+                application_ref=adapter.summary.ref,
+                project_ref=project_ref,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(listed, ThreadsListed)
+        assert isinstance(listed, ThreadsListed)
+        self.assertEqual(
+            tuple(thread.ref.thread_id for thread in listed.threads.items),
+            ("own",),
+        )
+
+        missing_client = MissingCreatedScopeClient()
+        missing_adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=missing_client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        created = await missing_adapter.execute(
+            CreateThread(
+                operation_id="create-without-scope",
+                application_ref=missing_adapter.summary.ref,
+                project_ref=project_ref,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(created, ApplicationOperationFailed)
+
     async def test_local_image_uses_verified_connection_epoch(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory, "image.png")
             path.write_bytes(b"png")
-            client = _InputClient(local_image_epoch=17)
+            client = _InputClient(local_image_epoch=17, workspace_cwd=directory)
             adapter = CodexApplicationAdapter(
                 application_instance_id="codex-main",
                 client=client,
+                workspace_id="workspace",
                 cwd=directory,
                 shared_filesystem_root=directory,
             )
 
             await adapter.send_input(
-                ThreadRef("codex-main", "thread-1"),
+                ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
                 AgentInput(
                     client_message_id="message-image",
                     content=(
@@ -275,17 +498,22 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory, "image.png")
             path.write_bytes(b"png")
-            client = _InputClient(active_turn_id="turn-active", local_image_epoch=23)
+            client = _InputClient(
+                active_turn_id="turn-active",
+                local_image_epoch=23,
+                workspace_cwd=directory,
+            )
             adapter = CodexApplicationAdapter(
                 application_instance_id="codex-main",
                 client=client,
+                workspace_id="workspace",
                 cwd=directory,
                 shared_filesystem_root=directory,
                 steer_active_turn=True,
             )
 
             accepted = await adapter.send_input(
-                ThreadRef("codex-main", "thread-1"),
+                ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
                 AgentInput(
                     client_message_id="message-steered-image",
                     content=(
@@ -302,23 +530,24 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(client.started, [])
         self.assertEqual(client.steered[0]["expected_local_image_epoch"], 23)
-        self.assertEqual(accepted.turn_id, "turn-active")
+        self.assertEqual(accepted.turn_ref.turn_id, "turn-active")
 
     async def test_local_image_requires_a_verified_connection_epoch(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory, "image.png")
             path.write_bytes(b"png")
-            client = _InputClient(local_image_epoch=None)
+            client = _InputClient(local_image_epoch=None, workspace_cwd=directory)
             adapter = CodexApplicationAdapter(
                 application_instance_id="codex-main",
                 client=client,
+                workspace_id="workspace",
                 cwd=directory,
                 shared_filesystem_root=directory,
             )
 
             with self.assertRaisesRegex(RuntimeError, "verified shared filesystem"):
                 await adapter.send_input(
-                    ThreadRef("codex-main", "thread-1"),
+                    ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
                     AgentInput(
                         client_message_id="message-unverified-image",
                         content=(
@@ -340,11 +569,12 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
         adapter = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/repo",
         )
 
         accepted = await adapter.send_input(
-            ThreadRef("codex-main", "thread-1"),
+            ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
             AgentInput(
                 client_message_id="message-followup",
                 content=(TextContent("continue"),),
@@ -363,7 +593,7 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
         self.assertEqual(client.started, [])
-        self.assertEqual(accepted.turn_id, "turn-active")
+        self.assertEqual(accepted.turn_ref.turn_id, "turn-active")
         self.assertEqual(accepted.client_message_id, "message-followup")
         self.assertIs(accepted.disposition, InputDisposition.STEERED)
         self.assertIs(
@@ -376,6 +606,7 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
         adapter = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/repo",
         )
         dispatches: list[ApplicationInputDispatch] = []
@@ -385,7 +616,7 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
             dispatches.append(dispatch)
 
         await adapter.send_input(
-            ThreadRef("codex-main", "thread-1"),
+            ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
             AgentInput(
                 client_message_id="message-fenced-steer",
                 content=(TextContent("continue"),),
@@ -402,13 +633,17 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
             dispatches[0].correlation_policy,
             TurnReplyCorrelationPolicy.PRESERVE_EXISTING,
         )
-        self.assertEqual(dispatches[0].expected_turn_id, "turn-active")
+        self.assertEqual(
+            dispatches[0].expected_turn_ref,
+            TurnRef(ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"), "turn-active"),
+        )
 
     async def test_codex_fence_failure_prevents_native_steer(self) -> None:
         client = _InputClient(active_turn_id="turn-active")
         adapter = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/repo",
         )
 
@@ -418,7 +653,7 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaisesRegex(RuntimeError, "fence rejected"):
             await adapter.send_input(
-                ThreadRef("codex-main", "thread-1"),
+                ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
                 AgentInput(
                     client_message_id="message-rejected-steer",
                     content=(TextContent("continue"),),
@@ -434,6 +669,7 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
         adapter = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/repo",
             steer_active_turn=False,
         )
@@ -444,7 +680,7 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
             dispatches.append(dispatch)
 
         await adapter.send_input(
-            ThreadRef("codex-main", "thread-1"),
+            ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
             AgentInput(
                 client_message_id="message-default-start",
                 content=(TextContent("continue"),),
@@ -452,8 +688,8 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
             before_dispatch=before_dispatch,
         )
 
-        self.assertEqual(client.trace, ["fence", "start"])
-        self.assertEqual(client.read_calls, [])
+        self.assertEqual(client.trace, ["read", "fence", "start"])
+        self.assertEqual(client.read_calls, [("thread-1", False)])
         self.assertEqual(client.steered, [])
         self.assertEqual(len(client.started), 1)
         self.assertEqual(len(dispatches), 1)
@@ -462,18 +698,19 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
             dispatches[0].correlation_policy,
             TurnReplyCorrelationPolicy.CREATE_NEW,
         )
-        self.assertIsNone(dispatches[0].expected_turn_id)
+        self.assertIsNone(dispatches[0].expected_turn_ref)
 
     async def test_explicit_start_new_turn_bypasses_active_turn_discovery(self) -> None:
         client = _InputClient(active_turn_id="turn-active")
         adapter = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/repo",
         )
 
         accepted = await adapter.send_input(
-            ThreadRef("codex-main", "thread-1"),
+            ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
             AgentInput(
                 client_message_id="message-explicit-start",
                 content=(TextContent("new work"),),
@@ -481,7 +718,7 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
             continuation=InputContinuationPreference.START_NEW_TURN,
         )
 
-        self.assertEqual(client.read_calls, [])
+        self.assertEqual(client.read_calls, [("thread-1", False)])
         self.assertEqual(client.steered, [])
         self.assertEqual(len(client.started), 1)
         self.assertIs(accepted.disposition, InputDisposition.STARTED)
@@ -497,13 +734,14 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
         adapter = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/repo",
             steer_active_turn=True,
         )
 
         with self.assertRaises(AppServerError) as raised:
             await adapter.send_input(
-                ThreadRef("codex-main", "thread-1"),
+                ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
                 AgentInput(
                     client_message_id="message-raced-completion",
                     content=(TextContent("continue"),),
@@ -525,12 +763,13 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
         adapter = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/repo",
             steer_active_turn=True,
         )
 
         accepted = await adapter.send_input(
-            ThreadRef("codex-main", "thread-1"),
+            ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
             AgentInput(
                 client_message_id="message-raced-replacement",
                 content=(TextContent("continue"),),
@@ -540,20 +779,21 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.read_calls, [("thread-1", True)])
         self.assertEqual(client.steered[0]["turn_id"], "turn-observed")
         self.assertEqual(client.started, [])
-        self.assertEqual(accepted.turn_id, "turn-replacement")
+        self.assertEqual(accepted.turn_ref.turn_id, "turn-replacement")
 
     async def test_active_thread_without_turn_identity_fails_closed(self) -> None:
         client = _ActiveTurnWithoutIdentityClient()
         adapter = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/repo",
             steer_active_turn=True,
         )
 
         with self.assertRaisesRegex(RuntimeError, "did not expose an active Turn identity"):
             await adapter.send_input(
-                ThreadRef("codex-main", "thread-1"),
+                ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
                 AgentInput(
                     client_message_id="message-missing-active-id",
                     content=(TextContent("continue"),),
@@ -568,13 +808,14 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
         adapter = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/repo",
             steer_active_turn=True,
         )
 
         with self.assertRaises(ApplicationInputOutcomeUnknown) as raised:
             await adapter.send_input(
-                ThreadRef("codex-main", "thread-1"),
+                ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
                 AgentInput(
                     client_message_id="message-missing-steer-id",
                     content=(TextContent("continue"),),
@@ -590,12 +831,13 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
         adapter = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/repo",
         )
 
         with self.assertRaises(ApplicationInputOutcomeUnknown) as raised:
             await adapter.send_input(
-                ThreadRef("codex-main", "thread-1"),
+                ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
                 AgentInput(
                     client_message_id="message-missing-start-id",
                     content=(TextContent("begin"),),
@@ -609,14 +851,121 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CodexEventFanoutTests(unittest.IsolatedAsyncioTestCase):
+    async def test_delta_without_native_turn_identity_emits_recovery_gap(self) -> None:
+        native = NativeZenClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=native,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        events = adapter.subscribe_thread(
+            ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
+        )
+        try:
+            await native._notify(
+                {
+                    "method": "item/agentMessage/delta",
+                    "params": {"threadId": "thread-1", "delta": "must not escape"},
+                }
+            )
+            with self.assertRaisesRegex(
+                EventStreamReset,
+                "application_native_mapping_failed",
+            ):
+                await anext(events)
+        finally:
+            await _close(events)
+
+    async def test_transient_scope_read_failure_emits_recovery_gap(self) -> None:
+        class FailingReadClient(NativeZenClient):
+            async def read_thread(self, thread_id: str, *, include_turns: bool = False):
+                del thread_id, include_turns
+                raise RuntimeError("transient native read failure")
+
+        native = FailingReadClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=native,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        events = adapter.subscribe_thread(
+            ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
+        )
+        try:
+            await native._notify(
+                {
+                    "method": "turn/completed",
+                    "params": {
+                        "threadId": "thread-1",
+                        "turnId": "turn-1",
+                        "status": "completed",
+                    },
+                }
+            )
+            with self.assertRaisesRegex(EventStreamReset, "application_native_mapping_failed"):
+                await anext(events)
+        finally:
+            await _close(events)
+
+    async def test_notification_without_matching_native_cwd_fails_closed(self) -> None:
+        class ScopedNativeClient(NativeZenClient):
+            def __init__(self, native_cwd: str | None) -> None:
+                super().__init__()
+                self.native_cwd = native_cwd
+
+            async def read_thread(self, thread_id: str, *, include_turns: bool = False):
+                thread: dict[str, object] = {
+                    "id": thread_id,
+                    "status": {"type": "idle"},
+                    "turns": [] if include_turns else None,
+                }
+                if self.native_cwd is not None:
+                    thread["cwd"] = self.native_cwd
+                return {"thread": thread}
+
+        for native_cwd in (None, "/other-workspace"):
+            with self.subTest(native_cwd=native_cwd):
+                native = ScopedNativeClient(native_cwd)
+                adapter = CodexApplicationAdapter(
+                    application_instance_id="codex-main",
+                    client=native,
+                    workspace_id="workspace",
+                    cwd="/repo",
+                )
+                events = adapter.subscribe_thread(
+                    ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
+                )
+                try:
+                    await native._notify(
+                        {
+                            "method": "item/completed",
+                            "params": {
+                                "threadId": "thread-1",
+                                "turnId": "turn-1",
+                                "item": {
+                                    "id": "foreign-message",
+                                    "type": "agentMessage",
+                                    "text": "must not be published",
+                                },
+                            },
+                        }
+                    )
+                    with self.assertRaises(EventStreamReset):
+                        await anext(events)
+                finally:
+                    await _close(events)
+
     async def test_appserver_fans_out_multiple_messages_before_terminal_event(self) -> None:
         native = NativeZenClient()
         adapter = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=native,
+            workspace_id="workspace",
             cwd="/repo",
         )
-        thread_ref = ThreadRef("codex-main", "thread-1")
+        thread_ref = ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
         first = adapter.subscribe_thread(thread_ref)
         second = adapter.subscribe_thread(thread_ref)
 
@@ -683,10 +1032,11 @@ class CodexEventFanoutTests(unittest.IsolatedAsyncioTestCase):
         adapter = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=native,
+            workspace_id="workspace",
             cwd="/repo",
             event_buffer_max_pending=2,
         )
-        thread_ref = ThreadRef("codex-main", "thread-1")
+        thread_ref = ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
         fast = adapter.subscribe_thread(thread_ref)
         slow = adapter.subscribe_thread(thread_ref)
 
@@ -721,9 +1071,12 @@ class CodexEventFanoutTests(unittest.IsolatedAsyncioTestCase):
         adapter = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=native,
+            workspace_id="workspace",
             cwd="/repo",
         )
-        events = adapter.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        events = adapter.subscribe_thread(
+            ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
+        )
         await native._notify(
             {
                 "method": "item/completed",
@@ -753,9 +1106,12 @@ class CodexEventFanoutTests(unittest.IsolatedAsyncioTestCase):
         adapter = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=native,
+            workspace_id="workspace",
             cwd="/repo",
         )
-        events = adapter.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        events = adapter.subscribe_thread(
+            ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
+        )
         try:
             await native._notify(
                 {
@@ -793,13 +1149,14 @@ class CodexEventFanoutTests(unittest.IsolatedAsyncioTestCase):
         adapter = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=InvalidHistoryClient(),
+            workspace_id="workspace",
             cwd="/repo",
         )
         result = await adapter.execute(
             GetThreadHistory(
                 operation_id="invalid-native-history",
                 application_ref=ApplicationRef("codex-main"),
-                thread_ref=ThreadRef("codex-main", "thread-1"),
+                thread_ref=ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
                 created_at=datetime.now(UTC),
             )
         )

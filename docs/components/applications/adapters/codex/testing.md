@@ -21,6 +21,17 @@ stable message/item identity, bounded presentation/materialization, honest
 unknown dispatch outcomes, and recovery through authoritative history. No
 test should route raw native events or Gateway policy through the adapter.
 
+The focused suite also proves stable workspace list/get across reconstruction,
+changed-root fingerprint evidence, required Project ancestry in every mapped
+Thread/event/history/request, and typed unsupported Project creation with no
+native call or workspace mutation.
+It also proves that missing or foreign native `cwd` evidence is filtered from
+listing and blocks reads, input/control mutations, notifications, request
+opening, response writeback, and resolution publication.
+Transient notification verification failure produces an explicit recovery gap,
+and request publication/cache maintenance cannot turn an already successful
+native response into a local failure through a second scope read.
+
 ## Target evidence and verification
 
 The target owner suite is `tests/applications/adapters/test_codex.py`; the

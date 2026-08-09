@@ -11,7 +11,9 @@ from ...applications.contract import (
     ApplicationRef,
     ProjectRef,
     ThreadRef,
+    TurnRef,
     validate_thread_ref,
+    validate_turn_ref,
 )
 from ...applications.requests import (
     RequestRef as _RequestRef,
@@ -44,8 +46,7 @@ class RequestRouteState(StrEnum):
 class RequestRouteCorrelation:
     correlation_id: str
     request_ref: _RequestRef
-    thread_ref: ThreadRef
-    turn_id: str
+    turn_ref: TurnRef
     conversation_ref: ConversationRef
     delivery_id: str
     response_shape: _RequestResponseShape
@@ -79,8 +80,7 @@ class ThreadProjectionRoute:
 @dataclass(frozen=True, slots=True)
 class TurnReplyCorrelation:
     correlation_id: str
-    thread_ref: ThreadRef
-    turn_id: str
+    turn_ref: TurnRef
     client_message_id: str
     conversation_ref: ConversationRef
     reply_to_message_id: str
@@ -146,8 +146,6 @@ def validate_binding(
     binding: ConversationBinding,
     capabilities: ApplicationCapabilities | None = None,
 ) -> None:
-    from ...applications.capabilities import ProjectMode
-
     require_identifier(binding.conversation_ref.channel_instance_id, "channel_instance_id")
     require_identifier(binding.conversation_ref.native_conversation_id, "native_conversation_id")
     if binding.revision < 0:
@@ -161,23 +159,13 @@ def validate_binding(
             raise ContractViolation("binding project belongs to a different application")
     if binding.thread_ref is not None:
         validate_thread_ref(binding.thread_ref)
-        if application_id != binding.thread_ref.application_instance_id:
+        if binding.application_ref is None or binding.project_ref is None:
+            raise ContractViolation("binding Thread requires Application and Project")
+        if application_id != binding.thread_ref.project_ref.application_instance_id:
             raise ContractViolation("binding thread belongs to a different application")
-    if (
-        binding.project_ref is not None
-        and binding.thread_ref is not None
-        and binding.thread_ref.project_ref is not None
-        and binding.project_ref != binding.thread_ref.project_ref
-    ):
+    if binding.thread_ref is not None and binding.project_ref != binding.thread_ref.project_ref:
         raise ContractViolation("binding thread belongs to a different project")
-    if (
-        capabilities is not None
-        and capabilities.projects.mode in (ProjectMode.FLAT, ProjectMode.FIXED)
-        and binding.project_ref is not None
-    ):
-        raise ContractViolation(
-            f"{capabilities.projects.mode.value} project mode cannot bind a project"
-        )
+    del capabilities
 
 
 def validate_projection_route(route: ThreadProjectionRoute) -> None:
@@ -206,8 +194,7 @@ def validate_projection_route(route: ThreadProjectionRoute) -> None:
 
 def validate_turn_reply_correlation(correlation: TurnReplyCorrelation) -> None:
     require_identifier(correlation.correlation_id, "correlation_id")
-    validate_thread_ref(correlation.thread_ref)
-    require_identifier(correlation.turn_id, "turn_id")
+    validate_turn_ref(correlation.turn_ref)
     require_identifier(correlation.client_message_id, "client_message_id")
     require_identifier(
         correlation.conversation_ref.channel_instance_id,
@@ -225,13 +212,12 @@ def validate_request_route_correlation(
 ) -> None:
     require_identifier(correlation.correlation_id, "correlation_id")
     _validate_request_ref(correlation.request_ref)
-    validate_thread_ref(correlation.thread_ref)
+    validate_turn_ref(correlation.turn_ref)
     if (
-        correlation.thread_ref.application_instance_id
+        correlation.turn_ref.thread_ref.project_ref.application_instance_id
         != correlation.request_ref.application_ref.application_instance_id
     ):
         raise ContractViolation("request correlation belongs to a different application")
-    require_identifier(correlation.turn_id, "turn_id")
     require_identifier(
         correlation.conversation_ref.channel_instance_id,
         "channel_instance_id",

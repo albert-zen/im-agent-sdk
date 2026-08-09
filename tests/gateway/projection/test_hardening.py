@@ -20,7 +20,9 @@ from imagent.applications.contract import (
     ApplicationInputOutcomeUnknown,
     InputContinuationPreference,
     InputDisposition,
+    ProjectRef,
     ThreadRef,
+    TurnRef,
     TurnReplyCorrelationPolicy,
 )
 from imagent.applications.events import AgentEvent, AgentEventType
@@ -136,7 +138,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_live_completed_message_preserves_immutable_metadata(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "metadata-live")
         channel = FakeChannelAdapter()
         projections = InMemoryProjectionRouteRepository()
@@ -208,7 +210,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_live_only_created_message_deduplicates_without_checkpoint(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "live-only")
         channel = FakeChannelAdapter()
         projections = InMemoryProjectionRouteRepository()
@@ -247,7 +249,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                 derive_live_projection_delivery_id(
                     conversation,
                     thread.ref,
-                    f"fake-agent:thread:{thread.ref.native_thread_id}:message:live-event-1",
+                    f"fake-agent:thread:{thread.ref.thread_id}:message:live-event-1",
                 ),
             )
             route = (await projections.list_projection_routes(thread.ref))[0]
@@ -258,7 +260,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_authoritative_history_preserves_agent_metadata(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         await application.send_input(
             thread.ref,
             AgentInput(
@@ -323,7 +325,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = CountingSubscriptionApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         good_conversation = ConversationRef("good-channel", "good")
         bad_conversation = ConversationRef("bad-channel", "bad")
         bindings = InMemoryBindingRepository()
@@ -333,6 +335,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                 ConversationBinding(
                     conversation_ref=conversation,
                     application_ref=application.summary.ref,
+                    project_ref=thread.ref.project_ref,
                     thread_ref=thread.ref,
                 )
             )
@@ -383,7 +386,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = CountingSubscriptionApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         await application.send_input(
             thread.ref,
             AgentInput(client_message_id="before-start", content=(TextContent("history"),)),
@@ -397,6 +400,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                 ConversationBinding(
                     conversation_ref=conversation,
                     application_ref=application.summary.ref,
+                    project_ref=thread.ref.project_ref,
                     thread_ref=thread.ref,
                 )
             )
@@ -440,8 +444,8 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = CountingSubscriptionApplication()
-        affected = await application.create_thread()
-        healthy = await application.create_thread()
+        affected = await application.create_thread(application.default_project_ref)
+        healthy = await application.create_thread(application.default_project_ref)
         affected_conversation = ConversationRef("fake-channel", "affected")
         healthy_conversation = ConversationRef("fake-channel", "healthy")
         bindings = InMemoryBindingRepository()
@@ -456,6 +460,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                 ConversationBinding(
                     conversation_ref=conversation,
                     application_ref=application.summary.ref,
+                    project_ref=thread.ref.project_ref,
                     thread_ref=thread.ref,
                 )
             )
@@ -496,7 +501,8 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                     stored = await projections.list_projection_routes(affected.ref)
                     health = gateway.get_projection_health(affected.ref)
                     if (
-                        stored[0].checkpoint_agent_item_id == f"{accepted.turn_id}:message:2"
+                        stored[0].checkpoint_agent_item_id
+                        == f"{accepted.turn_ref.turn_id}:message:2"
                         and health is not None
                         and health.state is ProjectionWorkerState.RUNNING
                     ):
@@ -532,7 +538,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = CountingSubscriptionApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         first = ConversationRef("fake-channel", "first")
         second = ConversationRef("fake-channel", "second")
         gateway = ImAgentGateway(
@@ -558,7 +564,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_first_observe_uses_bounded_recent_baseline(self) -> None:
         application = RecordingHistoryApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         for index in range(20):
             await application.send_input(
                 thread.ref,
@@ -589,7 +595,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_first_observe_caps_items_from_one_large_turn(self) -> None:
         application = LargeTurnHistoryApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         await application.seed_large_turn(
             thread.ref,
             message_count=50,
@@ -627,7 +633,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = BlockingHistoryApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         await application.send_input(
             thread.ref,
             AgentInput(
@@ -675,7 +681,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_route_barrier_precedes_durable_visibility(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         first = ConversationRef("fake-channel", "first")
         second = ConversationRef("fake-channel", "second")
         channel = FakeChannelAdapter()
@@ -719,7 +725,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "conversation")
         channel = FakeChannelAdapter()
         projections = FailingRefreshRepository()
@@ -755,13 +761,14 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = PassiveAcceptanceApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = InMemoryBindingRepository()
         await bindings.put(
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -797,13 +804,14 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_post_acceptance_drain_failure_keeps_inbound_terminal(self) -> None:
         application = PassiveAcceptanceApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = InMemoryBindingRepository()
         await bindings.put(
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -849,13 +857,14 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = OverflowingAcceptanceApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = InMemoryBindingRepository()
         await bindings.put(
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -914,13 +923,14 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_pre_acceptance_failure_releases_inbound_for_retry(self) -> None:
         application = FailOnceBeforeAcceptanceApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = InMemoryBindingRepository()
         await bindings.put(
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -955,13 +965,14 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_dispatched_unknown_input_keeps_inbound_in_flight(self) -> None:
         application = UnknownOutcomeApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = InMemoryBindingRepository()
         await bindings.put(
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -995,13 +1006,14 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_primary_post_acceptance_error_survives_drain_failure(self) -> None:
         application = PassiveAcceptanceApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = InMemoryBindingRepository()
         await bindings.put(
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -1040,12 +1052,13 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             path = Path(directory) / "gateway.sqlite3"
             state = FailingAcceptedInputSQLiteState(path)
             application = PassiveAcceptanceApplication()
-            thread = await application.create_thread()
+            thread = await application.create_thread(application.default_project_ref)
             conversation = ConversationRef("fake-channel", "conversation")
             await state.put(
                 ConversationBinding(
                     conversation_ref=conversation,
                     application_ref=application.summary.ref,
+                    project_ref=thread.ref.project_ref,
                     thread_ref=thread.ref,
                 )
             )
@@ -1082,7 +1095,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_turn_reply_correlation_is_destination_safe(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         first = ConversationRef("fake-channel", "first")
         second = ConversationRef("fake-channel", "second")
         bindings = InMemoryBindingRepository()
@@ -1091,6 +1104,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                 ConversationBinding(
                     conversation_ref=conversation,
                     application_ref=application.summary.ref,
+                    project_ref=thread.ref.project_ref,
                     thread_ref=thread.ref,
                 )
             )
@@ -1141,7 +1155,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_two_conversations_steer_one_turn_without_retargeting(self) -> None:
         application = ContinuationApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         first = ConversationRef("fake-channel", "first")
         second = ConversationRef("fake-channel", "second")
         bindings = InMemoryBindingRepository()
@@ -1150,6 +1164,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                 ConversationBinding(
                     conversation_ref=conversation,
                     application_ref=application.summary.ref,
+                    project_ref=thread.ref.project_ref,
                     thread_ref=thread.ref,
                 )
             )
@@ -1193,7 +1208,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "steer-restart.sqlite3"
             application = ContinuationApplication()
-            thread = await application.create_thread()
+            thread = await application.create_thread(application.default_project_ref)
             first = ConversationRef("fake-channel", "first")
             second = ConversationRef("fake-channel", "second")
             initial = SQLiteGatewayState(path)
@@ -1202,6 +1217,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                     ConversationBinding(
                         conversation_ref=conversation,
                         application_ref=application.summary.ref,
+                        project_ref=thread.ref.project_ref,
                         thread_ref=thread.ref,
                     )
                 )
@@ -1251,13 +1267,14 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_uncorrelated_steer_fails_before_native_dispatch(self) -> None:
         application = ContinuationApplication(active_turn_id="turn-external")
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = InMemoryBindingRepository()
         await bindings.put(
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -1282,7 +1299,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = ContinuationApplication(block_first_acceptance=True)
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         first = ConversationRef("fake-channel", "first")
         second = ConversationRef("fake-channel", "second")
         bindings = InMemoryBindingRepository()
@@ -1291,6 +1308,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                 ConversationBinding(
                     conversation_ref=conversation,
                     application_ref=application.summary.ref,
+                    project_ref=thread.ref.project_ref,
                     thread_ref=thread.ref,
                 )
             )
@@ -1344,7 +1362,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = ContinuationApplication(replacement_turn_id="turn-replacement")
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         first = ConversationRef("fake-channel", "first")
         second = ConversationRef("fake-channel", "second")
         bindings = InMemoryBindingRepository()
@@ -1353,6 +1371,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                 ConversationBinding(
                     conversation_ref=conversation,
                     application_ref=application.summary.ref,
+                    project_ref=thread.ref.project_ref,
                     thread_ref=thread.ref,
                 )
             )
@@ -1391,8 +1410,8 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = CountingSubscriptionApplication()
-        thread_a = await application.create_thread()
-        thread_b = await application.create_thread()
+        thread_a = await application.create_thread(application.default_project_ref)
+        thread_b = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = InMemoryBindingRepository()
         projections = InMemoryProjectionRouteRepository()
@@ -1400,6 +1419,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread_b.ref.project_ref,
                 thread_ref=thread_b.ref,
             )
         )
@@ -1477,13 +1497,14 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_external_turn_does_not_inherit_latest_inbound_reply(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = InMemoryBindingRepository()
         await bindings.put(
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -1518,8 +1539,8 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread()
-        other_thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
+        other_thread = await application.create_thread(application.default_project_ref)
         first = ConversationRef("fake-channel", "first")
         second = ConversationRef("fake-channel", "second")
         bindings = InMemoryBindingRepository()
@@ -1527,6 +1548,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=first,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -1534,6 +1556,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=second,
                 application_ref=application.summary.ref,
+                project_ref=other_thread.ref.project_ref,
                 thread_ref=other_thread.ref,
             )
         )
@@ -1588,7 +1611,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = RecordingHistoryApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         for index in range(10):
             await application.send_input(
                 thread.ref,
@@ -1617,6 +1640,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -1649,7 +1673,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_missing_checkpoint_is_bounded_and_visible_as_gap(self) -> None:
         application = RecordingHistoryApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         for index in range(10):
             await application.send_input(
                 thread.ref,
@@ -1678,6 +1702,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -1723,7 +1748,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_completed_delivery_converges_lagging_checkpoint(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         await application.send_input(
             thread.ref,
             AgentInput(client_message_id="completed", content=(TextContent("done"),)),
@@ -1748,6 +1773,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -1883,7 +1909,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_in_flight_delivery_does_not_advance_checkpoint(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         await application.send_input(
             thread.ref,
             AgentInput(client_message_id="in-flight", content=(TextContent("run"),)),
@@ -1908,6 +1934,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -1940,7 +1967,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_stale_correlations_are_cleaned_without_agent_state(self) -> None:
         projections = InMemoryProjectionRouteRepository()
-        thread = ThreadRef("fake-agent", "thread-1")
+        thread = ThreadRef(ProjectRef("fake-agent", "workspace"), "thread-1")
         conversation = ConversationRef("fake-channel", "conversation")
         now = datetime.now(UTC)
         for turn_id, created_at in (
@@ -1949,12 +1976,8 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         ):
             await projections.put_turn_reply_correlation(
                 TurnReplyCorrelation(
-                    correlation_id=derive_turn_reply_correlation_id(
-                        thread,
-                        turn_id,
-                    ),
-                    thread_ref=thread,
-                    turn_id=turn_id,
+                    correlation_id=derive_turn_reply_correlation_id(TurnRef(thread, turn_id)),
+                    turn_ref=TurnRef(thread, turn_id),
                     client_message_id=f"client-{turn_id}",
                     conversation_ref=conversation,
                     reply_to_message_id=f"message-{turn_id}",
@@ -1975,7 +1998,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         await gateway.start()
         try:
             remaining = await projections.list_turn_reply_correlations()
-            self.assertEqual([item.turn_id for item in remaining], ["current-turn"])
+            self.assertEqual([item.turn_ref.turn_id for item in remaining], ["current-turn"])
         finally:
             await gateway.stop()
 
@@ -1983,7 +2006,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = InMemoryBindingRepository()
         projections = InMemoryProjectionRouteRepository()
@@ -1991,6 +2014,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -2011,11 +2035,9 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             await projections.put_turn_reply_correlation(
                 TurnReplyCorrelation(
                     correlation_id=derive_turn_reply_correlation_id(
-                        thread.ref,
-                        "orphaned-turn",
+                        TurnRef(thread.ref, "orphaned-turn")
                     ),
-                    thread_ref=thread.ref,
-                    turn_id="orphaned-turn",
+                    turn_ref=TurnRef(thread.ref, "orphaned-turn"),
                     client_message_id="orphaned-client",
                     conversation_ref=conversation,
                     reply_to_message_id="orphaned-message",
@@ -2036,7 +2058,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_thread_deletion_cleans_routes_and_reply_correlations(self) -> None:
         application = CountingSubscriptionApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = InMemoryBindingRepository()
         projections = InMemoryProjectionRouteRepository()
@@ -2044,6 +2066,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -2051,11 +2074,9 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         await projections.put_turn_reply_correlation(
             TurnReplyCorrelation(
                 correlation_id=derive_turn_reply_correlation_id(
-                    thread.ref,
-                    "turn-orphaned",
+                    TurnRef(thread.ref, "turn-orphaned")
                 ),
-                thread_ref=thread.ref,
-                turn_id="turn-orphaned",
+                turn_ref=TurnRef(thread.ref, "turn-orphaned"),
                 client_message_id="client-orphaned",
                 conversation_ref=conversation,
                 reply_to_message_id="message-orphaned",
@@ -2087,7 +2108,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_subscription_failure_recovers_without_new_input(self) -> None:
         application = FlakySubscriptionApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = InMemoryBindingRepository()
         projections = InMemoryProjectionRouteRepository()
@@ -2095,6 +2116,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -2149,7 +2171,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                 ),
             ),
         )
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "degraded-subscription")
         bindings = InMemoryBindingRepository()
         projections = InMemoryProjectionRouteRepository()
@@ -2157,6 +2179,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -2194,7 +2217,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = CountingSubscriptionApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = InMemoryBindingRepository()
         projections = FailOnceListingProjectionRepository(fail_on_call=2)
@@ -2202,6 +2225,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -2237,7 +2261,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_recovery_failure_retries_without_new_input(self) -> None:
         application = FlakyRecoveryApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = InMemoryBindingRepository()
         projections = InMemoryProjectionRouteRepository()
@@ -2245,6 +2269,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -2282,7 +2307,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = AcceptanceRecoveryRaceApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = InMemoryBindingRepository()
         projections = InMemoryProjectionRouteRepository()
@@ -2290,6 +2315,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -2327,7 +2353,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_restart_without_checkpoint_is_bounded_and_degraded(self) -> None:
         application = RecordingHistoryApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         conversation = ConversationRef("fake-channel", "conversation")
         bindings = InMemoryBindingRepository()
         projections = InMemoryProjectionRouteRepository()
@@ -2335,6 +2361,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -2367,7 +2394,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             await gateway.stop()
 
     async def test_stale_route_does_not_block_gateway_start(self) -> None:
-        thread = ThreadRef("missing-application", "thread")
+        thread = ThreadRef(ProjectRef("missing-application", "workspace"), "thread")
         conversation = ConversationRef("fake-channel", "conversation")
         projections = InMemoryProjectionRouteRepository()
         await projections.put_projection_route(_route(thread, conversation))
@@ -2408,11 +2435,19 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         conversation = ConversationRef("eager-channel", "conversation")
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
         channel = EagerInboundChannel(_inbound(conversation, "startup-message"))
+        bindings = InMemoryBindingRepository()
+        await bindings.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+                project_ref=application.default_project_ref,
+            )
+        )
         gateway = ImAgentGateway(
             channels=[channel],
             applications=[application],
             repositories=GatewayRepositories(
-                bindings=InMemoryBindingRepository(),
+                bindings=bindings,
             ),
         )
         await gateway.start()
@@ -2634,7 +2669,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_one_route_delivery_failure_is_isolated_and_visible(self) -> None:
         application = CountingSubscriptionApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         good_conversation = ConversationRef("good-channel", "good")
         bad_conversation = ConversationRef("bad-channel", "bad")
         bindings = InMemoryBindingRepository()
@@ -2644,6 +2679,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                 ConversationBinding(
                     conversation_ref=conversation,
                     application_ref=application.summary.ref,
+                    project_ref=thread.ref.project_ref,
                     thread_ref=thread.ref,
                 )
             )
@@ -2939,7 +2975,11 @@ class ContinuationApplication(FakeAgentApplicationAdapter):
                     client_message_id=message.client_message_id,
                     disposition=disposition,
                     correlation_policy=policy,
-                    expected_turn_id=expected_turn_id,
+                    expected_turn_ref=(
+                        TurnRef(thread_ref, expected_turn_id)
+                        if expected_turn_id is not None
+                        else None
+                    ),
                 )
             )
         self.native_dispatches.append(disposition)
@@ -2953,8 +2993,7 @@ class ContinuationApplication(FakeAgentApplicationAdapter):
             accepted_turn_id = self.replacement_turn_id or expected_turn_id
             assert accepted_turn_id is not None
         return AcceptedTurn(
-            thread_ref=thread_ref,
-            turn_id=accepted_turn_id,
+            turn_ref=TurnRef(thread_ref, accepted_turn_id),
             client_message_id=message.client_message_id,
             disposition=disposition,
             correlation_policy=policy,
@@ -2990,8 +3029,7 @@ class PassiveAcceptanceApplication(FakeAgentApplicationAdapter):
             )
         self.accepted_input_calls += 1
         return AcceptedTurn(
-            thread_ref=thread_ref,
-            turn_id=f"turn-{self.accepted_input_calls}",
+            turn_ref=TurnRef(thread_ref, f"turn-{self.accepted_input_calls}"),
             client_message_id=message.client_message_id,
         )
 

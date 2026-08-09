@@ -26,6 +26,7 @@ from imagent.applications.contract import (
     Page,
     ProjectRef,
     ThreadRef,
+    TurnRef,
 )
 from imagent.applications.events import AgentEvent, AgentEventType, validate_agent_event
 from imagent.applications.operations import (
@@ -118,7 +119,7 @@ class ReferenceAndBindingTests(unittest.TestCase):
         self.conversation = ConversationRef("qq-primary", "c2c:user-1")
         self.application = ApplicationRef("zen-local")
         self.project = ProjectRef("zen-local", "repo-1")
-        self.thread = ThreadRef("zen-local", "thread-1", self.project)
+        self.thread = ThreadRef(self.project, "thread-1")
 
     def test_accepts_managed_binding(self) -> None:
         validate_binding(
@@ -131,29 +132,29 @@ class ReferenceAndBindingTests(unittest.TestCase):
             capabilities(ProjectMode.MANAGED),
         )
 
-    def test_accepts_projectless_flat_and_fixed_bindings(self) -> None:
-        thread = ThreadRef("zen-local", "thread-1")
+    def test_accepts_workspace_project_flat_and_fixed_bindings(self) -> None:
+        thread = ThreadRef(ProjectRef("zen-local", "workspace"), "thread-1")
         for mode in (ProjectMode.FLAT, ProjectMode.FIXED):
             with self.subTest(mode=mode):
                 validate_binding(
                     ConversationBinding(
                         conversation_ref=self.conversation,
                         application_ref=self.application,
+                        project_ref=thread.project_ref,
                         thread_ref=thread,
                     ),
                     capabilities(mode),
                 )
 
-    def test_rejects_project_binding_in_fixed_mode(self) -> None:
-        with self.assertRaisesRegex(ContractViolation, "fixed project mode"):
-            validate_binding(
-                ConversationBinding(
-                    conversation_ref=self.conversation,
-                    application_ref=self.application,
-                    project_ref=self.project,
-                ),
-                capabilities(ProjectMode.FIXED),
-            )
+    def test_accepts_project_binding_in_fixed_mode(self) -> None:
+        validate_binding(
+            ConversationBinding(
+                conversation_ref=self.conversation,
+                application_ref=self.application,
+                project_ref=self.project,
+            ),
+            capabilities(ProjectMode.FIXED),
+        )
 
     def test_rejects_cross_application_thread(self) -> None:
         with self.assertRaisesRegex(ContractViolation, "different application"):
@@ -161,7 +162,10 @@ class ReferenceAndBindingTests(unittest.TestCase):
                 ConversationBinding(
                     conversation_ref=self.conversation,
                     application_ref=self.application,
-                    thread_ref=ThreadRef("t3-remote", "thread-1"),
+                    project_ref=ThreadRef(
+                        ProjectRef("t3-remote", "workspace"), "thread-1"
+                    ).project_ref,
+                    thread_ref=ThreadRef(ProjectRef("t3-remote", "workspace"), "thread-1"),
                 )
             )
 
@@ -183,6 +187,12 @@ class MessageIdentityTests(unittest.TestCase):
         honest = AgentEvent(
             event_id="event-1",
             application_instance_id="app-1",
+            project_ref=ProjectRef("app-1", "workspace"),
+            thread_ref=ThreadRef(ProjectRef("app-1", "workspace"), "thread-1"),
+            turn_ref=TurnRef(
+                ThreadRef(ProjectRef("app-1", "workspace"), "thread-1"),
+                "turn-1",
+            ),
             type=AgentEventType.TURN_COMPLETED,
             data={},
             created_at=created_at,
@@ -194,6 +204,12 @@ class MessageIdentityTests(unittest.TestCase):
                 AgentEvent(
                     event_id="event-2",
                     application_instance_id="app-1",
+                    project_ref=ProjectRef("app-1", "workspace"),
+                    thread_ref=ThreadRef(ProjectRef("app-1", "workspace"), "thread-1"),
+                    turn_ref=TurnRef(
+                        ThreadRef(ProjectRef("app-1", "workspace"), "thread-1"),
+                        "turn-1",
+                    ),
                     type=AgentEventType.TURN_COMPLETED,
                     data={},
                     created_at=created_at,
@@ -228,6 +244,12 @@ class MessageIdentityTests(unittest.TestCase):
                 AgentEvent(
                     event_id="event-3",
                     application_instance_id="app-1",
+                    project_ref=ProjectRef("app-1", "workspace"),
+                    thread_ref=ThreadRef(ProjectRef("app-1", "workspace"), "thread-1"),
+                    turn_ref=TurnRef(
+                        ThreadRef(ProjectRef("app-1", "workspace"), "thread-1"),
+                        "turn-1",
+                    ),
                     type=AgentEventType.TURN_COMPLETED,
                     data={},
                     created_at=created_at,
@@ -240,6 +262,12 @@ class MessageIdentityTests(unittest.TestCase):
             AgentEvent(
                 event_id="event-4",
                 application_instance_id="app-1",
+                project_ref=ProjectRef("app-1", "workspace"),
+                thread_ref=ThreadRef(ProjectRef("app-1", "workspace"), "thread-1"),
+                turn_ref=TurnRef(
+                    ThreadRef(ProjectRef("app-1", "workspace"), "thread-1"),
+                    "turn-1",
+                ),
                 type=AgentEventType.TURN_COMPLETED,
                 data={},
                 created_at=created_at,
@@ -255,7 +283,7 @@ class InteractiveRequestContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.application = ApplicationRef("codex-local")
         self.request_ref = RequestRef(self.application, "epoch-4:request-7")
-        self.thread = ThreadRef("codex-local", "thread-1")
+        self.thread = ThreadRef(ProjectRef("codex-local", "workspace"), "thread-1")
 
     def test_approval_preserves_native_choice_ids_without_binary_policy(self) -> None:
         choices = tuple(
@@ -269,8 +297,7 @@ class InteractiveRequestContractTests(unittest.TestCase):
         )
         request = ApprovalRequest(
             request_ref=self.request_ref,
-            thread_ref=self.thread,
-            turn_id="turn-1",
+            turn_ref=TurnRef(self.thread, "turn-1"),
             prompt="Run the command?",
             choices=choices,
         )
@@ -294,8 +321,7 @@ class InteractiveRequestContractTests(unittest.TestCase):
         validate_interactive_request(
             UserInputRequest(
                 request_ref=self.request_ref,
-                thread_ref=self.thread,
-                turn_id="turn-1",
+                turn_ref=TurnRef(self.thread, "turn-1"),
                 questions=(single,),
             )
         )
@@ -328,8 +354,7 @@ class InteractiveRequestContractTests(unittest.TestCase):
         validate_interactive_request(
             ApprovalRequest(
                 request_ref=self.request_ref,
-                thread_ref=self.thread,
-                turn_id="turn-1",
+                turn_ref=TurnRef(self.thread, "turn-1"),
                 prompt="Approve?",
                 choices=approval_choices,
             )
@@ -338,8 +363,7 @@ class InteractiveRequestContractTests(unittest.TestCase):
             validate_interactive_request(
                 ApprovalRequest(
                     request_ref=self.request_ref,
-                    thread_ref=self.thread,
-                    turn_id="turn-1",
+                    turn_ref=TurnRef(self.thread, "turn-1"),
                     prompt="Approve?",
                     choices=approval_choices + (RequestChoice("overflow", "Overflow"),),
                 )
@@ -347,8 +371,7 @@ class InteractiveRequestContractTests(unittest.TestCase):
         validate_interactive_request(
             UserInputRequest(
                 request_ref=self.request_ref,
-                thread_ref=self.thread,
-                turn_id="turn-1",
+                turn_ref=TurnRef(self.thread, "turn-1"),
                 questions=(
                     UserInputQuestion(
                         question_id="bounded-choices",
@@ -364,8 +387,7 @@ class InteractiveRequestContractTests(unittest.TestCase):
             validate_interactive_request(
                 UserInputRequest(
                     request_ref=self.request_ref,
-                    thread_ref=self.thread,
-                    turn_id="turn-1",
+                    turn_ref=TurnRef(self.thread, "turn-1"),
                     questions=(
                         UserInputQuestion(
                             question_id="too-many-choices",
@@ -389,8 +411,7 @@ class InteractiveRequestContractTests(unittest.TestCase):
         validate_interactive_request(
             UserInputRequest(
                 request_ref=self.request_ref,
-                thread_ref=self.thread,
-                turn_id="turn-1",
+                turn_ref=TurnRef(self.thread, "turn-1"),
                 questions=questions,
             )
         )
@@ -398,8 +419,7 @@ class InteractiveRequestContractTests(unittest.TestCase):
             validate_interactive_request(
                 UserInputRequest(
                     request_ref=self.request_ref,
-                    thread_ref=self.thread,
-                    turn_id="turn-1",
+                    turn_ref=TurnRef(self.thread, "turn-1"),
                     questions=questions
                     + (
                         UserInputQuestion(
@@ -477,19 +497,19 @@ class InteractiveRequestContractTests(unittest.TestCase):
                 ApplicationRef("other-application"),
                 self.request_ref.native_request_id,
             ),
-            thread_ref=self.thread,
-            turn_id="turn-1",
+            turn_ref=TurnRef(self.thread, "turn-1"),
             prompt="Run the command?",
             choices=(RequestChoice("accept", "Approve"),),
         )
         event = AgentEvent(
             event_id="request-event-1",
             application_instance_id="codex-local",
+            project_ref=self.thread.project_ref,
             type=AgentEventType.REQUEST_OPENED,
             data={},
             created_at=datetime.now(UTC),
             thread_ref=self.thread,
-            turn_id="turn-1",
+            turn_ref=TurnRef(self.thread, "turn-1"),
             request=request,
         )
         with self.assertRaisesRegex(ContractViolation, "different application"):
@@ -500,7 +520,7 @@ class ProjectionContractTests(unittest.TestCase):
     def test_checkpoint_fields_are_a_nullable_pair(self) -> None:
         route = ThreadProjectionRoute(
             route_id="route-1",
-            thread_ref=ThreadRef("agent-1", "thread-1"),
+            thread_ref=ThreadRef(ProjectRef("agent-1", "workspace"), "thread-1"),
             conversation_ref=ConversationRef("channel-1", "conversation-1"),
         )
         validate_projection_route(route)
@@ -518,8 +538,9 @@ class ProjectionContractTests(unittest.TestCase):
         validate_turn_reply_correlation(
             TurnReplyCorrelation(
                 correlation_id="correlation-1",
-                thread_ref=ThreadRef("agent-1", "thread-1"),
-                turn_id="turn-1",
+                turn_ref=TurnRef(
+                    ThreadRef(ProjectRef("agent-1", "workspace"), "thread-1"), "turn-1"
+                ),
                 client_message_id="client-message-1",
                 conversation_ref=ConversationRef(
                     "channel-1",
@@ -534,7 +555,7 @@ class ProjectionContractTests(unittest.TestCase):
 class OperationTests(unittest.TestCase):
     def test_typed_history_operations_validate_limits_and_scope(self) -> None:
         application = ApplicationRef("zen-local")
-        thread = ThreadRef("zen-local", "thread-1")
+        thread = ThreadRef(ProjectRef("zen-local", "workspace"), "thread-1")
         validate_application_operation(
             GetTurnCatchup(
                 operation_id="op-catchup",
@@ -559,7 +580,7 @@ class OperationTests(unittest.TestCase):
                 GetTurnCatchup(
                     operation_id="op-cross-app",
                     application_ref=application,
-                    thread_ref=ThreadRef("t3-remote", "thread-1"),
+                    thread_ref=ThreadRef(ProjectRef("t3-remote", "workspace"), "thread-1"),
                     created_at=datetime.now(UTC),
                 )
             )
@@ -569,7 +590,7 @@ class OperationTests(unittest.TestCase):
             operation_id="op-1",
             conversation_ref=ConversationRef("qq-primary", "c2c:user-1"),
             actor="user-1",
-            thread_ref=ThreadRef("zen-local", "thread-1"),
+            thread_ref=ThreadRef(ProjectRef("zen-local", "workspace"), "thread-1"),
             created_at=datetime.now(UTC),
         )
         validate_gateway_operation(operation)
@@ -582,6 +603,9 @@ class OperationTests(unittest.TestCase):
         operation = ListThreads(
             operation_id="op-list",
             application_ref=ApplicationRef("zen-local"),
+            project_ref=ProjectRef(
+                ApplicationRef("zen-local").application_instance_id, "workspace"
+            ),
             created_at=datetime.now(UTC),
         )
         result = ThreadsListed(
@@ -606,7 +630,7 @@ class OperationTests(unittest.TestCase):
             operation_id="op-bind",
             conversation_ref=ConversationRef("qq-primary", "c2c:user-1"),
             actor="user-1",
-            thread_ref=ThreadRef("zen-local", "thread-1"),
+            thread_ref=ThreadRef(ProjectRef("zen-local", "workspace"), "thread-1"),
             created_at=datetime.now(UTC),
         )
         with self.assertRaisesRegex(ContractViolation, "different Conversation"):
@@ -619,7 +643,10 @@ class OperationTests(unittest.TestCase):
                     binding=ConversationBinding(
                         conversation_ref=ConversationRef("qq-primary", "c2c:user-2"),
                         application_ref=ApplicationRef("zen-local"),
-                        thread_ref=ThreadRef("zen-local", "thread-1"),
+                        project_ref=ThreadRef(
+                            ProjectRef("zen-local", "workspace"), "thread-1"
+                        ).project_ref,
+                        thread_ref=ThreadRef(ProjectRef("zen-local", "workspace"), "thread-1"),
                     ),
                 ),
             )
@@ -628,6 +655,9 @@ class OperationTests(unittest.TestCase):
         operation = ListThreads(
             operation_id="op-1",
             application_ref=ApplicationRef("zen-local"),
+            project_ref=ProjectRef(
+                ApplicationRef("zen-local").application_instance_id, "workspace"
+            ),
             created_at=datetime.now(UTC),
         )
         with self.assertRaisesRegex(ContractViolation, "message cannot be empty"):
@@ -643,13 +673,104 @@ class OperationTests(unittest.TestCase):
 
 
 class VersionOneSchemaCompatibilityTests(unittest.TestCase):
+    def test_schema_resource_hierarchy_rejects_projectless_legacy_shapes(self) -> None:
+        project_ref = {
+            "applicationInstanceId": "codex-main",
+            "projectId": "workspace",
+        }
+        thread_ref = {"projectRef": project_ref, "threadId": "thread-1"}
+        turn_ref = {"threadRef": thread_ref, "turnId": "turn-1"}
+        self._validate_definition("resources.schema.json", "ProjectRef", project_ref)
+        self._validate_definition("resources.schema.json", "ThreadRef", thread_ref)
+        self._validate_definition("resources.schema.json", "TurnRef", turn_ref)
+        self._assert_invalid_definition(
+            "resources.schema.json",
+            "ThreadRef",
+            {"applicationInstanceId": "codex-main", "threadId": "thread-1"},
+        )
+        self._assert_invalid_definition(
+            "bindings.schema.json",
+            "ConversationBinding",
+            {
+                "conversationRef": {
+                    "channelInstanceId": "channel",
+                    "nativeConversationId": "conversation",
+                },
+                "applicationRef": {"applicationInstanceId": "codex-main"},
+                "threadRef": thread_ref,
+                "revision": 1,
+                "updatedAt": "2026-08-09T00:00:00Z",
+            },
+        )
+        self._validate_definition(
+            "deliveries.schema.json",
+            "IngressThreadTarget",
+            {"kind": "threadRoutes", "threadRef": thread_ref},
+        )
+        self._assert_invalid_definition(
+            "deliveries.schema.json",
+            "IngressThreadTarget",
+            {
+                "kind": "threadRoutes",
+                "applicationInstanceId": "codex-main",
+                "threadId": "thread-1",
+            },
+        )
+
+    def test_turn_scoped_event_schema_requires_nested_thread_and_turn_refs(self) -> None:
+        project_ref = {
+            "applicationInstanceId": "codex-main",
+            "projectId": "workspace",
+        }
+        thread_ref = {"projectRef": project_ref, "threadId": "thread-1"}
+        event = {
+            "eventId": "event-1",
+            "applicationInstanceId": "codex-main",
+            "projectRef": project_ref,
+            "threadRef": thread_ref,
+            "turnRef": {"threadRef": thread_ref, "turnId": "turn-1"},
+            "type": "turn.completed",
+            "data": {},
+            "createdAt": "2026-08-09T00:00:00Z",
+        }
+        self._validate_definition("events.schema.json", "AgentEvent", event)
+        self._assert_invalid_definition(
+            "events.schema.json",
+            "AgentEvent",
+            {key: value for key, value in event.items() if key != "turnRef"},
+        )
+
+        message_event = {
+            **event,
+            "type": "message.completed",
+            "data": {
+                "message": {
+                    "agentItemId": "item-1",
+                    "threadRef": thread_ref,
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "answer", "format": "plain"}],
+                    "createdAt": "2026-08-09T00:00:00Z",
+                }
+            },
+        }
+        self._validate_definition("events.schema.json", "AgentEvent", message_event)
+        self._assert_invalid_definition(
+            "events.schema.json",
+            "AgentEvent",
+            {**message_event, "data": {}},
+        )
+
     def test_input_dispatch_and_acceptance_require_matching_correlation_policy(
         self,
     ) -> None:
         thread_ref = {
-            "applicationInstanceId": "codex-main",
-            "nativeThreadId": "thread-1",
+            "projectRef": {
+                "applicationInstanceId": "codex-main",
+                "projectId": "workspace",
+            },
+            "threadId": "thread-1",
         }
+        turn_ref = {"threadRef": thread_ref, "turnId": "turn-active"}
         self._validate_definition(
             "messages.schema.json",
             "ApplicationInputDispatch",
@@ -658,15 +779,14 @@ class VersionOneSchemaCompatibilityTests(unittest.TestCase):
                 "clientMessageId": "client-1",
                 "disposition": "steered",
                 "correlationPolicy": "preserve_existing",
-                "expectedTurnId": "turn-active",
+                "expectedTurnRef": turn_ref,
             },
         )
         self._validate_definition(
             "messages.schema.json",
             "AcceptedTurn",
             {
-                "threadRef": thread_ref,
-                "turnId": "turn-active",
+                "turnRef": turn_ref,
                 "clientMessageId": "client-1",
                 "disposition": "started",
                 "correlationPolicy": "create_new",
@@ -680,15 +800,14 @@ class VersionOneSchemaCompatibilityTests(unittest.TestCase):
                 "clientMessageId": "client-1",
                 "disposition": "steered",
                 "correlationPolicy": "create_new",
-                "expectedTurnId": "turn-active",
+                "expectedTurnRef": turn_ref,
             },
         )
         self._assert_invalid_definition(
             "messages.schema.json",
             "AcceptedTurn",
             {
-                "threadRef": thread_ref,
-                "turnId": "turn-active",
+                "turnRef": turn_ref,
                 "clientMessageId": "client-1",
                 "disposition": "started",
                 "correlationPolicy": "preserve_existing",

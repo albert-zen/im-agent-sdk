@@ -13,6 +13,8 @@ Gateway operation, persistence, routing, projection, and recovery owners:
   release an existing recovery fence;
 - project bind, Thread bind, and Thread clear return the documented typed
   postconditions without activating native UI state;
+- every Thread binding carries and equals its Project ancestor in managed,
+  fixed, and flat modes; Project-less and cross-Project bindings fail;
 - mutations for one Conversation serialize while unrelated Conversations can
   progress independently;
 - `foreground_only` prepares a route before binding CAS, gives it no authority
@@ -23,6 +25,9 @@ Gateway operation, persistence, routing, projection, and recovery owners:
   creating another Application subscription; and
 - product command grammar, CWD/profile policy, and consumer JSON state are
   absent from the binding implementation.
+
+Block A tests do not claim block B's monotonic binding generation or durable
+effect-receipt semantics; those gates land with the coherent `GatewayStore`.
 
 The focused binding-leaf tests prove typed operation/result shape, facade
 identity, field validation, binding-result postconditions, repository/CAS

@@ -19,7 +19,7 @@ import imagent.gateway as gateway_facade
 import imagent.gateway.diagnostics as gateway_diagnostics
 from imagent.applications.adapters.t3 import T3ApplicationAdapter
 from imagent.applications.capabilities import ProjectMode
-from imagent.applications.contract import ThreadRef
+from imagent.applications.contract import ProjectRef, ThreadRef
 from imagent.applications.diagnostics import ApplicationDiagnosticFacts
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.diagnostics import (
@@ -222,7 +222,7 @@ for name in (
         secret_thread = "native-thread-secret"
         health = (
             ProjectionWorkerHealth(
-                thread_ref=ThreadRef("codex-a", secret_thread),
+                thread_ref=ThreadRef(ProjectRef("codex-a", "workspace"), secret_thread),
                 state=ProjectionWorkerState.RETRYING,
                 restart_count=2,
                 delivery_failure_count=1,
@@ -233,7 +233,7 @@ for name in (
                 updated_at=datetime.now(UTC),
             ),
             ProjectionWorkerHealth(
-                thread_ref=ThreadRef("codex-a", "another-native-thread"),
+                thread_ref=ThreadRef(ProjectRef("codex-a", "workspace"), "another-native-thread"),
                 state=ProjectionWorkerState.RUNNING,
                 last_gap="secret-route:checkpoint_out_of_window",
                 last_event_gap="consumer-controlled-unbounded-value",

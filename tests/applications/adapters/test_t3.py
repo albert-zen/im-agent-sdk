@@ -4,13 +4,33 @@ import asyncio
 import json
 import unittest
 from collections.abc import Mapping
+from datetime import UTC, datetime
+from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
 import httpx
 
 from imagent.applications import HttpT3Client
 from imagent.applications.adapters.t3 import T3ApplicationAdapter, _T3StateCapacityError
-from imagent.applications.contract import AgentInput, ApplicationInputOutcomeUnknown, ThreadRef
+from imagent.applications.contract import (
+    AgentInput,
+    ApplicationInputOutcomeUnknown,
+    ProjectRef,
+    ThreadRef,
+    TurnRef,
+)
+from imagent.applications.events import EventStreamReset
+from imagent.applications.operations import (
+    ApplicationOperationFailed,
+    DeleteThread,
+    GetThread,
+    GetThreadHistory,
+    GetThreadStatus,
+    GetTurnCatchup,
+    InterruptTurn,
+    ListThreads,
+    ThreadDeletionMode,
+)
 from imagent.interaction.messages import TextContent
 
 
@@ -26,9 +46,12 @@ class _ScriptedT3Client:
         self.dispatch_started = asyncio.Event()
         self.release_dispatch = asyncio.Event()
         self.latest_turn_ids: dict[str, str] = {}
+        self.thread_project_ids: dict[str, str | None] = {}
+        self.thread_messages: dict[str, list[dict[str, object]]] = {}
+        self.shell_threads: list[dict[str, object]] = []
 
     async def shell_snapshot(self) -> dict[str, object]:
-        return {"projects": [], "threads": []}
+        return {"projects": [], "threads": self.shell_threads}
 
     async def thread_detail(self, thread_id: str) -> dict[str, object]:
         self.detail_calls += 1
@@ -41,7 +64,8 @@ class _ScriptedT3Client:
         return {
             "thread": {
                 "id": thread_id,
-                "messages": [],
+                "projectId": self.thread_project_ids.get(thread_id, "workspace"),
+                "messages": list(self.thread_messages.get(thread_id, ())),
                 "latestTurn": latest_turn,
             }
         }
@@ -67,7 +91,7 @@ def _input(client_message_id: str) -> AgentInput:
 
 
 def _thread(thread_id: str) -> ThreadRef:
-    return ThreadRef("t3-main", thread_id)
+    return ThreadRef(ProjectRef("t3-main", "workspace"), thread_id)
 
 
 class HttpT3ClientTests(unittest.IsolatedAsyncioTestCase):
@@ -108,6 +132,174 @@ class HttpT3ClientTests(unittest.IsolatedAsyncioTestCase):
 
 
 class T3InputOutcomeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_live_message_without_turn_identity_fails_before_seen_or_publish(self) -> None:
+        client = _ScriptedT3Client()
+        client.thread_messages["thread-1"] = [
+            {
+                "id": "message-without-turn",
+                "role": "assistant",
+                "text": "must not escape",
+            }
+        ]
+        adapter = T3ApplicationAdapter(
+            application_instance_id="t3-main",
+            client=client,
+            poll_interval=0,
+        )
+        thread_ref = _thread("thread-1")
+        events = adapter.subscribe_thread(thread_ref)
+        try:
+            with self.assertRaisesRegex(
+                EventStreamReset,
+                "application_native_mapping_failed",
+            ):
+                await asyncio.wait_for(anext(events), 1)
+            self.assertEqual(adapter._seen_messages, {})
+            self.assertEqual(adapter._initialized_threads, set())
+        finally:
+            await cast(Any, events).aclose()
+            await adapter.stop()
+
+    async def test_native_threads_without_project_identity_fail_closed(self) -> None:
+        client = _ScriptedT3Client()
+        client.shell_threads = [{"id": "thread-without-project"}]
+        client.thread_project_ids["thread-without-project"] = None
+        adapter = T3ApplicationAdapter(
+            application_instance_id="t3-main",
+            client=client,
+        )
+        project_ref = ProjectRef("t3-main", "workspace")
+
+        listed = await adapter.execute(
+            ListThreads(
+                operation_id="list-project-threads",
+                application_ref=adapter.summary.ref,
+                project_ref=project_ref,
+                created_at=datetime.now(UTC),
+            )
+        )
+        read = await adapter.execute(
+            GetThread(
+                operation_id="read-project-thread",
+                application_ref=adapter.summary.ref,
+                thread_ref=ThreadRef(project_ref, "thread-without-project"),
+                created_at=datetime.now(UTC),
+            )
+        )
+
+        self.assertIsInstance(listed, ApplicationOperationFailed)
+        self.assertIsInstance(read, ApplicationOperationFailed)
+
+    async def test_same_application_different_project_rejects_reads_and_mutations(self) -> None:
+        client = _ScriptedT3Client()
+        adapter = T3ApplicationAdapter(
+            application_instance_id="t3-main",
+            client=client,
+        )
+        requested_ref = ThreadRef(
+            ProjectRef("t3-main", "different-workspace"),
+            "thread-1",
+        )
+        now = datetime.now(UTC)
+        operations = (
+            GetThread(
+                operation_id="cross-project-read",
+                application_ref=adapter.summary.ref,
+                thread_ref=requested_ref,
+                created_at=now,
+            ),
+            GetThreadStatus(
+                operation_id="cross-project-status",
+                application_ref=adapter.summary.ref,
+                thread_ref=requested_ref,
+                created_at=now,
+            ),
+            GetTurnCatchup(
+                operation_id="cross-project-catchup",
+                application_ref=adapter.summary.ref,
+                thread_ref=requested_ref,
+                created_at=now,
+            ),
+            GetThreadHistory(
+                operation_id="cross-project-history",
+                application_ref=adapter.summary.ref,
+                thread_ref=requested_ref,
+                created_at=now,
+            ),
+            DeleteThread(
+                operation_id="cross-project-delete",
+                application_ref=adapter.summary.ref,
+                thread_ref=requested_ref,
+                mode=ThreadDeletionMode.ARCHIVE,
+                created_at=now,
+            ),
+            InterruptTurn(
+                operation_id="cross-project-interrupt",
+                application_ref=adapter.summary.ref,
+                thread_ref=requested_ref,
+                created_at=now,
+            ),
+        )
+
+        results = [await adapter.execute(operation) for operation in operations]
+
+        self.assertTrue(all(isinstance(result, ApplicationOperationFailed) for result in results))
+        self.assertEqual(client.dispatches, [])
+        self.assertEqual(adapter._turn_baselines, {})
+        self.assertEqual(adapter._seen_messages, {})
+        self.assertEqual(adapter._terminal_turns, {})
+
+    async def test_same_application_different_project_rejects_input_before_callback(self) -> None:
+        client = _ScriptedT3Client()
+        adapter = T3ApplicationAdapter(
+            application_instance_id="t3-main",
+            client=client,
+        )
+        requested_ref = ThreadRef(
+            ProjectRef("t3-main", "different-workspace"),
+            "thread-1",
+        )
+        callback_calls: list[str] = []
+
+        async def before_dispatch(_plan: object) -> None:
+            callback_calls.append("called")
+
+        try:
+            with self.assertRaisesRegex(ValueError, "different Project"):
+                await adapter.send_input(
+                    requested_ref,
+                    _input("cross-project-input"),
+                    before_dispatch=before_dispatch,
+                )
+            self.assertEqual(callback_calls, [])
+            self.assertEqual(client.dispatches, [])
+            self.assertEqual(adapter._turn_baselines, {})
+            self.assertEqual(adapter._send_locks, {})
+        finally:
+            await adapter.stop()
+
+    async def test_same_application_different_project_poll_publishes_no_event(self) -> None:
+        client = _ScriptedT3Client()
+        adapter = T3ApplicationAdapter(
+            application_instance_id="t3-main",
+            client=client,
+            poll_interval=0,
+        )
+        requested_ref = ThreadRef(
+            ProjectRef("t3-main", "different-workspace"),
+            "thread-1",
+        )
+        events = adapter.subscribe_thread(requested_ref)
+        try:
+            with self.assertRaisesRegex(EventStreamReset, "application_event_poll_failed"):
+                await asyncio.wait_for(anext(events), 1)
+            self.assertEqual(adapter._initialized_threads, set())
+            self.assertEqual(adapter._seen_messages, {})
+            self.assertEqual(adapter._terminal_turns, {})
+        finally:
+            await cast(Any, events).aclose()
+            await adapter.stop()
+
     async def test_callback_is_last_check_and_accepted_turn_returns_without_publish(self) -> None:
         client = _ScriptedT3Client()
         adapter = T3ApplicationAdapter(
@@ -131,9 +323,12 @@ class T3InputOutcomeTests(unittest.IsolatedAsyncioTestCase):
             publish.assert_not_awaited()
             order.extend(client.order)
             self.assertEqual(order, ["callback", "dispatch"])
-            self.assertEqual(accepted.turn_id, "turn-1")
+            self.assertEqual(accepted.turn_ref.turn_id, "turn-1")
             self.assertEqual(len(client.dispatches), 1)
-            self.assertEqual(adapter._turn_baselines, {("thread-1", "turn-1"): frozenset()})
+            self.assertEqual(
+                adapter._turn_baselines,
+                {TurnRef(_thread("thread-1"), "turn-1"): frozenset()},
+            )
         finally:
             await adapter.stop()
 
@@ -161,7 +356,7 @@ class T3InputOutcomeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(adapter._reserved_turn_baselines, 0)
 
             accepted = await adapter.send_input(_thread("thread-1"), _input("input-accepted"))
-            self.assertEqual(accepted.turn_id, "turn-1")
+            self.assertEqual(accepted.turn_ref.turn_id, "turn-1")
             self.assertEqual(len(client.dispatches), 1)
         finally:
             await adapter.stop()
@@ -187,7 +382,7 @@ class T3InputOutcomeTests(unittest.IsolatedAsyncioTestCase):
             accepted = await adapter.send_input(
                 _thread("thread-1"), _input("input-retry-by-caller")
             )
-            self.assertEqual(accepted.turn_id, "turn-2")
+            self.assertEqual(accepted.turn_ref.turn_id, "turn-2")
             self.assertEqual(len(client.dispatches), 2)
         finally:
             await adapter.stop()
@@ -286,11 +481,17 @@ class T3StateBoundsTests(unittest.IsolatedAsyncioTestCase):
 
             await adapter._publish_thread_state(
                 _thread("thread-1"),
-                {"messages": [], "latestTurn": {"id": first.turn_id, "state": "completed"}},
+                {
+                    "messages": [],
+                    "latestTurn": {"id": first.turn_ref.turn_id, "state": "completed"},
+                },
             )
             second = await adapter.send_input(_thread("thread-2"), _input("input-after-terminal"))
-            self.assertEqual(second.turn_id, "turn-2")
-            self.assertEqual(tuple(adapter._turn_baselines), (("thread-2", "turn-2"),))
+            self.assertEqual(second.turn_ref.turn_id, "turn-2")
+            self.assertEqual(
+                tuple(adapter._turn_baselines),
+                (TurnRef(_thread("thread-2"), "turn-2"),),
+            )
         finally:
             await adapter.stop()
 
@@ -311,17 +512,17 @@ class T3StateBoundsTests(unittest.IsolatedAsyncioTestCase):
                 adapter.send_input(_thread("thread-1"), _input("input-waiter"))
             )
             async with asyncio.timeout(1):
-                while adapter._send_locks["thread-1"].users < 2:
+                while adapter._send_locks[_thread("thread-1")].users < 2:
                     await asyncio.sleep(0)
             waiter_task.cancel()
             with self.assertRaises(asyncio.CancelledError):
                 await waiter_task
-            self.assertEqual(adapter._send_locks["thread-1"].users, 1)
+            self.assertEqual(adapter._send_locks[_thread("thread-1")].users, 1)
             with self.assertRaises(_T3StateCapacityError):
                 await adapter.send_input(_thread("thread-2"), _input("input-other-thread"))
             client.release_dispatch.set()
             accepted = await first_task
-            self.assertEqual(accepted.turn_id, "turn-1")
+            self.assertEqual(accepted.turn_ref.turn_id, "turn-1")
             self.assertEqual(adapter._send_locks, {})
         finally:
             if not first_task.done():
@@ -339,33 +540,33 @@ class T3StateBoundsTests(unittest.IsolatedAsyncioTestCase):
             terminal_turn_max_entries=2,
         )
         try:
-            adapter._remember_seen_message("thread-1", "message-1")
-            adapter._remember_seen_message("thread-2", "message-2")
-            adapter._remember_seen_message("thread-1", "message-3")
+            adapter._remember_seen_message(_thread("thread-1"), "message-1")
+            adapter._remember_seen_message(_thread("thread-2"), "message-2")
+            adapter._remember_seen_message(_thread("thread-1"), "message-3")
             self.assertEqual(
                 tuple(adapter._seen_message_order),
-                (("thread-2", "message-2"), ("thread-1", "message-3")),
+                ((_thread("thread-2"), "message-2"), (_thread("thread-1"), "message-3")),
             )
             self.assertEqual(
                 adapter._seen_messages,
                 {
-                    "thread-2": {"message-2"},
-                    "thread-1": {"message-3"},
+                    _thread("thread-2"): {"message-2"},
+                    _thread("thread-1"): {"message-3"},
                 },
             )
 
-            self.assertTrue(adapter._remember_terminal_turn("thread-1", "turn-1"))
-            self.assertTrue(adapter._remember_terminal_turn("thread-2", "turn-2"))
-            self.assertTrue(adapter._remember_terminal_turn("thread-1", "turn-3"))
+            self.assertTrue(adapter._remember_terminal_turn(_thread("thread-1"), "turn-1"))
+            self.assertTrue(adapter._remember_terminal_turn(_thread("thread-2"), "turn-2"))
+            self.assertTrue(adapter._remember_terminal_turn(_thread("thread-1"), "turn-3"))
             self.assertEqual(
                 tuple(adapter._terminal_turn_order),
-                (("thread-2", "turn-2"), ("thread-1", "turn-3")),
+                ((_thread("thread-2"), "turn-2"), (_thread("thread-1"), "turn-3")),
             )
             self.assertEqual(
                 adapter._terminal_turns,
                 {
-                    "thread-2": {"turn-2"},
-                    "thread-1": {"turn-3"},
+                    _thread("thread-2"): {"turn-2"},
+                    _thread("thread-1"): {"turn-3"},
                 },
             )
         finally:

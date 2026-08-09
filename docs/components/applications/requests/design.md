@@ -25,8 +25,10 @@ resource identity, not Gateway implementation. Request IDs are scoped by
 `ApplicationRef`; a reused native ID after transport reset must be epoch-scoped
 by the adapter rather than merged by SDK inference.
 
-`ApplicationRef` and `ThreadRef` are owned by the Applications contract leaf,
-and this owner imports them only for typed validation/signatures. The
+`ApplicationRef` and `TurnRef` are owned by the Applications contract leaf.
+Every opened request and resolution carries the exact `TurnRef`; validators
+require its Project ancestry to belong to the request's Application. This
+owner imports those identities only for typed validation/signatures. The
 canonical request values and validators are exported only from
 `imagent.applications.requests`, implemented in
 `src/imagent/applications/requests.py`. The package root and
@@ -54,9 +56,9 @@ request-correlation/presenter integration remains in
 remain in place. The versioned schemas remain deliberate cross-owner
 contracts.
 
-The mechanical move preserves dataclass fields, discriminants, public aliases,
-bounded choice/question and text validation, request application scope, and
-first-writer/stale error behavior. It does not move Gateway request-correlation
+The request surface preserves discriminants, public aliases, bounded
+choice/question and text validation, exact Turn scope, and first-writer/stale
+error behavior. It does not move Gateway request-correlation
 records or policy, persistence, presentation, adapters, product commands, raw
 native events, or execution/recovery behavior.
 
@@ -65,3 +67,4 @@ native events, or execution/recovery behavior.
 - [Architecture](../../../ARCHITECTURE.md)
 - [Application adapter design](../../application-adapters/design.md)
 - [ADR 0008](../../../decisions/0008-interactive-request-routing.md)
+- [ADR 0016](../../../decisions/0016-uniform-workspace-and-consumer-actions.md)

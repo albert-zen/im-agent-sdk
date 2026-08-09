@@ -7,7 +7,8 @@ affected evidence rather than alternate owners.
 
 Tests prove Application-scoped request identity, bounded approval choices and
 user-input questions, typed response shape validation, explicit unsupported
-request kinds, and exact open/respond/resolve discriminants. Native fixture
+request kinds, exact Project-scoped `TurnRef` ancestry for open and resolution
+values, and exact open/respond/resolve discriminants. Native fixture
 tests cover response wire fidelity, terminal resolution racing response
 writeback, duplicate responses, and epoch-scoped staleness after reset.
 

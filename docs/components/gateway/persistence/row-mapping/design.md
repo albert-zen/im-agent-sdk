@@ -33,7 +33,11 @@ closed typed decoders rather than falling back to a default policy or state.
 Every current-schema row is decoded as a complete typed value and then passes
 its owning state-contract validator. A nullable binding Application scope is
 valid only when its Project and Thread columns are also null; a mapper must
-reject, never discard, a partial scope. Checkpoint ID/time is an all-or-nothing
+reject, never discard, a partial scope. A binding Thread column requires its
+Project column, and every route, correlation, and Thread-scoped delivery row
+stores a non-empty Project ID. The pre-v1 empty-string Project sentinel is not
+a current-schema value and is rejected rather than decoded into a Project-less
+Thread. Checkpoint ID/time is an all-or-nothing
 pair. Request shapes and delivery receipts are closed JSON payloads: unknown
 kinds, missing required fields, incompatible scalar/container types, invalid
 enums, timestamps, identities, or response cardinality reject the row.
@@ -93,3 +97,4 @@ not change the validation or compatibility decision above.
 - [ADR 0008](../../../../decisions/0008-interactive-request-routing.md)
 - [ADR 0009](../../../../decisions/0009-proactive-delivery-routing.md)
 - [ADR 0012](../../../../decisions/0012-input-continuation-and-reply-correlation.md)
+- [ADR 0016](../../../../decisions/0016-uniform-workspace-and-consumer-actions.md)

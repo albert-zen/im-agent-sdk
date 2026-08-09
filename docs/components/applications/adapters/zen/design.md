@@ -25,6 +25,15 @@ Outputs are common typed summaries/results, truthful `started/create_new`
 input outcomes, canonical `AgentEvent` values, and bounded artifact facts when
 configured. Native request and capability gaps fail explicitly.
 
+Fixed configuration includes required immutable `workspace_id` and `cwd`.
+The adapter exposes one listable/readable workspace Project with its typed
+canonical-root fingerprint and uses its ProjectRef for all Thread/event/
+history/request identity. Native Project management remains unsupported.
+It exposes or mutates a native Thread under that Project only after an
+authoritative native read supplies the same Thread ID and matching canonical
+`cwd`; missing or foreign scope evidence fails closed, including live and
+interactive-request publication.
+
 The current formal export is `ZenApplicationAdapter` from the lazy
 `imagent.applications` facade, implemented at the exact target
 `imagent.applications.adapters.zen:ZenApplicationAdapter`; the top facade
@@ -72,3 +81,4 @@ evidence. Zen owns the concrete facade and has no dependency on Codex.
 - [ADR 0008](../../../../decisions/0008-interactive-request-routing.md)
 - [ADR 0012](../../../../decisions/0012-input-continuation-and-reply-correlation.md)
 - [ADR 0015](../../../../decisions/0015-typed-extension-seams-and-composition.md)
+- [ADR 0016](../../../../decisions/0016-uniform-workspace-and-consumer-actions.md)

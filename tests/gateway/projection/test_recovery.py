@@ -10,7 +10,7 @@ from typing import cast
 
 from imagent.applications import CodexApplicationAdapter
 from imagent.applications.capabilities import ProjectMode
-from imagent.applications.contract import AgentInput, ThreadRef
+from imagent.applications.contract import AgentInput, ProjectRef, ThreadRef
 from imagent.applications.events import (
     AgentEvent,
     AgentEventType,
@@ -62,8 +62,8 @@ class ThreadRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_thread_scoped_sequence_has_no_cross_thread_false_gap(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        first_thread = await application.create_thread()
-        second_thread = await application.create_thread()
+        first_thread = await application.create_thread(application.default_project_ref)
+        second_thread = await application.create_thread(application.default_project_ref)
         first_events = application.subscribe_thread(first_thread.ref)
         second_events = application.subscribe_thread(second_thread.ref)
 
@@ -91,7 +91,7 @@ class ThreadRecoveryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_replay_supported_adapter_resumes_after_opaque_cursor(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         first_live = application.subscribe_thread(thread.ref)
         first_turn = await application.send_input(
             thread.ref,
@@ -100,7 +100,7 @@ class ThreadRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 content=(TextContent("first"),),
             ),
         )
-        first_events = await _collect_turn(first_live, first_turn.turn_id)
+        first_events = await _collect_turn(first_live, first_turn.turn_ref.turn_id)
         cursor = first_events[-1].cursor
         self.assertIsNotNone(cursor)
 
@@ -118,7 +118,7 @@ class ThreadRecoveryTests(unittest.IsolatedAsyncioTestCase):
             after_cursor=cursor,
         )
         try:
-            replayed = await _collect_turn(recovery.events, second_turn.turn_id)
+            replayed = await _collect_turn(recovery.events, second_turn.turn_ref.turn_id)
         finally:
             await _close(recovery.events)
 
@@ -133,13 +133,13 @@ class ThreadRecoveryTests(unittest.IsolatedAsyncioTestCase):
             project_mode=ProjectMode.FLAT,
             event_history_limit=3,
         )
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         live = application.subscribe_thread(thread.ref)
         first_turn = await application.send_input(
             thread.ref,
             AgentInput(client_message_id="first", content=(TextContent("first"),)),
         )
-        first_events = await _collect_turn(live, first_turn.turn_id)
+        first_events = await _collect_turn(live, first_turn.turn_ref.turn_id)
         expired_cursor = first_events[-1].cursor
         assert expired_cursor is not None
         await application.send_input(
@@ -164,11 +164,12 @@ class ThreadRecoveryTests(unittest.IsolatedAsyncioTestCase):
         application = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=NativeZenClient(),
+            workspace_id="workspace",
             cwd="/repo",
         )
         recovery = await recover_thread(
             application,
-            ThreadRef("codex-main", "codex-thread"),
+            ThreadRef(ProjectRef("codex-main", "workspace"), "codex-thread"),
             recovery_id="recovery:appserver",
             after_cursor="native-cursor-not-supported",
         )
@@ -225,8 +226,8 @@ class RecoverySupervisorTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_failure_classification_is_typed_bounded_and_thread_local(self) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        first = await application.create_thread()
-        second = await application.create_thread()
+        first = await application.create_thread(application.default_project_ref)
+        second = await application.create_thread(application.default_project_ref)
         supervisor = _recovery_supervisor(retry_initial_seconds=0.25, retry_max_seconds=1)
         first_attempt = supervisor.start_attempt(
             reconcile_existing=False,
@@ -277,8 +278,8 @@ class RecoverySupervisorTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        affected = await application.create_thread()
-        unrelated = await application.create_thread()
+        affected = await application.create_thread(application.default_project_ref)
+        unrelated = await application.create_thread(application.default_project_ref)
         reconciled: list[ThreadRef] = []
 
         async def reconcile_request_snapshot(
@@ -320,7 +321,7 @@ class RecoverySupervisorTests(unittest.IsolatedAsyncioTestCase):
 class BoundedAuthoritativeProjectionTests(unittest.IsolatedAsyncioTestCase):
     async def test_new_route_reads_one_bounded_page_and_caps_flattened_items(self) -> None:
         application = _RecordingHistoryApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         for index in range(3):
             await application.send_input(
                 thread.ref,
@@ -351,7 +352,7 @@ class BoundedAuthoritativeProjectionTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         application = _RecordingHistoryApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         for index in range(4):
             await application.send_input(
                 thread.ref,
@@ -383,7 +384,7 @@ class BoundedAuthoritativeProjectionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_required_missing_checkpoint_stays_explicit(self) -> None:
         application = _RecordingHistoryApplication()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         route = _route(thread.ref, ConversationRef("test-channel", "missing"))
 
         projection = await read_bounded_authoritative_projection(
@@ -405,7 +406,7 @@ async def _collect_turn(events, turn_id: str) -> tuple[AgentEvent, ...]:
     observed: list[AgentEvent] = []
     try:
         async for event in events:
-            if event.turn_id != turn_id:
+            if event.turn_ref is None or event.turn_ref.turn_id != turn_id:
                 continue
             observed.append(event)
             if event.type in {

@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from imagent.applications.capabilities import ProjectMode
-from imagent.applications.contract import ThreadRef
+from imagent.applications.contract import ProjectRef, ThreadRef
 from imagent.contracts import DeliveryPrincipal
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.delivery import (
@@ -160,8 +160,13 @@ def _text_payload(delivery_id: str) -> dict[str, object]:
         "deliveryId": delivery_id,
         "target": {
             "kind": "threadRoutes",
-            "applicationInstanceId": "application",
-            "nativeThreadId": "thread-1",
+            "threadRef": {
+                "projectRef": {
+                    "applicationInstanceId": "application",
+                    "projectId": "workspace",
+                },
+                "threadId": "thread-1",
+            },
         },
         "content": [{"type": "text", "text": "bounded"}],
     }
@@ -169,7 +174,7 @@ def _text_payload(delivery_id: str) -> dict[str, object]:
 
 class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        self.thread_ref = ThreadRef("application", "thread-1")
+        self.thread_ref = ThreadRef(ProjectRef("application", "workspace"), "thread-1")
         self.conversation_ref = ConversationRef("channel", "conversation-1")
         self.channel = _ReadingChannel()
         self.routes = InMemoryProjectionRouteRepository()
@@ -293,8 +298,13 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
                             "deliveryId": " delivery-exact ",
                             "target": {
                                 "kind": "threadRoutes",
-                                "applicationInstanceId": "application",
-                                "nativeThreadId": "thread-1",
+                                "threadRef": {
+                                    "projectRef": {
+                                        "applicationInstanceId": "application",
+                                        "projectId": "workspace",
+                                    },
+                                    "threadId": "thread-1",
+                                },
                             },
                             "content": [
                                 {
@@ -351,8 +361,13 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
                     "deliveryId": "delivery-inline",
                     "target": {
                         "kind": "threadRoutes",
-                        "applicationInstanceId": "application",
-                        "nativeThreadId": "thread-1",
+                        "threadRef": {
+                            "projectRef": {
+                                "applicationInstanceId": "application",
+                                "projectId": "workspace",
+                            },
+                            "threadId": "thread-1",
+                        },
                     },
                     "content": [
                         {"type": "text", "text": "before", "format": "markdown"},
@@ -547,8 +562,13 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
             payload = {
                 "target": {
                     "kind": "threadRoutes",
-                    "applicationInstanceId": "application",
-                    "nativeThreadId": "thread-1",
+                    "threadRef": {
+                        "projectRef": {
+                            "applicationInstanceId": "application",
+                            "projectId": "workspace",
+                        },
+                        "threadId": "thread-1",
+                    },
                 },
                 "content": [{"type": "text", "text": "bounded"}],
             }
@@ -586,8 +606,13 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
                         "deliveryId": "delivery-cancelled",
                         "target": {
                             "kind": "threadRoutes",
-                            "applicationInstanceId": "application",
-                            "nativeThreadId": "thread-1",
+                            "threadRef": {
+                                "projectRef": {
+                                    "applicationInstanceId": "application",
+                                    "projectId": "workspace",
+                                },
+                                "threadId": "thread-1",
+                            },
                         },
                         "content": [
                             {
@@ -647,8 +672,13 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
                     "deliveryId": "delivery-unauthorized",
                     "target": {
                         "kind": "threadRoutes",
-                        "applicationInstanceId": "application",
-                        "nativeThreadId": "thread-1",
+                        "threadRef": {
+                            "projectRef": {
+                                "applicationInstanceId": "application",
+                                "projectId": "workspace",
+                            },
+                            "threadId": "thread-1",
+                        },
                     },
                     "content": [
                         {
@@ -672,8 +702,13 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
             "deliveryId": "delivery-root-change",
             "target": {
                 "kind": "threadRoutes",
-                "applicationInstanceId": "application",
-                "nativeThreadId": "thread-1",
+                "threadRef": {
+                    "projectRef": {
+                        "applicationInstanceId": "application",
+                        "projectId": "workspace",
+                    },
+                    "threadId": "thread-1",
+                },
             },
             "content": [
                 {

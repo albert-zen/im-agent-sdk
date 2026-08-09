@@ -56,7 +56,7 @@ class MarkdownSlashPresenter:
             return "No projects found."
         lines = ["## Projects", ""]
         for index, project in enumerate(projects, start=1):
-            lines.append(f"{index}. **{project.display_name}** (`{project.ref.native_project_id}`)")
+            lines.append(f"{index}. **{project.display_name}** (`{project.ref.project_id}`)")
         lines.extend(["", "Use `/use <number-or-project>`."])
         return "\n".join(lines)
 
@@ -67,13 +67,13 @@ class MarkdownSlashPresenter:
         for index, thread in enumerate(threads, start=1):
             lines.append(
                 f"{index}. **{thread.title or 'Untitled'}** "
-                f"(`{thread.ref.native_thread_id}`) — {thread.status.value}"
+                f"(`{thread.ref.thread_id}`) — {thread.status.value}"
             )
         lines.extend(["", "Use `/pick <number-or-thread>`."])
         return "\n".join(lines)
 
     def turn_catchup(self, catchup: TurnCatchup) -> str:
-        if catchup.turn_id is None:
+        if catchup.turn_ref is None:
             return "## Recent Activity\n\n_No Turn is available._"
         lines = [
             "## Recent Activity",
@@ -112,7 +112,7 @@ class MarkdownSlashPresenter:
                 [
                     "",
                     f"### {index}. {_human_state(turn.status)} · "
-                    f"`{_compact_turn_id(turn.turn_id)}`",
+                    f"`{_compact_turn_id(turn.turn_ref.turn_id)}`",
                 ]
             )
             user_text = _message_text(turn.user_message)

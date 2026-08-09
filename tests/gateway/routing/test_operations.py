@@ -193,7 +193,7 @@ class _DelegateProbe:
     def __init__(self, conversation: ConversationRef, thread: ThreadRef) -> None:
         self.conversation = conversation
         self.thread = thread
-        self.application = ApplicationRef(thread.application_instance_id)
+        self.application = ApplicationRef(thread.project_ref.application_instance_id)
         self.project = thread.project_ref
         self.calls: list[str] = []
 
@@ -316,7 +316,7 @@ class GatewayOperationsOwnerTests(unittest.IsolatedAsyncioTestCase):
         self.conversation = ConversationRef("qq-primary", "c2c:user-1")
         self.application = ApplicationRef("zen-local")
         self.project = ProjectRef("zen-local", "repo-1")
-        self.thread = ThreadRef("zen-local", "thread-1", self.project)
+        self.thread = ThreadRef(self.project, "thread-1")
 
     def _executor(
         self,

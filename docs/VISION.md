@@ -22,7 +22,7 @@ DingTalk, Slack, and others.
 
 Agent Applications always own:
 
-- Project and Thread resources;
+- Project, Thread, and Turn resources;
 - transcript/item identity and authoritative history;
 - Turn, request, approval, execution, and interruption truth;
 - model, provider, workspace, sandbox, and native runtime behavior.
@@ -50,8 +50,9 @@ transcripts.
 
 The SDK standardizes:
 
-1. **Resources** — Application, Project, Thread, Conversation, binding, and
-   projection route references.
+1. **Resources** — Application, Project/Workspace, Thread, Turn,
+   Conversation, binding, and projection route references. Every Thread and
+   Turn identity carries its stable Project ancestry.
 2. **Messages** — inbound, outbound, and authoritative Agent content.
 3. **Operations** — explicit control intent.
 4. **Events** — canonical message and lifecycle observations.
@@ -120,6 +121,12 @@ Externally visible mutations and events have stable IDs. Text and timestamps
 never define deduplication. Cursor/sequence guarantees are declared only when
 the native producer preserves them; otherwise recovery reconciles from
 authoritative history.
+
+Fixed and flat Applications expose one immutable workspace Project identity
+and a typed fingerprint of the adapter-canonicalized execution root. The
+workspace ID, not its display name or path, scopes Thread identity. Managed
+Applications expose their native Project list/read capabilities without
+inventing management support.
 
 ### Explicit capability differences
 

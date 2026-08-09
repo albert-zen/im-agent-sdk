@@ -31,6 +31,7 @@ from ...capabilities import (
     ThreadDeletionCapability,
 )
 from ...contract import (
+    MAX_WORKSPACE_ROOT_LENGTH,
     AcceptedTurn,
     AgentInput,
     AgentMessage,
@@ -41,13 +42,20 @@ from ...contract import (
     InputContinuationPreference,
     InputDisposition,
     Page,
+    ProjectRef,
+    ProjectSummary,
     ThreadHistory,
     ThreadRef,
     ThreadSummary,
     TurnCatchup,
     TurnHistoryEntry,
+    TurnRef,
     TurnReplyCorrelationPolicy,
     TurnStatus,
+    WorkspaceIdentity,
+    fingerprint_canonical_workspace_root,
+    validate_application_summary,
+    validate_project_summary,
 )
 from ...diagnostics import ApplicationDiagnosticFacts
 from ...events import AgentEvent, AgentEventType, EventBroadcaster, EventStreamReset
@@ -56,6 +64,7 @@ from ...operations import (
     ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,
+    CreateProject,
     CreateThread,
     DeleteThread,
     GetProject,
@@ -67,6 +76,8 @@ from ...operations import (
     ListProjects,
     ListThreads,
     NativeThreadActivated,
+    ProjectRead,
+    ProjectsListed,
     RespondRequest,
     ThreadCreated,
     ThreadHistoryRead,
@@ -178,6 +189,10 @@ _ARTIFACT_OBSERVATION_ERRORS = (
 )
 
 
+class _NativeThreadScopeError(ValueError):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class _PreparedAppServerInput:
     text: str
@@ -230,6 +245,7 @@ class _AppServerApplicationAdapter:
         kind: str,
         display_name: str,
         client: AppServerClient,
+        workspace_id: str,
         cwd: str,
         shared_filesystem_root: str | Path | None = None,
         server_request_mapper: ServerRequestMapper | None = None,
@@ -243,7 +259,13 @@ class _AppServerApplicationAdapter:
     ) -> None:
         self._application_instance_id = application_instance_id
         self._client = client
-        self._cwd = cwd
+        self._cwd = _canonical_workspace_root(cwd)
+        self._workspace_project = ProjectSummary(
+            ref=ProjectRef(application_instance_id, workspace_id),
+            display_name=Path(self._cwd).name or workspace_id,
+            root_path=self._cwd,
+            workspace_root_fingerprint=fingerprint_canonical_workspace_root(self._cwd),
+        )
         self._shared_filesystem_root = configure_shared_filesystem_root(shared_filesystem_root)
         self._thread_start_options = _thread_start_options(thread_start_options)
         self._events = EventBroadcaster[str, AgentEvent](max_pending=event_buffer_max_pending)
@@ -258,10 +280,12 @@ class _AppServerApplicationAdapter:
         self._seen_live_artifact_identities: dict[tuple[str, str, str], None] = {}
         self._client.add_notification_handler(self._handle_notification)
         self._request_runtime = AppServerRequestRuntime(
-            application_ref=ApplicationRef(application_instance_id),
+            project_ref=self._workspace_project.ref,
             client=self._client,
             mapper=server_request_mapper,
             publish_event=self._events.publish,
+            require_thread_scope=self._require_native_thread_scope,
+            fail_observation=self._fail_native_mapping_observation,
         )
         add_reset_handler = getattr(self._client, "add_connection_reset_handler", None)
         if callable(add_reset_handler):
@@ -270,8 +294,8 @@ class _AppServerApplicationAdapter:
         capabilities = ApplicationCapabilities(
             projects=ProjectCapabilities(
                 mode=ProjectMode.FIXED,
-                discovery=SupportLevel.UNSUPPORTED,
-                reading=SupportLevel.UNSUPPORTED,
+                discovery=SupportLevel.FALLBACK,
+                reading=SupportLevel.FALLBACK,
             ),
             threads=ThreadCapabilities(
                 listing=SupportLevel.NATIVE,
@@ -304,8 +328,14 @@ class _AppServerApplicationAdapter:
             kind=kind,
             display_name=display_name,
             capabilities=capabilities,
-            metadata={"cwd": cwd, "protocol": "codex-app-server"},
+            workspace_identity=WorkspaceIdentity(
+                project_ref=self._workspace_project.ref,
+                root_fingerprint=self._workspace_project.workspace_root_fingerprint or "",
+            ),
+            metadata={"protocol": "codex-app-server"},
         )
+        validate_project_summary(self._workspace_project)
+        validate_application_summary(self._summary)
 
     @property
     def summary(self) -> ApplicationSummary:
@@ -377,7 +407,33 @@ class _AppServerApplicationAdapter:
         operation: ApplicationOperation,
     ) -> ApplicationOperationResult:
         completed_at = datetime.now(UTC)
+        if isinstance(operation, ListProjects):
+            if operation.cursor is not None:
+                raise ValueError("fixed workspace Project list does not use cursors")
+            query = (operation.query or "").casefold()
+            project = self._workspace_project
+            items = (
+                (project,)
+                if not query
+                or query in project.display_name.casefold()
+                or query in project.ref.project_id.casefold()
+                else ()
+            )
+            return ProjectsListed(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                projects=Page(items=items),
+            )
+        if isinstance(operation, GetProject):
+            if operation.project_ref != self._workspace_project.ref:
+                raise ValueError("workspace Project does not belong to this application")
+            return ProjectRead(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                project=self._workspace_project,
+            )
         if isinstance(operation, ListThreads):
+            self._require_workspace_project(operation.project_ref)
             result = _native_mapping(
                 await self._client.list_threads(
                     sortKey="updated_at",
@@ -386,7 +442,9 @@ class _AppServerApplicationAdapter:
                 )
             )
             threads = tuple(
-                self._thread_summary(item) for item in _native_list(result, "data", "threads")
+                self._thread_summary(item)
+                for item in _native_list(result, "data", "threads")
+                if self._native_thread_matches_workspace(item)
             )
             return ThreadsListed(
                 operation_id=operation.operation_id,
@@ -399,6 +457,7 @@ class _AppServerApplicationAdapter:
                 ),
             )
         if isinstance(operation, CreateThread):
+            self._require_workspace_project(operation.project_ref)
             if operation.initial_context:
                 raise NotImplementedError("initial thread context is unsupported by App Server")
             return ThreadCreated(
@@ -407,8 +466,8 @@ class _AppServerApplicationAdapter:
                 thread=await self.create_thread_with_options(),
             )
         if isinstance(operation, (GetThread, GetThreadStatus)):
-            result = await self._client.read_thread(operation.thread_ref.native_thread_id)
-            summary = self._thread_summary(_native_object(result, "thread"))
+            thread = await self._require_native_thread_scope(operation.thread_ref)
+            summary = self._thread_summary(thread)
             if isinstance(operation, GetThreadStatus):
                 return ThreadStatusRead(
                     operation_id=operation.operation_id,
@@ -422,8 +481,8 @@ class _AppServerApplicationAdapter:
                 thread=summary,
             )
         if isinstance(operation, ActivateNativeThread):
-            self._require_own_thread(operation.thread_ref)
-            await self._client.resume_thread(threadId=operation.thread_ref.native_thread_id)
+            await self._require_native_thread_scope(operation.thread_ref)
+            await self._client.resume_thread(threadId=operation.thread_ref.thread_id)
             return NativeThreadActivated(
                 operation_id=operation.operation_id,
                 completed_at=completed_at,
@@ -431,7 +490,7 @@ class _AppServerApplicationAdapter:
             )
         if isinstance(operation, GetTurnCatchup):
             thread_ref = operation.thread_ref
-            self._require_own_thread(thread_ref)
+            await self._require_native_thread_scope(thread_ref)
             turns, _has_older = await self._read_turn_page(
                 thread_ref,
                 limit=1,
@@ -443,7 +502,7 @@ class _AppServerApplicationAdapter:
                     completed_at=completed_at,
                     catchup=TurnCatchup(
                         thread_ref=thread_ref,
-                        turn_id=None,
+                        turn_ref=None,
                         status=TurnStatus.IDLE,
                         messages=(),
                     ),
@@ -461,7 +520,7 @@ class _AppServerApplicationAdapter:
                 completed_at=completed_at,
                 catchup=TurnCatchup(
                     thread_ref=thread_ref,
-                    turn_id=_turn_id(turn),
+                    turn_ref=TurnRef(thread_ref, _turn_id(turn)),
                     status=_turn_status(turn.get("status")),
                     messages=commentary[-operation.limit :],
                     updated_at=_turn_updated_at(turn),
@@ -470,7 +529,7 @@ class _AppServerApplicationAdapter:
             )
         if isinstance(operation, GetThreadHistory):
             thread_ref = operation.thread_ref
-            self._require_own_thread(thread_ref)
+            await self._require_native_thread_scope(thread_ref)
             turns, has_older = await self._read_turn_page(
                 thread_ref,
                 limit=operation.limit,
@@ -497,15 +556,17 @@ class _AppServerApplicationAdapter:
             )
         if isinstance(operation, InterruptTurn):
             thread_ref = operation.thread_ref
-            turn_id = operation.turn_id or ""
-            if not turn_id:
+            await self._require_native_thread_scope(thread_ref)
+            turn_ref = operation.turn_ref
+            if turn_ref is None:
                 raise ValueError("turn.interrupt requires turn_id")
-            await self._client.interrupt_turn(thread_ref.native_thread_id, turn_id)
+            turn_id = turn_ref.turn_id
+            await self._client.interrupt_turn(thread_ref.thread_id, turn_id)
             return TurnInterrupted(
                 operation_id=operation.operation_id,
                 completed_at=completed_at,
                 thread_ref=thread_ref,
-                turn_id=turn_id,
+                turn_ref=turn_ref,
             )
         if isinstance(operation, RespondRequest):
             return await self._request_runtime.respond(
@@ -514,7 +575,7 @@ class _AppServerApplicationAdapter:
             )
         if isinstance(
             operation,
-            (ListProjects, GetProject, DeleteThread),
+            (CreateProject, DeleteThread),
         ):
             raise NotImplementedError(f"{operation.type.value} is unsupported by this application")
         raise NotImplementedError(f"unsupported operation: {operation.type.value}")
@@ -558,7 +619,7 @@ class _AppServerApplicationAdapter:
                     parameters["cursor"] = cursor
                 try:
                     payload = list_turns(
-                        thread_ref.native_thread_id,
+                        thread_ref.thread_id,
                         **parameters,
                     )
                     result = await payload if inspect.isawaitable(payload) else payload
@@ -581,11 +642,11 @@ class _AppServerApplicationAdapter:
                     raise RuntimeError("thread history returned a repeated pagination cursor")
                 seen_cursors.add(next_cursor)
                 cursor = next_cursor
-        result = await self._client.read_thread(
-            thread_ref.native_thread_id,
+        thread = await self._require_native_thread_scope(
+            thread_ref,
             include_turns=True,
         )
-        turns = _turn_list(result)
+        turns = _turn_list(thread)
         end = max(0, len(turns) - ((page - 1) * limit))
         start = max(0, end - limit)
         return turns[start:end], start > 0
@@ -610,7 +671,7 @@ class _AppServerApplicationAdapter:
             if message.role is MessageRole.ASSISTANT:
                 agent_messages.append(message)
         return TurnHistoryEntry(
-            turn_id=_turn_id(turn),
+            turn_ref=TurnRef(thread_ref, _turn_id(turn)),
             status=_turn_status(turn.get("status")),
             user_message=user_message,
             agent_messages=tuple(agent_messages),
@@ -671,7 +732,7 @@ class _AppServerApplicationAdapter:
             if terminal_message is not None:
                 agent_messages.append(terminal_message)
         return TurnHistoryEntry(
-            turn_id=turn_id,
+            turn_ref=TurnRef(thread_ref, turn_id),
             status=turn_status,
             user_message=user_message,
             agent_messages=tuple(agent_messages),
@@ -769,7 +830,7 @@ class _AppServerApplicationAdapter:
         identity = hashlib.sha256(
             (
                 f"{self._application_instance_id}\x1f"
-                f"{facts.thread_ref.native_thread_id}\x1f{facts.turn_id}"
+                f"{facts.thread_ref.thread_id}\x1f{facts.turn_id}"
             ).encode()
         ).hexdigest()
         return self._artifact_message(
@@ -869,6 +930,7 @@ class _AppServerApplicationAdapter:
         prepared: _PreparedAppServerInput,
         before_dispatch: Callable[[ApplicationInputDispatch], Awaitable[None]] | None,
     ) -> AcceptedTurn:
+        await self._require_native_thread_scope(thread_ref)
         expected_local_image_epoch = (
             await self._verified_local_image_epoch() if prepared.input_items is not None else None
         )
@@ -879,11 +941,11 @@ class _AppServerApplicationAdapter:
                     client_message_id=message.client_message_id,
                     disposition=InputDisposition.STARTED,
                     correlation_policy=TurnReplyCorrelationPolicy.CREATE_NEW,
-                    expected_turn_id=None,
+                    expected_turn_ref=None,
                 )
             )
         result = await self._start_input(
-            thread_id=thread_ref.native_thread_id,
+            thread_id=thread_ref.thread_id,
             prepared=prepared,
             expected_local_image_epoch=expected_local_image_epoch,
         )
@@ -902,8 +964,7 @@ class _AppServerApplicationAdapter:
                 cause,
             ) from cause
         return AcceptedTurn(
-            thread_ref=thread_ref,
-            turn_id=turn_id,
+            turn_ref=TurnRef(thread_ref, turn_id),
             client_message_id=message.client_message_id,
             disposition=InputDisposition.STARTED,
             correlation_policy=TurnReplyCorrelationPolicy.CREATE_NEW,
@@ -988,7 +1049,7 @@ class _AppServerApplicationAdapter:
         if after_cursor is not None:
             raise NotImplementedError("Codex App Server does not support event replay")
         self._require_own_thread(thread_ref)
-        return self._events.subscribe(thread_ref.native_thread_id)
+        return self._events.subscribe(thread_ref.thread_id)
 
     async def _handle_event_connection_reset(self, connection_epoch: int) -> None:
         del connection_epoch
@@ -1001,15 +1062,24 @@ class _AppServerApplicationAdapter:
             discard_pending=False,
         )
 
+    def _fail_native_mapping_observation(self) -> None:
+        self._events.fail_all(
+            lambda: EventStreamReset("application_native_mapping_failed"),
+            discard_pending=False,
+        )
+
     async def _handle_notification(self, notification: dict) -> None:
         try:
             event = _normalize_appserver_message(notification)
+            if event.thread_id is not None:
+                try:
+                    await self._require_native_thread_scope(self._thread_ref(event.thread_id))
+                except Exception:
+                    self._fail_native_mapping_observation()
+                    return
             await self._handle_mapped_notification(event)
-        except _AppServerMappingError:
-            self._events.fail_all(
-                lambda: EventStreamReset("application_native_mapping_failed"),
-                discard_pending=False,
-            )
+        except (_AppServerMappingError, _NativeThreadScopeError):
+            self._fail_native_mapping_observation()
 
     async def _handle_mapped_notification(self, event: _AppServerEvent) -> None:
         method = event.method
@@ -1023,6 +1093,8 @@ class _AppServerApplicationAdapter:
         turn_id = event.turn_id
         thread_ref = self._thread_ref(thread_id)
         if method == "item/agentMessage/delta":
+            if turn_id is None:
+                raise _AppServerMappingError
             self._emit(
                 thread_id,
                 AgentEventType.MESSAGE_DELTA,
@@ -1084,6 +1156,7 @@ class _AppServerApplicationAdapter:
                 {"message": message},
                 event_id=_derive_appserver_event_id(
                     self._application_instance_id,
+                    project_id=self._workspace_project.ref.project_id,
                     event_type=AgentEventType.MESSAGE_COMPLETED.value,
                     thread_id=thread_id,
                     turn_id=turn_id,
@@ -1137,6 +1210,7 @@ class _AppServerApplicationAdapter:
                         {"message": terminal_message},
                         event_id=_derive_appserver_event_id(
                             self._application_instance_id,
+                            project_id=self._workspace_project.ref.project_id,
                             event_type=AgentEventType.MESSAGE_COMPLETED.value,
                             thread_id=thread_id,
                             turn_id=turn_id,
@@ -1152,6 +1226,7 @@ class _AppServerApplicationAdapter:
                 {"status": status or "completed"},
                 event_id=_derive_appserver_event_id(
                     self._application_instance_id,
+                    project_id=self._workspace_project.ref.project_id,
                     event_type=event_type.value,
                     thread_id=thread_id,
                     turn_id=turn_id,
@@ -1181,15 +1256,18 @@ class _AppServerApplicationAdapter:
         event = AgentEvent(
             event_id=event_id,
             application_instance_id=self._application_instance_id,
+            project_ref=self._workspace_project.ref,
             type=event_type,
             data=data,
             created_at=datetime.now(UTC),
             thread_ref=thread_ref,
-            turn_id=turn_id,
+            turn_ref=TurnRef(thread_ref, turn_id) if turn_id is not None else None,
         )
         self._events.publish(thread_id, event)
 
     def _thread_summary(self, thread: Mapping[str, object]) -> ThreadSummary:
+        if not self._native_thread_matches_workspace(thread):
+            raise ValueError("native Thread belongs to a different workspace")
         thread_id = _thread_id(thread)
         status_value = thread.get("status")
         if isinstance(status_value, Mapping):
@@ -1208,13 +1286,61 @@ class _AppServerApplicationAdapter:
 
     def _thread_ref(self, thread_id: str) -> ThreadRef:
         return ThreadRef(
-            application_instance_id=self._application_instance_id,
-            native_thread_id=thread_id,
+            project_ref=self._workspace_project.ref,
+            thread_id=thread_id,
         )
 
     def _require_own_thread(self, thread_ref: ThreadRef) -> None:
-        if thread_ref.application_instance_id != self._application_instance_id:
-            raise ValueError("thread belongs to a different application instance")
+        self._require_workspace_project(thread_ref.project_ref)
+
+    async def _require_native_thread_scope(
+        self,
+        thread_ref: ThreadRef,
+        *,
+        include_turns: bool = False,
+    ) -> Mapping[str, object]:
+        """Read and verify the native Thread's immutable workspace scope."""
+
+        self._require_own_thread(thread_ref)
+        result = await self._client.read_thread(
+            thread_ref.thread_id,
+            include_turns=include_turns,
+        )
+        thread = _native_object(result, "thread")
+        if _thread_id(thread) != thread_ref.thread_id:
+            raise _NativeThreadScopeError(
+                "native Thread identity does not match the requested Thread"
+            )
+        if not self._native_thread_matches_workspace(thread):
+            raise _NativeThreadScopeError(
+                "native Thread does not expose the configured workspace cwd"
+            )
+        return thread
+
+    def _require_workspace_project(self, project_ref: ProjectRef) -> None:
+        if project_ref != self._workspace_project.ref:
+            raise ValueError("Project does not match the configured workspace")
+
+    def _native_thread_matches_workspace(self, thread: Mapping[str, object]) -> bool:
+        native_cwd = _optional_string(thread.get("cwd"))
+        if native_cwd is None:
+            return False
+        try:
+            return _canonical_workspace_root(native_cwd) == self._cwd
+        except (OSError, ValueError):
+            return False
+
+
+def _canonical_workspace_root(root: str | Path) -> str:
+    raw = str(root)
+    if not raw or len(raw) > MAX_WORKSPACE_ROOT_LENGTH:
+        raise ValueError(
+            "workspace root must be a non-empty path of at most "
+            f"{MAX_WORKSPACE_ROOT_LENGTH} characters"
+        )
+    canonical = str(Path(raw).expanduser().resolve(strict=False))
+    fingerprint_canonical_workspace_root(canonical)
+    return canonical
 
 
 def _thread_start_options(

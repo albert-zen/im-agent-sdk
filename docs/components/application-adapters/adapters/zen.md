@@ -8,8 +8,8 @@ history, and retention.
 ## Mapping
 
 - SDK Thread maps to the native Zen App Server Thread.
-- Project is exposed only by a real outer workspace/project registry; it is not
-  forced into Zen's append-only runtime.
+- one configured workspace Project scopes every Thread without claiming Zen's
+  append-only runtime has native Project management;
 - the shared App Server adapter maps native resource operations, input,
   history/catch-up, interruption, and notifications.
 - every completed Agent item is preserved before the explicit terminal Turn
@@ -31,6 +31,11 @@ Zen accepts the SDK's default continuation preference but truthfully returns
 `started/create_new`. Codex active-Turn steering is not inferred for Zen from a
 shared transport; Zen remains start-only until its own native behavior proves
 an equivalent native policy.
+
+Construction requires an immutable `workspace_id` plus `cwd`. Project
+list/read return exactly that stable scope with its canonical-root fingerprint;
+Project create/delete/switch remain typed unsupported. Every Thread, event,
+history item, and request carries the workspace ProjectRef.
 
 ## Recovery guarantees
 

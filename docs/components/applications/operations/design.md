@@ -7,7 +7,8 @@ Parent: `applications`
 ## Purpose and ownership
 
 This leaf expresses the common typed control intent and results for one native
-Application: Project/Thread reads and lists, Thread creation/deletion,
+Application: Project/Thread reads and lists, managed Project creation from a
+bounded CWD, Thread creation/deletion,
 history/catch-up/status reads, interruption, optional native activation, and
 the native `request.respond` mutation. It owns `ApplicationOperation`,
 `ApplicationOperationResult`, their closed variants and validators.
@@ -35,6 +36,15 @@ The canonical public values are exported only from
 operations schema remains a shared language-neutral contract.
 
 ## State, recovery, and structure
+
+`CreateProject`/`ProjectCreated` are common typed variants, but only a managed
+adapter with evidenced native creation advertises success. Fixed/flat adapters
+return the ordinary typed unsupported result and never change their configured
+workspace. `CreateThread` and `ListThreads` always name a Project because there
+is no Project-less resource branch.
+Operation result validation walks history and catch-up recursively: every
+nested `TurnRef` and `AgentMessage` must belong to the requested Thread rather
+than merely the same Application.
 
 Operations do not establish an SDK Agent state machine. A native mutation that
 may have begun but has no truthful result remains ambiguous; adapters do not
@@ -67,3 +77,4 @@ execution behavior.
 - [ADR 0002](../../../decisions/0002-design-authority-and-control-boundaries.md)
 - [ADR 0006](../../../decisions/0006-core-admission-and-policy-ownership.md)
 - [ADR 0012](../../../decisions/0012-input-continuation-and-reply-correlation.md)
+- [ADR 0016](../../../decisions/0016-uniform-workspace-and-consumer-actions.md)

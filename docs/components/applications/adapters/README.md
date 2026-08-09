@@ -51,6 +51,14 @@ synthetic long-lived connection epoch. Its one finite polling flow and
 authoritative native history determine recovery; interactive requests remain
 unsupported until native evidence exists.
 
+Codex and Zen are fixed-workspace adapters. At construction they canonicalize
+their configured execution root once and combine its fingerprint with the
+configured immutable workspace ID. They answer Project list/get locally with
+one stable projected `ProjectSummary`, reject Project management explicitly,
+and reject foreign Project/Thread scopes before native I/O. T3 is managed: its
+native Project list/get is authoritative, and a native Thread without
+`projectId` fails closed.
+
 All input and output positions are bounded typed values. Stable native IDs,
 connection epochs, and explicit outcome/gap discriminants drive idempotency
 and recovery. Raw native payloads stop inside the adapter normalization path;

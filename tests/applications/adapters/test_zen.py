@@ -13,6 +13,7 @@ from imagent.applications.contract import (
     AgentInput,
     ApplicationInputDispatch,
     InputDisposition,
+    ProjectRef,
     ThreadRef,
     TurnReplyCorrelationPolicy,
 )
@@ -29,9 +30,11 @@ class _ZenInputClient:
         *,
         active_turn_id: str | None = None,
         local_image_epoch: int | None = 7,
+        workspace_cwd: str = "/repo",
     ) -> None:
         self.active_turn_id = active_turn_id
         self.local_image_epoch = local_image_epoch
+        self.workspace_cwd = workspace_cwd
         self.read_calls: list[tuple[str, bool]] = []
         self.trace: list[str] = []
         self.created_threads: list[dict[str, object]] = []
@@ -58,7 +61,7 @@ class _ZenInputClient:
 
     async def start_thread(self, **params: object) -> dict[str, object]:
         self.created_threads.append(deepcopy(dict(params)))
-        return {"thread": {"id": "thread-created"}}
+        return {"thread": {"id": "thread-created", "cwd": params["cwd"]}}
 
     async def read_thread(
         self,
@@ -76,6 +79,7 @@ class _ZenInputClient:
         return {
             "thread": {
                 "id": thread_id,
+                "cwd": self.workspace_cwd,
                 "status": {"type": "active" if turns else "idle"},
                 "turns": turns if include_turns else None,
             }
@@ -139,11 +143,12 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("InputDisposition.STARTED", source)
         self.assertIn("TurnReplyCorrelationPolicy.CREATE_NEW", source)
 
-    async def test_prefer_active_turn_is_fenced_start_without_read_or_steer(self) -> None:
+    async def test_prefer_active_turn_is_fenced_start_without_active_turn_discovery(self) -> None:
         client = _ZenInputClient(active_turn_id="turn-active")
         adapter = ZenApplicationAdapter(
             application_instance_id="zen-main",
             client=client,
+            workspace_id="workspace",
             cwd="/repo",
         )
         dispatches: list[ApplicationInputDispatch] = []
@@ -153,7 +158,7 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
             dispatches.append(dispatch)
 
         accepted = await adapter.send_input(
-            ThreadRef("zen-main", "thread-1"),
+            ThreadRef(ProjectRef("zen-main", "workspace"), "thread-1"),
             AgentInput(
                 client_message_id="message-zen-start",
                 content=(TextContent("begin"),),
@@ -161,8 +166,8 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
             before_dispatch=before_dispatch,
         )
 
-        self.assertEqual(client.trace, ["fence", "start"])
-        self.assertEqual(client.read_calls, [])
+        self.assertEqual(client.trace, ["read", "fence", "start"])
+        self.assertEqual(client.read_calls, [("thread-1", False)])
         self.assertEqual(client.steered, [])
         self.assertEqual(len(client.started), 1)
         self.assertEqual(len(dispatches), 1)
@@ -171,7 +176,7 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
             dispatches[0].correlation_policy,
             TurnReplyCorrelationPolicy.CREATE_NEW,
         )
-        self.assertIsNone(dispatches[0].expected_turn_id)
+        self.assertIsNone(dispatches[0].expected_turn_ref)
         self.assertIs(accepted.disposition, InputDisposition.STARTED)
         self.assertIs(
             accepted.correlation_policy,
@@ -183,6 +188,7 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
         adapter = ZenApplicationAdapter(
             application_instance_id="zen-main",
             client=client,
+            workspace_id="workspace",
             cwd="/repo",
         )
 
@@ -192,7 +198,7 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaisesRegex(RuntimeError, "fence rejected"):
             await adapter.send_input(
-                ThreadRef("zen-main", "thread-1"),
+                ThreadRef(ProjectRef("zen-main", "workspace"), "thread-1"),
                 AgentInput(
                     client_message_id="message-zen-rejected",
                     content=(TextContent("begin"),),
@@ -200,7 +206,7 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
                 before_dispatch=reject_dispatch,
             )
 
-        self.assertEqual(client.read_calls, [])
+        self.assertEqual(client.read_calls, [("thread-1", False)])
         self.assertEqual(client.steered, [])
         self.assertEqual(client.started, [])
 
@@ -211,7 +217,7 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
                 native_nested = params.get("nativeNested")
                 assert isinstance(native_nested, dict)
                 native_nested["mode"] = "mutated-by-client"
-                return {"thread": {"id": "thread-created"}}
+                return {"thread": {"id": "thread-created", "cwd": params["cwd"]}}
 
         client = MutatingClient()
         nested = {"mode": "configured"}
@@ -223,6 +229,7 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
         adapter = ZenApplicationAdapter(
             application_instance_id="zen-main",
             client=client,
+            workspace_id="workspace",
             cwd="/repo",
             thread_start_options=profile,
         )
@@ -234,6 +241,9 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
                 CreateThread(
                     operation_id=f"create-zen-thread-{index}",
                     application_ref=adapter.summary.ref,
+                    project_ref=ProjectRef(
+                        adapter.summary.ref.application_instance_id, "workspace"
+                    ),
                     created_at=datetime.now(UTC),
                 )
             )
@@ -252,6 +262,7 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
         adapter = ZenApplicationAdapter(
             application_instance_id="zen-main",
             client=client,
+            workspace_id="workspace",
             cwd="/repo",
             thread_start_options={"approval_policy": "never"},
         )
@@ -263,7 +274,9 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
             }
         )
 
-        self.assertEqual(thread.ref, ThreadRef("zen-main", "thread-created"))
+        self.assertEqual(
+            thread.ref, ThreadRef(ProjectRef("zen-main", "workspace"), "thread-created")
+        )
         self.assertEqual(
             client.created_threads,
             [
@@ -280,6 +293,7 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
             cast(Any, ZenApplicationAdapter)(
                 application_instance_id="zen-main",
                 client=_ZenInputClient(),
+                workspace_id="workspace",
                 cwd="/repo",
                 thread_start_options={"cwd": "/other"},
             )
@@ -289,6 +303,7 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
             ZenApplicationAdapter(
                 application_instance_id="zen-main",
                 client=_ZenInputClient(),
+                workspace_id="workspace",
                 cwd="/repo",
                 thread_start_options={
                     "approval_policy": "never",
@@ -300,16 +315,17 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory, "image.png")
             path.write_bytes(b"png")
-            client = _ZenInputClient(local_image_epoch=29)
+            client = _ZenInputClient(local_image_epoch=29, workspace_cwd=directory)
             adapter = ZenApplicationAdapter(
                 application_instance_id="zen-main",
                 client=client,
+                workspace_id="workspace",
                 cwd=directory,
                 shared_filesystem_root=directory,
             )
 
             await adapter.send_input(
-                ThreadRef("zen-main", "thread-1"),
+                ThreadRef(ProjectRef("zen-main", "workspace"), "thread-1"),
                 AgentInput(
                     client_message_id="message-zen-image",
                     content=(
@@ -340,9 +356,12 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
         adapter = ZenApplicationAdapter(
             application_instance_id="zen-main",
             client=native,
+            workspace_id="workspace",
             cwd="/repo",
         )
-        events = adapter.subscribe_thread(ThreadRef("zen-main", "thread-1"))
+        events = adapter.subscribe_thread(
+            ThreadRef(ProjectRef("zen-main", "workspace"), "thread-1")
+        )
         try:
             await native._notify(
                 {

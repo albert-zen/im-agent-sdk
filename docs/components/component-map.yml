@@ -46,6 +46,14 @@ architecture_lint:
   current_import_exceptions:
     - from: src/imagent/applications/events.py
       to: src/imagent/applications/contract.py
+      symbol: AgentMessage
+      reason: Message-event validation consumes the exact Applications-owned message value so nested Thread ancestry cannot diverge from the event envelope.
+    - from: src/imagent/applications/events.py
+      to: src/imagent/applications/contract.py
+      symbol: validate_agent_message
+      reason: Message-event validation delegates the Applications-owned nested AgentMessage identity invariant.
+    - from: src/imagent/applications/events.py
+      to: src/imagent/applications/contract.py
       symbol: ProjectRef
       reason: Event runtime annotations resolve the Applications-owned resource identity without introducing a second event or resource contract during the mechanical move.
     - from: src/imagent/applications/events.py
@@ -56,6 +64,18 @@ architecture_lint:
       to: src/imagent/applications/contract.py
       symbol: validate_thread_ref
       reason: Event validation delegates the Applications-owned ThreadRef invariant while preserving runtime validation behavior during the mechanical move.
+    - from: src/imagent/applications/events.py
+      to: src/imagent/applications/contract.py
+      symbol: TurnRef
+      reason: Event runtime annotations use the Applications-owned nested Turn identity without defining another resource shape.
+    - from: src/imagent/applications/events.py
+      to: src/imagent/applications/contract.py
+      symbol: validate_project_ref
+      reason: Event validation delegates the required Applications-owned Project ancestry invariant.
+    - from: src/imagent/applications/events.py
+      to: src/imagent/applications/contract.py
+      symbol: validate_turn_ref
+      reason: Turn-scoped event validation delegates the Applications-owned nested Turn invariant.
     - from: src/imagent/applications/operations.py
       to: src/imagent/applications/contract.py
       symbol: ApplicationRef
@@ -96,18 +116,46 @@ architecture_lint:
       to: src/imagent/applications/contract.py
       symbol: validate_thread_ref
       reason: Application operation validation delegates the Applications-owned ThreadRef invariant while preserving runtime validation behavior during the mechanical move.
+    - from: src/imagent/applications/operations.py
+      to: src/imagent/applications/contract.py
+      symbol: TurnRef
+      reason: Application operations use the Applications-owned nested Turn identity without defining a second resource shape.
+    - from: src/imagent/applications/operations.py
+      to: src/imagent/applications/contract.py
+      symbol: validate_project_ref
+      reason: Project-scoped operation validation delegates the Applications-owned Project invariant.
+    - from: src/imagent/applications/operations.py
+      to: src/imagent/applications/contract.py
+      symbol: validate_project_summary
+      reason: Project operation results delegate the Applications-owned Project summary invariant.
+    - from: src/imagent/applications/operations.py
+      to: src/imagent/applications/contract.py
+      symbol: validate_thread_history
+      reason: History operation results delegate recursive Turn and message ancestry validation to the Applications contract owner.
+    - from: src/imagent/applications/operations.py
+      to: src/imagent/applications/contract.py
+      symbol: validate_thread_summary
+      reason: Thread operation results delegate the Applications-owned Thread summary identity invariant.
+    - from: src/imagent/applications/operations.py
+      to: src/imagent/applications/contract.py
+      symbol: validate_turn_catchup
+      reason: Catch-up operation results delegate recursive Turn and message ancestry validation to the Applications contract owner.
+    - from: src/imagent/applications/operations.py
+      to: src/imagent/applications/contract.py
+      symbol: validate_turn_ref
+      reason: Turn-scoped operation validation delegates the Applications-owned nested Turn invariant.
     - from: src/imagent/applications/requests.py
       to: src/imagent/applications/contract.py
       symbol: ApplicationRef
       reason: Application request runtime annotations resolve the Applications-owned resource identity without a duplicate historical model.
     - from: src/imagent/applications/requests.py
       to: src/imagent/applications/contract.py
-      symbol: ThreadRef
-      reason: Application request runtime annotations resolve the Applications-owned resource identity without a duplicate historical model.
+      symbol: TurnRef
+      reason: Application request values use the Applications-owned nested Turn identity without a duplicate resource model.
     - from: src/imagent/applications/requests.py
       to: src/imagent/applications/contract.py
-      symbol: validate_thread_ref
-      reason: Application request validation delegates the Applications-owned ThreadRef invariant while preserving runtime validation behavior during the mechanical move.
+      symbol: validate_turn_ref
+      reason: Application request validation delegates the Applications-owned nested Turn invariant.
     - from: src/imagent/applications/adapters/appserver/client/__init__.py
       to: src/imagent/__init__.py
       symbol: __version__
@@ -628,7 +676,7 @@ components:
     current_tests: [tests/gateway/routing/test_bindings.py, tests/gateway/test_operations_integration.py, tests/gateway/routing/test_projection_integration.py]
     target_tests: [tests/gateway/routing/test_bindings.py, tests/gateway/test_operations_integration.py, tests/gateway/routing/test_projection_integration.py]
     authoritative_docs: [docs/components/gateway/routing/bindings/design.md, docs/components/gateway/routing/bindings/testing.md, docs/components/gateway/design.md, docs/components/persistence/design.md, docs/components/projections-and-recovery/design.md]
-    adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md]
+    adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
 
   gateway.routing.gateway-operations:
@@ -672,7 +720,7 @@ components:
     current_tests: [tests/gateway/routing/test_projection_routes.py, tests/gateway/routing/test_projection_integration.py, tests/gateway/projection/test_hardening.py, tests/gateway/test_operations_integration.py]
     target_tests: [tests/gateway/routing/test_projection_routes.py]
     authoritative_docs: [docs/components/gateway/routing/projection-routes/design.md, docs/components/gateway/routing/projection-routes/testing.md, docs/components/projections-and-recovery/design.md, docs/components/gateway/design.md]
-    adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md]
+    adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
 
   gateway.input.content-transformation:
@@ -804,7 +852,7 @@ components:
     current_tests: [tests/gateway/projection/test_request_correlation.py, tests/applications/adapters/appserver/test_gateway_request_integration.py, tests/gateway/test_operations_integration.py, tests/gateway/projection/test_hardening.py]
     target_tests: [tests/gateway/projection/test_request_correlation.py]
     authoritative_docs: [docs/components/gateway/projection/request-correlation/design.md, docs/components/gateway/projection/request-correlation/testing.md, docs/components/gateway/persistence/state-contracts/design.md, docs/components/interaction/controllers/request-presentation/design.md]
-    adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
+    adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
 
   gateway.projection.recovery:
@@ -1002,7 +1050,7 @@ components:
     current_tests: [tests/interaction/test_contracts.py, tests/gateway/persistence/test_memory.py, tests/gateway/routing/test_projection_integration.py, tests/gateway/persistence/test_sqlite.py, tests/gateway/persistence/test_state_contracts.py]
     target_tests: [tests/gateway/persistence/test_state_contracts.py]
     authoritative_docs: [docs/components/gateway/persistence/state-contracts/design.md, docs/components/gateway/persistence/state-contracts/testing.md, docs/components/contracts/protocol.md, docs/components/persistence/design.md, docs/components/projections-and-recovery/design.md]
-    adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
+    adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: [state-contract extraction is complete; remaining routing/projection slices may remove their mixed operation and orchestration owners]
 
   gateway.persistence.repository-contracts:
@@ -1112,7 +1160,7 @@ components:
     current_tests: [tests/gateway/persistence/test_row_mapping.py]
     target_tests: [tests/gateway/persistence/test_row_mapping.py]
     authoritative_docs: [docs/components/gateway/persistence/row-mapping/design.md, docs/components/gateway/persistence/row-mapping/testing.md, docs/components/persistence/design.md, docs/engineering/repository-maintainability/design.md]
-    adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
+    adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
 
   gateway.diagnostics:
@@ -1141,22 +1189,22 @@ components:
     id: applications.application-contract
     parent: applications
     purpose: Define the common native Application lifecycle/resource/input/history/subscription boundary.
-    owns: [Page, ApplicationRef, ProjectRef, ThreadRef, InputContinuationPreference, InputDisposition, TurnReplyCorrelationPolicy, ThreadStatus, ApplicationSummary, ProjectSummary, ThreadSummary, AgentInput, AgentMessage, TurnStatus, TurnCatchup, TurnHistoryEntry, ThreadHistory, ThreadSnapshot, AcceptedTurn, ApplicationInputDispatch, validate_thread_ref, AgentApplicationAdapter, ApplicationInputDispatchHandler, native dispatch outcome classification]
+    owns: [Page, ApplicationRef, ProjectRef, ThreadRef, InputContinuationPreference, InputDisposition, TurnReplyCorrelationPolicy, ThreadStatus, ApplicationSummary, ProjectSummary, ThreadSummary, AgentInput, AgentMessage, TurnStatus, TurnCatchup, TurnHistoryEntry, ThreadHistory, ThreadSnapshot, AcceptedTurn, ApplicationInputDispatch, validate_thread_ref, AgentApplicationAdapter, ApplicationInputDispatchHandler, native dispatch outcome classification, MAX_WORKSPACE_ROOT_LENGTH, TurnRef, WorkspaceIdentity, fingerprint_canonical_workspace_root, validate_application_summary, validate_project_ref, validate_project_summary, validate_turn_ref, validate_workspace_identity, validate_agent_message, validate_thread_history, validate_thread_summary, validate_turn_catchup, validate_turn_history_entry]
     does_not_own: [Gateway routing, product commands, native implementation details]
     inputs: [typed Application operations and AgentInput]
     outputs: [typed native results, accepted dispatch, authoritative resource/history values, Thread event subscription]
-    public_contracts: [Page, ApplicationRef, ProjectRef, ThreadRef, InputContinuationPreference, InputDisposition, TurnReplyCorrelationPolicy, ThreadStatus, ApplicationSummary, ProjectSummary, ThreadSummary, AgentInput, AgentMessage, TurnStatus, TurnCatchup, TurnHistoryEntry, ThreadHistory, ThreadSnapshot, AcceptedTurn, ApplicationInputDispatch, validate_thread_ref, AgentApplicationAdapter, ApplicationInputDispatchHandler, ApplicationInputOutcomeUnknown]
+    public_contracts: [Page, ApplicationRef, ProjectRef, ThreadRef, InputContinuationPreference, InputDisposition, TurnReplyCorrelationPolicy, ThreadStatus, ApplicationSummary, ProjectSummary, ThreadSummary, AgentInput, AgentMessage, TurnStatus, TurnCatchup, TurnHistoryEntry, ThreadHistory, ThreadSnapshot, AcceptedTurn, ApplicationInputDispatch, validate_thread_ref, AgentApplicationAdapter, ApplicationInputDispatchHandler, ApplicationInputOutcomeUnknown, MAX_WORKSPACE_ROOT_LENGTH, TurnRef, WorkspaceIdentity, fingerprint_canonical_workspace_root, validate_application_summary, validate_project_ref, validate_project_summary, validate_turn_ref, validate_workspace_identity, validate_agent_message, validate_thread_history, validate_thread_summary, validate_turn_catchup, validate_turn_history_entry]
     public_exports:
-      current: [imagent.applications:AgentApplicationAdapter, imagent.applications:ApplicationInputDispatchHandler, imagent.applications.contract:AgentApplicationAdapter, imagent.applications.contract:ApplicationInputDispatchHandler, imagent.applications.contract:Page, imagent.applications.contract:ApplicationRef, imagent.applications.contract:ProjectRef, imagent.applications.contract:ThreadRef, imagent.applications.contract:InputContinuationPreference, imagent.applications.contract:InputDisposition, imagent.applications.contract:TurnReplyCorrelationPolicy, imagent.applications.contract:ThreadStatus, imagent.applications.contract:ApplicationSummary, imagent.applications.contract:ProjectSummary, imagent.applications.contract:ThreadSummary, imagent.applications.contract:AgentInput, imagent.applications.contract:AgentMessage, imagent.applications.contract:TurnStatus, imagent.applications.contract:TurnCatchup, imagent.applications.contract:TurnHistoryEntry, imagent.applications.contract:ThreadHistory, imagent.applications.contract:ThreadSnapshot, imagent.applications.contract:AcceptedTurn, imagent.applications.contract:ApplicationInputDispatch, imagent.applications.contract:ApplicationInputOutcomeUnknown, imagent.applications.contract:validate_thread_ref, imagent.applications:Page, imagent.applications:ApplicationRef, imagent.applications:ProjectRef, imagent.applications:ThreadRef, imagent.applications:InputContinuationPreference, imagent.applications:InputDisposition, imagent.applications:TurnReplyCorrelationPolicy, imagent.applications:ThreadStatus, imagent.applications:ApplicationSummary, imagent.applications:ProjectSummary, imagent.applications:ThreadSummary, imagent.applications:AgentInput, imagent.applications:AgentMessage, imagent.applications:TurnStatus, imagent.applications:TurnCatchup, imagent.applications:TurnHistoryEntry, imagent.applications:ThreadHistory, imagent.applications:ThreadSnapshot, imagent.applications:AcceptedTurn, imagent.applications:ApplicationInputDispatch, imagent.applications:validate_thread_ref, imagent.applications:ApplicationInputOutcomeUnknown, imagent.contracts:ApplicationInputOutcomeUnknown]
-      target: [imagent.applications.contract:Page, imagent.applications.contract:ApplicationRef, imagent.applications.contract:ProjectRef, imagent.applications.contract:ThreadRef, imagent.applications.contract:InputContinuationPreference, imagent.applications.contract:InputDisposition, imagent.applications.contract:TurnReplyCorrelationPolicy, imagent.applications.contract:ThreadStatus, imagent.applications.contract:ApplicationSummary, imagent.applications.contract:ProjectSummary, imagent.applications.contract:ThreadSummary, imagent.applications.contract:AgentInput, imagent.applications.contract:AgentMessage, imagent.applications.contract:TurnStatus, imagent.applications.contract:TurnCatchup, imagent.applications.contract:TurnHistoryEntry, imagent.applications.contract:ThreadHistory, imagent.applications.contract:ThreadSnapshot, imagent.applications.contract:AcceptedTurn, imagent.applications.contract:ApplicationInputDispatch, imagent.applications.contract:ApplicationInputOutcomeUnknown, imagent.applications.contract:validate_thread_ref, imagent.applications.contract:AgentApplicationAdapter, imagent.applications.contract:ApplicationInputDispatchHandler, imagent.applications:Page, imagent.applications:ApplicationRef, imagent.applications:ProjectRef, imagent.applications:ThreadRef, imagent.applications:InputContinuationPreference, imagent.applications:InputDisposition, imagent.applications:TurnReplyCorrelationPolicy, imagent.applications:ThreadStatus, imagent.applications:ApplicationSummary, imagent.applications:ProjectSummary, imagent.applications:ThreadSummary, imagent.applications:AgentInput, imagent.applications:AgentMessage, imagent.applications:TurnStatus, imagent.applications:TurnCatchup, imagent.applications:TurnHistoryEntry, imagent.applications:ThreadHistory, imagent.applications:ThreadSnapshot, imagent.applications:AcceptedTurn, imagent.applications:ApplicationInputDispatch, imagent.applications:validate_thread_ref, imagent.applications:AgentApplicationAdapter, imagent.applications:ApplicationInputDispatchHandler, imagent.applications:ApplicationInputOutcomeUnknown, imagent.contracts:ApplicationInputOutcomeUnknown]
+      current: [imagent.applications:AgentApplicationAdapter, imagent.applications:ApplicationInputDispatchHandler, imagent.applications.contract:AgentApplicationAdapter, imagent.applications.contract:ApplicationInputDispatchHandler, imagent.applications.contract:Page, imagent.applications.contract:ApplicationRef, imagent.applications.contract:ProjectRef, imagent.applications.contract:ThreadRef, imagent.applications.contract:InputContinuationPreference, imagent.applications.contract:InputDisposition, imagent.applications.contract:TurnReplyCorrelationPolicy, imagent.applications.contract:ThreadStatus, imagent.applications.contract:ApplicationSummary, imagent.applications.contract:ProjectSummary, imagent.applications.contract:ThreadSummary, imagent.applications.contract:AgentInput, imagent.applications.contract:AgentMessage, imagent.applications.contract:TurnStatus, imagent.applications.contract:TurnCatchup, imagent.applications.contract:TurnHistoryEntry, imagent.applications.contract:ThreadHistory, imagent.applications.contract:ThreadSnapshot, imagent.applications.contract:AcceptedTurn, imagent.applications.contract:ApplicationInputDispatch, imagent.applications.contract:ApplicationInputOutcomeUnknown, imagent.applications.contract:validate_thread_ref, imagent.applications:Page, imagent.applications:ApplicationRef, imagent.applications:ProjectRef, imagent.applications:ThreadRef, imagent.applications:InputContinuationPreference, imagent.applications:InputDisposition, imagent.applications:TurnReplyCorrelationPolicy, imagent.applications:ThreadStatus, imagent.applications:ApplicationSummary, imagent.applications:ProjectSummary, imagent.applications:ThreadSummary, imagent.applications:AgentInput, imagent.applications:AgentMessage, imagent.applications:TurnStatus, imagent.applications:TurnCatchup, imagent.applications:TurnHistoryEntry, imagent.applications:ThreadHistory, imagent.applications:ThreadSnapshot, imagent.applications:AcceptedTurn, imagent.applications:ApplicationInputDispatch, imagent.applications:validate_thread_ref, imagent.applications:ApplicationInputOutcomeUnknown, imagent.contracts:ApplicationInputOutcomeUnknown, imagent.applications.contract:MAX_WORKSPACE_ROOT_LENGTH, imagent.applications.contract:TurnRef, imagent.applications.contract:WorkspaceIdentity, imagent.applications.contract:fingerprint_canonical_workspace_root, imagent.applications.contract:validate_application_summary, imagent.applications.contract:validate_project_ref, imagent.applications.contract:validate_project_summary, imagent.applications.contract:validate_turn_ref, imagent.applications.contract:validate_workspace_identity, imagent.applications:MAX_WORKSPACE_ROOT_LENGTH, imagent.applications:TurnRef, imagent.applications:WorkspaceIdentity, imagent.applications:fingerprint_canonical_workspace_root, imagent.applications:validate_application_summary, imagent.applications:validate_project_ref, imagent.applications:validate_project_summary, imagent.applications:validate_turn_ref, imagent.applications:validate_workspace_identity, imagent.applications.contract:validate_agent_message, imagent.applications.contract:validate_thread_history, imagent.applications.contract:validate_thread_summary, imagent.applications.contract:validate_turn_catchup, imagent.applications.contract:validate_turn_history_entry, imagent.applications:validate_agent_message, imagent.applications:validate_thread_history, imagent.applications:validate_thread_summary, imagent.applications:validate_turn_catchup, imagent.applications:validate_turn_history_entry]
+      target: [imagent.applications.contract:Page, imagent.applications.contract:ApplicationRef, imagent.applications.contract:ProjectRef, imagent.applications.contract:ThreadRef, imagent.applications.contract:InputContinuationPreference, imagent.applications.contract:InputDisposition, imagent.applications.contract:TurnReplyCorrelationPolicy, imagent.applications.contract:ThreadStatus, imagent.applications.contract:ApplicationSummary, imagent.applications.contract:ProjectSummary, imagent.applications.contract:ThreadSummary, imagent.applications.contract:AgentInput, imagent.applications.contract:AgentMessage, imagent.applications.contract:TurnStatus, imagent.applications.contract:TurnCatchup, imagent.applications.contract:TurnHistoryEntry, imagent.applications.contract:ThreadHistory, imagent.applications.contract:ThreadSnapshot, imagent.applications.contract:AcceptedTurn, imagent.applications.contract:ApplicationInputDispatch, imagent.applications.contract:ApplicationInputOutcomeUnknown, imagent.applications.contract:validate_thread_ref, imagent.applications.contract:AgentApplicationAdapter, imagent.applications.contract:ApplicationInputDispatchHandler, imagent.applications:Page, imagent.applications:ApplicationRef, imagent.applications:ProjectRef, imagent.applications:ThreadRef, imagent.applications:InputContinuationPreference, imagent.applications:InputDisposition, imagent.applications:TurnReplyCorrelationPolicy, imagent.applications:ThreadStatus, imagent.applications:ApplicationSummary, imagent.applications:ProjectSummary, imagent.applications:ThreadSummary, imagent.applications:AgentInput, imagent.applications:AgentMessage, imagent.applications:TurnStatus, imagent.applications:TurnCatchup, imagent.applications:TurnHistoryEntry, imagent.applications:ThreadHistory, imagent.applications:ThreadSnapshot, imagent.applications:AcceptedTurn, imagent.applications:ApplicationInputDispatch, imagent.applications:validate_thread_ref, imagent.applications:AgentApplicationAdapter, imagent.applications:ApplicationInputDispatchHandler, imagent.applications:ApplicationInputOutcomeUnknown, imagent.contracts:ApplicationInputOutcomeUnknown, imagent.applications.contract:MAX_WORKSPACE_ROOT_LENGTH, imagent.applications.contract:TurnRef, imagent.applications.contract:WorkspaceIdentity, imagent.applications.contract:fingerprint_canonical_workspace_root, imagent.applications.contract:validate_application_summary, imagent.applications.contract:validate_project_ref, imagent.applications.contract:validate_project_summary, imagent.applications.contract:validate_turn_ref, imagent.applications.contract:validate_workspace_identity, imagent.applications:MAX_WORKSPACE_ROOT_LENGTH, imagent.applications:TurnRef, imagent.applications:WorkspaceIdentity, imagent.applications:fingerprint_canonical_workspace_root, imagent.applications:validate_application_summary, imagent.applications:validate_project_ref, imagent.applications:validate_project_summary, imagent.applications:validate_turn_ref, imagent.applications:validate_workspace_identity, imagent.applications.contract:validate_agent_message, imagent.applications.contract:validate_thread_history, imagent.applications.contract:validate_thread_summary, imagent.applications.contract:validate_turn_catchup, imagent.applications.contract:validate_turn_history_entry, imagent.applications:validate_agent_message, imagent.applications:validate_thread_history, imagent.applications:validate_thread_summary, imagent.applications:validate_turn_catchup, imagent.applications:validate_turn_history_entry]
     dependencies: [interaction.messages, interaction.operations, applications.capabilities, applications.events, applications.operations, applications.requests]
     state_recovery: Adapter reports only evidenced replay/order; dispatched unknown outcomes never become retry permission.
     current_code: [schemas/v1/common.schema.json, schemas/v1/history.schema.json, schemas/v1/messages.schema.json, schemas/v1/resources.schema.json, src/imagent/applications/contract.py, src/imagent/applications/__init__.py]
     target_code: [schemas/v1/common.schema.json, schemas/v1/history.schema.json, schemas/v1/messages.schema.json, schemas/v1/resources.schema.json, src/imagent/applications/contract.py]
     current_tests: [tests/applications/test_contract.py, tests/conformance/test_adapter_contracts.py]
-    target_tests: [tests/applications/test_contract.py]
+    target_tests: [tests/applications/test_contract.py, tests/conformance/test_adapter_contracts.py]
     authoritative_docs: [docs/components/applications/application-contract/design.md, docs/components/applications/application-contract/testing.md]
-    adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
+    adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: [historical adapters.py remains a split candidate for the unrelated Gateway proactive-authorization and repository aliases; Application and Channel/admission aliases are no longer exported]
 
   applications.capabilities:
@@ -1178,7 +1226,7 @@ components:
     current_tests: [tests/applications/test_capabilities.py, tests/conformance/test_adapter_contracts.py]
     target_tests: [tests/applications/test_capabilities.py]
     authoritative_docs: [docs/components/applications/capabilities/design.md, docs/components/applications/capabilities/testing.md]
-    adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0003-attachment-sources-and-trust.md]
+    adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
 
   applications.events:
@@ -1200,7 +1248,7 @@ components:
     current_tests: [tests/applications/test_events.py]
     target_tests: [tests/applications/test_events.py]
     authoritative_docs: [docs/components/applications/events/design.md, docs/components/applications/events/testing.md]
-    adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0013-bounded-application-event-admission.md]
+    adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0013-bounded-application-event-admission.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
 
   applications.diagnostics:
@@ -1233,10 +1281,10 @@ components:
     does_not_own: [product-only native commands, Gateway binding, native wire mapping]
     inputs: [typed common Application operation]
     outputs: [typed success or explicit ApplicationOperationFailed]
-    public_contracts: [ApplicationOperation, ApplicationOperationResult, ActivateNativeThread, ApplicationOperationFailed, ApplicationOperationType, CreateThread, DeleteThread, GetProject, GetThread, GetThreadHistory, GetThreadStatus, GetTurnCatchup, InterruptTurn, ListProjects, ListThreads, NativeThreadActivated, ProjectRead, ProjectsListed, RespondRequest, RequestResponded, ThreadCreated, ThreadDeleted, ThreadDeletionMode, ThreadHistoryRead, ThreadRead, ThreadsListed, ThreadStatusRead, TurnCatchupRead, TurnInterrupted, validate_application_operation, validate_application_operation_result]
+    public_contracts: [ApplicationOperation, ApplicationOperationResult, ActivateNativeThread, ApplicationOperationFailed, ApplicationOperationType, CreateThread, DeleteThread, GetProject, GetThread, GetThreadHistory, GetThreadStatus, GetTurnCatchup, InterruptTurn, ListProjects, ListThreads, NativeThreadActivated, ProjectRead, ProjectsListed, RespondRequest, RequestResponded, ThreadCreated, ThreadDeleted, ThreadDeletionMode, ThreadHistoryRead, ThreadRead, ThreadsListed, ThreadStatusRead, TurnCatchupRead, TurnInterrupted, validate_application_operation, validate_application_operation_result, CreateProject, ProjectCreated, MAX_PROJECT_CWD_LENGTH, MAX_PROJECT_DISPLAY_NAME_LENGTH]
     public_exports:
-      current: [imagent.applications.operations:ApplicationOperation, imagent.applications.operations:ApplicationOperationResult, imagent.applications.operations:ActivateNativeThread, imagent.applications.operations:ApplicationOperationFailed, imagent.applications.operations:ApplicationOperationType, imagent.applications.operations:CreateThread, imagent.applications.operations:DeleteThread, imagent.applications.operations:GetProject, imagent.applications.operations:GetThread, imagent.applications.operations:GetThreadHistory, imagent.applications.operations:GetThreadStatus, imagent.applications.operations:GetTurnCatchup, imagent.applications.operations:InterruptTurn, imagent.applications.operations:ListProjects, imagent.applications.operations:ListThreads, imagent.applications.operations:NativeThreadActivated, imagent.applications.operations:ProjectRead, imagent.applications.operations:ProjectsListed, imagent.applications.operations:RespondRequest, imagent.applications.operations:RequestResponded, imagent.applications.operations:ThreadCreated, imagent.applications.operations:ThreadDeleted, imagent.applications.operations:ThreadDeletionMode, imagent.applications.operations:ThreadHistoryRead, imagent.applications.operations:ThreadRead, imagent.applications.operations:ThreadsListed, imagent.applications.operations:ThreadStatusRead, imagent.applications.operations:TurnCatchupRead, imagent.applications.operations:TurnInterrupted, imagent.applications.operations:validate_application_operation, imagent.applications.operations:validate_application_operation_result]
-      target: [imagent.applications.operations:ApplicationOperation, imagent.applications.operations:ApplicationOperationResult, imagent.applications.operations:ActivateNativeThread, imagent.applications.operations:ApplicationOperationFailed, imagent.applications.operations:ApplicationOperationType, imagent.applications.operations:CreateThread, imagent.applications.operations:DeleteThread, imagent.applications.operations:GetProject, imagent.applications.operations:GetThread, imagent.applications.operations:GetThreadHistory, imagent.applications.operations:GetThreadStatus, imagent.applications.operations:GetTurnCatchup, imagent.applications.operations:InterruptTurn, imagent.applications.operations:ListProjects, imagent.applications.operations:ListThreads, imagent.applications.operations:NativeThreadActivated, imagent.applications.operations:ProjectRead, imagent.applications.operations:ProjectsListed, imagent.applications.operations:RespondRequest, imagent.applications.operations:RequestResponded, imagent.applications.operations:ThreadCreated, imagent.applications.operations:ThreadDeleted, imagent.applications.operations:ThreadDeletionMode, imagent.applications.operations:ThreadHistoryRead, imagent.applications.operations:ThreadRead, imagent.applications.operations:ThreadsListed, imagent.applications.operations:ThreadStatusRead, imagent.applications.operations:TurnCatchupRead, imagent.applications.operations:TurnInterrupted, imagent.applications.operations:validate_application_operation, imagent.applications.operations:validate_application_operation_result]
+      current: [imagent.applications.operations:ApplicationOperation, imagent.applications.operations:ApplicationOperationResult, imagent.applications.operations:ActivateNativeThread, imagent.applications.operations:ApplicationOperationFailed, imagent.applications.operations:ApplicationOperationType, imagent.applications.operations:CreateThread, imagent.applications.operations:DeleteThread, imagent.applications.operations:GetProject, imagent.applications.operations:GetThread, imagent.applications.operations:GetThreadHistory, imagent.applications.operations:GetThreadStatus, imagent.applications.operations:GetTurnCatchup, imagent.applications.operations:InterruptTurn, imagent.applications.operations:ListProjects, imagent.applications.operations:ListThreads, imagent.applications.operations:NativeThreadActivated, imagent.applications.operations:ProjectRead, imagent.applications.operations:ProjectsListed, imagent.applications.operations:RespondRequest, imagent.applications.operations:RequestResponded, imagent.applications.operations:ThreadCreated, imagent.applications.operations:ThreadDeleted, imagent.applications.operations:ThreadDeletionMode, imagent.applications.operations:ThreadHistoryRead, imagent.applications.operations:ThreadRead, imagent.applications.operations:ThreadsListed, imagent.applications.operations:ThreadStatusRead, imagent.applications.operations:TurnCatchupRead, imagent.applications.operations:TurnInterrupted, imagent.applications.operations:validate_application_operation, imagent.applications.operations:validate_application_operation_result, imagent.applications.operations:CreateProject, imagent.applications.operations:ProjectCreated, imagent.applications.operations:MAX_PROJECT_CWD_LENGTH, imagent.applications.operations:MAX_PROJECT_DISPLAY_NAME_LENGTH]
+      target: [imagent.applications.operations:ApplicationOperation, imagent.applications.operations:ApplicationOperationResult, imagent.applications.operations:ActivateNativeThread, imagent.applications.operations:ApplicationOperationFailed, imagent.applications.operations:ApplicationOperationType, imagent.applications.operations:CreateThread, imagent.applications.operations:DeleteThread, imagent.applications.operations:GetProject, imagent.applications.operations:GetThread, imagent.applications.operations:GetThreadHistory, imagent.applications.operations:GetThreadStatus, imagent.applications.operations:GetTurnCatchup, imagent.applications.operations:InterruptTurn, imagent.applications.operations:ListProjects, imagent.applications.operations:ListThreads, imagent.applications.operations:NativeThreadActivated, imagent.applications.operations:ProjectRead, imagent.applications.operations:ProjectsListed, imagent.applications.operations:RespondRequest, imagent.applications.operations:RequestResponded, imagent.applications.operations:ThreadCreated, imagent.applications.operations:ThreadDeleted, imagent.applications.operations:ThreadDeletionMode, imagent.applications.operations:ThreadHistoryRead, imagent.applications.operations:ThreadRead, imagent.applications.operations:ThreadsListed, imagent.applications.operations:ThreadStatusRead, imagent.applications.operations:TurnCatchupRead, imagent.applications.operations:TurnInterrupted, imagent.applications.operations:validate_application_operation, imagent.applications.operations:validate_application_operation_result, imagent.applications.operations:CreateProject, imagent.applications.operations:ProjectCreated, imagent.applications.operations:MAX_PROJECT_CWD_LENGTH, imagent.applications.operations:MAX_PROJECT_DISPLAY_NAME_LENGTH]
     dependencies: [interaction.messages, interaction.operations, applications.requests]
     state_recovery: Operation ID is stable; adapters preserve ambiguous mutation outcomes and never silently retry.
     current_code: [schemas/v1/operations.schema.json, src/imagent/applications/operations.py]
@@ -1244,7 +1292,7 @@ components:
     current_tests: [tests/applications/test_operations.py]
     target_tests: [tests/applications/test_operations.py]
     authoritative_docs: [docs/components/applications/operations/design.md, docs/components/applications/operations/testing.md]
-    adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
+    adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: [product-only commands remain intentionally absent; Gateway aggregate dispatch and Conversation serialization belong to gateway.routing.gateway-operations]
 
   applications.requests:
@@ -1266,7 +1314,7 @@ components:
     current_tests: [tests/applications/test_requests.py]
     target_tests: [tests/applications/test_requests.py]
     authoritative_docs: [docs/components/applications/requests/design.md, docs/components/applications/requests/testing.md]
-    adrs: [docs/decisions/0008-interactive-request-routing.md]
+    adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: [versioned schemas remain cross-owner; Gateway route correlation remains in its Gateway-owned historical contract/validation modules]
 
   applications.presentation.live-activity:
@@ -1376,7 +1424,7 @@ components:
     current_tests: [tests/applications/adapters/appserver/test_mapping.py, tests/applications/adapters/appserver/test_input_integration.py]
     target_tests: [tests/applications/adapters/appserver/test_mapping.py]
     authoritative_docs: [docs/components/applications/adapters/appserver/mapping/design.md, docs/components/applications/adapters/appserver/mapping/testing.md]
-    adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    adrs: [docs/decisions/0001-contract-and-resource-foundations.md, docs/decisions/0015-typed-extension-seams-and-composition.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
 
   applications.adapters.appserver.requests:
@@ -1398,7 +1446,7 @@ components:
     current_tests: [tests/applications/adapters/appserver/test_requests.py, tests/applications/adapters/appserver/test_gateway_request_integration.py]
     target_tests: [tests/applications/adapters/appserver/test_requests.py]
     authoritative_docs: [docs/components/applications/adapters/appserver/requests/design.md, docs/components/applications/adapters/appserver/requests/testing.md]
-    adrs: [docs/decisions/0008-interactive-request-routing.md]
+    adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
 
   applications.adapters.appserver.diagnostics:
@@ -1442,7 +1490,7 @@ components:
     current_tests: [tests/applications/adapters/test_codex.py, tests/applications/adapters/appserver/test_client.py, tests/applications/adapters/appserver/test_input_integration.py, tests/applications/adapters/appserver/test_mapping.py, tests/applications/adapters/appserver/test_requests.py, tests/applications/adapters/appserver/test_gateway_request_integration.py, tests/applications/presentation/test_artifact_materialization.py, tests/applications/presentation/test_live_activity.py]
     target_tests: [tests/applications/adapters/test_codex.py]
     authoritative_docs: [docs/components/applications/adapters/codex/design.md, docs/components/applications/adapters/codex/testing.md]
-    adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
 
   applications.adapters.zen:
@@ -1464,7 +1512,7 @@ components:
     current_tests: [tests/applications/adapters/test_zen.py, tests/applications/adapters/appserver/test_client.py, tests/applications/adapters/appserver/test_input_integration.py, tests/applications/adapters/appserver/test_requests.py, tests/applications/adapters/appserver/test_gateway_request_integration.py, tests/applications/presentation/test_artifact_materialization.py, tests/gateway/test_vertical_slice.py]
     target_tests: [tests/applications/adapters/test_zen.py]
     authoritative_docs: [docs/components/applications/adapters/zen/design.md, docs/components/applications/adapters/zen/testing.md]
-    adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    adrs: [docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
 
   applications.adapters.t3:
@@ -1486,7 +1534,7 @@ components:
     current_tests: [tests/applications/adapters/test_t3.py, tests/conformance/test_adapter_contracts.py, tests/gateway/test_vertical_slice.py, tests/gateway/test_diagnostics.py, tests/applications/presentation/test_live_activity.py]
     target_tests: [tests/applications/adapters/test_t3.py]
     authoritative_docs: [docs/components/applications/adapters/t3/design.md, docs/components/applications/adapters/t3/testing.md]
-    adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
+    adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
 
   engineering.testing-and-conformance:

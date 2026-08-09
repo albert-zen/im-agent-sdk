@@ -13,7 +13,9 @@ The mapping suite proves exact-limit success and limit-plus-one fixed-redacted
 failure for scalar text, generic lists, mapping keys, recursive total values,
 and content aggregation. It also proves missing, blank, non-scalar, overlong,
 or conflicting method-required Thread/Turn/item/request identities fail before
-a typed fact is returned. The conflict cases cover inner/outer item and Turn
+a typed fact is returned. A Turn-scoped delta without native Turn identity
+terminates live observation with the fixed native-mapping recovery gap. The
+conflict cases cover inner/outer item and Turn
 identity, resource aliases, and `eventId`/`event_id`.
 Affected Codex/Zen/request/event suites prove no canonical event, request open,
 history entry, presenter, or materializer dispatch follows the failure,

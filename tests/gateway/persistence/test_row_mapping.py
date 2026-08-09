@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import get_type_hints
 
 import imagent.gateway.persistence as persistence_package
-from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef
+from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef, TurnRef
 from imagent.applications.requests import (
     RequestRef,
     UserInputQuestionShape,
@@ -79,11 +79,7 @@ class RowMappingTests(unittest.TestCase):
             conversation_ref=ConversationRef("qq-main", "conversation-1"),
             application_ref=ApplicationRef("application-1"),
             project_ref=ProjectRef("application-1", "project-1"),
-            thread_ref=ThreadRef(
-                "application-1",
-                "thread-1",
-                ProjectRef("application-1", "project-1"),
-            ),
+            thread_ref=ThreadRef(ProjectRef("application-1", "project-1"), "thread-1"),
             revision=7,
             updated_at=_NOW,
         )
@@ -101,7 +97,7 @@ class RowMappingTests(unittest.TestCase):
 
         route = ThreadProjectionRoute(
             route_id="route-1",
-            thread_ref=ThreadRef("application-1", "thread-1"),
+            thread_ref=ThreadRef(ProjectRef("application-1", "workspace"), "thread-1"),
             conversation_ref=ConversationRef("qq-main", "conversation-1"),
             reply_to_message_id=None,
             checkpoint_agent_item_id="item-9",
@@ -123,13 +119,15 @@ class RowMappingTests(unittest.TestCase):
         route_row = _row_from_values(route_names, row_mapping.projection_route_to_row(route))
         decoded_route = row_mapping.projection_route_from_row(route_row)
         self.assertEqual(decoded_route, route)
-        self.assertIsNone(decoded_route.thread_ref.project_ref)
+        self.assertEqual(
+            decoded_route.thread_ref.project_ref,
+            ProjectRef("application-1", "workspace"),
+        )
         self.assertEqual(decoded_route.checkpointed_at, _NOW)
 
         correlation = TurnReplyCorrelation(
             correlation_id="correlation-1",
-            thread_ref=ThreadRef("application-1", "thread-1", ProjectRef("application-1", "p")),
-            turn_id="turn-1",
+            turn_ref=TurnRef(ThreadRef(ProjectRef("application-1", "p"), "thread-1"), "turn-1"),
             client_message_id="client-1",
             conversation_ref=ConversationRef("qq-main", "conversation-1"),
             reply_to_message_id="message-1",
@@ -168,8 +166,7 @@ class RowMappingTests(unittest.TestCase):
         correlation = RequestRouteCorrelation(
             correlation_id="request-correlation-1",
             request_ref=RequestRef(ApplicationRef("application-1"), "epoch-1:request-1"),
-            thread_ref=ThreadRef("application-1", "thread-1", ProjectRef("application-1", "p")),
-            turn_id="turn-1",
+            turn_ref=TurnRef(ThreadRef(ProjectRef("application-1", "p"), "thread-1"), "turn-1"),
             conversation_ref=ConversationRef("qq-main", "conversation-1"),
             delivery_id="delivery-1",
             response_shape=shape,

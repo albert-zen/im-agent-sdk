@@ -36,13 +36,15 @@ The owner contracts/exports are the complete family listed below, plus
 `AgentApplicationAdapter` and `ApplicationInputDispatchHandler`, from
 `src/imagent/applications/contract.py`:
 
-`Page`, `ApplicationRef`, `ProjectRef`, `ThreadRef`,
+`Page`, `ApplicationRef`, `ProjectRef`, `ThreadRef`, `TurnRef`,
+`WorkspaceIdentity`, `MAX_WORKSPACE_ROOT_LENGTH`,
 `InputContinuationPreference`, `InputDisposition`,
 `TurnReplyCorrelationPolicy`, `ThreadStatus`, `ApplicationSummary`,
 `ProjectSummary`, `ThreadSummary`, `AgentInput`, `AgentMessage`, `TurnStatus`,
 `TurnCatchup`, `TurnHistoryEntry`, `ThreadHistory`, `ThreadSnapshot`,
 `AcceptedTurn`, `ApplicationInputDispatch`, `ApplicationInputOutcomeUnknown`,
-and `validate_thread_ref`.
+`fingerprint_canonical_workspace_root`, and the Application/Project/Thread/
+Turn/workspace validators.
 
 The finite `imagent.applications` facade exposes those exact objects. The
 deliberate `imagent.contracts` facade retains the exact compatibility alias for
@@ -73,11 +75,19 @@ otherwise; it never reopens Gateway retry permission. Known pre-dispatch
 rejections remain their original exception types and do not use the unknown
 outcome wrapper.
 
-Managed, flat, and fixed Project shapes are explicit through the capability
-leaf's `ProjectMode`. Binding a returned `ThreadSummary` is a separate Gateway
-mutation and cannot activate a native Thread. An adapter must not silently
-invent steer/queue behavior when a native Application supports only a started
-Turn.
+Managed, flat, and fixed Project-management shapes are explicit through the
+capability leaf's `ProjectMode`, but the resource hierarchy never changes.
+Every `ThreadRef` requires one same-Application `ProjectRef`; history, catch-up,
+messages, accepted input, requests, and events inherit that Project ancestry.
+The contract's semantic validators walk nested summaries, messages, catch-up,
+and history values: an outer Thread cannot contain a Turn or message from a
+different Thread or Project even when both belong to the same Application.
+Fixed/flat adapters expose one stable workspace Project using their configured
+immutable workspace ID and typed canonical-root fingerprint. That Project is
+an honest execution-scope projection, not a claim of native management.
+Binding a returned `ThreadSummary` is a separate Gateway mutation and cannot
+activate a native Thread. An adapter must not silently invent steer/queue
+behavior when a native Application supports only a started Turn.
 
 ## Current and target structure
 
@@ -102,3 +112,4 @@ The conformance suite remains affected evidence for all concrete adapters.
 - [ADR 0001](../../../decisions/0001-contract-and-resource-foundations.md)
 - [ADR 0002](../../../decisions/0002-design-authority-and-control-boundaries.md)
 - [ADR 0012](../../../decisions/0012-input-continuation-and-reply-correlation.md)
+- [ADR 0016](../../../decisions/0016-uniform-workspace-and-consumer-actions.md)

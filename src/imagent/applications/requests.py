@@ -57,8 +57,7 @@ class RequestChoice:
 @dataclass(frozen=True, slots=True)
 class ApprovalRequest:
     request_ref: RequestRef
-    thread_ref: ThreadRef
-    turn_id: str
+    turn_ref: TurnRef
     prompt: str
     choices: tuple[RequestChoice, ...]
     expires_at: datetime | None = None
@@ -84,8 +83,7 @@ class UserInputQuestion:
 @dataclass(frozen=True, slots=True)
 class UserInputRequest:
     request_ref: RequestRef
-    thread_ref: ThreadRef
-    turn_id: str
+    turn_ref: TurnRef
     questions: tuple[UserInputQuestion, ...]
     prompt: str | None = None
     expires_at: datetime | None = None
@@ -132,6 +130,7 @@ RequestResponseShape: TypeAlias = ApprovalResponseShape | UserInputResponseShape
 @dataclass(frozen=True, slots=True)
 class RequestResolution:
     request_ref: RequestRef
+    turn_ref: TurnRef
     status: RequestResolutionStatus
     resolved_at: datetime
 
@@ -159,13 +158,12 @@ def validate_interactive_request(
     request: ApprovalRequest | UserInputRequest,
 ) -> None:
     validate_request_ref(request.request_ref)
-    validate_thread_ref(request.thread_ref)
+    validate_turn_ref(request.turn_ref)
     if (
         request.request_ref.application_ref.application_instance_id
-        != request.thread_ref.application_instance_id
+        != request.turn_ref.thread_ref.project_ref.application_instance_id
     ):
         raise ContractViolation("request belongs to a different application")
-    require_identifier(request.turn_id, "turn_id")
     if request.expires_at is not None and request.expires_at.tzinfo is None:
         raise ContractViolation("request expiry must include a timezone")
     if isinstance(request, ApprovalRequest):
@@ -206,6 +204,12 @@ def validate_interactive_request(
 
 def validate_request_resolution(resolution: RequestResolution) -> None:
     validate_request_ref(resolution.request_ref)
+    validate_turn_ref(resolution.turn_ref)
+    if (
+        resolution.turn_ref.thread_ref.project_ref.application_instance_id
+        != resolution.request_ref.application_ref.application_instance_id
+    ):
+        raise ContractViolation("request resolution belongs to a different application")
     if resolution.resolved_at.tzinfo is None:
         raise ContractViolation("request resolution time must include a timezone")
 
@@ -335,8 +339,8 @@ def _validate_choice_count(count: int) -> None:
 # import or a second request contract.
 from .contract import (  # noqa: E402
     ApplicationRef,
-    ThreadRef,
-    validate_thread_ref,
+    TurnRef,
+    validate_turn_ref,
 )
 
 __all__ = [

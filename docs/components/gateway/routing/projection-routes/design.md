@@ -48,6 +48,9 @@ output to A while leaving every other Conversation observing Thread 1 intact.
 
 Routes persist only stable endpoint references, optional destination reply
 context, the per-destination completed projection checkpoint, and update time.
+The route's required `ThreadRef.project_ref` supplies its Project ancestry;
+route identity and storage never use an empty-string Project sentinel or a
+Project-less fixed/flat exception.
 An ordinary route refresh preserves checkpoint fields. Checkpoint advancement
 belongs solely to the projection checkpoint owner. It uses expected-value
 compare-and-swap after stable delivery idempotency completion or durable O1

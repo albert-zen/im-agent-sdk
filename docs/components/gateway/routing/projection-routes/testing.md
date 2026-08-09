@@ -3,6 +3,8 @@
 Projection-route conformance must prove:
 
 - stable route identity and uniqueness for each Thread/Conversation edge;
+- required same-Application Project ancestry in every route and rejection of
+  Project-less persisted or in-memory Thread references;
 - one Thread can fan out to multiple Conversations without creating multiple
   Application observation workers;
 - all three policies resolve only their documented active destinations;

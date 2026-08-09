@@ -5,11 +5,11 @@ import inspect
 import json
 import logging
 from collections import OrderedDict
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from ...contract import ApplicationRef, ThreadRef
+from ...contract import ApplicationRef, ProjectRef, ThreadRef, TurnRef
 from ...events import AgentEvent, AgentEventType
 from ...operations import RequestResponded, RespondRequest
 from ...requests import (
@@ -71,9 +71,10 @@ class PendingAppServerRequest:
 
 
 def map_appserver_request(
-    application_ref: ApplicationRef,
+    project_ref: ProjectRef,
     message: AppServerEvent | Mapping[str, object],
 ) -> PendingAppServerRequest:
+    application_ref = ApplicationRef(project_ref.application_instance_id)
     event = _as_appserver_event(message)
     method = event.method
     if method not in SUPPORTED_SERVER_REQUEST_METHODS:
@@ -93,8 +94,8 @@ def map_appserver_request(
         transport_request_id=transport_request_id,
     )
     thread_ref = ThreadRef(
-        application_instance_id=application_ref.application_instance_id,
-        native_thread_id=thread_id,
+        project_ref=project_ref,
+        thread_id=thread_id,
     )
     if method == COMMAND_APPROVAL:
         return _command_approval(
@@ -138,7 +139,7 @@ def map_appserver_request(
 
 
 def map_zen_appserver_request(
-    application_ref: ApplicationRef,
+    project_ref: ProjectRef,
     message: AppServerEvent | Mapping[str, object],
 ) -> PendingAppServerRequest:
     """Map only the interactive request surface evidenced by native Zen."""
@@ -148,7 +149,7 @@ def map_zen_appserver_request(
         raise UnsupportedAppServerRequest(
             f"unsupported Zen App Server request method: {event.method or '<missing>'}"
         )
-    return map_appserver_request(application_ref, event)
+    return map_appserver_request(project_ref, event)
 
 
 def _as_appserver_event(
@@ -236,8 +237,7 @@ def _command_approval(
     return PendingAppServerRequest(
         request=ApprovalRequest(
             request_ref=request_ref,
-            thread_ref=thread_ref,
-            turn_id=turn_id,
+            turn_ref=TurnRef(thread_ref, turn_id),
             prompt=prompt,
             choices=choices,
             metadata={"native_method": COMMAND_APPROVAL},
@@ -273,8 +273,7 @@ def _file_approval(
     return PendingAppServerRequest(
         request=ApprovalRequest(
             request_ref=request_ref,
-            thread_ref=thread_ref,
-            turn_id=turn_id,
+            turn_ref=TurnRef(thread_ref, turn_id),
             prompt=prompt,
             choices=choices,
             metadata={"native_method": FILE_APPROVAL},
@@ -316,8 +315,7 @@ def _permissions_approval(
     return PendingAppServerRequest(
         request=ApprovalRequest(
             request_ref=request_ref,
-            thread_ref=thread_ref,
-            turn_id=turn_id,
+            turn_ref=TurnRef(thread_ref, turn_id),
             prompt=prompt,
             choices=(
                 RequestChoice(
@@ -402,8 +400,7 @@ def _user_input(
     return PendingAppServerRequest(
         request=UserInputRequest(
             request_ref=request_ref,
-            thread_ref=thread_ref,
-            turn_id=turn_id,
+            turn_ref=TurnRef(thread_ref, turn_id),
             questions=tuple(questions),
             metadata={"native_method": USER_INPUT},
         ),
@@ -532,10 +529,12 @@ def _require_collection_limit(
 
 
 ServerRequestMapper = Callable[
-    [ApplicationRef, AppServerEvent],
+    [ProjectRef, AppServerEvent],
     PendingAppServerRequest,
 ]
 PublishEvent = Callable[[str, AgentEvent], None]
+RequireThreadScope = Callable[[ThreadRef], Awaitable[object]]
+FailObservation = Callable[[], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -550,15 +549,20 @@ class AppServerRequestRuntime:
     def __init__(
         self,
         *,
-        application_ref: ApplicationRef,
+        project_ref: ProjectRef,
         client: object,
         mapper: ServerRequestMapper | None,
         publish_event: PublishEvent,
+        require_thread_scope: RequireThreadScope,
+        fail_observation: FailObservation,
     ) -> None:
-        self._application_ref = application_ref
+        self._project_ref = project_ref
+        self._application_ref = ApplicationRef(project_ref.application_instance_id)
         self._client = client
         self._mapper = mapper
         self._publish_event = publish_event
+        self._require_thread_scope = require_thread_scope
+        self._fail_observation = fail_observation
         self._pending: dict[RequestRef, PendingAppServerRequest] = {}
         self._outcomes: OrderedDict[
             RequestRef,
@@ -623,8 +627,9 @@ class AppServerRequestRuntime:
         pending = self._pending.get(request_ref)
         if pending is None:
             raise RequestStaleError("App Server request is not pending")
-        if operation.thread_ref is not None and operation.thread_ref != pending.request.thread_ref:
-            raise ValueError("request.respond belongs to a different Thread")
+        if operation.turn_ref != pending.request.turn_ref:
+            raise ValueError("request.respond belongs to a different Turn")
+        await self._require_thread_scope(pending.request.turn_ref.thread_ref)
         current_epoch = getattr(self._client, "connection_epoch", None)
         if (
             isinstance(current_epoch, int)
@@ -653,7 +658,7 @@ class AppServerRequestRuntime:
             raise
         outcome = self._get_outcome(request_ref)
         if outcome is None:
-            self._remember_outcome(pending, "responded")
+            await self._remember_outcome(pending, "responded")
         return RequestResponded(
             operation_id=operation.operation_id,
             completed_at=completed_at,
@@ -666,7 +671,7 @@ class AppServerRequestRuntime:
             raise RuntimeError("native interactive requests are not configured")
         try:
             event = normalize_appserver_message(message)
-            pending = mapper(self._application_ref, event)
+            pending = mapper(self._project_ref, event)
         except UnsupportedAppServerRequest as error:
             await self._reject(message, error, code=-32601)
             return
@@ -677,17 +682,27 @@ class AppServerRequestRuntime:
                 code=-32602,
             )
             return
+        try:
+            await self._require_thread_scope(pending.request.turn_ref.thread_ref)
+        except Exception:
+            self._fail_observation()
+            await self._reject(
+                message,
+                AppServerMappingError(),
+                code=-32602,
+            )
+            return
         request_ref = pending.request.request_ref
         self._pending[request_ref] = pending
         self._outcomes.pop(request_ref, None)
-        self._publish(
-            pending.request.thread_ref,
-            pending.request.turn_id,
+        await self._publish(
+            pending.request.turn_ref.thread_ref,
+            pending.request.turn_ref.turn_id,
             AgentEventType.REQUEST_OPENED,
             event_id=self._request_event_id(
                 event_identity="request_opened",
-                thread_ref=pending.request.thread_ref,
-                turn_id=pending.request.turn_id,
+                thread_ref=pending.request.turn_ref.thread_ref,
+                turn_id=pending.request.turn_ref.turn_id,
                 transport_request_id=pending.transport_request_id,
                 connection_epoch=pending.connection_epoch,
             ),
@@ -732,8 +747,8 @@ class AppServerRequestRuntime:
         pending = candidates[0] if len(candidates) == 1 else None
         if pending is not None:
             request_ref = pending.request.request_ref
-            thread_ref = pending.request.thread_ref
-            turn_id = pending.request.turn_id
+            thread_ref = pending.request.turn_ref.thread_ref
+            turn_id = pending.request.turn_ref.turn_id
             resolution_epoch = pending.connection_epoch
         else:
             if notification_epoch is None or notification_epoch < 1:
@@ -751,18 +766,29 @@ class AppServerRequestRuntime:
                 )
                 return
             thread_ref = ThreadRef(
-                application_instance_id=(self._application_ref.application_instance_id),
-                native_thread_id=event.thread_id,
+                project_ref=self._project_ref,
+                thread_id=event.thread_id,
             )
             turn_id = event.turn_id
+            if turn_id is None:
+                logger.warning(
+                    "Ignoring App Server request resolution without pending or Turn scope"
+                )
+                return
+        try:
+            await self._require_thread_scope(thread_ref)
+        except Exception:
+            self._fail_observation()
+            return
         if pending is not None:
-            self._remember_outcome(pending, "resolved")
+            await self._remember_outcome(pending, "resolved")
         resolution = RequestResolution(
             request_ref=request_ref,
+            turn_ref=TurnRef(thread_ref, turn_id),
             status=RequestResolutionStatus.RESOLVED,
             resolved_at=datetime.now(UTC),
         )
-        self._publish(
+        await self._publish(
             thread_ref,
             turn_id,
             AgentEventType.REQUEST_RESOLVED,
@@ -810,20 +836,21 @@ class AppServerRequestRuntime:
         pending: PendingAppServerRequest,
     ) -> None:
         request_ref = pending.request.request_ref
-        self._remember_outcome(pending, "stale")
+        await self._remember_outcome(pending, "stale")
         resolution = RequestResolution(
             request_ref=request_ref,
+            turn_ref=pending.request.turn_ref,
             status=RequestResolutionStatus.STALE,
             resolved_at=datetime.now(UTC),
         )
-        self._publish(
-            pending.request.thread_ref,
-            pending.request.turn_id,
+        await self._publish(
+            pending.request.turn_ref.thread_ref,
+            pending.request.turn_ref.turn_id,
             AgentEventType.REQUEST_RESOLVED,
             event_id=self._request_event_id(
                 event_identity="request_stale",
-                thread_ref=pending.request.thread_ref,
-                turn_id=pending.request.turn_id,
+                thread_ref=pending.request.turn_ref.thread_ref,
+                turn_id=pending.request.turn_ref.turn_id,
                 transport_request_id=pending.transport_request_id,
                 connection_epoch=pending.connection_epoch,
             ),
@@ -839,7 +866,7 @@ class AppServerRequestRuntime:
             self._outcomes.move_to_end(request_ref)
         return outcome
 
-    def _remember_outcome(
+    async def _remember_outcome(
         self,
         pending: PendingAppServerRequest,
         state: str,
@@ -854,26 +881,27 @@ class AppServerRequestRuntime:
         while len(self._outcomes) > _TERMINAL_REQUEST_CACHE_LIMIT:
             _evicted_ref, evicted = self._outcomes.popitem(last=False)
             if evicted.state == "responded":
-                self._publish_retention_stale(evicted.pending)
+                await self._publish_retention_stale(evicted.pending)
 
-    def _publish_retention_stale(
+    async def _publish_retention_stale(
         self,
         pending: PendingAppServerRequest,
     ) -> None:
         request_ref = pending.request.request_ref
         resolution = RequestResolution(
             request_ref=request_ref,
+            turn_ref=pending.request.turn_ref,
             status=RequestResolutionStatus.STALE,
             resolved_at=datetime.now(UTC),
         )
-        self._publish(
-            pending.request.thread_ref,
-            pending.request.turn_id,
+        await self._publish(
+            pending.request.turn_ref.thread_ref,
+            pending.request.turn_ref.turn_id,
             AgentEventType.REQUEST_RESOLVED,
             event_id=self._request_event_id(
                 event_identity="request_retention_stale",
-                thread_ref=pending.request.thread_ref,
-                turn_id=pending.request.turn_id,
+                thread_ref=pending.request.turn_ref.thread_ref,
+                turn_id=pending.request.turn_ref.turn_id,
                 transport_request_id=pending.transport_request_id,
                 connection_epoch=pending.connection_epoch,
             ),
@@ -885,23 +913,24 @@ class AppServerRequestRuntime:
         *,
         event_identity: str,
         thread_ref: ThreadRef,
-        turn_id: str | None,
+        turn_id: str,
         transport_request_id: str | int,
         connection_epoch: int,
     ) -> str:
         return derive_appserver_event_id(
             self._application_ref.application_instance_id,
+            project_id=thread_ref.project_ref.project_id,
             event_type=event_identity,
-            thread_id=thread_ref.native_thread_id,
+            thread_id=thread_ref.thread_id,
             turn_id=turn_id,
             request_id=transport_request_id,
             connection_epoch=connection_epoch,
         )
 
-    def _publish(
+    async def _publish(
         self,
         thread_ref: ThreadRef,
-        turn_id: str | None,
+        turn_id: str,
         event_type: AgentEventType,
         *,
         event_id: str,
@@ -911,12 +940,13 @@ class AppServerRequestRuntime:
         event = AgentEvent(
             event_id=event_id,
             application_instance_id=(self._application_ref.application_instance_id),
+            project_ref=thread_ref.project_ref,
             type=event_type,
             data={},
             created_at=datetime.now(UTC),
             thread_ref=thread_ref,
-            turn_id=turn_id,
+            turn_ref=TurnRef(thread_ref, turn_id),
             request=request,
             request_resolution=resolution,
         )
-        self._publish_event(thread_ref.native_thread_id, event)
+        self._publish_event(thread_ref.thread_id, event)

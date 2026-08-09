@@ -2,9 +2,11 @@
 
 The normative v1 public architecture and executable acceptance contract are
 [V1_DESIGN.md](V1_DESIGN.md) and
-[V1_EXECUTABLE_SPEC.md](V1_EXECUTABLE_SPEC.md). This pre-v1 system map remains
-implementation evidence while its Project-less paths, low-level consumer
-actions, persistence composition, and implicit onboarding are reconciled.
+[V1_EXECUTABLE_SPEC.md](V1_EXECUTABLE_SPEC.md). The uniform resource contract
+is now implemented as Application → Project/Workspace → Thread → Turn. The
+remaining low-level consumer actions, persistence composition, and implicit
+onboarding are still transformation evidence until their later DAG blocks
+land.
 
 ## System shape
 
@@ -58,6 +60,14 @@ quota, lease, cleanup ledger, or second native subscription.
 
 IM is another access surface over the native Agent Application. It is not a
 separate Agent state tier.
+
+Every Thread reference nests one Project reference and every escaped Turn
+reference nests one Thread reference. Managed adapters preserve native Project
+identity. Fixed and flat adapters project exactly one stable workspace Project
+with an immutable workspace ID and canonical-root fingerprint; list/read are
+honest adapter fallbacks while management is explicitly unsupported. Gateway
+bridge keys and rows use these stable nested IDs, never path, display text, or
+timestamps.
 
 ## Product components
 

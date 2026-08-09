@@ -69,8 +69,12 @@ async def run_demo() -> DemoReport:
     application = consumer.application
     conversation_a = ConversationRef("reference-channel", "conversation-a")
     conversation_b = ConversationRef("reference-channel", "conversation-b")
-    first_thread = await application.create_thread(title="Shared reference Thread")
-    second_thread = await application.create_thread(title="Switched reference Thread")
+    first_thread = await application.create_thread(
+        application.default_project_ref, title="Shared reference Thread"
+    )
+    second_thread = await application.create_thread(
+        application.default_project_ref, title="Switched reference Thread"
+    )
 
     await consumer.start()
     diagnostics = None

@@ -17,7 +17,7 @@ from imagent.applications.adapters.appserver.requests import (
     map_zen_appserver_request,
 )
 from imagent.applications.capabilities import SupportLevel
-from imagent.applications.contract import ApplicationRef, ThreadRef
+from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef, TurnRef
 from imagent.applications.events import AgentEventType, EventStreamReset
 from imagent.applications.operations import (
     ApplicationOperationFailed,
@@ -40,11 +40,12 @@ from imagent.interaction.operations import OperationErrorCode
 class AppServerRequestMappingTests(unittest.TestCase):
     def setUp(self) -> None:
         self.application = ApplicationRef("codex-main")
+        self.project = ProjectRef("codex-main", "workspace")
 
     def test_command_choices_preserve_native_response_payloads(self) -> None:
         amendment = {"acceptWithExecpolicyAmendment": {"execpolicy_amendment": ["git", "status"]}}
         pending = map_appserver_request(
-            self.application,
+            self.project,
             _server_request(
                 method="item/commandExecution/requestApproval",
                 params={
@@ -82,7 +83,7 @@ class AppServerRequestMappingTests(unittest.TestCase):
             "unsupported Zen App Server request method",
         ):
             map_zen_appserver_request(
-                ApplicationRef("zen-main"),
+                ProjectRef("zen-main", "workspace"),
                 _server_request(
                     method="item/tool/requestUserInput",
                     params={"questions": []},
@@ -92,7 +93,7 @@ class AppServerRequestMappingTests(unittest.TestCase):
     def test_mapper_rejects_oversized_request_collections_before_mapping(self) -> None:
         with self.assertRaisesRegex(ValueError, "questions exceed"):
             map_appserver_request(
-                self.application,
+                self.project,
                 _server_request(
                     method="item/tool/requestUserInput",
                     params={
@@ -108,7 +109,7 @@ class AppServerRequestMappingTests(unittest.TestCase):
             )
         with self.assertRaisesRegex(ValueError, "options exceed"):
             map_appserver_request(
-                self.application,
+                self.project,
                 _server_request(
                     method="item/tool/requestUserInput",
                     params={
@@ -127,7 +128,7 @@ class AppServerRequestMappingTests(unittest.TestCase):
             )
         with self.assertRaisesRegex(ValueError, "decisions exceed"):
             map_appserver_request(
-                self.application,
+                self.project,
                 _server_request(
                     method="item/commandExecution/requestApproval",
                     params={
@@ -144,7 +145,7 @@ class AppServerRequestMappingTests(unittest.TestCase):
         self,
     ) -> None:
         pending = map_appserver_request(
-            self.application,
+            self.project,
             _server_request(
                 method="item/tool/requestUserInput",
                 params={
@@ -187,7 +188,7 @@ class AppServerRequestMappingTests(unittest.TestCase):
         self,
     ) -> None:
         pending = map_appserver_request(
-            self.application,
+            self.project,
             _server_request(
                 method="item/tool/requestUserInput",
                 params={
@@ -215,7 +216,7 @@ class AppServerRequestMappingTests(unittest.TestCase):
             "network": {"enabled": True},
         }
         pending = map_appserver_request(
-            self.application,
+            self.project,
             _server_request(
                 method="item/permissions/requestApproval",
                 params={"permissions": permissions},
@@ -247,7 +248,7 @@ class AppServerRequestMappingTests(unittest.TestCase):
         self,
     ) -> None:
         pending = map_appserver_request(
-            self.application,
+            self.project,
             _server_request(
                 method="item/commandExecution/requestApproval",
                 params={
@@ -280,7 +281,7 @@ class AppServerRequestMappingTests(unittest.TestCase):
         self,
     ) -> None:
         pending = map_appserver_request(
-            self.application,
+            self.project,
             _server_request(
                 method="item/tool/requestUserInput",
                 params={
@@ -336,8 +337,9 @@ class AppServerRequestMappingTests(unittest.TestCase):
 
 
 class InteractiveClient:
-    def __init__(self) -> None:
+    def __init__(self, *, workspace_cwd: str | None = "D:/repo") -> None:
         self.connection_epoch = 3
+        self.workspace_cwd = workspace_cwd
         self.notification_handlers = []
         self.server_request_handlers = []
         self.reset_handlers = []
@@ -345,6 +347,10 @@ class InteractiveClient:
         self.errors = []
         self.reply_started: asyncio.Event | None = None
         self.release_reply: asyncio.Event | None = None
+        self.read_calls = 0
+        self.max_successful_reads: int | None = None
+        self.fail_reads_after_reply = False
+        self.fail_reads = False
 
     def add_notification_handler(self, handler) -> None:
         self.notification_handlers.append(handler)
@@ -363,6 +369,8 @@ class InteractiveClient:
         expected_connection_epoch=None,
     ):
         self.replies.append((request_id, result, expected_connection_epoch))
+        if self.fail_reads_after_reply:
+            self.fail_reads = True
         if self.reply_started is not None:
             self.reply_started.set()
         if self.release_reply is not None:
@@ -400,14 +408,19 @@ class InteractiveClient:
                 await result
 
     async def read_thread(self, thread_id: str, *, include_turns: bool = False):
-        return {
-            "thread": {
-                "id": thread_id,
-                "cwd": "D:/repo",
-                "status": {"type": "idle"},
-                "turns": [] if include_turns else None,
-            }
+        self.read_calls += 1
+        if self.fail_reads or (
+            self.max_successful_reads is not None and self.read_calls > self.max_successful_reads
+        ):
+            raise RuntimeError("injected native scope-read failure")
+        thread = {
+            "id": thread_id,
+            "status": {"type": "idle"},
+            "turns": [] if include_turns else None,
         }
+        if self.workspace_cwd is not None:
+            thread["cwd"] = self.workspace_cwd
+        return {"thread": thread}
 
     async def list_thread_turns(self, _thread_id: str, **_params):
         return {"data": [], "nextCursor": None}
@@ -419,9 +432,10 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
         self.adapter = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=cast(Any, self.client),
+            workspace_id="workspace",
             cwd="D:/repo",
         )
-        self.thread = ThreadRef("codex-main", "thread-1")
+        self.thread = ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
         self.events = cast(Any, self.adapter.subscribe_thread(self.thread))
 
     async def asyncTearDown(self) -> None:
@@ -449,7 +463,7 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
                 application_ref=self.adapter.summary.ref,
                 request_ref=event.request.request_ref,
                 response=ApprovalResponse("acceptForSession"),
-                thread_ref=self.thread,
+                turn_ref=event.request.turn_ref,
                 created_at=datetime.now(UTC),
             )
         )
@@ -465,7 +479,7 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
                 application_ref=self.adapter.summary.ref,
                 request_ref=event.request.request_ref,
                 response=ApprovalResponse("accept"),
-                thread_ref=self.thread,
+                turn_ref=event.request.turn_ref,
                 created_at=datetime.now(UTC),
             )
         )
@@ -495,6 +509,182 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
             event.request.request_ref,
         )
 
+    async def test_request_open_carries_single_pre_effect_scope_verification(self) -> None:
+        client = InteractiveClient()
+        client.max_successful_reads = 1
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-single-scope-read",
+            client=cast(Any, client),
+            workspace_id="workspace",
+            cwd="D:/repo",
+        )
+        thread_ref = ThreadRef(
+            ProjectRef("codex-single-scope-read", "workspace"),
+            "thread-1",
+        )
+        events = cast(Any, adapter.subscribe_thread(thread_ref))
+        try:
+            opened = asyncio.create_task(anext(events))
+            await asyncio.sleep(0)
+            await client.emit_request(
+                _server_request(
+                    method="item/fileChange/requestApproval",
+                    params={"reason": "verified once before publication"},
+                )
+            )
+            self.assertIs((await opened).type, AgentEventType.REQUEST_OPENED)
+            self.assertEqual(client.read_calls, 1)
+            self.assertEqual(adapter._request_runtime.pending_count, 1)
+        finally:
+            await events.aclose()
+
+    async def test_retention_publication_cannot_reverse_native_response_success(self) -> None:
+        for request_id in range(257):
+            await self.client.emit_request(
+                _server_request(
+                    method="item/fileChange/requestApproval",
+                    params={},
+                    transport_request_id=request_id,
+                )
+            )
+            if request_id == 256:
+                self.client.fail_reads_after_reply = True
+            result = await self.adapter.execute(
+                RespondRequest(
+                    operation_id=f"retention-response-{request_id}",
+                    application_ref=self.adapter.summary.ref,
+                    request_ref=derive_appserver_request_ref(
+                        self.adapter.summary.ref,
+                        connection_epoch=3,
+                        transport_request_id=request_id,
+                    ),
+                    response=ApprovalResponse("accept"),
+                    turn_ref=TurnRef(self.thread, "turn-1"),
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(result, RequestResponded)
+        self.assertTrue(self.client.fail_reads)
+        self.assertEqual(self.adapter._request_runtime.pending_count, 0)
+        self.assertEqual(self.adapter._request_runtime.terminal_count, 256)
+
+    async def test_request_open_scope_failure_resets_without_admitting_state(self) -> None:
+        for native_cwd, fail_reads in (
+            (None, False),
+            ("D:/other-workspace", False),
+            ("D:/repo", True),
+        ):
+            with self.subTest(native_cwd=native_cwd, fail_reads=fail_reads):
+                client = InteractiveClient(workspace_cwd=native_cwd)
+                client.fail_reads = fail_reads
+                adapter = CodexApplicationAdapter(
+                    application_instance_id="codex-scoped-request",
+                    client=cast(Any, client),
+                    workspace_id="workspace",
+                    cwd="D:/repo",
+                )
+                thread_ref = ThreadRef(
+                    ProjectRef("codex-scoped-request", "workspace"),
+                    "thread-1",
+                )
+                events = cast(Any, adapter.subscribe_thread(thread_ref))
+                opened = asyncio.create_task(anext(events))
+                await asyncio.sleep(0)
+                try:
+                    await client.emit_request(
+                        _server_request(
+                            method="item/fileChange/requestApproval",
+                            params={"reason": "must not escape foreign scope"},
+                        )
+                    )
+                    with self.assertRaisesRegex(
+                        EventStreamReset,
+                        "application_native_mapping_failed",
+                    ):
+                        await opened
+                    self.assertEqual(
+                        client.errors,
+                        [(7, -32602, APP_SERVER_MAPPING_ERROR_MESSAGE, 3)],
+                    )
+                    self.assertEqual(adapter._request_runtime.pending_count, 0)
+                    self.assertEqual(adapter._request_runtime.terminal_count, 0)
+                finally:
+                    await events.aclose()
+
+    async def test_request_response_rechecks_native_workspace_before_mutation(self) -> None:
+        opened = asyncio.create_task(anext(self.events))
+        await asyncio.sleep(0)
+        await self.client.emit_request(
+            _server_request(
+                method="item/fileChange/requestApproval",
+                params={"reason": "scope may change before response"},
+            )
+        )
+        event = await opened
+        assert event.request is not None
+        self.client.workspace_cwd = "D:/other-workspace"
+
+        result = await self.adapter.execute(
+            RespondRequest(
+                operation_id="respond-foreign-workspace",
+                application_ref=self.adapter.summary.ref,
+                request_ref=event.request.request_ref,
+                response=ApprovalResponse("accept"),
+                turn_ref=event.request.turn_ref,
+                created_at=datetime.now(UTC),
+            )
+        )
+
+        self.assertIsInstance(result, ApplicationOperationFailed)
+        self.assertEqual(self.client.replies, [])
+
+    async def test_request_resolution_scope_failure_resets_without_mutating_state(
+        self,
+    ) -> None:
+        for native_cwd, fail_reads in ((None, False), ("D:/repo", True)):
+            with self.subTest(native_cwd=native_cwd, fail_reads=fail_reads):
+                client = InteractiveClient()
+                adapter = CodexApplicationAdapter(
+                    application_instance_id="codex-resolution-scope",
+                    client=cast(Any, client),
+                    workspace_id="workspace",
+                    cwd="D:/repo",
+                )
+                thread_ref = ThreadRef(
+                    ProjectRef("codex-resolution-scope", "workspace"),
+                    "thread-1",
+                )
+                events = cast(Any, adapter.subscribe_thread(thread_ref))
+                try:
+                    opened = asyncio.create_task(anext(events))
+                    await asyncio.sleep(0)
+                    await client.emit_request(
+                        _server_request(
+                            method="item/fileChange/requestApproval",
+                            params={"reason": "scope may disappear before resolution"},
+                        )
+                    )
+                    self.assertIs((await opened).type, AgentEventType.REQUEST_OPENED)
+                    client.workspace_cwd = native_cwd
+                    client.fail_reads = fail_reads
+
+                    await client.emit_notification(
+                        {
+                            "method": "serverRequest/resolved",
+                            "params": {"requestId": 7},
+                        }
+                    )
+
+                    with self.assertRaisesRegex(
+                        EventStreamReset,
+                        "application_native_mapping_failed",
+                    ):
+                        await anext(events)
+                    self.assertEqual(adapter._request_runtime.pending_count, 1)
+                    self.assertEqual(adapter._request_runtime.terminal_count, 0)
+                finally:
+                    await events.aclose()
+
     async def test_connection_reset_emits_stale_and_rejects_late_response(
         self,
     ) -> None:
@@ -520,7 +710,7 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
                 application_ref=self.adapter.summary.ref,
                 request_ref=request_event.request.request_ref,
                 response=ApprovalResponse("accept"),
-                thread_ref=self.thread,
+                turn_ref=request_event.request.turn_ref,
                 created_at=datetime.now(UTC),
             )
         )
@@ -536,10 +726,11 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
         adapter = CodexApplicationAdapter(
             application_instance_id="codex-capacity-one",
             client=cast(Any, client),
+            workspace_id="workspace",
             cwd="D:/repo",
             event_buffer_max_pending=1,
         )
-        thread_ref = ThreadRef("codex-capacity-one", "thread-1")
+        thread_ref = ThreadRef(ProjectRef("codex-capacity-one", "workspace"), "thread-1")
         events = cast(Any, adapter.subscribe_thread(thread_ref))
         try:
             await client.emit_request(
@@ -580,7 +771,7 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
                     application_ref=self.adapter.summary.ref,
                     request_ref=request_event.request.request_ref,
                     response=ApprovalResponse("accept"),
-                    thread_ref=self.thread,
+                    turn_ref=request_event.request.turn_ref,
                     created_at=datetime.now(UTC),
                 )
             )
@@ -604,7 +795,7 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
                 application_ref=self.adapter.summary.ref,
                 request_ref=request_event.request.request_ref,
                 response=ApprovalResponse("accept"),
-                thread_ref=self.thread,
+                turn_ref=request_event.request.turn_ref,
                 created_at=datetime.now(UTC),
             )
         )
@@ -781,7 +972,7 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
                 application_ref=self.adapter.summary.ref,
                 request_ref=second_event.request.request_ref,
                 response=ApprovalResponse("accept"),
-                thread_ref=self.thread,
+                turn_ref=second_event.request.turn_ref,
                 created_at=datetime.now(UTC),
             )
         )
@@ -794,6 +985,7 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
         adapter = ZenApplicationAdapter(
             application_instance_id="zen-main",
             client=cast(Any, client),
+            workspace_id="workspace",
             cwd="D:/repo",
         )
         self.assertIs(
@@ -801,7 +993,7 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
             SupportLevel.NATIVE,
         )
         self.assertEqual(len(client.server_request_handlers), 1)
-        thread = ThreadRef("zen-main", "thread-1")
+        thread = ThreadRef(ProjectRef("zen-main", "workspace"), "thread-1")
         events = cast(Any, adapter.subscribe_thread(thread))
         try:
             opened = asyncio.create_task(anext(events))
@@ -819,7 +1011,7 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
             event = await opened
             self.assertIs(event.type, AgentEventType.REQUEST_OPENED)
             assert isinstance(event.request, ApprovalRequest)
-            self.assertEqual(event.request.thread_ref, thread)
+            self.assertEqual(event.request.turn_ref.thread_ref, thread)
 
             result = await adapter.execute(
                 RespondRequest(
@@ -827,7 +1019,7 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
                     application_ref=adapter.summary.ref,
                     request_ref=event.request.request_ref,
                     response=ApprovalResponse("accept"),
-                    thread_ref=thread,
+                    turn_ref=event.request.turn_ref,
                     created_at=datetime.now(UTC),
                 )
             )
@@ -864,7 +1056,7 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
                         transport_request_id=request_id,
                     ),
                     response=ApprovalResponse("accept"),
-                    thread_ref=self.thread,
+                    turn_ref=TurnRef(self.thread, "turn-1"),
                     created_at=datetime.now(UTC),
                 )
             )
@@ -898,7 +1090,7 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
                     transport_request_id=299,
                 ),
                 response=ApprovalResponse("accept"),
-                thread_ref=self.thread,
+                turn_ref=TurnRef(self.thread, "turn"),
                 created_at=datetime.now(UTC),
             )
         )
@@ -919,7 +1111,7 @@ class AppServerAdapterRequestTests(unittest.IsolatedAsyncioTestCase):
                     transport_request_id=0,
                 ),
                 response=ApprovalResponse("accept"),
-                thread_ref=self.thread,
+                turn_ref=TurnRef(self.thread, "turn"),
                 created_at=datetime.now(UTC),
             )
         )

@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 import imagent.gateway as gateway_facade
 from imagent.adapters import IdempotencyClaimStatus
-from imagent.applications.contract import AgentInput, AgentMessage, ThreadRef
+from imagent.applications.contract import AgentInput, AgentMessage, ProjectRef, ThreadRef
 from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway import presentation as presentation_owner
 from imagent.gateway.persistence import (
@@ -174,7 +174,7 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
 
         policy = _Policy(present)
         gateway, channel, repository = self._gateway(policy)
-        thread = ThreadRef("fake-agent", "thread-1")
+        thread = ThreadRef(ProjectRef("fake-agent", "workspace"), "thread-1")
         visible = _route(thread, ConversationRef("fake-channel", "visible"))
         hidden = _route(thread, ConversationRef("fake-channel", "hidden"))
         await repository.put_projection_route(visible)
@@ -221,7 +221,7 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
         policy = _Policy(lambda _message, _context: None)
         idempotency = InMemoryIdempotencyRepository()
         gateway, channel, repository = self._gateway(policy, idempotency=idempotency)
-        thread = ThreadRef("fake-agent", "thread-crash")
+        thread = ThreadRef(ProjectRef("fake-agent", "workspace"), "thread-crash")
         route = _route(thread, ConversationRef("fake-channel", "crash-window"))
         await repository.put_projection_route(route)
         projected = _projected(thread)
@@ -329,7 +329,7 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
 
         policy = _Policy(present)
         application = FakeAgentApplicationAdapter()
-        thread = await application.create_thread()
+        thread = await application.create_thread(application.default_project_ref)
         await application.send_input(
             thread.ref,
             AgentInput(client_message_id="seed", content=(TextContent("run"),)),
@@ -340,6 +340,7 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
             ConversationBinding(
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
+                project_ref=thread.ref.project_ref,
                 thread_ref=thread.ref,
             )
         )
@@ -380,7 +381,7 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
     async def test_live_only_suppression_never_advances_checkpoint(self) -> None:
         policy = _Policy(lambda _message, _context: None)
         gateway, channel, repository = self._gateway(policy)
-        thread = ThreadRef("fake-agent", "thread-live")
+        thread = ThreadRef(ProjectRef("fake-agent", "workspace"), "thread-live")
         route = _route(thread, ConversationRef("fake-channel", "live"))
         await repository.put_projection_route(route)
         projected = _projected(thread, checkpoint=False, event_id="event-1")

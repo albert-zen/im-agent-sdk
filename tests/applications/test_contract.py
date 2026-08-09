@@ -7,7 +7,7 @@ import subprocess
 import sys
 import unittest
 from collections.abc import AsyncIterator, Awaitable, Callable
-from dataclasses import FrozenInstanceError, is_dataclass
+from dataclasses import FrozenInstanceError, fields, is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast, get_type_hints
@@ -37,6 +37,8 @@ _APPLICATION_MODEL_FAMILY = (
     "ApplicationRef",
     "ProjectRef",
     "ThreadRef",
+    "TurnRef",
+    "WorkspaceIdentity",
     "InputContinuationPreference",
     "InputDisposition",
     "TurnReplyCorrelationPolicy",
@@ -53,7 +55,18 @@ _APPLICATION_MODEL_FAMILY = (
     "ThreadSnapshot",
     "AcceptedTurn",
     "ApplicationInputDispatch",
+    "fingerprint_canonical_workspace_root",
+    "validate_agent_message",
+    "validate_application_summary",
+    "validate_project_ref",
+    "validate_project_summary",
     "validate_thread_ref",
+    "validate_thread_history",
+    "validate_thread_summary",
+    "validate_turn_catchup",
+    "validate_turn_history_entry",
+    "validate_turn_ref",
+    "validate_workspace_identity",
 )
 
 
@@ -120,7 +133,7 @@ class ApplicationContractOwnershipTests(unittest.TestCase):
                     self.assertTrue(getattr(params, "frozen", False))
                     self.assertTrue(hasattr(model, "__slots__"))
 
-        thread = owner.ThreadRef("app-1", "thread-1")
+        thread = owner.ThreadRef(owner.ProjectRef("app-1", "workspace"), "thread-1")
         message = owner.AgentMessage(
             agent_item_id="item-1",
             thread_ref=thread,
@@ -130,7 +143,7 @@ class ApplicationContractOwnershipTests(unittest.TestCase):
         )
         catchup = owner.TurnCatchup(
             thread_ref=thread,
-            turn_id="turn-1",
+            turn_ref=owner.TurnRef(thread, "turn-1"),
             status=owner.TurnStatus.COMPLETED,
             messages=(message,),
         )
@@ -138,7 +151,7 @@ class ApplicationContractOwnershipTests(unittest.TestCase):
             thread_ref=thread,
             turns=(
                 owner.TurnHistoryEntry(
-                    turn_id="turn-1",
+                    turn_ref=owner.TurnRef(thread, "turn-1"),
                     status=owner.TurnStatus.COMPLETED,
                     agent_messages=(message,),
                 ),
@@ -154,11 +167,12 @@ class ApplicationContractOwnershipTests(unittest.TestCase):
         event = AgentEvent(
             event_id="event-1",
             application_instance_id="app-1",
+            project_ref=thread.project_ref,
             type=AgentEventType.MESSAGE_COMPLETED,
             data={"message": message},
             created_at=message.created_at,
             thread_ref=thread,
-            turn_id="turn-1",
+            turn_ref=owner.TurnRef(thread, "turn-1"),
         )
 
         self.assertIs(catchup.messages[0], message)
@@ -171,14 +185,8 @@ class ApplicationContractOwnershipTests(unittest.TestCase):
     def test_thread_scope_validation_and_historical_model_have_no_duplicate_definitions(
         self,
     ) -> None:
-        with self.assertRaisesRegex(ContractViolation, "different application"):
-            owner.validate_thread_ref(
-                owner.ThreadRef(
-                    "app-1",
-                    "thread-1",
-                    owner.ProjectRef("app-2", "project-1"),
-                )
-            )
+        with self.assertRaisesRegex(ContractViolation, "project_id"):
+            owner.validate_thread_ref(owner.ThreadRef(owner.ProjectRef("app-2", ""), "thread-1"))
 
         repository_root = Path(__file__).resolve().parents[2]
         model_path = repository_root / "src" / "imagent" / "contracts" / "model.py"
@@ -193,6 +201,58 @@ class ApplicationContractOwnershipTests(unittest.TestCase):
 
         self.assertFalse(hasattr(messages, "AgentMessage"))
         self.assertNotIn("imagent.applications", messages.__dict__)
+
+    def test_resource_refs_use_only_the_normative_nested_identity_fields(self) -> None:
+        project = owner.ProjectRef("app-1", "project-1")
+        thread = owner.ThreadRef(project, "thread-1")
+        turn = owner.TurnRef(thread, "turn-1")
+
+        self.assertEqual(
+            tuple(field.name for field in fields(owner.ProjectRef)),
+            (
+                "application_instance_id",
+                "project_id",
+            ),
+        )
+        self.assertEqual(
+            tuple(field.name for field in fields(owner.ThreadRef)),
+            (
+                "project_ref",
+                "thread_id",
+            ),
+        )
+        self.assertEqual(
+            tuple(field.name for field in fields(owner.TurnRef)),
+            (
+                "thread_ref",
+                "turn_id",
+            ),
+        )
+        self.assertFalse(hasattr(project, "native_project_id"))
+        self.assertFalse(hasattr(thread, "application_instance_id"))
+        self.assertEqual(turn.thread_ref.project_ref, project)
+
+    def test_workspace_identity_is_stable_id_plus_canonical_root_fingerprint(self) -> None:
+        first_ref = owner.ProjectRef("app-1", "workspace-1")
+        same_ref = owner.ProjectRef("app-1", "workspace-1")
+        replacement_ref = owner.ProjectRef("app-1", "workspace-2")
+        first_fingerprint = owner.fingerprint_canonical_workspace_root("/repo/root")
+        moved_fingerprint = owner.fingerprint_canonical_workspace_root("/repo/moved")
+
+        self.assertEqual(first_ref, same_ref)
+        self.assertNotEqual(first_ref, replacement_ref)
+        self.assertNotEqual(first_fingerprint, moved_fingerprint)
+        self.assertEqual(
+            owner.ProjectSummary(first_ref, "First display").ref,
+            owner.ProjectSummary(first_ref, "Renamed display").ref,
+        )
+        owner.validate_workspace_identity(owner.WorkspaceIdentity(first_ref, first_fingerprint))
+        with self.assertRaisesRegex(ContractViolation, "lowercase SHA-256"):
+            owner.validate_workspace_identity(owner.WorkspaceIdentity(first_ref, "A" * 64))
+        with self.assertRaisesRegex(ContractViolation, "between 1 and 4096"):
+            owner.fingerprint_canonical_workspace_root("")
+        with self.assertRaisesRegex(ContractViolation, "valid UTF-8"):
+            owner.fingerprint_canonical_workspace_root("\ud800")
 
     def test_owner_and_public_facades_export_exact_objects(self) -> None:
         names = (

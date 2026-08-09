@@ -27,10 +27,16 @@ Runtime `typing.get_type_hints` preserves the model fields and the native
 continuation, pre-dispatch fence, pending-request, and single
 Thread-subscription signatures.
 
-Required scenarios prove managed/flat/fixed Project shape, instance-scoped
-references, strong `ThreadRef` validation, frozen/slot model behavior, history
+Required scenarios prove managed/flat/fixed Project-management shape, the one
+stable fixed/flat workspace Project and canonical-root fingerprint, instance-
+scoped references, mandatory strong `ThreadRef` Project ancestry, frozen/slot
+model behavior, history
 and live `AgentMessage` parity, Thread lookup independent of native activation,
-typed operation result discrimination, and a stable client-message ID. Every concrete adapter
+typed operation result discrimination, and a stable client-message ID. No
+Project-less construction, event, history, request, route, or persisted row is
+accepted. Negative ancestry cases also place foreign Turn and `AgentMessage`
+values inside otherwise valid catch-up/history/event envelopes and require the
+semantic validators to fail closed. Every concrete adapter
 must accept the default continuation preference, call the pre-dispatch callback
 once immediately before mutation, and return only the disposition/correlation
 policy it actually performed.

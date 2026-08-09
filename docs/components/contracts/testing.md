@@ -21,8 +21,14 @@ pyright src/imagent/contracts tests/interaction/test_contracts.py scripts
 
 Coverage must preserve:
 
-- managed, flat, and fixed project modes;
+- managed, flat, and fixed Project modes, including one stable listable and
+  readable workspace Project for fixed/flat modes;
+- immutable fixed/flat workspace IDs and canonical-root fingerprints across
+  adapter reconstruction, with changed-root evidence producing a different
+  fingerprint for block B to reject;
 - reference scoping and cross-Application rejection;
+- mandatory Project ancestry in every Thread/event/history/binding/route/
+  correlation identity and rejection of partial or Project-less shapes;
 - valid started/create-new and steered/preserve-existing input dispatch and
   accepted-Turn schema combinations, with mixed policies rejected;
 - stable client message IDs;

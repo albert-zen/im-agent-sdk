@@ -49,8 +49,7 @@ def _same_turn_reply_correlation(
 ) -> bool:
     return (
         left.correlation_id == right.correlation_id
-        and left.thread_ref == right.thread_ref
-        and left.turn_id == right.turn_id
+        and left.turn_ref == right.turn_ref
         and left.client_message_id == right.client_message_id
         and left.conversation_ref == right.conversation_ref
         and left.reply_to_message_id == right.reply_to_message_id
@@ -553,7 +552,10 @@ class SQLiteGatewayState:
                   AND thread_id = ?
                   AND turn_id = ?
                 """,
-                (*row_mapping.thread_storage_key(correlation.thread_ref), correlation.turn_id),
+                (
+                    *row_mapping.thread_storage_key(correlation.turn_ref.thread_ref),
+                    correlation.turn_ref.turn_id,
+                ),
             ).fetchone()
             if row is None:
                 raise RuntimeError("Turn reply correlation insert did not persist a row")

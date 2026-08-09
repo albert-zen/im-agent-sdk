@@ -16,7 +16,7 @@ from imagent.applications.capabilities import (
     SupportLevel,
     ThreadCapabilities,
 )
-from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef
+from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef, TurnRef
 from imagent.applications.requests import (
     ApprovalResponseShape,
     RequestRef,
@@ -99,27 +99,25 @@ class StateContractOwnershipTests(unittest.TestCase):
         conversation = ConversationRef("channel-1", "conversation-1")
         application = ApplicationRef("app-1")
         project = ProjectRef("app-1", "project-1")
-        thread = ThreadRef("app-1", "thread-1", project)
+        thread = ThreadRef(project, "thread-1")
         owner.validate_binding(
             owner.ConversationBinding(conversation, application, project, thread),
             _capabilities(ProjectMode.MANAGED),
         )
-        with self.assertRaisesRegex(ContractViolation, "fixed project mode"):
-            owner.validate_binding(
-                owner.ConversationBinding(conversation, application, project),
-                _capabilities(ProjectMode.FIXED),
-            )
+        owner.validate_binding(
+            owner.ConversationBinding(conversation, application, project),
+            _capabilities(ProjectMode.FIXED),
+        )
 
     def test_projection_route_and_turn_correlation_require_explicit_identity(self) -> None:
         conversation = ConversationRef("channel-1", "conversation-1")
-        thread = ThreadRef("app-1", "thread-1")
+        thread = ThreadRef(ProjectRef("app-1", "workspace"), "thread-1")
         route = owner.ThreadProjectionRoute("route-1", thread, conversation)
         owner.validate_projection_route(route)
         owner.validate_turn_reply_correlation(
             owner.TurnReplyCorrelation(
                 "correlation-1",
-                thread,
-                "turn-1",
+                TurnRef(thread, "turn-1"),
                 "client-1",
                 conversation,
                 "reply-1",
@@ -142,8 +140,7 @@ class StateContractOwnershipTests(unittest.TestCase):
         correlation = owner.RequestRouteCorrelation(
             correlation_id="correlation-1",
             request_ref=request_ref,
-            thread_ref=ThreadRef("app-1", "thread-1"),
-            turn_id="turn-1",
+            turn_ref=TurnRef(ThreadRef(ProjectRef("app-1", "workspace"), "thread-1"), "turn-1"),
             conversation_ref=ConversationRef("channel-1", "conversation-1"),
             delivery_id="delivery-1",
             response_shape=ApprovalResponseShape(("accept",)),
@@ -155,7 +152,13 @@ class StateContractOwnershipTests(unittest.TestCase):
         owner.validate_request_route_correlation(correlation)
         with self.assertRaisesRegex(ContractViolation, "different application"):
             owner.validate_request_route_correlation(
-                replace(correlation, thread_ref=ThreadRef("other", "thread-1"))
+                replace(
+                    correlation,
+                    turn_ref=TurnRef(
+                        ThreadRef(ProjectRef("other", "workspace"), "thread-1"),
+                        "turn-1",
+                    ),
+                )
             )
 
     def test_delivery_snapshot_rejects_route_fields_without_a_thread(self) -> None:

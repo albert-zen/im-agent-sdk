@@ -8,6 +8,7 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast, get_type_hints
+from unittest.mock import patch
 
 import imagent.applications as applications
 from imagent.applications import (
@@ -28,6 +29,7 @@ from imagent.applications.adapters.appserver.client import AppServerClient as Na
 from imagent.applications.contract import (
     AgentMessage,
     ApplicationRef,
+    ProjectRef,
     ThreadRef,
 )
 from imagent.applications.diagnostics import ApplicationArtifactMaterializationFailureCode
@@ -70,12 +72,17 @@ class _AppServerClient:
         return {"data": self.turns, "nextCursor": None}
 
     async def start_thread(self, **params):
-        del params
-        return {"thread": {"id": "thread-1"}}
+        return {"thread": {"id": "thread-1", "cwd": params["cwd"]}}
 
     async def read_thread(self, thread_id: str, *, include_turns: bool = False):
         del include_turns
-        return {"thread": {"id": thread_id, "turns": self.turns}}
+        return {
+            "thread": {
+                "id": thread_id,
+                "cwd": "/workspace",
+                "turns": self.turns,
+            }
+        }
 
     async def resume_thread(self, **params):
         del params
@@ -256,10 +263,13 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
         application = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/workspace",
             artifact_materializer=materializer,
         )
-        events = application.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        events = application.subscribe_thread(
+            ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
+        )
         artifact = _artifact_notification()
         await client.notify(artifact)
         await client.notify(artifact)
@@ -302,6 +312,7 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
         application = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/workspace",
             artifact_materializer=materializer,
             artifact_materialization_limits=AppServerArtifactMaterializationLimits(
@@ -327,13 +338,14 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
         application = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/workspace",
             artifact_materializer=materializer,
         )
         operation = GetThreadHistory(
             operation_id="history-artifacts",
             application_ref=ApplicationRef("codex-main"),
-            thread_ref=ThreadRef("codex-main", "thread-1"),
+            thread_ref=ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
             limit=10,
             page=1,
             created_at=datetime(2026, 8, 3, tzinfo=UTC),
@@ -372,10 +384,13 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
                 application = CodexApplicationAdapter(
                     application_instance_id="codex-main",
                     client=client,
+                    workspace_id="workspace",
                     cwd="/workspace",
                     artifact_materializer=materializer,
                 )
-                events = application.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+                events = application.subscribe_thread(
+                    ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
+                )
                 await client.notify(_artifact_notification())
                 await client.notify(_terminal_notification(status))
 
@@ -407,7 +422,7 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
                 {"type": "inputImage", "imageUrl": "file:///native/ignored.png"},
             ],
         }
-        thread_ref = ThreadRef("codex-main", "thread-1")
+        thread_ref = ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
         first = appserver_completed_item_facts(
             item,
             thread_ref=thread_ref,
@@ -579,10 +594,13 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
         application = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/workspace",
             artifact_materializer=materializer,
         )
-        events = application.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        events = application.subscribe_thread(
+            ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
+        )
         await client.notify(_artifact_notification())
         await client.notify(_answer_notification())
         projected = (await anext(events)).data["message"]
@@ -637,10 +655,13 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
         application = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/workspace",
             artifact_materializer=Failing(),
         )
-        first_events = application.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        first_events = application.subscribe_thread(
+            ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
+        )
         await client.notify(_artifact_notification())
         with self.assertRaises(EventStreamReset) as first:
             await anext(first_events)
@@ -650,7 +671,9 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertNotIn("secret", str(first.exception))
 
-        retry_events = application.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        retry_events = application.subscribe_thread(
+            ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
+        )
         await client.notify(_artifact_notification())
         with self.assertRaises(EventStreamReset) as retry:
             await anext(retry_events)
@@ -663,7 +686,7 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
             GetThreadHistory(
                 operation_id="failed-history",
                 application_ref=ApplicationRef("codex-main"),
-                thread_ref=ThreadRef("codex-main", "thread-1"),
+                thread_ref=ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
                 limit=10,
                 page=1,
                 created_at=datetime(2026, 8, 3, tzinfo=UTC),
@@ -704,33 +727,46 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
         application = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=cast(Any, client),
+            workspace_id="workspace",
             cwd="/workspace",
             artifact_materializer=materializer,
         )
-        events = application.subscribe_thread(ThreadRef("codex-main", "thread-1"))
+        events = application.subscribe_thread(
+            ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
+        )
 
-        await client._dispatch_one(
-            {
-                "method": "item/agentMessage/delta",
-                "params": {
-                    "threadId": "thread-1",
-                    "turnId": "turn-1",
-                    "delta": "before",
+        async def scoped_read_thread(thread_id: str, *, include_turns: bool = False):
+            return {
+                "thread": {
+                    "id": thread_id,
+                    "cwd": "/workspace",
+                    "turns": [] if include_turns else None,
+                }
+            }
+
+        with patch.object(client, "read_thread", scoped_read_thread):
+            await client._dispatch_one(
+                {
+                    "method": "item/agentMessage/delta",
+                    "params": {
+                        "threadId": "thread-1",
+                        "turnId": "turn-1",
+                        "delta": "before",
+                    },
                 },
-            },
-            1,
-            queue_kind="notification",
-        )
-        await client._dispatch_one(
-            _artifact_notification(),
-            1,
-            queue_kind="notification",
-        )
-        await client._dispatch_one(
-            _answer_notification(),
-            1,
-            queue_kind="notification",
-        )
+                1,
+                queue_kind="notification",
+            )
+            await client._dispatch_one(
+                _artifact_notification(),
+                1,
+                queue_kind="notification",
+            )
+            await client._dispatch_one(
+                _answer_notification(),
+                1,
+                queue_kind="notification",
+            )
 
         before = await anext(events)
         self.assertEqual(before.type, AgentEventType.MESSAGE_DELTA)
@@ -750,12 +786,15 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
         application = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/workspace",
             artifact_materializer=materializer,
         )
         notification = _artifact_notification()
         notification["params"]["threadId"] = "secret" * 100
-        events = application.subscribe_thread(ThreadRef("codex-main", "secret" * 100))
+        events = application.subscribe_thread(
+            ThreadRef(ProjectRef("codex-main", "workspace"), "secret" * 100)
+        )
         await client.notify(notification)
         with self.assertRaises(EventStreamReset) as raised:
             await anext(events)
@@ -778,10 +817,11 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
         application = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/workspace",
             artifact_materializer=materializer,
         )
-        thread_ref = ThreadRef("codex-main", "thread-1")
+        thread_ref = ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
 
         missing_turn = _artifact_notification()
         del missing_turn["params"]["turnId"]
@@ -857,10 +897,11 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
         application = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=client,
+            workspace_id="workspace",
             cwd="/workspace",
             artifact_materializer=materializer,
         )
-        thread_ref = ThreadRef("codex-main", "thread-1")
+        thread_ref = ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1")
         conflicting_turn = _native_turn("completed")
         conflicting_turn["turnId"] = "turn-conflicts-with-id"
         client.turns = [conflicting_turn]
@@ -889,11 +930,13 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
         codex = CodexApplicationAdapter(
             application_instance_id="codex-main",
             client=_AppServerClient(),
+            workspace_id="workspace",
             cwd="/workspace",
         )
         zen = ZenApplicationAdapter(
             application_instance_id="zen-main",
             client=_AppServerClient(),
+            workspace_id="workspace",
             cwd="/workspace",
         )
         self.assertIsNone(codex.diagnostic_facts().artifact_materialization)

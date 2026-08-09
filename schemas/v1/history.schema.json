@@ -15,14 +15,14 @@
     },
     "TurnCatchup": {
       "type": "object",
-      "required": ["threadRef", "turnId", "status", "messages"],
+      "required": ["threadRef", "turnRef", "status", "messages"],
       "properties": {
         "threadRef": {
           "$ref": "resources.schema.json#/$defs/ThreadRef"
         },
-        "turnId": {
+        "turnRef": {
           "oneOf": [
-            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "$ref": "resources.schema.json#/$defs/TurnRef" },
             { "type": "null" }
           ]
         },
@@ -44,7 +44,7 @@
     "TurnHistoryEntry": {
       "type": "object",
       "required": [
-        "turnId",
+        "turnRef",
         "status",
         "userMessage",
         "agentMessages",
@@ -52,7 +52,7 @@
         "hadCompaction"
       ],
       "properties": {
-        "turnId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "turnRef": { "$ref": "resources.schema.json#/$defs/TurnRef" },
         "status": { "$ref": "#/$defs/TurnStatus" },
         "userMessage": {
           "oneOf": [

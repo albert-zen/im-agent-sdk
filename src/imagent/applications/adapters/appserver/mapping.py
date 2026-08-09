@@ -408,7 +408,9 @@ _THREAD_REQUIRED_EVENT_METHODS = frozenset(
         "model/rerouted",
     }
 )
-_TURN_REQUIRED_EVENT_METHODS = frozenset({"item/completed", "turn/completed"})
+_TURN_REQUIRED_EVENT_METHODS = frozenset(
+    {"item/agentMessage/delta", "item/completed", "turn/completed"}
+)
 _ITEM_REQUIRED_EVENT_METHODS = frozenset({"item/completed"})
 
 
@@ -499,6 +501,7 @@ def normalize_appserver_message(message: Mapping[str, object]) -> AppServerEvent
 def derive_appserver_event_id(
     application_instance_id: str,
     *,
+    project_id: str,
     event_type: str,
     thread_id: str | None = None,
     turn_id: str | None = None,
@@ -509,6 +512,7 @@ def derive_appserver_event_id(
     """Create a bounded canonical event identity from validated native IDs."""
 
     _required_identity(application_instance_id)
+    _required_identity(project_id)
     _native_text(event_type)
     for identity in (thread_id, turn_id, item_id):
         if identity is not None:
@@ -520,6 +524,7 @@ def derive_appserver_event_id(
     encoded = json.dumps(
         [
             application_instance_id,
+            project_id,
             event_type,
             thread_id,
             turn_id,

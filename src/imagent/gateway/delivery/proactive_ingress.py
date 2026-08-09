@@ -235,23 +235,20 @@ def _parse_target(
         )
     if kind != "threadRoutes":
         raise ValueError("target.kind is unsupported")
-    project_payload = payload.get("projectRef")
-    project_ref = None
-    if project_payload is not None:
-        if not isinstance(project_payload, Mapping):
-            raise TypeError("target.projectRef must be an object")
-        project_ref = ProjectRef(
-            _required_string(project_payload, "applicationInstanceId"),
-            _required_string(project_payload, "nativeProjectId"),
-        )
-    application_instance_id = _required_string(payload, "applicationInstanceId")
-    if project_ref is not None and project_ref.application_instance_id != application_instance_id:
-        raise ValueError("target Project and Thread must belong to the same Application")
+    thread_payload = payload.get("threadRef")
+    if not isinstance(thread_payload, Mapping):
+        raise TypeError("target.threadRef must be an object")
+    project_payload = thread_payload.get("projectRef")
+    if not isinstance(project_payload, Mapping):
+        raise TypeError("target.threadRef.projectRef must be an object")
+    project_ref = ProjectRef(
+        _required_string(project_payload, "applicationInstanceId"),
+        _required_string(project_payload, "projectId"),
+    )
     return ThreadRouteDeliveryTarget(
         ThreadRef(
-            application_instance_id,
-            _required_string(payload, "nativeThreadId"),
             project_ref,
+            _required_string(thread_payload, "threadId"),
         ),
         route_id=_optional_string(payload, "routeId"),
     )

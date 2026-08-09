@@ -36,12 +36,12 @@ class AgentEventType(StrEnum):
 class AgentEvent:
     event_id: str
     application_instance_id: str
+    project_ref: ProjectRef
     type: AgentEventType
     data: Metadata
     created_at: datetime
-    project_ref: ProjectRef | None = None
     thread_ref: ThreadRef | None = None
-    turn_id: str | None = None
+    turn_ref: TurnRef | None = None
     sequence: int | None = None
     sequence_epoch: str | None = None
     cursor: str | None = None
@@ -57,10 +57,52 @@ def validate_agent_event(
 
     require_identifier(event.event_id, "event_id")
     require_identifier(event.application_instance_id, "application_instance_id")
+    validate_project_ref(event.project_ref)
+    if event.project_ref.application_instance_id != event.application_instance_id:
+        raise ContractViolation("event project belongs to a different application")
     if event.thread_ref is not None:
         validate_thread_ref(event.thread_ref)
-        if event.thread_ref.application_instance_id != event.application_instance_id:
+        if event.thread_ref.project_ref.application_instance_id != event.application_instance_id:
             raise ContractViolation("event thread belongs to a different application")
+        if event.thread_ref.project_ref != event.project_ref:
+            raise ContractViolation("event thread belongs to a different project")
+    if event.turn_ref is not None:
+        validate_turn_ref(event.turn_ref)
+        if event.thread_ref is None or event.turn_ref.thread_ref != event.thread_ref:
+            raise ContractViolation("event Turn belongs to a different Thread")
+    turn_scoped = {
+        AgentEventType.MESSAGE_CREATED,
+        AgentEventType.MESSAGE_DELTA,
+        AgentEventType.MESSAGE_COMPLETED,
+        AgentEventType.TURN_STARTED,
+        AgentEventType.TURN_COMPLETED,
+        AgentEventType.TURN_FAILED,
+        AgentEventType.TURN_INTERRUPTED,
+        AgentEventType.REQUEST_OPENED,
+        AgentEventType.REQUEST_RESOLVED,
+    }
+    thread_scoped = turn_scoped | {
+        AgentEventType.THREAD_CREATED,
+        AgentEventType.THREAD_UPDATED,
+        AgentEventType.THREAD_DELETED,
+        AgentEventType.STATUS_CHANGED,
+    }
+    if event.type in thread_scoped and event.thread_ref is None:
+        raise ContractViolation(f"{event.type.value} requires a Thread")
+    if event.type in turn_scoped and event.turn_ref is None:
+        raise ContractViolation(f"{event.type.value} requires a Turn")
+    message = event.data.get("message")
+    if event.type in {
+        AgentEventType.MESSAGE_CREATED,
+        AgentEventType.MESSAGE_COMPLETED,
+    } and not isinstance(message, _AgentMessage):
+        raise ContractViolation(f"{event.type.value} requires one typed AgentMessage")
+    if message is not None:
+        if not isinstance(message, _AgentMessage):
+            raise ContractViolation("event message must use AgentMessage")
+        _validate_agent_message(message)
+        if event.thread_ref is None or message.thread_ref != event.thread_ref:
+            raise ContractViolation("event message belongs to a different Thread")
     if event.sequence is None:
         if event.sequence_epoch is not None:
             raise ContractViolation("sequence_epoch requires sequence")
@@ -81,9 +123,7 @@ def validate_agent_event(
         validate_interactive_request(event.request)
         if capabilities.runtime.interactive_requests is SupportLevel.UNSUPPORTED:
             raise ContractViolation("request event requires interactive request support")
-        if event.thread_ref != event.request.thread_ref:
-            raise ContractViolation("request event belongs to a different Thread")
-        if event.turn_id != event.request.turn_id:
+        if event.turn_ref != event.request.turn_ref:
             raise ContractViolation("request event belongs to a different Turn")
         if (
             event.request.request_ref.application_ref.application_instance_id
@@ -94,6 +134,8 @@ def validate_agent_event(
         if event.request is not None or event.request_resolution is None:
             raise ContractViolation("request.resolved requires one typed resolution")
         validate_request_resolution(event.request_resolution)
+        if event.turn_ref != event.request_resolution.turn_ref:
+            raise ContractViolation("request resolution event belongs to a different Turn")
         if (
             event.request_resolution.request_ref.application_ref.application_instance_id
             != event.application_instance_id
@@ -284,7 +326,20 @@ class EventBroadcaster(Generic[K, V]):
 # Bind the Applications-owned resource/item and request references only after
 # this event owner is defined. These module-level imports preserve runtime type
 # hints without a function-local reverse import or a second model contract.
-from .contract import ProjectRef, ThreadRef, validate_thread_ref  # noqa: E402
+from .contract import (  # noqa: E402
+    AgentMessage as _AgentMessage,
+)
+from .contract import (  # noqa: E402
+    ProjectRef,
+    ThreadRef,
+    TurnRef,
+    validate_project_ref,
+    validate_thread_ref,
+    validate_turn_ref,
+)
+from .contract import (  # noqa: E402
+    validate_agent_message as _validate_agent_message,
+)
 from .requests import (  # noqa: E402
     InteractiveRequest,
     RequestResolution,

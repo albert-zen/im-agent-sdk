@@ -35,6 +35,12 @@ revision is a repository compare-and-swap fact, not an Application Thread
 revision. The value contains no binding history, active-Turn state, or
 projection worker authority.
 
+The selection is hierarchical: a Thread requires an equal Project and
+Application selection. Every Thread-bearing route, checkpoint, reply/request
+correlation, and delivery snapshot reaches the same required Project through
+`ThreadRef`; fixed/flat mode has no persistence exception. A binding may still
+be unbound, Application-only, or Project-only.
+
 A projection route is one stable Thread-to-Conversation edge. Its checkpoint
 is an opaque authoritative Agent item identity paired with its checkpoint
 time; neither the item ID nor the time is a bridge sequence number. The
@@ -109,3 +115,4 @@ It is not a compatibility model, fallback value, or second state contract.
 - [ADR 0008](../../../../decisions/0008-interactive-request-routing.md)
 - [ADR 0009](../../../../decisions/0009-proactive-delivery-routing.md)
 - [ADR 0012](../../../../decisions/0012-input-continuation-and-reply-correlation.md)
+- [ADR 0016](../../../../decisions/0016-uniform-workspace-and-consumer-actions.md)

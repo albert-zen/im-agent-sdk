@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from imagent.applications import CodexApplicationAdapter, ZenApplicationAdapter
-from imagent.applications.contract import AgentInput, ThreadRef
+from imagent.applications.contract import AgentInput, ProjectRef, ThreadRef
 from imagent.interaction.media import AttachmentContent, LocalPath
 from imagent.interaction.messages import TextContent
 
@@ -79,12 +79,13 @@ class AppServerInputIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     adapter = adapter_type(
                         application_instance_id=application_id,
                         client=client,
+                        workspace_id="workspace",
                         cwd=directory,
                         shared_filesystem_root=directory,
                     )
                     with self.assertRaisesRegex(ValueError, "image attachments only"):
                         await adapter.send_input(
-                            ThreadRef(application_id, "thread-1"),
+                            ThreadRef(ProjectRef(application_id, "workspace"), "thread-1"),
                             AgentInput(
                                 client_message_id=f"message-{application_id}",
                                 content=(

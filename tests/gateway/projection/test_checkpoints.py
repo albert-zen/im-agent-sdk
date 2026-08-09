@@ -7,7 +7,7 @@ from subprocess import run
 from sys import executable
 from typing import cast
 
-from imagent.applications.contract import ThreadRef
+from imagent.applications.contract import ProjectRef, ThreadRef
 from imagent.gateway.persistence import ThreadProjectionRoute
 from imagent.gateway.persistence.memory import InMemoryProjectionRouteRepository
 from imagent.gateway.persistence.repository_contracts import (
@@ -30,7 +30,7 @@ class ProjectionCheckpointOwnershipTests(unittest.TestCase):
 
     def test_derivation_preserves_stable_destination_item_identity(self) -> None:
         conversation = ConversationRef("channel-a", "conversation-a")
-        thread = ThreadRef("application-a", "thread-a")
+        thread = ThreadRef(ProjectRef("application-a", "workspace"), "thread-a")
 
         delivery_id = derive_projection_delivery_id(conversation, thread, "item-a")
 
@@ -261,7 +261,7 @@ class ProjectionCheckpointConvergenceTests(unittest.IsolatedAsyncioTestCase):
 
 
 def _route(conversation_id: str) -> ThreadProjectionRoute:
-    thread = ThreadRef("application", "thread")
+    thread = ThreadRef(ProjectRef("application", "workspace"), "thread")
     conversation = ConversationRef("channel", conversation_id)
     return ThreadProjectionRoute(
         route_id=derive_projection_route_id(thread, conversation),

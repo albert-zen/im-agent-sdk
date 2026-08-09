@@ -98,8 +98,7 @@
       "type": "object",
       "required": [
         "correlationId",
-        "threadRef",
-        "turnId",
+        "turnRef",
         "clientMessageId",
         "conversationRef",
         "replyToMessageId",
@@ -109,10 +108,7 @@
         "correlationId": {
           "$ref": "common.schema.json#/$defs/Identifier"
         },
-        "threadRef": {
-          "$ref": "resources.schema.json#/$defs/ThreadRef"
-        },
-        "turnId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "turnRef": { "$ref": "resources.schema.json#/$defs/TurnRef" },
         "clientMessageId": {
           "$ref": "common.schema.json#/$defs/Identifier"
         },
@@ -133,8 +129,7 @@
       "required": [
         "correlationId",
         "requestRef",
-        "threadRef",
-        "turnId",
+        "turnRef",
         "conversationRef",
         "deliveryId",
         "responseShape",
@@ -145,8 +140,7 @@
       "properties": {
         "correlationId": { "$ref": "common.schema.json#/$defs/Identifier" },
         "requestRef": { "$ref": "resources.schema.json#/$defs/RequestRef" },
-        "threadRef": { "$ref": "resources.schema.json#/$defs/ThreadRef" },
-        "turnId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "turnRef": { "$ref": "resources.schema.json#/$defs/TurnRef" },
         "conversationRef": {
           "$ref": "messages.schema.json#/$defs/ConversationRef"
         },

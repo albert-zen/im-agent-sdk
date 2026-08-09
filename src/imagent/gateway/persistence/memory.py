@@ -192,8 +192,7 @@ def _same_turn_reply_correlation(
 ) -> bool:
     return (
         left.correlation_id == right.correlation_id
-        and left.thread_ref == right.thread_ref
-        and left.turn_id == right.turn_id
+        and left.turn_ref == right.turn_ref
         and left.client_message_id == right.client_message_id
         and left.conversation_ref == right.conversation_ref
         and left.reply_to_message_id == right.reply_to_message_id
@@ -354,7 +353,9 @@ class InMemoryProjectionRouteRepository:
         if thread_ref is None:
             return correlations
         return tuple(
-            correlation for correlation in correlations if correlation.thread_ref == thread_ref
+            correlation
+            for correlation in correlations
+            if correlation.turn_ref.thread_ref == thread_ref
         )
 
     async def put_turn_reply_correlation(
@@ -363,7 +364,7 @@ class InMemoryProjectionRouteRepository:
     ) -> TurnReplyCorrelation:
         validate_turn_reply_correlation(correlation)
         async with self._lock:
-            key = (correlation.thread_ref, correlation.turn_id)
+            key = (correlation.turn_ref.thread_ref, correlation.turn_ref.turn_id)
             current = self._turn_correlations.get(key)
             if current is None:
                 self._turn_correlations[key] = correlation
@@ -395,7 +396,7 @@ class InMemoryProjectionRouteRepository:
             keys = tuple(
                 key
                 for key, correlation in self._turn_correlations.items()
-                if (thread_ref is None or correlation.thread_ref == thread_ref)
+                if (thread_ref is None or correlation.turn_ref.thread_ref == thread_ref)
                 and (conversation_ref is None or correlation.conversation_ref == conversation_ref)
                 and (older_than is None or correlation.created_at < older_than)
             )

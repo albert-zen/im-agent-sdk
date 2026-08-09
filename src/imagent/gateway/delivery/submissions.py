@@ -136,7 +136,7 @@ def _sha256_identity(label: str, identity: object) -> str:
 
 def _thread_identity(thread_ref: ThreadRef) -> object:
     return [
-        thread_ref.application_instance_id,
-        (thread_ref.project_ref.native_project_id if thread_ref.project_ref is not None else None),
-        thread_ref.native_thread_id,
+        thread_ref.project_ref.application_instance_id,
+        thread_ref.project_ref.project_id,
+        thread_ref.thread_id,
     ]

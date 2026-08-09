@@ -45,6 +45,8 @@ class SendClientToolTests(unittest.TestCase):
             "delivery-cli",
             "--application",
             "application",
+            "--project",
+            "project-1",
             "--thread",
             "thread-1",
             *extra,
@@ -186,11 +188,12 @@ assert not any(
             request["json"]["target"],
             {
                 "kind": "threadRoutes",
-                "applicationInstanceId": "application",
-                "nativeThreadId": "thread-1",
-                "projectRef": {
-                    "applicationInstanceId": "application",
-                    "nativeProjectId": "project-1",
+                "threadRef": {
+                    "projectRef": {
+                        "applicationInstanceId": "application",
+                        "projectId": "project-1",
+                    },
+                    "threadId": "thread-1",
                 },
                 "routeId": "route-1",
             },
@@ -318,6 +321,7 @@ assert not any(
             ("--application", "application"),
             ("--thread", "thread-1"),
             ("--project", "project-1"),
+            ("--application", "application", "--thread", "thread-1"),
             ("--channel", "channel"),
             ("--conversation", "conversation-1"),
             (

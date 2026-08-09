@@ -7,7 +7,7 @@ import sqlite3
 from collections.abc import Iterable
 from datetime import datetime
 
-from ...applications.contract import ApplicationRef, ProjectRef, ThreadRef
+from ...applications.contract import ApplicationRef, ProjectRef, ThreadRef, TurnRef
 from ...applications.requests import (
     ApprovalResponseShape,
     RequestRef,
@@ -49,6 +49,8 @@ def binding_from_row(row: sqlite3.Row) -> ConversationBinding:
     thread_id = row["thread_id"]
     if application_id is None and (project_id is not None or thread_id is not None):
         raise ValueError("binding scope requires an application")
+    if thread_id is not None and project_id is None:
+        raise ValueError("binding Thread scope requires a Project")
     application_ref = None
     if application_id is not None:
         application_ref = ApplicationRef(required_text(application_id, "application_instance_id"))
@@ -62,11 +64,10 @@ def binding_from_row(row: sqlite3.Row) -> ConversationBinding:
     )
     thread_ref = (
         ThreadRef(
-            application_instance_id=application_ref.application_instance_id,
-            native_thread_id=required_text(thread_id, "thread_id"),
             project_ref=project_ref,
+            thread_id=required_text(thread_id, "thread_id"),
         )
-        if application_ref is not None and thread_id is not None
+        if project_ref is not None and thread_id is not None
         else None
     )
     binding = ConversationBinding(
@@ -93,8 +94,8 @@ def binding_to_row(binding: ConversationBinding) -> tuple[object, ...]:
             if binding.application_ref is not None
             else None
         ),
-        binding.project_ref.native_project_id if binding.project_ref is not None else None,
-        binding.thread_ref.native_thread_id if binding.thread_ref is not None else None,
+        binding.project_ref.project_id if binding.project_ref is not None else None,
+        binding.thread_ref.thread_id if binding.thread_ref is not None else None,
         binding.revision,
         binding.updated_at.isoformat() if binding.updated_at is not None else None,
     )
@@ -104,22 +105,21 @@ def thread_storage_key(thread_ref: ThreadRef | None) -> tuple[str, str, str]:
     if thread_ref is None:
         return "", "", ""
     return (
-        thread_ref.application_instance_id,
-        (thread_ref.project_ref.native_project_id if thread_ref.project_ref is not None else ""),
-        thread_ref.native_thread_id,
+        thread_ref.project_ref.application_instance_id,
+        thread_ref.project_ref.project_id,
+        thread_ref.thread_id,
     )
 
 
 def projection_route_from_row(row: sqlite3.Row) -> ThreadProjectionRoute:
     application_id = required_text(row["application_instance_id"], "application_instance_id")
-    project_id = empty_storage_text(row["project_id"], "project_id")
-    project_ref = ProjectRef(application_id, project_id) if project_id else None
+    project_id = required_text(row["project_id"], "project_id")
+    project_ref = ProjectRef(application_id, project_id)
     route = ThreadProjectionRoute(
         route_id=required_text(row["route_id"], "route_id"),
         thread_ref=ThreadRef(
-            application_instance_id=application_id,
-            native_thread_id=required_text(row["thread_id"], "thread_id"),
             project_ref=project_ref,
+            thread_id=required_text(row["thread_id"], "thread_id"),
         ),
         conversation_ref=ConversationRef(
             channel_instance_id=required_text(row["channel_instance_id"], "channel_instance_id"),
@@ -162,16 +162,17 @@ def projection_route_to_row(
 
 def turn_reply_correlation_from_row(row: sqlite3.Row) -> TurnReplyCorrelation:
     application_id = required_text(row["application_instance_id"], "application_instance_id")
-    project_id = empty_storage_text(row["project_id"], "project_id")
-    project_ref = ProjectRef(application_id, project_id) if project_id else None
+    project_id = required_text(row["project_id"], "project_id")
+    project_ref = ProjectRef(application_id, project_id)
     correlation = TurnReplyCorrelation(
         correlation_id=required_text(row["correlation_id"], "correlation_id"),
-        thread_ref=ThreadRef(
-            application_instance_id=application_id,
-            native_thread_id=required_text(row["thread_id"], "thread_id"),
-            project_ref=project_ref,
+        turn_ref=TurnRef(
+            ThreadRef(
+                project_ref=project_ref,
+                thread_id=required_text(row["thread_id"], "thread_id"),
+            ),
+            required_text(row["turn_id"], "turn_id"),
         ),
-        turn_id=required_text(row["turn_id"], "turn_id"),
         client_message_id=required_text(row["client_message_id"], "client_message_id"),
         conversation_ref=ConversationRef(
             channel_instance_id=required_text(row["channel_instance_id"], "channel_instance_id"),
@@ -189,8 +190,8 @@ def turn_reply_correlation_from_row(row: sqlite3.Row) -> TurnReplyCorrelation:
 def turn_reply_correlation_to_row(correlation: TurnReplyCorrelation) -> tuple[object, ...]:
     return (
         correlation.correlation_id,
-        *thread_storage_key(correlation.thread_ref),
-        correlation.turn_id,
+        *thread_storage_key(correlation.turn_ref.thread_ref),
+        correlation.turn_ref.turn_id,
         correlation.client_message_id,
         correlation.conversation_ref.channel_instance_id,
         correlation.conversation_ref.native_conversation_id,
@@ -207,14 +208,6 @@ def required_text(value: object, label: str) -> str:
 
 def optional_text(value: object, label: str) -> str | None:
     if value is None:
-        return None
-    return required_text(value, label)
-
-
-def empty_storage_text(value: object, label: str) -> str | None:
-    """Decode the current NOT NULL empty-string sentinel for an absent Project."""
-
-    if value == "":
         return None
     return required_text(value, label)
 
@@ -237,20 +230,21 @@ def decode_datetime(value: object, label: str) -> datetime:
 
 def request_correlation_from_row(row: sqlite3.Row) -> RequestRouteCorrelation:
     application_id = required_text(row["application_instance_id"], "application_instance_id")
-    project_id = empty_storage_text(row["project_id"], "project_id")
-    project_ref = ProjectRef(application_id, project_id) if project_id else None
+    project_id = required_text(row["project_id"], "project_id")
+    project_ref = ProjectRef(application_id, project_id)
     correlation = RequestRouteCorrelation(
         correlation_id=required_text(row["correlation_id"], "correlation_id"),
         request_ref=RequestRef(
             application_ref=ApplicationRef(application_id),
             native_request_id=required_text(row["native_request_id"], "native_request_id"),
         ),
-        thread_ref=ThreadRef(
-            application_instance_id=application_id,
-            native_thread_id=required_text(row["thread_id"], "thread_id"),
-            project_ref=project_ref,
+        turn_ref=TurnRef(
+            ThreadRef(
+                project_ref=project_ref,
+                thread_id=required_text(row["thread_id"], "thread_id"),
+            ),
+            required_text(row["turn_id"], "turn_id"),
         ),
-        turn_id=required_text(row["turn_id"], "turn_id"),
         conversation_ref=ConversationRef(
             channel_instance_id=required_text(row["channel_instance_id"], "channel_instance_id"),
             native_conversation_id=required_text(
@@ -277,8 +271,8 @@ def request_correlation_to_row(correlation: RequestRouteCorrelation) -> tuple[ob
         correlation.correlation_id,
         correlation.request_ref.application_ref.application_instance_id,
         correlation.request_ref.native_request_id,
-        *thread_storage_key(correlation.thread_ref)[1:],
-        correlation.turn_id,
+        *thread_storage_key(correlation.turn_ref.thread_ref)[1:],
+        correlation.turn_ref.turn_id,
         correlation.conversation_ref.channel_instance_id,
         correlation.conversation_ref.native_conversation_id,
         correlation.delivery_id,
@@ -434,16 +428,17 @@ def delivery_destination_from_row(row: sqlite3.Row) -> DestinationDeliveryRecord
     has_thread_scope = any(
         value is not None for value in (application_id, project_id, thread_id, route_id)
     )
-    if has_thread_scope and (application_id is None or thread_id is None or route_id is None):
+    if has_thread_scope and (
+        application_id is None or project_id is None or thread_id is None or route_id is None
+    ):
         raise ValueError("delivery destination Thread route scope is incomplete")
     thread_ref = None
     if has_thread_scope:
-        if application_id is None or thread_id is None or route_id is None:
+        if application_id is None or project_id is None or thread_id is None or route_id is None:
             raise AssertionError("complete Thread route scope was not established")
         thread_ref = ThreadRef(
-            application_instance_id=application_id,
-            native_thread_id=thread_id,
-            project_ref=(ProjectRef(application_id, project_id) if project_id else None),
+            project_ref=ProjectRef(application_id, project_id),
+            thread_id=thread_id,
         )
     return DestinationDeliveryRecord(
         delivery_id=required_text(row["destination_delivery_id"], "destination_delivery_id"),

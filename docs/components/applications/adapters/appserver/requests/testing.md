@@ -21,6 +21,12 @@ method-not-found without opening a request, while malformed supported requests
 receive the fixed redacted invalid-params response before any request event or
 pending state is created.
 
+Fixed-workspace evidence verifies native Thread scope once before request
+admission or response mutation, reports transient ingress verification failure
+as an explicit observation gap, and proves that later publication or bounded
+terminal-cache eviction cannot re-read scope and reverse an already successful
+native response.
+
 ## Target evidence and verification
 
 Run the leaf and retained integration evidence:
