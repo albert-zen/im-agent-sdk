@@ -108,6 +108,16 @@ class StateContractOwnershipTests(unittest.TestCase):
             owner.ConversationBinding(conversation, application, project),
             _capabilities(ProjectMode.FIXED),
         )
+        for invalid_generation in (True, None):
+            with self.subTest(invalid_generation=invalid_generation):
+                with self.assertRaises(ContractViolation):
+                    owner.validate_binding(
+                        owner.ConversationBinding(
+                            conversation,
+                            application,
+                            generation=invalid_generation,  # type: ignore[arg-type]
+                        )
+                    )
 
     def test_projection_route_and_turn_correlation_require_explicit_identity(self) -> None:
         conversation = ConversationRef("channel-1", "conversation-1")

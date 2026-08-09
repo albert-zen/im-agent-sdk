@@ -147,8 +147,7 @@ def validate_binding(
 ) -> None:
     require_identifier(binding.conversation_ref.channel_instance_id, "channel_instance_id")
     require_identifier(binding.conversation_ref.native_conversation_id, "native_conversation_id")
-    if binding.generation < 0:
-        raise ContractViolation("binding generation cannot be negative")
+    _validate_generation(binding.generation, "binding generation", optional=False)
 
     application_id = (
         binding.application_ref.application_instance_id if binding.application_ref else None
@@ -165,6 +164,15 @@ def validate_binding(
     if binding.thread_ref is not None and binding.project_ref != binding.thread_ref.project_ref:
         raise ContractViolation("binding thread belongs to a different project")
     del capabilities
+
+
+def _validate_generation(value: object, label: str, *, optional: bool = True) -> None:
+    if value is None:
+        if optional:
+            return
+        raise ContractViolation(f"{label} must be a non-negative integer")
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ContractViolation(f"{label} must be a non-negative integer")
 
 
 def validate_projection_route(route: ThreadProjectionRoute) -> None:

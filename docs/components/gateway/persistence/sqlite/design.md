@@ -72,6 +72,10 @@ WAL mode and the single connection/lock are implementation details of the
 current adapter. Restart reconstructs typed bridge-state values from rows and
 preserves terminal/ambiguous evidence. Any schema change requires an explicit
 upgrade decision and tests against the immediately supported legacy shape.
+The legacy delivery-detail upgrade treats checkpoint and vacuum completion as
+part of the migration. It checks `wal_checkpoint(TRUNCATE)`, leaves no accepted
+completion marker while a reader pins secret-bearing frames, and retries the
+physical scrub on the next open.
 
 ## Structure
 

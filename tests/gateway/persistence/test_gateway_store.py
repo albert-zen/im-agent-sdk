@@ -23,6 +23,8 @@ from imagent.gateway.persistence.effects import (
     BindingClearScope,
     BindingTarget,
     EffectCategory,
+    EffectValue,
+    StableReference,
     StoreMutationPlan,
     StoreMutationRequest,
     derive_action_fingerprint,
@@ -250,6 +252,7 @@ class GatewayStoreParityTests(unittest.IsolatedAsyncioTestCase):
         conversation = ConversationRef("channel", "conversation")
         thread = ThreadRef(ProjectRef("app", "project"), "thread")
         route = ThreadProjectionRoute("route", thread, conversation)
+        clear_outcomes = []
         for factory in self._factories():
             store = factory()
             with self.subTest(store=type(store).__name__):
@@ -283,11 +286,22 @@ class GatewayStoreParityTests(unittest.IsolatedAsyncioTestCase):
                 )
                 cleared = await session.commit_store_mutation(clear)
                 self.assertIsInstance(cleared.outcome, Succeeded)
+                self.assertEqual(await session.commit_store_mutation(clear), cleared)
+                clear_outcomes.append(cleared.outcome)
                 self.assertIsNone(await session.get(conversation))
                 self.assertEqual(await session.get_binding_generation(conversation), 0)
                 self.assertEqual(await session.list_projection_routes(thread), ())
                 await session.release_runtime()
                 await store.close()
+        expected = Succeeded(
+            EffectValue(
+                reference=StableReference.from_value(thread),
+                conversation_ref=conversation,
+                binding_generation=0,
+                route_id=route.route_id,
+            )
+        )
+        self.assertEqual(clear_outcomes, [expected, expected])
 
     async def test_store_mutation_rejects_cross_conversation_route(self) -> None:
         conversation = ConversationRef("channel", "conversation")

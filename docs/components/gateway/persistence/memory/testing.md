@@ -6,6 +6,8 @@ Focused binding tests prove:
 - validation happens before mutation;
 - stale expected generations reject put and delete through the exact shared
   `BindingConflict` type without changing the stored record;
+- Boolean expected generations fail contract validation rather than aliasing
+  integer generations;
 - delete with the current generation removes only that Conversation and
   retains its successor generation against ABA;
 - concurrent process-local operations are serialized by the repository lock;

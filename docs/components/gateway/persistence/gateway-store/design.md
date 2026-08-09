@@ -77,6 +77,10 @@ observe, and clear-observation. The request is operation-agnostic: block C owns
 the public closed operation variants and maps them to this validated plan.
 Its Conversation is explicit even for route-only work, so observation changes
 do not create a binding or advance the binding generation.
+Clear-observation success retains the deleted route's stable Thread reference
+and route ID in its terminal value. A missing route still succeeds with the
+requested route ID and no invented Thread reference; memory and SQLite replay
+the same complete outcome.
 Every hierarchical clear does advance the generation, including an
 already-cleared or unbound Conversation; application clear removes the current
 row while retaining the successor generation tombstone. This prevents a
@@ -142,8 +146,10 @@ spool bodies, or replayable work.
 The current binding column is `generation`. Opening the immediately preceding
 `revision` schema renames it before use. A one-time secure-delete migration
 projects legacy delivery receipts onto closed bounded evidence, nulls the
-retired error/detail fields, checkpoints WAL, and vacuums stale bytes; later
-non-null values are rejected as malformed current state rather than repaired.
+retired error/detail fields, confirms WAL truncation, and vacuums stale bytes
+before writing its completion marker. A busy checkpoint fails closed with no
+accepted marker so a later open retries physical cleanup; later non-null values
+are rejected as malformed current state rather than repaired.
 
 ## Authority
 

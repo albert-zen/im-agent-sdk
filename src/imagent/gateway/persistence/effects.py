@@ -27,7 +27,11 @@ from ...interaction.operations import (
     require_identifier,
 )
 from ..outcomes import Failed, Outcome, OutcomeUnknown, Partial, Succeeded
-from .state_contracts import ThreadProjectionRoute, validate_projection_route
+from .state_contracts import (
+    ThreadProjectionRoute,
+    _validate_generation,
+    validate_projection_route,
+)
 
 MAX_ACTION_KIND_LENGTH = 128
 MAX_ACTION_FINGERPRINT_FIELDS = 128
@@ -348,8 +352,7 @@ def validate_effect_value(value: EffectValue) -> None:
             value.conversation_ref.native_conversation_id,
             "native_conversation_id",
         )
-    if value.binding_generation is not None and value.binding_generation < 0:
-        raise ContractViolation("binding_generation cannot be negative")
+    _validate_generation(value.binding_generation, "binding_generation")
     if value.route_id is not None:
         require_identifier(value.route_id, "route_id")
 
@@ -411,8 +414,7 @@ def validate_store_mutation_request(request: StoreMutationRequest) -> None:
         require_identifier(plan.route_delete_id, "route_delete_id")
     if plan.binding_clear is not None and not isinstance(plan.binding_clear, BindingClearScope):
         raise ContractViolation("binding clear scope is invalid")
-    if plan.expected_generation is not None and plan.expected_generation < 0:
-        raise ContractViolation("expected_generation cannot be negative")
+    _validate_generation(plan.expected_generation, "expected_generation")
 
 
 def validate_native_mutation_request(request: NativeMutationRequest) -> None:
@@ -458,8 +460,7 @@ def validate_effect_receipt(receipt: EffectReceipt) -> None:
     )
     if receipt.native_phase_id is not None:
         require_identifier(receipt.native_phase_id, "native_phase_id")
-    if receipt.binding_generation is not None and receipt.binding_generation < 0:
-        raise ContractViolation("receipt binding generation cannot be negative")
+    _validate_generation(receipt.binding_generation, "receipt binding generation")
     if receipt.created_at.tzinfo is None or receipt.updated_at.tzinfo is None:
         raise ContractViolation("receipt timestamps must include a timezone")
     if receipt.updated_at < receipt.created_at:
@@ -748,8 +749,7 @@ def _effect_value_from_json(raw: object) -> EffectValue:
             str(conversation_raw.get("native_conversation_id", "")),
         )
     generation = raw.get("binding_generation")
-    if generation is not None and (not isinstance(generation, int) or isinstance(generation, bool)):
-        raise ContractViolation("stored binding generation is invalid")
+    _validate_generation(generation, "stored binding generation")
     route_id = _optional_string(raw.get("route_id"))
     result = EffectValue(reference, conversation, generation, route_id)
     validate_effect_value(result)

@@ -7,6 +7,9 @@ SQLite tests must prove:
 - stale binding generations, route identities, checkpoints, correlation states,
   delivery reservations, and destination states fail without partial writes;
 - a transaction rollback leaves every previously committed row unchanged;
+- legacy delivery-detail migration does not publish its completion marker when
+  a pinned reader makes WAL truncation busy, and a later open physically
+  removes the bytes before marking completion;
 - completed and protected idempotency evidence survives restart, stale
   `in_flight` reclaim changes the owner atomically, and old owners stay fenced;
 - Turn reply correlations remain create-only and request correlations update

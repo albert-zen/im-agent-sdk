@@ -33,7 +33,10 @@ from imagent.gateway.persistence.memory import (
     InMemoryProjectionRouteRepository,
     InMemoryRequestCorrelationRepository,
 )
-from imagent.gateway.persistence.sqlite import SQLiteGatewayState
+from imagent.gateway.persistence.sqlite import (
+    SQLiteGatewayState,
+    initialize_delivery_submission_schema,
+)
 from imagent.gateway.projection.request_correlation import (
     derive_request_correlation_id,
     derive_turn_reply_correlation_id,
@@ -361,6 +364,29 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(BindingConflict):
                     await state.delete(conversation, expected_generation=0)
                 self.assertEqual(await state.get(conversation), original)
+            finally:
+                await state.close()
+
+    async def test_binding_expected_generation_rejects_boolean_without_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state = SQLiteGatewayState(Path(directory) / "gateway.sqlite3")
+            conversation = ConversationRef("qq-main", "c2c:user-bool")
+            stored = await state.put(
+                ConversationBinding(
+                    conversation_ref=conversation,
+                    application_ref=ApplicationRef("t3-main"),
+                )
+            )
+            try:
+                replacement = ConversationBinding(
+                    conversation_ref=conversation,
+                    application_ref=ApplicationRef("zen-main"),
+                )
+                with self.assertRaises(ContractViolation):
+                    await state.put(replacement, expected_generation=True)
+                with self.assertRaises(ContractViolation):
+                    await state.delete(conversation, expected_generation=True)
+                self.assertEqual(await state.get(conversation), stored)
             finally:
                 await state.close()
 
@@ -781,6 +807,164 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 await state.close()
 
+            for sqlite_file in Path(directory).iterdir():
+                self.assertNotIn(secret.encode(), sqlite_file.read_bytes())
+
+            marker_connection = sqlite3.connect(path)
+            try:
+                marker = marker_connection.execute(
+                    "SELECT metadata_value FROM gateway_schema_metadata "
+                    "WHERE metadata_key = 'delivery_receipt_detail_storage'"
+                ).fetchone()
+                self.assertEqual(marker, ("redacted-v2-physically-scrubbed",))
+            finally:
+                marker_connection.close()
+
+    async def test_pinned_wal_blocks_scrub_marker_until_physical_cleanup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "pinned-legacy-delivery.sqlite3"
+            wal_path = Path(f"{path}-wal")
+            now = datetime.now(UTC).isoformat()
+            secret = "credential=pinned-secret path=/private/native-response.json"
+            writer = sqlite3.connect(path)
+            reader: sqlite3.Connection | None = None
+            try:
+                writer.execute("PRAGMA journal_mode = WAL")
+                writer.executescript(
+                    """
+                    CREATE TABLE delivery_submissions (
+                        submission_id TEXT NOT NULL PRIMARY KEY,
+                        delivery_id TEXT NOT NULL,
+                        origin TEXT NOT NULL,
+                        principal_id TEXT NOT NULL,
+                        target_fingerprint TEXT NOT NULL,
+                        payload_fingerprint TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    CREATE TABLE delivery_submission_destinations (
+                        root_submission_id TEXT NOT NULL,
+                        destination_delivery_id TEXT NOT NULL PRIMARY KEY,
+                        channel_instance_id TEXT NOT NULL,
+                        native_conversation_id TEXT NOT NULL,
+                        application_instance_id TEXT NOT NULL,
+                        project_id TEXT NOT NULL,
+                        thread_id TEXT NOT NULL,
+                        route_id TEXT NOT NULL,
+                        route_updated_at TEXT,
+                        reply_to_message_id TEXT,
+                        state TEXT NOT NULL,
+                        receipt_json TEXT,
+                        error TEXT,
+                        updated_at TEXT NOT NULL
+                    );
+                    CREATE TABLE gateway_schema_metadata (
+                        metadata_key TEXT NOT NULL PRIMARY KEY,
+                        metadata_value TEXT NOT NULL
+                    );
+                    """
+                )
+                writer.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                writer.execute(
+                    "INSERT INTO delivery_submissions VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        "submission",
+                        "delivery",
+                        "external",
+                        "principal",
+                        "target",
+                        "payload",
+                        now,
+                        now,
+                    ),
+                )
+                writer.execute(
+                    "INSERT INTO delivery_submission_destinations VALUES "
+                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        "submission",
+                        "destination",
+                        "channel",
+                        "conversation",
+                        "",
+                        "",
+                        "",
+                        "",
+                        None,
+                        None,
+                        "unknown",
+                        json.dumps(
+                            {
+                                "status": "unknown",
+                                "native_message_id": None,
+                                "detail": secret,
+                                "retry_after_seconds": None,
+                                "items": [],
+                                "segments": [],
+                            }
+                        ),
+                        secret,
+                        now,
+                    ),
+                )
+                writer.execute(
+                    "INSERT INTO gateway_schema_metadata VALUES (?, ?)",
+                    ("delivery_receipt_detail_storage", "redacted-v1"),
+                )
+                writer.commit()
+                self.assertIn(secret.encode(), wal_path.read_bytes())
+
+                reader = sqlite3.connect(path)
+                reader.execute("BEGIN")
+                pinned = reader.execute(
+                    "SELECT receipt_json FROM delivery_submission_destinations"
+                ).fetchone()
+                assert pinned is not None
+                self.assertIn(secret, str(pinned[0]))
+
+                migration = sqlite3.connect(path, timeout=0)
+                migration.row_factory = sqlite3.Row
+                try:
+                    migration.execute("PRAGMA busy_timeout = 0")
+                    migration.execute("PRAGMA journal_mode = WAL")
+                    with self.assertRaisesRegex(RuntimeError, "WAL remains pinned"):
+                        initialize_delivery_submission_schema(migration)
+                finally:
+                    migration.close()
+
+                inspector = sqlite3.connect(path)
+                try:
+                    marker = inspector.execute(
+                        "SELECT metadata_value FROM gateway_schema_metadata "
+                        "WHERE metadata_key = 'delivery_receipt_detail_storage'"
+                    ).fetchone()
+                    self.assertIsNone(marker)
+                    current = inspector.execute(
+                        "SELECT receipt_json, error FROM delivery_submission_destinations"
+                    ).fetchone()
+                    assert current is not None
+                    self.assertNotIn(secret, str(current[0]))
+                    self.assertIsNone(current[1])
+                finally:
+                    inspector.close()
+                self.assertIn(secret.encode(), wal_path.read_bytes())
+            finally:
+                if reader is not None:
+                    reader.rollback()
+                    reader.close()
+                writer.close()
+
+            recovered = SQLiteGatewayState(path)
+            await recovered.close()
+            marker_connection = sqlite3.connect(path)
+            try:
+                marker = marker_connection.execute(
+                    "SELECT metadata_value FROM gateway_schema_metadata "
+                    "WHERE metadata_key = 'delivery_receipt_detail_storage'"
+                ).fetchone()
+                self.assertEqual(marker, ("redacted-v2-physically-scrubbed",))
+            finally:
+                marker_connection.close()
             for sqlite_file in Path(directory).iterdir():
                 self.assertNotIn(secret.encode(), sqlite_file.read_bytes())
 

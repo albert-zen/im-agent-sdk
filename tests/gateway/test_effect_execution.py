@@ -212,9 +212,12 @@ class GatewayEffectExecutionParityTests(unittest.IsolatedAsyncioTestCase):
                 invalid_native = NativeMutationRequest(
                     _fingerprint("invalid-native", "application.delete")
                 )
+                native_invocations = 0
 
                 async def invalid_invoke(_phase_id: str):
-                    return Succeeded(EffectValue(binding_generation=-1))
+                    nonlocal native_invocations
+                    native_invocations += 1
+                    return Succeeded(EffectValue(binding_generation=True))
 
                 native_outcome = await executor.execute_native_mutation(
                     invalid_native,
@@ -228,6 +231,10 @@ class GatewayEffectExecutionParityTests(unittest.IsolatedAsyncioTestCase):
                     ),
                     native_outcome,
                 )
+                self.assertEqual(native_invocations, 1)
+                native_receipt = await session.get_effect_receipt(invalid_native.fingerprint)
+                assert native_receipt is not None
+                self.assertIsInstance(native_receipt.outcome, OutcomeUnknown)
 
                 workflow = CreateBindingWorkflowRequest(
                     _fingerprint("invalid-workflow", "conversation.create_and_select"),

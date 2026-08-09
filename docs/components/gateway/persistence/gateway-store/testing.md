@@ -39,7 +39,10 @@ prove:
   lease, phase, fixed error, and minimal stable-reference fields;
 - legacy binding `revision` is renamed to `generation`, while legacy delivery
   error/detail text is securely scrubbed from the database and sidecars before
-  the current schema is admitted.
+  the current schema is admitted; and
+- a pinned legacy WAL prevents the physical-scrub marker, retains fail-closed
+  evidence, and is scrubbed plus marked only after the reader releases and a
+  later open confirms checkpoint truncation.
 
 Cancellation tests cover every await boundary before reservation, after
 reservation but before the native fence, after the native fence, after a known

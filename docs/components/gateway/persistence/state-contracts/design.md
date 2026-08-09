@@ -34,6 +34,8 @@ A Conversation binding records only Gateway's current input selection. Its
 generation is a durable repository compare-and-swap fact, not an Application
 Thread generation. The value contains no binding history, active-Turn state, or
 projection worker authority.
+Generation values are strict non-Boolean, non-negative integers; Boolean
+coercion cannot satisfy a binding or receipt compare-and-swap boundary.
 
 The selection is hierarchical: a Thread requires an equal Project and
 Application selection. Every Thread-bearing route, checkpoint, reply/request

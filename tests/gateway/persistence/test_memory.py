@@ -85,6 +85,23 @@ class InMemoryBindingRepositoryTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(await self.repository.get(self.conversation), stored)
 
+    async def test_expected_generation_rejects_boolean_without_mutation(self) -> None:
+        stored = await self.repository.put(
+            ConversationBinding(
+                conversation_ref=self.conversation,
+                application_ref=ApplicationRef("zen-local"),
+            )
+        )
+        replacement = ConversationBinding(
+            conversation_ref=self.conversation,
+            application_ref=ApplicationRef("t3-local"),
+        )
+        with self.assertRaises(ContractViolation):
+            await self.repository.put(replacement, expected_generation=True)
+        with self.assertRaises(ContractViolation):
+            await self.repository.delete(self.conversation, expected_generation=True)
+        self.assertEqual(await self.repository.get(self.conversation), stored)
+
     async def test_invalid_put_fails_before_mutation(self) -> None:
         stored = await self.repository.put(
             ConversationBinding(

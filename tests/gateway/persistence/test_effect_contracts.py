@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from datetime import UTC, datetime
 
 from imagent.applications.contract import ApplicationRef
 from imagent.gateway.outcomes import Failed, OutcomeUnknown, Partial, Succeeded
@@ -8,12 +9,21 @@ from imagent.gateway.persistence.effects import (
     ActionError,
     ActionErrorCode,
     ActionIdentity,
+    BindingClearScope,
+    EffectCategory,
+    EffectPhase,
+    EffectReceipt,
     EffectValue,
     StableReference,
+    StoreMutationPlan,
+    StoreMutationRequest,
     decode_action_outcome,
     derive_action_fingerprint,
     encode_action_outcome,
     validate_action_error,
+    validate_effect_receipt,
+    validate_effect_value,
+    validate_store_mutation_request,
 )
 from imagent.interaction.messages import ConversationRef
 from imagent.interaction.operations import ContractViolation, OperationErrorCode
@@ -94,6 +104,47 @@ class GatewayEffectContractTests(unittest.TestCase):
             with self.subTest(encoded=encoded):
                 with self.assertRaises(ContractViolation):
                     decode_action_outcome(encoded)
+
+    def test_generations_are_strict_non_boolean_non_negative_integers(self) -> None:
+        conversation = ConversationRef("channel", "conversation")
+        fingerprint = derive_action_fingerprint(
+            ActionIdentity("gateway", "principal", "conversation.clear", "action", conversation),
+            (),
+        )
+        now = datetime.now(UTC)
+        for invalid in (True, False, -1, 1.0, "1"):
+            with self.subTest(field="value", invalid=invalid):
+                with self.assertRaises(ContractViolation):
+                    validate_effect_value(EffectValue(binding_generation=invalid))  # type: ignore[arg-type]
+            with self.subTest(field="plan", invalid=invalid):
+                with self.assertRaises(ContractViolation):
+                    validate_store_mutation_request(
+                        StoreMutationRequest(
+                            fingerprint,
+                            StoreMutationPlan(
+                                conversation_ref=conversation,
+                                binding_clear=BindingClearScope.APPLICATION,
+                                expected_generation=invalid,  # type: ignore[arg-type]
+                            ),
+                        )
+                    )
+            with self.subTest(field="receipt", invalid=invalid):
+                with self.assertRaises(ContractViolation):
+                    validate_effect_receipt(
+                        EffectReceipt(
+                            gateway_id="gateway",
+                            action_kind=fingerprint.action_kind,
+                            action_key=fingerprint.action_key,
+                            payload_fingerprint=fingerprint.payload_fingerprint,
+                            category=EffectCategory.WORKFLOW,
+                            phase=EffectPhase.RESERVED,
+                            native_phase_id=fingerprint.phase_id("native"),
+                            binding_generation=invalid,  # type: ignore[arg-type]
+                            outcome=None,
+                            created_at=now,
+                            updated_at=now,
+                        )
+                    )
 
 
 if __name__ == "__main__":

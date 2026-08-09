@@ -1168,6 +1168,7 @@ def _prepare_route(
             existing = state._read_projection_route(plan.route_delete_id)
             if existing is not None and existing.conversation_ref != plan.conversation_ref:
                 raise ProjectionRouteConflict("route deletion belongs to a different Conversation")
+            return existing
         return None
     candidate = replace(plan.route_upsert, updated_at=now)
     return merge_projection_route(
@@ -1306,7 +1307,9 @@ def _receipt_from_row(row: sqlite3.Row) -> EffectReceipt:
             str(row["native_phase_id"]) if row["native_phase_id"] is not None else None
         ),
         binding_generation=(
-            int(row["binding_generation"]) if row["binding_generation"] is not None else None
+            row_mapping.required_integer(row["binding_generation"], "binding_generation")
+            if row["binding_generation"] is not None
+            else None
         ),
         outcome=decode_action_outcome(
             str(row["outcome_json"]) if row["outcome_json"] is not None else None

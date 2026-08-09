@@ -37,6 +37,7 @@ from .state_contracts import (
     RequestRouteState,
     ThreadProjectionRoute,
     TurnReplyCorrelation,
+    _validate_generation,
     validate_binding,
     validate_delivery_submission_record,
     validate_projection_route,
@@ -287,6 +288,7 @@ class SQLiteGatewayState:
         expected_generation: int | None = None,
     ) -> ConversationBinding:
         validate_binding(binding)
+        _validate_generation(expected_generation, "expected_generation")
         async with self._lock:
             self._begin_mutation()
             try:
@@ -377,6 +379,7 @@ class SQLiteGatewayState:
         conversation: ConversationRef,
         expected_generation: int | None = None,
     ) -> None:
+        _validate_generation(expected_generation, "expected_generation")
         async with self._lock:
             self._begin_mutation()
             try:
@@ -1329,36 +1332,52 @@ def initialize_delivery_submission_schema(connection: sqlite3.Connection) -> Non
 
 def _migrate_delivery_receipt_detail_storage(connection: sqlite3.Connection) -> None:
     migration_key = "delivery_receipt_detail_storage"
+    completed_value = "redacted-v2-physically-scrubbed"
     marker = connection.execute(
         "SELECT metadata_value FROM gateway_schema_metadata WHERE metadata_key = ?",
         (migration_key,),
     ).fetchone()
-    if marker is not None:
+    if marker is not None and str(marker[0]) == completed_value:
         return
+    connection.execute(
+        "DELETE FROM gateway_schema_metadata WHERE metadata_key = ?",
+        (migration_key,),
+    )
     connection.execute("PRAGMA secure_delete = ON")
     rows = connection.execute(
         "SELECT destination_delivery_id, receipt_json, error FROM delivery_submission_destinations"
     ).fetchall()
-    changed = False
     for row in rows:
         receipt_json = _sanitize_legacy_delivery_receipt_json(row["receipt_json"])
         if receipt_json != row["receipt_json"] or row["error"] is not None:
-            changed = True
             connection.execute(
                 "UPDATE delivery_submission_destinations "
                 "SET receipt_json = ?, error = NULL "
                 "WHERE destination_delivery_id = ?",
                 (receipt_json, row["destination_delivery_id"]),
             )
+    connection.commit()
+    _require_truncated_wal(connection)
+    connection.execute("VACUUM")
+    _require_truncated_wal(connection)
     connection.execute(
-        "INSERT INTO gateway_schema_metadata (metadata_key, metadata_value) VALUES (?, ?)",
-        (migration_key, "redacted-v1"),
+        """
+        INSERT INTO gateway_schema_metadata (metadata_key, metadata_value)
+        VALUES (?, ?)
+        ON CONFLICT(metadata_key) DO UPDATE SET metadata_value = excluded.metadata_value
+        """,
+        (migration_key, completed_value),
     )
     connection.commit()
-    if changed:
-        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        connection.execute("VACUUM")
-        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+
+def _require_truncated_wal(connection: sqlite3.Connection) -> None:
+    result = connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+    if result is None or len(result) != 3:
+        raise RuntimeError("SQLite did not report WAL checkpoint completion")
+    busy, log_frames, checkpointed_frames = (int(result[index]) for index in range(3))
+    if busy != 0 or (log_frames, checkpointed_frames) not in {(0, 0), (-1, -1)}:
+        raise RuntimeError("SQLite WAL remains pinned; legacy detail scrub is incomplete")
 
 
 def _sanitize_legacy_delivery_receipt_json(value: object) -> str | None:

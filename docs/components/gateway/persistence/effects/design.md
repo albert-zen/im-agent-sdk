@@ -34,6 +34,10 @@ Any binding target or route in the plan must belong to that exact
 Conversation. Persisted errors combine the fixed `ActionErrorCode` with, when
 needed, the existing closed common `OperationErrorCode`; arbitrary strings are
 not accepted or stored.
+Binding and expected generations are strict non-Boolean, non-negative integers
+in plans, values, receipts, and codecs. A post-native-fence callback that
+returns any other shape is ambiguous and becomes sticky `outcome_unknown`;
+it cannot become a terminal success that later fails to decode.
 
 ## Authority
 

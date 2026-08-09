@@ -34,6 +34,7 @@ from .state_contracts import (
     RequestRouteState,
     ThreadProjectionRoute,
     TurnReplyCorrelation,
+    _validate_generation,
     validate_binding,
     validate_delivery_submission_record,
     validate_projection_route,
@@ -61,6 +62,7 @@ class InMemoryBindingRepository:
         expected_generation: int | None = None,
     ) -> ConversationBinding:
         validate_binding(binding)
+        _validate_generation(expected_generation, "expected_generation")
         async with self._lock:
             current = self._bindings.get(binding.conversation_ref)
             current_generation = max(
@@ -89,6 +91,7 @@ class InMemoryBindingRepository:
         conversation: ConversationRef,
         expected_generation: int | None = None,
     ) -> None:
+        _validate_generation(expected_generation, "expected_generation")
         async with self._lock:
             current = self._bindings.get(conversation)
             current_generation = max(
