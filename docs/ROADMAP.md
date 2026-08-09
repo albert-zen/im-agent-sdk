@@ -63,10 +63,10 @@ consumer-specific need remains downstream unless the v1 extension evidence
 rule is independently satisfied. Experimental branches require separate human
 approval before merging to downstream defaults.
 
-The current IMT3 checkout is not attached to a Git repository. Its real
-repository provenance or upstream must be established before an experimental
-branch/worktree can be created; this issue does not authorize an ad-hoc
-`git init`.
+IMT3 is now a local Git repository, so its experimental branch/worktree can be
+created without blocking final acceptance. A remote is not required for local
+validation; publishing or merging that experiment remains a separate human
+decision.
 
 ## Issue #13: backlog
 
