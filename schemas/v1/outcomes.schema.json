@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.imagent.dev/v1/outcomes.schema.json",
+  "title": "IM Agent action outcomes",
+  "$defs": {
+    "ActionErrorCode": {
+      "type": "string",
+      "enum": [
+        "conflict",
+        "capacity_exhausted",
+        "stale_runtime",
+        "stale_binding",
+        "unsupported",
+        "native_rejected",
+        "native_outcome_unknown",
+        "store_failure"
+      ]
+    },
+    "ActionError": {
+      "type": "object",
+      "required": ["code"],
+      "properties": {
+        "code": { "$ref": "#/$defs/ActionErrorCode" },
+        "operationErrorCode": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "invalid_operation",
+                "unsupported",
+                "not_found",
+                "conflict",
+                "adapter_failure",
+                "capacity_exhausted",
+                "unauthorized_destination",
+                "request_duplicate",
+                "request_resolved",
+                "request_stale"
+              ]
+            },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "StableReference": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "applicationInstanceId"],
+          "properties": {
+            "kind": { "const": "application" },
+            "applicationInstanceId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "applicationInstanceId", "projectId"],
+          "properties": {
+            "kind": { "const": "project" },
+            "applicationInstanceId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "projectId": { "$ref": "common.schema.json#/$defs/Identifier" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "applicationInstanceId", "projectId", "threadId"],
+          "properties": {
+            "kind": { "const": "thread" },
+            "applicationInstanceId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "projectId": { "$ref": "common.schema.json#/$defs/Identifier" },
+            "threadId": { "$ref": "common.schema.json#/$defs/Identifier" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "applicationInstanceId",
+            "projectId",
+            "threadId",
+            "turnId"
+          ],
+          "properties": {
+            "kind": { "const": "turn" },
+            "applicationInstanceId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "projectId": { "$ref": "common.schema.json#/$defs/Identifier" },
+            "threadId": { "$ref": "common.schema.json#/$defs/Identifier" },
+            "turnId": { "$ref": "common.schema.json#/$defs/Identifier" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "applicationInstanceId", "nativeRequestId"],
+          "properties": {
+            "kind": { "const": "request" },
+            "applicationInstanceId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "nativeRequestId": { "$ref": "common.schema.json#/$defs/Identifier" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "EffectValue": {
+      "type": "object",
+      "properties": {
+        "reference": {
+          "oneOf": [
+            { "$ref": "#/$defs/StableReference" },
+            { "type": "null" }
+          ]
+        },
+        "conversationRef": {
+          "oneOf": [
+            { "$ref": "messages.schema.json#/$defs/ConversationRef" },
+            { "type": "null" }
+          ]
+        },
+        "bindingGeneration": { "type": ["integer", "null"], "minimum": 0 },
+        "routeId": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Identifier" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Succeeded": {
+      "type": "object",
+      "required": ["status", "value"],
+      "properties": {
+        "status": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/EffectValue" }
+      },
+      "additionalProperties": false
+    },
+    "Failed": {
+      "type": "object",
+      "required": ["status", "error"],
+      "properties": {
+        "status": { "const": "failed" },
+        "error": { "$ref": "#/$defs/ActionError" }
+      },
+      "additionalProperties": false
+    },
+    "Partial": {
+      "type": "object",
+      "required": ["status", "value", "error"],
+      "properties": {
+        "status": { "const": "partial" },
+        "value": { "$ref": "#/$defs/EffectValue" },
+        "error": { "$ref": "#/$defs/ActionError" }
+      },
+      "additionalProperties": false
+    },
+    "OutcomeUnknown": {
+      "type": "object",
+      "required": ["status", "error"],
+      "properties": {
+        "status": { "const": "outcome_unknown" },
+        "error": { "$ref": "#/$defs/ActionError" }
+      },
+      "additionalProperties": false
+    },
+    "ActionOutcome": {
+      "oneOf": [
+        { "$ref": "#/$defs/Succeeded" },
+        { "$ref": "#/$defs/Failed" },
+        { "$ref": "#/$defs/Partial" },
+        { "$ref": "#/$defs/OutcomeUnknown" }
+      ]
+    }
+  }
+}

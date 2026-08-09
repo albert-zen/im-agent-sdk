@@ -416,7 +416,7 @@ class GatewayThreadObservationCapacityTests(unittest.IsolatedAsyncioTestCase):
                     conversation_ref=conversation,
                     actor="user",
                     thread_ref=rejected_thread.ref,
-                    expected_revision=first_bound.binding.revision,
+                    expected_generation=first_bound.binding.generation,
                     created_at=datetime.now(UTC),
                 )
             )
@@ -440,7 +440,7 @@ class GatewayThreadObservationCapacityTests(unittest.IsolatedAsyncioTestCase):
                     operation_id="foreground-capacity-clear",
                     conversation_ref=conversation,
                     actor="user",
-                    expected_revision=first_bound.binding.revision,
+                    expected_generation=first_bound.binding.generation,
                     created_at=datetime.now(UTC),
                 )
             )
@@ -455,7 +455,7 @@ class GatewayThreadObservationCapacityTests(unittest.IsolatedAsyncioTestCase):
                     conversation_ref=conversation,
                     actor="user",
                     thread_ref=rejected_thread.ref,
-                    expected_revision=cleared.binding.revision,
+                    expected_generation=cleared.binding.generation,
                     created_at=datetime.now(UTC),
                 )
             )

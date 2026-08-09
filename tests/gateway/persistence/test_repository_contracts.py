@@ -60,12 +60,15 @@ _METHOD_SIGNATURES = {
         "put",
     ): (
         "(self, binding: 'ConversationBinding', "
-        "expected_revision: 'int | None' = None) -> 'ConversationBinding'"
+        "expected_generation: 'int | None' = None) -> 'ConversationBinding'"
     ),
     (
         "BindingRepository",
         "delete",
-    ): "(self, conversation: 'ConversationRef', expected_revision: 'int | None' = None) -> 'None'",
+    ): (
+        "(self, conversation: 'ConversationRef', "
+        "expected_generation: 'int | None' = None) -> 'None'"
+    ),
     (
         "ProjectionRouteRepository",
         "list_projection_routes",
@@ -196,12 +199,12 @@ _EXPECTED_METHOD_HINTS = {
     },
     ("BindingRepository", "put"): {
         "binding": ConversationBinding,
-        "expected_revision": int | None,
+        "expected_generation": int | None,
         "return": ConversationBinding,
     },
     ("BindingRepository", "delete"): {
         "conversation": ConversationRef,
-        "expected_revision": int | None,
+        "expected_generation": int | None,
         "return": type(None),
     },
     ("ProjectionRouteRepository", "list_projection_routes"): {

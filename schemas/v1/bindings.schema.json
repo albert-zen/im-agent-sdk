@@ -5,7 +5,7 @@
   "$defs": {
     "ConversationBinding": {
       "type": "object",
-      "required": ["conversationRef", "revision", "updatedAt"],
+      "required": ["conversationRef", "generation", "updatedAt"],
       "properties": {
         "conversationRef": {
           "$ref": "messages.schema.json#/$defs/ConversationRef"
@@ -28,7 +28,7 @@
             { "type": "null" }
           ]
         },
-        "revision": { "type": "integer", "minimum": 0 },
+        "generation": { "type": "integer", "minimum": 0 },
         "updatedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
       },
       "allOf": [

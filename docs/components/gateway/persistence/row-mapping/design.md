@@ -18,7 +18,7 @@ delivery snapshots. It may apply the state-contract validators to a completed
 decoded value.
 
 It does not own a connection or cursor lifecycle, locks, `BEGIN`, commit or
-rollback, migrations, current time, revision/CAS policy, claim reclaim,
+rollback, migrations, current time, generation/CAS policy, claim reclaim,
 correlation transitions, route selection, delivery retries, or repair of
 invalid persisted data.
 
@@ -41,6 +41,10 @@ Thread. Checkpoint ID/time is an all-or-nothing
 pair. Request shapes and delivery receipts are closed JSON payloads: unknown
 kinds, missing required fields, incompatible scalar/container types, invalid
 enums, timestamps, identities, or response cardinality reject the row.
+The delivery receipt JSON shape retains explicit null detail members for one
+deterministic current encoding, but their values must be null. The destination
+error column is likewise reserved null. Decoding non-null free-form detail or
+error text fails closed; encoding never writes it.
 
 ## Compatibility decision
 

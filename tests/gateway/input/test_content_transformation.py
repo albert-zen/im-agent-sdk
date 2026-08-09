@@ -490,7 +490,7 @@ class InboundContentTransformerTests(unittest.IsolatedAsyncioTestCase):
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
                 project_ref=application.default_project_ref,
-                revision=1,
+                generation=1,
                 updated_at=datetime.now(UTC),
             )
         gateway = ImAgentGateway(

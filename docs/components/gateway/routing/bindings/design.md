@@ -16,7 +16,7 @@ This leaf owns:
 - pure binding-operation field validation;
 - pure binding-result identity and postcondition validation;
 - binding repository mutation and optimistic CAS; and
-- same-target convergence, including its revisionless retry distinction.
+- same-target convergence, including its generationless retry distinction.
 
 It does not own Gateway aggregate dispatch, Conversation locks, foreground
 projection route changes, recovery policy, Application Project or Thread
@@ -34,7 +34,7 @@ only selections remain valid, but every Thread selection requires and exactly
 matches the binding's Project ancestor in every Project mode. Fixed/flat
 workspace Projects are therefore ordinary stable binding scopes; mode never
 authorizes a Project-less Thread. The binding repository stores only the
-bridge-owned binding reference and revision; it never persists or copies
+bridge-owned binding reference and generation; it never persists or copies
 Project, Thread, transcript, Turn, or execution state. Gateway composition
 constructs the binding runtime with the configured repository and calls its
 explicit typed methods; it does not perform repository reads, writes, CAS, or
@@ -55,13 +55,13 @@ Project binding, Thread binding, and Thread clearing. A foreground Thread bind
 is split into a typed preparation fact and commit so composition can prepare
 the projection route before CAS without taking ownership of binding mutation.
 Preparation compares the exact Application/Project/Thread target and rejects
-a same-target guard unless it is absent, the current revision, or the
-immediately preceding revision. Commit then converges that accepted
-same-target retry without a write or revision bump. A non-foreground,
-revisionless same-target bind remains an ordinary repository write and
-advances the revision; revisionless input is not a general idempotency key.
+a same-target guard unless it is absent, the current generation, or the
+immediately preceding generation. Commit then converges that accepted
+same-target retry without a write or generation bump. A non-foreground,
+generationless same-target bind remains an ordinary repository write and
+advances the generation; generationless input is not a general idempotency key.
 
-Block A preserves the current optimistic revision contract. The monotonic
+Block A preserves the current optimistic generation contract. The monotonic
 binding generation, store-only action receipts, workflow CAS, and atomic
 receipt/foreground-route transaction required by ADR 0016 belong to block B;
 no local compatibility receipt or second persistence path is introduced here.
@@ -83,7 +83,7 @@ dispatches through typed binding methods; this binding owner performs
 repository mutation, optimistic CAS, and same-target convergence. The
 operations owner serializes one Conversation, while the projection-routing
 owner controls foreground route changes and recovery policy. Those owners
-preserve the one-current-binding and stable-revision guarantees.
+preserve the one-current-binding and stable-generation guarantees.
 
 Integration tests retain evidence for binding mutation/CAS, lock,
 foreground-route, fan-out, and restart behavior. Binding state is bridge-owned

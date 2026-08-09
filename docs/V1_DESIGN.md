@@ -349,7 +349,7 @@ outcomes remain typed values.
 For `create_and_select_project` and `create_and_bind_thread`:
 
 1. persist the action fingerprint, stable phase identities, current binding
-   revision, and `reserved` state;
+   generation, and `reserved` state;
 2. durably fence the receipt as `native_side_effect_started` immediately
    before invoking native create;
 3. invoke native create with the stable phase operation ID;
@@ -361,9 +361,9 @@ For `create_and_select_project` and `create_and_bind_thread`:
    temporary `not_found` is insufficient, so otherwise persist/return sticky
    `outcome_unknown` and never repeat create;
 6. in one fenced store transaction, compare-and-swap the recorded binding
-   revision and commit the hierarchical binding, any matching
+   generation and commit the hierarchical binding, any matching
    `foreground_only` route, and the workflow receipt's terminal binding phase
-   with its successor revision;
+   with its successor generation;
 7. if commit acknowledgement or the caller response was lost, read the
    terminal workflow receipt first; its stored success remains authoritative
    even if a later user action has since changed the binding;

@@ -32,7 +32,7 @@ class _BindingChange:
 class _PreparedThreadBinding:
     previous: ConversationBinding | None
     desired: ConversationBinding
-    expected_revision: int | None
+    expected_generation: int | None
     converge_without_write: bool
 
 
@@ -53,14 +53,14 @@ class _BindingRuntime:
         conversation_ref: ConversationRef,
         application_ref: ApplicationRef,
         *,
-        expected_revision: int | None,
+        expected_generation: int | None,
     ) -> _BindingChange:
         return await self._replace(
             ConversationBinding(
                 conversation_ref=conversation_ref,
                 application_ref=application_ref,
             ),
-            expected_revision=expected_revision,
+            expected_generation=expected_generation,
         )
 
     async def bind_project(
@@ -69,7 +69,7 @@ class _BindingRuntime:
         application_ref: ApplicationRef,
         project_ref: ProjectRef,
         *,
-        expected_revision: int | None,
+        expected_generation: int | None,
     ) -> _BindingChange:
         return await self._replace(
             ConversationBinding(
@@ -77,7 +77,7 @@ class _BindingRuntime:
                 application_ref=application_ref,
                 project_ref=project_ref,
             ),
-            expected_revision=expected_revision,
+            expected_generation=expected_generation,
         )
 
     async def prepare_thread_binding(
@@ -86,7 +86,7 @@ class _BindingRuntime:
         application_ref: ApplicationRef,
         thread_ref: ThreadRef,
         *,
-        expected_revision: int | None,
+        expected_generation: int | None,
         converge_same_target: bool,
     ) -> _PreparedThreadBinding:
         previous = await self._repository.get(conversation_ref)
@@ -103,16 +103,16 @@ class _BindingRuntime:
         if (
             converge_without_write
             and previous is not None
-            and expected_revision not in {None, previous.revision, previous.revision - 1}
+            and expected_generation not in {None, previous.generation, previous.generation - 1}
         ):
             raise BindingConflict(
                 "same-target bind retry does not match the current "
-                "or immediately preceding revision"
+                "or immediately preceding generation"
             )
         return _PreparedThreadBinding(
             previous=previous,
             desired=desired,
-            expected_revision=expected_revision,
+            expected_generation=expected_generation,
             converge_without_write=converge_without_write,
         )
 
@@ -127,7 +127,7 @@ class _BindingRuntime:
             return _BindingChange(previous=previous, binding=previous)
         binding = await self._repository.put(
             prepared.desired,
-            expected_revision=prepared.expected_revision,
+            expected_generation=prepared.expected_generation,
         )
         return _BindingChange(previous=prepared.previous, binding=binding)
 
@@ -152,7 +152,7 @@ class _BindingRuntime:
         self,
         conversation_ref: ConversationRef,
         *,
-        expected_revision: int | None,
+        expected_generation: int | None,
     ) -> _BindingChange:
         current = await self._repository.get(conversation_ref)
         if current is None:
@@ -163,7 +163,7 @@ class _BindingRuntime:
                 application_ref=current.application_ref,
                 project_ref=current.project_ref,
             ),
-            expected_revision=expected_revision,
+            expected_generation=expected_generation,
         )
         return _BindingChange(previous=current, binding=binding)
 
@@ -171,12 +171,12 @@ class _BindingRuntime:
         self,
         desired: ConversationBinding,
         *,
-        expected_revision: int | None,
+        expected_generation: int | None,
     ) -> _BindingChange:
         previous = await self._repository.get(desired.conversation_ref)
         binding = await self._repository.put(
             desired,
-            expected_revision=expected_revision,
+            expected_generation=expected_generation,
         )
         return _BindingChange(previous=previous, binding=binding)
 
@@ -196,7 +196,7 @@ def _has_same_target(
 @dataclass(frozen=True, slots=True, kw_only=True)
 class BindConversationToProject(_GatewayOperation):
     project_ref: ProjectRef
-    expected_revision: int | None = None
+    expected_generation: int | None = None
     type: _GatewayOperationType = field(
         init=False,
         default=_GatewayOperationType.CONVERSATION_BIND_PROJECT,
@@ -206,7 +206,7 @@ class BindConversationToProject(_GatewayOperation):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class BindConversationToThread(_GatewayOperation):
     thread_ref: ThreadRef
-    expected_revision: int | None = None
+    expected_generation: int | None = None
     type: _GatewayOperationType = field(
         init=False,
         default=_GatewayOperationType.CONVERSATION_BIND_THREAD,
@@ -215,7 +215,7 @@ class BindConversationToThread(_GatewayOperation):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ClearConversationThread(_GatewayOperation):
-    expected_revision: int | None = None
+    expected_generation: int | None = None
     type: _GatewayOperationType = field(
         init=False,
         default=_GatewayOperationType.CONVERSATION_CLEAR_THREAD,

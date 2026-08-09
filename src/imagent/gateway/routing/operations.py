@@ -66,7 +66,7 @@ class ListApplications(_GatewayOperation):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SelectApplication(_GatewayOperation):
     application_ref: ApplicationRef
-    expected_revision: int | None = None
+    expected_generation: int | None = None
     type: GatewayOperationType = field(
         init=False,
         default=GatewayOperationType.APPLICATION_SELECT,
@@ -275,9 +275,9 @@ def validate_gateway_operation(operation: GatewayOperation) -> None:
     require_identifier(operation.actor, "actor")
     require_identifier(operation.conversation_ref.channel_instance_id, "channel_instance_id")
     require_identifier(operation.conversation_ref.native_conversation_id, "native_conversation_id")
-    expected_revision = getattr(operation, "expected_revision", None)
-    if expected_revision is not None and expected_revision < 0:
-        raise ContractViolation("expected_revision cannot be negative")
+    expected_generation = getattr(operation, "expected_generation", None)
+    if expected_generation is not None and expected_generation < 0:
+        raise ContractViolation("expected_generation cannot be negative")
     if isinstance(operation, SelectApplication):
         require_identifier(
             operation.application_ref.application_instance_id,

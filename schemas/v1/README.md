@@ -10,6 +10,7 @@ These JSON Schemas describe semantic contracts, not a required transport.
 - `operations.schema.json`: operations and results.
 - `events.schema.json`: unified Agent events.
 - `bindings.schema.json`: current IM Conversation selection.
+- `outcomes.schema.json`: closed success/failure/partial/unknown action results.
 - `projections.schema.json`: Gateway-owned Thread output routes.
 - `deliveries.schema.json`: proactive intents, scoped delivery results and the
   optional inline-artifact ingress request.

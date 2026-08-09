@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -353,12 +354,12 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                             conversation_ref=conversation,
                             application_ref=ApplicationRef("zen-main"),
                         ),
-                        expected_revision=0,
+                        expected_generation=0,
                     )
                 self.assertEqual(await state.get(conversation), original)
 
                 with self.assertRaises(BindingConflict):
-                    await state.delete(conversation, expected_revision=0)
+                    await state.delete(conversation, expected_generation=0)
                 self.assertEqual(await state.get(conversation), original)
             finally:
                 await state.close()
@@ -589,7 +590,7 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
             try:
                 binding = await state.get(conversation)
                 assert binding is not None
-                self.assertEqual(binding.revision, 7)
+                self.assertEqual(binding.generation, 7)
                 self.assertEqual(binding.thread_ref, thread)
                 self.assertEqual(
                     await state.claim("outbound:qq-main", "delivery-1"),
@@ -667,6 +668,121 @@ class SQLiteGatewayStateTests(unittest.IsolatedAsyncioTestCase):
                 )
             finally:
                 await state.close()
+
+            connection = sqlite3.connect(path)
+            try:
+                binding_columns = {
+                    row[1] for row in connection.execute("PRAGMA table_info(conversation_bindings)")
+                }
+                self.assertIn("generation", binding_columns)
+                self.assertNotIn("revision", binding_columns)
+            finally:
+                connection.close()
+
+    async def test_legacy_delivery_detail_is_scrubbed_from_sqlite_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "legacy-delivery.sqlite3"
+            now = datetime.now(UTC)
+            secret = "credential=secret path=/private/native-response.json"
+            connection = sqlite3.connect(path)
+            try:
+                connection.executescript(
+                    """
+                    CREATE TABLE delivery_submissions (
+                        submission_id TEXT NOT NULL PRIMARY KEY,
+                        delivery_id TEXT NOT NULL,
+                        origin TEXT NOT NULL,
+                        principal_id TEXT NOT NULL,
+                        target_fingerprint TEXT NOT NULL,
+                        payload_fingerprint TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    CREATE TABLE delivery_submission_destinations (
+                        root_submission_id TEXT NOT NULL,
+                        destination_delivery_id TEXT NOT NULL PRIMARY KEY,
+                        channel_instance_id TEXT NOT NULL,
+                        native_conversation_id TEXT NOT NULL,
+                        application_instance_id TEXT NOT NULL,
+                        project_id TEXT NOT NULL,
+                        thread_id TEXT NOT NULL,
+                        route_id TEXT NOT NULL,
+                        route_updated_at TEXT,
+                        reply_to_message_id TEXT,
+                        state TEXT NOT NULL,
+                        receipt_json TEXT,
+                        error TEXT,
+                        updated_at TEXT NOT NULL
+                    );
+                    """
+                )
+                connection.execute(
+                    "INSERT INTO delivery_submissions VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        "submission",
+                        "delivery",
+                        "external",
+                        "principal",
+                        "target",
+                        "payload",
+                        now.isoformat(),
+                        now.isoformat(),
+                    ),
+                )
+                connection.execute(
+                    "INSERT INTO delivery_submission_destinations VALUES "
+                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        "submission",
+                        "destination",
+                        "channel",
+                        "conversation",
+                        "",
+                        "",
+                        "",
+                        "",
+                        None,
+                        None,
+                        "unknown",
+                        json.dumps(
+                            {
+                                "status": "unknown",
+                                "native_message_id": None,
+                                "detail": secret,
+                                "retry_after_seconds": None,
+                                "items": [
+                                    {
+                                        "content_index": 0,
+                                        "status": "unknown",
+                                        "attachment_id": None,
+                                        "native_message_id": None,
+                                        "detail": secret,
+                                    }
+                                ],
+                                "segments": [],
+                            }
+                        ),
+                        secret,
+                        now.isoformat(),
+                    ),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            state = SQLiteGatewayState(path)
+            try:
+                record = await state.get_delivery_submission("submission")
+                assert record is not None
+                receipt = record.destinations[0].receipt
+                assert receipt is not None
+                self.assertIsNone(receipt.detail)
+                self.assertTrue(all(item.detail is None for item in receipt.items))
+            finally:
+                await state.close()
+
+            for sqlite_file in Path(directory).iterdir():
+                self.assertNotIn(secret.encode(), sqlite_file.read_bytes())
 
     async def test_migration_clears_legacy_latest_reply_for_external_turn(
         self,

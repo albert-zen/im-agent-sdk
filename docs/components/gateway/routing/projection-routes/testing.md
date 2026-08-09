@@ -13,7 +13,7 @@ Projection-route conformance must prove:
 - switching one Conversation does not remove or disable other Conversations'
   routes to the old Thread;
 - route refresh preserves checkpoints and replaces destination context under
-  revision control;
+  generation control;
 - checkpoint compare-and-swap cannot be bypassed by ordinary route writes;
 - restart reconstructs active observation from durable routes and bindings,
   with bounded baseline-before-live ordering;

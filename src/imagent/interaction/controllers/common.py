@@ -302,7 +302,7 @@ class _CommonCommandRuntime:
                 conversation_ref=message.conversation_ref,
                 actor=message.sender,
                 application_ref=selected.ref,
-                expected_revision=current.revision if current is not None else None,
+                expected_generation=current.generation if current is not None else None,
                 created_at=message.created_at,
             )
         )
@@ -341,7 +341,7 @@ class _CommonCommandRuntime:
                 conversation_ref=message.conversation_ref,
                 actor=message.sender,
                 application_ref=application.ref,
-                expected_revision=binding.revision if binding is not None else None,
+                expected_generation=binding.generation if binding is not None else None,
                 created_at=message.created_at,
             )
         )
@@ -398,7 +398,7 @@ class _CommonCommandRuntime:
                 conversation_ref=message.conversation_ref,
                 actor=message.sender,
                 project_ref=project.ref,
-                expected_revision=binding.revision,
+                expected_generation=binding.generation,
                 created_at=message.created_at,
             )
         )
@@ -460,7 +460,7 @@ class _CommonCommandRuntime:
                 conversation_ref=message.conversation_ref,
                 actor=message.sender,
                 thread_ref=thread.ref,
-                expected_revision=binding.revision,
+                expected_generation=binding.generation,
                 created_at=message.created_at,
             )
         )
@@ -512,7 +512,7 @@ class _CommonCommandRuntime:
                 conversation_ref=message.conversation_ref,
                 actor=message.sender,
                 thread_ref=thread.ref,
-                expected_revision=binding.revision,
+                expected_generation=binding.generation,
                 created_at=message.created_at,
             )
         )
@@ -565,7 +565,7 @@ class _CommonCommandRuntime:
                 operation_id=_operation_id(message, "conversation.clear_thread"),
                 conversation_ref=message.conversation_ref,
                 actor=message.sender,
-                expected_revision=binding.revision,
+                expected_generation=binding.generation,
                 created_at=message.created_at,
             )
         )

@@ -3,7 +3,7 @@
 State-contract tests must prove:
 
 - bindings preserve one stable Conversation identity, validate consistent
-  Application/Project/Thread references, and reject invalid revisions;
+  Application/Project/Thread references, and reject invalid generations;
 - every Thread-bearing state value has mandatory Project ancestry, including
   fixed/flat workspaces, and rejects a partial or mismatched hierarchy;
 - route identity binds one stable route ID to one exact Thread/Conversation
@@ -18,7 +18,10 @@ State-contract tests must prove:
 - mutable outcome/receipt fields do not alter reservation identity, while any
   changed root fingerprint or snapshot does;
 - values contain no transcript item, prompt/response body, message/artifact
-  content, credential, callback, or retry job; and
+  content, credential, callback, retry job, free-form delivery error, or
+  receipt/item/segment detail text;
+- durable delivery classifications stay closed and stable receipt identities
+  reject values beyond the identifier bound; and
 - JSON schemas and Python values remain compatible at their public boundary.
 
 The proactive target/intent/result vocabulary and validator are tested through

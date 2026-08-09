@@ -63,6 +63,8 @@ leaf docs for [messages](interaction/messages/design.md),
 gateway
 ├── composition
 ├── lifecycle
+├── outcomes
+├── effect-execution
 ├── admission
 ├── concurrency
 ├── routing
@@ -87,6 +89,8 @@ gateway
 │   ├── proactive-delivery
 │   └── outcome-observation
 ├── persistence
+│   ├── gateway-store
+│   ├── effects
 │   ├── state-contracts
 │   ├── repository-contracts
 │   ├── memory

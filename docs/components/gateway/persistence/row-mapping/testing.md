@@ -7,7 +7,8 @@ Row-mapping tests must prove:
   snapshot, receipt, and correlation state;
 - target validation distinguishes `NULL` from empty identifiers and rejects
   malformed timestamps, JSON, enums, references, cross-Application scopes,
-  checkpoint pairs, and receipts explicitly;
+  checkpoint pairs, receipts, and non-null delivery error/detail text
+  explicitly;
 - every decoded Thread-bearing row requires a non-empty same-Application
   Project ID; the historical empty Project sentinel is rejected;
 - decoding performs no SQL mutation, migration, clock read, file/native I/O,

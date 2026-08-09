@@ -59,12 +59,12 @@ class _CrashBindingRepository(InMemoryBindingRepository):
     async def put(
         self,
         binding: ConversationBinding,
-        expected_revision: int | None = None,
+        expected_generation: int | None = None,
     ) -> ConversationBinding:
         if self.fail_before_put:
             self.fail_before_put = False
             raise RuntimeError("crash before binding commit")
-        stored = await super().put(binding, expected_revision=expected_revision)
+        stored = await super().put(binding, expected_generation=expected_generation)
         if self.pause_after_put:
             self.pause_after_put = False
             self.put_committed.set()
@@ -389,7 +389,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
                     conversation_ref=conversation,
                     actor="user",
                     thread_ref=thread.ref,
-                    expected_revision=initial.revision,
+                    expected_generation=initial.generation,
                     created_at=datetime.now(UTC),
                 )
             )
@@ -412,7 +412,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
                     conversation_ref=conversation,
                     actor="user",
                     thread_ref=thread.ref,
-                    expected_revision=initial.revision,
+                    expected_generation=initial.generation,
                     created_at=datetime.now(UTC),
                 )
             )
@@ -459,7 +459,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
                     conversation_ref=conversation,
                     actor="user",
                     thread_ref=thread.ref,
-                    expected_revision=initial.revision,
+                    expected_generation=initial.generation,
                     created_at=datetime.now(UTC),
                 )
             )
@@ -507,7 +507,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
                     conversation_ref=conversation,
                     actor="user",
                     thread_ref=thread_a.ref,
-                    expected_revision=initial.revision,
+                    expected_generation=initial.generation,
                     created_at=datetime.now(UTC),
                 )
             )
@@ -522,7 +522,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
                     conversation_ref=conversation,
                     actor="user",
                     thread_ref=thread_a.ref,
-                    expected_revision=initial.revision,
+                    expected_generation=initial.generation,
                     created_at=datetime.now(UTC),
                 )
             )
@@ -536,14 +536,14 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
                 ),
                 (conversation,),
             )
-            for invalid_revision in (0, 99):
+            for invalid_generation in (0, 99):
                 invalid_retry = await gateway.execute_gateway(
                     BindConversationToThread(
-                        operation_id=f"bind-invalid-retry-{invalid_revision}",
+                        operation_id=f"bind-invalid-retry-{invalid_generation}",
                         conversation_ref=conversation,
                         actor="user",
                         thread_ref=thread_a.ref,
-                        expected_revision=invalid_revision,
+                        expected_generation=invalid_generation,
                         created_at=datetime.now(UTC),
                     )
                 )
@@ -555,7 +555,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
                     conversation_ref=conversation,
                     actor="user",
                     thread_ref=thread_b.ref,
-                    expected_revision=committed.revision,
+                    expected_generation=committed.generation,
                     created_at=datetime.now(UTC),
                 )
             )
@@ -566,7 +566,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
                     conversation_ref=conversation,
                     actor="user",
                     thread_ref=thread_a.ref,
-                    expected_revision=initial.revision,
+                    expected_generation=initial.generation,
                     created_at=datetime.now(UTC),
                 )
             )
@@ -823,7 +823,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
                     conversation_ref=conversation,
                     actor="user",
                     thread_ref=thread.ref,
-                    expected_revision=99,
+                    expected_generation=99,
                     created_at=datetime.now(UTC),
                 )
             )
@@ -849,7 +849,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
                     conversation_ref=conversation,
                     actor="user",
                     thread_ref=thread.ref,
-                    expected_revision=committed.revision,
+                    expected_generation=committed.generation,
                     created_at=datetime.now(UTC),
                 )
             )
@@ -968,7 +968,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
                     conversation_ref=conversation,
                     actor="user",
                     thread_ref=thread_b.ref,
-                    expected_revision=first_binding.revision,
+                    expected_generation=first_binding.generation,
                     created_at=datetime.now(UTC),
                 )
             )
@@ -995,7 +995,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
                     conversation_ref=conversation,
                     actor="user",
                     thread_ref=thread_a.ref,
-                    expected_revision=current.revision,
+                    expected_generation=current.generation,
                     created_at=datetime.now(UTC),
                 )
             )
@@ -1069,7 +1069,7 @@ class ProjectionRoutingTests(unittest.IsolatedAsyncioTestCase):
                     conversation_ref=conversation,
                     actor="user",
                     thread_ref=thread_b.ref,
-                    expected_revision=current.revision,
+                    expected_generation=current.generation,
                     created_at=datetime.now(UTC),
                 )
             )

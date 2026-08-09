@@ -1031,6 +1031,50 @@ components:
     adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
     gaps: []
 
+  gateway.outcomes:
+    id: gateway.outcomes
+    parent: gateway
+    purpose: Define the closed language-neutral success, failure, partial, and unknown runtime result algebra.
+    owns: [outcome discriminants, immutable generic result variants, language-neutral outcome schema]
+    does_not_own: [product errors, persistence phases, retry policy, native reconciliation]
+    inputs: [typed success values and typed errors]
+    outputs: [Succeeded, Failed, Partial, OutcomeUnknown]
+    public_contracts: [OutcomeStatus, Succeeded, Failed, Partial, OutcomeUnknown, Outcome]
+    public_exports:
+      current: [imagent.gateway.outcomes:OutcomeStatus, imagent.gateway.outcomes:Succeeded, imagent.gateway.outcomes:Failed, imagent.gateway.outcomes:Partial, imagent.gateway.outcomes:OutcomeUnknown, imagent.gateway.outcomes:Outcome]
+      target: [imagent.gateway.outcomes:OutcomeStatus, imagent.gateway.outcomes:Succeeded, imagent.gateway.outcomes:Failed, imagent.gateway.outcomes:Partial, imagent.gateway.outcomes:OutcomeUnknown, imagent.gateway.outcomes:Outcome]
+    dependencies: []
+    state_recovery: Passive result values carry no retry authority; outcome_unknown preserves ambiguity.
+    current_code: [schemas/v1/outcomes.schema.json, src/imagent/gateway/outcomes.py]
+    target_code: [schemas/v1/outcomes.schema.json, src/imagent/gateway/outcomes.py]
+    current_tests: [tests/gateway/test_outcomes.py]
+    target_tests: [tests/gateway/test_outcomes.py]
+    authoritative_docs: [docs/components/gateway/outcomes/design.md, docs/components/gateway/outcomes/testing.md]
+    adrs: [docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
+    gaps: []
+
+  gateway.effect-execution:
+    id: gateway.effect-execution
+    parent: gateway
+    purpose: Execute store, native, request-response, and create-binding effects through one typed durable seam.
+    owns: [GatewayEffectExecutor, native side-effect state machine, conservative reconciliation, workflow binding coordination]
+    does_not_own: [public action surfaces, product commands, authorization, stores, leases, adapter implementations]
+    inputs: [validated effect requests and stable phase callbacks]
+    outputs: [closed action outcomes]
+    public_contracts: [GatewayEffectExecutor, NativeEffectInvoker, NativeEffectPreflight, NativeEffectReconciler, StoreBackedGatewayEffectExecutor]
+    public_exports:
+      current: [imagent.gateway.effect_execution:GatewayEffectExecutor, imagent.gateway.effect_execution:NativeEffectInvoker, imagent.gateway.effect_execution:NativeEffectPreflight, imagent.gateway.effect_execution:NativeEffectReconciler, imagent.gateway.effect_execution:StoreBackedGatewayEffectExecutor]
+      target: [imagent.gateway.effect_execution:GatewayEffectExecutor, imagent.gateway.effect_execution:NativeEffectInvoker, imagent.gateway.effect_execution:NativeEffectPreflight, imagent.gateway.effect_execution:NativeEffectReconciler, imagent.gateway.effect_execution:StoreBackedGatewayEffectExecutor]
+    dependencies: [applications.application-contract, gateway.outcomes, gateway.routing.projection-routes, gateway.persistence.effects, gateway.persistence.state-contracts, gateway.persistence.gateway-store]
+    state_recovery: Durable phases prevent blind native retry and permit only evidenced reconciliation or binding-phase resume.
+    current_code: [src/imagent/gateway/effect_execution.py]
+    target_code: [src/imagent/gateway/effect_execution.py]
+    current_tests: [tests/gateway/test_effect_execution.py]
+    target_tests: [tests/gateway/test_effect_execution.py]
+    authoritative_docs: [docs/components/gateway/effect-execution/design.md, docs/components/gateway/effect-execution/testing.md]
+    adrs: [docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
+    gaps: [Block C consumes only this typed seam and owns all public scoped action construction]
+
   gateway.persistence.state-contracts:
     id: gateway.persistence.state-contracts
     parent: gateway.persistence
@@ -1044,7 +1088,7 @@ components:
       current: [imagent.contracts:ConversationBinding, imagent.gateway.persistence:ConversationBinding, imagent.gateway.persistence:ThreadProjectionRoute, imagent.gateway.persistence:TurnReplyCorrelation, imagent.gateway.persistence:RequestRouteState, imagent.gateway.persistence:RequestRouteCorrelation, imagent.gateway.persistence:DeliverySubmissionState, imagent.gateway.persistence:MAX_DELIVERY_SUBMISSION_DESTINATIONS, imagent.gateway.persistence:DeliveryRouteSnapshot, imagent.gateway.persistence:DestinationDeliveryRecord, imagent.gateway.persistence:DeliverySubmissionRecord, imagent.gateway.persistence:DeliveryReservation, imagent.gateway.persistence:validate_binding, imagent.gateway.persistence:validate_delivery_route_snapshot, imagent.gateway.persistence:validate_delivery_submission_destination_count, imagent.gateway.persistence:validate_delivery_submission_record, imagent.gateway.persistence:validate_projection_route, imagent.gateway.persistence:validate_request_route_correlation, imagent.gateway.persistence:validate_turn_reply_correlation, imagent.gateway.persistence.state_contracts:ConversationBinding, imagent.gateway.persistence.state_contracts:DeliveryReservation, imagent.gateway.persistence.state_contracts:DeliveryRouteSnapshot, imagent.gateway.persistence.state_contracts:DeliverySubmissionRecord, imagent.gateway.persistence.state_contracts:DeliverySubmissionState, imagent.gateway.persistence.state_contracts:DestinationDeliveryRecord, imagent.gateway.persistence.state_contracts:MAX_DELIVERY_SUBMISSION_DESTINATIONS, imagent.gateway.persistence.state_contracts:RequestRouteCorrelation, imagent.gateway.persistence.state_contracts:RequestRouteState, imagent.gateway.persistence.state_contracts:ThreadProjectionRoute, imagent.gateway.persistence.state_contracts:TurnReplyCorrelation, imagent.gateway.persistence.state_contracts:validate_binding, imagent.gateway.persistence.state_contracts:validate_delivery_route_snapshot, imagent.gateway.persistence.state_contracts:validate_delivery_submission_destination_count, imagent.gateway.persistence.state_contracts:validate_delivery_submission_record, imagent.gateway.persistence.state_contracts:validate_projection_route, imagent.gateway.persistence.state_contracts:validate_request_route_correlation, imagent.gateway.persistence.state_contracts:validate_turn_reply_correlation]
       target: [imagent.contracts:ConversationBinding, imagent.gateway.persistence:ConversationBinding, imagent.gateway.persistence:ThreadProjectionRoute, imagent.gateway.persistence:TurnReplyCorrelation, imagent.gateway.persistence:RequestRouteState, imagent.gateway.persistence:RequestRouteCorrelation, imagent.gateway.persistence:DeliverySubmissionState, imagent.gateway.persistence:MAX_DELIVERY_SUBMISSION_DESTINATIONS, imagent.gateway.persistence:DeliveryRouteSnapshot, imagent.gateway.persistence:DestinationDeliveryRecord, imagent.gateway.persistence:DeliverySubmissionRecord, imagent.gateway.persistence:DeliveryReservation, imagent.gateway.persistence:validate_binding, imagent.gateway.persistence:validate_delivery_route_snapshot, imagent.gateway.persistence:validate_delivery_submission_destination_count, imagent.gateway.persistence:validate_delivery_submission_record, imagent.gateway.persistence:validate_projection_route, imagent.gateway.persistence:validate_request_route_correlation, imagent.gateway.persistence:validate_turn_reply_correlation, imagent.gateway.persistence.state_contracts:ConversationBinding, imagent.gateway.persistence.state_contracts:DeliveryReservation, imagent.gateway.persistence.state_contracts:DeliveryRouteSnapshot, imagent.gateway.persistence.state_contracts:DeliverySubmissionRecord, imagent.gateway.persistence.state_contracts:DeliverySubmissionState, imagent.gateway.persistence.state_contracts:DestinationDeliveryRecord, imagent.gateway.persistence.state_contracts:MAX_DELIVERY_SUBMISSION_DESTINATIONS, imagent.gateway.persistence.state_contracts:RequestRouteCorrelation, imagent.gateway.persistence.state_contracts:RequestRouteState, imagent.gateway.persistence.state_contracts:ThreadProjectionRoute, imagent.gateway.persistence.state_contracts:TurnReplyCorrelation, imagent.gateway.persistence.state_contracts:validate_binding, imagent.gateway.persistence.state_contracts:validate_delivery_route_snapshot, imagent.gateway.persistence.state_contracts:validate_delivery_submission_destination_count, imagent.gateway.persistence.state_contracts:validate_delivery_submission_record, imagent.gateway.persistence.state_contracts:validate_projection_route, imagent.gateway.persistence.state_contracts:validate_request_route_correlation, imagent.gateway.persistence.state_contracts:validate_turn_reply_correlation]
     dependencies: [interaction.messages, interaction.channels.channel-contract, interaction.operations, applications.application-contract, applications.capabilities, applications.requests]
-    state_recovery: Values carry stable identities/revisions/state only; repository implementations own atomic recovery mutations.
+    state_recovery: Values carry stable identities/generations/state only; repository implementations own atomic recovery mutations.
     current_code: [schemas/v1/bindings.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, schemas/v1/projections.schema.json, src/imagent/gateway/persistence/state_contracts.py]
     target_code: [schemas/v1/bindings.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, schemas/v1/projections.schema.json, src/imagent/gateway/persistence/state_contracts.py]
     current_tests: [tests/interaction/test_contracts.py, tests/gateway/persistence/test_memory.py, tests/gateway/routing/test_projection_integration.py, tests/gateway/persistence/test_sqlite.py, tests/gateway/persistence/test_state_contracts.py]
@@ -1059,7 +1103,7 @@ components:
     purpose: Define typed repositories for bindings, routes, correlations, idempotency, and submissions.
     owns: [repository Protocols, conflict types, atomic mutation contracts]
     does_not_own: [SQLite schema, Gateway policy, transcript/content storage]
-    inputs: [typed bridge-state values and expected revisions/owners]
+    inputs: [typed bridge-state values and expected generations/owners]
     outputs: [atomic typed repository outcomes]
     public_contracts: [BindingRepository, ProjectionRouteRepository, IdempotencyRepository, RequestCorrelationRepository, DeliverySubmissionRepository, BindingConflict, IdempotencyClaimStatus, IdempotencyCapacityError, ProjectionCheckpointConflict, ProjectionRouteConflict, RequestCorrelationConflict, TurnReplyCorrelationConflict, DeliverySubmissionConflict, DeliverySubmissionCapacityError]
     public_exports:
@@ -1067,8 +1111,8 @@ components:
       target: [imagent.gateway.persistence.repository_contracts:BindingConflict, imagent.gateway.persistence.repository_contracts:BindingRepository, imagent.gateway.persistence.repository_contracts:DeliverySubmissionCapacityError, imagent.gateway.persistence.repository_contracts:DeliverySubmissionConflict, imagent.gateway.persistence.repository_contracts:DeliverySubmissionRepository, imagent.gateway.persistence.repository_contracts:IdempotencyCapacityError, imagent.gateway.persistence.repository_contracts:IdempotencyClaimStatus, imagent.gateway.persistence.repository_contracts:IdempotencyRepository, imagent.gateway.persistence.repository_contracts:ProjectionCheckpointConflict, imagent.gateway.persistence.repository_contracts:ProjectionRouteConflict, imagent.gateway.persistence.repository_contracts:ProjectionRouteRepository, imagent.gateway.persistence.repository_contracts:RequestCorrelationConflict, imagent.gateway.persistence.repository_contracts:RequestCorrelationRepository, imagent.gateway.persistence.repository_contracts:TurnReplyCorrelationConflict, imagent.gateway.persistence:BindingConflict, imagent.gateway.persistence:BindingRepository, imagent.gateway.persistence:DeliverySubmissionCapacityError, imagent.gateway.persistence:DeliverySubmissionConflict, imagent.gateway.persistence:DeliverySubmissionRepository, imagent.gateway.persistence:IdempotencyCapacityError, imagent.gateway.persistence:IdempotencyClaimStatus, imagent.gateway.persistence:IdempotencyRepository, imagent.gateway.persistence:ProjectionCheckpointConflict, imagent.gateway.persistence:ProjectionRouteConflict, imagent.gateway.persistence:ProjectionRouteRepository, imagent.gateway.persistence:RequestCorrelationConflict, imagent.gateway.persistence:RequestCorrelationRepository, imagent.gateway.persistence:TurnReplyCorrelationConflict]
     dependencies: [interaction.messages, applications.application-contract, applications.requests, gateway.persistence.state-contracts]
     state_recovery: Contracts require fencing, create-only correlations, checkpoint CAS, and immutable submission identity.
-    current_code: [src/imagent/adapters.py, src/imagent/gateway/persistence/__init__.py, src/imagent/gateway/persistence/repository_contracts.py, src/imagent/gateway/persistence/submission_identity.py]
-    target_code: [src/imagent/gateway/persistence/__init__.py, src/imagent/gateway/persistence/repository_contracts.py, src/imagent/gateway/persistence/submission_identity.py]
+    current_code: [src/imagent/adapters.py, src/imagent/gateway/persistence/repository_contracts.py, src/imagent/gateway/persistence/submission_identity.py]
+    target_code: [src/imagent/gateway/persistence/repository_contracts.py, src/imagent/gateway/persistence/submission_identity.py]
     current_tests: [tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_repository_contracts.py, tests/gateway/persistence/test_sqlite.py, tests/conformance/test_adapter_contracts.py, tests/gateway/persistence/test_submission_identity.py]
     target_tests: [tests/gateway/persistence/test_repository_contracts.py, tests/gateway/persistence/test_submission_identity.py]
     authoritative_docs: [docs/components/gateway/persistence/repository-contracts/design.md, docs/components/gateway/persistence/repository-contracts/testing.md, docs/components/ports/design.md, docs/components/persistence/design.md]
@@ -1131,7 +1175,7 @@ components:
     public_exports:
       current: [imagent.gateway.persistence.sqlite:SQLiteGatewayState]
       target: [imagent.gateway.persistence.sqlite:SQLiteGatewayState]
-    dependencies: [interaction.messages, applications.application-contract, applications.requests, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.row-mapping, gateway.projection.request-correlation]
+    dependencies: [interaction.messages, interaction.channels.channel-contract, applications.application-contract, applications.requests, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.row-mapping, gateway.projection.request-correlation]
     state_recovery: The SQLite owner upgrades only the immediately preceding route shape; current malformed rows fail closed without repair, authority inference, replay, or resend.
     current_code: [src/imagent/gateway/persistence/sqlite.py]
     target_code: [src/imagent/gateway/persistence/sqlite.py]
@@ -1162,6 +1206,50 @@ components:
     authoritative_docs: [docs/components/gateway/persistence/row-mapping/design.md, docs/components/gateway/persistence/row-mapping/testing.md, docs/components/persistence/design.md, docs/engineering/repository-maintainability/design.md]
     adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
+
+  gateway.persistence.effects:
+    id: gateway.persistence.effects
+    parent: gateway.persistence
+    purpose: Define passive bounded action fingerprints, receipt values, and store/native/workflow execution requests.
+    owns: [action identity and fingerprints, receipt categories and phases, minimal receipt outcomes, mutation and workflow request contracts, receipt codecs]
+    does_not_own: [lease or transaction execution, adapter calls, public action ergonomics, reconciliation policy]
+    inputs: [stable action identity and bounded semantic payload facts]
+    outputs: [validated fingerprints, requests, receipt values, encoded minimal outcomes]
+    public_contracts: [ActionError, ActionErrorCode, ActionFingerprint, ActionIdentity, ActionOutcome, BindingClearScope, BindingTarget, CreateBindingWorkflowKind, CreateBindingWorkflowRequest, EffectCategory, EffectPhase, EffectReceipt, EffectValue, FingerprintPayload, FingerprintValue, KnownNativeOutcome, MAX_ACTION_FINGERPRINT_FIELDS, MAX_ACTION_FINGERPRINT_PAYLOAD_BYTES, MAX_ACTION_FINGERPRINT_VALUES, NativeMutationRequest, StableReference, StableReferenceKind, StoreMutationPlan, StoreMutationRequest, decode_action_outcome, derive_action_fingerprint, encode_action_outcome, validate_action_fingerprint, validate_action_identity, validate_binding_target, validate_create_binding_workflow_request, validate_effect_receipt, validate_native_mutation_request, validate_store_mutation_request]
+    public_exports:
+      current: [imagent.gateway.persistence.effects:ActionError, imagent.gateway.persistence.effects:ActionErrorCode, imagent.gateway.persistence.effects:ActionFingerprint, imagent.gateway.persistence.effects:ActionIdentity, imagent.gateway.persistence.effects:ActionOutcome, imagent.gateway.persistence.effects:BindingClearScope, imagent.gateway.persistence.effects:BindingTarget, imagent.gateway.persistence.effects:CreateBindingWorkflowKind, imagent.gateway.persistence.effects:CreateBindingWorkflowRequest, imagent.gateway.persistence.effects:EffectCategory, imagent.gateway.persistence.effects:EffectPhase, imagent.gateway.persistence.effects:EffectReceipt, imagent.gateway.persistence.effects:EffectValue, imagent.gateway.persistence.effects:FingerprintPayload, imagent.gateway.persistence.effects:FingerprintValue, imagent.gateway.persistence.effects:KnownNativeOutcome, imagent.gateway.persistence.effects:MAX_ACTION_FINGERPRINT_FIELDS, imagent.gateway.persistence.effects:MAX_ACTION_FINGERPRINT_PAYLOAD_BYTES, imagent.gateway.persistence.effects:MAX_ACTION_FINGERPRINT_VALUES, imagent.gateway.persistence.effects:NativeMutationRequest, imagent.gateway.persistence.effects:StableReference, imagent.gateway.persistence.effects:StableReferenceKind, imagent.gateway.persistence.effects:StoreMutationPlan, imagent.gateway.persistence.effects:StoreMutationRequest, imagent.gateway.persistence.effects:decode_action_outcome, imagent.gateway.persistence.effects:derive_action_fingerprint, imagent.gateway.persistence.effects:encode_action_outcome, imagent.gateway.persistence.effects:validate_action_fingerprint, imagent.gateway.persistence.effects:validate_action_identity, imagent.gateway.persistence.effects:validate_binding_target, imagent.gateway.persistence.effects:validate_create_binding_workflow_request, imagent.gateway.persistence.effects:validate_effect_receipt, imagent.gateway.persistence.effects:validate_native_mutation_request, imagent.gateway.persistence.effects:validate_store_mutation_request]
+      target: [imagent.gateway.persistence.effects:ActionError, imagent.gateway.persistence.effects:ActionErrorCode, imagent.gateway.persistence.effects:ActionFingerprint, imagent.gateway.persistence.effects:ActionIdentity, imagent.gateway.persistence.effects:ActionOutcome, imagent.gateway.persistence.effects:BindingClearScope, imagent.gateway.persistence.effects:BindingTarget, imagent.gateway.persistence.effects:CreateBindingWorkflowKind, imagent.gateway.persistence.effects:CreateBindingWorkflowRequest, imagent.gateway.persistence.effects:EffectCategory, imagent.gateway.persistence.effects:EffectPhase, imagent.gateway.persistence.effects:EffectReceipt, imagent.gateway.persistence.effects:EffectValue, imagent.gateway.persistence.effects:FingerprintPayload, imagent.gateway.persistence.effects:FingerprintValue, imagent.gateway.persistence.effects:KnownNativeOutcome, imagent.gateway.persistence.effects:MAX_ACTION_FINGERPRINT_FIELDS, imagent.gateway.persistence.effects:MAX_ACTION_FINGERPRINT_PAYLOAD_BYTES, imagent.gateway.persistence.effects:MAX_ACTION_FINGERPRINT_VALUES, imagent.gateway.persistence.effects:NativeMutationRequest, imagent.gateway.persistence.effects:StableReference, imagent.gateway.persistence.effects:StableReferenceKind, imagent.gateway.persistence.effects:StoreMutationPlan, imagent.gateway.persistence.effects:StoreMutationRequest, imagent.gateway.persistence.effects:decode_action_outcome, imagent.gateway.persistence.effects:derive_action_fingerprint, imagent.gateway.persistence.effects:encode_action_outcome, imagent.gateway.persistence.effects:validate_action_fingerprint, imagent.gateway.persistence.effects:validate_action_identity, imagent.gateway.persistence.effects:validate_binding_target, imagent.gateway.persistence.effects:validate_create_binding_workflow_request, imagent.gateway.persistence.effects:validate_effect_receipt, imagent.gateway.persistence.effects:validate_native_mutation_request, imagent.gateway.persistence.effects:validate_store_mutation_request]
+    dependencies: [interaction.messages, interaction.operations, applications.application-contract, applications.requests, gateway.outcomes, gateway.persistence.state-contracts]
+    state_recovery: Fingerprints retain bounded semantic identity while receipts retain only fixed errors and minimal stable references.
+    current_code: [src/imagent/gateway/persistence/effects.py]
+    target_code: [src/imagent/gateway/persistence/effects.py]
+    current_tests: [tests/gateway/persistence/test_effect_contracts.py]
+    target_tests: [tests/gateway/persistence/test_effect_contracts.py]
+    authoritative_docs: [docs/components/gateway/persistence/effects/design.md, docs/components/gateway/persistence/effects/testing.md]
+    adrs: [docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
+    gaps: []
+
+  gateway.persistence.gateway-store:
+    id: gateway.persistence.gateway-store
+    parent: gateway.persistence
+    purpose: Expose one coherent public GatewayStore choice with fenced memory and SQLite durability domains and bounded effect receipts.
+    owns: [GatewayStore, MemoryGatewayStore, SQLiteGatewayStore, runtime lease and fence, workspace identity persistence, atomic Gateway and workflow transactions]
+    does_not_own: [effect value contracts, public action ergonomics, product commands, adapter calls, Agent truth, transcript or content storage, generic orchestration]
+    inputs: [stable namespace and owner identity, validated bridge mutations, minimal stable native results]
+    outputs: [lease-bound internal session, durable effect receipts, atomic bridge-state outcomes]
+    public_contracts: [GatewayStore, MemoryGatewayStore, SQLiteGatewayStore, GatewayStoreError, GatewayNamespaceConflict, RuntimeLease, RuntimeLeaseUnavailable, StaleRuntimeFence, EffectReceiptConflict, EffectReceiptCapacityError, WorkspaceIdentityConflict]
+    public_exports:
+      current: [imagent.gateway.persistence:EffectReceiptCapacityError, imagent.gateway.persistence:EffectReceiptConflict, imagent.gateway.persistence:GatewayNamespaceConflict, imagent.gateway.persistence:GatewayStore, imagent.gateway.persistence:GatewayStoreError, imagent.gateway.persistence:MemoryGatewayStore, imagent.gateway.persistence:RuntimeLease, imagent.gateway.persistence:RuntimeLeaseUnavailable, imagent.gateway.persistence:SQLiteGatewayStore, imagent.gateway.persistence:StaleRuntimeFence, imagent.gateway.persistence:WorkspaceIdentityConflict, imagent.gateway.persistence.store:EffectReceiptCapacityError, imagent.gateway.persistence.store:EffectReceiptConflict, imagent.gateway.persistence.store:GatewayNamespaceConflict, imagent.gateway.persistence.store:GatewayStore, imagent.gateway.persistence.store:GatewayStoreError, imagent.gateway.persistence.store:RuntimeLease, imagent.gateway.persistence.store:RuntimeLeaseUnavailable, imagent.gateway.persistence.store:StaleRuntimeFence, imagent.gateway.persistence.store:WorkspaceIdentityConflict, imagent.gateway.persistence.memory_store:MemoryGatewayStore, imagent.gateway.persistence.sqlite_store:SQLiteGatewayStore]
+      target: [imagent.gateway.persistence:EffectReceiptCapacityError, imagent.gateway.persistence:EffectReceiptConflict, imagent.gateway.persistence:GatewayNamespaceConflict, imagent.gateway.persistence:GatewayStore, imagent.gateway.persistence:GatewayStoreError, imagent.gateway.persistence:MemoryGatewayStore, imagent.gateway.persistence:RuntimeLease, imagent.gateway.persistence:RuntimeLeaseUnavailable, imagent.gateway.persistence:SQLiteGatewayStore, imagent.gateway.persistence:StaleRuntimeFence, imagent.gateway.persistence:WorkspaceIdentityConflict, imagent.gateway.persistence.store:EffectReceiptCapacityError, imagent.gateway.persistence.store:EffectReceiptConflict, imagent.gateway.persistence.store:GatewayNamespaceConflict, imagent.gateway.persistence.store:GatewayStore, imagent.gateway.persistence.store:GatewayStoreError, imagent.gateway.persistence.store:RuntimeLease, imagent.gateway.persistence.store:RuntimeLeaseUnavailable, imagent.gateway.persistence.store:StaleRuntimeFence, imagent.gateway.persistence.store:WorkspaceIdentityConflict, imagent.gateway.persistence.memory_store:MemoryGatewayStore, imagent.gateway.persistence.sqlite_store:SQLiteGatewayStore]
+    dependencies: [interaction.messages, interaction.operations, applications.application-contract, applications.requests, gateway.outcomes, gateway.routing.projection-routes, gateway.persistence.effects, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.memory, gateway.persistence.idempotency, gateway.persistence.sqlite, gateway.persistence.row-mapping]
+    state_recovery: One namespace retains monotonic binding generations and non-evicting receipts; store-authored lease expiry permits fenced takeover without granting native retry authority.
+    current_code: [src/imagent/gateway/persistence/__init__.py, src/imagent/gateway/persistence/store.py, src/imagent/gateway/persistence/memory_store.py, src/imagent/gateway/persistence/sqlite_store.py]
+    target_code: [src/imagent/gateway/persistence/__init__.py, src/imagent/gateway/persistence/store.py, src/imagent/gateway/persistence/memory_store.py, src/imagent/gateway/persistence/sqlite_store.py]
+    current_tests: [tests/gateway/persistence/test_gateway_store.py, tests/gateway/persistence/test_sqlite_gateway_fencing.py]
+    target_tests: [tests/gateway/persistence/test_gateway_store.py, tests/gateway/persistence/test_sqlite_gateway_fencing.py]
+    authoritative_docs: [docs/components/gateway/persistence/gateway-store/design.md, docs/components/gateway/persistence/gateway-store/testing.md, docs/components/persistence/design.md, docs/components/persistence/testing.md]
+    adrs: [docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
+    gaps: [Block C consumes only GatewayEffectExecutor; later composition replaces the retiring public repository bundle]
 
   gateway.diagnostics:
     id: gateway.diagnostics
@@ -1767,8 +1855,8 @@ structural_status:
       owner: engineering.release
       rationale: Stable public Application-event facade; every symbol is an exact re-export from the focused events owner and no implementation remains here.
     - path: src/imagent/gateway/persistence/__init__.py
-      owner: gateway.persistence.repository-contracts
-      rationale: Gateway persistence facade; repository contracts and the idempotency reference implementation are exact re-exports from focused leaves.
+      owner: gateway.persistence.gateway-store
+      rationale: Gateway persistence facade; the coherent public GatewayStore and built-in stores are lazy exact exports, while existing focused repository contracts and the idempotency reference implementation remain exact re-exports from their owners.
     - path: src/imagent/gateway/input/__init__.py
       owner: gateway.input.failure-presentation
       rationale: Gateway input facade re-exports exact I1, dispatch, and I2 public contracts from their focused implementations without retaining historical modules.

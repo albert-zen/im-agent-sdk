@@ -38,6 +38,7 @@ RUNTIME_NAMES = {
     "_preflight_rejection",
     "_result_from_record",
     "_redact_receipt",
+    "_durable_delivery_receipt",
     "_require_external_local_digests",
     "_ensure_submission_identity",
 }

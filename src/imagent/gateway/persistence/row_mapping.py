@@ -78,7 +78,7 @@ def binding_from_row(row: sqlite3.Row) -> ConversationBinding:
         application_ref=application_ref,
         project_ref=project_ref,
         thread_ref=thread_ref,
-        revision=required_integer(row["revision"], "revision"),
+        generation=required_integer(row["generation"], "generation"),
         updated_at=decode_datetime(row["updated_at"], "updated_at"),
     )
     validate_binding(binding)
@@ -96,7 +96,7 @@ def binding_to_row(binding: ConversationBinding) -> tuple[object, ...]:
         ),
         binding.project_ref.project_id if binding.project_ref is not None else None,
         binding.thread_ref.thread_id if binding.thread_ref is not None else None,
-        binding.revision,
+        binding.generation,
         binding.updated_at.isoformat() if binding.updated_at is not None else None,
     )
 
@@ -413,12 +413,14 @@ def delivery_destination_to_row(
         snapshot.reply_to_message_id,
         destination.state.value,
         encode_receipt(destination.receipt),
-        destination.error,
+        None,
         destination.updated_at.isoformat(),
     )
 
 
 def delivery_destination_from_row(row: sqlite3.Row) -> DestinationDeliveryRecord:
+    if row["error"] is not None:
+        raise ValueError("persisted delivery destination error must be null")
     application_id = _optional_route_scope_text(
         row["application_instance_id"], "application_instance_id"
     )
@@ -462,7 +464,6 @@ def delivery_destination_from_row(row: sqlite3.Row) -> DestinationDeliveryRecord
         ),
         state=DeliverySubmissionState(required_text(row["state"], "state")),
         receipt=decode_receipt(row["receipt_json"]),
-        error=optional_text(row["error"], "error"),
         updated_at=decode_datetime(row["updated_at"], "updated_at"),
     )
 
@@ -474,7 +475,7 @@ def encode_receipt(receipt: DeliveryReceipt | None) -> str | None:
         {
             "status": receipt.status.value,
             "native_message_id": receipt.native_message_id,
-            "detail": receipt.detail,
+            "detail": None,
             "retry_after_seconds": receipt.retry_after_seconds,
             "items": [
                 {
@@ -482,7 +483,7 @@ def encode_receipt(receipt: DeliveryReceipt | None) -> str | None:
                     "status": item.status.value,
                     "attachment_id": item.attachment_id,
                     "native_message_id": item.native_message_id,
-                    "detail": item.detail,
+                    "detail": None,
                 }
                 for item in receipt.items
             ],
@@ -493,7 +494,7 @@ def encode_receipt(receipt: DeliveryReceipt | None) -> str | None:
                     "source_content_indexes": list(segment.source_content_indexes),
                     "status": segment.status.value,
                     "native_message_id": segment.native_message_id,
-                    "detail": segment.detail,
+                    "detail": None,
                     "retry_after_seconds": segment.retry_after_seconds,
                 }
                 for segment in receipt.segments
@@ -528,12 +529,13 @@ def decode_receipt(value: object) -> DeliveryReceipt | None:
     segments = payload["segments"]
     if not isinstance(items, list) or not isinstance(segments, list):
         raise ValueError("delivery receipt items and segments must be lists")
+    _require_json_null(payload["detail"], "receipt.detail")
     return DeliveryReceipt(
         status=DeliveryReceiptStatus(_json_required_text(payload["status"], "receipt.status")),
         native_message_id=_json_optional_text(
             payload["native_message_id"], "receipt.native_message_id"
         ),
-        detail=_json_optional_text(payload["detail"], "receipt.detail"),
+        detail=None,
         retry_after_seconds=_json_optional_number(
             payload["retry_after_seconds"], "receipt.retry_after_seconds"
         ),
@@ -552,6 +554,7 @@ def _decode_item_receipt(value: object) -> DeliveryItemReceipt:
     }
     if not isinstance(value, dict) or set(value) != expected_keys:
         raise ValueError("delivery item receipt is malformed")
+    _require_json_null(value["detail"], "receipt.item.detail")
     return DeliveryItemReceipt(
         content_index=_json_integer(value["content_index"], "receipt.item.content_index"),
         status=DeliveryItemStatus(_json_required_text(value["status"], "receipt.item.status")),
@@ -559,7 +562,7 @@ def _decode_item_receipt(value: object) -> DeliveryItemReceipt:
         native_message_id=_json_optional_text(
             value["native_message_id"], "receipt.item.native_message_id"
         ),
-        detail=_json_optional_text(value["detail"], "receipt.item.detail"),
+        detail=None,
     )
 
 
@@ -575,6 +578,7 @@ def _decode_segment_receipt(value: object) -> DeliverySegmentReceipt:
     }
     if not isinstance(value, dict) or set(value) != expected_keys:
         raise ValueError("delivery segment receipt is malformed")
+    _require_json_null(value["detail"], "receipt.segment.detail")
     indexes = value["source_content_indexes"]
     if not isinstance(indexes, list):
         raise ValueError("delivery segment source indexes must be a list")
@@ -590,7 +594,7 @@ def _decode_segment_receipt(value: object) -> DeliverySegmentReceipt:
         native_message_id=_json_optional_text(
             value["native_message_id"], "receipt.segment.native_message_id"
         ),
-        detail=_json_optional_text(value["detail"], "receipt.segment.detail"),
+        detail=None,
         retry_after_seconds=_json_optional_number(
             value["retry_after_seconds"], "receipt.segment.retry_after_seconds"
         ),
@@ -621,6 +625,11 @@ def _json_optional_number(value: object, label: str) -> float | int | None:
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         raise ValueError(f"{label} must be a number")
     return value
+
+
+def _require_json_null(value: object, label: str) -> None:
+    if value is not None:
+        raise ValueError(f"persisted {label} must be null")
 
 
 def _optional_route_scope_text(value: object, label: str) -> str | None:

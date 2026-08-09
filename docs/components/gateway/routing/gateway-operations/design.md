@@ -74,7 +74,7 @@ presentation. Presenter or Channel failure cannot reopen the input.
 
 Replay behavior is operation-specific rather than a generic `operation_id`
 deduplication guarantee. Operations preserves the existing same-target and
-revisionless distinctions by dispatching to the binding, route, and request
+generationless distinctions by dispatching to the binding, route, and request
 owners; it does not infer or implement their postconditions. Unknown outcomes
 fail explicitly unless the delegated owner documents a state comparison that
 proves convergence. Gateway does not authorize a blind repeat or manufacture

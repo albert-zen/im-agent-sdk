@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sqlite3
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 from ...applications.contract import ThreadRef
 from ...applications.requests import RequestRef
+from ...interaction.channels.contract import validate_delivery_receipt
 from ...interaction.messages import ConversationRef
 from ..projection.request_correlation import (
     _merge_correlation,
@@ -88,6 +91,24 @@ def merge_projection_route(
     )
 
 
+def _migrate_binding_generation_column(connection: sqlite3.Connection) -> None:
+    columns = {
+        str(row["name"])
+        for row in connection.execute("PRAGMA table_info(conversation_bindings)").fetchall()
+    }
+    if "generation" not in columns and "revision" in columns:
+        connection.execute("ALTER TABLE conversation_bindings RENAME COLUMN revision TO generation")
+        return
+    if "generation" in columns and "revision" in columns:
+        connection.execute(
+            "UPDATE conversation_bindings SET generation = MAX(generation, revision)"
+        )
+        connection.execute("ALTER TABLE conversation_bindings DROP COLUMN revision")
+        return
+    if "generation" not in columns:
+        raise RuntimeError("conversation binding schema has no generation column")
+
+
 class SQLiteGatewayState:
     """Durable bindings, projection routes, and idempotency without Agent truth."""
 
@@ -96,6 +117,8 @@ class SQLiteGatewayState:
         path: str | Path,
         *,
         stale_claim_after_seconds: float = 300.0,
+        _configure_connection: Callable[[sqlite3.Connection], None] | None = None,
+        _mutation_guard: Callable[[sqlite3.Connection], None] | None = None,
     ) -> None:
         if stale_claim_after_seconds < 0:
             raise ValueError("stale_claim_after_seconds must be non-negative")
@@ -104,6 +127,9 @@ class SQLiteGatewayState:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = sqlite3.connect(self._path)
         self._connection.row_factory = sqlite3.Row
+        if _configure_connection is not None:
+            _configure_connection(self._connection)
+        self._mutation_guard = _mutation_guard
         self._lock = asyncio.Lock()
         self._connection.executescript(
             """
@@ -114,8 +140,14 @@ class SQLiteGatewayState:
                 application_instance_id TEXT,
                 project_id TEXT,
                 thread_id TEXT,
-                revision INTEGER NOT NULL,
+                generation INTEGER NOT NULL,
                 updated_at TEXT NOT NULL,
+                PRIMARY KEY (channel_instance_id, native_conversation_id)
+            );
+            CREATE TABLE IF NOT EXISTS conversation_binding_generations (
+                channel_instance_id TEXT NOT NULL,
+                native_conversation_id TEXT NOT NULL,
+                generation INTEGER NOT NULL,
                 PRIMARY KEY (channel_instance_id, native_conversation_id)
             );
             CREATE TABLE IF NOT EXISTS idempotency_records (
@@ -165,6 +197,7 @@ class SQLiteGatewayState:
             );
             """
         )
+        _migrate_binding_generation_column(self._connection)
         idempotency_columns = {
             str(row["name"])
             for row in self._connection.execute("PRAGMA table_info(idempotency_records)").fetchall()
@@ -199,7 +232,33 @@ class SQLiteGatewayState:
             )
         initialize_request_correlation_schema(self._connection)
         initialize_delivery_submission_schema(self._connection)
+        self._connection.execute(
+            """
+            INSERT INTO conversation_binding_generations (
+                channel_instance_id,
+                native_conversation_id,
+                generation
+            )
+            SELECT channel_instance_id, native_conversation_id, generation
+            FROM conversation_bindings
+            WHERE 1
+            ON CONFLICT(channel_instance_id, native_conversation_id)
+            DO UPDATE SET generation = MAX(
+                conversation_binding_generations.generation,
+                excluded.generation
+            )
+            """
+        )
         self._connection.commit()
+
+    def _begin_mutation(self) -> None:
+        self._connection.execute("BEGIN IMMEDIATE")
+        try:
+            if self._mutation_guard is not None:
+                self._mutation_guard(self._connection)
+        except BaseException:
+            self._connection.rollback()
+            raise
 
     async def close(self) -> None:
         async with self._lock:
@@ -225,27 +284,41 @@ class SQLiteGatewayState:
     async def put(
         self,
         binding: ConversationBinding,
-        expected_revision: int | None = None,
+        expected_generation: int | None = None,
     ) -> ConversationBinding:
         validate_binding(binding)
         async with self._lock:
-            self._connection.execute("BEGIN IMMEDIATE")
+            self._begin_mutation()
             try:
                 row = self._connection.execute(
                     """
-                    SELECT revision FROM conversation_bindings
-                    WHERE channel_instance_id = ? AND native_conversation_id = ?
+                    SELECT MAX(generation) AS generation
+                    FROM (
+                        SELECT generation
+                        FROM conversation_bindings
+                        WHERE channel_instance_id = ? AND native_conversation_id = ?
+                        UNION ALL
+                        SELECT generation
+                        FROM conversation_binding_generations
+                        WHERE channel_instance_id = ? AND native_conversation_id = ?
+                    )
                     """,
                     (
                         binding.conversation_ref.channel_instance_id,
                         binding.conversation_ref.native_conversation_id,
+                        binding.conversation_ref.channel_instance_id,
+                        binding.conversation_ref.native_conversation_id,
                     ),
                 ).fetchone()
-                current_revision = int(row["revision"]) if row is not None else 0
-                if expected_revision is not None and expected_revision != current_revision:
+                current_generation = (
+                    int(row["generation"])
+                    if row is not None and row["generation"] is not None
+                    else 0
+                )
+                if expected_generation is not None and expected_generation != current_generation:
                     raise BindingConflict(
-                        f"expected revision {expected_revision}, "
-                        f"current revision is {current_revision}"
+                        f"expected generation {expected_generation}, "
+                        f"current generation is {current_generation}"
                     )
                 updated_at = datetime.now(UTC)
                 stored = ConversationBinding(
@@ -253,7 +326,7 @@ class SQLiteGatewayState:
                     application_ref=binding.application_ref,
                     project_ref=binding.project_ref,
                     thread_ref=binding.thread_ref,
-                    revision=current_revision + 1,
+                    generation=current_generation + 1,
                     updated_at=updated_at,
                 )
                 self._connection.execute(
@@ -264,7 +337,7 @@ class SQLiteGatewayState:
                         application_instance_id,
                         project_id,
                         thread_id,
-                        revision,
+                        generation,
                         updated_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(channel_instance_id, native_conversation_id)
@@ -272,10 +345,26 @@ class SQLiteGatewayState:
                         application_instance_id = excluded.application_instance_id,
                         project_id = excluded.project_id,
                         thread_id = excluded.thread_id,
-                        revision = excluded.revision,
+                        generation = excluded.generation,
                         updated_at = excluded.updated_at
                     """,
                     row_mapping.binding_to_row(stored),
+                )
+                self._connection.execute(
+                    """
+                    INSERT INTO conversation_binding_generations (
+                        channel_instance_id,
+                        native_conversation_id,
+                        generation
+                    ) VALUES (?, ?, ?)
+                    ON CONFLICT(channel_instance_id, native_conversation_id)
+                    DO UPDATE SET generation = excluded.generation
+                    """,
+                    (
+                        binding.conversation_ref.channel_instance_id,
+                        binding.conversation_ref.native_conversation_id,
+                        stored.generation,
+                    ),
                 )
                 self._connection.commit()
                 return stored
@@ -286,26 +375,40 @@ class SQLiteGatewayState:
     async def delete(
         self,
         conversation: ConversationRef,
-        expected_revision: int | None = None,
+        expected_generation: int | None = None,
     ) -> None:
         async with self._lock:
-            self._connection.execute("BEGIN IMMEDIATE")
+            self._begin_mutation()
             try:
                 row = self._connection.execute(
                     """
-                    SELECT revision FROM conversation_bindings
-                    WHERE channel_instance_id = ? AND native_conversation_id = ?
+                    SELECT MAX(generation) AS generation
+                    FROM (
+                        SELECT generation
+                        FROM conversation_bindings
+                        WHERE channel_instance_id = ? AND native_conversation_id = ?
+                        UNION ALL
+                        SELECT generation
+                        FROM conversation_binding_generations
+                        WHERE channel_instance_id = ? AND native_conversation_id = ?
+                    )
                     """,
                     (
                         conversation.channel_instance_id,
                         conversation.native_conversation_id,
+                        conversation.channel_instance_id,
+                        conversation.native_conversation_id,
                     ),
                 ).fetchone()
-                current_revision = int(row["revision"]) if row is not None else 0
-                if expected_revision is not None and expected_revision != current_revision:
+                current_generation = (
+                    int(row["generation"])
+                    if row is not None and row["generation"] is not None
+                    else 0
+                )
+                if expected_generation is not None and expected_generation != current_generation:
                     raise BindingConflict(
-                        f"expected revision {expected_revision}, "
-                        f"current revision is {current_revision}"
+                        f"expected generation {expected_generation}, "
+                        f"current generation is {current_generation}"
                     )
                 self._connection.execute(
                     """
@@ -315,6 +418,22 @@ class SQLiteGatewayState:
                     (
                         conversation.channel_instance_id,
                         conversation.native_conversation_id,
+                    ),
+                )
+                self._connection.execute(
+                    """
+                    INSERT INTO conversation_binding_generations (
+                        channel_instance_id,
+                        native_conversation_id,
+                        generation
+                    ) VALUES (?, ?, ?)
+                    ON CONFLICT(channel_instance_id, native_conversation_id)
+                    DO UPDATE SET generation = excluded.generation
+                    """,
+                    (
+                        conversation.channel_instance_id,
+                        conversation.native_conversation_id,
+                        current_generation + 1,
                     ),
                 )
                 self._connection.commit()
@@ -350,7 +469,7 @@ class SQLiteGatewayState:
     ) -> ThreadProjectionRoute:
         validate_projection_route(route)
         async with self._lock:
-            self._connection.execute("BEGIN IMMEDIATE")
+            self._begin_mutation()
             try:
                 existing = self._read_projection_route(
                     route.route_id
@@ -369,7 +488,7 @@ class SQLiteGatewayState:
     ) -> ThreadProjectionRoute:
         validate_projection_route(route)
         async with self._lock:
-            self._connection.execute("BEGIN IMMEDIATE")
+            self._begin_mutation()
             try:
                 stored = merge_projection_route(
                     self._read_projection_route(route.route_id)
@@ -401,7 +520,7 @@ class SQLiteGatewayState:
         checkpointed_at: datetime,
     ) -> ThreadProjectionRoute:
         async with self._lock:
-            self._connection.execute("BEGIN IMMEDIATE")
+            self._begin_mutation()
             try:
                 existing = self._read_projection_route(route_id)
                 if existing is None:
@@ -466,12 +585,17 @@ class SQLiteGatewayState:
                 conversation_ref.native_conversation_id,
             )
         async with self._lock:
-            cursor = self._connection.execute(
-                f"DELETE FROM thread_projection_routes WHERE {where}",
-                parameters,
-            )
-            self._connection.commit()
-            return cursor.rowcount
+            self._begin_mutation()
+            try:
+                cursor = self._connection.execute(
+                    f"DELETE FROM thread_projection_routes WHERE {where}",
+                    parameters,
+                )
+                self._connection.commit()
+                return cursor.rowcount
+            except BaseException:
+                self._connection.rollback()
+                raise
 
     async def get_turn_reply_correlation(
         self,
@@ -519,52 +643,57 @@ class SQLiteGatewayState:
     ) -> TurnReplyCorrelation:
         validate_turn_reply_correlation(correlation)
         async with self._lock:
-            self._connection.execute(
-                """
-                INSERT INTO turn_reply_correlations (
-                    correlation_id,
-                    application_instance_id,
-                    project_id,
-                    thread_id,
-                    turn_id,
-                    client_message_id,
-                    channel_instance_id,
-                    native_conversation_id,
-                    reply_to_message_id,
-                    created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (
-                    application_instance_id,
-                    project_id,
-                    thread_id,
-                    turn_id
+            self._begin_mutation()
+            try:
+                self._connection.execute(
+                    """
+                    INSERT INTO turn_reply_correlations (
+                        correlation_id,
+                        application_instance_id,
+                        project_id,
+                        thread_id,
+                        turn_id,
+                        client_message_id,
+                        channel_instance_id,
+                        native_conversation_id,
+                        reply_to_message_id,
+                        created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (
+                        application_instance_id,
+                        project_id,
+                        thread_id,
+                        turn_id
+                    )
+                    DO NOTHING
+                    """,
+                    row_mapping.turn_reply_correlation_to_row(correlation),
                 )
-                DO NOTHING
-                """,
-                row_mapping.turn_reply_correlation_to_row(correlation),
-            )
-            self._connection.commit()
-            row = self._connection.execute(
-                """
-                SELECT * FROM turn_reply_correlations
-                WHERE application_instance_id = ?
-                  AND project_id = ?
-                  AND thread_id = ?
-                  AND turn_id = ?
-                """,
-                (
-                    *row_mapping.thread_storage_key(correlation.turn_ref.thread_ref),
-                    correlation.turn_ref.turn_id,
-                ),
-            ).fetchone()
-            if row is None:
-                raise RuntimeError("Turn reply correlation insert did not persist a row")
-            current = row_mapping.turn_reply_correlation_from_row(row)
-            if not _same_turn_reply_correlation(current, correlation):
-                raise TurnReplyCorrelationConflict(
-                    "Turn reply correlation already belongs to another IM input"
-                )
-            return current
+                row = self._connection.execute(
+                    """
+                    SELECT * FROM turn_reply_correlations
+                    WHERE application_instance_id = ?
+                      AND project_id = ?
+                      AND thread_id = ?
+                      AND turn_id = ?
+                    """,
+                    (
+                        *row_mapping.thread_storage_key(correlation.turn_ref.thread_ref),
+                        correlation.turn_ref.turn_id,
+                    ),
+                ).fetchone()
+                if row is None:
+                    raise RuntimeError("Turn reply correlation insert did not persist a row")
+                current = row_mapping.turn_reply_correlation_from_row(row)
+                if not _same_turn_reply_correlation(current, correlation):
+                    raise TurnReplyCorrelationConflict(
+                        "Turn reply correlation already belongs to another IM input"
+                    )
+                self._connection.commit()
+                return current
+            except BaseException:
+                self._connection.rollback()
+                raise
 
     async def delete_turn_reply_correlation(
         self,
@@ -572,18 +701,23 @@ class SQLiteGatewayState:
         turn_id: str,
     ) -> bool:
         async with self._lock:
-            cursor = self._connection.execute(
-                """
-                DELETE FROM turn_reply_correlations
-                WHERE application_instance_id = ?
-                  AND project_id = ?
-                  AND thread_id = ?
-                  AND turn_id = ?
-                """,
-                (*row_mapping.thread_storage_key(thread_ref), turn_id),
-            )
-            self._connection.commit()
-            return cursor.rowcount == 1
+            self._begin_mutation()
+            try:
+                cursor = self._connection.execute(
+                    """
+                    DELETE FROM turn_reply_correlations
+                    WHERE application_instance_id = ?
+                      AND project_id = ?
+                      AND thread_id = ?
+                      AND turn_id = ?
+                    """,
+                    (*row_mapping.thread_storage_key(thread_ref), turn_id),
+                )
+                self._connection.commit()
+                return cursor.rowcount == 1
+            except BaseException:
+                self._connection.rollback()
+                raise
 
     async def delete_turn_reply_correlations(
         self,
@@ -623,12 +757,17 @@ class SQLiteGatewayState:
             parameters.append(older_than.isoformat())
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         async with self._lock:
-            cursor = self._connection.execute(
-                f"DELETE FROM turn_reply_correlations{where}",
-                tuple(parameters),
-            )
-            self._connection.commit()
-            return cursor.rowcount
+            self._begin_mutation()
+            try:
+                cursor = self._connection.execute(
+                    f"DELETE FROM turn_reply_correlations{where}",
+                    tuple(parameters),
+                )
+                self._connection.commit()
+                return cursor.rowcount
+            except BaseException:
+                self._connection.rollback()
+                raise
 
     async def list_request_correlations(
         self,
@@ -661,7 +800,7 @@ class SQLiteGatewayState:
     ) -> RequestRouteCorrelation:
         validate_request_route_correlation(correlation)
         async with self._lock:
-            self._connection.execute("BEGIN IMMEDIATE")
+            self._begin_mutation()
             try:
                 rows = self._connection.execute(
                     """
@@ -727,7 +866,7 @@ class SQLiteGatewayState:
         updated_at: datetime,
     ) -> tuple[RequestRouteCorrelation, ...]:
         async with self._lock:
-            self._connection.execute("BEGIN IMMEDIATE")
+            self._begin_mutation()
             try:
                 rows = self._connection.execute(
                     """
@@ -777,12 +916,17 @@ class SQLiteGatewayState:
             clauses.append("updated_at < ?")
             parameters.append(older_than.isoformat())
         async with self._lock:
-            cursor = self._connection.execute(
-                f"DELETE FROM request_route_correlations WHERE {' AND '.join(clauses)}",
-                tuple(parameters),
-            )
-            self._connection.commit()
-            return cursor.rowcount
+            self._begin_mutation()
+            try:
+                cursor = self._connection.execute(
+                    f"DELETE FROM request_route_correlations WHERE {' AND '.join(clauses)}",
+                    tuple(parameters),
+                )
+                self._connection.commit()
+                return cursor.rowcount
+            except BaseException:
+                self._connection.rollback()
+                raise
 
     async def get_delivery_submission(
         self,
@@ -797,7 +941,7 @@ class SQLiteGatewayState:
     ) -> DeliveryReservation:
         validate_delivery_submission_record(record)
         async with self._lock:
-            self._connection.execute("BEGIN IMMEDIATE")
+            self._begin_mutation()
             try:
                 existing = _read_submission(self._connection, record.submission_id)
                 if existing is not None:
@@ -822,7 +966,7 @@ class SQLiteGatewayState:
         if destination.delivery_id != destination_delivery_id:
             raise DeliverySubmissionConflict("destination delivery identity changed")
         async with self._lock:
-            self._connection.execute("BEGIN IMMEDIATE")
+            self._begin_mutation()
             try:
                 current = _read_submission(self._connection, submission_id)
                 if current is None:
@@ -943,7 +1087,7 @@ class SQLiteGatewayState:
     ) -> IdempotencyClaimStatus:
         async with self._lock:
             now = datetime.now(UTC)
-            self._connection.execute("BEGIN IMMEDIATE")
+            self._begin_mutation()
             try:
                 self._connection.execute(
                     """
@@ -1007,19 +1151,23 @@ class SQLiteGatewayState:
         owner_token: str | None = None,
     ) -> None:
         async with self._lock:
-            cursor = self._connection.execute(
-                """
-                UPDATE idempotency_records
-                SET status = 'side_effect_started', updated_at = ?
-                WHERE scope = ? AND record_key = ? AND status = 'in_flight'
-                  AND owner_token IS ?
-                """,
-                (datetime.now(UTC).isoformat(), scope, key, owner_token),
-            )
-            if cursor.rowcount != 1:
+            self._begin_mutation()
+            try:
+                cursor = self._connection.execute(
+                    """
+                    UPDATE idempotency_records
+                    SET status = 'side_effect_started', updated_at = ?
+                    WHERE scope = ? AND record_key = ? AND status = 'in_flight'
+                      AND owner_token IS ?
+                    """,
+                    (datetime.now(UTC).isoformat(), scope, key, owner_token),
+                )
+                if cursor.rowcount != 1:
+                    raise RuntimeError("idempotency claim is not owned by caller")
+                self._connection.commit()
+            except BaseException:
                 self._connection.rollback()
-                raise RuntimeError("idempotency claim is not owned by caller")
-            self._connection.commit()
+                raise
 
     async def refresh(
         self,
@@ -1029,19 +1177,23 @@ class SQLiteGatewayState:
         owner_token: str | None = None,
     ) -> None:
         async with self._lock:
-            cursor = self._connection.execute(
-                """
-                UPDATE idempotency_records
-                SET updated_at = ?
-                WHERE scope = ? AND record_key = ? AND status = 'in_flight'
-                  AND owner_token IS ?
-                """,
-                (datetime.now(UTC).isoformat(), scope, key, owner_token),
-            )
-            if cursor.rowcount != 1:
+            self._begin_mutation()
+            try:
+                cursor = self._connection.execute(
+                    """
+                    UPDATE idempotency_records
+                    SET updated_at = ?
+                    WHERE scope = ? AND record_key = ? AND status = 'in_flight'
+                      AND owner_token IS ?
+                    """,
+                    (datetime.now(UTC).isoformat(), scope, key, owner_token),
+                )
+                if cursor.rowcount != 1:
+                    raise RuntimeError("idempotency claim is not owned by caller")
+                self._connection.commit()
+            except BaseException:
                 self._connection.rollback()
-                raise RuntimeError("idempotency claim is not owned by caller")
-            self._connection.commit()
+                raise
 
     async def complete(
         self,
@@ -1051,18 +1203,22 @@ class SQLiteGatewayState:
         owner_token: str | None = None,
     ) -> None:
         async with self._lock:
-            cursor = self._connection.execute(
-                """
-                UPDATE idempotency_records
-                SET status = 'completed', updated_at = ?
-                WHERE scope = ? AND record_key = ? AND owner_token IS ?
-                """,
-                (datetime.now(UTC).isoformat(), scope, key, owner_token),
-            )
-            if cursor.rowcount != 1:
+            self._begin_mutation()
+            try:
+                cursor = self._connection.execute(
+                    """
+                    UPDATE idempotency_records
+                    SET status = 'completed', updated_at = ?
+                    WHERE scope = ? AND record_key = ? AND owner_token IS ?
+                    """,
+                    (datetime.now(UTC).isoformat(), scope, key, owner_token),
+                )
+                if cursor.rowcount != 1:
+                    raise RuntimeError("idempotency claim is not owned by caller")
+                self._connection.commit()
+            except BaseException:
                 self._connection.rollback()
-                raise RuntimeError("idempotency claim is not owned by caller")
-            self._connection.commit()
+                raise
 
     async def release(
         self,
@@ -1072,16 +1228,21 @@ class SQLiteGatewayState:
         owner_token: str | None = None,
     ) -> None:
         async with self._lock:
-            self._connection.execute(
-                """
-                DELETE FROM idempotency_records
-                WHERE scope = ? AND record_key = ?
-                  AND status IN ('in_flight', 'side_effect_started')
-                  AND owner_token IS ?
-                """,
-                (scope, key, owner_token),
-            )
-            self._connection.commit()
+            self._begin_mutation()
+            try:
+                self._connection.execute(
+                    """
+                    DELETE FROM idempotency_records
+                    WHERE scope = ? AND record_key = ?
+                      AND status IN ('in_flight', 'side_effect_started')
+                      AND owner_token IS ?
+                    """,
+                    (scope, key, owner_token),
+                )
+                self._connection.commit()
+            except BaseException:
+                self._connection.rollback()
+                raise
 
 
 def initialize_request_correlation_schema(connection: sqlite3.Connection) -> None:
@@ -1157,8 +1318,76 @@ def initialize_delivery_submission_schema(connection: sqlite3.Connection) -> Non
         );
         CREATE INDEX IF NOT EXISTS delivery_destinations_root
             ON delivery_submission_destinations(root_submission_id);
+        CREATE TABLE IF NOT EXISTS gateway_schema_metadata (
+            metadata_key TEXT NOT NULL PRIMARY KEY,
+            metadata_value TEXT NOT NULL
+        );
         """
     )
+    _migrate_delivery_receipt_detail_storage(connection)
+
+
+def _migrate_delivery_receipt_detail_storage(connection: sqlite3.Connection) -> None:
+    migration_key = "delivery_receipt_detail_storage"
+    marker = connection.execute(
+        "SELECT metadata_value FROM gateway_schema_metadata WHERE metadata_key = ?",
+        (migration_key,),
+    ).fetchone()
+    if marker is not None:
+        return
+    connection.execute("PRAGMA secure_delete = ON")
+    rows = connection.execute(
+        "SELECT destination_delivery_id, receipt_json, error FROM delivery_submission_destinations"
+    ).fetchall()
+    changed = False
+    for row in rows:
+        receipt_json = _sanitize_legacy_delivery_receipt_json(row["receipt_json"])
+        if receipt_json != row["receipt_json"] or row["error"] is not None:
+            changed = True
+            connection.execute(
+                "UPDATE delivery_submission_destinations "
+                "SET receipt_json = ?, error = NULL "
+                "WHERE destination_delivery_id = ?",
+                (receipt_json, row["destination_delivery_id"]),
+            )
+    connection.execute(
+        "INSERT INTO gateway_schema_metadata (metadata_key, metadata_value) VALUES (?, ?)",
+        (migration_key, "redacted-v1"),
+    )
+    connection.commit()
+    if changed:
+        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        connection.execute("VACUUM")
+        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+
+def _sanitize_legacy_delivery_receipt_json(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return None
+    try:
+        payload = json.loads(value)
+        if not isinstance(payload, dict):
+            return None
+        payload["detail"] = None
+        for collection_name in ("items", "segments"):
+            collection = payload.get(collection_name)
+            if not isinstance(collection, list):
+                return None
+            for member in collection:
+                if not isinstance(member, dict):
+                    return None
+                member["detail"] = None
+        receipt = row_mapping.decode_receipt(
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        )
+        if receipt is None:
+            return None
+        validate_delivery_receipt(receipt)
+        return row_mapping.encode_receipt(receipt)
+    except (TypeError, ValueError):
+        return None
 
 
 def _append_request_selectors(

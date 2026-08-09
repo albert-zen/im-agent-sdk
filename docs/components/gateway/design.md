@@ -189,8 +189,8 @@ before durable visibility and remains fenced through binding convergence, so
 an existing Thread worker cannot deliver live output ahead of reconciliation.
 A newly created route receives the normal bounded baseline without a false
 missing-checkpoint gap. A retry that observes the same desired binding and
-route converges to that postcondition without advancing the binding revision
-only when its guard names the current or immediately preceding revision;
+route converges to that postcondition without advancing the binding generation
+only when its guard names the current or immediately preceding generation;
 an existing route still uses checkpoint-directed recovery and reports a
 missing checkpoint rather than silently downgrading to a new-route baseline.
 A checkpoint-free route surviving a pre-CAS process crash is therefore allowed
@@ -201,14 +201,14 @@ newly started worker is stopped rather than allowing live output to advance the
 checkpoint past unseen history. A same-target retry repeats recovery and opens
 the route only after reconciliation succeeds. An unknown binding write outcome
 also stays fenced when the repository cannot verify whether the CAS committed.
-Invalid same-target revision guards are rejected before route preparation, so
+Invalid same-target generation guards are rejected before route preparation, so
 they cannot release a fence retained by an earlier recovery failure.
 A later different binding is never overwritten by the stale retry. Other
 projection policies retain explicit `ObserveThread` route semantics.
 
 ## Failure and restart
 
-Conversation mutations use revision guards and serialize per Conversation.
+Conversation mutations use generation guards and serialize per Conversation.
 Foreground Thread binding prepares its inactive-until-bound route before the
 binding CAS, so restart never exposes a completed binding with a missing
 delivery edge. A same-target retry may converge a binding already advanced by

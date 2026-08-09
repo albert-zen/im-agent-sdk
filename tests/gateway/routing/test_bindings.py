@@ -112,12 +112,12 @@ class _FaultBindingRepository:
     async def put(
         self,
         binding: ConversationBinding,
-        expected_revision: int | None = None,
+        expected_generation: int | None = None,
     ) -> ConversationBinding:
         self.put_calls += 1
         if self.put_failure == "before":
             raise RuntimeError("binding write failed")
-        stored = await self.delegate.put(binding, expected_revision)
+        stored = await self.delegate.put(binding, expected_generation)
         if self.put_failure == "after":
             raise RuntimeError("binding write response was lost")
         return stored
@@ -125,9 +125,9 @@ class _FaultBindingRepository:
     async def delete(
         self,
         conversation: ConversationRef,
-        expected_revision: int | None = None,
+        expected_generation: int | None = None,
     ) -> None:
-        await self.delegate.delete(conversation, expected_revision)
+        await self.delegate.delete(conversation, expected_generation)
 
 
 class BindingOwnerTests(unittest.TestCase):
@@ -202,7 +202,7 @@ class BindingOwnerTests(unittest.TestCase):
                 "actor",
                 "created_at",
                 "project_ref",
-                "expected_revision",
+                "expected_generation",
                 "type",
             ),
         )
@@ -214,7 +214,7 @@ class BindingOwnerTests(unittest.TestCase):
                 "actor",
                 "created_at",
                 "thread_ref",
-                "expected_revision",
+                "expected_generation",
                 "type",
             ),
         )
@@ -305,14 +305,14 @@ class BindingRuntimeTests(unittest.IsolatedAsyncioTestCase):
         conversation: ConversationRef,
         thread: ThreadRef,
         *,
-        expected_revision: int | None = 0,
+        expected_generation: int | None = 0,
         converge_same_target: bool = True,
     ) -> binding_owner._BindingChange:
         prepared = await self.runtime.prepare_thread_binding(
             conversation,
             self.application,
             thread,
-            expected_revision=expected_revision,
+            expected_generation=expected_generation,
             converge_same_target=converge_same_target,
         )
         return await self.runtime.commit_thread_binding(prepared)
@@ -342,15 +342,15 @@ class BindingRuntimeTests(unittest.IsolatedAsyncioTestCase):
         selected = await self.runtime.select_application(
             self.conversation,
             self.application,
-            expected_revision=0,
+            expected_generation=0,
         )
 
-        with self.assertRaisesRegex(BindingConflict, "expected revision 0"):
+        with self.assertRaisesRegex(BindingConflict, "expected generation 0"):
             await self.runtime.bind_project(
                 self.conversation,
                 self.application,
                 self.project,
-                expected_revision=0,
+                expected_generation=0,
             )
 
         self.assertEqual(
@@ -365,16 +365,16 @@ class BindingRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.conversation,
             self.application,
             self.project,
-            expected_revision=0,
+            expected_generation=0,
         )
         thread = await self._bind_thread(
             self.conversation,
             self.thread,
-            expected_revision=project.binding.revision,
+            expected_generation=project.binding.generation,
         )
         cleared = await self.runtime.clear_thread(
             self.conversation,
-            expected_revision=thread.binding.revision,
+            expected_generation=thread.binding.generation,
         )
 
         self.assertIsNone(project.previous)
@@ -384,21 +384,21 @@ class BindingRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cleared.binding.project_ref, self.project)
         self.assertIsNone(cleared.binding.thread_ref)
 
-    async def test_same_target_converges_for_each_accepted_revision_guard(self) -> None:
+    async def test_same_target_converges_for_each_accepted_generation_guard(self) -> None:
         initial = await self._bind_thread(self.conversation, self.thread)
         initial_put_calls = self.repository.put_calls
 
         for guard in (
             None,
-            initial.binding.revision,
-            initial.binding.revision - 1,
+            initial.binding.generation,
+            initial.binding.generation - 1,
         ):
-            with self.subTest(expected_revision=guard):
+            with self.subTest(expected_generation=guard):
                 prepared = await self.runtime.prepare_thread_binding(
                     self.conversation,
                     self.application,
                     self.thread,
-                    expected_revision=guard,
+                    expected_generation=guard,
                     converge_same_target=True,
                 )
                 self.assertTrue(prepared.converge_without_write)
@@ -411,18 +411,18 @@ class BindingRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 self.conversation,
                 self.application,
                 self.thread,
-                expected_revision=initial.binding.revision + 2,
+                expected_generation=initial.binding.generation + 2,
                 converge_same_target=True,
             )
         self.assertEqual(self.repository.put_calls, initial_put_calls)
 
-    async def test_revisionless_nonforeground_same_target_remains_a_write(self) -> None:
+    async def test_generationless_nonforeground_same_target_remains_a_write(self) -> None:
         initial = await self._bind_thread(self.conversation, self.thread)
         prepared = await self.runtime.prepare_thread_binding(
             self.conversation,
             self.application,
             self.thread,
-            expected_revision=None,
+            expected_generation=None,
             converge_same_target=False,
         )
 
@@ -431,20 +431,20 @@ class BindingRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(repeated.previous, initial.binding)
         self.assertEqual(repeated.binding.thread_ref, self.thread)
-        self.assertEqual(repeated.binding.revision, initial.binding.revision + 1)
+        self.assertEqual(repeated.binding.generation, initial.binding.generation + 1)
 
     async def test_stale_retry_never_overwrites_a_later_different_target(self) -> None:
         first = await self._bind_thread(self.conversation, self.thread)
         later = await self._bind_thread(
             self.conversation,
             self.other_thread,
-            expected_revision=first.binding.revision,
+            expected_generation=first.binding.generation,
         )
         stale = await self.runtime.prepare_thread_binding(
             self.conversation,
             self.application,
             self.thread,
-            expected_revision=first.binding.revision - 1,
+            expected_generation=first.binding.generation - 1,
             converge_same_target=True,
         )
 
@@ -467,7 +467,7 @@ class BindingRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.conversation,
             self.application,
             self.thread,
-            expected_revision=0,
+            expected_generation=0,
             converge_same_target=True,
         )
         self.repository.put_failure = "after"
@@ -492,7 +492,7 @@ class BindingRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.conversation,
             self.application,
             self.thread,
-            expected_revision=0,
+            expected_generation=0,
             converge_same_target=True,
         )
         self.repository.put_failure = "before"
@@ -514,7 +514,7 @@ class BindingRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.conversation,
             self.application,
             self.thread,
-            expected_revision=0,
+            expected_generation=0,
             converge_same_target=True,
         )
         self.repository.put_failure = "after"

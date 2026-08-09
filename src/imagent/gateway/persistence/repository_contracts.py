@@ -23,7 +23,7 @@ from .state_contracts import (
 
 
 class BindingConflict(RuntimeError):
-    """An expected Conversation binding revision did not match."""
+    """An expected Conversation binding generation did not match."""
 
 
 class IdempotencyClaimStatus(StrEnum):
@@ -69,13 +69,13 @@ class BindingRepository(Protocol):
     async def put(
         self,
         binding: ConversationBinding,
-        expected_revision: int | None = None,
+        expected_generation: int | None = None,
     ) -> ConversationBinding: ...
 
     async def delete(
         self,
         conversation: ConversationRef,
-        expected_revision: int | None = None,
+        expected_generation: int | None = None,
     ) -> None: ...
 
 

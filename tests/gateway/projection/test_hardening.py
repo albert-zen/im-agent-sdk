@@ -1477,7 +1477,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                     conversation_ref=conversation,
                     actor="user",
                     thread_ref=thread_a.ref,
-                    expected_revision=binding.revision,
+                    expected_generation=binding.generation,
                     created_at=datetime.now(UTC),
                 )
             )
@@ -1582,7 +1582,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                     conversation_ref=second,
                     actor="user",
                     thread_ref=thread.ref,
-                    expected_revision=second_binding.revision,
+                    expected_generation=second_binding.generation,
                     created_at=datetime.now(UTC),
                 )
             )

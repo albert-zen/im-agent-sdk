@@ -1,5 +1,7 @@
 """Gateway-owned bridge-state persistence contracts and implementations."""
 
+from typing import TYPE_CHECKING
+
 from .idempotency import InMemoryIdempotencyRepository as InMemoryIdempotencyRepository
 from .repository_contracts import (
     BindingConflict,
@@ -37,6 +39,21 @@ from .state_contracts import (
     validate_request_route_correlation,
     validate_turn_reply_correlation,
 )
+from .store import (
+    EffectReceiptCapacityError,
+    EffectReceiptConflict,
+    GatewayNamespaceConflict,
+    GatewayStore,
+    GatewayStoreError,
+    RuntimeLease,
+    RuntimeLeaseUnavailable,
+    StaleRuntimeFence,
+    WorkspaceIdentityConflict,
+)
+
+if TYPE_CHECKING:
+    from .memory_store import MemoryGatewayStore
+    from .sqlite_store import SQLiteGatewayStore
 
 __all__ = [
     "BindingConflict",
@@ -50,10 +67,16 @@ __all__ = [
     "DeliverySubmissionRecord",
     "DeliverySubmissionState",
     "DestinationDeliveryRecord",
+    "EffectReceiptCapacityError",
+    "EffectReceiptConflict",
+    "GatewayNamespaceConflict",
+    "GatewayStore",
+    "GatewayStoreError",
     "IdempotencyCapacityError",
     "IdempotencyClaimStatus",
     "IdempotencyRepository",
     "InMemoryIdempotencyRepository",
+    "MemoryGatewayStore",
     "MAX_DELIVERY_SUBMISSION_DESTINATIONS",
     "ProjectionCheckpointConflict",
     "ProjectionRouteConflict",
@@ -62,9 +85,14 @@ __all__ = [
     "RequestCorrelationRepository",
     "RequestRouteCorrelation",
     "RequestRouteState",
+    "RuntimeLease",
+    "RuntimeLeaseUnavailable",
+    "SQLiteGatewayStore",
+    "StaleRuntimeFence",
     "ThreadProjectionRoute",
     "TurnReplyCorrelationConflict",
     "TurnReplyCorrelation",
+    "WorkspaceIdentityConflict",
     "validate_binding",
     "validate_delivery_route_snapshot",
     "validate_delivery_submission_destination_count",
@@ -73,3 +101,17 @@ __all__ = [
     "validate_request_route_correlation",
     "validate_turn_reply_correlation",
 ]
+
+
+def __getattr__(name: str) -> object:
+    if name == "MemoryGatewayStore":
+        from .memory_store import MemoryGatewayStore
+
+        globals()[name] = MemoryGatewayStore
+        return MemoryGatewayStore
+    if name == "SQLiteGatewayStore":
+        from .sqlite_store import SQLiteGatewayStore
+
+        globals()[name] = SQLiteGatewayStore
+        return SQLiteGatewayStore
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -193,6 +193,36 @@ class StateContractOwnershipTests(unittest.TestCase):
             updated_at=now,
         )
         owner.validate_delivery_submission_record(record)
+        with self.assertRaisesRegex(ContractViolation, "cannot contain detail text"):
+            owner.validate_delivery_submission_record(
+                replace(
+                    record,
+                    destinations=(
+                        replace(
+                            destination,
+                            receipt=DeliveryReceipt(
+                                status=DeliveryReceiptStatus.UNKNOWN,
+                                detail="credential=/private/secret",
+                            ),
+                        ),
+                    ),
+                )
+            )
+        with self.assertRaisesRegex(ContractViolation, "at most 512"):
+            owner.validate_delivery_submission_record(
+                replace(
+                    record,
+                    destinations=(
+                        replace(
+                            destination,
+                            receipt=DeliveryReceipt(
+                                status=DeliveryReceiptStatus.UNKNOWN,
+                                native_message_id="n" * 513,
+                            ),
+                        ),
+                    ),
+                )
+            )
         with self.assertRaisesRegex(ContractViolation, "unique"):
             owner.validate_delivery_submission_record(
                 replace(record, destinations=(destination, destination))

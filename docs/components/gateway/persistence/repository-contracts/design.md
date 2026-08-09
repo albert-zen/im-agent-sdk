@@ -40,21 +40,21 @@ truth, or retry work.
 ## Binding contract
 
 `BindingConflict` is the common explicit outcome when an implementation cannot
-satisfy an expected Conversation binding revision. Both process-local and
+satisfy an expected Conversation binding generation. Both process-local and
 SQLite implementations raise the exact same type. The conflict carries no
 authority to retry, replace a later binding, or infer Application state.
 
 The `BindingRepository` Port now lives beside `BindingConflict` in this leaf.
 The move is mechanical: every method signature, annotation, default, and
-runtime type-hint result remains unchanged. Memory and SQLite implementations
-continue to raise the same conflict object and enforce the same expected
-revision fence.
+runtime type-hint result uses the v1 generation vocabulary. Memory and SQLite
+implementations raise the same conflict object and enforce the same expected
+generation fence.
 
 ## Dependencies and recovery
 
 Repository contracts depend only on typed Interaction/Application references
 and passive Gateway state. Implementations preserve stable identity, expected
-revision/owner fencing, create-only correlations, and checkpoint compare-and-
+generation/owner fencing, create-only correlations, and checkpoint compare-and-
 swap. Storage failures and conflicts remain visible to Gateway; the contract
 does not manufacture recovery or native side-effect authority.
 

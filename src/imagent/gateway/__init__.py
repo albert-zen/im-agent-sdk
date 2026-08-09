@@ -536,7 +536,7 @@ class ImAgentGateway:
         change = await self._binding_runtime.select_application(
             operation.conversation_ref,
             operation.application_ref,
-            expected_revision=operation.expected_revision,
+            expected_generation=operation.expected_generation,
         )
         await self._projection_runtime.handle_binding_change(
             change.previous,
@@ -574,7 +574,7 @@ class ImAgentGateway:
             operation.conversation_ref,
             application.summary.ref,
             read.project.ref,
-            expected_revision=operation.expected_revision,
+            expected_generation=operation.expected_generation,
         )
         await self._projection_runtime.handle_binding_change(
             change.previous,
@@ -617,7 +617,7 @@ class ImAgentGateway:
             operation.conversation_ref,
             application.summary.ref,
             read.thread.ref,
-            expected_revision=operation.expected_revision,
+            expected_generation=operation.expected_generation,
             converge_same_target=foreground_only,
         )
         if foreground_only:
@@ -694,7 +694,7 @@ class ImAgentGateway:
     ) -> ConversationBound:
         change = await self._binding_runtime.clear_thread(
             operation.conversation_ref,
-            expected_revision=operation.expected_revision,
+            expected_generation=operation.expected_generation,
         )
         await self._projection_runtime.handle_binding_change(
             change.previous,
@@ -886,7 +886,7 @@ class ImAgentGateway:
                         conversation_ref=message.conversation_ref,
                         actor=message.sender,
                         application_ref=application.summary.ref,
-                        expected_revision=binding.revision if binding is not None else None,
+                        expected_generation=(binding.generation if binding is not None else None),
                         created_at=message.created_at,
                     )
                 )
@@ -920,7 +920,7 @@ class ImAgentGateway:
                         conversation_ref=message.conversation_ref,
                         actor=message.sender,
                         thread_ref=result.thread.ref,
-                        expected_revision=binding.revision,
+                        expected_generation=binding.generation,
                         created_at=message.created_at,
                     )
                 )

@@ -4,7 +4,7 @@ SQLite tests must prove:
 
 - each repository operation matches its typed Port and shares the common
   conflict/acquisition types with memory implementations;
-- stale binding revisions, route identities, checkpoints, correlation states,
+- stale binding generations, route identities, checkpoints, correlation states,
   delivery reservations, and destination states fail without partial writes;
 - a transaction rollback leaves every previously committed row unchanged;
 - completed and protected idempotency evidence survives restart, stale

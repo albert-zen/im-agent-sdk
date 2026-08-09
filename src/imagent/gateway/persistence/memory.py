@@ -44,10 +44,11 @@ from .submission_identity import ensure_same_delivery_submission_reservation
 
 
 class InMemoryBindingRepository:
-    """Atomic process-local binding storage with optimistic revision checks."""
+    """Atomic process-local binding storage with optimistic generation checks."""
 
     def __init__(self) -> None:
         self._bindings: dict[ConversationRef, ConversationBinding] = {}
+        self._binding_generation_floors: dict[ConversationRef, int] = {}
         self._lock = asyncio.Lock()
 
     async def get(self, conversation: ConversationRef) -> ConversationBinding | None:
@@ -57,40 +58,50 @@ class InMemoryBindingRepository:
     async def put(
         self,
         binding: ConversationBinding,
-        expected_revision: int | None = None,
+        expected_generation: int | None = None,
     ) -> ConversationBinding:
         validate_binding(binding)
         async with self._lock:
             current = self._bindings.get(binding.conversation_ref)
-            current_revision = current.revision if current is not None else 0
-            if expected_revision is not None and expected_revision != current_revision:
+            current_generation = max(
+                current.generation if current is not None else 0,
+                self._binding_generation_floors.get(binding.conversation_ref, 0),
+            )
+            if expected_generation is not None and expected_generation != current_generation:
                 raise BindingConflict(
-                    f"expected revision {expected_revision}, current revision is {current_revision}"
+                    "expected generation "
+                    f"{expected_generation}, current generation is {current_generation}"
                 )
             stored = ConversationBinding(
                 conversation_ref=binding.conversation_ref,
                 application_ref=binding.application_ref,
                 project_ref=binding.project_ref,
                 thread_ref=binding.thread_ref,
-                revision=current_revision + 1,
+                generation=current_generation + 1,
                 updated_at=datetime.now(UTC),
             )
             self._bindings[binding.conversation_ref] = stored
+            self._binding_generation_floors[binding.conversation_ref] = stored.generation
             return stored
 
     async def delete(
         self,
         conversation: ConversationRef,
-        expected_revision: int | None = None,
+        expected_generation: int | None = None,
     ) -> None:
         async with self._lock:
             current = self._bindings.get(conversation)
-            current_revision = current.revision if current is not None else 0
-            if expected_revision is not None and expected_revision != current_revision:
+            current_generation = max(
+                current.generation if current is not None else 0,
+                self._binding_generation_floors.get(conversation, 0),
+            )
+            if expected_generation is not None and expected_generation != current_generation:
                 raise BindingConflict(
-                    f"expected revision {expected_revision}, current revision is {current_revision}"
+                    "expected generation "
+                    f"{expected_generation}, current generation is {current_generation}"
                 )
             self._bindings.pop(conversation, None)
+            self._binding_generation_floors[conversation] = current_generation + 1
 
 
 class InMemoryRequestCorrelationRepository:

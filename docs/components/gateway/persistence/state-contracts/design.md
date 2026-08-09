@@ -8,7 +8,7 @@ Parent: `gateway.persistence`
 
 This leaf defines immutable, validated values for the minimal bridge state
 that Gateway repository Ports exchange. The values describe stable identity,
-revision, routing, correlation, checkpoint, and delivery evidence. They do not
+generation, routing, correlation, checkpoint, and delivery evidence. They do not
 perform I/O or become a second source of Application truth.
 
 ## Ownership
@@ -16,7 +16,7 @@ perform I/O or become a second source of Application truth.
 This leaf owns:
 
 - `ConversationBinding` as one current Application/Project/Thread selection
-  for a stable Conversation plus its optimistic revision;
+  for a stable Conversation plus its optimistic generation;
 - `ThreadProjectionRoute`, including stable Thread and Conversation endpoints,
   optional reply context, and one opaque checkpoint;
 - create-only `TurnReplyCorrelation` and `RequestRouteCorrelation` values;
@@ -31,8 +31,8 @@ message/artifact content, transcripts, credentials, leases, or retries.
 ## State boundaries
 
 A Conversation binding records only Gateway's current input selection. Its
-revision is a repository compare-and-swap fact, not an Application Thread
-revision. The value contains no binding history, active-Turn state, or
+generation is a durable repository compare-and-swap fact, not an Application
+Thread generation. The value contains no binding history, active-Turn state, or
 projection worker authority.
 
 The selection is hierarchical: a Thread requires an equal Project and
@@ -63,6 +63,12 @@ set, and mutable per-destination outcome evidence. The snapshot set pins one
 logical delivery to the originally resolved destinations across retries and
 restart. It contains no text, artifact bytes, arbitrary local path, callback,
 or replayable work body, so it is neither a content spool nor an outbox.
+Durable destination evidence uses only closed submission/receipt/item/segment
+states, bounded stable delivery/attachment/native-message identities, and
+bounded retry timing. `DeliveryReceipt.detail`, item/segment detail, and
+free-form destination errors are presentation/debug facts and are never part
+of `DestinationDeliveryRecord`; the delivery runtime may expose them only in
+the process that observed them.
 The submission origin enum is physically defined beside the record so the
 record remains a closed passive value, but its supported public facade and
 behavioral ownership stay in `gateway.delivery.submissions`; the persistence

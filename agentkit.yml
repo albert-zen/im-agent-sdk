@@ -222,6 +222,8 @@ components:
       - src/imagent/gateway/__init__.py
       - src/imagent/gateway/composition.py
       - src/imagent/gateway/lifecycle.py
+      - src/imagent/gateway/outcomes.py
+      - src/imagent/gateway/effect_execution.py
       - src/imagent/gateway/routing/__init__.py
       - src/imagent/gateway/routing/bindings.py
       - src/imagent/gateway/routing/operations.py
@@ -239,6 +241,8 @@ components:
       - tests/gateway/test_reference_consumer.py
       - tests/gateway/test_admission.py
       - tests/gateway/test_concurrency.py
+      - tests/gateway/test_outcomes.py
+      - tests/gateway/test_effect_execution.py
       - tests/gateway/input/test_content_transformation.py
       - tests/gateway/input/test_dispatch.py
       - tests/gateway/input/test_failure_presentation.py
@@ -254,6 +258,10 @@ components:
       - docs/components/gateway/admission/testing.md
       - docs/components/gateway/concurrency/design.md
       - docs/components/gateway/concurrency/testing.md
+      - docs/components/gateway/outcomes/design.md
+      - docs/components/gateway/outcomes/testing.md
+      - docs/components/gateway/effect-execution/design.md
+      - docs/components/gateway/effect-execution/testing.md
       - docs/components/gateway/input/README.md
       - docs/components/gateway/input/content-transformation/design.md
       - docs/components/gateway/input/content-transformation/testing.md
@@ -395,8 +403,13 @@ components:
       - src/imagent/gateway/persistence/row_mapping.py
       - tests/gateway/persistence/**
       - tests/gateway/persistence/test_row_mapping.py
+      - tests/gateway/persistence/test_sqlite_gateway_fencing.py
     docs:
       - docs/components/gateway/persistence/README.md
+      - docs/components/gateway/persistence/effects/design.md
+      - docs/components/gateway/persistence/effects/testing.md
+      - docs/components/gateway/persistence/gateway-store/design.md
+      - docs/components/gateway/persistence/gateway-store/testing.md
       - docs/components/gateway/persistence/idempotency/design.md
       - docs/components/gateway/persistence/idempotency/testing.md
       - docs/components/gateway/persistence/memory/design.md

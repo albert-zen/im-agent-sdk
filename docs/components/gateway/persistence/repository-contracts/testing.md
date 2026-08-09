@@ -12,7 +12,7 @@ Repository-contract tests and implementation conformance must prove:
 - enum values and every conflict/capacity exception preserve identity and
   behavior;
 - memory and SQLite raise the exact `BindingConflict` type for stale expected
-  revisions;
+  generations;
 - a conflict does not mutate or delete the current binding;
 - repository Protocol signatures remain structurally compatible with every
   implementation and fake;
@@ -21,7 +21,7 @@ Repository-contract tests and implementation conformance must prove:
 - process-local idempotency capacity failure is a distinct exact exception for
   an absent stable identity, occurs before mutation, and does not turn into an
   in-flight/retry outcome or alter existing replay/fencing behavior;
-- expected revisions, owner tokens, stable identities, and checkpoint values
+- expected generations, owner tokens, stable identities, and checkpoint values
   remain explicit rather than inferred from text or timestamps.
 - memory and SQLite accept every forward or same-state request-correlation
   edge, reject every backward edge even when the current state appears in

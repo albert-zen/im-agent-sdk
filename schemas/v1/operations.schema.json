@@ -349,7 +349,7 @@
             "applicationRef": {
               "$ref": "resources.schema.json#/$defs/ApplicationRef"
             },
-            "expectedRevision": { "type": ["integer", "null"], "minimum": 0 }
+            "expectedGeneration": { "type": ["integer", "null"], "minimum": 0 }
           }
         }
       ],
@@ -366,7 +366,7 @@
             "projectRef": {
               "$ref": "resources.schema.json#/$defs/ProjectRef"
             },
-            "expectedRevision": { "type": ["integer", "null"], "minimum": 0 }
+            "expectedGeneration": { "type": ["integer", "null"], "minimum": 0 }
           }
         }
       ],
@@ -383,7 +383,7 @@
             "threadRef": {
               "$ref": "resources.schema.json#/$defs/ThreadRef"
             },
-            "expectedRevision": { "type": ["integer", "null"], "minimum": 0 }
+            "expectedGeneration": { "type": ["integer", "null"], "minimum": 0 }
           }
         }
       ],
@@ -397,7 +397,7 @@
           "required": ["type"],
           "properties": {
             "type": { "const": "conversation.clear_thread" },
-            "expectedRevision": { "type": ["integer", "null"], "minimum": 0 }
+            "expectedGeneration": { "type": ["integer", "null"], "minimum": 0 }
           }
         }
       ],

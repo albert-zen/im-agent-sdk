@@ -25,7 +25,7 @@ side-effect reconciliation.
 
 Repository mutations validate typed input before SQL and serialize through the
 shared lock. Multi-read/write decisions use one immediate transaction and
-roll back on failure. Binding revisions, stable route endpoint identity,
+roll back on failure. Binding generations, stable route endpoint identity,
 checkpoint compare-and-swap, create-only Turn correlations, request-wide
 expected-state-fenced transitions, immutable delivery reservation identity, and expected
 destination state are preserved atomically.
@@ -54,7 +54,11 @@ Schema initialization is additive and retains existing bridge state. The
 legacy route upgrade adds explicit checkpoint fields and clears the old
 `reply_to_message_id` values because their prior meaning cannot be safely
 distinguished from durable reply context. Request-correlation and delivery-
-submission tables are additive.
+submission tables are additive. The v1 store upgrade also adds a retained
+Conversation-generation ledger, the fixed Gateway namespace and renewable
+runtime lease, workspace-root fingerprints, and bounded effect receipts.
+`SQLiteGatewayStore` composes this owner and supplies statement-level fencing
+for every bridge-state mutation; it does not create a second database.
 
 The SQLite owner is the only compatibility transformer. It supports the
 immediately preceding route shape, applies that documented non-authorizing

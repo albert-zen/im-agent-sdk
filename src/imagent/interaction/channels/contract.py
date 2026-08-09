@@ -252,6 +252,8 @@ def validate_delivery_receipt(receipt: DeliveryReceipt) -> None:
             raise ContractViolation("retry_after_seconds must be finite")
         if receipt.retry_after_seconds < 0:
             raise ContractViolation("retry_after_seconds cannot be negative")
+    if receipt.native_message_id is not None:
+        require_identifier(receipt.native_message_id, "native_message_id")
     seen_indexes: set[int] = set()
     for item in receipt.items:
         if item.content_index < 0:
@@ -270,6 +272,8 @@ def validate_delivery_receipt(receipt: DeliveryReceipt) -> None:
             )
         if item.attachment_id is not None:
             require_identifier(item.attachment_id, "attachment_id")
+        if item.native_message_id is not None:
+            require_identifier(item.native_message_id, "item.native_message_id")
     seen_segment_indexes: set[int] = set()
     seen_segment_ids: set[str] = set()
     for segment in receipt.segments:
@@ -306,6 +310,8 @@ def validate_delivery_receipt(receipt: DeliveryReceipt) -> None:
                 raise ContractViolation("segment retry_after_seconds must be finite")
             if segment.retry_after_seconds < 0:
                 raise ContractViolation("segment retry_after_seconds cannot be negative")
+        if segment.native_message_id is not None:
+            require_identifier(segment.native_message_id, "segment.native_message_id")
     if receipt.status is DeliveryReceiptStatus.RETRYABLE_FAILURE:
         if receipt.native_message_id is not None:
             raise ContractViolation(

@@ -26,7 +26,7 @@ content, path, endpoint, and error-text identities.
 ## A switched Conversation still sees the old Thread
 
 Verify that the switch used a typed `BindConversationToThread` operation and
-the current binding revision. Under `foreground_only`, the old route becomes
+the current binding generation. Under `foreground_only`, the old route becomes
 inactive after the binding changes. A different Conversation that remains
 bound to that Thread must continue to receive its output. If both stop, check
 that the Application worker was not replaced by consumer-side subscription

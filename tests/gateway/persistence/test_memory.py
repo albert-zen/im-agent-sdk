@@ -29,6 +29,7 @@ from imagent.gateway.persistence.memory import (
     InMemoryProjectionRouteRepository,
     InMemoryRequestCorrelationRepository,
 )
+from imagent.interaction.channels.contract import DeliveryReceipt, DeliveryReceiptStatus
 from imagent.interaction.messages import ConversationRef
 from imagent.interaction.operations import ContractViolation
 
@@ -46,7 +47,7 @@ class InMemoryBindingRepositoryTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIsNone(importlib.util.find_spec("imagent.bindings"))
 
-    async def test_put_assigns_monotonic_revision(self) -> None:
+    async def test_put_assigns_monotonic_generation(self) -> None:
         first = await self.repository.put(
             ConversationBinding(
                 conversation_ref=self.conversation,
@@ -60,14 +61,14 @@ class InMemoryBindingRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 project_ref=ProjectRef("zen-local", "workspace"),
                 thread_ref=ThreadRef(ProjectRef("zen-local", "workspace"), "thread-1"),
             ),
-            expected_revision=first.revision,
+            expected_generation=first.generation,
         )
-        self.assertEqual(first.revision, 1)
-        self.assertEqual(second.revision, 2)
+        self.assertEqual(first.generation, 1)
+        self.assertEqual(second.generation, 2)
         self.assertIsNotNone(second.updated_at)
         self.assertEqual(await self.repository.get(self.conversation), second)
 
-    async def test_put_rejects_stale_revision_without_mutation(self) -> None:
+    async def test_put_rejects_stale_generation_without_mutation(self) -> None:
         stored = await self.repository.put(
             ConversationBinding(
                 conversation_ref=self.conversation,
@@ -80,7 +81,7 @@ class InMemoryBindingRepositoryTests(unittest.IsolatedAsyncioTestCase):
                     conversation_ref=self.conversation,
                     application_ref=ApplicationRef("t3-local"),
                 ),
-                expected_revision=0,
+                expected_generation=0,
             )
         self.assertEqual(await self.repository.get(self.conversation), stored)
 
@@ -101,11 +102,11 @@ class InMemoryBindingRepositoryTests(unittest.IsolatedAsyncioTestCase):
                     ).project_ref,
                     thread_ref=ThreadRef(ProjectRef("t3-local", "workspace"), "thread-other"),
                 ),
-                expected_revision=stored.revision,
+                expected_generation=stored.generation,
             )
         self.assertEqual(await self.repository.get(self.conversation), stored)
 
-    async def test_concurrent_puts_serialize_revisions(self) -> None:
+    async def test_concurrent_puts_serialize_generations(self) -> None:
         first, second = await asyncio.gather(
             self.repository.put(
                 ConversationBinding(
@@ -120,11 +121,11 @@ class InMemoryBindingRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 )
             ),
         )
-        self.assertEqual({first.revision, second.revision}, {1, 2})
+        self.assertEqual({first.generation, second.generation}, {1, 2})
         current = await self.repository.get(self.conversation)
         self.assertIsNotNone(current)
         assert current is not None
-        self.assertEqual(current.revision, 2)
+        self.assertEqual(current.generation, 2)
 
     async def test_fresh_repository_starts_without_binding_state(self) -> None:
         await self.repository.put(
@@ -136,7 +137,7 @@ class InMemoryBindingRepositoryTests(unittest.IsolatedAsyncioTestCase):
         restarted = InMemoryBindingRepository()
         self.assertIsNone(await restarted.get(self.conversation))
 
-    async def test_delete_supports_revision_guard(self) -> None:
+    async def test_delete_supports_generation_guard(self) -> None:
         stored = await self.repository.put(
             ConversationBinding(
                 conversation_ref=self.conversation,
@@ -144,10 +145,10 @@ class InMemoryBindingRepositoryTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         with self.assertRaises(BindingConflict):
-            await self.repository.delete(self.conversation, expected_revision=0)
+            await self.repository.delete(self.conversation, expected_generation=0)
         self.assertEqual(await self.repository.get(self.conversation), stored)
 
-        await self.repository.delete(self.conversation, expected_revision=stored.revision)
+        await self.repository.delete(self.conversation, expected_generation=stored.generation)
         self.assertIsNone(await self.repository.get(self.conversation))
 
 
@@ -321,7 +322,10 @@ class InMemoryDeliverySubmissionRepositoryTests(unittest.IsolatedAsyncioTestCase
                 record.submission_id,
                 current.delivery_id,
                 expected_state=DeliverySubmissionState.IN_FLIGHT,
-                destination=replace(accepted, error="changed"),
+                destination=replace(
+                    accepted,
+                    receipt=DeliveryReceipt(status=DeliveryReceiptStatus.UNKNOWN),
+                ),
             )
         with self.assertRaisesRegex(DeliverySubmissionConflict, "snapshot changed"):
             await repository.update_delivery_destination(

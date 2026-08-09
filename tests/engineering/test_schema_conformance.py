@@ -45,7 +45,7 @@ class SchemaConformanceTests(unittest.TestCase):
         with contextlib.redirect_stdout(output):
             validate_schemas.main()
 
-        self.assertEqual(output.getvalue(), "validated 10 schemas\n")
+        self.assertEqual(output.getvalue(), "validated 11 schemas\n")
 
     def test_valid_same_set_reference_and_pointer_validate(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

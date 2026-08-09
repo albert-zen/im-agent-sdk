@@ -1,6 +1,6 @@
 # V1 repository audit and transformation DAG
 
-Status: DAG block A implemented; blocks B–I remain transformation targets
+Status: DAG blocks A–B implemented; blocks C–I remain transformation targets
 
 This audit compares the repository with `V1_DESIGN.md`. Existing behavior is
 not retained merely because it has tests. Safety evidence is reused; conflicting
@@ -64,6 +64,10 @@ Required transformation:
 - use finite non-evicting receipt capacity, failing before effects when full;
 - remove hand-coded workflow sequences from common/product handlers.
 
+Block B now supplies the closed outcomes, fingerprints, durable receipts, and
+typed store/native/workflow executor seam. Block C remains responsible for
+the scoped public actions and removal of manual consumer composition.
+
 ### Resolved in A: Project-creation evidence revised onto the uniform model
 
 Commit `bef9cec5a6fea93e0c8c96f3ab8682074db83213` provides useful evidence:
@@ -80,7 +84,7 @@ block B work.
 
 ### P1: persistence is exposed as repository wiring
 
-Current consumers construct `GatewayRepositories` with several optional
+The retiring runtime still constructs `GatewayRepositories` with several optional
 repositories. Defaults can silently mix durable and process-local state. There
 is no transaction boundary for hierarchical binding plus foreground route
 preparation or for workflow phase receipts.
@@ -100,6 +104,11 @@ Required transformation:
   reconciliation safe;
 - prohibit configurations that appear durable while critical bridge state is
   process-local.
+
+Block B now exposes the coherent `GatewayStore`, `MemoryGatewayStore`, and
+`SQLiteGatewayStore` choices with one lease-fenced session and transaction
+domain. Later composition blocks must consume that port and delete the old
+repository-wiring surface; they must not add a bridge between the two APIs.
 
 ### P1: lifecycle and public facade are implementation-shaped
 
@@ -157,14 +166,15 @@ Status: complete.
    honest scopes.
 4. Revise the Project-creation evidence on top of this contract.
 
-The clean boundary left for B is the immutable
+The clean boundary consumed by B was the immutable
 `WorkspaceIdentity(project_ref, root_fingerprint)` exposed by fixed/flat
-Application summaries. B will persist and compare that value, reject the same
-workspace ID with a changed fingerprint at startup, and introduce coherent
-stores/effect receipts. A does not add those persistence or receipt semantics
-to the old repository bundle.
+Application summaries. B persists and compares that value, rejects the same
+workspace ID with a changed fingerprint, and supplies coherent stores/effect
+receipts. None of those semantics were added to the old repository bundle.
 
 ### B. Outcome algebra, store, and effect receipts
+
+Status: complete.
 
 1. Define language-neutral success/failure/partial/unknown results and stable
    action fingerprints.
@@ -181,6 +191,26 @@ to the old repository bundle.
 This block starts only after A stabilizes. Store implementation and outcome
 contract may be split only if their files and transaction contract are already
 fixed.
+
+Landed evidence includes the four-variant outcome schema, namespaced bounded
+fingerprints, the exact `GatewayEffectExecutor` seam for C, one public
+`GatewayStore` port with memory/SQLite parity, monotonic generation tombstones,
+shared non-evicting receipt capacity, atomic Gateway/workflow commits, durable
+native fences, conservative reconciliation, workspace fingerprint checks, and
+exclusive store-time leases with monotonic epochs. SQLite maintenance is
+default-deny outside schema initialization, and every focused mutation has an
+in-transaction database-time guard even when it converges or affects zero
+rows. Focused tests cover restart, commit-ack replay, durable-phase
+cancellation, concurrent same-action fencing, unknown native effects, ABA,
+capacity, route-only observation/clear, route-conflict rollback, crash-expiry
+takeover, negative reconciliation after takeover, and stale owner rejection in
+a fresh execution context. Hierarchical clears now carry closed transaction-
+internal clear scope rather than caller-pre-read ancestors, and native action
+authorization/capability checks use the executor's reserved-phase preflight so
+terminal replay always precedes reauthorization. Later composition blocks
+must acquire `GatewayStore`, construct `StoreBackedGatewayEffectExecutor` from
+its leased session, and inject only `GatewayEffectExecutor` into C; neither B
+nor C bridges the retiring repository bundle.
 
 ### C. Scoped consumer actions and commands
 

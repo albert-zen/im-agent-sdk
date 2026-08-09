@@ -219,8 +219,7 @@ class ProactiveDeliveryService:
                         delivery_id=destination.delivery_id,
                         snapshot=snapshot,
                         state=destination.state,
-                        receipt=destination.receipt,
-                        error=destination.error,
+                        receipt=_durable_delivery_receipt(destination.receipt),
                         updated_at=now,
                     )
                     for destination, snapshot in zip(
@@ -238,6 +237,10 @@ class ProactiveDeliveryService:
                     reservation.record,
                     rejected_record,
                 )
+            elif isinstance(intent.target, ConversationDeliveryTarget):
+                # Presentation/debug detail may be returned in this process,
+                # but it is deliberately absent from the replay authority.
+                return rejection
             return _result_from_record(
                 reservation.record,
                 replayed=not reservation.acquired,
@@ -330,7 +333,6 @@ class ProactiveDeliveryService:
                 destination,
                 state=DeliverySubmissionState.IN_FLIGHT,
                 receipt=None,
-                error=None,
                 updated_at=now,
             )
             try:
@@ -445,16 +447,6 @@ class ProactiveDeliveryService:
             receipt = await self._coordinator.deliver(channel, message)
             validate_delivery_receipt_for_content(receipt, intent.content)
             state = _state_from_receipt(receipt)
-            error = (
-                receipt.detail
-                if state
-                in {
-                    DeliverySubmissionState.REJECTED,
-                    DeliverySubmissionState.UNKNOWN,
-                    DeliverySubmissionState.PARTIAL,
-                }
-                else None
-            )
         except DeliveryPlanningError as delivery_error:
             outcome_error = DeliveryOutcomeErrorCode.PLANNING_FAILED
             receipt = DeliveryReceipt(
@@ -462,7 +454,6 @@ class ProactiveDeliveryService:
                 detail=str(delivery_error),
             )
             state = DeliverySubmissionState.REJECTED
-            error = receipt.detail
         except asyncio.CancelledError as delivery_error:
             # Cancellation means the native outcome cannot be trusted, but it
             # must not strand durable state at IN_FLIGHT. Persist UNKNOWN
@@ -472,7 +463,6 @@ class ProactiveDeliveryService:
                 detail="delivery cancelled before the native outcome was confirmed",
             )
             state = DeliverySubmissionState.UNKNOWN
-            error = receipt.detail
             cancellation = delivery_error
             outcome_error = DeliveryOutcomeErrorCode.CANCELLED
         except BaseException as delivery_error:
@@ -483,13 +473,11 @@ class ProactiveDeliveryService:
                 detail=str(delivery_error) or type(delivery_error).__name__,
             )
             state = DeliverySubmissionState.UNKNOWN
-            error = receipt.detail
             outcome_error = DeliveryOutcomeErrorCode.EXECUTION_FAILED
         replacement = replace(
             destination,
             state=state,
-            receipt=receipt,
-            error=error,
+            receipt=_durable_delivery_receipt(receipt),
             updated_at=datetime.now(UTC),
         )
         try:
@@ -633,7 +621,7 @@ def _result_from_record(
                 if expose_conversations
                 else _redact_receipt(destination.receipt)
             ),
-            error=(destination.error if expose_conversations else None),
+            error=None,
             replayed=replayed,
         )
         for destination in record.destinations
@@ -682,6 +670,19 @@ def _redact_receipt(
             )
             for segment in receipt.segments
         ),
+    )
+
+
+def _durable_delivery_receipt(
+    receipt: DeliveryReceipt | None,
+) -> DeliveryReceipt | None:
+    if receipt is None:
+        return None
+    return replace(
+        receipt,
+        detail=None,
+        items=tuple(replace(item, detail=None) for item in receipt.items),
+        segments=tuple(replace(segment, detail=None) for segment in receipt.segments),
     )
 
 

@@ -698,7 +698,7 @@ class VersionOneSchemaCompatibilityTests(unittest.TestCase):
                 },
                 "applicationRef": {"applicationInstanceId": "codex-main"},
                 "threadRef": thread_ref,
-                "revision": 1,
+                "generation": 1,
                 "updatedAt": "2026-08-09T00:00:00Z",
             },
         )

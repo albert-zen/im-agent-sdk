@@ -2,11 +2,12 @@
 
 Focused binding tests prove:
 
-- the first put assigns revision one and later puts increment monotonically;
+- the first put assigns generation one and later puts increment monotonically;
 - validation happens before mutation;
-- stale expected revisions reject put and delete through the exact shared
+- stale expected generations reject put and delete through the exact shared
   `BindingConflict` type without changing the stored record;
-- delete with the current revision removes only that Conversation;
+- delete with the current generation removes only that Conversation and
+  retains its successor generation against ABA;
 - concurrent process-local operations are serialized by the repository lock;
 - restart constructs an empty repository and claims no durable recovery;
 - no route, Application worker, transcript, or product JSON state is created.

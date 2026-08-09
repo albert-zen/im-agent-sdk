@@ -5,11 +5,11 @@ Gateway operation, persistence, routing, projection, and recovery owners:
 
 - one Conversation has at most one current binding while multiple
   Conversations may bind the same Thread;
-- revision compare-and-swap rejects stale writers;
-- a same-target crash retry converges only with no guard, the current revision,
-  or the immediately preceding revision, and never overwrites a later
+- generation compare-and-swap rejects stale writers;
+- a same-target crash retry converges only with no guard, the current generation,
+  or the immediately preceding generation, and never overwrites a later
   different target;
-- an invalid same-target revision fails before route preparation and cannot
+- an invalid same-target generation fails before route preparation and cannot
   release an existing recovery fence;
 - project bind, Thread bind, and Thread clear return the documented typed
   postconditions without activating native UI state;
@@ -31,7 +31,7 @@ effect-receipt semantics; those gates land with the coherent `GatewayStore`.
 
 The focused binding-leaf tests prove typed operation/result shape, facade
 identity, field validation, binding-result postconditions, repository/CAS
-mutation, same-target convergence, the revisionless retry distinction, and
+mutation, same-target convergence, the generationless retry distinction, and
 verification after an unknown write outcome. They use a constructor-injected
 repository and assert that a failed or unverifiable write never produces
 verified binding authority. They do not claim ownership of Conversation

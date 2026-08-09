@@ -19,6 +19,12 @@ Channel transport, Agent transcript, or second runtime.
 - [concurrency design](concurrency/design.md) and
   [testing](concurrency/testing.md) — dependency-neutral waiter-safe keyed
   serialization and optional active-key capacity mechanics.
+- [outcome algebra](outcomes/design.md) and
+  [testing](outcomes/testing.md) — the closed success/failure/partial/unknown
+  result union.
+- [effect execution](effect-execution/design.md) and
+  [testing](effect-execution/testing.md) — durable store/native/workflow
+  execution behind the scoped consumer action surface.
 - [input](input/README.md) — independent content-transformation, dispatch, and
   failure-presentation leaves.
 - [routing](routing/README.md) — Conversation bindings, typed Gateway
@@ -38,8 +44,9 @@ Channel transport, Agent transcript, or second runtime.
   projection/startup aggregation, bounded provider normalization, and the
   exact stable transition facade.
 - [persistence](persistence/README.md) — bridge-state contracts and repository
-  implementations, including process-local [memory](persistence/memory/design.md)
-  and its [tests](persistence/memory/testing.md).
+  implementations, including the coherent public
+  [Gateway store](persistence/gateway-store/design.md), process-local
+  [memory](persistence/memory/design.md), and their tests.
 - [Gateway aggregate design](design.md) and [testing](testing.md) — current
   orchestration evidence while the remaining leaves are extracted.
 

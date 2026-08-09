@@ -26,11 +26,13 @@ durable recovery promise.
 
 `InMemoryBindingRepository` stores at most one current binding for each stable
 `ConversationRef`. `put` validates the complete passive binding value while
-holding one process-local lock, compares an optional expected revision, and
-stores a freshly timestamped record whose revision is exactly one greater than
-the current value. `delete` performs the same expected-revision comparison
-before removal. A stale comparison raises the repository-contract-owned
-`BindingConflict` without changing state.
+holding one process-local lock, compares an optional expected generation, and
+stores a freshly timestamped record whose generation is exactly one greater
+than the retained value. `delete` performs the same expected-generation
+comparison, advances the retained generation, and then removes the current
+row. A stale comparison raises the repository-contract-owned
+`BindingConflict` without changing state. `MemoryGatewayStore` composes these
+focused repositories under one runtime lease and one transaction lock.
 
 The implementation does not coordinate projection routes, start or observe an
 Application Thread, infer a retry, or retain history. Gateway remains the sole

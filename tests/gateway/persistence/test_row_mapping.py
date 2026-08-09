@@ -80,7 +80,7 @@ class RowMappingTests(unittest.TestCase):
             application_ref=ApplicationRef("application-1"),
             project_ref=ProjectRef("application-1", "project-1"),
             thread_ref=ThreadRef(ProjectRef("application-1", "project-1"), "thread-1"),
-            revision=7,
+            generation=7,
             updated_at=_NOW,
         )
         binding_names = (
@@ -89,7 +89,7 @@ class RowMappingTests(unittest.TestCase):
             "application_instance_id",
             "project_id",
             "thread_id",
-            "revision",
+            "generation",
             "updated_at",
         )
         binding_row = _row_from_values(binding_names, row_mapping.binding_to_row(binding))
@@ -220,7 +220,6 @@ class RowMappingTests(unittest.TestCase):
         receipt = DeliveryReceipt(
             status=DeliveryReceiptStatus.ACCEPTED_BY_PLATFORM,
             native_message_id="native-message-1",
-            detail="accepted",
             items=(
                 DeliveryItemReceipt(
                     content_index=0,
@@ -313,6 +312,19 @@ class RowMappingTests(unittest.TestCase):
                         "status": "not-a-status",
                         "native_message_id": None,
                         "detail": None,
+                        "retry_after_seconds": None,
+                        "items": [],
+                        "segments": [],
+                    }
+                )
+            )
+        with self.assertRaisesRegex(ValueError, "persisted receipt.detail must be null"):
+            row_mapping.decode_receipt(
+                json.dumps(
+                    {
+                        "status": "unknown",
+                        "native_message_id": None,
+                        "detail": "/private/credential.txt",
                         "retry_after_seconds": None,
                         "items": [],
                         "segments": [],

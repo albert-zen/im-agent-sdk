@@ -21,7 +21,7 @@ Gateway operation conformance must prove:
 - one Conversation's mutations serialize and unrelated Conversations can run
   independently;
 - replay tests distinguish operations with a proved state postcondition from
-  revisionless operations that may write a new revision again, and never infer
+  generationless operations that may write a new generation again, and never infer
   generic deduplication from `operation_id`;
 - read-only Application/resource listing has no binding, route, observation,
   activation, or Application mutation side effect;

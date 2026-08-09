@@ -2,8 +2,8 @@
 
 Required scenarios:
 
-- binding revisions increase monotonically;
-- stale put/delete revisions fail;
+- binding generations increase monotonically;
+- stale put/delete generations fail;
 - memory and SQLite use the exact same repository-contract conflict type, and
   stale failures leave the current binding unchanged;
 - managed/flat/fixed binding invariants remain valid;
@@ -51,7 +51,8 @@ Required scenarios:
 - opening the previous SQLite schema adds request correlation storage without
   losing existing bridge state;
 - proactive route snapshots and per-item receipts survive restart without
-  storing message/artifact content;
+  storing message/artifact content, local paths, credentials, native
+  exception/detail text, or any free-form delivery error;
 - O2 observes only newly executed Coordinator attempts; restart/replay creates
   no notification row, callback state, content copy, cleanup job, or outbox;
 - concurrent proactive reservation has one winner and mismatched reuse of a

@@ -163,7 +163,7 @@
 - failed foreground baseline keeps live output fenced and cannot advance a
   checkpoint until a same-target recovery retry succeeds;
 - an unverified binding-write outcome fails closed with its route fenced, and
-  an invalid same-target revision cannot release a retained recovery fence;
+  an invalid same-target generation cannot release a retained recovery fence;
 - Application subscription failure self-recovers while one destination
   failure remains isolated and visible;
 - attachment and delivery failures stay explicit.

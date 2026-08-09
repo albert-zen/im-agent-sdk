@@ -49,6 +49,9 @@ install must not discover optional integration dependencies that were not
 requested. The aggregate `channels` extra and wheel contents such as
 `py.typed` remain separate release checks; the smoke script does not claim to
 cover them.
+The base case also resolves `GatewayStore`, `MemoryGatewayStore`, and
+`SQLiteGatewayStore` from the installed persistence facade and proves their
+identity with the canonical Block-B owners.
 The base case also proves, in the original transition-first clean process,
 that `imagent.diagnostics` preserves exact identity for the canonical
 Interaction, Channel, and Application diagnostics objects. It additionally

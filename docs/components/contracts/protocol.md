@@ -78,7 +78,7 @@ conversationRef
 applicationRef?
 projectRef?
 threadRef?
-revision
+generation
 updatedAt
 ```
 

@@ -62,7 +62,7 @@ class ConversationBinding:
     application_ref: ApplicationRef | None = None
     project_ref: ProjectRef | None = None
     thread_ref: ThreadRef | None = None
-    revision: int = 0
+    generation: int = 0
     updated_at: datetime | None = None
 
 
@@ -120,7 +120,6 @@ class DestinationDeliveryRecord:
     state: DeliverySubmissionState
     updated_at: datetime
     receipt: DeliveryReceipt | None = None
-    error: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,8 +147,8 @@ def validate_binding(
 ) -> None:
     require_identifier(binding.conversation_ref.channel_instance_id, "channel_instance_id")
     require_identifier(binding.conversation_ref.native_conversation_id, "native_conversation_id")
-    if binding.revision < 0:
-        raise ContractViolation("binding revision cannot be negative")
+    if binding.generation < 0:
+        raise ContractViolation("binding generation cannot be negative")
 
     application_id = (
         binding.application_ref.application_instance_id if binding.application_ref else None
@@ -284,6 +283,7 @@ def validate_delivery_submission_record(record: DeliverySubmissionRecord) -> Non
         validate_delivery_route_snapshot(destination.snapshot)
         if destination.receipt is not None:
             validate_delivery_receipt(destination.receipt)
+            _validate_durable_delivery_receipt(destination.receipt)
 
 
 def validate_delivery_submission_destination_count(count: int) -> None:
@@ -292,6 +292,15 @@ def validate_delivery_submission_destination_count(count: int) -> None:
             "delivery submission destinations exceed the maximum of "
             f"{MAX_DELIVERY_SUBMISSION_DESTINATIONS}"
         )
+
+
+def _validate_durable_delivery_receipt(receipt: DeliveryReceipt) -> None:
+    if receipt.detail is not None:
+        raise ContractViolation("durable delivery receipt cannot contain detail text")
+    if any(item.detail is not None for item in receipt.items):
+        raise ContractViolation("durable delivery item receipt cannot contain detail text")
+    if any(segment.detail is not None for segment in receipt.segments):
+        raise ContractViolation("durable delivery segment receipt cannot contain detail text")
 
 
 def _validate_conversation_ref(conversation_ref: ConversationRef) -> None:

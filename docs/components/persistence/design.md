@@ -10,16 +10,22 @@ from native authoritative sources.
 
 Persistence owns implementations for:
 
-- `ConversationBinding` with optimistic revision guards;
+- `ConversationBinding` with monotonic generation guards retained across clear
+  and row deletion;
 - `ThreadProjectionRoute`;
 - minimal per-Turn IM reply correlations;
 - minimal per-destination interactive-request correlations;
 - inbound and outbound idempotency claim/completion state.
 - proactive-delivery identity, immutable route snapshots, destination states,
   and typed receipts.
+- one Gateway namespace, renewable runtime lease and fencing epoch;
+- fixed workspace-root fingerprints; and
+- bounded non-evicting Gateway/native/request/workflow effect receipts.
 
-The current implementations are in-memory repositories and
-`gateway.persistence.sqlite.SQLiteGatewayState`. Pure SQLite row conversion is
+The public v1 choices are `MemoryGatewayStore` and `SQLiteGatewayStore`, both
+behind one `GatewayStore` port. They compose the focused in-memory repositories
+or `gateway.persistence.sqlite.SQLiteGatewayState` behind one lease-bound
+session; consumers do not assemble repository bundles. Pure SQLite row conversion is
 owned by `gateway.persistence.row_mapping`; request policy is owned by
 `gateway.projection.request_correlation`; the single SQLite owner performs all
 SQL, schema, migration, lock, and transaction work. `merge_projection_route`
@@ -55,10 +61,16 @@ It must not store:
 | projection completion boundary | Gateway projection state | per route; completed delivery or durable presentation suppression, never transcript content |
 | Turn reply correlation | Gateway projection state | active IM-originated Turns only |
 | Request route correlation | Gateway projection state | delivered request/destination identity only |
-| Proactive delivery submission | Gateway | fingerprints, route snapshots, outcome/receipt only |
+| Proactive delivery submission | Gateway | fingerprints, route snapshots, closed outcome/receipt states and bounded stable identities only; no detail/error text |
+| Binding generation tombstone | Gateway | monotonic per Conversation, including while unbound |
+| Effect receipt | Gateway | bounded fingerprint, phase, fixed error/minimal stable reference only |
+| Runtime lease | Gateway | one owner token, monotonic epoch, store-authored expiry per namespace |
+| Workspace identity | Gateway | ProjectRef plus root fingerprint; never the root path |
 
 Binding updates are atomic from one Conversation's perspective. A stale
-expected revision fails explicitly. Project/Thread references are validated
+expected generation fails explicitly. Store-only actions atomically reserve
+capacity and commit their mutation, successor generation, and terminal
+receipt. Project/Thread references are validated
 against Application ownership before they are persisted.
 
 The shared `BindingConflict` belongs to the Gateway repository-contract leaf;
@@ -136,9 +148,10 @@ namespaced reference rather than reviving the old one.
 
 ## Dependencies
 
-Persistence implements repository Ports using Contract values. It does not
-depend on Gateway orchestration or concrete integrations. SQLite schema and
-row mapping are implementation details behind the Ports.
+Persistence implements repository Ports and coherent store transactions using
+Contract values. It does not depend on product actions, Gateway command
+ergonomics, or concrete integrations. SQLite schema and row mapping are
+implementation details behind the public `GatewayStore` port.
 
 ## Failure and recovery
 
@@ -146,6 +159,20 @@ Storage errors and checkpoint conflicts remain visible to Gateway.
 Idempotency claims distinguish acquired, already-completed, and currently
 in-flight work so completed delivery can converge a lagging checkpoint without
 mistaking active work for success.
+
+One Gateway namespace has one renewable runtime lease. Every bridge mutation
+checks owner token, monotonic fencing epoch, and unexpired lease inside the
+same transaction using store-authored time. Lease expiry permits takeover but
+does not turn a fenced native effect into proven absence; an old owner cannot
+write binding, route, checkpoint, correlation, idempotency, delivery,
+workspace, or receipt state after takeover.
+
+Gateway/native/request/workflow receipts share one configured positive finite
+capacity and are never evicted by elapsed time. Native execution persists
+`native_side_effect_started` before the external call. Cancellation, crash,
+timeout, or lost response after that fence remains unknown unless evidenced
+native idempotency or terminal operation status returns an authoritative
+result; negative resource lookup is insufficient.
 
 An `in_flight` claim is a reclaimable lease so a crash before work begins does
 not permanently block inbound or outbound progress. Immediately before a
@@ -239,8 +266,11 @@ remain unchanged.
 
 ## Change obligations
 
-Changes to `gateway/persistence/repository_contracts.py`,
+Changes to `gateway/persistence/effects.py`, `gateway/persistence/store.py`,
+`gateway/persistence/memory_store.py`, `gateway/persistence/sqlite_store.py`,
+`gateway/persistence/repository_contracts.py`,
 `gateway/persistence/idempotency.py`, `gateway/persistence/memory.py`, or
-`gateway/persistence/sqlite.py` require checking schema migration, restart behavior, revision
-conflicts, idempotency semantics, projection route invariants, and the
+`gateway/persistence/sqlite.py` require checking schema migration, restart
+behavior, generation conflicts/ABA, receipt capacity and replay, runtime
+fencing, idempotency semantics, projection route invariants, and the
 projections/recovery docs when checkpoint shape changes.

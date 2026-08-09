@@ -999,6 +999,48 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(replay.destinations[0].replayed)
         self.assertEqual(len(self.channel_b.sent), 0)
 
+    async def test_sqlite_submission_excludes_content_paths_and_native_detail(self) -> None:
+        secret_detail = "credential=token-secret path=/private/staging/native-truth.json"
+        secret_content = "payload-content-must-not-enter-bridge-state"
+        self.channel_a.receipt_status = DeliveryReceiptStatus.UNKNOWN
+        self.channel_a.receipt_detail = secret_detail
+        self.channel_a.receipt_items = (
+            DeliveryItemReceipt(
+                content_index=0,
+                status=DeliveryItemStatus.UNKNOWN,
+                detail=secret_detail,
+            ),
+        )
+        intent = replace(
+            self.intent(delivery_id="delivery-no-content-leak", text=secret_content),
+            target=ConversationDeliveryTarget(self.conversation_a),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "gateway.sqlite")
+            state = SQLiteGatewayState(path)
+            await self.gateway(submissions=state).deliver_proactively(
+                intent,
+                credential=self.conversation_token,
+            )
+            submission_id = derive_delivery_submission_id(
+                DeliverySubmissionOrigin.EXTERNAL,
+                "operator",
+                intent.delivery_id,
+            )
+            record = await state.get_delivery_submission(submission_id)
+            assert record is not None
+            receipt = record.destinations[0].receipt
+            assert receipt is not None
+            self.assertIsNone(receipt.detail)
+            self.assertTrue(all(item.detail is None for item in receipt.items))
+            self.assertTrue(all(segment.detail is None for segment in receipt.segments))
+            await state.close()
+
+            for sqlite_file in Path(directory).iterdir():
+                database_bytes = sqlite_file.read_bytes()
+                self.assertNotIn(secret_detail.encode(), database_bytes)
+                self.assertNotIn(secret_content.encode(), database_bytes)
+
     async def test_sqlite_retryable_receipt_survives_restart_and_can_resume(self) -> None:
         await self.put_route(self.conversation_a, route_id="route-a")
         self.channel_a.receipt_status = DeliveryReceiptStatus.RETRYABLE_FAILURE
