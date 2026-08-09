@@ -227,6 +227,22 @@ docs/examples, compatibility shims, orphan tests, and multi-owner code. Run
 full gates, clean-wheel executable specification, strong clean-context review,
 fix findings, and review the fixes again.
 
+### J. Downstream experimental rewrites
+
+Only after the SDK candidate passes I, create isolated experimental branches
+and worktrees for IMCodex, IMT3, and IMZen. Pin each to the exact SDK candidate
+commit/wheel and rewrite its bridge composition through the public v1 surface.
+Keep product configuration, commands, permissions, credentials, and
+presentation downstream; remove duplicated bridge authority from the
+experimental path.
+
+Run each consumer's native suite and a real public-path vertical scenario.
+Generic defects return to the SDK and reopen the affected SDK gates/review;
+consumer-specific policy does not migrate into Core. Do not merge these
+experimental branches to downstream defaults without separate human approval.
+Resolve repository provenance first when a checkout is not currently backed by
+Git; do not create an ad-hoc repository merely to satisfy this DAG item.
+
 ## Reuse rule
 
 Existing tests are classified by semantic evidence, not by pass count:

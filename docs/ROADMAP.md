@@ -49,6 +49,25 @@ without overstating native limits.
 A durable job system remains out of scope until multiple real consumers prove
 that the SDK, rather than a product/orchestrator, must own it.
 
+## Issue #13: three-consumer v1 acceptance rewrite
+
+After the v1 SDK candidate passes its own executable specification, create
+isolated experimental branches/worktrees for IMCodex, IMT3, and IMZen and
+rewrite their bridge composition against one exact SDK candidate commit or
+wheel. This is a final acceptance layer, not an input to SDK architecture.
+
+The experiments retain product policy downstream, remove duplicated bridge
+authority, use only public SDK imports, and prove repository-native tests plus
+real vertical message flows. A generic defect reopens the SDK candidate; a
+consumer-specific need remains downstream unless the v1 extension evidence
+rule is independently satisfied. Experimental branches require separate human
+approval before merging to downstream defaults.
+
+The current IMT3 checkout is not attached to a Git repository. Its real
+repository provenance or upstream must be established before an experimental
+branch/worktree can be created; this issue does not authorize an ad-hoc
+`git init`.
+
 ## Issue #13: backlog
 
 Issue #13 remains backlog and is not part of the current maturity sequence.

@@ -320,6 +320,36 @@ Diagnostics assertions cover only allowlisted aggregate facts. Thread,
 Conversation, request, route, content, path, endpoint, credential, native
 message identity, and free-form exception text never appear.
 
+## Downstream experimental acceptance path
+
+After the SDK candidate satisfies every in-repository gate, the final delivery
+includes three isolated downstream rewrites: IMCodex, IMT3, and IMZen. Each is
+implemented on its own experimental branch and worktree against one exact SDK
+candidate commit or wheel. These rewrites are acceptance consumers, not design
+authorities: product policy remains downstream, and no SDK abstraction is
+accepted merely to preserve their pre-v1 structure.
+
+Each rewrite must:
+
+- compose only the installed public SDK surface, with no SDK private imports,
+  copied Gateway runtime, or compatibility shim;
+- retain downstream configuration, credentials, authorization, product
+  commands, presentation, branding, and launch policy at the product layer;
+- delete or bypass the duplicated IM-to-Agent bridge path in the experimental
+  composition rather than running two authorities;
+- prove explicit Application/Project/Thread selection, ordinary input and
+  authoritative output, restart behavior, and applicable request/media paths;
+- run its repository-native tests plus at least one real public-path vertical
+  scenario; and
+- record any generic SDK defect back in the SDK, fix and re-review the SDK
+  candidate, then rerun all affected downstream scenarios.
+
+The experimental branches are not merged to downstream default branches as
+part of SDK automation without separate human approval. If a downstream
+checkout is not attached to a real Git repository, repository provenance must
+be resolved before creating its branch/worktree; automation must not silently
+initialize or invent an upstream.
+
 ## Conformance ledger
 
 Every vertical implementation PR updates this table and adds the named public
@@ -347,6 +377,7 @@ clean-wheel executions both pass.
 | media/artifact boundaries | trust, bounds, consumer-owned bytes/cleanup | existing evidence requires integration |
 | diagnostics and graceful shutdown | redaction, finite cleanup, late callback rejection | partial existing evidence |
 | installed-wheel usability | same executable specification from clean wheel | missing |
+| downstream experimental rewrites | IMCodex, IMT3, IMZen isolated worktrees on exact SDK candidate | final acceptance only |
 
 No pre-v1 test name, module boundary, or passing count is itself acceptance
 evidence. Evidence is retained only when it proves the semantics in
