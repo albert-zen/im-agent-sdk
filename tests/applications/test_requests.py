@@ -52,6 +52,7 @@ class ApplicationRequestTests(unittest.TestCase):
             "ApprovalResponseShape",
             "InteractiveRequest",
             "InteractiveRequestKind",
+            "MAX_INTERACTIVE_REQUEST_ANSWER_LENGTH",
             "MAX_INTERACTIVE_REQUEST_CHOICES",
             "MAX_INTERACTIVE_REQUEST_QUESTIONS",
             "RequestChoice",
@@ -73,6 +74,7 @@ class ApplicationRequestTests(unittest.TestCase):
             "validate_request_ref",
             "validate_request_resolution",
             "validate_request_response",
+            "validate_request_response_admission",
             "validate_request_response_shape",
         ):
             with self.subTest(name=name):
@@ -210,6 +212,30 @@ class ApplicationRequestTests(unittest.TestCase):
                 )
             )
 
+        for min_answers, max_answers in (
+            (False, 1),
+            (0, True),
+            (0.0, 1),
+            (0, 1.0),
+        ):
+            with self.subTest(min_answers=min_answers, max_answers=max_answers):
+                with self.assertRaisesRegex(ContractViolation, "answers must be"):
+                    requests.validate_interactive_request(
+                        requests.UserInputRequest(
+                            request_ref=self.request_ref,
+                            turn_ref=contract.TurnRef(self.thread, "turn-1"),
+                            questions=(
+                                requests.UserInputQuestion(
+                                    question_id="typed-cardinality",
+                                    prompt="Typed cardinality",
+                                    allows_other=True,
+                                    min_answers=min_answers,  # type: ignore[arg-type]
+                                    max_answers=max_answers,  # type: ignore[arg-type]
+                                ),
+                            ),
+                        )
+                    )
+
     def test_response_shape_derivation_and_validation_preserve_errors(self) -> None:
         request = self._approval()
         shape = requests.derive_request_response_shape(request)
@@ -260,6 +286,87 @@ class ApplicationRequestTests(unittest.TestCase):
                 requests.UserInputResponse({"environment": ("staging", "production")}),
                 user_shape,
             )
+
+    def test_user_input_response_admission_is_bounded_before_routing(self) -> None:
+        boundary_questions = requests.UserInputResponse(
+            {
+                f"question-{index}": ("answer",)
+                for index in range(requests.MAX_INTERACTIVE_REQUEST_QUESTIONS)
+            }
+        )
+        boundary_answers = requests.UserInputResponse(
+            {
+                "question": tuple(
+                    f"answer-{index}" for index in range(requests.MAX_INTERACTIVE_REQUEST_CHOICES)
+                )
+            }
+        )
+        boundary_length = requests.UserInputResponse(
+            {"question": ("x" * requests.MAX_INTERACTIVE_REQUEST_ANSWER_LENGTH,)}
+        )
+        for response in (boundary_questions, boundary_answers, boundary_length):
+            requests.validate_request_response_admission(response)
+
+        invalid = (
+            requests.UserInputResponse(
+                {
+                    f"question-{index}": ("answer",)
+                    for index in range(requests.MAX_INTERACTIVE_REQUEST_QUESTIONS + 1)
+                }
+            ),
+            requests.UserInputResponse(
+                {
+                    "question": tuple(
+                        f"answer-{index}"
+                        for index in range(requests.MAX_INTERACTIVE_REQUEST_CHOICES + 1)
+                    )
+                }
+            ),
+            requests.UserInputResponse(
+                {"question": ("x" * (requests.MAX_INTERACTIVE_REQUEST_ANSWER_LENGTH + 1),)}
+            ),
+        )
+        for response in invalid:
+            with self.subTest(response=response):
+                with self.assertRaises(ContractViolation):
+                    requests.validate_request_response_admission(response)
+
+        with self.assertRaisesRegex(ContractViolation, "response limit"):
+            requests.validate_request_response_shape(
+                requests.UserInputResponseShape(
+                    (
+                        requests.UserInputQuestionShape(
+                            question_id="question",
+                            choice_ids=(),
+                            allows_other=True,
+                            min_answers=1,
+                            max_answers=requests.MAX_INTERACTIVE_REQUEST_CHOICES + 1,
+                        ),
+                    )
+                )
+            )
+
+        for min_answers, max_answers in (
+            (False, 1),
+            (0, True),
+            (0.0, 1),
+            (0, 1.0),
+        ):
+            with self.subTest(min_answers=min_answers, max_answers=max_answers):
+                with self.assertRaisesRegex(ContractViolation, "answers must be"):
+                    requests.validate_request_response_shape(
+                        requests.UserInputResponseShape(
+                            (
+                                requests.UserInputQuestionShape(
+                                    question_id="typed-cardinality",
+                                    choice_ids=(),
+                                    allows_other=True,
+                                    min_answers=min_answers,  # type: ignore[arg-type]
+                                    max_answers=max_answers,  # type: ignore[arg-type]
+                                ),
+                            )
+                        )
+                    )
 
     def test_request_resolution_and_native_error_codes_remain_stable(self) -> None:
         requests.validate_request_resolution(

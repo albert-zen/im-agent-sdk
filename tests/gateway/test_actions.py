@@ -4,7 +4,7 @@ import inspect
 import tempfile
 import unittest
 from collections.abc import Callable, Mapping
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, get_args, get_type_hints
@@ -13,10 +13,23 @@ from unittest.mock import patch
 import imagent
 import imagent.gateway as gateway_facade
 import imagent.gateway.actions as actions_owner
-from imagent.applications.capabilities import ProjectMode
-from imagent.applications.contract import ApplicationSummary, ProjectRef, ThreadRef
-from imagent.applications.operations import ApplicationOperation, CreateThread
+from imagent.applications.capabilities import ProjectMode, SupportLevel
+from imagent.applications.contract import (
+    ApplicationRef,
+    ApplicationSummary,
+    ProjectRef,
+    ThreadRef,
+)
+from imagent.applications.operations import (
+    ApplicationOperation,
+    ApplicationOperationFailed,
+    CreateThread,
+    ThreadCreated,
+)
 from imagent.applications.requests import (
+    MAX_INTERACTIVE_REQUEST_ANSWER_LENGTH,
+    MAX_INTERACTIVE_REQUEST_CHOICES,
+    MAX_INTERACTIVE_REQUEST_QUESTIONS,
     ApprovalResponse,
     RequestRef,
     RequestResponse,
@@ -52,9 +65,13 @@ from imagent.gateway.persistence.state_contracts import ConversationBinding
 from imagent.gateway.persistence.store import GatewayStore
 from imagent.gateway.routing.operations import _MAX_APPLICATION_LIST_ITEMS
 from imagent.interaction.controllers import CommandInvocation, CommandRegistry, CommandResult
-from imagent.interaction.media import AttachmentContent, AttachmentHandle
+from imagent.interaction.media import (
+    AttachmentContent,
+    AttachmentHandle,
+    AttachmentSourceKind,
+)
 from imagent.interaction.messages import ConversationRef, InboundMessage, TextContent
-from imagent.interaction.operations import ContractViolation
+from imagent.interaction.operations import ContractError, ContractViolation, OperationErrorCode
 from imagent.testing import FakeAgentApplicationAdapter
 
 
@@ -68,6 +85,7 @@ class _Runtime:
         self.reject_request = False
         self.wrong_request_result = False
         self.binding_reads = 0
+        self.forced_operation_error: OperationErrorCode | None = None
         self.application_summaries: tuple[ApplicationSummary, ...] = (self.application.summary,)
 
     def list_applications(self):
@@ -75,6 +93,16 @@ class _Runtime:
 
     async def execute_application(self, operation: ApplicationOperation):
         self.operations.append(operation)
+        if self.forced_operation_error is not None:
+            return ApplicationOperationFailed(
+                operation_id=operation.operation_id,
+                type=operation.type,
+                completed_at=datetime.now(UTC),
+                error=ContractError(
+                    code=self.forced_operation_error.value,
+                    message="forced preflight failure",
+                ),
+            )
         return await self.application.execute(operation)
 
     async def reconcile_application(self, operation: ApplicationOperation):
@@ -83,8 +111,7 @@ class _Runtime:
 
     async def get_binding(self, conversation_ref: ConversationRef):
         self.binding_reads += 1
-        if self.binding is not None and self.binding.conversation_ref != conversation_ref:
-            raise AssertionError("ConversationActions substituted its Conversation")
+        del conversation_ref
         return self.binding
 
     async def authorize_request_response(
@@ -128,6 +155,7 @@ class _Runtime:
 class _StrictEffects:
     def __init__(self) -> None:
         self.store_requests: list[StoreMutationRequest] = []
+        self.store_outcomes: dict[str, ActionOutcome] = {}
         self.native_requests: list[NativeMutationRequest] = []
         self.workflow_requests: list[CreateBindingWorkflowRequest] = []
         self.partial_workflow = False
@@ -135,8 +163,22 @@ class _StrictEffects:
         self.before_native: Callable[[], None] | None = None
         self.native_outcomes: dict[str, ActionOutcome] = {}
 
-    async def execute_store_mutation(self, request: StoreMutationRequest) -> ActionOutcome:
+    async def execute_store_mutation(
+        self,
+        request: StoreMutationRequest,
+        *,
+        preflight=None,
+    ) -> ActionOutcome:
         self.store_requests.append(request)
+        replay = self.store_outcomes.get(request.fingerprint.action_key)
+        if replay is not None:
+            return replay
+        if preflight is not None:
+            error = await preflight()
+            if error is not None:
+                outcome: ActionOutcome = Failed(error)
+                self.store_outcomes[request.fingerprint.action_key] = outcome
+                return outcome
         plan = request.plan
         reference = None
         conversation_ref = plan.conversation_ref if plan.binding_clear is not None else None
@@ -146,7 +188,7 @@ class _StrictEffects:
             selected = target.thread_ref or target.project_ref or target.application_ref
             if selected is not None:
                 reference = StableReference.from_value(selected)
-        return Succeeded(
+        outcome = Succeeded(
             EffectValue(
                 reference=reference,
                 conversation_ref=conversation_ref,
@@ -158,6 +200,8 @@ class _StrictEffects:
                 ),
             )
         )
+        self.store_outcomes[request.fingerprint.action_key] = outcome
+        return outcome
 
     async def execute_native_mutation(
         self,
@@ -195,8 +239,12 @@ class _StrictEffects:
         preflight=None,
         reconcile=None,
     ) -> ActionOutcome:
-        del preflight, reconcile
+        del reconcile
         self.workflow_requests.append(request)
+        if preflight is not None:
+            error = await preflight()
+            if error is not None:
+                return Failed(error)
         try:
             created = await invoke("phase-native-create")
         except Exception:
@@ -228,6 +276,35 @@ class _OversizedMetadata(Mapping[str, object]):
 
     def __len__(self) -> int:
         return 65
+
+
+class _OversizedAnswers(Mapping[str, tuple[str, ...]]):
+    """Prove the question bound is checked before answers are traversed."""
+
+    def __getitem__(self, key: str) -> tuple[str, ...]:
+        raise AssertionError(f"oversized answers were read at {key!r}")
+
+    def __iter__(self):
+        raise AssertionError("oversized answers were iterated before rejection")
+
+    def __len__(self) -> int:
+        return 33
+
+
+async def _seed_thread(
+    runtime: _Runtime,
+    *,
+    operation_id: str = "seed-thread",
+) -> ThreadRef:
+    operation = CreateThread(
+        operation_id=operation_id,
+        application_ref=runtime.application.summary.ref,
+        project_ref=runtime.application.default_project_ref,
+        created_at=datetime.now(UTC),
+    )
+    result = await runtime.application.execute(operation)
+    assert isinstance(result, ThreadCreated)
+    return result.thread.ref
 
 
 def _contains_any(value: object) -> bool:
@@ -311,6 +388,25 @@ class ScopedActionSurfaceTests(unittest.IsolatedAsyncioTestCase):
         )
         with self.assertRaisesRegex(ContractViolation, "kind"):
             await self.actions.get_application(self.application_ref)
+
+    async def test_binding_reads_validate_complete_frozen_conversation_scope(self) -> None:
+        self.runtime.binding = ConversationBinding(
+            conversation_ref=ConversationRef("channel-b", "conversation-b"),
+            application_ref=self.application_ref,
+            generation=1,
+            updated_at=datetime.now(UTC),
+        )
+        with self.assertRaisesRegex(ContractViolation, "another Conversation"):
+            await self.actions.get_binding()
+
+        self.runtime.binding = ConversationBinding(
+            conversation_ref=self.conversation,
+            application_ref=ApplicationRef(""),
+            generation=1,
+            updated_at=datetime.now(UTC),
+        )
+        with self.assertRaisesRegex(ContractViolation, "application_instance_id"):
+            await self.actions.get_binding()
 
     def test_surfaces_are_frozen_scopes_and_have_no_authority_escape(self) -> None:
         with self.assertRaises(TypeError):
@@ -401,7 +497,7 @@ class ScopedActionSurfaceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(self.runtime.binding)
 
     async def test_store_actions_are_scoped_and_use_generation_vocabulary(self) -> None:
-        thread = ThreadRef(ProjectRef(self.application_ref.application_instance_id, "p1"), "t1")
+        thread = await _seed_thread(self.runtime)
         result = await self.actions.bind_thread(
             thread,
             expected_generation=9,
@@ -495,7 +591,7 @@ class ScopedActionSurfaceTests(unittest.IsolatedAsyncioTestCase):
         request = self.effects.workflow_requests[0]
         self.assertIs(request.kind, CreateBindingWorkflowKind.CREATE_AND_BIND_THREAD)
         self.assertEqual(request.conversation_ref, self.conversation)
-        self.assertEqual(len(self.runtime.operations), 1)
+        self.assertEqual(len(self.runtime.operations), 2)
 
         self.effects.unknown_workflow = True
         unknown = await self.actions.create_and_select_project(
@@ -549,9 +645,225 @@ class ScopedActionSurfaceTests(unittest.IsolatedAsyncioTestCase):
                     action_id="oversized-workflow-cwd",
                 )
 
+    async def test_native_and_workflow_preflights_enforce_capability_honesty(self) -> None:
+        direct = self.actions._application(self.application_ref)
+        thread = await _seed_thread(self.runtime)
+        base = self.runtime.application.summary
+
+        project_unsupported = replace(
+            base,
+            capabilities=replace(
+                base.capabilities,
+                projects=replace(
+                    base.capabilities.projects,
+                    creation=SupportLevel.UNSUPPORTED,
+                ),
+            ),
+        )
+        self.runtime.application_summaries = (project_unsupported,)
+        project_result = await direct.create_project(
+            cwd="/unsupported",
+            action_id="unsupported-project",
+        )
+
+        thread_unsupported = replace(
+            base,
+            capabilities=replace(
+                base.capabilities,
+                threads=replace(
+                    base.capabilities.threads,
+                    creation=SupportLevel.UNSUPPORTED,
+                ),
+            ),
+        )
+        self.runtime.application_summaries = (thread_unsupported,)
+        thread_result = await direct.create_thread(
+            thread.project_ref,
+            action_id="unsupported-thread",
+        )
+
+        self.runtime.application_summaries = (base,)
+        attachment_result = await direct.create_thread(
+            thread.project_ref,
+            action_id="unsupported-attachment",
+            initial_context=(
+                AttachmentContent(
+                    attachment_id="attachment-unsupported",
+                    media_type="application/octet-stream",
+                    source=AttachmentHandle("handle-unsupported"),
+                ),
+            ),
+        )
+
+        runtime_unsupported = replace(
+            base,
+            capabilities=replace(
+                base.capabilities,
+                runtime=replace(
+                    base.capabilities.runtime,
+                    native_thread_activation=SupportLevel.UNSUPPORTED,
+                ),
+            ),
+        )
+        self.runtime.application_summaries = (runtime_unsupported,)
+        runtime_result = await direct.activate_native_thread(
+            thread,
+            action_id="unsupported-runtime",
+        )
+
+        self.runtime.application_summaries = (project_unsupported,)
+        project_workflow = await self.actions.create_and_select_project(
+            self.application_ref,
+            cwd="/unsupported-workflow",
+            action_id="unsupported-project-workflow",
+        )
+        self.runtime.application_summaries = (thread_unsupported,)
+        thread_workflow = await self.actions.create_and_bind_thread(
+            thread.project_ref,
+            action_id="unsupported-thread-workflow",
+        )
+
+        for result in (
+            project_result,
+            thread_result,
+            attachment_result,
+            runtime_result,
+            project_workflow,
+            thread_workflow,
+        ):
+            with self.subTest(result=result):
+                self.assertIsInstance(result, Failed)
+                assert isinstance(result, Failed)
+                self.assertEqual(result.error.code, ActionErrorCode.UNSUPPORTED)
+        self.assertEqual(self.runtime.operations, [])
+
+    async def test_resource_preflight_preserves_stale_error_classification(self) -> None:
+        self.runtime.forced_operation_error = OperationErrorCode.REQUEST_STALE
+        result = await self.actions.select_project(
+            self.runtime.application.default_project_ref,
+            action_id="stale-project-preflight",
+        )
+        self.assertIsInstance(result, Failed)
+        assert isinstance(result, Failed)
+        self.assertEqual(result.error.code, ActionErrorCode.NATIVE_REJECTED)
+        self.assertEqual(
+            result.error.operation_error_code,
+            OperationErrorCode.REQUEST_STALE,
+        )
+        self.assertEqual(len(self.effects.store_requests), 1)
+        preflight_operations = len(self.runtime.operations)
+        self.runtime.forced_operation_error = None
+        replay = await self.actions.select_project(
+            self.runtime.application.default_project_ref,
+            action_id="stale-project-preflight",
+        )
+        self.assertEqual(replay, result)
+        self.assertEqual(len(self.runtime.operations), preflight_operations)
+
+    async def test_route_producers_require_streaming_capability(self) -> None:
+        thread = await _seed_thread(self.runtime)
+        base = self.runtime.application.summary
+        self.runtime.application_summaries = (
+            replace(
+                base,
+                capabilities=replace(
+                    base.capabilities,
+                    runtime=replace(
+                        base.capabilities.runtime,
+                        streaming=SupportLevel.UNSUPPORTED,
+                    ),
+                ),
+            ),
+        )
+        results = (
+            await self.actions.observe_thread(
+                thread,
+                action_id="unsupported-stream-observe",
+            ),
+            await self.actions.bind_thread(
+                thread,
+                action_id="unsupported-stream-bind",
+            ),
+            await self.actions.create_and_bind_thread(
+                thread.project_ref,
+                action_id="unsupported-stream-workflow",
+            ),
+        )
+        for result in results:
+            self.assertEqual(
+                result,
+                Failed(
+                    ActionError(
+                        ActionErrorCode.UNSUPPORTED,
+                        OperationErrorCode.UNSUPPORTED,
+                    )
+                ),
+            )
+        self.assertEqual(self.runtime.operations, [])
+
+        non_foreground_effects = _StrictEffects()
+        non_foreground = _new_conversation_actions(
+            self.conversation,
+            actor="actor-a",
+            gateway_id="gateway-a",
+            runtime=self.runtime,
+            effects=non_foreground_effects,
+            foreground_route=False,
+        )
+        bound = await non_foreground.bind_thread(
+            thread,
+            action_id="non-foreground-bind-without-streaming",
+        )
+        self.assertIsInstance(bound, Succeeded)
+
+    async def test_request_response_bounds_precede_snapshot_and_executor_admission(self) -> None:
+        request_ref = RequestRef(self.application_ref, "request-bounds")
+        with self.assertRaisesRegex(ContractViolation, "questions exceed"):
+            await self.actions.respond_request(
+                request_ref,
+                UserInputResponse(_OversizedAnswers()),
+                action_id="response-too-many-questions",
+            )
+        with self.assertRaisesRegex(ContractViolation, "maximum length"):
+            await self.actions.respond_request(
+                request_ref,
+                UserInputResponse(
+                    {"question": ("x" * (MAX_INTERACTIVE_REQUEST_ANSWER_LENGTH + 1),)}
+                ),
+                action_id="response-answer-too-long",
+            )
+        self.assertEqual(self.effects.native_requests, [])
+        self.assertEqual(self.runtime.authorized_requests, [])
+        self.assertEqual(self.runtime.request_calls, [])
+
+        boundary_responses = (
+            UserInputResponse(
+                {
+                    f"question-{index}": ("answer",)
+                    for index in range(MAX_INTERACTIVE_REQUEST_QUESTIONS)
+                }
+            ),
+            UserInputResponse(
+                {
+                    "question": tuple(
+                        f"answer-{index}" for index in range(MAX_INTERACTIVE_REQUEST_CHOICES)
+                    )
+                }
+            ),
+            UserInputResponse({"question": ("x" * MAX_INTERACTIVE_REQUEST_ANSWER_LENGTH,)}),
+        )
+        for index, response in enumerate(boundary_responses):
+            result = await self.actions.respond_request(
+                request_ref,
+                response,
+                action_id=f"response-boundary-{index}",
+            )
+            self.assertIsInstance(result, Succeeded)
+
     async def test_route_only_actions_name_scope_without_a_synthetic_binding(self) -> None:
-        thread = ThreadRef(ProjectRef(self.application_ref.application_instance_id, "p1"), "t1")
-        await self.actions.observe_thread(thread, action_id="observe-1")
+        thread = await _seed_thread(self.runtime)
+        observed = await self.actions.observe_thread(thread, action_id="observe-1")
+        self.assertIsInstance(observed, Succeeded)
         await self.actions.clear_observation(thread, action_id="clear-observation-1")
         for request in self.effects.store_requests:
             with self.subTest(action_kind=request.fingerprint.action_kind):
@@ -646,11 +958,7 @@ class ScopedActionStoreIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 )
                 try:
                     runtime = _Runtime()
-                    application_ref = runtime.application.summary.ref
-                    thread = ThreadRef(
-                        ProjectRef(application_ref.application_instance_id, "project"),
-                        "thread",
-                    )
+                    thread = await _seed_thread(runtime)
                     conversation = ConversationRef("channel", "foreground")
                     actions = _new_conversation_actions(
                         conversation,
@@ -752,6 +1060,203 @@ class ScopedActionStoreIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     await session.release_runtime()
                     await store.close()
 
+    async def test_missing_resources_never_mutate_real_store_state(self) -> None:
+        for factory in self._factories():
+            store = factory()
+            with self.subTest(store=type(store).__name__):
+                session = await store.acquire_runtime(
+                    gateway_id="gateway-resource-preflight",
+                    owner_token="owner-resource-preflight",
+                    lease_duration_seconds=30,
+                )
+                try:
+                    runtime = _Runtime()
+                    thread = await _seed_thread(runtime)
+                    conversation = ConversationRef("channel", "resource-preflight")
+                    actions = _new_conversation_actions(
+                        conversation,
+                        actor="actor",
+                        gateway_id="gateway-resource-preflight",
+                        runtime=runtime,
+                        effects=StoreBackedGatewayEffectExecutor(session),
+                        foreground_route=False,
+                    )
+                    bound = await actions.bind_thread(thread, action_id="bind-existing")
+                    self.assertIsInstance(bound, Succeeded)
+                    before = await session.get(conversation)
+                    assert before is not None
+
+                    missing_application = ApplicationRef("missing-application")
+                    missing_project = ProjectRef(
+                        runtime.application.summary.ref.application_instance_id,
+                        "missing-project",
+                    )
+                    missing_thread = ThreadRef(
+                        runtime.application.default_project_ref,
+                        "missing-thread",
+                    )
+                    foreign_project = ProjectRef("foreign-application", "foreign-project")
+                    foreign_thread = ThreadRef(foreign_project, "foreign-thread")
+                    results = (
+                        await actions.select_application(
+                            missing_application,
+                            action_id="select-missing-application",
+                        ),
+                        await actions.select_project(
+                            missing_project,
+                            action_id="select-missing-project",
+                        ),
+                        await actions.bind_thread(
+                            missing_thread,
+                            action_id="bind-missing-thread",
+                        ),
+                        await actions.observe_thread(
+                            missing_thread,
+                            action_id="observe-missing-thread",
+                        ),
+                        await actions.select_project(
+                            foreign_project,
+                            action_id="select-foreign-project",
+                        ),
+                        await actions.bind_thread(
+                            foreign_thread,
+                            action_id="bind-foreign-thread",
+                        ),
+                        await actions.observe_thread(
+                            foreign_thread,
+                            action_id="observe-foreign-thread",
+                        ),
+                    )
+                    for result in results:
+                        self.assertIsInstance(result, Failed)
+                        assert isinstance(result, Failed)
+                        self.assertEqual(
+                            result.error.operation_error_code,
+                            OperationErrorCode.NOT_FOUND,
+                        )
+                    self.assertEqual(await session.get(conversation), before)
+                    self.assertEqual(
+                        await session.list_projection_routes(missing_thread),
+                        (),
+                    )
+
+                    operation_count = len(runtime.operations)
+                    runtime.application_summaries = ()
+                    replayed_binding = await actions.bind_thread(
+                        thread,
+                        action_id="bind-existing",
+                    )
+                    self.assertEqual(replayed_binding, bound)
+                    self.assertEqual(len(runtime.operations), operation_count)
+
+                    runtime.application_summaries = (
+                        replace(runtime.application.summary, ref=missing_application),
+                    )
+                    replayed_missing = await actions.select_application(
+                        missing_application,
+                        action_id="select-missing-application",
+                    )
+                    self.assertEqual(replayed_missing, results[0])
+                    self.assertEqual(await session.get(conversation), before)
+                finally:
+                    await session.release_runtime()
+                    await store.close()
+
+    async def test_unsupported_streaming_never_creates_route_or_native_thread(self) -> None:
+        for factory in self._factories():
+            store = factory()
+            with self.subTest(store=type(store).__name__):
+                session = await store.acquire_runtime(
+                    gateway_id="gateway-streaming-preflight",
+                    owner_token="owner-streaming-preflight",
+                    lease_duration_seconds=30,
+                )
+                try:
+                    runtime = _Runtime()
+                    thread = await _seed_thread(runtime)
+                    base = runtime.application.summary
+                    runtime.application_summaries = (
+                        replace(
+                            base,
+                            capabilities=replace(
+                                base.capabilities,
+                                runtime=replace(
+                                    base.capabilities.runtime,
+                                    streaming=SupportLevel.UNSUPPORTED,
+                                ),
+                            ),
+                        ),
+                    )
+                    conversation = ConversationRef("channel", "streaming-preflight")
+                    actions = _new_conversation_actions(
+                        conversation,
+                        actor="actor",
+                        gateway_id="gateway-streaming-preflight",
+                        runtime=runtime,
+                        effects=StoreBackedGatewayEffectExecutor(session),
+                        foreground_route=True,
+                    )
+                    results = (
+                        await actions.observe_thread(
+                            thread,
+                            action_id="observe-without-streaming",
+                        ),
+                        await actions.bind_thread(
+                            thread,
+                            action_id="bind-without-streaming",
+                        ),
+                        await actions.create_and_bind_thread(
+                            thread.project_ref,
+                            action_id="create-bind-without-streaming",
+                        ),
+                    )
+                    self.assertTrue(all(isinstance(result, Failed) for result in results))
+                    self.assertEqual(runtime.operations, [])
+                    self.assertIsNone(await session.get(conversation))
+                    self.assertEqual(await session.list_projection_routes(thread), ())
+                finally:
+                    await session.release_runtime()
+                    await store.close()
+
+    async def test_native_terminal_replay_precedes_changed_capability_preflight(self) -> None:
+        for factory in self._factories():
+            store = factory()
+            with self.subTest(store=type(store).__name__):
+                session = await store.acquire_runtime(
+                    gateway_id="gateway-native-preflight-replay",
+                    owner_token="owner-native-preflight-replay",
+                    lease_duration_seconds=30,
+                )
+                try:
+                    runtime = _Runtime()
+                    actions = _new_conversation_actions(
+                        ConversationRef("channel", "native-preflight-replay"),
+                        actor="actor",
+                        gateway_id="gateway-native-preflight-replay",
+                        runtime=runtime,
+                        effects=StoreBackedGatewayEffectExecutor(session),
+                        foreground_route=False,
+                    )
+                    first = await actions.create_project(
+                        runtime.application.summary.ref,
+                        cwd="/replay-project",
+                        action_id="create-replay-project",
+                    )
+                    self.assertIsInstance(first, Succeeded)
+                    self.assertEqual(len(runtime.operations), 1)
+
+                    runtime.application_summaries = ()
+                    replay = await actions.create_project(
+                        runtime.application.summary.ref,
+                        cwd="/replay-project",
+                        action_id="create-replay-project",
+                    )
+                    self.assertEqual(replay, first)
+                    self.assertEqual(len(runtime.operations), 1)
+                finally:
+                    await session.release_runtime()
+                    await store.close()
+
     async def test_request_terminal_receipt_replays_before_reauthorization(self) -> None:
         request_ref = RequestRef(self.application_ref, "request-replay")
         first = await self.actions.respond_request(
@@ -791,7 +1296,14 @@ class ScopedActionStoreIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
         direct = self.actions._application(self.application_ref)
         self.effects.before_native = mutate_inputs
-        project = ProjectRef(self.application_ref.application_instance_id, "p1")
+        capabilities = replace(
+            self.runtime.application.summary.capabilities,
+            attachment_sources=(AttachmentSourceKind.ATTACHMENT_HANDLE,),
+        )
+        self.runtime.application_summaries = (
+            replace(self.runtime.application.summary, capabilities=capabilities),
+        )
+        project = self.runtime.application.default_project_ref
         await direct.create_thread(
             project,
             action_id="snapshot-thread",

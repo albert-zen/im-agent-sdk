@@ -250,6 +250,50 @@ class MemoryGatewayStore:
             self._check_fingerprint_locked(existing, fingerprint)
             return existing
 
+    async def _get_store_mutation_receipt(
+        self,
+        fence: RuntimeLease,
+        fingerprint: ActionFingerprint,
+    ) -> EffectReceipt | None:
+        validate_action_fingerprint(fingerprint)
+        async with self._lock:
+            self._assert_fence_locked(fence)
+            return self._existing_receipt_locked(
+                fingerprint,
+                category=EffectCategory.GATEWAY,
+            )
+
+    async def _commit_store_preflight_failure(
+        self,
+        fence: RuntimeLease,
+        fingerprint: ActionFingerprint,
+        *,
+        error: ActionError,
+    ) -> EffectReceipt:
+        validate_action_fingerprint(fingerprint)
+        validate_action_error(error)
+        async with self._lock:
+            self._assert_fence_locked(fence)
+            existing = self._existing_receipt_locked(
+                fingerprint,
+                category=EffectCategory.GATEWAY,
+            )
+            if existing is not None:
+                return existing
+            self._reserve_capacity_locked()
+            now = self._now_locked()
+            receipt = self._new_receipt_locked(
+                fingerprint,
+                category=EffectCategory.GATEWAY,
+                phase=EffectPhase.TERMINAL,
+                native_phase_id=None,
+                binding_generation=None,
+                outcome=Failed(error),
+                now=now,
+            )
+            self._effect_receipts[receipt.action_key] = receipt
+            return receipt
+
     async def _commit_store_mutation(
         self,
         fence: RuntimeLease,
@@ -700,6 +744,26 @@ class _MemoryGatewayStoreSession:
 
     async def get_binding_generation(self, conversation_ref: ConversationRef) -> int:
         return await self._store._get_binding_generation(conversation_ref)
+
+    async def get_store_mutation_receipt(
+        self,
+        fingerprint: ActionFingerprint,
+    ) -> EffectReceipt | None:
+        self._require_open()
+        return await self._store._get_store_mutation_receipt(self._lease, fingerprint)
+
+    async def commit_store_preflight_failure(
+        self,
+        fingerprint: ActionFingerprint,
+        *,
+        error: ActionError,
+    ) -> EffectReceipt:
+        self._require_open()
+        return await self._store._commit_store_preflight_failure(
+            self._lease,
+            fingerprint,
+            error=error,
+        )
 
     async def commit_store_mutation(self, request: StoreMutationRequest) -> EffectReceipt:
         self._require_open()

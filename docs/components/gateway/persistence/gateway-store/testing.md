@@ -21,6 +21,9 @@ prove:
 - atomic capacity reservation, fingerprint, binding/route/generation, and
   terminal store-action receipt commits, including rollback and lost
   acknowledgement replay before current-state inspection;
+- optional store preflight checks a lease-fenced terminal receipt first,
+  terminalizes rejection without bridge mutation, permits an unchanged atomic
+  mutation on success, and has exact Memory/SQLite replay parity;
 - guarded route deletion preserves a route matching the resulting bound Thread,
   deletes it once that binding is cleared or differs, and replays the earlier
   protected terminal receipt before inspecting newer state, with exact

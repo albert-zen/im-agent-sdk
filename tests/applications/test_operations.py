@@ -272,6 +272,71 @@ class ApplicationOperationTests(unittest.TestCase):
                 )
             )
 
+    def test_request_response_operation_uses_canonical_admission_bounds(self) -> None:
+        application = contract.ApplicationRef("managed-app")
+        turn_ref = contract.TurnRef(
+            contract.ThreadRef(contract.ProjectRef("managed-app", "project-1"), "thread-1"),
+            "turn-1",
+        )
+        request_ref = requests.RequestRef(application, "request-1")
+
+        def operation(response: requests.RequestResponse) -> operations.RespondRequest:
+            return operations.RespondRequest(
+                operation_id="op-request-respond",
+                application_ref=application,
+                request_ref=request_ref,
+                turn_ref=turn_ref,
+                response=response,
+                created_at=datetime.now(UTC),
+            )
+
+        boundary_responses = (
+            requests.UserInputResponse(
+                {
+                    f"question-{index}": ("answer",)
+                    for index in range(requests.MAX_INTERACTIVE_REQUEST_QUESTIONS)
+                }
+            ),
+            requests.UserInputResponse(
+                {
+                    "question": tuple(
+                        f"answer-{index}"
+                        for index in range(requests.MAX_INTERACTIVE_REQUEST_CHOICES)
+                    )
+                }
+            ),
+            requests.UserInputResponse(
+                {"question": ("x" * requests.MAX_INTERACTIVE_REQUEST_ANSWER_LENGTH,)}
+            ),
+        )
+        for response in boundary_responses:
+            with self.subTest(response=response):
+                operations.validate_application_operation(operation(response))
+
+        invalid_responses = (
+            requests.UserInputResponse(
+                {
+                    f"question-{index}": ("answer",)
+                    for index in range(requests.MAX_INTERACTIVE_REQUEST_QUESTIONS + 1)
+                }
+            ),
+            requests.UserInputResponse(
+                {
+                    "question": tuple(
+                        f"answer-{index}"
+                        for index in range(requests.MAX_INTERACTIVE_REQUEST_CHOICES + 1)
+                    )
+                }
+            ),
+            requests.UserInputResponse(
+                {"question": ("x" * (requests.MAX_INTERACTIVE_REQUEST_ANSWER_LENGTH + 1),)}
+            ),
+        )
+        for response in invalid_responses:
+            with self.subTest(response=response):
+                with self.assertRaises(ContractViolation):
+                    operations.validate_application_operation(operation(response))
+
     def test_result_validation_preserves_variant_and_error_checks(self) -> None:
         operation = operations.ListThreads(
             operation_id="op-list",
@@ -309,6 +374,52 @@ class ApplicationOperationTests(unittest.TestCase):
                     error=ContractError(code="thread_not_found", message=""),
                 ),
             )
+
+    def test_list_results_require_immutable_bounded_page_items(self) -> None:
+        operation = operations.ListProjects(
+            operation_id="op-list-page-contract",
+            application_ref=contract.ApplicationRef("managed-app"),
+            created_at=datetime.now(UTC),
+        )
+        mutable_items = [
+            contract.ProjectSummary(
+                ref=contract.ProjectRef("managed-app", "project-1"),
+                display_name="Project 1",
+            )
+        ]
+        mutable_result = operations.ProjectsListed(
+            operation_id=operation.operation_id,
+            completed_at=datetime.now(UTC),
+            projects=contract.Page(mutable_items),  # type: ignore[arg-type]
+        )
+        with self.assertRaisesRegex(ContractViolation, "items must be a tuple"):
+            operations.validate_application_operation_result(operation, mutable_result)
+
+        mutable_items.extend(
+            contract.ProjectSummary(
+                ref=contract.ProjectRef("managed-app", f"project-{index}"),
+                display_name=f"Project {index}",
+            )
+            for index in range(2, operations.MAX_LIST_PAGE_ITEMS + 2)
+        )
+        with self.assertRaisesRegex(ContractViolation, "items must be a tuple"):
+            operations.validate_application_operation_result(operation, mutable_result)
+
+        oversized_result = operations.ProjectsListed(
+            operation_id=operation.operation_id,
+            completed_at=datetime.now(UTC),
+            projects=contract.Page(
+                tuple(
+                    contract.ProjectSummary(
+                        ref=contract.ProjectRef("managed-app", f"project-{index}"),
+                        display_name=f"Project {index}",
+                    )
+                    for index in range(operations.MAX_LIST_PAGE_ITEMS + 1)
+                )
+            ),
+        )
+        with self.assertRaisesRegex(ContractViolation, "at most 1000 items"):
+            operations.validate_application_operation_result(operation, oversized_result)
 
     def test_history_result_rejects_foreign_nested_turns_and_messages(self) -> None:
         outer_thread = contract.ThreadRef(

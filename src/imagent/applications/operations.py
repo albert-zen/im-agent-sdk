@@ -15,7 +15,12 @@ from ..interaction.operations import (
     OperationResultStatus,
     require_identifier,
 )
-from .requests import ApprovalResponse, UserInputResponse, validate_request_ref
+from .requests import (
+    ApprovalResponse,
+    UserInputResponse,
+    validate_request_ref,
+    validate_request_response_admission,
+)
 
 MAX_PROJECT_CWD_LENGTH = 4096
 MAX_PROJECT_DISPLAY_NAME_LENGTH = 128
@@ -435,6 +440,7 @@ def validate_application_operation(operation: ApplicationOperation) -> None:
         thread_ref = operation.thread_ref
     elif isinstance(operation, RespondRequest):
         validate_request_ref(operation.request_ref)
+        validate_request_response_admission(operation.response)
         if operation.request_ref.application_ref != operation.application_ref:
             raise ContractViolation("request belongs to a different application")
         validate_turn_ref(operation.turn_ref)
@@ -675,6 +681,8 @@ def _require_optional_bounded_text(
 
 
 def _validate_page(value: Page[TPage]) -> None:
+    if not isinstance(value.items, tuple):
+        raise ContractViolation("list result items must be a tuple")
     if len(value.items) > MAX_LIST_PAGE_ITEMS:
         raise ContractViolation(f"list result must contain at most {MAX_LIST_PAGE_ITEMS} items")
     _require_optional_bounded_text(

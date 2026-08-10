@@ -385,6 +385,62 @@ class SQLiteGatewayStore:
         _check_receipt_fingerprint(receipt, fingerprint)
         return receipt
 
+    async def _get_store_mutation_receipt(
+        self,
+        fence: RuntimeLease,
+        fingerprint: ActionFingerprint,
+    ) -> EffectReceipt | None:
+        validate_action_fingerprint(fingerprint)
+        async with self._state._lock:
+            connection = self._state._connection
+            self._assert_fence_sql(connection, fence)
+            receipt = _read_receipt(connection, fingerprint)
+            if receipt is not None and receipt.category is not EffectCategory.GATEWAY:
+                raise EffectReceiptConflict("effect category changed")
+            return receipt
+
+    async def _commit_store_preflight_failure(
+        self,
+        fence: RuntimeLease,
+        fingerprint: ActionFingerprint,
+        *,
+        error: ActionError,
+    ) -> EffectReceipt:
+        validate_action_fingerprint(fingerprint)
+        validate_action_error(error)
+        async with self._state._lock:
+            connection = self._state._connection
+            token = self._fence_context.set(fence)
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._assert_fence_sql(connection, fence)
+                existing = _read_receipt(connection, fingerprint)
+                if existing is not None:
+                    if existing.category is not EffectCategory.GATEWAY:
+                        raise EffectReceiptConflict("effect category changed")
+                    connection.commit()
+                    return existing
+                self._assert_receipt_capacity(connection)
+                now = _database_now(connection)
+                receipt = _new_receipt(
+                    fence.gateway_id,
+                    fingerprint,
+                    category=EffectCategory.GATEWAY,
+                    phase=EffectPhase.TERMINAL,
+                    native_phase_id=None,
+                    binding_generation=None,
+                    outcome=Failed(error),
+                    now=now,
+                )
+                _insert_receipt(connection, receipt)
+                connection.commit()
+                return receipt
+            except BaseException:
+                connection.rollback()
+                raise
+            finally:
+                self._fence_context.reset(token)
+
     async def _commit_store_mutation(
         self,
         fence: RuntimeLease,
@@ -907,6 +963,26 @@ class _SQLiteGatewayStoreSession:
 
     async def get_binding_generation(self, conversation_ref: ConversationRef) -> int:
         return await self._store._get_binding_generation(conversation_ref)
+
+    async def get_store_mutation_receipt(
+        self,
+        fingerprint: ActionFingerprint,
+    ) -> EffectReceipt | None:
+        self._require_open()
+        return await self._store._get_store_mutation_receipt(self._lease, fingerprint)
+
+    async def commit_store_preflight_failure(
+        self,
+        fingerprint: ActionFingerprint,
+        *,
+        error: ActionError,
+    ) -> EffectReceipt:
+        self._require_open()
+        return await self._store._commit_store_preflight_failure(
+            self._lease,
+            fingerprint,
+            error=error,
+        )
 
     async def commit_store_mutation(self, request: StoreMutationRequest) -> EffectReceipt:
         self._require_open()

@@ -29,7 +29,6 @@ from ...applications.operations import (
     _LegacyApplicationOperation,
 )
 from ...applications.requests import (
-    ApprovalResponse,
     InteractiveRequest,
     RequestDuplicateError,
     RequestRef,
@@ -37,11 +36,11 @@ from ...applications.requests import (
     RequestResolvedError,
     RequestResponse,
     RequestStaleError,
-    UserInputResponse,
     derive_request_response_shape,
     validate_interactive_request,
     validate_request_ref,
     validate_request_response,
+    validate_request_response_admission,
 )
 from ...interaction.controllers.request_presentation import RequestPresenter
 from ...interaction.messages import ConversationRef, OutboundMessage
@@ -49,7 +48,6 @@ from ...interaction.operations import (
     ContractError,
     ContractViolation,
     OperationErrorCode,
-    require_identifier,
 )
 from ..concurrency import KeyedLockRegistry
 from ..persistence.repository_contracts import (
@@ -122,15 +120,7 @@ class _RequestResponseRejected(RuntimeError):
 
 def _validate_respond_operation(operation: RespondToRequest) -> None:
     validate_request_ref(operation.request_ref)
-    if isinstance(operation.response, ApprovalResponse):
-        require_identifier(operation.response.choice_id, "choice_id")
-    if isinstance(operation.response, UserInputResponse):
-        if not operation.response.answers:
-            raise ContractViolation("user input response requires answers")
-        for question_id, answers in operation.response.answers.items():
-            require_identifier(question_id, "question_id")
-            if not answers or any(not answer for answer in answers):
-                raise ContractViolation("each user input question requires non-empty answers")
+    validate_request_response_admission(operation.response)
 
 
 def _validate_respond_operation_result(

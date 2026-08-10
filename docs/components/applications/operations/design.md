@@ -51,7 +51,11 @@ before deriving its fingerprint, so later caller mutation cannot change the
 native effect associated with a durable receipt.
 List queries, cursors, result cardinality, and returned cursors are also
 bounded at the operation boundary; a read cannot turn the scoped surface into
-an unbounded native enumeration.
+an unbounded native enumeration. Every returned `Page.items` value must be an
+exact tuple before count or member validation, so a list-backed page cannot be
+validated and later mutated beyond its bound.
+`RespondRequest` delegates to the canonical bounded request-response admission
+validator, preserving Python/schema parity at the native operation boundary.
 Operation result validation walks history and catch-up recursively: every
 nested `TurnRef` and `AgentMessage` must belong to the requested Thread rather
 than merely the same Application, and neither result may contain more entries

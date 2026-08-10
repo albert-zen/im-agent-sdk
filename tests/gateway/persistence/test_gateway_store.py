@@ -18,6 +18,7 @@ from imagent.applications.contract import (
 )
 from imagent.gateway.outcomes import Failed, Succeeded
 from imagent.gateway.persistence.effects import (
+    ActionError,
     ActionErrorCode,
     ActionIdentity,
     BindingClearScope,
@@ -626,6 +627,11 @@ class GatewayStoreParityTests(unittest.IsolatedAsyncioTestCase):
                 category=EffectCategory.NATIVE,
                 native_phase_id=fingerprint.phase_id("native"),
             ),
+            lambda: old.get_store_mutation_receipt(fingerprint),
+            lambda: old.commit_store_preflight_failure(
+                fingerprint,
+                error=ActionError(ActionErrorCode.UNSUPPORTED),
+            ),
         )
         for mutate in mutations:
             with self.assertRaises(StaleRuntimeFence):
@@ -657,6 +663,18 @@ class GatewayStoreParityTests(unittest.IsolatedAsyncioTestCase):
                     ConversationRef("channel", "conversation"),
                     ApplicationRef("app"),
                 )
+            )
+        fingerprint = _fingerprint(
+            "sqlite-store-preflight",
+            "conversation.select",
+            ConversationRef("channel", "conversation"),
+        )
+        with self.assertRaises(StaleRuntimeFence):
+            await old.get_store_mutation_receipt(fingerprint)
+        with self.assertRaises(StaleRuntimeFence):
+            await old.commit_store_preflight_failure(
+                fingerprint,
+                error=ActionError(ActionErrorCode.UNSUPPORTED),
             )
         await successor.release_runtime()
         await successor_store.close()

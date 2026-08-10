@@ -6,11 +6,17 @@ adapter-native and Gateway request-correlation suites remain separate,
 affected evidence rather than alternate owners.
 
 Tests prove Application-scoped request identity, bounded approval choices and
-user-input questions, typed response shape validation, explicit unsupported
+user-input questions, 64-answer and 4,096-character response limits, typed
+response shape validation, explicit unsupported
 request kinds, exact Project-scoped `TurnRef` ancestry for open and resolution
 values, and exact open/respond/resolve discriminants. Native fixture
 tests cover response wire fidelity, terminal resolution racing response
 writeback, duplicate responses, and epoch-scoped staleness after reset.
+Boundary tests accept exactly 32 questions, 64 answers, and 4,096 answer
+characters, reject one more, and use a hostile 33-question mapping to prove
+cardinality rejection precedes traversal.
+They also reject Boolean and floating-point request/response-shape
+cardinalities and prove the persisted response-shape schema rejects 65.
 
 Recovery tests must prove an adapter uses an authoritative pending-request set
 when it advertises one and otherwise emits a truthful stale projection rather

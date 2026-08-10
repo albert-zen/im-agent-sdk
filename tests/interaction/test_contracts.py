@@ -673,6 +673,28 @@ class OperationTests(unittest.TestCase):
 
 
 class VersionOneSchemaCompatibilityTests(unittest.TestCase):
+    def test_persisted_user_input_shape_has_the_runtime_answer_ceiling(self) -> None:
+        boundary = {
+            "questionId": "question",
+            "choiceIds": [],
+            "allowsOther": True,
+            "minAnswers": 0,
+            "maxAnswers": MAX_INTERACTIVE_REQUEST_CHOICES,
+        }
+        self._validate_definition(
+            "events.schema.json",
+            "UserInputQuestionShape",
+            boundary,
+        )
+        self._assert_invalid_definition(
+            "events.schema.json",
+            "UserInputQuestionShape",
+            {
+                **boundary,
+                "maxAnswers": MAX_INTERACTIVE_REQUEST_CHOICES + 1,
+            },
+        )
+
     def test_schema_resource_hierarchy_rejects_projectless_legacy_shapes(self) -> None:
         project_ref = {
             "applicationInstanceId": "codex-main",

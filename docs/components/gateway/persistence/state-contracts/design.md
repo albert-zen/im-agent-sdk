@@ -42,6 +42,9 @@ Application selection. Every Thread-bearing route, checkpoint, reply/request
 correlation, and delivery snapshot reaches the same required Project through
 `ThreadRef`; fixed/flat mode has no persistence exception. A binding may still
 be unbound, Application-only, or Project-only.
+Every present Application and Project reference is itself validated before
+those ancestry comparisons, so a structurally complete binding cannot carry an
+empty or otherwise invalid ancestor identity.
 
 A projection route is one stable Thread-to-Conversation edge. Its checkpoint
 is an opaque authoritative Agent item identity paired with its checkpoint

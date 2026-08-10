@@ -46,6 +46,7 @@ NativeEffectReconciler: TypeAlias = Callable[
     [str],
     Awaitable[KnownNativeOutcome | None],
 ]
+StoreEffectPreflight: TypeAlias = Callable[[], Awaitable[ActionError | None]]
 
 
 @runtime_checkable
@@ -55,6 +56,8 @@ class GatewayEffectExecutor(Protocol):
     async def execute_store_mutation(
         self,
         request: StoreMutationRequest,
+        *,
+        preflight: StoreEffectPreflight | None = None,
     ) -> ActionOutcome: ...
 
     async def execute_native_mutation(
@@ -85,28 +88,121 @@ class StoreBackedGatewayEffectExecutor:
     async def execute_store_mutation(
         self,
         request: StoreMutationRequest,
+        *,
+        preflight: StoreEffectPreflight | None = None,
     ) -> ActionOutcome:
         validate_store_mutation_request(request)
+        if preflight is not None:
+            replay = await self._read_store_mutation_receipt(request.fingerprint)
+            if replay is not None:
+                return replay
+            preflight_outcome = await self._run_store_preflight(
+                request.fingerprint,
+                preflight,
+            )
+            if preflight_outcome is not None:
+                return preflight_outcome
         try:
             receipt = await self._session.commit_store_mutation(request)
         except asyncio.CancelledError:
-            receipt = await _shielded_receipt_read(self._session, request.fingerprint)
-            if receipt is not None and receipt.phase is EffectPhase.TERMINAL:
-                return _required_outcome(receipt)
+            recovered = await self._recover_store_mutation_outcome(request.fingerprint)
+            if recovered is not None:
+                return recovered
             raise
         except GatewayStoreError as error:
-            receipt = await _shielded_receipt_read(self._session, request.fingerprint)
-            if receipt is not None and receipt.phase is EffectPhase.TERMINAL:
-                return _required_outcome(receipt)
+            recovered = await self._recover_store_mutation_outcome(request.fingerprint)
+            if recovered is not None:
+                return recovered
             return Failed(ActionError(_store_error_code(error)))
         except Exception:
-            receipt = await _shielded_receipt_read(self._session, request.fingerprint)
-            if receipt is not None and receipt.phase is EffectPhase.TERMINAL:
-                return _required_outcome(receipt)
+            recovered = await self._recover_store_mutation_outcome(request.fingerprint)
+            if recovered is not None:
+                return recovered
             return Failed(ActionError(ActionErrorCode.STORE_FAILURE))
         if receipt.outcome is None:
             raise RuntimeError("terminal store mutation receipt has no outcome")
         return receipt.outcome
+
+    async def _read_store_mutation_receipt(
+        self,
+        fingerprint: ActionFingerprint,
+    ) -> ActionOutcome | None:
+        try:
+            receipt = await self._session.get_store_mutation_receipt(fingerprint)
+        except EffectReceiptConflict:
+            return Failed(ActionError(ActionErrorCode.CONFLICT))
+        except EffectReceiptCapacityError:
+            return Failed(ActionError(ActionErrorCode.CAPACITY_EXHAUSTED))
+        except StaleRuntimeFence:
+            return Failed(ActionError(ActionErrorCode.STALE_RUNTIME))
+        except GatewayStoreError:
+            return Failed(ActionError(ActionErrorCode.STORE_FAILURE))
+        except Exception:
+            return Failed(ActionError(ActionErrorCode.STORE_FAILURE))
+        if receipt is None:
+            return None
+        if receipt.phase is not EffectPhase.TERMINAL:
+            raise RuntimeError("Gateway store receipt has an invalid phase")
+        return _required_outcome(receipt)
+
+    async def _recover_store_mutation_outcome(
+        self,
+        fingerprint: ActionFingerprint,
+    ) -> ActionOutcome | None:
+        try:
+            receipt = await _shielded_store_receipt_read(self._session, fingerprint)
+        except EffectReceiptConflict:
+            return Failed(ActionError(ActionErrorCode.CONFLICT))
+        if receipt is None:
+            return None
+        if receipt.phase is not EffectPhase.TERMINAL:
+            return Failed(ActionError(ActionErrorCode.STORE_FAILURE))
+        return _required_outcome(receipt)
+
+    async def _run_store_preflight(
+        self,
+        fingerprint: ActionFingerprint,
+        preflight: StoreEffectPreflight,
+    ) -> ActionOutcome | None:
+        try:
+            error = await preflight()
+        except asyncio.CancelledError:
+            recovered = await self._recover_store_mutation_outcome(fingerprint)
+            if recovered is not None:
+                return recovered
+            raise
+        except Exception:
+            return Failed(ActionError(ActionErrorCode.STORE_FAILURE))
+        if error is None:
+            return None
+        validate_action_error(error)
+        try:
+            receipt = await self._session.commit_store_preflight_failure(
+                fingerprint,
+                error=error,
+            )
+        except asyncio.CancelledError:
+            recovered = await self._recover_store_mutation_outcome(fingerprint)
+            if recovered is not None:
+                return recovered
+            raise
+        except EffectReceiptConflict:
+            return Failed(ActionError(ActionErrorCode.CONFLICT))
+        except EffectReceiptCapacityError:
+            return Failed(ActionError(ActionErrorCode.CAPACITY_EXHAUSTED))
+        except StaleRuntimeFence:
+            return Failed(ActionError(ActionErrorCode.STALE_RUNTIME))
+        except GatewayStoreError:
+            recovered = await self._recover_store_mutation_outcome(fingerprint)
+            if recovered is not None:
+                return recovered
+            return Failed(ActionError(ActionErrorCode.STORE_FAILURE))
+        except Exception:
+            recovered = await self._recover_store_mutation_outcome(fingerprint)
+            if recovered is not None:
+                return recovered
+            return Failed(ActionError(ActionErrorCode.STORE_FAILURE))
+        return _required_outcome(receipt)
 
     async def execute_native_mutation(
         self,
@@ -590,6 +686,26 @@ async def _shielded_receipt_read(
         return None
 
 
+async def _shielded_store_receipt_read(
+    session: GatewayStoreSession,
+    fingerprint: ActionFingerprint,
+) -> EffectReceipt | None:
+    task = asyncio.create_task(session.get_store_mutation_receipt(fingerprint))
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        try:
+            return await task
+        except EffectReceiptConflict:
+            raise
+        except BaseException:
+            return None
+    except EffectReceiptConflict:
+        raise
+    except Exception:
+        return None
+
+
 def _store_error_code(error: GatewayStoreError) -> ActionErrorCode:
     if isinstance(error, EffectReceiptConflict):
         return ActionErrorCode.CONFLICT
@@ -698,5 +814,6 @@ __all__ = [
     "NativeEffectInvoker",
     "NativeEffectPreflight",
     "NativeEffectReconciler",
+    "StoreEffectPreflight",
     "StoreBackedGatewayEffectExecutor",
 ]

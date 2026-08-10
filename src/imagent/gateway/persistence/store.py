@@ -89,6 +89,18 @@ class GatewayStoreSession(
 
     async def get_binding_generation(self, conversation_ref: ConversationRef) -> int: ...
 
+    async def get_store_mutation_receipt(
+        self,
+        fingerprint: ActionFingerprint,
+    ) -> EffectReceipt | None: ...
+
+    async def commit_store_preflight_failure(
+        self,
+        fingerprint: ActionFingerprint,
+        *,
+        error: ActionError,
+    ) -> EffectReceipt: ...
+
     async def commit_store_mutation(
         self,
         request: StoreMutationRequest,

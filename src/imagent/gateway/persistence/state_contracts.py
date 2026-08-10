@@ -12,6 +12,7 @@ from ...applications.contract import (
     ProjectRef,
     ThreadRef,
     TurnRef,
+    validate_project_ref,
     validate_thread_ref,
     validate_turn_ref,
 )
@@ -152,7 +153,10 @@ def validate_binding(
     application_id = (
         binding.application_ref.application_instance_id if binding.application_ref else None
     )
+    if binding.application_ref is not None:
+        require_identifier(application_id or "", "application_instance_id")
     if binding.project_ref is not None:
+        validate_project_ref(binding.project_ref)
         if application_id != binding.project_ref.application_instance_id:
             raise ContractViolation("binding project belongs to a different application")
     if binding.thread_ref is not None:

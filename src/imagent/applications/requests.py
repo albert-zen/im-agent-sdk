@@ -152,6 +152,7 @@ RequestResponse: TypeAlias = ApprovalResponse | UserInputResponse
 
 MAX_INTERACTIVE_REQUEST_QUESTIONS = 32
 MAX_INTERACTIVE_REQUEST_CHOICES = 64
+MAX_INTERACTIVE_REQUEST_ANSWER_LENGTH = 4_096
 
 
 def validate_interactive_request(
@@ -186,12 +187,15 @@ def validate_interactive_request(
             raise ContractViolation("user input question cannot be empty")
         _validate_choice_count(len(question.choices))
         _validate_choices(question.choices)
+        _validate_answer_cardinality(question.min_answers, question.max_answers)
         if question.min_answers < 0:
             raise ContractViolation("minimum answers cannot be negative")
         if question.max_answers < question.min_answers:
             raise ContractViolation("maximum answers is below minimum answers")
         if question.max_answers < 1:
             raise ContractViolation("maximum answers must be positive")
+        if question.max_answers > MAX_INTERACTIVE_REQUEST_CHOICES:
+            raise ContractViolation("maximum answers exceeds the interactive response limit")
         if (
             question.choices
             and not question.allows_other
@@ -245,10 +249,13 @@ def validate_request_response_shape(shape: RequestResponseShape) -> None:
             raise ContractViolation("user input response choices must be unique")
         for choice_id in question.choice_ids:
             require_identifier(choice_id, "choice_id")
+        _validate_answer_cardinality(question.min_answers, question.max_answers)
         if question.min_answers < 0 or question.max_answers < question.min_answers:
             raise ContractViolation("invalid user input response cardinality")
         if question.max_answers < 1:
             raise ContractViolation("maximum answers must be positive")
+        if question.max_answers > MAX_INTERACTIVE_REQUEST_CHOICES:
+            raise ContractViolation("maximum answers exceeds the interactive response limit")
         if not question.allows_other and question.max_answers > len(question.choice_ids):
             raise ContractViolation("maximum answers exceeds available choices")
 
@@ -280,6 +287,7 @@ def validate_request_response(
     """Validate a response against the shape delivered to its destination."""
 
     validate_request_response_shape(shape)
+    validate_request_response_admission(response)
     if isinstance(shape, ApprovalResponseShape):
         if not isinstance(response, ApprovalResponse):
             raise ContractViolation("approval request requires an approval response")
@@ -309,6 +317,46 @@ def validate_request_response(
                 raise ContractViolation("user input answer was not offered")
 
 
+def validate_request_response_admission(
+    response: ApprovalResponse | UserInputResponse,
+) -> None:
+    """Bound one response before copying, fingerprinting, or native admission."""
+
+    if isinstance(response, ApprovalResponse):
+        require_identifier(response.choice_id, "choice_id")
+        return
+    if not isinstance(response, UserInputResponse):
+        raise ContractViolation("request response has an unsupported kind")
+    if not isinstance(response.answers, Mapping):
+        raise ContractViolation("user input answers must be a mapping")
+    if not response.answers:
+        raise ContractViolation("user input response requires answers")
+    if len(response.answers) > MAX_INTERACTIVE_REQUEST_QUESTIONS:
+        raise ContractViolation(
+            "user input response questions exceed the maximum of "
+            f"{MAX_INTERACTIVE_REQUEST_QUESTIONS}"
+        )
+    for question_id, answers in response.answers.items():
+        require_identifier(question_id, "question_id")
+        if not isinstance(answers, tuple):
+            raise ContractViolation("user input answers must be tuples")
+        if not answers:
+            raise ContractViolation("each user input question requires non-empty answers")
+        if len(answers) > MAX_INTERACTIVE_REQUEST_CHOICES:
+            raise ContractViolation(
+                "user input answers exceed the maximum of "
+                f"{MAX_INTERACTIVE_REQUEST_CHOICES} per question"
+            )
+        for answer in answers:
+            if not isinstance(answer, str) or not answer:
+                raise ContractViolation("user input answer must be a non-empty string")
+            if len(answer) > MAX_INTERACTIVE_REQUEST_ANSWER_LENGTH:
+                raise ContractViolation(
+                    "user input answer exceeds the maximum length of "
+                    f"{MAX_INTERACTIVE_REQUEST_ANSWER_LENGTH}"
+                )
+
+
 def _validate_choices(choices) -> None:
     choice_ids = tuple(choice.choice_id for choice in choices)
     if len(set(choice_ids)) != len(choice_ids):
@@ -317,6 +365,13 @@ def _validate_choices(choices) -> None:
         require_identifier(choice.choice_id, "choice_id")
         if not choice.label.strip():
             raise ContractViolation("request choice label cannot be empty")
+
+
+def _validate_answer_cardinality(min_answers: int, max_answers: int) -> None:
+    if not isinstance(min_answers, int) or isinstance(min_answers, bool):
+        raise ContractViolation("minimum answers must be a non-negative integer")
+    if not isinstance(max_answers, int) or isinstance(max_answers, bool):
+        raise ContractViolation("maximum answers must be a positive integer")
 
 
 def _validate_question_count(count: int) -> None:
@@ -352,6 +407,7 @@ __all__ = [
     "ApprovalResponseShape",
     "InteractiveRequest",
     "InteractiveRequestKind",
+    "MAX_INTERACTIVE_REQUEST_ANSWER_LENGTH",
     "MAX_INTERACTIVE_REQUEST_CHOICES",
     "MAX_INTERACTIVE_REQUEST_QUESTIONS",
     "RequestChoice",
@@ -370,5 +426,6 @@ __all__ = [
     "validate_request_ref",
     "validate_request_resolution",
     "validate_request_response",
+    "validate_request_response_admission",
     "validate_request_response_shape",
 ]

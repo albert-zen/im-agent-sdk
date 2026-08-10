@@ -5,12 +5,13 @@ import tempfile
 import unittest
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, get_type_hints
 
 from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef
 from imagent.gateway.effect_execution import (
     GatewayEffectExecutor,
     StoreBackedGatewayEffectExecutor,
+    StoreEffectPreflight,
 )
 from imagent.gateway.outcomes import (
     Failed,
@@ -71,6 +72,10 @@ class GatewayEffectExecutionParityTests(unittest.IsolatedAsyncioTestCase):
         return session, executor
 
     def test_outcome_algebra_and_action_fingerprints_are_closed_and_stable(self) -> None:
+        self.assertEqual(
+            get_type_hints(GatewayEffectExecutor.execute_store_mutation)["preflight"],
+            StoreEffectPreflight | None,
+        )
         self.assertEqual(
             {status.value for status in OutcomeStatus},
             {"succeeded", "failed", "partial", "outcome_unknown"},
@@ -200,6 +205,87 @@ class GatewayEffectExecutionParityTests(unittest.IsolatedAsyncioTestCase):
                 )
                 self.assertEqual(replayed_rejection, rejection)
                 self.assertFalse(invoked)
+                await session.release_runtime()
+                await store.close()
+
+    async def test_store_preflight_is_replay_first_and_terminalizes_rejection(self) -> None:
+        conversation = ConversationRef("channel", "store-preflight")
+        for factory in self._factories():
+            store = factory()
+            with self.subTest(store=type(store).__name__):
+                session, executor = await self._executor(store)
+                request = StoreMutationRequest(
+                    _fingerprint("store-preflight", "conversation.select", conversation),
+                    StoreMutationPlan(
+                        conversation_ref=conversation,
+                        binding_target=BindingTarget(
+                            conversation,
+                            ApplicationRef("application"),
+                        ),
+                    ),
+                )
+                preflight_calls = 0
+
+                async def allow():
+                    nonlocal preflight_calls
+                    preflight_calls += 1
+                    self.assertIsNone(await session.get_effect_receipt(request.fingerprint))
+                    return None
+
+                first = await executor.execute_store_mutation(
+                    request,
+                    preflight=allow,
+                )
+
+                async def stale_check():
+                    raise AssertionError("terminal replay must precede store preflight")
+
+                replay = await executor.execute_store_mutation(
+                    request,
+                    preflight=stale_check,
+                )
+                self.assertEqual(replay, first)
+                self.assertEqual(preflight_calls, 1)
+                binding = await session.get(conversation)
+                assert binding is not None
+                self.assertEqual(binding.application_ref, ApplicationRef("application"))
+
+                rejected_conversation = ConversationRef("channel", "store-rejected")
+                rejected = StoreMutationRequest(
+                    _fingerprint(
+                        "store-rejected",
+                        "conversation.select",
+                        rejected_conversation,
+                    ),
+                    StoreMutationPlan(
+                        conversation_ref=rejected_conversation,
+                        binding_target=BindingTarget(
+                            rejected_conversation,
+                            ApplicationRef("application"),
+                        ),
+                    ),
+                )
+
+                async def reject():
+                    return ActionError(ActionErrorCode.UNSUPPORTED)
+
+                rejection = await executor.execute_store_mutation(
+                    rejected,
+                    preflight=reject,
+                )
+                replayed_rejection = await executor.execute_store_mutation(
+                    rejected,
+                    preflight=stale_check,
+                )
+                self.assertEqual(
+                    rejection,
+                    Failed(ActionError(ActionErrorCode.UNSUPPORTED)),
+                )
+                self.assertEqual(replayed_rejection, rejection)
+                self.assertIsNone(await session.get(rejected_conversation))
+                receipt = await session.get_effect_receipt(rejected.fingerprint)
+                assert receipt is not None
+                self.assertIs(receipt.phase, EffectPhase.TERMINAL)
                 await session.release_runtime()
                 await store.close()
 
@@ -387,6 +473,37 @@ class GatewayEffectExecutionParityTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIsInstance(store_outcome, Succeeded)
 
+        rejected_conversation = ConversationRef("channel", "preflight-lost-ack")
+        rejected_request = StoreMutationRequest(
+            _fingerprint("store-preflight-ack", "conversation.select", rejected_conversation),
+            StoreMutationPlan(
+                conversation_ref=rejected_conversation,
+                binding_target=BindingTarget(
+                    rejected_conversation,
+                    ApplicationRef("app"),
+                ),
+            ),
+        )
+        preflight_executor = StoreBackedGatewayEffectExecutor(
+            cast(
+                GatewayStoreSession,
+                _FaultSession(session, "commit_store_preflight_failure", "error_after"),
+            )
+        )
+
+        async def reject_store():
+            return ActionError(ActionErrorCode.UNSUPPORTED)
+
+        rejected_outcome = await preflight_executor.execute_store_mutation(
+            rejected_request,
+            preflight=reject_store,
+        )
+        self.assertEqual(
+            rejected_outcome,
+            Failed(ActionError(ActionErrorCode.UNSUPPORTED)),
+        )
+        self.assertIsNone(await session.get(rejected_conversation))
+
         native_executor = StoreBackedGatewayEffectExecutor(
             cast(
                 GatewayStoreSession,
@@ -428,6 +545,102 @@ class GatewayEffectExecutionParityTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(workflow_outcome, Succeeded)
         await session.release_runtime()
         await store.close()
+
+    async def test_store_lost_ack_recovery_rejects_foreign_receipt_categories(self) -> None:
+        conversation = ConversationRef("channel", "store-category-conflict")
+        fingerprint = _fingerprint(
+            "store-category-conflict",
+            "conversation.select",
+            conversation,
+        )
+        request = StoreMutationRequest(
+            fingerprint,
+            StoreMutationPlan(
+                conversation_ref=conversation,
+                binding_target=BindingTarget(conversation, ApplicationRef("app")),
+            ),
+        )
+
+        for factory in self._factories():
+            store = factory()
+            session, executor = await self._executor(store)
+            try:
+
+                async def invoke(_phase_id: str):
+                    return Succeeded(EffectValue())
+
+                native = await executor.execute_native_mutation(
+                    NativeMutationRequest(fingerprint),
+                    invoke=invoke,
+                )
+                self.assertIsInstance(native, Succeeded)
+
+                outcome = await executor.execute_store_mutation(request)
+
+                self.assertEqual(
+                    outcome,
+                    Failed(ActionError(ActionErrorCode.CONFLICT)),
+                )
+                self.assertIsNone(await session.get(conversation))
+            finally:
+                await session.release_runtime()
+                await store.close()
+
+    async def test_cancelled_store_preflight_rejects_concurrent_native_receipt(self) -> None:
+        conversation = ConversationRef("channel", "store-preflight-category-conflict")
+        fingerprint = _fingerprint(
+            "store-preflight-category-conflict",
+            "conversation.select",
+            conversation,
+        )
+        request = StoreMutationRequest(
+            fingerprint,
+            StoreMutationPlan(
+                conversation_ref=conversation,
+                binding_target=BindingTarget(conversation, ApplicationRef("app")),
+            ),
+        )
+
+        for factory in self._factories():
+            store = factory()
+            session, executor = await self._executor(store)
+            entered = asyncio.Event()
+
+            async def preflight():
+                entered.set()
+                await asyncio.Event().wait()
+
+            async def invoke(_phase_id: str):
+                return Succeeded(EffectValue())
+
+            store_task = asyncio.create_task(
+                executor.execute_store_mutation(request, preflight=preflight)
+            )
+            try:
+                await entered.wait()
+                native = await executor.execute_native_mutation(
+                    NativeMutationRequest(fingerprint),
+                    invoke=invoke,
+                )
+                self.assertIsInstance(native, Succeeded)
+
+                store_task.cancel()
+                outcome = await store_task
+
+                self.assertEqual(
+                    outcome,
+                    Failed(ActionError(ActionErrorCode.CONFLICT)),
+                )
+                self.assertIsNone(await session.get(conversation))
+            finally:
+                if not store_task.done():
+                    store_task.cancel()
+                    try:
+                        await store_task
+                    except asyncio.CancelledError:
+                        pass
+                await session.release_runtime()
+                await store.close()
 
     async def test_cancellation_boundaries_follow_the_durable_phase(self) -> None:
         conversation = ConversationRef("channel", "conversation")

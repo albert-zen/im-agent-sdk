@@ -15,7 +15,7 @@ does not receive a store, repository, lease, receipt, or concrete adapter.
 
 B owns these operation-agnostic entry points:
 
-- `execute_store_mutation(StoreMutationRequest)`;
+- `execute_store_mutation(StoreMutationRequest, preflight=None)`;
 - `execute_native_mutation(NativeMutationRequest, invoke, preflight=None,
   reconcile=None)`;
 - `execute_create_binding_workflow(CreateBindingWorkflowRequest, invoke,
@@ -38,6 +38,15 @@ fence. `None` authorizes; a closed `ActionError` commits a terminal failure
 without a native call. Terminal retries never re-run preflight, so later
 binding/request state cannot hide a committed result.
 
+The optional `StoreEffectPreflight` has the same closed callback shape but no
+native phase. B performs a lease-fenced terminal-receipt check before invoking
+it. `None` permits the existing atomic store transaction; a closed error is
+committed as a terminal Gateway receipt in a receipt-only transaction without
+changing binding or route state. The final commit of either the failure or the
+mutation checks the receipt again, so a concurrently committed terminal
+outcome wins. Cancellation before that commit leaves no reserved Gateway
+receipt or partial bridge mutation.
+
 ## Outcome algebra
 
 The public runtime result is the closed generic union:
@@ -54,8 +63,9 @@ raise before execution. The persisted error projection uses a fixed bounded
 
 ## Execution rules
 
-Store-only execution delegates one atomic transaction and returns the stored
-terminal result on identical retry. Native execution reserves, returns any
+Store-only execution checks terminal replay, optionally runs its side-effect-
+free preflight, then delegates one atomic mutation or receipt-only failure
+transaction and returns the stored terminal result on identical retry. Native execution reserves, returns any
 existing terminal result, runs the optional preflight, records the native
 fence, then calls exactly once. Only the caller that atomically
 advances `reserved` to `native_side_effect_started` may invoke; a concurrent

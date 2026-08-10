@@ -14,6 +14,10 @@ native fence for primitive and workflow mutations, terminalizes a closed
 rejection, and is skipped on terminal replay even when current authorization
 or request-correlation state has changed. Invalid callback/reconciliation
 values after the fence become sticky unknown instead of raising.
+Store-preflight parity tests prove Memory and SQLite check a lease-fenced
+terminal receipt first, run a new callback before any receipt or bridge-state
+write, atomically terminalize a closed rejection without mutation, and replay
+both success and rejection without consulting changed resource state.
 
 The block-C seam is checked structurally: the protocol and requests expose no
 store, session, lease, repository, adapter, credential, `Any` context, product

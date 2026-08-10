@@ -11,6 +11,19 @@ Required evidence:
 - neither public surface exposes implementation/state/credential objects or
   an `Any` context;
 - reads are bounded and never call `GatewayEffectExecutor`;
+- binding reads validate the complete hierarchy and reject a runtime value for
+  any Conversation other than the surface's frozen Conversation;
+- selection and observation preflight exact Application/Project/Thread
+  existence and ancestry before store admission; Memory and SQLite evidence
+  proves rejected resources cannot change a binding or route;
+- store preflight writes a terminal rejection receipt and both accepted and
+  rejected same-ID actions replay before later resource/capability drift;
+- route-producing observe, foreground bind, and foreground create-and-bind
+  reject unsupported streaming before a route or native Thread is created,
+  while non-foreground binding remains valid;
+- native/workflow preflight proves capability honesty before the native fence
+  or callback, while a terminal receipt replays before changed capability or
+  resource state is consulted;
 - every primitive native mutation produces one `NativeMutationRequest` and no
   store mutation;
 - every select/bind/clear/observe operation produces one closed
@@ -34,6 +47,9 @@ Required evidence:
   executor admission; validated mutable context metadata and response-answer
   mappings are then snapshotted so caller mutation cannot change the later
   native invocation;
+- user-input responses reject a 33rd question, 65th answer, or 4,097th answer
+  character before traversal/copy/fingerprint/executor work, and accept each
+  exact boundary;
 - malformed Application or request-response success values never cross the
   public action-result boundary as success;
 - same action ID plus changed payload reaches B as a changed fingerprint;

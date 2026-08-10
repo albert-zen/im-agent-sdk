@@ -9,6 +9,9 @@ Tests cover closed operation/result discriminants, stable operation IDs,
 required Project scoping for Thread list/create and every Thread-targeted
 operation, bounded managed Project CWD creation, exact managed Project deletion,
 bounded Thread title/context payloads, bounded list queries/cursors/pages,
+exact immutable tuple-backed page items and post-construction mutation
+counterexamples, canonical request-response bounds at the native operation
+boundary,
 history/catch-up adapters that exceed the requested limit, schema parity for
 opaque attachment handles, strict non-Boolean attachment sizes, typed text
 content/format validation, legacy generic Project-delete rejection, explicit

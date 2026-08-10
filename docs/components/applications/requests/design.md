@@ -43,6 +43,14 @@ authoritative pending-request snapshot must not manufacture an open request.
 Gateway may retain a bounded delivered response shape, but never prompt text,
 answers, permission policy, or a second request state machine.
 
+User-input response admission is finite and matches the delivered request
+shape vocabulary: at most 32 question IDs, at most 64 answers per question,
+and at most 4,096 characters in one answer. A delivered question cannot claim
+more than 64 answers. These limits are enforced before Gateway copies,
+fingerprints, reserves, or routes the response and are identical in the Python
+validator and v1 schemas. Minimum and maximum answer cardinalities are exact
+non-Boolean integers in Python, matching the schema integer contract.
+
 The implementation is the request portions of
 `schemas/v1/{events,operations,resources}.schema.json` plus
 `src/imagent/applications/requests.py`; historical aggregate model and

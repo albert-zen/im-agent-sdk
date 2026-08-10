@@ -12,6 +12,7 @@ from types import MappingProxyType
 from typing import Protocol, TypeAlias, TypeVar
 from uuid import uuid4
 
+from ..applications.capabilities import SupportLevel, ThreadDeletionCapability
 from ..applications.contract import (
     ApplicationRef,
     ApplicationSummary,
@@ -100,7 +101,11 @@ from .persistence.effects import (
     StoreMutationRequest,
     derive_action_fingerprint,
 )
-from .persistence.state_contracts import ConversationBinding, ThreadProjectionRoute
+from .persistence.state_contracts import (
+    ConversationBinding,
+    ThreadProjectionRoute,
+    validate_binding,
+)
 from .projection.request_correlation import RespondToRequest
 from .routing.bindings import (
     BindConversationToProject,
@@ -571,7 +576,8 @@ class ApplicationActions:
         operation: Callable[[str], ApplicationOperation],
         success_type: type[object],
     ) -> ActionResult:
-        validate_application_operation(operation("imagent:validation"))
+        validation_operation = operation("imagent:validation")
+        validate_application_operation(validation_operation)
         semantic_payload = payload
         if all(name != "application_id" for name, _ in semantic_payload):
             semantic_payload = (
@@ -585,6 +591,13 @@ class ApplicationActions:
             semantic_payload,
         )
         request = NativeMutationRequest(fingerprint=fingerprint)
+
+        async def preflight() -> ActionError | None:
+            return await _preflight_application_mutation(
+                self._context.runtime,
+                validation_operation,
+                fingerprint.phase_id("preflight"),
+            )
 
         async def invoke(phase_id: str) -> KnownNativeOutcome:
             native_operation = operation(phase_id)
@@ -606,6 +619,7 @@ class ApplicationActions:
         outcome = await self._context.effects.execute_native_mutation(
             request,
             invoke=invoke,
+            preflight=preflight,
             reconcile=reconcile,
         )
         return _public_outcome(outcome)
@@ -670,7 +684,13 @@ class ConversationActions:
         return await self._application(application_ref).get_application()
 
     async def get_binding(self) -> ConversationBinding | None:
-        return await self._context.runtime.get_binding(self.conversation_ref)
+        binding = await self._context.runtime.get_binding(self.conversation_ref)
+        if binding is None:
+            return None
+        validate_binding(binding)
+        if binding.conversation_ref != self.conversation_ref:
+            raise ContractViolation("binding belongs to another Conversation")
+        return binding
 
     async def list_projects(
         self,
@@ -830,6 +850,7 @@ class ConversationActions:
             target,
             (("application_id", operation.application_ref.application_instance_id),),
             operation.expected_generation,
+            preflight_resource=operation.application_ref,
         )
 
     async def select_project(
@@ -859,6 +880,7 @@ class ConversationActions:
             target,
             _ref_payload(operation.project_ref),
             operation.expected_generation,
+            preflight_resource=operation.project_ref,
         )
 
     async def bind_thread(
@@ -903,6 +925,8 @@ class ConversationActions:
             ),
             operation.expected_generation,
             route_upsert=route,
+            preflight_resource=operation.thread_ref,
+            require_streaming=self._context.foreground_route,
         )
 
     async def clear_thread(
@@ -1015,7 +1039,21 @@ class ConversationActions:
                 route_upsert=route,
             ),
         )
-        return _public_outcome(await self._context.effects.execute_store_mutation(request))
+
+        async def preflight() -> ActionError | None:
+            return await _preflight_application_resource(
+                self._context.runtime,
+                operation.thread_ref,
+                _read_operation_id("preflight.thread.get"),
+                require_streaming=True,
+            )
+
+        return _public_outcome(
+            await self._context.effects.execute_store_mutation(
+                request,
+                preflight=preflight,
+            )
+        )
 
     async def clear_observation(
         self,
@@ -1096,6 +1134,12 @@ class ConversationActions:
         )
 
         async def preflight() -> ActionError | None:
+            application_error = _preflight_request_application(
+                self._context.runtime,
+                operation.request_ref,
+            )
+            if application_error is not None:
+                return application_error
             try:
                 await self._context.runtime.authorize_request_response(
                     operation.conversation_ref,
@@ -1241,6 +1285,8 @@ class ConversationActions:
         *,
         binding_clear: BindingClearScope | None = None,
         route_upsert: ThreadProjectionRoute | None = None,
+        preflight_resource: ApplicationRef | ProjectRef | ThreadRef | None = None,
+        require_streaming: bool = False,
     ) -> ActionResult:
         if expected_generation is not None:
             if not isinstance(expected_generation, int) or isinstance(expected_generation, bool):
@@ -1266,7 +1312,23 @@ class ConversationActions:
                 expected_generation=expected_generation,
             ),
         )
-        return _public_outcome(await self._context.effects.execute_store_mutation(request))
+
+        async def preflight() -> ActionError | None:
+            if preflight_resource is None:
+                return None
+            return await _preflight_application_resource(
+                self._context.runtime,
+                preflight_resource,
+                _read_operation_id("preflight.resource.get"),
+                require_streaming=require_streaming,
+            )
+
+        return _public_outcome(
+            await self._context.effects.execute_store_mutation(
+                request,
+                preflight=preflight if preflight_resource is not None else None,
+            )
+        )
 
     async def _workflow(
         self,
@@ -1274,7 +1336,19 @@ class ConversationActions:
         operation: Callable[[str], ApplicationOperation],
         success_type: type[object],
     ) -> ActionResult:
-        validate_application_operation(operation("imagent:validation"))
+        validation_operation = operation("imagent:validation")
+        validate_application_operation(validation_operation)
+
+        async def preflight() -> ActionError | None:
+            return await _preflight_application_mutation(
+                self._context.runtime,
+                validation_operation,
+                request.fingerprint.phase_id("preflight"),
+                require_streaming=(
+                    request.kind is CreateBindingWorkflowKind.CREATE_AND_BIND_THREAD
+                    and request.foreground_route
+                ),
+            )
 
         async def invoke(phase_id: str) -> KnownNativeOutcome:
             native_operation = operation(phase_id)
@@ -1296,6 +1370,7 @@ class ConversationActions:
         outcome = await self._context.effects.execute_create_binding_workflow(
             request,
             invoke=invoke,
+            preflight=preflight,
             reconcile=reconcile,
         )
         return _public_outcome(outcome)
@@ -1529,6 +1604,202 @@ def _validated_application_discovery(
     return applications
 
 
+def _preflight_application_summary(
+    runtime: _ActionRuntime,
+    application_ref: ApplicationRef,
+) -> ApplicationSummary | ActionError:
+    try:
+        applications = _validated_application_discovery(runtime)
+    except Exception as error:
+        return _exception_action_error(error)
+    summary = next(
+        (application for application in applications if application.ref == application_ref),
+        None,
+    )
+    if summary is None:
+        return _action_error(OperationErrorCode.NOT_FOUND)
+    return summary
+
+
+async def _preflight_application_resource(
+    runtime: _ActionRuntime,
+    resource: ApplicationRef | ProjectRef | ThreadRef,
+    operation_id: str,
+    *,
+    require_streaming: bool = False,
+) -> ActionError | None:
+    application_ref = (
+        resource if isinstance(resource, ApplicationRef) else _application_ref(resource)
+    )
+    summary = _preflight_application_summary(runtime, application_ref)
+    if isinstance(summary, ActionError):
+        return summary
+    if require_streaming and summary.capabilities.runtime.streaming is SupportLevel.UNSUPPORTED:
+        return _action_error(OperationErrorCode.UNSUPPORTED)
+    if isinstance(resource, ApplicationRef):
+        return None
+    return await _preflight_resource_under_application(
+        runtime,
+        summary,
+        resource,
+        operation_id,
+    )
+
+
+async def _preflight_resource_under_application(
+    runtime: _ActionRuntime,
+    application: ApplicationSummary,
+    resource: ProjectRef | ThreadRef,
+    operation_id: str,
+) -> ActionError | None:
+    if application.capabilities.projects.reading is SupportLevel.UNSUPPORTED:
+        return _action_error(OperationErrorCode.UNSUPPORTED)
+    project_ref = resource.project_ref if isinstance(resource, ThreadRef) else resource
+    project_error = await _preflight_project_read(
+        runtime,
+        application.ref,
+        project_ref,
+        f"{operation_id}:project",
+    )
+    if project_error is not None or isinstance(resource, ProjectRef):
+        return project_error
+    if application.capabilities.threads.reading is SupportLevel.UNSUPPORTED:
+        return _action_error(OperationErrorCode.UNSUPPORTED)
+    return await _preflight_thread_read(
+        runtime,
+        application.ref,
+        resource,
+        f"{operation_id}:thread",
+    )
+
+
+async def _preflight_project_read(
+    runtime: _ActionRuntime,
+    application_ref: ApplicationRef,
+    project_ref: ProjectRef,
+    operation_id: str,
+) -> ActionError | None:
+    operation = GetProject(
+        operation_id=operation_id,
+        application_ref=application_ref,
+        project_ref=project_ref,
+        created_at=_now(),
+    )
+    try:
+        validate_application_operation(operation)
+        result = await runtime.execute_application(operation)
+        validate_application_operation_result(operation, result)
+    except Exception as error:
+        return _exception_action_error(error)
+    if isinstance(result, ApplicationOperationFailed):
+        return _application_error(result)
+    if not isinstance(result, ProjectRead):
+        return _action_error(OperationErrorCode.ADAPTER_FAILURE)
+    return None
+
+
+async def _preflight_thread_read(
+    runtime: _ActionRuntime,
+    application_ref: ApplicationRef,
+    thread_ref: ThreadRef,
+    operation_id: str,
+) -> ActionError | None:
+    operation = GetThread(
+        operation_id=operation_id,
+        application_ref=application_ref,
+        thread_ref=thread_ref,
+        created_at=_now(),
+    )
+    try:
+        validate_application_operation(operation)
+        result = await runtime.execute_application(operation)
+        validate_application_operation_result(operation, result)
+    except Exception as error:
+        return _exception_action_error(error)
+    if isinstance(result, ApplicationOperationFailed):
+        return _application_error(result)
+    if not isinstance(result, ThreadRead):
+        return _action_error(OperationErrorCode.ADAPTER_FAILURE)
+    return None
+
+
+async def _preflight_application_mutation(
+    runtime: _ActionRuntime,
+    operation: ApplicationOperation,
+    operation_id: str,
+    *,
+    require_streaming: bool = False,
+) -> ActionError | None:
+    summary = _preflight_application_summary(runtime, operation.application_ref)
+    if isinstance(summary, ActionError):
+        return summary
+    capability_error = _mutation_capability_error(summary, operation)
+    if capability_error is not None:
+        return capability_error
+    if require_streaming and summary.capabilities.runtime.streaming is SupportLevel.UNSUPPORTED:
+        return _action_error(OperationErrorCode.UNSUPPORTED)
+    if isinstance(operation, (DeleteProject, CreateThread)):
+        return await _preflight_resource_under_application(
+            runtime,
+            summary,
+            operation.project_ref,
+            operation_id,
+        )
+    if isinstance(operation, (ActivateNativeThread, DeleteThread, InterruptTurn)):
+        return await _preflight_resource_under_application(
+            runtime,
+            summary,
+            operation.thread_ref,
+            operation_id,
+        )
+    if isinstance(operation, CreateProject):
+        return None
+    return _action_error(OperationErrorCode.UNSUPPORTED)
+
+
+def _mutation_capability_error(
+    application: ApplicationSummary,
+    operation: ApplicationOperation,
+) -> ActionError | None:
+    capabilities = application.capabilities
+    unsupported = False
+    if isinstance(operation, CreateProject):
+        unsupported = capabilities.projects.creation is SupportLevel.UNSUPPORTED
+    elif isinstance(operation, DeleteProject):
+        unsupported = capabilities.projects.deletion is SupportLevel.UNSUPPORTED
+    elif isinstance(operation, CreateThread):
+        unsupported = capabilities.threads.creation is SupportLevel.UNSUPPORTED or any(
+            isinstance(item, AttachmentContent)
+            and item.source.kind not in capabilities.attachment_sources
+            for item in operation.initial_context
+        )
+    elif isinstance(operation, ActivateNativeThread):
+        unsupported = capabilities.runtime.native_thread_activation is SupportLevel.UNSUPPORTED
+    elif isinstance(operation, DeleteThread):
+        deletion = capabilities.threads.deletion
+        unsupported = (
+            deletion is ThreadDeletionCapability.UNSUPPORTED
+            or deletion.value != operation.mode.value
+        )
+    elif isinstance(operation, InterruptTurn):
+        unsupported = capabilities.runtime.interruption is SupportLevel.UNSUPPORTED
+    else:
+        unsupported = True
+    return _action_error(OperationErrorCode.UNSUPPORTED) if unsupported else None
+
+
+def _preflight_request_application(
+    runtime: _ActionRuntime,
+    request_ref: RequestRef,
+) -> ActionError | None:
+    summary = _preflight_application_summary(runtime, request_ref.application_ref)
+    if isinstance(summary, ActionError):
+        return summary
+    if summary.capabilities.runtime.interactive_requests is SupportLevel.UNSUPPORTED:
+        return _action_error(OperationErrorCode.UNSUPPORTED)
+    return None
+
+
 def _ref_payload(value: ProjectRef | ThreadRef) -> FingerprintPayload:
     project_ref = value.project_ref if isinstance(value, ThreadRef) else value
     payload: FingerprintPayload = (
@@ -1553,7 +1824,12 @@ def _response_payload(
     answers = tuple(
         (question_id, tuple(values)) for question_id, values in sorted(response.answers.items())
     )
-    return (*base, ("response_kind", "user_input"), ("answers", answers))
+    encoded = json.dumps(answers, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return (
+        *base,
+        ("response_kind", "user_input"),
+        ("answers_fingerprint", hashlib.sha256(encoded).hexdigest()),
+    )
 
 
 def _snapshot_request_response(response: RequestResponse) -> RequestResponse:

@@ -24,6 +24,9 @@ binding. They are side-effect free: they never select, bind, observe, activate
 native UI, or create a resource. Bounds apply to returned collections as well
 as requests: Application discovery has a finite cardinality, and history or
 catch-up results cannot exceed their requested limit.
+`get_binding` validates the complete hierarchical value and requires its
+Conversation identity to equal the surface's frozen Conversation before
+exposing it; runtime data cannot substitute another Conversation.
 
 Primitive native mutations affect only Application truth. In particular,
 `create_project` does not select, `create_thread` does not bind, and
@@ -62,6 +65,31 @@ fingerprint, durable reservation, or native callback is constructed. C then
 snapshots the validated mutable metadata and validates that snapshot again at
 the callback boundary, so caller mutation cannot change the receipt's native
 intent.
+
+Every selection/observation and native mutation has a C-owned typed preflight
+against the configured Application runtime. It proves exact Application
+existence, declared capability support, and complete Project/Thread ancestry
+through bounded discovery plus the canonical resource-read operations.
+Store-only actions pass that check through B's `StoreEffectPreflight`: B checks
+a lease-fenced terminal receipt first, then runs preflight before atomically
+committing either its closed failure receipt or the requested mutation. A
+foreign, stale, nonexistent, or unsupported resource never becomes bridge
+state, and later resource drift cannot hide a committed result. Native
+mutations and create/bind workflows pass the same check through B's
+`NativeEffectPreflight`: B replays a terminal receipt first, then runs
+preflight only for a newly reserved action and before the native side-effect
+fence or callback. C maps native `not_found`, `request_stale`, and `unsupported`
+results into the closed `ActionError` vocabulary rather than guessing that a
+resource or capability exists. Any action that creates an observation route—
+explicit observe, foreground binding, or foreground create-and-bind—also
+requires non-unsupported streaming; a non-foreground binding does not invent
+that requirement.
+
+Interactive request responses are admitted before snapshotting or
+fingerprinting: at most 32 question IDs, at most 64 answers per question, and
+at most 4,096 characters per answer. C fingerprints a canonical digest of the
+bounded answer structure, while the durable effect request retains no raw
+answer text.
 
 The action layer has no store/session/lease/repository access and does not
 sequence persistence calls. B returns its closed `ActionOutcome`; C maps the

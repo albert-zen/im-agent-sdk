@@ -72,6 +72,15 @@ lease-fenced transaction the store:
 7. writes the minimal terminal outcome receipt; and
 8. commits or rolls back the complete transaction.
 
+When C supplies a resource/capability preflight, the executor first performs a
+lease-fenced terminal-receipt check without reserving state. A closed failure
+is committed through a separate receipt-only lease-fenced transaction that
+checks terminal replay and capacity again and never touches a binding or
+route. A successful preflight enters the unchanged atomic mutation transaction,
+whose first step checks the receipt again. This keeps callbacks outside store
+locks/SQLite transactions while guaranteeing that an already or concurrently
+committed terminal outcome wins.
+
 This transaction is the storage primitive for select, bind, every clear,
 observe, and clear-observation. The request is operation-agnostic: block C owns
 the public closed operation variants and maps them to this validated plan.
@@ -109,7 +118,8 @@ only digests and bounded stable reference fields cross the store boundary.
 
 Receipts have the finite phases `reserved`,
 `native_side_effect_started`, `native_result_known`, and `terminal`.
-Store-only actions commit directly to terminal. Native actions persist
+Store-only actions commit directly to terminal; they never retain a reserved
+phase, including while an optional preflight is running. Native actions persist
 `native_side_effect_started` before the callback. A known native result becomes
 terminal for a primitive action or `native_result_known` for a workflow. An
 ambiguous result stays protected and yields `outcome_unknown`; elapsed time or
