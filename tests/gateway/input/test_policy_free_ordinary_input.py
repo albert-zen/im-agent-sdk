@@ -1,28 +1,45 @@
 from __future__ import annotations
 
+import asyncio
+import tempfile
 import unittest
 from datetime import UTC, datetime
+from pathlib import Path
 
 import imagent
 import imagent.contracts as contracts_facade
 import imagent.gateway as gateway_facade
 import imagent.gateway.input as input_facade
 from imagent.applications.capabilities import ProjectMode
-from imagent.applications.contract import ProjectRef
+from imagent.applications.contract import AgentApplicationAdapter, AgentInput, ProjectRef
+from imagent.applications.operations import GetProject, GetThread, GetThreadHistory
 from imagent.gateway import (
     GatewayExtensions,
+    GatewayLimits,
     GatewayRepositories,
     ImAgentGateway,
     MissingBindingError,
+    StaleBindingError,
 )
-from imagent.gateway.actions import ConversationActions
+from imagent.gateway.actions import ActionResult, ConversationActions
 from imagent.gateway.input import InboundFailurePhase
-from imagent.gateway.outcomes import Succeeded
+from imagent.gateway.outcomes import Partial, Succeeded
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
+from imagent.gateway.persistence.effects import ActionErrorCode
 from imagent.gateway.persistence.memory import InMemoryProjectionRouteRepository
 from imagent.gateway.persistence.memory_store import MemoryGatewayStore
-from imagent.gateway.persistence.state_contracts import ConversationBinding
+from imagent.gateway.persistence.sqlite_store import SQLiteGatewayStore
+from imagent.gateway.persistence.state_contracts import (
+    ConversationBinding,
+    ThreadProjectionRoute,
+)
 from imagent.gateway.routing.projection_routes import ProjectionPolicy
+from imagent.interaction.controllers import (
+    CommandExecutionSafety,
+    CommandInvocation,
+    CommandRegistry,
+    CommandResult,
+)
 from imagent.interaction.messages import (
     ConversationRef,
     InboundMessage,
@@ -35,6 +52,7 @@ from imagent.interaction.operations import (
     operation_error,
 )
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
+from tests._command_support import common_command_registry
 
 
 class _RecordingTransformer:
@@ -44,6 +62,16 @@ class _RecordingTransformer:
     async def transform_content(self, message: InboundMessage):
         self.messages.append(message)
         return message.content
+
+
+class _RecordingApplication(FakeAgentApplicationAdapter):
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.operations: list[object] = []
+
+    async def execute(self, operation):
+        self.operations.append(operation)
+        return await super().execute(operation)
 
 
 class _StaticBindingRepository:
@@ -236,6 +264,94 @@ class PolicyFreeOrdinaryInputTests(unittest.IsolatedAsyncioTestCase):
         await session.close()
         await store.close()
 
+    async def test_stale_native_ancestry_is_typed_and_side_effect_free_in_memory_and_sqlite(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            for store_kind in ("memory", "sqlite"):
+                for stale_kind in ("project", "thread", "application"):
+                    with self.subTest(store=store_kind, stale=stale_kind):
+                        store = (
+                            MemoryGatewayStore()
+                            if store_kind == "memory"
+                            else SQLiteGatewayStore(Path(directory) / f"{stale_kind}.sqlite3")
+                        )
+                        session = await store.acquire_runtime(
+                            gateway_id=f"stale-{store_kind}-{stale_kind}",
+                            owner_token="owner-1",
+                            lease_duration_seconds=30,
+                        )
+                        channel = FakeChannelAdapter()
+                        application = _RecordingApplication(
+                            application_instance_id=f"application-{store_kind}-{stale_kind}",
+                            project_mode=ProjectMode.MANAGED,
+                        )
+                        project_ref = application.default_project_ref
+                        thread = await application.create_thread(project_ref)
+                        conversation = ConversationRef("fake-channel", "conversation-1")
+                        binding = await session.put(
+                            ConversationBinding(
+                                conversation_ref=conversation,
+                                application_ref=application.summary.ref,
+                                project_ref=project_ref,
+                                thread_ref=thread.ref,
+                            )
+                        )
+                        if stale_kind == "project":
+                            application._projects.pop(project_ref)
+                        elif stale_kind == "thread":
+                            await application.delete_thread(thread.ref)
+                        configured_applications: list[AgentApplicationAdapter] = (
+                            [] if stale_kind == "application" else [application]
+                        )
+                        transformer = _RecordingTransformer()
+                        gateway = ImAgentGateway(
+                            channels=[channel],
+                            applications=configured_applications,
+                            repositories=GatewayRepositories(bindings=session),
+                            extensions=GatewayExtensions(
+                                controller=(
+                                    common_command_registry() if store_kind == "memory" else None
+                                ),
+                                inbound_content_transformer=transformer,
+                            ),
+                        )
+                        message = _message(
+                            conversation,
+                            f"stale-{store_kind}-{stale_kind}",
+                            "must not dispatch",
+                        )
+
+                        await gateway.start()
+                        try:
+                            for _ in range(2):
+                                with self.assertRaises(StaleBindingError) as raised:
+                                    await channel.emit_message(message)
+                                self.assertEqual(
+                                    operation_error(raised.exception).code,
+                                    OperationErrorCode.STALE_BINDING.value,
+                                )
+                        finally:
+                            await gateway.stop()
+
+                        self.assertEqual(await session.get(conversation), binding)
+                        self.assertEqual(await session.list_projection_routes(), ())
+                        self.assertEqual(transformer.messages, [])
+                        self.assertEqual(application._inputs, [])
+                        self.assertEqual(channel.sent, [])
+                        read_types = tuple(type(operation) for operation in application.operations)
+                        if stale_kind == "project":
+                            self.assertEqual(read_types, (GetProject, GetProject))
+                        elif stale_kind == "thread":
+                            self.assertEqual(
+                                read_types,
+                                (GetProject, GetThread, GetProject, GetThread),
+                            )
+                        else:
+                            self.assertEqual(read_types, ())
+                        await session.close()
+                        await store.close()
+
     async def test_coherent_session_cannot_be_mixed_with_another_repository(self) -> None:
         store = MemoryGatewayStore()
         session = await store.acquire_runtime(
@@ -299,6 +415,152 @@ class PolicyFreeOrdinaryInputTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(routes[0].conversation_ref, conversation)
         self.assertEqual(routes[0].thread_ref, binding.thread_ref)
         self._assert_scoped_surface_has_no_runtime_escape(controller.actions[0])
+        await session.close()
+        await store.close()
+
+    async def test_common_new_activates_projection_and_delivers_later_authoritative_output(
+        self,
+    ) -> None:
+        store = MemoryGatewayStore()
+        session = await store.acquire_runtime(
+            gateway_id="common-new-observation",
+            owner_token="owner-1",
+            lease_duration_seconds=30,
+        )
+        channel = FakeChannelAdapter()
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.MANAGED)
+        conversation = ConversationRef("fake-channel", "conversation-1")
+        await session.put(
+            ConversationBinding(
+                conversation_ref=conversation,
+                application_ref=application.summary.ref,
+                project_ref=application.default_project_ref,
+            )
+        )
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            repositories=GatewayRepositories(bindings=session),
+            extensions=GatewayExtensions(controller=common_command_registry()),
+            projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+        )
+
+        await gateway.start()
+        try:
+            await channel.emit_message(_message(conversation, "new-command", "/new Task"))
+            binding = await session.get(conversation)
+            self.assertIsNotNone(binding)
+            assert binding is not None and binding.thread_ref is not None
+            thread_ref = binding.thread_ref
+            await _wait_until(lambda: gateway.get_projection_health(thread_ref) is not None)
+            sent_before_native_output = len(channel.sent)
+            await application.send_input(
+                thread_ref,
+                AgentInput(
+                    client_message_id="later-authoritative-output",
+                    content=(TextContent("native work"),),
+                ),
+            )
+            await _wait_until(lambda: len(channel.sent) >= sent_before_native_output + 2)
+        finally:
+            await gateway.stop()
+
+        self.assertGreaterEqual(len(channel.sent), 3)
+        self.assertEqual(len(await session.list_projection_routes()), 1)
+        await session.close()
+        await store.close()
+
+    async def test_registry_route_replay_reconciles_and_activation_failure_is_partial(
+        self,
+    ) -> None:
+        store = MemoryGatewayStore()
+        session = await store.acquire_runtime(
+            gateway_id="registry-route-replay",
+            owner_token="owner-1",
+            lease_duration_seconds=30,
+        )
+        channel = FakeChannelAdapter()
+        application = _RecordingApplication(project_mode=ProjectMode.MANAGED)
+        first_thread = await application.create_thread(application.default_project_ref)
+        replay_thread = await application.create_thread(application.default_project_ref)
+        blocked_thread = await application.create_thread(application.default_project_ref)
+        first_conversation = ConversationRef("fake-channel", "existing-observer")
+        command_conversation = ConversationRef("fake-channel", "command-conversation")
+        await session.put_projection_route(
+            ThreadProjectionRoute(
+                route_id="existing-route",
+                thread_ref=first_thread.ref,
+                conversation_ref=first_conversation,
+            )
+        )
+        registry = CommandRegistry()
+        outcomes: list[ActionResult] = []
+
+        @registry.command("replay", safety=CommandExecutionSafety.EFFECTFUL)
+        async def replay_route(
+            invocation: CommandInvocation,
+            actions: ConversationActions,
+        ) -> CommandResult:
+            del invocation
+            outcome = await actions.observe_thread(
+                replay_thread.ref,
+                action_id="fixed-replayed-observation",
+            )
+            outcomes.append(outcome)
+            return CommandResult.text(type(outcome).__name__)
+
+        @registry.command("blocked", safety=CommandExecutionSafety.EFFECTFUL)
+        async def blocked_route(
+            invocation: CommandInvocation,
+            actions: ConversationActions,
+        ) -> CommandResult:
+            del invocation
+            outcome = await actions.observe_thread(
+                blocked_thread.ref,
+                action_id="capacity-blocked-observation",
+            )
+            outcomes.append(outcome)
+            return CommandResult.text(type(outcome).__name__)
+
+        registry.freeze()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            repositories=GatewayRepositories(bindings=session),
+            limits=GatewayLimits(projection_max_active_threads=1),
+            extensions=GatewayExtensions(controller=registry),
+            projection_policy=ProjectionPolicy.ALL_OBSERVERS,
+        )
+
+        await gateway.start()
+        try:
+            await channel.emit_message(_message(command_conversation, "replay-1", "/replay"))
+            self.assertIsInstance(outcomes[-1], Partial)
+            assert isinstance(outcomes[-1], Partial)
+            self.assertEqual(outcomes[-1].error.code, ActionErrorCode.CAPACITY_EXHAUSTED)
+            await session.delete_projection_routes(first_thread.ref)
+            await gateway._projection_runtime.reconcile_action_route(None)
+            await channel.emit_message(_message(command_conversation, "replay-2", "/replay"))
+            await channel.emit_message(_message(command_conversation, "replay-3", "/replay"))
+            self.assertIsInstance(outcomes[-2], Succeeded)
+            self.assertIsInstance(outcomes[-1], Succeeded)
+            history_reads = [
+                operation
+                for operation in application.operations
+                if isinstance(operation, GetThreadHistory)
+                and operation.thread_ref == replay_thread.ref
+            ]
+            self.assertGreaterEqual(len(history_reads), 2)
+            await channel.emit_message(_message(command_conversation, "blocked-1", "/blocked"))
+        finally:
+            await gateway.stop()
+
+        self.assertIsInstance(outcomes[-1], Partial)
+        assert isinstance(outcomes[-1], Partial)
+        self.assertEqual(outcomes[-1].error.code, ActionErrorCode.CAPACITY_EXHAUSTED)
+        self.assertIsNone(gateway.get_projection_health(blocked_thread.ref))
+        routes = await session.list_projection_routes()
+        self.assertIn(blocked_thread.ref, {route.thread_ref for route in routes})
         await session.close()
         await store.close()
 
@@ -453,6 +715,14 @@ class PolicyFreeOrdinaryInputTests(unittest.IsolatedAsyncioTestCase):
             operation_error(MissingBindingError()).code,
             OperationErrorCode.MISSING_BINDING.value,
         )
+        self.assertIs(StaleBindingError, input_facade.StaleBindingError)
+        self.assertIs(StaleBindingError, gateway_facade.StaleBindingError)
+        self.assertFalse(hasattr(imagent, "StaleBindingError"))
+        self.assertFalse(hasattr(contracts_facade, "StaleBindingError"))
+        self.assertEqual(
+            operation_error(StaleBindingError()).code,
+            OperationErrorCode.STALE_BINDING.value,
+        )
 
     def _assert_scoped_surface_has_no_runtime_escape(
         self,
@@ -491,3 +761,11 @@ def _message(
         content=(TextContent(text),),
         created_at=datetime.now(UTC),
     )
+
+
+async def _wait_until(predicate, *, attempts: int = 1000) -> None:
+    for _ in range(attempts):
+        if predicate():
+            return
+        await asyncio.sleep(0)
+    raise AssertionError("condition did not become true")

@@ -21,6 +21,10 @@ and binding. Deletion calls only the primitive native delete and never silently
 clears a binding. Request response calls only the Conversation-authorized
 `respond_request`. The SDK supplies no default CWD; project creation requires
 an explicit caller value and is not guessed by common command code.
+After `/new` receives its created `ThreadRef`, its explicit `observe_thread`
+action must reconcile the live projection runtime before the consumed command
+returns success. A partial activation is presented as partial; it is never
+collapsed into success or an alternate dispatch path.
 
 Every effectful handler derives a stable action ID from admitted Channel,
 Conversation, message, canonical command/action, and bounded arguments. It

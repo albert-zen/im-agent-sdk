@@ -197,9 +197,12 @@ Per-user group selection is a future consumer policy, not current Core.
    the same ordinary-input path; a tuple consumes the Message.
 6. Gateway resolves the exact Application → Project → Thread binding. An
    incomplete or absent binding fails as typed `missing_binding` before I1,
-   route mutation, or native Application work. Gateway never selects a sole
+   route mutation, or native Application work. A complete binding then proves
+   the Application is registered and performs authoritative Project and Thread
+   reads; missing native ancestry fails as typed `stale_binding` before I1,
+   route/worker mutation, or native input. Gateway never selects a sole
    candidate, creates a resource, or chooses a default CWD.
-7. Optional I1 transforms content only after that binding is complete.
+7. Optional I1 transforms content only after that binding is complete and live.
 8. Gateway derives/preserves a stable client message ID.
 9. It records/refreshes output observation and establishes live subscription
    before sending input.

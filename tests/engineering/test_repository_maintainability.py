@@ -436,7 +436,11 @@ class ComponentMapTests(unittest.TestCase):
 
         self.assertEqual(
             components["gateway.input.dispatch"]["public_contracts"],
-            ["MissingBindingError", "derive_client_message_id"],
+            [
+                "MissingBindingError",
+                "StaleBindingError",
+                "derive_client_message_id",
+            ],
         )
         self.assertGreaterEqual(
             set(components["applications.application-contract"]["public_contracts"]),

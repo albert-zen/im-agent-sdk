@@ -39,6 +39,7 @@ class CommonOperationVocabularyTests(unittest.TestCase):
             "capacity_exhausted",
         )
         self.assertEqual(OperationErrorCode.MISSING_BINDING.value, "missing_binding")
+        self.assertEqual(OperationErrorCode.STALE_BINDING.value, "stale_binding")
         cases = (
             (ValueError("bad input"), OperationErrorCode.INVALID_OPERATION),
             (NotImplementedError("missing"), OperationErrorCode.UNSUPPORTED),

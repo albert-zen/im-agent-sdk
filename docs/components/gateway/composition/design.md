@@ -66,9 +66,13 @@ submissions together. Every optional repository must be absent or that exact
 object; mixing the session with any other repository fails during construction.
 Gateway then constructs `StoreBackedGatewayEffectExecutor` and exposes only the
 resulting `ConversationActions` to Controller code. This focused integration
-does not expose the private session or turn `GatewayRepositories` into the v1
-public store port; final `GatewayStore` acquisition and lifecycle ownership
-remain later DAG composition work.
+also injects the projection runtime's public action-route bootstrap and
+reconciliation methods as narrow callables into the private Controller action
+adapter. Successful and terminally replayed route/binding actions converge
+current observation without giving C or the Controller a repository/runtime
+escape. This focused integration does not expose the private session or turn
+`GatewayRepositories` into the v1 public store port; final `GatewayStore`
+acquisition and lifecycle ownership remain later DAG composition work.
 
 `projection_max_active_threads` is passed only to the Thread observation
 runtime. It bounds distinct stable `ThreadRef` workers in one Gateway process:

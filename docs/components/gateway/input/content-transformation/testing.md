@@ -7,8 +7,8 @@ Tests must prove:
 
 - absence is exact identity behavior and Controller-consumed/duplicate input
   bypasses I1;
-- missing/incomplete binding and foreign Conversation/resource ancestry bypass
-  I1 before route or native work;
+- missing/incomplete/stale binding and foreign Conversation/resource ancestry
+  bypass I1 before route/worker or native work;
 - the transformer receives the original frozen message and can replace content
   without changing any envelope, binding, client ID, continuation, or
   correlation fact;

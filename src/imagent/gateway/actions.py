@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import math
@@ -78,7 +79,7 @@ from ..interaction.operations import (
     operation_error,
     require_identifier,
 )
-from .effect_execution import GatewayEffectExecutor
+from .effect_execution import GatewayEffectExecutor, StoreEffectPreflight
 from .outcomes import Failed, Outcome, OutcomeUnknown, Partial, Succeeded
 from .persistence.effects import (
     ActionError,
@@ -163,6 +164,20 @@ class _ActionRuntime(Protocol):
         self,
         conversation_ref: ConversationRef,
     ) -> ConversationBinding | None: ...
+
+    async def begin_projection_route(self, route_id: str) -> object: ...
+
+    def complete_projection_route(
+        self,
+        lease: object,
+        reconciled: bool | None,
+    ) -> None: ...
+
+    async def reconcile_projection_route(
+        self,
+        route_id: str | None,
+        action_lease: object | None,
+    ) -> ActionError | None: ...
 
     async def authorize_request_response(
         self,
@@ -1049,9 +1064,10 @@ class ConversationActions:
             )
 
         return _public_outcome(
-            await self._context.effects.execute_store_mutation(
+            await self._execute_store_mutation(
                 request,
                 preflight=preflight,
+                bootstrap_route_id=route.route_id,
             )
         )
 
@@ -1093,7 +1109,7 @@ class ConversationActions:
                 ),
             ),
         )
-        return _public_outcome(await self._context.effects.execute_store_mutation(request))
+        return _public_outcome(await self._execute_store_mutation(request))
 
     async def respond_request(
         self,
@@ -1324,9 +1340,10 @@ class ConversationActions:
             )
 
         return _public_outcome(
-            await self._context.effects.execute_store_mutation(
+            await self._execute_store_mutation(
                 request,
                 preflight=preflight if preflight_resource is not None else None,
+                bootstrap_route_id=(route_upsert.route_id if route_upsert is not None else None),
             )
         )
 
@@ -1367,13 +1384,73 @@ class ConversationActions:
             validate_application_operation_result(native_operation, result)
             return _known_native_result(result, success_type)
 
-        outcome = await self._context.effects.execute_create_binding_workflow(
-            request,
-            invoke=invoke,
-            preflight=preflight,
-            reconcile=reconcile,
+        outcome = await self._reconcile_projection_route(
+            await self._context.effects.execute_create_binding_workflow(
+                request,
+                invoke=invoke,
+                preflight=preflight,
+                reconcile=reconcile,
+            )
         )
         return _public_outcome(outcome)
+
+    async def _reconcile_projection_route(
+        self,
+        outcome: ActionOutcome,
+        action_lease: object | None = None,
+    ) -> ActionOutcome:
+        if not isinstance(outcome, Succeeded):
+            return outcome
+        task = asyncio.create_task(
+            self._context.runtime.reconcile_projection_route(
+                outcome.value.route_id,
+                action_lease,
+            )
+        )
+        try:
+            error = await asyncio.shield(task)
+        except asyncio.CancelledError:
+            # The route mutation is already terminal.  Join the process-local
+            # convergence attempt so a single caller cancellation cannot leave
+            # a consumed command durably routed but inactive.
+            error = await task
+        if error is not None:
+            return Partial(outcome.value, error)
+        return outcome
+
+    async def _execute_store_mutation(
+        self,
+        request: StoreMutationRequest,
+        *,
+        preflight: StoreEffectPreflight | None = None,
+        bootstrap_route_id: str | None = None,
+    ) -> ActionOutcome:
+        bootstrap_lease = (
+            await self._context.runtime.begin_projection_route(bootstrap_route_id)
+            if bootstrap_route_id is not None
+            else None
+        )
+        reconciled: bool | None = None
+        try:
+            durable_outcome = await self._context.effects.execute_store_mutation(
+                request,
+                preflight=preflight,
+            )
+            if not isinstance(durable_outcome, Succeeded):
+                return durable_outcome
+            reconciled = False
+            outcome = await self._reconcile_projection_route(
+                durable_outcome,
+                bootstrap_lease,
+            )
+            reconciled = isinstance(outcome, Succeeded)
+            return outcome
+        finally:
+            if bootstrap_lease is not None:
+                self._context.runtime.complete_projection_route(
+                    bootstrap_lease,
+                    reconciled,
+                )
 
     async def _enter_effectful_command(self, invocation: _CommandInvocationFacts) -> None:
         if invocation.conversation_ref != self.conversation_ref or invocation.actor != self.actor:

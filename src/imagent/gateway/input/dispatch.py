@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 from collections.abc import Awaitable, Callable
+from datetime import datetime
 from typing import Protocol
 
 from ...applications.contract import (
@@ -18,6 +19,16 @@ from ...applications.contract import (
     ThreadRef,
 )
 from ...applications.events import AgentEvent, EventBufferOverflow
+from ...applications.operations import (
+    ApplicationOperation,
+    ApplicationOperationFailed,
+    ApplicationOperationResult,
+    GetProject,
+    GetThread,
+    ProjectRead,
+    ThreadRead,
+    validate_application_operation_result,
+)
 from ...interaction.messages import Content, ConversationRef, InboundMessage
 from ...interaction.operations import (
     OperationErrorCode,
@@ -37,6 +48,78 @@ class MissingBindingError(_MappedOperationError):
 
     def __init__(self) -> None:
         super().__init__("ordinary input requires an explicit Application/Project/Thread binding")
+
+
+class StaleBindingError(_MappedOperationError):
+    """Ordinary input's complete binding no longer has authoritative native ancestry."""
+
+    operation_error_code = OperationErrorCode.STALE_BINDING
+
+    def __init__(self) -> None:
+        super().__init__(
+            "ordinary input binding no longer resolves to authoritative native resources"
+        )
+
+
+class _BindingPreflightError(_MappedOperationError):
+    """A non-stale authoritative binding read failed before ordinary input effects."""
+
+    def __init__(self, code: OperationErrorCode) -> None:
+        self.operation_error_code = code
+        super().__init__("ordinary input binding could not be verified")
+
+
+ApplicationOperationExecutor = Callable[
+    [ApplicationOperation],
+    Awaitable[ApplicationOperationResult],
+]
+
+
+async def preflight_authoritative_binding(
+    application: AgentApplicationAdapter,
+    thread_ref: ThreadRef,
+    *,
+    operation_id_prefix: str,
+    created_at: datetime,
+    execute_application: ApplicationOperationExecutor,
+) -> None:
+    """Prove Project and Thread existence without admitting any native input effect."""
+
+    project_operation = GetProject(
+        operation_id=f"{operation_id_prefix}:project.get",
+        application_ref=application.summary.ref,
+        project_ref=thread_ref.project_ref,
+        created_at=created_at,
+    )
+    project_result = await execute_application(project_operation)
+    validate_application_operation_result(project_operation, project_result)
+    if isinstance(project_result, ApplicationOperationFailed):
+        _raise_binding_preflight_failure(project_result)
+    if not isinstance(project_result, ProjectRead):
+        raise _BindingPreflightError(OperationErrorCode.ADAPTER_FAILURE)
+
+    thread_operation = GetThread(
+        operation_id=f"{operation_id_prefix}:thread.get",
+        application_ref=application.summary.ref,
+        thread_ref=thread_ref,
+        created_at=created_at,
+    )
+    thread_result = await execute_application(thread_operation)
+    validate_application_operation_result(thread_operation, thread_result)
+    if isinstance(thread_result, ApplicationOperationFailed):
+        _raise_binding_preflight_failure(thread_result)
+    if not isinstance(thread_result, ThreadRead):
+        raise _BindingPreflightError(OperationErrorCode.ADAPTER_FAILURE)
+
+
+def _raise_binding_preflight_failure(result: ApplicationOperationFailed) -> None:
+    try:
+        code = OperationErrorCode(result.error.code)
+    except ValueError:
+        code = OperationErrorCode.ADAPTER_FAILURE
+    if code is OperationErrorCode.NOT_FOUND:
+        raise StaleBindingError()
+    raise _BindingPreflightError(code)
 
 
 class OrderedProjectionEventApplier(Protocol):

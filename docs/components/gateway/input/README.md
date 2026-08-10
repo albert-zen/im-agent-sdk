@@ -15,11 +15,13 @@ and optional classified failure presentation independent:
   optional terminal error delivery without retry authority.
 
 The ordered path is Controller handling, exact complete binding resolution,
-optional I1 after Controller decline, route preparation, then canonical native
-dispatch. A Controller may explicitly onboard through scoped actions and pass
-the original Message through, but Gateway never selects or creates resources
-and no second dispatch path exists. Missing Application/Project/Thread ancestry
-is the typed `missing_binding` pre-acceptance failure. Dispatch owns only stable
+authoritative bound Project/Thread existence preflight, optional I1 after
+Controller decline, route preparation, then canonical native dispatch. A
+Controller may explicitly onboard through scoped actions and pass the original
+Message through, but Gateway never selects or creates resources and no second
+dispatch path exists. Absent/incomplete hierarchy is typed `missing_binding`;
+an unregistered Application or authoritative native `not_found` is typed
+`stale_binding`. Both are pre-acceptance failures. Dispatch owns only stable
 input identity, the typed native side-effect pre-dispatch fence, the distinct
 acceptance-ordering gate, and accepted-Turn correlation; it does not create another Conversation
 registry. I2 wraps the owned claimed-input outcome and applies phase-specific

@@ -31,23 +31,33 @@ Landed evidence:
 
 Ordinary input now requires one explicit complete Application/Project/Thread
 binding and invokes one canonical dispatch runtime. `MissingBindingError`
-carries the stable `missing_binding` classification through the existing
-pre-acceptance/I2 path without binding, effect-receipt, route, resource,
-native-input, or fallback-delivery mutation. Required admission claim/release
-or completion bookkeeping remains intact.
+carries the stable `missing_binding` classification for absent/incomplete
+hierarchy; `StaleBindingError` carries `stale_binding` when the bound
+Application is unregistered or authoritative Project/Thread reads return
+`not_found`. Both use the existing pre-acceptance/I2 path without binding,
+effect-receipt, route, resource, native-input, or fallback-delivery mutation.
+Required admission claim/release or completion bookkeeping remains intact.
 
 Landed evidence:
 
 - sole-Application discovery, implicit Thread creation, default CWD, and
   hand-rendered Gateway onboarding errors are absent from ordinary input;
-- binding resolution precedes I1, route preparation, and native dispatch;
+- binding shape and authoritative Project/Thread existence resolution precede
+  I1, route preparation, worker start, and native dispatch;
 - a Controller backed by one coherent B store session receives only C's scoped
   `ConversationActions`, can explicitly create/select and create/bind, and can
   return `None` to pass the same original Message through the same dispatch
   path;
 - two Conversations retain independent binding/route/input ancestry, while C,
   the coherent store, and the ordinary-input resolver reject foreign
-  Conversation/resource hierarchy; and
+  Conversation/resource hierarchy;
+- successful and terminally replayed scoped route mutations reconcile the
+  projection-owned runtime against current store authority; common `/new`
+  starts observation before the consumed command returns, and activation
+  failure becomes a typed partial outcome instead of false success; opaque
+  generation leases serialize same-route action lifecycles, prevent stale
+  completion from opening a newer fence, and retire blocked delivery when the
+  route is removed; and
 - durable admission and unknown-outcome protection remain intact, including
   released pre-acceptance replay, terminal accepted replay, cancellation
   fences, prefer-active-Turn behavior, and Turn/reply correlation.
@@ -255,21 +265,26 @@ Gateway factory and lifecycle wiring remain later DAG work.
 Status: complete.
 
 1. Remove implicit Application selection and Thread creation.
-2. Return explicit missing-binding through the classified failure path.
+2. Return explicit missing- or stale-binding through the classified failure
+   path.
 3. Preserve admission, I1/I2, prefer-active-Turn, correlation, and no-retry
    invariants.
 4. Prove a consumer Controller can implement optional onboarding explicitly
    without creating a second dispatch path.
 
-Landed evidence includes the exact public `MissingBindingError` identity and
-language-neutral `missing_binding` code, pre-acceptance release/I2
-classification, zero-effect incomplete-binding tests at every hierarchy depth,
-explicit C workflow onboarding followed by the unchanged Message, stable
-accepted-message replay, hostile binding-repository Conversation/resource
-ancestry rejection, two-Conversation isolation, and retained dispatch/
-correlation/cancellation/unknown-outcome suites. Obsolete fixtures now create
-and bind their Threads explicitly; existing-Thread vertical evidence waits for
-the correlated reply after any authoritative baseline recovery.
+Landed evidence includes the exact public `MissingBindingError` and
+`StaleBindingError` identities and language-neutral `missing_binding`/
+`stale_binding` codes, pre-acceptance release/I2 classification, zero-effect
+incomplete-binding tests at every hierarchy depth, Memory/SQLite deleted
+Project/deleted Thread/unregistered Application counterexamples, explicit C
+workflow onboarding followed by the unchanged Message, stable accepted-message
+replay, hostile binding-repository Conversation/resource ancestry rejection,
+two-Conversation isolation, real registry common-`/new` observation and
+terminal route-action replay/activation-failure evidence, post-receipt
+cancellation join and failed-baseline fencing until replay, and retained
+dispatch/correlation/cancellation/unknown-outcome suites. Obsolete fixtures now
+create and bind their Threads explicitly; existing-Thread vertical evidence
+waits for the correlated reply after any authoritative baseline recovery.
 
 ### E. Executable vertical consumer
 

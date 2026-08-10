@@ -54,7 +54,7 @@ not grant the Controller access to Gateway or Application implementations.
 ## Failure and replay boundary
 
 Stable error codes distinguish invalid, unsupported, missing resource,
-missing ordinary-input binding, conflicting,
+missing ordinary-input binding, stale ordinary-input binding, conflicting,
 adapter-failed, capacity-exhausted, unauthorized-destination, and
 request-lifecycle outcomes. `capacity_exhausted` is retryable only because it
 is emitted before the owning operation's side-effect boundary. Native
@@ -65,9 +65,9 @@ Owner-specific exceptions may carry one stable `OperationErrorCode` through a
 private common mapped-error base. The base contains no Application or Gateway
 state and exists only so `operation_error` can preserve the code without a
 reverse import. Applications-owned request exceptions and the Gateway-owned
-`MissingBindingError` depend on that common base; `interaction.operations`
-never imports those exceptions or interprets request lifecycle or binding
-truth.
+`MissingBindingError`/`StaleBindingError` depend on that common base;
+`interaction.operations` never imports those exceptions or interprets request
+lifecycle or binding truth.
 
 `operationId` is correlation identity, not a universal exactly-once claim.
 The owner of each concrete operation defines whether it is read-only,

@@ -31,6 +31,12 @@ implement optional onboarding with `create_and_select_project` and
 resolved and sent by the same ordinary-input dispatcher. Gateway itself never
 performs that policy, guesses a CWD, or creates a second dispatch route.
 
+When a handler consumes input after a route-producing scoped action, that
+action's success is returned only after the projection-owned runtime has
+reconciled current live observation. Terminal action receipt replay performs the
+same reconciliation without restoring later-removed route state. The
+Controller receives neither that runtime seam nor its store dependencies.
+
 `ControllerLifecycle` remains an optional structural capability for startup
 validation and bounded shutdown. An unfrozen registry fails before input.
 

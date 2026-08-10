@@ -19,6 +19,9 @@ Projection-route conformance must prove:
 - checkpoint compare-and-swap cannot be bypassed by ordinary route writes;
 - restart reconstructs active observation from durable routes and bindings,
   with bounded baseline-before-live ordering;
+- successful and terminally replayed scoped route mutations reconcile the live
+  projection owner against current route authority without direct repository
+  access from Controller/action surfaces or restoration of later-removed state;
 - one destination failure neither restarts Thread observation nor blocks
   another destination;
 - request projection creates correlation only for accepted destination

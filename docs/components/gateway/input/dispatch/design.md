@@ -25,12 +25,17 @@ remain with their owning leaves.
 
 After Controller decline, the Gateway aggregate requires an already complete
 Application/Project/Thread binding and validates that its Conversation and
-resource ancestry match exactly. Missing ancestry raises the public typed
+resource ancestry match exactly. Missing hierarchy raises the public typed
 `MissingBindingError` with stable `missing_binding` classification; foreign or
-malformed ancestry fails as a contract violation. Both occur before I1, route
-mutation, or native work. Gateway never discovers a sole Application, creates
-a Project/Thread, selects a default CWD, or interprets Message content as
-control intent. An optional Controller may explicitly create/select and
+malformed ancestry fails as a contract violation. A complete hierarchy must
+then resolve a registered Application and matching authoritative `project.get`
+and `thread.get`; absent native ancestry raises public typed
+`StaleBindingError` with stable `stale_binding` classification. These all occur
+before I1, route/worker mutation, or native input. A non-`not_found` native read
+failure preserves its fixed pre-acceptance operation classification rather than
+pretending the binding is stale. Gateway never discovers a sole Application,
+creates a Project/Thread, selects a default CWD, or interprets Message content
+as control intent. An optional Controller may explicitly create/select and
 create/bind through `ConversationActions`, then return `None`; the unchanged
 Message continues through this exact same resolution and dispatch path.
 
@@ -103,7 +108,7 @@ binding, claim, or side-effect policy.
 ## Contracts and structure
 
 The exact public facade exports
-`imagent.gateway.input:MissingBindingError` and
+`imagent.gateway.input:{MissingBindingError,StaleBindingError}` and
 `imagent.gateway.input:derive_client_message_id`; the historical
 `imagent.contracts.validators` module and validator alias are physically
 absent. Implementation is
@@ -119,9 +124,9 @@ Dependencies are the common Interaction operation-error vocabulary,
 Application contract/operations/events, Gateway
 admission, Gateway binding-state validation, the request/reply-correlation
 owner, and the existing typed projection event/recovery path. Strict binding
-resolution and route preparation are complete before this leaf begins; the
-missing-binding type remains in this owner because it classifies entry into the
-one ordinary-input dispatch path.
+shape and authoritative existence resolution are complete before I1 and route
+preparation; the missing/stale binding types and read preflight remain in this
+owner because they classify entry into the one ordinary-input dispatch path.
 
 ## Authority
 

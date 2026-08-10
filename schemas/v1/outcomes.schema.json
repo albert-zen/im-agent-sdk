@@ -30,6 +30,7 @@
                 "unsupported",
                 "not_found",
                 "missing_binding",
+                "stale_binding",
                 "conflict",
                 "adapter_failure",
                 "capacity_exhausted",

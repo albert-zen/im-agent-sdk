@@ -19,7 +19,9 @@
   extensions preserve behavior exactly;
 - Controller composition rejects loose or mixed repositories before input,
   while one exact coherent store session supplies every runtime persistence
-  owner and C's effect executor without escaping through `ConversationActions`;
+  owner and C's effect executor, and the projection-owned route reconciliation
+  callable converges successful/replayed action state, without escaping through
+  `ConversationActions`;
 - invalid finite capacities, including the default in-memory idempotency record
   bound, fail during construction before startup or I/O;
 - the positive active-Thread observation bound reaches the one projection

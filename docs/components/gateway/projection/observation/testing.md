@@ -24,6 +24,21 @@ Observation conformance must prove:
   terminal Turn events do;
 - baseline delivery precedes live draining for each route without creating a
   second content queue;
+- the public action-route reconciliation method reads current route/binding
+  authority, activates and baselines a successful or terminally replayed route,
+  ignores a replayed route removed by later intent, stops newly unauthorized
+  workers, and surfaces capacity/activation failure instead of false success;
+- scoped observe/foreground-bind composition installs this owner's sole route
+  barrier before durable visibility, releases it after successful baseline,
+  retains it after baseline failure/cancellation, and releases it when later
+  explicit replay converges;
+- generation-specific action leases serialize same-route lifecycles, prevent a
+  concurrent or stale completion from releasing another action's barrier, and
+  survive route removal/re-add without an ABA release;
+- delivery queued behind a route lock rechecks the current barrier generation,
+  while removal retires the closed generation, wakes waiters, cancels retries,
+  and cancellation while acquiring an action lease releases its Thread-start
+  reservation;
 - retryable and terminal typed destination decisions do not restart the Thread
   worker or block other routes, whereas an injected checkpoint/repository
   failure enters only the affected Thread's existing recovery worker and

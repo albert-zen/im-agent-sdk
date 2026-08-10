@@ -134,6 +134,14 @@ The same run proves:
   service;
 - one neutral effectful command calls a Conversation workflow action after the
   durable command fence;
+- common `/new` establishes live projection through the scoped route action, and
+  later authoritative Thread output is delivered even though the command input
+  itself was consumed;
+- terminal route-action replay reconciles current live observation again, while
+  activation failure is a typed partial result rather than success, and
+  post-receipt cancellation/baseline failure cannot open an unreconciled route;
+  same-route action generations serialize, stale completion cannot open a newer
+  fence, and route removal retires blocked delivery before same-ID re-add;
 - duplicate registration and an unfrozen registry fail before Gateway accepts
   input; and
 - with no Controller, Slash-looking text is ordinary Agent input.
@@ -374,12 +382,12 @@ clean-wheel executions both pass.
 | Project create-and-select workflow | success/partial/unknown/conflict | B/C durable coordinator and scoped action mapping implemented |
 | Thread create-and-bind workflow | success/partial/unknown/conflict | B/C durable coordinator and scoped action mapping implemented |
 | scoped consumer actions | principal, Conversation isolation, no adapter/store escape | implemented in DAG C; D wires the Controller input seam over one coherent session, while the final public factory remains later composition work |
-| ordinary Channel → Agent → Channel text | no direct fake mutation | D implements policy-free binding/dispatch and explicit Controller onboarding focused evidence; the reference executable remains block E |
+| ordinary Channel → Agent → Channel text | no direct fake mutation | D implements policy-free binding/dispatch, authoritative stale-binding preflight, explicit Controller onboarding, and consumed-command observation activation evidence; the reference executable remains block E |
 | multi-Conversation one-Thread fan-out | one worker, two destinations | existing evidence requires public-path review |
 | foreground switch and switch-back | route authority in both directions, no duplicates | partial existing evidence |
 | SQLite restart recovery | fresh Gateway/store objects, no SDK content truth | missing |
 | local common and product commands | read-only plus effectful typed service/action | implemented in DAG C focused registry/action evidence |
-| unsupported/stale/capacity/partial/unknown | typed consumer-visible outcomes | D adds exact typed/classified `missing_binding`; remaining vertical outcome coverage is incomplete |
+| unsupported/stale/capacity/partial/unknown | typed consumer-visible outcomes | D adds exact typed/classified `missing_binding` and `stale_binding`, plus partial projection-activation failure; remaining vertical outcome coverage is incomplete |
 | request response routing | recipient correlation and native first-writer truth | B replay-before-preflight and C authorized scoped action implemented; final lifecycle/projection integration remains |
 | media/artifact boundaries | trust, bounds, consumer-owned bytes/cleanup | existing evidence requires integration |
 | diagnostics and graceful shutdown | redaction, finite cleanup, late callback rejection | partial existing evidence |

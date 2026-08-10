@@ -51,6 +51,33 @@ into a hidden replay queue. The bootstrap barrier orders bounded baseline
 reconciliation before this route drains live observations, while the live data
 remains only in the existing bounded Application subscriber queue.
 
+`ThreadProjectionRuntime.reconcile_action_route(route_id)` is the explicit
+composition seam after a scoped Conversation action has durably changed
+binding/route state or replayed its terminal success. It reads current active
+routes through this owner's route authority, stops workers no longer authorized,
+and for a still-active returned route installs the bootstrap barrier, ensures
+the one bounded worker, and performs bounded authoritative reconciliation. It
+never creates or restores a route, writes a binding, consults a consumer
+surface, or repeats the durable action. A replay whose route was later removed
+therefore performs only current-state convergence. Capacity or activation
+failure propagates to the action adapter for typed partial classification;
+success is not reported merely because route persistence succeeded. Once a
+route barrier is installed, baseline failure or cancellation leaves it closed;
+only successful reconciliation or later explicit replay opens live delivery.
+For scoped actions whose route ID is known before persistence,
+`begin_action_route`/`complete_action_route` expose that same coordinator barrier
+to composition so durable visibility cannot precede baseline fencing. Begin
+returns an opaque, coordinator-owned generation lease used only to serialize
+same-route action lifecycles and to associate completion with the exact barrier
+generation it began. Reconciliation and completion carry that lease back to the
+same owner; stale completion cannot open, retain, or release a later generation.
+When a route has been durably removed, reconciliation retires its barrier,
+wakes blocked delivery, and cancels its route-scoped retry before returning.
+Delivery rechecks the current barrier while holding the route lock, so a waiter
+that observed an older open generation cannot cross a newly closed one. These
+methods never grant store, route-authority, or runtime access to Controller
+consumers, and the opaque lease is not a public consumer surface.
+
 `message.completed` is a durable completed-item observation, not a Turn
 terminal event. Only explicit `turn.completed`, `turn.failed`, or
 `turn.interrupted` closes the corresponding Turn. A live-only A1

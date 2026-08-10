@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 import tempfile
 import unittest
@@ -64,6 +65,7 @@ from imagent.gateway.persistence.sqlite_store import SQLiteGatewayStore
 from imagent.gateway.persistence.state_contracts import ConversationBinding
 from imagent.gateway.persistence.store import GatewayStore
 from imagent.gateway.routing.operations import _MAX_APPLICATION_LIST_ITEMS
+from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.controllers import CommandInvocation, CommandRegistry, CommandResult
 from imagent.interaction.media import (
     AttachmentContent,
@@ -85,6 +87,14 @@ class _Runtime:
         self.reject_request = False
         self.wrong_request_result = False
         self.binding_reads = 0
+        self.reconciled_route_ids: list[str | None] = []
+        self.begun_route_ids: list[str] = []
+        self.completed_route_ids: list[str] = []
+        self.completed_route_statuses: list[bool | None] = []
+        self.projection_route_leases: dict[object, str] = {}
+        self.projection_reconciliation_error: ActionError | None = None
+        self.projection_reconciliation_entered: asyncio.Event | None = None
+        self.projection_reconciliation_release: asyncio.Event | None = None
         self.forced_operation_error: OperationErrorCode | None = None
         self.application_summaries: tuple[ApplicationSummary, ...] = (self.application.summary,)
 
@@ -113,6 +123,43 @@ class _Runtime:
         self.binding_reads += 1
         del conversation_ref
         return self.binding
+
+    async def reconcile_projection_route(
+        self,
+        route_id: str | None,
+        action_lease: object | None,
+    ):
+        if action_lease is not None:
+            self.assert_projection_lease(action_lease, route_id)
+        self.reconciled_route_ids.append(route_id)
+        if self.projection_reconciliation_entered is not None:
+            self.projection_reconciliation_entered.set()
+        if self.projection_reconciliation_release is not None:
+            await self.projection_reconciliation_release.wait()
+        return self.projection_reconciliation_error
+
+    def assert_projection_lease(
+        self,
+        lease: object,
+        route_id: str | None,
+    ) -> None:
+        if self.projection_route_leases.get(lease) != route_id:
+            raise AssertionError("projection reconciliation received the wrong route lease")
+
+    async def begin_projection_route(self, route_id: str) -> object:
+        self.begun_route_ids.append(route_id)
+        lease = object()
+        self.projection_route_leases[lease] = route_id
+        return lease
+
+    def complete_projection_route(
+        self,
+        lease: object,
+        reconciled: bool | None,
+    ) -> None:
+        route_id = self.projection_route_leases.pop(lease)
+        self.completed_route_ids.append(route_id)
+        self.completed_route_statuses.append(reconciled)
 
     async def authorize_request_response(
         self,
@@ -161,6 +208,7 @@ class _StrictEffects:
         self.partial_workflow = False
         self.unknown_workflow = False
         self.before_native: Callable[[], None] | None = None
+        self.before_store: Callable[[StoreMutationRequest], None] | None = None
         self.native_outcomes: dict[str, ActionOutcome] = {}
 
     async def execute_store_mutation(
@@ -170,6 +218,8 @@ class _StrictEffects:
         preflight=None,
     ) -> ActionOutcome:
         self.store_requests.append(request)
+        if self.before_store is not None:
+            self.before_store(request)
         replay = self.store_outcomes.get(request.fingerprint.action_key)
         if replay is not None:
             return replay
@@ -862,9 +912,27 @@ class ScopedActionSurfaceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_route_only_actions_name_scope_without_a_synthetic_binding(self) -> None:
         thread = await _seed_thread(self.runtime)
+        self.effects.before_store = lambda request: self.assertIn(
+            request.plan.route_upsert.route_id if request.plan.route_upsert is not None else None,
+            self.runtime.begun_route_ids,
+        )
         observed = await self.actions.observe_thread(thread, action_id="observe-1")
         self.assertIsInstance(observed, Succeeded)
+        assert isinstance(observed, Succeeded)
+        replayed = await self.actions.observe_thread(thread, action_id="observe-1")
+        self.assertIsInstance(replayed, Succeeded)
+        assert isinstance(replayed, Succeeded)
+        self.effects.before_store = None
         await self.actions.clear_observation(thread, action_id="clear-observation-1")
+        self.assertEqual(
+            self.runtime.reconciled_route_ids[:3],
+            [observed.value.route_id, observed.value.route_id, observed.value.route_id],
+        )
+        self.assertEqual(
+            self.runtime.begun_route_ids,
+            [observed.value.route_id, observed.value.route_id],
+        )
+        self.assertEqual(self.runtime.completed_route_ids, self.runtime.begun_route_ids)
         for request in self.effects.store_requests:
             with self.subTest(action_kind=request.fingerprint.action_kind):
                 self.assertEqual(request.plan.conversation_ref, self.conversation)
@@ -894,6 +962,85 @@ class ScopedActionSurfaceTests(unittest.IsolatedAsyncioTestCase):
             foreground_clear.fingerprint.payload_fingerprint,
             non_foreground_clear.fingerprint.payload_fingerprint,
         )
+
+    async def test_projection_activation_failure_turns_durable_route_success_partial(self) -> None:
+        thread = await _seed_thread(self.runtime)
+        self.runtime.projection_reconciliation_error = ActionError(
+            ActionErrorCode.CAPACITY_EXHAUSTED,
+            OperationErrorCode.CAPACITY_EXHAUSTED,
+        )
+
+        result = await self.actions.observe_thread(thread, action_id="observe-capacity")
+
+        self.assertIsInstance(result, Partial)
+        assert isinstance(result, Partial)
+        self.assertEqual(
+            result.value.route_id,
+            derive_projection_route_id(thread, self.conversation),
+        )
+        self.assertEqual(result.error.code, ActionErrorCode.CAPACITY_EXHAUSTED)
+        self.assertEqual(
+            result.error.operation_error_code,
+            OperationErrorCode.CAPACITY_EXHAUSTED,
+        )
+        self.assertEqual(self.runtime.completed_route_statuses, [False])
+
+        self.runtime.projection_reconciliation_error = None
+        replayed = await self.actions.observe_thread(thread, action_id="observe-capacity")
+
+        self.assertIsInstance(replayed, Succeeded)
+        self.assertEqual(
+            self.runtime.completed_route_ids,
+            [
+                derive_projection_route_id(thread, self.conversation),
+                derive_projection_route_id(thread, self.conversation),
+            ],
+        )
+        self.assertEqual(self.runtime.completed_route_statuses, [False, True])
+
+    async def test_post_receipt_cancellation_joins_projection_reconciliation(self) -> None:
+        thread = await _seed_thread(self.runtime)
+        self.runtime.projection_reconciliation_entered = asyncio.Event()
+        self.runtime.projection_reconciliation_release = asyncio.Event()
+
+        action = asyncio.create_task(
+            self.actions.observe_thread(thread, action_id="observe-cancelled")
+        )
+        await self.runtime.projection_reconciliation_entered.wait()
+        action.cancel()
+        await asyncio.sleep(0)
+        self.assertFalse(action.done())
+
+        self.runtime.projection_reconciliation_release.set()
+        result = await action
+
+        self.assertIsInstance(result, Succeeded)
+        self.assertEqual(
+            self.runtime.completed_route_ids,
+            [derive_projection_route_id(thread, self.conversation)],
+        )
+        self.assertEqual(self.runtime.completed_route_statuses, [True])
+
+    async def test_repeated_post_receipt_cancellation_keeps_route_barrier_closed(self) -> None:
+        thread = await _seed_thread(self.runtime)
+        self.runtime.projection_reconciliation_entered = asyncio.Event()
+        self.runtime.projection_reconciliation_release = asyncio.Event()
+
+        action = asyncio.create_task(
+            self.actions.observe_thread(thread, action_id="observe-cancelled-twice")
+        )
+        await self.runtime.projection_reconciliation_entered.wait()
+        action.cancel()
+        await asyncio.sleep(0)
+        action.cancel()
+
+        with self.assertRaises(asyncio.CancelledError):
+            await action
+        self.assertEqual(
+            self.runtime.completed_route_ids,
+            [derive_projection_route_id(thread, self.conversation)],
+        )
+        self.assertEqual(self.runtime.completed_route_statuses, [False])
 
     async def test_respond_request_exists_only_on_authorized_conversation_scope(self) -> None:
         request_ref = RequestRef(self.application_ref, "request-1")

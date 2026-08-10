@@ -9,14 +9,23 @@ from ..applications.contract import AgentApplicationAdapter, ApplicationSummary
 from ..applications.operations import ApplicationOperation, ApplicationOperationResult
 from ..applications.requests import RequestRef, RequestResponse
 from ..interaction.messages import ConversationRef
+from ..interaction.operations import OperationErrorCode
 from .actions import ConversationActions, _new_conversation_actions
 from .effect_execution import GatewayEffectExecutor
-from .persistence.effects import KnownNativeOutcome
+from .persistence.effects import (
+    ActionError,
+    ActionErrorCode,
+    KnownNativeOutcome,
+)
 from .persistence.state_contracts import ConversationBinding
+from .projection.observation import ProjectionWorkerCapacityError
 
 ApplicationExecutor = Callable[[ApplicationOperation], Awaitable[ApplicationOperationResult]]
 BindingReader = Callable[[ConversationRef], Awaitable[ConversationBinding | None]]
 EffectFence = Callable[[], Awaitable[None]]
+ProjectionRouteReconciler = Callable[[str | None, object | None], Awaitable[None]]
+ProjectionRouteBootstrapBegin = Callable[[str], Awaitable[object]]
+ProjectionRouteBootstrapComplete = Callable[[object, bool | None], None]
 
 
 class _ScopedControllerActionRuntime:
@@ -30,12 +39,18 @@ class _ScopedControllerActionRuntime:
         execute_application: ApplicationExecutor,
         get_binding: BindingReader,
         effects: GatewayEffectExecutor,
+        reconcile_projection_route: ProjectionRouteReconciler,
+        begin_projection_route: ProjectionRouteBootstrapBegin,
+        complete_projection_route: ProjectionRouteBootstrapComplete,
     ) -> None:
         self._gateway_id = gateway_id
         self._applications = applications
         self._execute_application = execute_application
         self._get_binding = get_binding
         self._effects = effects
+        self._reconcile_projection_route = reconcile_projection_route
+        self._begin_projection_route = begin_projection_route
+        self._complete_projection_route = complete_projection_route
 
     def actions(
         self,
@@ -80,6 +95,35 @@ class _ScopedControllerActionRuntime:
         conversation_ref: ConversationRef,
     ) -> ConversationBinding | None:
         return await self._get_binding(conversation_ref)
+
+    async def reconcile_projection_route(
+        self,
+        route_id: str | None,
+        action_lease: object | None,
+    ) -> ActionError | None:
+        try:
+            await self._reconcile_projection_route(route_id, action_lease)
+        except ProjectionWorkerCapacityError:
+            return ActionError(
+                ActionErrorCode.CAPACITY_EXHAUSTED,
+                OperationErrorCode.CAPACITY_EXHAUSTED,
+            )
+        except Exception:
+            return ActionError(
+                ActionErrorCode.NATIVE_REJECTED,
+                OperationErrorCode.ADAPTER_FAILURE,
+            )
+        return None
+
+    async def begin_projection_route(self, route_id: str) -> object:
+        return await self._begin_projection_route(route_id)
+
+    def complete_projection_route(
+        self,
+        lease: object,
+        reconciled: bool | None,
+    ) -> None:
+        self._complete_projection_route(lease, reconciled)
 
     async def authorize_request_response(
         self,

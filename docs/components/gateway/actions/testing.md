@@ -21,6 +21,19 @@ Required evidence:
 - route-producing observe, foreground bind, and foreground create-and-bind
   reject unsupported streaming before a route or native Thread is created,
   while non-foreground binding remains valid;
+- every successful or terminally replayed Conversation route/binding action
+  invokes projection reconciliation; a runtime activation failure converts the
+  durable success into typed `Partial` without repeating the store/native
+  effect or exposing the runtime through the public surface;
+- explicit observe and foreground bind install the projection owner's sole
+  bootstrap barrier before the durable route write, release it for durable
+  non-success or completed activation, and retain it across post-receipt
+  activation failure;
+- cancellation after terminal receipt is joined through reconciliation, and a
+  failed baseline stays fenced until same-ID replay succeeds;
+- overlapping same-route actions hold opaque generation-specific leases, so a
+  failed, delayed, duplicate, or retired holder cannot release a successful
+  replay's barrier or the action mutex for a re-added route;
 - native/workflow preflight proves capability honesty before the native fence
   or callback, while a terminal receipt replays before changed capability or
   resource state is consulted;

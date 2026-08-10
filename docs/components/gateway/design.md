@@ -98,10 +98,13 @@ Channel startup validation remain on their owning concrete adapters.
    original Message; it cannot call a second dispatch implementation.
 5. Gateway requires one complete Application/Project/Thread
    `ConversationBinding` and validates its Conversation and full resource
-   ancestry. Missing ancestry raises typed `MissingBindingError`; foreign or
-   malformed ancestry fails as a contract violation. Both occur before I1,
-   route mutation, or native work. Candidate count, default CWD, and resource
-   creation are never inspected here.
+   ancestry. Missing hierarchy raises typed `MissingBindingError`; foreign or
+   malformed ancestry fails as a contract violation. A complete hierarchy then
+   resolves its registered Application and performs authoritative `project.get`
+   and `thread.get`; unregistered or `not_found` ancestry raises typed
+   `StaleBindingError`. All occur before I1, route/worker mutation, or native
+   input. Candidate count, default CWD, and resource creation are never
+   inspected here.
 6. An optional I1 `InboundContentTransformer` may replace only unconsumed
    typed content. Gateway awaits it under the configured finite lifetime and
    validates a non-empty, bounded tuple of `TextContent` and
@@ -267,11 +270,12 @@ Application and Channel failures remain typed or explicitly reported. Gateway
 does not convert unknown delivery into success.
 
 An absent or incomplete ordinary-input binding is the exact typed
-`MissingBindingError`. It is a known `pre_acceptance` failure: with no I2 the
-claim is released and the error reaches the Channel consumer; with I2 the claim
-is completed before fixed-phase presentation. Neither branch mutates binding,
-route, Application resources, or native input. A stale bound Application is a
-separate explicit failure and never triggers discovery or fallback.
+`MissingBindingError`; an unregistered bound Application or authoritative
+Project/Thread `not_found` is exact typed `StaleBindingError`. Both are known
+`pre_acceptance` failures: with no I2 the claim is released and the error
+reaches the Channel consumer; with I2 the claim is completed before fixed-phase
+presentation. Neither branch mutates binding, route, Application resources, or
+native input. Stale resolution never triggers discovery or fallback.
 
 Observation capacity is separate from durable route or checkpoint state. The
 runtime keys it by stable `ThreadRef`, joins an existing starting/running

@@ -91,14 +91,41 @@ at most 4,096 characters per answer. C fingerprints a canonical digest of the
 bounded answer structure, while the durable effect request retains no raw
 answer text.
 
-The action layer has no store/session/lease/repository access and does not
-sequence persistence calls. B returns its closed `ActionOutcome`; C maps the
-minimal `EffectValue` into immutable `ActionValue`, preserving
-`Succeeded`, `Failed`, `Partial`, and `OutcomeUnknown` exactly. The `.ref`
-field is reconstructed only from B's authoritative stable reference.
-Application reads and mutation callbacks validate the exact operation/result
-pair before mapping it. A request-response success must name the authorized
-`RequestRef`; a mismatched native result is never published as success.
+The action layer has no store/session/runtime-lease/repository authority and
+does not sequence persistence calls. Its opaque projection barrier-generation
+handle carries none of that authority. B returns its closed `ActionOutcome`; C
+maps the minimal `EffectValue` into immutable `ActionValue`. For a successful
+Conversation binding/route mutation or workflow, including terminal receipt
+replay, C invokes the composition runtime's typed projection-route
+reconciliation seam with the returned route ID and, when begun before the
+write, an opaque projection-owner lease. The lease carries no store or runtime
+authority; it only identifies the exact route-barrier generation and serializes
+same-route action lifecycles. The projection owner reads current route/binding
+authority, so an old replay cannot recreate later-removed state. Failed,
+partial, or unknown durable outcomes do not activate projection.
+For explicit observe and foreground bind, whose stable route ID is known before
+the store call, C asks the same projection owner to install its sole bootstrap
+barrier before B can make the route visible. A durable non-success releases the
+barrier; a durable success releases it only after reconciliation succeeds. A
+failed activation therefore stays fenced until same-ID replay converges it. No
+second barrier or repository pre-read is introduced. A create-and-bind workflow
+creates a new native Thread before its atomic foreground route commit, then
+crosses the same reconciliation seam from B's returned reference.
+Route removal retires the exact closed generation and wakes its blocked
+delivery; a later same-ID route receives a new generation that an older lease
+cannot complete.
+If the durable outcome succeeded but process-local activation fails, C returns
+`Partial` with the same value and a closed activation error rather than false
+success; a later same-ID replay may converge activation without repeating B or
+native effects. A caller cancellation after terminal receipt is shielded and
+joined through the one reconciliation attempt; a repeated cancellation may
+propagate, but cannot open the incomplete route barrier. Otherwise `Succeeded`,
+`Failed`, `Partial`, and
+`OutcomeUnknown` are preserved exactly. The `.ref` field is reconstructed only
+from B's authoritative stable reference. Application reads and mutation
+callbacks validate the exact operation/result pair before mapping it. A
+request-response success must name the authorized `RequestRef`; a mismatched
+native result is never published as success.
 
 Binding preconditions use `expected_generation` exclusively. There is no
 revision alias. Clear/delete/recreation safety and the monotonic generation
@@ -155,7 +182,9 @@ the coherent B store session is present. This is an explicit DAG integration
 edge, not permission to run mutations through loose repositories. D uses that
 edge only to freeze one inbound `ConversationActions` to the admitted
 Conversation/actor and B executor; Controller code receives no session,
-receipt, runtime, adapter, or alternate input dispatcher.
+receipt, runtime, adapter, or alternate input dispatcher. The private
+composition adapter receives the public projection runtime reconciliation
+method as one narrow callable; it does not read or mutate a repository.
 
 ## Authority
 

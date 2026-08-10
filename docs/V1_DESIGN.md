@@ -402,6 +402,7 @@ Channel authentication and normalization
   -> durable stable-ID admission before media work
   -> optional Controller
   -> exact complete hierarchical binding or typed pre-acceptance failure
+  -> authoritative bound Project and Thread existence preflight
   -> optional typed content transformation
   -> Thread observation established before dispatch
   -> prefer-active-Turn native input
@@ -413,17 +414,29 @@ Channel authentication and normalization
   -> typed Channel receipt
 ```
 
-An unbound message produces an explicit missing-binding outcome. The SDK does
-not choose a default Application/CWD, auto-create resources, ask a product
-question, or queue input. A consumer may implement an onboarding flow in its
-Controller using the same typed actions. Absence of a Controller leaves
-ordinary input behavior unchanged.
+An unbound message produces an explicit missing-binding outcome. A complete
+binding whose Application is no longer registered or whose authoritative
+Project or Thread no longer exists produces an explicit stale-binding outcome.
+Both finish before content transformation, route/worker mutation, or native
+input. The SDK does not choose a default Application/CWD, auto-create resources,
+ask a product question, or queue input. A consumer may implement an onboarding
+flow in its Controller using the same typed actions. Absence of a Controller
+leaves ordinary input behavior unchanged.
 
 A Controller decision is explicitly pass-through or consumed. An onboarding
 Controller may pass the original message through only after its binding
 workflow succeeded. A partial or unknown workflow must be consumed/presented
 or allowed to reach the explicit missing-binding result; it cannot dispatch
 ordinary input against guessed resource state.
+
+A successful scoped action that changes a binding or projection route, including
+a terminal receipt replay, crosses the projection runtime's explicit
+reconciliation seam. Reconciliation reads current route/binding authority, so
+an old replay cannot restore a later-removed route. A durable route success plus
+a failed process-local activation is reported as `partial`, never false success;
+the same action replay may converge activation without repeating its durable or
+native mutation. Cancellation after terminal receipt joins the one activation
+attempt; an incomplete baseline remains fenced until explicit replay converges.
 
 The default continuation preference is `prefer_active_turn`. An adapter that
 can steer returns `steered`; one that cannot returns `started`. It never
@@ -460,6 +473,13 @@ delivery ID drive idempotency; opaque IDs are never sorted or inferred from
 time. Live subscriptions are established before bounded history reconciliation.
 New routes use a bounded baseline; existing routes reconcile toward their
 checkpoint under strict limits.
+
+Scoped actions that make routes visible use the projection owner's opaque,
+generation-specific barrier lease. Same-route action lifecycles serialize;
+completion can affect only the generation it began, delivery rechecks the
+current fence under the route lock, and removing a route retires that fence and
+wakes its waiters. The lease conveys no repository or runtime authority and is
+not exposed through a Controller consumer surface.
 
 Recoverable output must be reproducible from Application history. Live-only
 output does not advance a completion checkpoint. Missing/expired replay or

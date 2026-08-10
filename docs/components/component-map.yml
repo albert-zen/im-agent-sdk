@@ -583,7 +583,7 @@ components:
     id: gateway.composition
     parent: gateway
     purpose: Assemble one immutable Gateway graph from explicit Applications, Channels, repositories, limits, extensions, and the D coherent-session Controller seam.
-    owns: [GatewayRepositories, GatewayLimits, GatewayExtensions, explicit dependency wiring, exact coherent-session detection and scoped-action executor wiring]
+    owns: [GatewayRepositories, GatewayLimits, GatewayExtensions, explicit dependency wiring, exact coherent-session detection, scoped-action executor wiring, projection action-route reconciliation callable wiring]
     does_not_own: [service lookup, product policy, native adapter internals]
     inputs: [configured typed dependencies]
     outputs: [ImAgentGateway composition]
@@ -591,7 +591,7 @@ components:
     public_exports:
       current: [imagent.gateway.composition:GatewayRepositories, imagent.gateway.composition:GatewayLimits, imagent.gateway.composition:GatewayExtensions]
       target: [imagent.gateway.composition:GatewayRepositories, imagent.gateway.composition:GatewayLimits, imagent.gateway.composition:GatewayExtensions]
-    dependencies: [interaction.messages, interaction.controllers.controller-contract, interaction.controllers.request-presentation, interaction.channels.channel-contract, applications.application-contract, applications.operations, applications.requests, gateway.actions, gateway.effect-execution, gateway.concurrency, gateway.admission, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.projection.observation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.routing.gateway-operations, gateway.persistence.effects, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.gateway-store, gateway.persistence.memory, gateway.persistence.idempotency]
+    dependencies: [interaction.messages, interaction.operations, interaction.controllers.controller-contract, interaction.controllers.request-presentation, interaction.channels.channel-contract, applications.application-contract, applications.operations, applications.requests, gateway.actions, gateway.effect-execution, gateway.concurrency, gateway.admission, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.projection.observation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.routing.gateway-operations, gateway.persistence.effects, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.gateway-store, gateway.persistence.memory, gateway.persistence.idempotency]
     state_recovery: Frozen construction values only; no runtime state or locator lookup.
     current_code: [src/imagent/gateway/composition.py, src/imagent/gateway/controller_input.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/composition.py, src/imagent/gateway/controller_input.py]
@@ -758,15 +758,15 @@ components:
   gateway.input.dispatch:
     id: gateway.input.dispatch
     parent: gateway.input
-    purpose: Require exact complete ordinary-input binding, canonically derive stable input identity, authorize one native side-effect pre-dispatch fact, validate/correlate AcceptedTurn truth, and own a distinct finite per-Thread acceptance-ordering gate.
-    owns: [MissingBindingError and missing_binding classification, derive_client_message_id, prefer_active_turn default, exactly-once native side-effect ApplicationInputDispatch authorization, AcceptedTurn validation/correlation invocation, finite per-Thread acceptance-ordering gate/buffer/ordered drain]
+    purpose: Require exact complete and authoritatively live ordinary-input binding, canonically derive stable input identity, authorize one native side-effect pre-dispatch fact, validate/correlate AcceptedTurn truth, and own a distinct finite per-Thread acceptance-ordering gate.
+    owns: [MissingBindingError and missing_binding classification, StaleBindingError and stale_binding classification, bounded Project/Thread existence preflight, derive_client_message_id, prefer_active_turn default, exactly-once native side-effect ApplicationInputDispatch authorization, AcceptedTurn validation/correlation invocation, finite per-Thread acceptance-ordering gate/buffer/ordered drain]
     does_not_own: [Application discovery or selection, Project or Thread creation, default CWD or onboarding policy, Gateway Conversation serialization, Controller/I1/I2, binding mutation, route preparation, native steer implementation, active Turn truth, worker lifecycle, recovery policy, Channel input work]
     inputs: [verified admitted Message, exact complete Conversation binding, established Conversation lock, prepared Application/Thread route, Application adapter]
-    outputs: [MissingBindingError before effects or AcceptedTurn/classified dispatch failure, ordered typed projection-event release]
-    public_contracts: [MissingBindingError, derive_client_message_id]
+    outputs: [MissingBindingError or StaleBindingError before I1/route/worker/native-input effects, or AcceptedTurn/classified dispatch failure, ordered typed projection-event release]
+    public_contracts: [MissingBindingError, StaleBindingError, derive_client_message_id]
     public_exports:
-      current: [imagent.gateway:MissingBindingError, imagent.gateway.input:MissingBindingError, imagent.gateway.input:derive_client_message_id]
-      target: [imagent.gateway:MissingBindingError, imagent.gateway.input:MissingBindingError, imagent.gateway.input:derive_client_message_id]
+      current: [imagent.gateway:MissingBindingError, imagent.gateway:StaleBindingError, imagent.gateway.input:MissingBindingError, imagent.gateway.input:StaleBindingError, imagent.gateway.input:derive_client_message_id]
+      target: [imagent.gateway:MissingBindingError, imagent.gateway:StaleBindingError, imagent.gateway.input:MissingBindingError, imagent.gateway.input:StaleBindingError, imagent.gateway.input:derive_client_message_id]
     dependencies: [interaction.messages, interaction.operations, applications.application-contract, applications.events, applications.operations, gateway.admission, gateway.persistence.state-contracts, gateway.projection.request-correlation]
     state_recovery: The final pending dispatch exit always signals/drains/removes process-local acceptance-ordering-gate state. Buffer overflow or a mid-drain applier failure records an explicit per-Thread gap for the existing authoritative worker recovery; neither itself transitions an inbound claim. Known pre-native-side-effect-fence failure releases, while native-side-effect-fence-unknown and accepted input remain non-redeliverable.
     current_code: [src/imagent/gateway/input/dispatch.py, src/imagent/gateway/__init__.py]
@@ -803,16 +803,16 @@ components:
     id: gateway.projection.observation
     parent: gateway.projection
     purpose: Maintain one bounded Application observation worker per active Thread and isolate bounded subscriber failures.
-    owns: [Thread worker lifecycle, active-Thread capacity, terminal runtime-entry cleanup, live fan-out consumption, bootstrap barrier, private per-route ordered delivery coordination]
+    owns: [Thread worker lifecycle, active-Thread capacity, terminal runtime-entry cleanup, live fan-out consumption, bootstrap barrier, public action-route reconciliation seam, private per-route ordered delivery coordination]
     does_not_own: [native subscription producer, transcript, second event journal, dispatch native side-effect fence or acceptance-ordering gate/buffer, checkpoint decision/CAS]
-    inputs: [Application Thread subscription]
-    outputs: [ordered normalized events for active routes]
+    inputs: [Application Thread subscription, successful or terminally replayed scoped-action route ID, optional opaque coordinator-owned barrier-generation lease for a pre-fenced action]
+    outputs: [ordered normalized events for active routes, current-state worker/route reconciliation or explicit activation failure]
     public_contracts: [ThreadProjectionRuntime, ProjectionWorkerHealth]
     public_exports:
       current: [imagent.gateway.projection:ThreadProjectionRuntime, imagent.gateway.projection:ProjectionWorkerHealth]
       target: [imagent.gateway.projection:ThreadProjectionRuntime, imagent.gateway.projection:ProjectionWorkerHealth]
     dependencies: [interaction.messages, interaction.controllers.request-presentation, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, gateway.input.dispatch, gateway.routing.projection-routes, gateway.projection.checkpoints, gateway.projection.request-correlation, gateway.projection.recovery, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
-    state_recovery: Active-worker capacity and per-Thread runtime entries are process-local; an in-flight same-Thread admission retains its identity across task turnover, bounded queue and dispatch-owned acceptance-ordering gaps retain the worker slot while supervised resubscription reconciles authoritatively, and terminal workers release it once no admission lease remains without clearing the dispatch-owned gate.
+    state_recovery: Active-worker capacity, per-Thread runtime entries, and opaque generation-specific route-barrier leases are process-local; same-route action lifecycles serialize, removed routes retire blocked generations, an in-flight same-Thread admission retains its identity across task turnover, bounded queue and dispatch-owned acceptance-ordering gaps retain the worker slot while supervised resubscription reconciles authoritatively, and terminal workers release it once no admission lease remains without clearing the dispatch-owned gate.
     current_code: [src/imagent/gateway/__init__.py, src/imagent/gateway/projection/observation.py]
     target_code: [src/imagent/gateway/projection/observation.py]
     current_tests: [tests/gateway/projection/test_observation.py, tests/gateway/projection/test_hardening.py, tests/gateway/routing/test_projection_integration.py]

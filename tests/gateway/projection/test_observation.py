@@ -12,6 +12,7 @@ from typing import cast
 from imagent.applications import CodexApplicationAdapter
 from imagent.applications.capabilities import ProjectMode, SupportLevel
 from imagent.applications.contract import (
+    AgentMessage,
     ApplicationRef,
     ProjectRef,
     ThreadRef,
@@ -28,6 +29,7 @@ from imagent.gateway.input.dispatch import TurnAcceptanceOrderingGate
 from imagent.gateway.persistence import (
     ConversationBinding,
     IdempotencyClaimStatus,
+    ThreadProjectionRoute,
 )
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
@@ -46,10 +48,13 @@ from imagent.gateway.projection.observation import (
     ProjectionWorkerState,
     ThreadProjectionRuntime,
 )
+from imagent.gateway.projection.recovery import ProjectedAgentMessage
 from imagent.gateway.routing import ObserveThread, ProjectionPolicy
+from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.messages import (
     ConversationRef,
     InboundMessage,
+    MessageRole,
     TextContent,
 )
 from imagent.interaction.operations import OperationErrorCode
@@ -507,6 +512,169 @@ class GatewayThreadObservationCapacityTests(unittest.IsolatedAsyncioTestCase):
         await owner
         await self._wait_for_worker_release(runtime, first)
         self.assertNotIn(first, runtime._tasks)
+
+    async def test_action_route_real_baseline_failure_keeps_fenced_until_replay(
+        self,
+    ) -> None:
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        runtime = self._runtime(
+            max_active_threads=1,
+            applications={application.summary.ref.application_instance_id: application},
+        )
+        thread = ThreadRef(application.default_project_ref, "action-route-failure")
+        conversation = ConversationRef("fake-channel", "action-route-failure")
+        route = ThreadProjectionRoute(
+            route_id=derive_projection_route_id(thread, conversation),
+            thread_ref=thread,
+            conversation_ref=conversation,
+        )
+        await runtime._projections.put_projection_route(route)
+        failed_lease = await runtime.begin_action_route(route.route_id)
+
+        async def ensure_projection(_thread_ref: ThreadRef, **_kwargs: object) -> None:
+            return None
+
+        runtime._ensure_projection = ensure_projection  # type: ignore[method-assign]
+
+        with self.assertRaisesRegex(AssertionError, "unexpected Application operation"):
+            await runtime.reconcile_action_route(route.route_id, failed_lease)
+
+        barrier = runtime._routes._bootstrap[route.route_id]
+        self.assertFalse(barrier.is_set())
+        runtime.complete_action_route(failed_lease, False)
+
+        async def complete_baseline(*_args: object, **_kwargs: object) -> None:
+            runtime._routes.complete_bootstrap(route.route_id)
+
+        runtime._recovery.reconcile_route = complete_baseline  # type: ignore[method-assign]
+        replay_lease = await runtime.begin_action_route(route.route_id)
+        await runtime.reconcile_action_route(route.route_id, replay_lease)
+        runtime.complete_action_route(replay_lease, True)
+        self.assertTrue(barrier.is_set())
+
+    async def test_action_route_holders_cannot_release_another_baseline(self) -> None:
+        runtime = self._runtime(max_active_threads=1)
+        route_id = "concurrent-action-route"
+
+        first_lease = await runtime.begin_action_route(route_id)
+        barrier = runtime._routes._bootstrap[route_id]
+        second_owner = asyncio.create_task(runtime.begin_action_route(route_id))
+        await asyncio.sleep(0)
+        self.assertFalse(second_owner.done())
+        self.assertFalse(barrier.is_set())
+        runtime.complete_action_route(first_lease, True)
+        second_lease = await second_owner
+        second_barrier = runtime._routes._bootstrap[route_id]
+        self.assertIsNot(second_barrier, barrier)
+        self.assertFalse(second_barrier.is_set())
+        runtime.complete_action_route(second_lease, True)
+        self.assertTrue(second_barrier.is_set())
+
+    async def test_removed_failed_action_route_retires_barrier_and_waiters(self) -> None:
+        runtime = self._runtime(max_active_threads=1)
+        route_id = "removed-failed-action-route"
+        lease = await runtime.begin_action_route(route_id)
+        barrier = runtime._routes._bootstrap[route_id]
+        runtime.complete_action_route(lease, False)
+        self.assertFalse(barrier.is_set())
+
+        await runtime.reconcile_action_route(route_id)
+
+        self.assertTrue(barrier.is_set())
+        self.assertNotIn(route_id, runtime._routes._bootstrap)
+        self.assertNotIn(route_id, runtime._routes._locks)
+
+    async def test_retired_route_lease_cannot_complete_a_readded_generation(self) -> None:
+        runtime = self._runtime(max_active_threads=1)
+        route_id = "retired-and-readded-action-route"
+        old_lease = await runtime.begin_action_route(route_id)
+        old_barrier = runtime._routes._bootstrap[route_id]
+        await runtime._routes.forget_route_ids((route_id,))
+        self.assertTrue(old_barrier.is_set())
+
+        new_owner = asyncio.create_task(runtime.begin_action_route(route_id))
+        await asyncio.sleep(0)
+        self.assertFalse(new_owner.done())
+        runtime.complete_action_route(old_lease, False)
+        new_lease = await new_owner
+        new_barrier = runtime._routes._bootstrap[route_id]
+        self.assertFalse(new_barrier.is_set())
+
+        runtime.complete_action_route(old_lease, True)
+        self.assertFalse(new_barrier.is_set())
+        runtime.complete_action_route(new_lease, True)
+        self.assertTrue(new_barrier.is_set())
+
+    async def test_live_delivery_rechecks_barrier_after_route_lock_queue(self) -> None:
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        runtime = self._runtime(max_active_threads=1)
+        thread = ThreadRef(application.default_project_ref, "queued-live-barrier")
+        conversation = ConversationRef("fake-channel", "queued-live-barrier")
+        route = ThreadProjectionRoute(
+            route_id=derive_projection_route_id(thread, conversation),
+            thread_ref=thread,
+            conversation_ref=conversation,
+        )
+        await runtime._projections.put_projection_route(route)
+        initial_barrier = asyncio.Event()
+        initial_barrier.set()
+        runtime._routes._bootstrap[route.route_id] = initial_barrier
+        route_lock = runtime._routes._locks.setdefault(route.route_id, asyncio.Lock())
+        await route_lock.acquire()
+        action_owner = asyncio.create_task(runtime.begin_action_route(route.route_id))
+        await asyncio.sleep(0)
+        live_delivery = asyncio.create_task(
+            runtime._routes._deliver_to_route(
+                route,
+                ProjectedAgentMessage(
+                    AgentMessage(
+                        agent_item_id="queued-live-item",
+                        thread_ref=thread,
+                        role=MessageRole.ASSISTANT,
+                        content=(TextContent("must remain fenced"),),
+                        created_at=datetime.now(UTC),
+                    ),
+                    turn_id="queued-live-turn",
+                ),
+            )
+        )
+        await asyncio.sleep(0)
+
+        route_lock.release()
+        lease = await action_owner
+        await asyncio.sleep(0)
+        self.assertFalse(runtime._routes._bootstrap[route.route_id].is_set())
+        self.assertFalse(live_delivery.done())
+
+        live_delivery.cancel()
+        await asyncio.gather(live_delivery, return_exceptions=True)
+        runtime.complete_action_route(lease, True)
+
+    async def test_cancelled_action_owner_wait_releases_thread_reservation(self) -> None:
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        runtime = self._runtime(
+            max_active_threads=1,
+            applications={application.summary.ref.application_instance_id: application},
+        )
+        thread = ThreadRef(application.default_project_ref, "cancelled-action-owner")
+        conversation = ConversationRef("fake-channel", "cancelled-action-owner")
+        route = ThreadProjectionRoute(
+            route_id=derive_projection_route_id(thread, conversation),
+            thread_ref=thread,
+            conversation_ref=conversation,
+        )
+        await runtime._projections.put_projection_route(route)
+        route_lock = runtime._routes._locks.setdefault(route.route_id, asyncio.Lock())
+        await route_lock.acquire()
+        reconciliation = asyncio.create_task(runtime.reconcile_action_route(route.route_id))
+        await asyncio.sleep(0)
+
+        reconciliation.cancel()
+        route_lock.release()
+        with self.assertRaises(asyncio.CancelledError):
+            await reconciliation
+
+        self.assertNotIn(thread, runtime._pending_starts)
 
     async def test_same_thread_reservation_survives_worker_turnover_before_ensure(
         self,

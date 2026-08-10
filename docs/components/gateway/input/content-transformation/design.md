@@ -8,9 +8,10 @@ Parent: `gateway.input`
 
 I1 optionally replaces only the verified content tuple of an unconsumed
 `InboundMessage`. It runs after durable duplicate rejection, Conversation
-lease refresh, Controller decline, and exact complete binding validation, and
-before route mutation or native input dispatch. Missing, incomplete, foreign,
-or malformed binding bypasses I1 through the classified pre-acceptance path.
+lease refresh, Controller decline, exact complete binding validation, and
+authoritative bound Project/Thread existence preflight, and before route
+mutation or native input dispatch. Missing, incomplete, stale, foreign, or
+malformed binding bypasses I1 through the classified pre-acceptance path.
 I1 never triggers resource discovery or creation. With no transformer, the
 original content tuple is used unchanged.
 

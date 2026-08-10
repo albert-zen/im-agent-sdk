@@ -418,6 +418,68 @@ class ThreadProjectionRuntime:
         """Resolve current destinations using the configured projection policy."""
         return await self._active_routes(thread_ref)
 
+    async def begin_action_route(self, route_id: str) -> object:
+        """Install the sole bootstrap barrier before a scoped route write is visible."""
+
+        return await self._routes.begin_action_bootstrap(route_id)
+
+    def complete_action_route(
+        self,
+        lease: object,
+        reconciled: bool | None,
+    ) -> None:
+        """Complete one exact action holder without releasing another baseline."""
+
+        self._routes.complete_action_bootstrap(lease, reconciled=reconciled)
+
+    async def reconcile_action_route(
+        self,
+        route_id: str | None,
+        action_lease: object | None = None,
+    ) -> None:
+        """Converge live observation after one durable scoped Conversation action."""
+
+        self._discard_finished_tasks()
+        active_routes = await self._route_authority.active_persisted_routes()
+        active_threads = {route.thread_ref for route in active_routes}
+        for thread_ref in tuple(self._tasks):
+            if thread_ref not in active_threads:
+                await self._stop_if_unobserved(thread_ref)
+
+        if route_id is None:
+            return
+        route = next(
+            (candidate for candidate in active_routes if candidate.route_id == route_id), None
+        )
+        if route is None:
+            await self._routes.forget_route_ids((route_id,))
+            return
+
+        reservation = self._reserve_projection_start(route.thread_ref)
+        reconciled = False
+        owned_action_lease: object | None = None
+        try:
+            if action_lease is None:
+                owned_action_lease = await self._routes.begin_action_bootstrap(route.route_id)
+            else:
+                self._routes.validate_action_bootstrap(route.route_id, action_lease)
+            await self._routes.begin_bootstrap(route.route_id)
+            await self._ensure_projection(route.thread_ref)
+            await self._recovery.reconcile_route(
+                self._application(route.thread_ref.project_ref.application_instance_id),
+                route,
+                require_checkpoint=False,
+                retain_barrier_on_failure=True,
+            )
+            reconciled = True
+        finally:
+            if owned_action_lease is not None:
+                self._routes.complete_action_bootstrap(
+                    owned_action_lease,
+                    reconciled=reconciled,
+                )
+            self._release_projection_start(route.thread_ref, reservation)
+
     async def observe_thread(
         self,
         application: AgentApplicationAdapter,
@@ -1070,6 +1132,14 @@ class _AuthoritativeProjection(Protocol):
     def messages(self) -> tuple[ProjectedAgentMessage, ...]: ...
 
 
+@dataclass(slots=True, eq=False)
+class _ActionRouteBootstrapLease:
+    route_id: str
+    barrier: asyncio.Event
+    action_lock: asyncio.Lock
+    completed: bool = False
+
+
 class _ProjectionRouteCoordinator:
     """Serialize bootstrap, reconciliation, and delivery per destination route."""
 
@@ -1100,6 +1170,11 @@ class _ProjectionRouteCoordinator:
         self._request_delivery_max_pending = request_delivery_max_pending
         self._request_capacity_changed = asyncio.Event()
         self._bootstrap: dict[str, asyncio.Event] = {}
+        self._bootstrap_pending: set[str] = set()
+        self._action_bootstrap_users: dict[str, set[_ActionRouteBootstrapLease]] = {}
+        self._action_bootstrap_retained: dict[str, asyncio.Event] = {}
+        self._action_locks: dict[str, asyncio.Lock] = {}
+        self._action_lock_waiters: dict[str, int] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._blocked_routes: set[str] = set()
         self._request_retry_tasks: dict[
@@ -1113,6 +1188,11 @@ class _ProjectionRouteCoordinator:
         for barrier in self._bootstrap.values():
             barrier.set()
         self._bootstrap.clear()
+        self._bootstrap_pending.clear()
+        self._action_bootstrap_users.clear()
+        self._action_bootstrap_retained.clear()
+        self._action_locks.clear()
+        self._action_lock_waiters.clear()
         self._locks.clear()
         self._blocked_routes.clear()
 
@@ -1122,28 +1202,142 @@ class _ProjectionRouteCoordinator:
             current = self._bootstrap.get(route_id)
             if current is None or current.is_set():
                 self._bootstrap[route_id] = asyncio.Event()
+                self._action_bootstrap_retained.pop(route_id, None)
+            self._bootstrap_pending.add(route_id)
 
     def complete_bootstrap(self, route_id: str) -> None:
-        barrier = self._bootstrap.setdefault(route_id, asyncio.Event())
-        barrier.set()
+        self._bootstrap.setdefault(route_id, asyncio.Event())
+        self._bootstrap_pending.discard(route_id)
+        self._complete_bootstrap_if_unowned(route_id)
+
+    async def begin_action_bootstrap(self, route_id: str) -> _ActionRouteBootstrapLease:
+        """Retain one exact action owner on the current route barrier generation."""
+
+        action_lock = self._action_locks.setdefault(route_id, asyncio.Lock())
+        self._action_lock_waiters[route_id] = self._action_lock_waiters.get(route_id, 0) + 1
+        try:
+            await action_lock.acquire()
+        finally:
+            waiters = self._action_lock_waiters[route_id] - 1
+            if waiters == 0:
+                self._action_lock_waiters.pop(route_id, None)
+            else:
+                self._action_lock_waiters[route_id] = waiters
+            if not action_lock.locked():
+                self._cleanup_action_lock(route_id, action_lock)
+        lock = self._locks.setdefault(route_id, asyncio.Lock())
+        try:
+            async with lock:
+                current = self._bootstrap.get(route_id)
+                if current is None or current.is_set():
+                    current = asyncio.Event()
+                    self._bootstrap[route_id] = current
+                    self._bootstrap_pending.discard(route_id)
+                    self._action_bootstrap_retained.pop(route_id, None)
+                lease = _ActionRouteBootstrapLease(route_id, current, action_lock)
+                self._action_bootstrap_users.setdefault(route_id, set()).add(lease)
+                return lease
+        except BaseException:
+            action_lock.release()
+            self._cleanup_action_lock(route_id, action_lock)
+            raise
+
+    def complete_action_bootstrap(
+        self,
+        lease: object,
+        *,
+        reconciled: bool | None,
+    ) -> None:
+        """Release one action owner and preserve incomplete baseline fencing."""
+
+        if not isinstance(lease, _ActionRouteBootstrapLease):
+            raise TypeError("action route bootstrap lease is invalid")
+        if lease.completed:
+            return
+        lease.completed = True
+        route_id = lease.route_id
+        users = self._action_bootstrap_users.get(route_id)
+        if users is None or lease not in users:
+            if lease.action_lock.locked():
+                lease.action_lock.release()
+            self._cleanup_action_lock(route_id, lease.action_lock)
+            return
+        users.remove(lease)
+        if not users:
+            self._action_bootstrap_users.pop(route_id, None)
+        try:
+            if self._bootstrap.get(route_id) is not lease.barrier:
+                return
+            if reconciled is True:
+                self._action_bootstrap_retained.pop(route_id, None)
+            elif reconciled is False:
+                self._action_bootstrap_retained[route_id] = lease.barrier
+            self._complete_bootstrap_if_unowned(route_id)
+        finally:
+            lease.action_lock.release()
+            self._cleanup_action_lock(route_id, lease.action_lock)
+
+    def validate_action_bootstrap(self, route_id: str, lease: object) -> None:
+        if not isinstance(lease, _ActionRouteBootstrapLease):
+            raise TypeError("action route bootstrap lease is invalid")
+        if lease.route_id != route_id:
+            raise ValueError("action route bootstrap lease belongs to a different route")
+        if lease not in self._action_bootstrap_users.get(route_id, ()):
+            raise RuntimeError("action route bootstrap lease is no longer active")
+
+    def _cleanup_action_lock(self, route_id: str, action_lock: asyncio.Lock) -> None:
+        if self._bootstrap.get(route_id) is not None:
+            return
+        if self._action_bootstrap_users.get(route_id):
+            return
+        if self._action_lock_waiters.get(route_id, 0) != 0:
+            return
+        if action_lock.locked():
+            return
+        if self._action_locks.get(route_id) is action_lock:
+            self._action_locks.pop(route_id, None)
+
+    def _complete_bootstrap_if_unowned(self, route_id: str) -> None:
+        current = self._bootstrap.get(route_id)
+        if current is None:
+            return
+        if any(
+            lease.barrier is current for lease in self._action_bootstrap_users.get(route_id, ())
+        ):
+            return
+        if route_id in self._bootstrap_pending:
+            return
+        if self._action_bootstrap_retained.get(route_id) is current:
+            return
+        current.set()
 
     async def forget_routes(
         self,
         routes: tuple[ThreadProjectionRoute, ...],
     ) -> None:
+        await self.forget_route_ids(tuple(route.route_id for route in routes))
+
+    async def forget_route_ids(self, route_ids: tuple[str, ...]) -> None:
+        """Retire route coordination even when persistence already removed the row."""
+
         retry_tasks: list[asyncio.Task[None]] = []
-        for route in routes:
+        for route_id in route_ids:
             retry_tasks.extend(
                 self._pop_route_request_retries(
-                    route.route_id,
-                    thread_ref=route.thread_ref,
+                    route_id,
+                    thread_ref=None,
                 )
             )
-            barrier = self._bootstrap.pop(route.route_id, None)
+            barrier = self._bootstrap.pop(route_id, None)
             if barrier is not None:
                 barrier.set()
-            self._locks.pop(route.route_id, None)
-            self._blocked_routes.discard(route.route_id)
+            self._bootstrap_pending.discard(route_id)
+            self._action_bootstrap_retained.pop(route_id, None)
+            self._locks.pop(route_id, None)
+            self._blocked_routes.discard(route_id)
+            action_lock = self._action_locks.get(route_id)
+            if action_lock is not None:
+                self._cleanup_action_lock(route_id, action_lock)
         for task in retry_tasks:
             task.cancel()
         if retry_tasks:
@@ -1264,28 +1458,37 @@ class _ProjectionRouteCoordinator:
         route: ThreadProjectionRoute,
         request: InteractiveRequest,
     ) -> None:
-        barrier = self._bootstrap.get(route.route_id)
-        if barrier is None:
-            barrier = asyncio.Event()
-            barrier.set()
-            self._bootstrap[route.route_id] = barrier
-        if not barrier.is_set():
-            await barrier.wait()
         retry_count = 0
         retry_error: RetryableDeliveryError | None = None
         while not _request_expired(request):
             if retry_error is not None:
+                delayed_error = retry_error
+                retry_error = None
                 retry_count += 1
                 delay = min(0.05 * (2 ** min(retry_count - 1, 5)), 1.0)
-                delay = max(delay, retry_error.retry_after_seconds or 0)
+                delay = max(delay, delayed_error.retry_after_seconds or 0)
                 if request.expires_at is not None:
                     remaining = (request.expires_at - datetime.now(UTC)).total_seconds()
                     if remaining <= 0:
                         return
                     delay = min(delay, remaining)
                 await asyncio.sleep(delay)
+            barrier = self._bootstrap.get(route.route_id)
+            if barrier is None:
+                barrier = asyncio.Event()
+                barrier.set()
+                self._bootstrap[route.route_id] = barrier
+            if not barrier.is_set():
+                await barrier.wait()
             lock = self._locks.setdefault(route.route_id, asyncio.Lock())
             async with lock:
+                current_barrier = self._bootstrap.get(route.route_id)
+                if (
+                    current_barrier is None
+                    or current_barrier is not barrier
+                    or not current_barrier.is_set()
+                ):
+                    continue
                 if route.route_id in self._blocked_routes or _request_expired(request):
                     return
                 current = await self._current_active_route(route)
@@ -1338,11 +1541,11 @@ class _ProjectionRouteCoordinator:
         self,
         route_id: str,
         *,
-        thread_ref: ThreadRef,
+        thread_ref: ThreadRef | None,
     ) -> tuple[asyncio.Task[None], ...]:
         tasks: list[asyncio.Task[None]] = []
         for key in tuple(self._request_retry_tasks):
-            if key[0] == thread_ref and key[1] == route_id:
+            if (thread_ref is None or key[0] == thread_ref) and key[1] == route_id:
                 tasks.append(self._request_retry_tasks.pop(key))
         return tuple(tasks)
 
@@ -1366,34 +1569,43 @@ class _ProjectionRouteCoordinator:
         route: ThreadProjectionRoute,
         projected: ProjectedAgentMessage,
     ) -> None:
-        barrier = self._bootstrap.get(route.route_id)
-        if barrier is None:
-            barrier = asyncio.Event()
-            barrier.set()
-            self._bootstrap[route.route_id] = barrier
-        if not barrier.is_set():
-            await barrier.wait()
-        lock = self._locks.setdefault(route.route_id, asyncio.Lock())
-        async with lock:
-            if route.route_id in self._blocked_routes:
-                return
-            current = await get_projection_route(
-                self._projections,
-                route.route_id,
-            )
-            if current is None:
-                return
-            try:
-                await deliver_projected_message(
+        while True:
+            barrier = self._bootstrap.get(route.route_id)
+            if barrier is None:
+                barrier = asyncio.Event()
+                barrier.set()
+                self._bootstrap[route.route_id] = barrier
+            if not barrier.is_set():
+                await barrier.wait()
+            lock = self._locks.setdefault(route.route_id, asyncio.Lock())
+            async with lock:
+                current_barrier = self._bootstrap.get(route.route_id)
+                if (
+                    current_barrier is None
+                    or current_barrier is not barrier
+                    or not current_barrier.is_set()
+                ):
+                    continue
+                if route.route_id in self._blocked_routes:
+                    return
+                current = await get_projection_route(
                     self._projections,
-                    current,
-                    projected,
-                    deliver_outbound=self._deliver_outbound,
-                    checkpoint_authority=self._checkpoint_authority,
-                    authoritative=False,
+                    route.route_id,
                 )
-            except _DestinationDecisionError as error:
-                self._block_route(current, error)
+                if current is None:
+                    return
+                try:
+                    await deliver_projected_message(
+                        self._projections,
+                        current,
+                        projected,
+                        deliver_outbound=self._deliver_outbound,
+                        checkpoint_authority=self._checkpoint_authority,
+                        authoritative=False,
+                    )
+                except _DestinationDecisionError as error:
+                    self._block_route(current, error)
+                return
 
     async def _deliver_messages(
         self,

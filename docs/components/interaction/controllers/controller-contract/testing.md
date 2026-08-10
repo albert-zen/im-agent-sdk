@@ -9,6 +9,9 @@ Required evidence:
   facades, root exports, and clean-wheel imports;
 - `None` continues ordinary input; any finite tuple consumes it;
 - output for another Conversation fails before delivery;
+- a consumed common route command cannot return action success while its
+  projection activation failed, and later authoritative output reaches the
+  reconciled route;
 - effectful invocation enters the one-way owned inbound fence before the
   handler, while read-only invocation does not;
 - fence failure prevents handler invocation and cancellation never creates

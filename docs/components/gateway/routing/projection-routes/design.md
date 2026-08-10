@@ -66,6 +66,13 @@ destination decision failure is isolated from other routes and from Application
 observation. Correlation-repository reads and checkpoint CAS are deliberately
 outside that catch so transient infrastructure failure enters the affected
 Thread's existing supervisor rather than permanently blocking a route.
+During live scoped-action execution, a successful or terminally replayed route
+mutation passes no route truth beyond its route ID to the projection runtime's
+public reconciliation seam. Composition may carry back the coordinator's
+opaque barrier-generation lease for a pre-fenced action; that handle conveys no
+repository or runtime authority. The projection owner reads current active
+routes, so the seam starts or stops process-local observation without
+reapplying a route or overriding later intent.
 
 Interactive requests use the same route-selection policy, but request
 delivery correlation is stored only after that destination accepts the stable

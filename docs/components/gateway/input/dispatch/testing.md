@@ -9,7 +9,7 @@ and Application adapter conformance.
 Tests must prove:
 
 - stable client message identity from only stable Conversation/native message
-  identity, exact public `MissingBindingError` and
+  identity, exact public `MissingBindingError`/`StaleBindingError` and
   `imagent.gateway.input` facade identity, and absence of the
   historical `imagent.contracts.validators` module/validator alias, including a
   clean-process failed import;
@@ -19,11 +19,20 @@ Tests must prove:
 - no binding, Application-only binding, and Project-only binding return the
   exact `MissingBindingError`/`missing_binding` classification without binding,
   projection-route, resource, native-input, or delivery mutation;
+- complete bindings with a deleted Project, deleted Thread, or unregistered
+  Application return exact `StaleBindingError`/`stale_binding` before I1,
+  route/worker/native-input mutation, with Memory/SQLite parity, real frozen
+  Controller-registry traversal in the coherent Memory cases, and bounded
+  authoritative reads in Project-then-Thread order;
 - one Application is never selected implicitly, and no Project, Thread, CWD,
   or onboarding action is derived from Message content;
 - a Controller can explicitly create/select a Project and create/bind a Thread
   through its scoped `ConversationActions`, return `None`, and send the same
   Message through the one canonical dispatch runtime exactly once;
+- real frozen-registry common `/new` starts live observation before the consumed
+  command returns; later authoritative output is delivered, terminal route
+  action replay reconciles again, and activation failure is a typed partial
+  result rather than false success;
 - two Conversations and foreign Project/Thread references cannot cross action,
   binding, route, or dispatch scope;
 - default prefer-active-Turn behavior, native steer when supported, and truthful

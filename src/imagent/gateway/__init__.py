@@ -81,8 +81,14 @@ from .diagnostics import (
 from .effect_execution import StoreBackedGatewayEffectExecutor
 from .input import InboundContentTransformer as InboundContentTransformer
 from .input import MissingBindingError as MissingBindingError
+from .input import StaleBindingError as StaleBindingError
 from .input.content_transformation import InboundContentTransformRuntime
-from .input.dispatch import InputDispatchRuntime, TurnAcceptanceOrderingGate
+from .input.dispatch import (
+    InputDispatchRuntime,
+    TurnAcceptanceOrderingGate,
+    derive_client_message_id,
+    preflight_authoritative_binding,
+)
 from .input.failure_presentation import InboundFailurePhase as InboundFailurePhase
 from .input.failure_presentation import InboundFailurePresentationRuntime, handle_claimed_inbound
 from .input.failure_presentation import InboundFailurePresenter as InboundFailurePresenter
@@ -212,17 +218,7 @@ class ImAgentGateway:
             request_correlations = InMemoryRequestCorrelationRepository()
         self._delivery_coordinator = delivery_coordinator or DeliveryCoordinator()
         self._controller = extensions.controller
-        self._controller_action_runtime = (
-            _ScopedControllerActionRuntime(
-                gateway_id=coherent_session.lease.gateway_id,
-                applications=self._applications,
-                execute_application=self._execute_scoped_application,
-                get_binding=self._binding_runtime.current,
-                effects=StoreBackedGatewayEffectExecutor(coherent_session),
-            )
-            if coherent_session is not None
-            else None
-        )
+        self._controller_action_runtime: _ScopedControllerActionRuntime | None = None
         self._inbound_content_transform_runtime = (
             InboundContentTransformRuntime(
                 extensions.inbound_content_transformer,
@@ -309,6 +305,17 @@ class ImAgentGateway:
             turn_correlation_retention_seconds=limits.turn_correlation_retention_seconds,
             request_correlation_retention_seconds=(limits.request_correlation_retention_seconds),
         )
+        if coherent_session is not None:
+            self._controller_action_runtime = _ScopedControllerActionRuntime(
+                gateway_id=coherent_session.lease.gateway_id,
+                applications=self._applications,
+                execute_application=self._execute_scoped_application,
+                get_binding=self._binding_runtime.current,
+                effects=StoreBackedGatewayEffectExecutor(coherent_session),
+                reconcile_projection_route=self._projection_runtime.reconcile_action_route,
+                begin_projection_route=self._projection_runtime.begin_action_route,
+                complete_projection_route=self._projection_runtime.complete_action_route,
+            )
         self._request_projection = self._projection_runtime.request_projection
         self._input_dispatch = InputDispatchRuntime(
             correlator=self._request_projection,
@@ -950,13 +957,23 @@ class ImAgentGateway:
                 raise MissingBindingError()
             application = self._bound_application(binding)
             if application is None:
-                raise RuntimeError("bound Agent application is unavailable")
+                raise StaleBindingError()
+            thread_ref = binding.thread_ref
+            await preflight_authoritative_binding(
+                application,
+                thread_ref,
+                operation_id_prefix=derive_client_message_id(
+                    message.conversation_ref,
+                    message.message_id,
+                ),
+                created_at=message.created_at,
+                execute_application=self._execute_scoped_application,
+            )
             content = (
                 await self._inbound_content_transform_runtime.transform(message)
                 if self._inbound_content_transform_runtime is not None
                 else message.content
             )
-            thread_ref = binding.thread_ref
             await self._projection_runtime.prepare_input_route(
                 application,
                 thread_ref,
@@ -1122,10 +1139,7 @@ class ImAgentGateway:
     ) -> AgentApplicationAdapter | None:
         if binding is None or binding.application_ref is None:
             return None
-        try:
-            return self._applications[binding.application_ref.application_instance_id]
-        except KeyError as error:
-            raise RuntimeError("bound Agent application is not registered") from error
+        return self._applications.get(binding.application_ref.application_instance_id)
 
     def _require_application(
         self,

@@ -8,6 +8,8 @@ Required evidence:
 - unbound reads do not implicitly select the only Application;
 - `/new` makes one workflow call, then an explicit observation call, with no
   primitive create/bind sequence;
+- real Gateway composition proves `/new` leaves live projection health and
+  delivers later authoritative output after the command was consumed;
 - delete never calls `clear_thread`;
 - request response is Conversation-authorized;
 - stable IDs remain distinct across Conversations that reuse a native message
