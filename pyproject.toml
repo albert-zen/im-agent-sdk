@@ -52,6 +52,9 @@ imagent-send = "imagent.interaction.client_tools.send:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/imagent"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"examples/reference_consumer" = "examples/reference_consumer"
+
 [tool.hatch.metadata]
 allow-direct-references = true
 

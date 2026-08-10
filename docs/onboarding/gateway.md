@@ -1,36 +1,65 @@
 # Gateway: composition and routing
 
 Gateway is the single composition root. Construct it with explicit
-Applications, Channels, bridge repositories, limits, and typed extensions:
+Applications, Channels, one coherent store, limits, and an optional frozen
+Controller:
 
 ```python
-gateway = ImAgentGateway(
+gateway = Gateway(
+    gateway_id="reference",
     channels=[channel],
     applications=[application],
-    repositories=GatewayRepositories(
-        bindings=bindings,
-        projections=projections,
-    ),
+    store=MemoryGatewayStore(),
     limits=GatewayLimits(...),
-    extensions=GatewayExtensions(controller=registry),
+    controller=registry,
     projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
 )
 ```
 
 The complete neutral wiring is in
 [`build_reference_consumer()`](../../examples/reference_consumer/gateway.py).
-The repositories are explicit composition values. They are not looked up by
-name at runtime and they do not contain transcript or execution state.
+The store is an explicit composition value. It contains only IM bridge state,
+idempotency/effect receipts, and rebuildable projections; it contains no
+transcript or Application execution truth. Gateway alone acquires its coherent
+store session and wires the private fenced executor used by public actions.
+The consumer never imports or constructs that seam.
+
+## Scoped consumer actions
+
+Acquire actions only while the owned Gateway context is running:
+
+```python
+async with gateway:
+    actions = gateway.actions(conversation.ref, actor=conversation.authenticated_actor)
+    project_result = await actions.create_and_select_project(
+        application.ref,
+        cwd=managed_cwd,
+        action_id="reference:create-project:1",
+    )
+    if not isinstance(project_result, Succeeded):
+        raise RuntimeError("reference Project workflow did not succeed")
+    thread_result = await actions.create_and_bind_thread(
+        project_result.value.ref,
+        action_id="reference:create-thread:1",
+    )
+    if not isinstance(thread_result, Succeeded):
+        raise RuntimeError("reference Thread workflow did not succeed")
+```
+
+Handle the typed `Succeeded`, `Failed`, `Partial`, and `OutcomeUnknown`
+variants explicitly. Reuse stable action IDs only for identical intent. The
+Conversation scope cannot be substituted by a handler, and the Application
+surface never gains Conversation binding authority.
 
 ## Binding and observation are different
 
 `ConversationBinding` selects the Application Thread for the next input.
 `ThreadProjectionRoute` selects where Thread output may be delivered. Native
-Thread activation is a separate Application operation. Use typed Gateway
-operations for each intent:
+Thread activation is a separate Application operation. Use
+Conversation-scoped actions for each intent:
 
-- `BindConversationToThread` changes future input selection;
-- `ObserveThread` explicitly adds or refreshes an output route for policies
+- `bind_thread` changes future input selection;
+- `observe_thread` explicitly adds or refreshes an output route for policies
   that retain unbound observers;
 - `ProjectionPolicy.FOREGROUND_ONLY` makes binding equality the output
   authority and prepares the matching route before the binding commit.
@@ -49,24 +78,17 @@ not inspect native Conversation IDs or create a consumer-side subscription.
 Start and stop the composed Gateway as one owner:
 
 ```python
-await gateway.start()
-try:
+async with gateway:
     # bind and accept input through typed contracts
     ...
-finally:
-    await gateway.stop()
 ```
 
-Startup restores persisted routes, starts the Application and Channel, then
-releases projection delivery. Stop closes observation and bounded delivery
-work before stopping the lower adapters. The sample reuses the same
-process-local Application object and bridge repository objects across a
-Gateway stop/start, so its bounded Application history remains available for
-the demonstration. On restart, the Gateway subscribes first and reconciles
-bounded history/catch-up, so output produced while it was stopped can be
-delivered to the still-active route without an SDK transcript. Production
-deployments require durable Application history plus durable Gateway
-repositories.
+Startup validates composition, acquires the store lease, starts the Application
+and Channel, and releases projection delivery. Stop closes observation and
+bounded delivery work, the Controller, adapters, and store lease/resources.
+The reference run constructs a fresh Gateway once and proves that no owned task
+or subscription remains. Durable fresh-object restart is a separate SQLite
+acceptance scenario.
 
-Read `diagnostics_snapshot()` synchronously for redacted, process-local
+Read `diagnostics()` synchronously for redacted, process-local
 facts. It is not authoritative health state and does not perform I/O.

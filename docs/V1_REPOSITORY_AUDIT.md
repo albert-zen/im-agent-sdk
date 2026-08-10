@@ -1,6 +1,6 @@
 # V1 repository audit and transformation DAG
 
-Status: DAG blocks A–D implemented; blocks E–I remain transformation targets
+Status: DAG blocks A–E implemented; blocks F–I remain transformation targets
 
 This audit compares the repository with `V1_DESIGN.md`. Existing behavior is
 not retained merely because it has tests. Safety evidence is reused; conflicting
@@ -103,8 +103,9 @@ Block D now composes those actions for ordinary input only when all Gateway
 runtime owners share one already-leased coherent B store session. Loose or
 mixed repositories still reject Controller configuration rather than
 substituting the old generic wrapper. The executable reference Controller and
-final public store-acquisition/lifecycle surface remain block E/H work; D adds
-no second action or dispatch implementation.
+public store-acquisition/lifecycle surface land in E; the broader lifecycle
+failure matrix remains block H work. D and E add no second action or dispatch
+implementation.
 
 ### Resolved in A: Project-creation evidence revised onto the uniform model
 
@@ -148,32 +149,16 @@ Block B now exposes the coherent `GatewayStore`, `MemoryGatewayStore`, and
 domain. Later composition blocks must consume that port and delete the old
 repository-wiring surface; they must not add a bridge between the two APIs.
 
-### P1: lifecycle and public facade are implementation-shaped
+### Resolved in E: canonical lifecycle and executable public facade
 
-Current public runtime is `ImAgentGateway` with explicit `start()`/`stop()` but
-no preferred async context manager or single `run()` convenience. The package
-facades mirror incremental component moves rather than the minimal consumer
-surface.
-
-Required transformation:
-
-- expose one finite `Gateway` public runtime;
-- add async-context lifecycle and one convenience runner over the same object;
-- retain explicit start/stop for embedding;
-- remove old facade/internal aliases instead of maintaining dual APIs;
-- ensure clean-wheel examples import only the final public surface.
-
-### P1: the reference consumer bypasses its intended contract
-
-The current example is useful routing evidence but still directly creates
-Threads on the fake Application and directly emits native Turns. Its flat
-Application now exposes one stable workspace Project and Project-scoped
-Thread/Turn/event identities, but it still switches only away and demonstrates
-restart by reusing the same in-memory objects.
-
-Required transformation is defined by `V1_EXECUTABLE_SPEC.md`: public Project
-and Thread workflows, ordinary Channel input, switch-back, SQLite reconstruction,
-capability honesty, typed failures, and clean-wheel execution.
+The public `Gateway` now owns one coherent store lease, async-context and
+explicit lifecycle, bounded diagnostics, scoped action factories, and
+deterministic shutdown. The installed reference consumer uses only that public
+surface for explicit managed-CWD Project creation/selection, Thread
+creation/binding, D's policy-free ordinary-input dispatch, two-Conversation
+fan-out, switch and switch-back, and exact worker/delivery/shutdown evidence.
+It does not directly create scenario resources on the Application or compose a
+second runtime/store path. Fresh-object SQLite reconstruction remains block F.
 
 ### P1: authority documents conflict
 
@@ -295,10 +280,23 @@ waits for the correlated reply after any authoritative baseline recovery.
 
 ### E. Executable vertical consumer
 
+Status: complete.
+
 Implement the minimal golden path in `V1_EXECUTABLE_SPEC.md`: managed CWD
 Project, create/select, create/bind, ordinary text round-trip, two
 Conversations, switch and switch-back, one worker, diagnostics, and shutdown.
 From this block onward every capability PR updates the same executable.
+
+The canonical consumer now runs that path through public `Gateway` composition,
+one coherent store, scoped actions, native Channel ingress, the optional frozen
+Controller, and authoritative Application observation. The same module runs
+from the source tree and an isolated wheel. Focused evidence proves stable
+resource replay, Conversation isolation in both switch directions, one
+subscription per Thread, exact non-duplicated delivery cardinality, immediate
+activation of action-created routes, bounded redacted diagnostics, lease-loss
+revocation including blocked startup, terminal replay under later worker-capacity
+drift, and zero owned work after shutdown. SQLite reconstruction remains block
+F.
 
 ### F. Projection and durable recovery
 

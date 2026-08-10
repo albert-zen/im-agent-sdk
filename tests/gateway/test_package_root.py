@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import unittest
 from importlib import import_module
 from pathlib import Path
@@ -9,8 +10,10 @@ from sys import executable
 from typing import get_type_hints
 
 import imagent.gateway as gateway_package
+from imagent import Gateway as RootGateway
 from imagent.gateway import (
     ClaimedInbound,
+    Gateway,
     GatewayExtensions,
     GatewayLimits,
     GatewayRepositories,
@@ -41,6 +44,21 @@ from imagent.interaction.controllers import InboundController, RequestPresenter
 
 
 class GatewayPackageRootTests(unittest.TestCase):
+    def test_canonical_gateway_is_one_real_public_class_without_private_inputs(self) -> None:
+        from imagent.gateway.runtime import Gateway as RuntimeGateway
+
+        self.assertIs(Gateway, RuntimeGateway)
+        self.assertIs(RootGateway, RuntimeGateway)
+        self.assertEqual(Gateway.__module__, "imagent.gateway.runtime")
+        self.assertFalse(issubclass(Gateway, ImAgentGateway))
+        parameters = inspect.signature(Gateway).parameters
+        self.assertNotIn("repositories", parameters)
+        self.assertNotIn("effect_executor", parameters)
+        self.assertNotIn("session", parameters)
+        self.assertTrue(callable(Gateway.diagnostics))
+        self.assertTrue(callable(Gateway.wait_closed))
+        self.assertFalse(hasattr(Gateway, "diagnostics_snapshot"))
+
     def test_public_gateway_surface_resolves_to_target_package(self) -> None:
         module_path = Path(gateway_package.__file__).resolve()
         self.assertEqual(module_path.name, "__init__.py")

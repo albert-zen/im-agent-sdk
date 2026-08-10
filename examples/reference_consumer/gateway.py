@@ -1,118 +1,66 @@
-"""Three-layer composition for the neutral reference consumer."""
+"""One public, production-shaped composition for the neutral consumer."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
-from imagent.applications.contract import ThreadRef
-from imagent.contracts import (
-    BindConversationToThread,
-    ConversationBound,
-    GatewayOperationFailed,
+from imagent import (
+    Gateway,
+    GatewayLimits,
+    MemoryGatewayStore,
+    ProjectionPolicy,
 )
-from imagent.gateway import ImAgentGateway
-from imagent.gateway.composition import GatewayRepositories
-from imagent.gateway.persistence.memory import (
-    InMemoryBindingRepository,
-    InMemoryProjectionRouteRepository,
-)
-from imagent.gateway.routing import ObserveThread, ProjectionPolicy, ThreadObserved
 from imagent.interaction.controllers import CommandRegistry
-from imagent.interaction.messages import ConversationRef
 
 from .application import ReferenceApplication
-from .interaction import ReferenceChannel, build_command_registry
+from .interaction import ReferenceChannel, ReferenceStatusService, build_command_registry
 
 
 @dataclass(slots=True)
 class ReferenceConsumer:
-    """Explicit composition root: local state, adapters, and one Gateway."""
+    """The local adapters and the one SDK-owned Gateway runtime."""
 
     channel: ReferenceChannel
     application: ReferenceApplication
-    bindings: InMemoryBindingRepository
-    projections: InMemoryProjectionRouteRepository
     registry: CommandRegistry
-    gateway: ImAgentGateway
-
-    async def start(self) -> None:
-        await self.gateway.start()
-
-    async def stop(self) -> None:
-        await self.gateway.stop()
-
-    async def bind(
-        self,
-        conversation_ref: ConversationRef,
-        thread_ref: ThreadRef,
-        *,
-        operation_id: str,
-        actor: str = "reference-user",
-    ) -> ConversationBound:
-        result = await self.gateway.execute_gateway(
-            BindConversationToThread(
-                operation_id=operation_id,
-                conversation_ref=conversation_ref,
-                actor=actor,
-                thread_ref=thread_ref,
-                created_at=datetime.now(UTC),
-            )
-        )
-        if isinstance(result, GatewayOperationFailed):
-            raise RuntimeError(result.error.message)
-        if not isinstance(result, ConversationBound):
-            raise RuntimeError("bind returned an incompatible Gateway result")
-        return result
-
-    async def observe(
-        self,
-        conversation_ref: ConversationRef,
-        thread_ref: ThreadRef,
-        *,
-        operation_id: str,
-        reply_to_message_id: str | None = None,
-        actor: str = "reference-user",
-    ) -> ThreadObserved:
-        result = await self.gateway.execute_gateway(
-            ObserveThread(
-                operation_id=operation_id,
-                conversation_ref=conversation_ref,
-                actor=actor,
-                thread_ref=thread_ref,
-                reply_to_message_id=reply_to_message_id,
-                created_at=datetime.now(UTC),
-            )
-        )
-        if isinstance(result, GatewayOperationFailed):
-            raise RuntimeError(result.error.message)
-        if not isinstance(result, ThreadObserved):
-            raise RuntimeError("observe returned an incompatible Gateway result")
-        return result
+    gateway: Gateway
 
 
 def build_reference_consumer() -> ReferenceConsumer:
-    """Return one fully explicit local composition with no process-global registry."""
+    """Build one explicit graph without private SDK seams or global state."""
 
-    channel = ReferenceChannel()
-    application = ReferenceApplication()
-    bindings = InMemoryBindingRepository()
-    projections = InMemoryProjectionRouteRepository()
-    registry = build_command_registry()
-    gateway = ImAgentGateway(
+    channel = ReferenceChannel(max_outbound_records=128)
+    application = ReferenceApplication(
+        max_projects=2,
+        max_threads=4,
+        max_turns_per_thread=8,
+        max_events_per_thread=64,
+    )
+    registry = build_command_registry(ReferenceStatusService())
+    gateway = Gateway(
+        gateway_id="reference",
         channels=[channel],
         applications=[application],
-        repositories=GatewayRepositories(
-            bindings=bindings,
-            projections=projections,
+        store=MemoryGatewayStore(
+            max_effect_receipts=64,
+            max_idempotency_records=128,
+            max_delivery_submission_records=128,
         ),
+        controller=registry,
         projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+        limits=GatewayLimits(
+            request_delivery_max_pending=16,
+            startup_buffer_max_pending=16,
+            turn_acceptance_event_max_pending=16,
+            delivery_submission_max_records=128,
+            conversation_serialization_max_active_keys=16,
+            idempotency_max_records=128,
+            projection_max_active_threads=4,
+        ),
     )
     return ReferenceConsumer(
         channel=channel,
         application=application,
-        bindings=bindings,
-        projections=projections,
         registry=registry,
         gateway=gateway,
     )

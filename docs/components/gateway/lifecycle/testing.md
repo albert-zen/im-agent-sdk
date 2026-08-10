@@ -10,6 +10,20 @@ identity without changing that orchestration.
 
 Tests must prove:
 
+- canonical `Gateway` owns one renewable coherent-store lease, creates scoped
+  actions only while running, rejects private repository/executor inputs, and
+  joins the renewal task plus session/store close during async-context exit;
+- renewal begins before inner startup can overrun the first lease; renewal loss
+  cancels blocked startup, closes live admission, projection, adapters, session,
+  and store, and is surfaced by `wait_closed()`;
+- construction failure after lease acquisition closes the session/store, and
+  retained scoped surfaces fail before reaching stopped Applications;
+- same-instance concurrent starts join one serialized transition and one lease;
+  stop racing a blocked startup cancels and joins its rollback; cancellation
+  while entering the async context closes every partially started owner once;
+  validation failure permits one corrected retry without acquiring or closing
+  another transition's store, and renewal loss racing explicit stop closes all
+  owners once without deadlock or a second cleanup;
 - startup ordering installs restored observation before live delivery and
   keeps startup admission active through FIFO drain;
 - FIFO capacity, ordering, sticky overflow, diagnostics, and reset are finite;
@@ -51,5 +65,5 @@ Tests must prove:
 Run:
 
 ```sh
-PYTHONPATH=src uv run python -m unittest tests.gateway.test_operations_integration tests.gateway.test_vertical_slice tests.gateway.test_diagnostics -v
+PYTHONPATH=src uv run python -m unittest tests.gateway.test_reference_consumer tests.gateway.test_operations_integration tests.gateway.test_vertical_slice tests.gateway.test_diagnostics -v
 ```

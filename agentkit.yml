@@ -222,6 +222,7 @@ components:
       - src/imagent/gateway/input/failure_presentation.py
       - src/imagent/gateway/__init__.py
       - src/imagent/gateway/composition.py
+      - src/imagent/gateway/runtime.py
       - src/imagent/gateway/lifecycle.py
       - src/imagent/gateway/outcomes.py
       - src/imagent/gateway/effect_execution.py
@@ -230,8 +231,6 @@ components:
       - src/imagent/gateway/routing/bindings.py
       - src/imagent/gateway/routing/operations.py
       - src/imagent/gateway/routing/projection_routes.py
-      - examples/reference_consumer/gateway.py
-      - examples/reference_consumer/main.py
       - tests/gateway/test_lifecycle.py
       - tests/gateway/test_package_root.py
       - tests/gateway/routing/__init__.py
@@ -240,7 +239,6 @@ components:
       - tests/gateway/routing/test_projection_routes.py
       - tests/gateway/test_operations_integration.py
       - tests/gateway/test_vertical_slice.py
-      - tests/gateway/test_reference_consumer.py
       - tests/gateway/test_admission.py
       - tests/gateway/test_concurrency.py
       - tests/gateway/test_outcomes.py
@@ -454,7 +452,6 @@ components:
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - src/imagent/interaction/controllers/**
-      - examples/reference_consumer/interaction.py
       - tests/interaction/controllers/**
     docs:
       - docs/components/interaction/controllers/README.md
@@ -468,7 +465,6 @@ components:
       - docs/components/interaction/controllers/request-presentation/testing.md
       - docs/components/controllers/design.md
       - docs/components/controllers/testing.md
-      - docs/onboarding/interaction.md
     required_docs:
       - design
       - testing
@@ -508,7 +504,6 @@ components:
       - src/imagent/interaction/channels/outbound_delivery.py
       - src/imagent/interaction/channels/adapters/**
       - src/imagent/channels/**
-      - examples/reference_consumer/interaction.py
       # Historical facades are shared here because this slice retires only
       # their Channel names while preserving unrelated aliases.
       - src/imagent/adapters.py
@@ -538,7 +533,6 @@ components:
       - docs/components/interaction/channels/adapters/testing.md
       - docs/components/channel-adapters/design.md
       - docs/components/channel-adapters/testing.md
-      - docs/onboarding/interaction.md
       - docs/components/channel-adapters/adapters/qq.md
       - docs/components/channel-adapters/adapters/telegram.md
       - docs/components/channel-adapters/adapters/feishu.md
@@ -689,7 +683,6 @@ components:
       - src/imagent/applications/operations.py
       - src/imagent/applications/requests.py
       - src/imagent/applications/presentation/**
-      - examples/reference_consumer/application.py
       - tests/applications/__init__.py
       - tests/applications/test_capabilities.py
       - tests/applications/test_contract.py
@@ -714,7 +707,6 @@ components:
       - docs/components/applications/presentation/live-activity/testing.md
       - docs/components/applications/presentation/artifact-materialization/design.md
       - docs/components/applications/presentation/artifact-materialization/testing.md
-      - docs/onboarding/applications.md
     required_docs:
       - design
       - testing
@@ -726,6 +718,34 @@ components:
       - request
       - presentation
       - artifact
+
+  reference-consumer:
+    description: The one product-neutral executable public-v1 acceptance consumer, its onboarding, and clean-wheel vertical evidence.
+    code:
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
+      - docs/V1_REPOSITORY_AUDIT.md
+      - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
+      - examples/reference_consumer/**
+      - tests/gateway/test_reference_consumer.py
+    docs:
+      - docs/engineering/reference-consumer/design.md
+      - docs/engineering/reference-consumer/testing.md
+      - docs/onboarding/README.md
+      - docs/onboarding/applications.md
+      - docs/onboarding/gateway.md
+      - docs/onboarding/interaction.md
+      - docs/onboarding/production-checklist.md
+      - docs/onboarding/troubleshooting.md
+    required_docs:
+      - design
+      - testing
+    keywords:
+      - reference-consumer
+      - executable
+      - vertical
+      - golden-path
+      - clean-wheel
 
   testing-and-conformance:
     description: Reusable fake adapters, contract suites, and cross-adapter honesty checks.
@@ -786,7 +806,6 @@ components:
       - docs/components/repository-maintainability/**
       - docs/components/README.md
       - docs/components/component-map.yml
-      - docs/onboarding/**
       - docs/engineering/README.md
       - docs/engineering/repository-maintainability/design.md
       - docs/engineering/repository-maintainability/testing.md

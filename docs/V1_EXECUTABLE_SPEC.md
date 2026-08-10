@@ -379,25 +379,25 @@ clean-wheel executions both pass.
 
 | Capability | Required executable evidence | State at design baseline |
 |---|---|---|
-| public composition and owned lifecycle | async context manager, start/stop rollback | redesign required |
+| public composition and owned lifecycle | async context manager, start/stop rollback | canonical Gateway/store/action composition and deterministic reference shutdown implemented in DAG E; broader lifecycle fault matrix remains H |
 | uniform Application → Project → Thread → Turn resources | managed/fixed/flat tests; every Thread has ProjectRef | implemented in DAG A |
 | managed Project CWD creation | success, capability honesty, stable action identity | contract and deterministic fake evidence implemented in A; native support remains capability-gated |
-| store-only Gateway mutation fencing | atomic terminal receipt; old same-ID retry never overwrites newer intent | B memory/SQLite executor parity and C scoped request mapping implemented; public lifecycle wiring remains |
-| primitive native mutation fencing | lost ack/restart/unknown for create, activate, delete, interrupt, request response | B durable executor parity and C scoped callback mapping implemented; public lifecycle wiring remains |
+| store-only Gateway mutation fencing | atomic terminal receipt; old same-ID retry never overwrites newer intent | B memory/SQLite executor parity, C scoped request mapping, and E public lifecycle wiring implemented |
+| primitive native mutation fencing | lost ack/restart/unknown for create, activate, delete, interrupt, request response | B durable executor parity and C scoped callback mapping implemented; E wires the Application primitive actions through the public lifecycle, while Conversation request-response lifecycle/projection integration remains block G work |
 | managed Project deletion | typed action, capability honesty, stale binding, durable native fence | B/C seam acceptance implemented; concrete native support remains capability-gated |
 | Project create-and-select workflow | success/partial/unknown/conflict | B/C durable coordinator and scoped action mapping implemented |
 | Thread create-and-bind workflow | success/partial/unknown/conflict | B/C durable coordinator and scoped action mapping implemented |
-| scoped consumer actions | principal, Conversation isolation, no adapter/store escape | implemented in DAG C; D wires the Controller input seam over one coherent session, while the final public factory remains later composition work |
-| ordinary Channel → Agent → Channel text | no direct fake mutation | D implements policy-free binding/dispatch, authoritative stale-binding preflight, explicit Controller onboarding, and consumed-command observation activation evidence; the reference executable remains block E |
-| multi-Conversation one-Thread fan-out | one worker, two destinations | existing evidence requires public-path review |
-| foreground switch and switch-back | route authority in both directions, no duplicates | partial existing evidence |
+| scoped consumer actions | principal, Conversation isolation, no adapter/store escape | implemented in DAG C; D supplies the coherent-session Controller/action seam and commit fences; E exposes it through the canonical public Gateway factories |
+| ordinary Channel → Agent → Channel text | no direct fake mutation | D's policy-free binding/dispatch and authoritative stale-binding preflight execute through the public native-ingress round trip in DAG E |
+| multi-Conversation one-Thread fan-out | one worker, two destinations | public two-Conversation path and one-subscription counter implemented in DAG E |
+| foreground switch and switch-back | route authority in both directions, no duplicates | D-fenced scoped actions drive both directions and exact destination isolation in DAG E |
 | SQLite restart recovery | fresh Gateway/store objects, no SDK content truth | missing |
 | local common and product commands | read-only plus effectful typed service/action | implemented in DAG C focused registry/action evidence |
 | unsupported/stale/capacity/partial/unknown | typed consumer-visible outcomes | D adds exact typed/classified `missing_binding` and `stale_binding`, plus partial projection-activation failure; remaining vertical outcome coverage is incomplete |
 | request response routing | recipient correlation and native first-writer truth | B replay-before-preflight and C authorized scoped action implemented; final lifecycle/projection integration remains |
 | media/artifact boundaries | trust, bounds, consumer-owned bytes/cleanup | existing evidence requires integration |
-| diagnostics and graceful shutdown | redaction, finite cleanup, late callback rejection | partial existing evidence |
-| installed-wheel usability | same executable specification from clean wheel | DAG C public action/registry import and negative-export wheel gate passes; full golden executable remains |
+| diagnostics and graceful shutdown | redaction, finite cleanup, late callback rejection | bounded/redacted snapshot and zero-work reference shutdown implemented in E; full failure matrix remains H |
+| installed-wheel usability | same executable specification from clean wheel | full golden reference entry point included and executed from an isolated base wheel in DAG E |
 | downstream experimental rewrites | IMCodex, IMT3, IMZen isolated worktrees on exact SDK candidate | final acceptance only |
 
 No pre-v1 test name, module boundary, or passing count is itself acceptance

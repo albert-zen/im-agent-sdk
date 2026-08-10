@@ -3,7 +3,7 @@
 ## Purpose
 
 The Gateway composes Channel adapters, optional Controllers, Agent Application
-adapters, bridge-state repositories, and projection/recovery services. It is
+adapters, one coherent `GatewayStore`, and projection/recovery services. It is
 the deterministic IM boundary, not an Agent runtime.
 
 ## Ownership
@@ -39,9 +39,22 @@ Gateway may depend on Contracts/Core, adapter ports, bridge-state
 repositories, Controllers, and projection/recovery. None of those components
 may import Gateway.
 
-## Composition groups
+## Public composition
 
-Gateway construction groups only owner-scoped dependencies that otherwise
+Canonical `Gateway` accepts one explicit store rather than a public repository
+bundle. On startup it acquires one renewable fenced session, supplies that
+session only to focused internal bridge-state owners, and constructs one
+private effect executor for scoped consumer actions. Consumers obtain
+`ConversationActions` and `ApplicationActions` from the running Gateway and
+cannot access the store session, repositories, lease, or executor.
+
+`GatewayRepositories` remains only on the retiring `ImAgentGateway` constructor
+during the v1 physical migration. `Gateway` is a distinct canonical class, not
+an alias or compatibility wrapper exposed by the example.
+
+## Internal composition groups
+
+Retiring internal construction groups only owner-scoped dependencies that otherwise
 grow together:
 
 - immutable `GatewayRepositories` holds bindings, idempotency, projection

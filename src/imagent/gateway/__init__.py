@@ -12,11 +12,13 @@ from uuid import uuid4
 
 if TYPE_CHECKING:
     from .delivery.proactive_authorization import DeliveryAuthorizer
+    from .runtime import Gateway as Gateway
 
 import imagent.contracts as contracts_facade
 
 from ..applications.contract import (
     AgentApplicationAdapter,
+    ApplicationRef,
     ApplicationSummary,
     ThreadRef,
 )
@@ -47,6 +49,7 @@ from ..interaction.operations import (
     OperationErrorCode,
     operation_error,
 )
+from .actions import ApplicationActions, ConversationActions
 from .admission import (
     ClaimedInbound,
     InboundAdmissionService,
@@ -560,6 +563,43 @@ class ImAgentGateway:
         conversation_ref: ConversationRef,
     ) -> ConversationBinding | None:
         return await self._binding_runtime.current(conversation_ref)
+
+    def _conversation_actions(
+        self,
+        conversation_ref: ConversationRef,
+        *,
+        actor: str,
+    ) -> ConversationActions:
+        runtime = self._require_scoped_action_runtime()
+        return runtime.actions(
+            conversation_ref,
+            actor=actor,
+            foreground_route=(
+                self._projection_policy is _projection_routes.ProjectionPolicy.FOREGROUND_ONLY
+            ),
+        )
+
+    def _application_actions(
+        self,
+        application_ref: ApplicationRef,
+        *,
+        principal: str,
+    ) -> ApplicationActions:
+        return self._require_scoped_action_runtime().application(
+            application_ref,
+            principal=principal,
+        )
+
+    def _deactivate_scoped_actions(self) -> None:
+        runtime = self._controller_action_runtime
+        if runtime is not None:
+            runtime.deactivate()
+
+    def _require_scoped_action_runtime(self) -> _ScopedControllerActionRuntime:
+        runtime = self._controller_action_runtime
+        if runtime is None:
+            raise RuntimeError("Scoped actions require one coherent GatewayStore session")
+        return runtime
 
     async def deliver_proactively(
         self,
@@ -1189,6 +1229,11 @@ def _contract_error(error: Exception) -> ContractError:
 
 
 def __getattr__(name: str) -> object:
+    if name == "Gateway":
+        from .runtime import Gateway
+
+        globals()[name] = Gateway
+        return Gateway
     if name == "DeliveryAuthorizer":
         from .delivery.proactive_authorization import DeliveryAuthorizer
 

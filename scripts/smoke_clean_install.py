@@ -128,6 +128,17 @@ value_exports = {
     "ApplicationActions": "imagent.gateway.actions",
     "ConversationActions": "imagent.gateway.actions",
     "ReadOutcome": "imagent.gateway.actions",
+    "Failed": "imagent.gateway.outcomes",
+    "Gateway": "imagent.gateway.runtime",
+    "GatewayExtensions": "imagent.gateway.composition",
+    "GatewayLimits": "imagent.gateway.composition",
+    "GatewayStore": "imagent.gateway.persistence",
+    "MemoryGatewayStore": "imagent.gateway.persistence",
+    "OutcomeUnknown": "imagent.gateway.outcomes",
+    "Partial": "imagent.gateway.outcomes",
+    "ProjectionPolicy": "imagent.gateway.routing",
+    "SQLiteGatewayStore": "imagent.gateway.persistence",
+    "Succeeded": "imagent.gateway.outcomes",
     "CommandArgumentContract": "imagent.interaction.controllers",
     "CommandDefinition": "imagent.interaction.controllers",
     "CommandExecutionSafety": "imagent.interaction.controllers",
@@ -149,7 +160,18 @@ assert imagent.__all__ == [
     "CommandRegistry",
     "CommandResult",
     "ConversationActions",
+    "Failed",
+    "Gateway",
+    "GatewayExtensions",
+    "GatewayLimits",
+    "GatewayStore",
+    "MemoryGatewayStore",
+    "OutcomeUnknown",
+    "Partial",
+    "ProjectionPolicy",
     "ReadOutcome",
+    "SQLiteGatewayStore",
+    "Succeeded",
     "adapters",
     "contracts",
     "delivery_coordination",
@@ -539,6 +561,30 @@ for first_import in (
             f"stdout={completed.stdout}\nstderr={completed.stderr}"
         )
 '''
+REFERENCE_CONSUMER_CHECK = r"""
+import os
+import subprocess
+import sys
+import tempfile
+
+reference_environment = os.environ.copy()
+reference_environment.pop("PYTHONPATH", None)
+with tempfile.TemporaryDirectory() as reference_cwd:
+    reference_run = subprocess.run(
+        [sys.executable, "-m", "examples.reference_consumer.main"],
+        cwd=reference_cwd,
+        env=reference_environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+assert reference_run.returncode == 0, reference_run.stderr
+assert reference_run.stdout == (
+    "reference consumer OK: projects=1 threads=2 conversations=2 "
+    "max_workers=1 diagnostics=bounded shutdown=true\n"
+)
+assert reference_run.stderr == ""
+"""
 CASES = {
     "base": (
         "",
@@ -548,6 +594,7 @@ CASES = {
         + BINDING_IMPORT_ORDER_CHECK
         + PROJECTION_ROUTE_IMPORT_ORDER_CHECK
         + REQUEST_CORRELATION_IMPORT_ORDER_CHECK
+        + REFERENCE_CONSUMER_CHECK
         + (
             "import asyncio, importlib, importlib.util, typing, imagent; "
             "import imagent.events as event_facade; "

@@ -577,20 +577,20 @@ components:
     target_tests: [tests/gateway/test_actions.py]
     authoritative_docs: [docs/components/gateway/actions/design.md, docs/components/gateway/actions/testing.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
-    gaps: [public Gateway factory wiring requires the coherent B store session and concrete executor acceptance]
+    gaps: []
 
   gateway.composition:
     id: gateway.composition
     parent: gateway
-    purpose: Assemble one immutable Gateway graph from explicit Applications, Channels, repositories, limits, extensions, and the D coherent-session Controller seam.
+    purpose: Assemble one immutable Gateway graph from explicit Applications, Channels, repositories, limits, extensions, and the D coherent-session scoped-action seam.
     owns: [GatewayRepositories, GatewayLimits, GatewayExtensions, explicit dependency wiring, exact coherent-session detection, scoped-action executor wiring, projection action-route reconciliation and commit-fence callable wiring]
-    does_not_own: [service lookup, product policy, native adapter internals]
+    does_not_own: [Gateway lifecycle, service lookup, product policy, native adapter internals, store implementation, public action semantics]
     inputs: [configured typed dependencies]
-    outputs: [ImAgentGateway composition]
+    outputs: [frozen Gateway construction values]
     public_contracts: [GatewayRepositories, GatewayLimits, GatewayExtensions]
     public_exports:
-      current: [imagent.gateway.composition:GatewayRepositories, imagent.gateway.composition:GatewayLimits, imagent.gateway.composition:GatewayExtensions]
-      target: [imagent.gateway.composition:GatewayRepositories, imagent.gateway.composition:GatewayLimits, imagent.gateway.composition:GatewayExtensions]
+      current: [imagent:GatewayLimits, imagent:GatewayExtensions, imagent.gateway:GatewayLimits, imagent.gateway:GatewayExtensions, imagent.gateway.composition:GatewayRepositories, imagent.gateway.composition:GatewayLimits, imagent.gateway.composition:GatewayExtensions]
+      target: [imagent:GatewayLimits, imagent:GatewayExtensions, imagent.gateway:GatewayLimits, imagent.gateway:GatewayExtensions, imagent.gateway.composition:GatewayRepositories, imagent.gateway.composition:GatewayLimits, imagent.gateway.composition:GatewayExtensions]
     dependencies: [interaction.messages, interaction.operations, interaction.controllers.controller-contract, interaction.controllers.request-presentation, interaction.channels.channel-contract, applications.application-contract, applications.operations, applications.requests, gateway.actions, gateway.effect-execution, gateway.concurrency, gateway.admission, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.projection.observation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.routing.gateway-operations, gateway.persistence.effects, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.gateway-store, gateway.persistence.memory, gateway.persistence.idempotency]
     state_recovery: Frozen construction values only; no runtime state or locator lookup.
     current_code: [src/imagent/gateway/composition.py, src/imagent/gateway/controller_input.py, src/imagent/gateway/__init__.py]
@@ -599,7 +599,7 @@ components:
     target_tests: [tests/gateway/test_composition.py, tests/gateway/test_package_root.py, tests/gateway/test_reference_consumer.py]
     authoritative_docs: [docs/components/gateway/composition/design.md, docs/components/gateway/composition/testing.md, docs/components/gateway/design.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [the Gateway package root still combines its composition facade and runtime orchestration]
+    gaps: [the retiring ImAgentGateway package-root orchestration remains until the final pre-v1 deletion block]
 
   gateway.concurrency:
     id: gateway.concurrency
@@ -627,19 +627,19 @@ components:
     id: gateway.lifecycle
     parent: gateway
     purpose: Start and stop the assembled graph with bounded FIFO startup admission and complete cleanup.
-    owns: [startup ordering, exact two-argument Channel start invocation, rollback, shutdown ordering including route-commit fence acquisition, startup admission gate]
+    owns: [Gateway, coherent store acquisition, lifecycle-bound scoped actions, renewable lease, startup ordering, exact two-argument Channel start invocation, rollback, shutdown ordering including route-commit fence acquisition, startup admission gate]
     does_not_own: [Channel signature compatibility, native transport supervision internals, durable work queue]
     inputs: [composed Applications and two-argument Channels]
     outputs: [running/stopped Gateway state]
-    public_contracts: [ImAgentGateway]
+    public_contracts: [Gateway, ImAgentGateway]
     public_exports:
-      current: [imagent.gateway:ImAgentGateway]
-      target: [imagent.gateway:ImAgentGateway]
-    dependencies: [gateway.composition, gateway.admission, gateway.projection.observation]
-    state_recovery: Bounded process-local FIFO; rollback closes admission before awaiting cleanup.
-    current_code: [src/imagent/gateway/__init__.py, src/imagent/gateway/lifecycle.py]
-    target_code: [src/imagent/gateway/lifecycle.py]
-    current_tests: [tests/gateway/test_lifecycle.py, tests/gateway/test_operations_integration.py, tests/gateway/test_vertical_slice.py, tests/gateway/test_diagnostics.py]
+      current: [imagent:Gateway, imagent.gateway:Gateway, imagent.gateway.runtime:Gateway, imagent.gateway:ImAgentGateway]
+      target: [imagent:Gateway, imagent.gateway:Gateway, imagent.gateway.runtime:Gateway, imagent.gateway:ImAgentGateway]
+    dependencies: [interaction.messages, interaction.operations, interaction.controllers.controller-contract, interaction.channels.channel-contract, applications.application-contract, applications.operations, applications.requests, gateway.actions, gateway.effect-execution, gateway.outcomes, gateway.composition, gateway.diagnostics, gateway.admission, gateway.projection.observation, gateway.routing.projection-routes, gateway.persistence.gateway-store, gateway.persistence.effects, gateway.persistence.state-contracts]
+    state_recovery: Gateway serializes same-instance lifecycle transitions, owns one renewable store lease, cancels and joins a racing startup through its rollback owner, and closes runtime, Controller, session, and store deterministically; bounded startup state is process-local.
+    current_code: [src/imagent/gateway/runtime.py, src/imagent/gateway/__init__.py, src/imagent/gateway/lifecycle.py]
+    target_code: [src/imagent/gateway/runtime.py, src/imagent/gateway/lifecycle.py]
+    current_tests: [tests/gateway/test_lifecycle.py, tests/gateway/test_reference_consumer.py, tests/gateway/test_operations_integration.py, tests/gateway/test_vertical_slice.py, tests/gateway/test_diagnostics.py]
     target_tests: [tests/gateway/test_lifecycle.py]
     authoritative_docs: [docs/components/gateway/lifecycle/design.md, docs/components/gateway/lifecycle/testing.md, docs/components/gateway/design.md, docs/components/gateway/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0013-bounded-application-event-admission.md]
@@ -721,8 +721,8 @@ components:
     outputs: [active ThreadProjectionRoute set]
     public_contracts: [ObserveThread, ThreadObserved, ClearThreadObservation, ThreadObservationCleared, ProjectionPolicy]
     public_exports:
-      current: [imagent.gateway.routing:ObserveThread, imagent.gateway.routing:ThreadObserved, imagent.gateway.routing:ClearThreadObservation, imagent.gateway.routing:ThreadObservationCleared, imagent.gateway.routing:ProjectionPolicy, imagent.gateway.routing.projection_routes:ObserveThread, imagent.gateway.routing.projection_routes:ThreadObserved, imagent.gateway.routing.projection_routes:ClearThreadObservation, imagent.gateway.routing.projection_routes:ThreadObservationCleared, imagent.gateway.routing.projection_routes:ProjectionPolicy]
-      target: [imagent.gateway.routing:ObserveThread, imagent.gateway.routing:ThreadObserved, imagent.gateway.routing:ClearThreadObservation, imagent.gateway.routing:ThreadObservationCleared, imagent.gateway.routing:ProjectionPolicy, imagent.gateway.routing.projection_routes:ObserveThread, imagent.gateway.routing.projection_routes:ThreadObserved, imagent.gateway.routing.projection_routes:ClearThreadObservation, imagent.gateway.routing.projection_routes:ThreadObservationCleared, imagent.gateway.routing.projection_routes:ProjectionPolicy]
+      current: [imagent:ProjectionPolicy, imagent.gateway.routing:ObserveThread, imagent.gateway.routing:ThreadObserved, imagent.gateway.routing:ClearThreadObservation, imagent.gateway.routing:ThreadObservationCleared, imagent.gateway.routing:ProjectionPolicy, imagent.gateway.routing.projection_routes:ObserveThread, imagent.gateway.routing.projection_routes:ThreadObserved, imagent.gateway.routing.projection_routes:ClearThreadObservation, imagent.gateway.routing.projection_routes:ThreadObservationCleared, imagent.gateway.routing.projection_routes:ProjectionPolicy]
+      target: [imagent:ProjectionPolicy, imagent.gateway.routing:ObserveThread, imagent.gateway.routing:ThreadObserved, imagent.gateway.routing:ClearThreadObservation, imagent.gateway.routing:ThreadObservationCleared, imagent.gateway.routing:ProjectionPolicy, imagent.gateway.routing.projection_routes:ObserveThread, imagent.gateway.routing.projection_routes:ThreadObserved, imagent.gateway.routing.projection_routes:ClearThreadObservation, imagent.gateway.routing.projection_routes:ThreadObservationCleared, imagent.gateway.routing.projection_routes:ProjectionPolicy]
     dependencies: [interaction.messages, interaction.operations, applications.application-contract, gateway.routing.bindings, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
     state_recovery: Routes persist independently; foreground authority requires current binding equality.
     current_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/projection_routes.py, src/imagent/gateway/__init__.py]
@@ -1051,8 +1051,8 @@ components:
     outputs: [Succeeded, Failed, Partial, OutcomeUnknown]
     public_contracts: [OutcomeStatus, Succeeded, Failed, Partial, OutcomeUnknown, Outcome]
     public_exports:
-      current: [imagent.gateway.outcomes:OutcomeStatus, imagent.gateway.outcomes:Succeeded, imagent.gateway.outcomes:Failed, imagent.gateway.outcomes:Partial, imagent.gateway.outcomes:OutcomeUnknown, imagent.gateway.outcomes:Outcome]
-      target: [imagent.gateway.outcomes:OutcomeStatus, imagent.gateway.outcomes:Succeeded, imagent.gateway.outcomes:Failed, imagent.gateway.outcomes:Partial, imagent.gateway.outcomes:OutcomeUnknown, imagent.gateway.outcomes:Outcome]
+      current: [imagent:Succeeded, imagent:Failed, imagent:Partial, imagent:OutcomeUnknown, imagent.gateway.outcomes:OutcomeStatus, imagent.gateway.outcomes:Succeeded, imagent.gateway.outcomes:Failed, imagent.gateway.outcomes:Partial, imagent.gateway.outcomes:OutcomeUnknown, imagent.gateway.outcomes:Outcome]
+      target: [imagent:Succeeded, imagent:Failed, imagent:Partial, imagent:OutcomeUnknown, imagent.gateway.outcomes:OutcomeStatus, imagent.gateway.outcomes:Succeeded, imagent.gateway.outcomes:Failed, imagent.gateway.outcomes:Partial, imagent.gateway.outcomes:OutcomeUnknown, imagent.gateway.outcomes:Outcome]
     dependencies: []
     state_recovery: Passive result values carry no retry authority; outcome_unknown preserves ambiguity.
     current_code: [schemas/v1/outcomes.schema.json, src/imagent/gateway/outcomes.py]
@@ -1249,8 +1249,8 @@ components:
     outputs: [lease-bound internal session, durable effect receipts, atomic bridge-state outcomes]
     public_contracts: [GatewayStore, MemoryGatewayStore, SQLiteGatewayStore, GatewayStoreError, GatewayNamespaceConflict, RuntimeLease, RuntimeLeaseUnavailable, StaleRuntimeFence, EffectReceiptConflict, EffectReceiptCapacityError, WorkspaceIdentityConflict]
     public_exports:
-      current: [imagent.gateway.persistence:EffectReceiptCapacityError, imagent.gateway.persistence:EffectReceiptConflict, imagent.gateway.persistence:GatewayNamespaceConflict, imagent.gateway.persistence:GatewayStore, imagent.gateway.persistence:GatewayStoreError, imagent.gateway.persistence:MemoryGatewayStore, imagent.gateway.persistence:RuntimeLease, imagent.gateway.persistence:RuntimeLeaseUnavailable, imagent.gateway.persistence:SQLiteGatewayStore, imagent.gateway.persistence:StaleRuntimeFence, imagent.gateway.persistence:WorkspaceIdentityConflict, imagent.gateway.persistence.store:EffectReceiptCapacityError, imagent.gateway.persistence.store:EffectReceiptConflict, imagent.gateway.persistence.store:GatewayNamespaceConflict, imagent.gateway.persistence.store:GatewayStore, imagent.gateway.persistence.store:GatewayStoreError, imagent.gateway.persistence.store:RuntimeLease, imagent.gateway.persistence.store:RuntimeLeaseUnavailable, imagent.gateway.persistence.store:StaleRuntimeFence, imagent.gateway.persistence.store:WorkspaceIdentityConflict, imagent.gateway.persistence.memory_store:MemoryGatewayStore, imagent.gateway.persistence.sqlite_store:SQLiteGatewayStore]
-      target: [imagent.gateway.persistence:EffectReceiptCapacityError, imagent.gateway.persistence:EffectReceiptConflict, imagent.gateway.persistence:GatewayNamespaceConflict, imagent.gateway.persistence:GatewayStore, imagent.gateway.persistence:GatewayStoreError, imagent.gateway.persistence:MemoryGatewayStore, imagent.gateway.persistence:RuntimeLease, imagent.gateway.persistence:RuntimeLeaseUnavailable, imagent.gateway.persistence:SQLiteGatewayStore, imagent.gateway.persistence:StaleRuntimeFence, imagent.gateway.persistence:WorkspaceIdentityConflict, imagent.gateway.persistence.store:EffectReceiptCapacityError, imagent.gateway.persistence.store:EffectReceiptConflict, imagent.gateway.persistence.store:GatewayNamespaceConflict, imagent.gateway.persistence.store:GatewayStore, imagent.gateway.persistence.store:GatewayStoreError, imagent.gateway.persistence.store:RuntimeLease, imagent.gateway.persistence.store:RuntimeLeaseUnavailable, imagent.gateway.persistence.store:StaleRuntimeFence, imagent.gateway.persistence.store:WorkspaceIdentityConflict, imagent.gateway.persistence.memory_store:MemoryGatewayStore, imagent.gateway.persistence.sqlite_store:SQLiteGatewayStore]
+      current: [imagent:GatewayStore, imagent:MemoryGatewayStore, imagent:SQLiteGatewayStore, imagent.gateway.persistence:EffectReceiptCapacityError, imagent.gateway.persistence:EffectReceiptConflict, imagent.gateway.persistence:GatewayNamespaceConflict, imagent.gateway.persistence:GatewayStore, imagent.gateway.persistence:GatewayStoreError, imagent.gateway.persistence:MemoryGatewayStore, imagent.gateway.persistence:RuntimeLease, imagent.gateway.persistence:RuntimeLeaseUnavailable, imagent.gateway.persistence:SQLiteGatewayStore, imagent.gateway.persistence:StaleRuntimeFence, imagent.gateway.persistence:WorkspaceIdentityConflict, imagent.gateway.persistence.store:EffectReceiptCapacityError, imagent.gateway.persistence.store:EffectReceiptConflict, imagent.gateway.persistence.store:GatewayNamespaceConflict, imagent.gateway.persistence.store:GatewayStore, imagent.gateway.persistence.store:GatewayStoreError, imagent.gateway.persistence.store:RuntimeLease, imagent.gateway.persistence.store:RuntimeLeaseUnavailable, imagent.gateway.persistence.store:StaleRuntimeFence, imagent.gateway.persistence.store:WorkspaceIdentityConflict, imagent.gateway.persistence.memory_store:MemoryGatewayStore, imagent.gateway.persistence.sqlite_store:SQLiteGatewayStore]
+      target: [imagent:GatewayStore, imagent:MemoryGatewayStore, imagent:SQLiteGatewayStore, imagent.gateway.persistence:EffectReceiptCapacityError, imagent.gateway.persistence:EffectReceiptConflict, imagent.gateway.persistence:GatewayNamespaceConflict, imagent.gateway.persistence:GatewayStore, imagent.gateway.persistence:GatewayStoreError, imagent.gateway.persistence:MemoryGatewayStore, imagent.gateway.persistence:RuntimeLease, imagent.gateway.persistence:RuntimeLeaseUnavailable, imagent.gateway.persistence:SQLiteGatewayStore, imagent.gateway.persistence:StaleRuntimeFence, imagent.gateway.persistence:WorkspaceIdentityConflict, imagent.gateway.persistence.store:EffectReceiptCapacityError, imagent.gateway.persistence.store:EffectReceiptConflict, imagent.gateway.persistence.store:GatewayNamespaceConflict, imagent.gateway.persistence.store:GatewayStore, imagent.gateway.persistence.store:GatewayStoreError, imagent.gateway.persistence.store:RuntimeLease, imagent.gateway.persistence.store:RuntimeLeaseUnavailable, imagent.gateway.persistence.store:StaleRuntimeFence, imagent.gateway.persistence.store:WorkspaceIdentityConflict, imagent.gateway.persistence.memory_store:MemoryGatewayStore, imagent.gateway.persistence.sqlite_store:SQLiteGatewayStore]
     dependencies: [interaction.messages, interaction.operations, applications.application-contract, applications.requests, gateway.outcomes, gateway.routing.projection-routes, gateway.persistence.effects, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.memory, gateway.persistence.idempotency, gateway.persistence.sqlite, gateway.persistence.row-mapping]
     state_recovery: One namespace retains monotonic binding generations and non-evicting receipts; store-authored lease expiry permits fenced takeover without granting native retry authority.
     current_code: [src/imagent/gateway/persistence/__init__.py, src/imagent/gateway/persistence/store.py, src/imagent/gateway/persistence/memory_store.py, src/imagent/gateway/persistence/sqlite_store.py]
@@ -1633,6 +1633,28 @@ components:
     target_tests: [tests/applications/adapters/test_t3.py]
     authoritative_docs: [docs/components/applications/adapters/t3/design.md, docs/components/applications/adapters/t3/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
+    gaps: []
+
+  engineering.reference-consumer:
+    id: engineering.reference-consumer
+    parent: engineering
+    purpose: Prove the public v1 consumer experience through one product-neutral executable and its clean-wheel acceptance path.
+    owns: [canonical executable consumer, deterministic public-port evidence, reference onboarding, executable vertical integration test]
+    does_not_own: [runtime semantics, private Gateway composition, native adapter policy, product policy, release publication]
+    inputs: [installed public SDK surface, explicit managed CWD, deterministic local Channel and Application]
+    outputs: [bounded executable report, public-path vertical acceptance evidence]
+    public_contracts: []
+    public_exports:
+      current: []
+      target: []
+    dependencies: [interaction.messages, interaction.channels.channel-contract, interaction.controllers.command-registry, interaction.controllers.common-commands, gateway.composition, gateway.lifecycle, gateway.persistence.gateway-store, gateway.diagnostics, gateway.projection.observation, applications.application-contract, applications.capabilities, applications.events, applications.operations, engineering.release]
+    state_recovery: The example retains only bounded process-local deterministic adapter truth; every run starts fresh and shutdown closes all owned tasks, subscriptions, and store resources.
+    current_code: [examples/reference_consumer/*.py]
+    target_code: [examples/reference_consumer/*.py]
+    current_tests: [tests/gateway/test_reference_consumer.py]
+    target_tests: [tests/gateway/test_reference_consumer.py]
+    authoritative_docs: [docs/engineering/reference-consumer/design.md, docs/engineering/reference-consumer/testing.md]
+    adrs: [docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
 
   engineering.testing-and-conformance:

@@ -49,14 +49,20 @@ install must not discover optional integration dependencies that were not
 requested. The aggregate `channels` extra and wheel contents such as
 `py.typed` remain separate release checks; the smoke script does not claim to
 cover them.
-The base case also resolves `GatewayStore`, `MemoryGatewayStore`, and
-`SQLiteGatewayStore` from the installed persistence facade and proves their
-identity with the canonical Block-B owners.
-It resolves `MissingBindingError` and `StaleBindingError` through both installed
-Gateway facades, proves exact identity with the input-dispatch owner and the
-stable `missing_binding`/`stale_binding` classifications, and proves that the
-Gateway-specific types do not escape through either the top-level package or
-language-neutral contracts facade.
+The base case also resolves `Gateway`, `GatewayLimits`, `GatewayStore`,
+`MemoryGatewayStore`, `SQLiteGatewayStore`, `ProjectionPolicy`, and closed
+outcomes from the installed top-level facade and proves their identity with
+the canonical owners. It resolves `MissingBindingError` and
+`StaleBindingError` through both installed Gateway facades, proves exact
+identity with the input-dispatch owner and their stable classifications, and
+proves that those Gateway-specific types do not escape through either the
+top-level package or language-neutral contracts facade.
+The same base environment executes the installed
+`examples.reference_consumer.main` module from a temporary working directory
+with no repository `PYTHONPATH`. The bounded success line is accepted only
+after the complete public-path scenario has asserted its managed resource
+identities, Conversation isolation, one-worker fan-out, diagnostics, and
+shutdown invariants.
 The base case also proves, in the original transition-first clean process,
 that `imagent.diagnostics` preserves exact identity for the canonical
 Interaction, Channel, and Application diagnostics objects. It additionally

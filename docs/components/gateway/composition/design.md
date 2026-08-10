@@ -6,8 +6,9 @@ Parent: `gateway`
 
 ## Purpose
 
-Composition assembles one explicit `ImAgentGateway` object graph from typed
-Applications, Channels, repositories, limits, and optional extension seams.
+Composition assembles one explicit public `Gateway` object graph from typed
+Applications, Channels, one coherent `GatewayStore`, limits, and optional
+extension seams.
 It is a wiring boundary, not a service locator or a fourth business layer.
 
 ## Ownership
@@ -26,21 +27,40 @@ repository. Composition still sequences Application Project/Thread truth,
 binding transition facts, and foreground projection-route preparation without
 becoming a second mutation owner.
 
-Inputs are explicitly configured Application and Channel instances plus typed
-Controller, repository, delivery, authorization, limit, and extension
-dependencies. The output is one `ImAgentGateway` with no dependency lookup at
-runtime. Dependencies point to the public Interaction and Applications
+Inputs are explicitly configured Application and Channel instances plus one
+typed store, Controller, limit, and extension dependencies. The output is one
+`Gateway` with no dependency lookup at runtime. Dependencies point to the
+public Interaction and Applications
 contracts and the specific Gateway admission, input, projection, presentation,
 delivery, persistence, and diagnostics leaves that consume the values.
 Coherent-session detection validates the complete structural capability so
 both built-in Memory and deliberately delegated SQLite sessions wire the same
 Controller/action graph; no session object crosses into a consumer surface.
 
-The formal public contracts are `GatewayRepositories`, `GatewayLimits`, and
-`GatewayExtensions`. Their single implementation lives in
-`imagent.gateway.composition`; the stable `imagent.gateway` facade re-exports
-the exact same objects. The removed `imagent.gateway_composition` internal
-module has no compatibility shim, so there can never be two implementations.
+The canonical public contracts are `Gateway`, `GatewayLimits`, and
+`GatewayExtensions`; the built-in store choices implement the separate
+`GatewayStore` port. `Gateway` lives in `imagent.gateway.runtime` and is an
+exact lazy export from `imagent.gateway` and `imagent`. The construction values
+live in `imagent.gateway.composition`. The removed
+`imagent.gateway_composition` module has no compatibility shim.
+
+At startup `Gateway` acquires exactly one lease-bound `GatewayStore` session.
+That same session supplies each focused internal bridge-state owner and creates
+one `StoreBackedGatewayEffectExecutor`; scoped action factories receive only
+the lifecycle-bound fenced `GatewayEffectExecutor` protocol. Composition
+uses D's one exact action bootstrap lease and narrow commit fence before a new
+route becomes visible, then reconciles the terminal store/workflow result
+through the one SDK projection runtime rather than a consumer subscription. The
+session, lease, concrete executor, repository views, and retiring
+`GatewayRepositories` bundle never cross the canonical consumer surface.
+Terminal replay remains authoritative: replay precedes lifecycle admission and
+current worker capacity or inactive-route state cannot rewrite a stored
+result. For new work, authoritative preflight remains outside the commit fence;
+the atomic route transaction and projection shutdown take that fence in winner
+order. After a successful commit, reconciliation stops workers no longer backed
+by active routes before reserving capacity for the new Thread. Its cancellation
+join and exact bootstrap lease ensure every holder completes or aborts without
+opening a live-before-baseline window.
 
 ## Bounds and absence
 
@@ -62,13 +82,14 @@ synthetic callback, diagnostic invocation, persistence, or side effect. The
 grouped constructor is the one supported construction shape; composition does
 not preserve an unlimited parallel flat-keyword API.
 
-The D ordinary-input integration accepts a Controller only when the retiring
-composition is already backed by one lease-bound `GatewayStoreSession` used as
+The D ordinary-input integration accepts a Controller only when composition is
+backed by one lease-bound `GatewayStoreSession` used as
 bindings, projections, idempotency, request correlations, and delivery
 submissions together. Every optional repository must be absent or that exact
 object; mixing the session with any other repository fails during construction.
 Gateway then constructs `StoreBackedGatewayEffectExecutor` and exposes only the
-resulting `ConversationActions` to Controller code. This focused integration
+resulting `ConversationActions` to Controller code or scoped action values to
+the public factories. This focused integration
 also injects the projection runtime's public action-route bootstrap and
 reconciliation methods as narrow callables into the private Controller action
 adapter. Successful and terminally replayed route/binding actions converge
@@ -79,10 +100,10 @@ durable route whose activation loses shutdown is closed partial, both without a
 second dispatch or recovery path. It injects only an opaque async commit-fence
 context into B: B retains the atomic store call, while projection stop and the
 post-preflight transaction acquire the same process-local fence. Terminal
-receipt replay remains before fence admission. This focused integration does not expose the
-private session or turn
-`GatewayRepositories` into the v1 public store port; final `GatewayStore`
-acquisition and lifecycle ownership remain later DAG composition work.
+receipt replay remains before fence admission. Canonical `Gateway` owns the
+public `GatewayStore` acquisition and deterministic release; the private
+session and `GatewayRepositories` never become consumer-facing construction
+ports.
 
 `projection_max_active_threads` is passed only to the Thread observation
 runtime. It bounds distinct stable `ThreadRef` workers in one Gateway process:
@@ -97,23 +118,28 @@ the final input owner until it has safely drained.
 
 ## State and recovery
 
-The three groups are frozen process configuration and own no mutable or durable
-state. Recovery belongs to the repository and runtime leaves receiving those
-dependencies. Reconstructing an equivalent composition must not create a
+The construction values are frozen process configuration. The Gateway owns its
+store lease, periodic renewal task, and deterministic release/close ordering;
+renewal starts immediately after acquisition, including while inner startup is
+still running. Renewal loss closes admission, invalidates all previously
+issued scoped surfaces, stops the runtime, and closes the session/store before
+`wait_closed()` reports the failure. Any failure after acquisition follows the
+same owned cleanup path.
+Durable recovery belongs to the configured store and runtime leaves.
+Reconstructing an equivalent composition must not create a
 second Application subscription, Channel admission path, transcript, Agent
 runtime, content spool, or outbox.
 
 ## Current structure and remaining split
 
-`src/imagent/gateway/composition.py` is the current and sole owner of the
-three composition values. `src/imagent/gateway/controller_input.py` privately
-adapts the exact Application/binding/effect callbacks required by C and creates
-the inbound scoped surface; it exposes no public factory or runtime object.
-`src/imagent/gateway/__init__.py` imports those exact values for the stable
-package facade and still contains `ImAgentGateway` runtime orchestration.
-Separating that remaining package-root facade/runtime combination is a later
-mechanical slice; it does not duplicate the composition values or alter their
-grouped constructor API.
+`src/imagent/gateway/runtime.py` hosts the lifecycle-owned canonical Gateway;
+`src/imagent/gateway/composition.py` solely owns its three immutable
+construction values. `src/imagent/gateway/controller_input.py` privately adapts
+the exact Application, binding, D effect-executor, projection-reconciliation,
+and route-commit-fence callbacks required by C for both public factories and
+the optional inbound Controller. `src/imagent/gateway/__init__.py` retains the
+single internal orchestration graph used by the canonical lifecycle; the
+reference consumer never imports it or any private composition seam.
 
 ## Authority
 

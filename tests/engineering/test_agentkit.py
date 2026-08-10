@@ -30,6 +30,7 @@ PRODUCT_COMPONENTS = {
 
 V1_AUTHORITY_COMPONENTS = PRODUCT_COMPONENTS | {
     "agentkit",
+    "reference-consumer",
     "release",
     "repository-maintainability",
     "schema-conformance",
@@ -187,6 +188,8 @@ class AgentKitMappingTests(unittest.TestCase):
             "src/imagent/interaction/testing/contracts.py": {"testing-and-conformance"},
             "src/imagent/interaction/testing/fakes.py": {"testing-and-conformance"},
             "src/imagent/testing/__init__.py": {"testing-and-conformance"},
+            "src/imagent/gateway/runtime.py": {"gateway"},
+            "examples/reference_consumer/main.py": {"reference-consumer"},
         }
         for path, owners in expected.items():
             with self.subTest(path=path):
@@ -203,6 +206,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/gateway/test_package_root.py": {"gateway"},
             "tests/gateway/test_operations_integration.py": {"gateway"},
             "tests/gateway/test_vertical_slice.py": {"gateway"},
+            "tests/gateway/test_reference_consumer.py": {"reference-consumer"},
             "tests/gateway/routing/__init__.py": {"gateway"},
             "tests/gateway/input/test_content_transformation.py": {"gateway"},
             "tests/gateway/input/test_dispatch.py": {"gateway"},
@@ -288,6 +292,8 @@ class AgentKitMappingTests(unittest.TestCase):
             "docs/engineering/repository-maintainability/design.md": {"repository-maintainability"},
             "docs/engineering/agentkit/design.md": {"agentkit"},
             "docs/engineering/release/design.md": {"release"},
+            "docs/engineering/reference-consumer/design.md": {"reference-consumer"},
+            "docs/onboarding/README.md": {"reference-consumer"},
         }
         for path, owners in expected.items():
             with self.subTest(path=path):

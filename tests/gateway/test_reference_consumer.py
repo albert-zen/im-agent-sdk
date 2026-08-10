@@ -1,12 +1,24 @@
 from __future__ import annotations
 
+import ast
+import asyncio
 import unittest
+from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import cast
+from unittest.mock import patch
 
 from examples.reference_consumer.application import ReferenceApplication
 from examples.reference_consumer.gateway import build_reference_consumer
-from examples.reference_consumer.interaction import ReferenceChannel
-from examples.reference_consumer.main import run_demo
+from examples.reference_consumer.interaction import (
+    ReferenceChannel,
+    ReferenceStatusService,
+    build_command_registry,
+)
+from examples.reference_consumer.main import run_reference_consumer
+from imagent import Gateway, GatewayLimits, MemoryGatewayStore, ProjectionPolicy, Succeeded
 from imagent.applications.contract import (
     AgentInput,
     ApplicationRef,
@@ -14,8 +26,20 @@ from imagent.applications.contract import (
     ThreadHistory,
     ThreadRef,
 )
-from imagent.applications.operations import GetThreadHistory, ThreadHistoryRead
-from imagent.gateway.routing import ProjectionPolicy
+from imagent.applications.operations import (
+    ApplicationOperationFailed,
+    CreateProject,
+    CreateThread,
+    GetThreadHistory,
+    ListProjects,
+    ProjectCreated,
+    ProjectsListed,
+    ThreadCreated,
+    ThreadHistoryRead,
+)
+from imagent.gateway.persistence.store import GatewayStoreSession
+from imagent.gateway.projection.observation import ThreadProjectionRuntime
+from imagent.interaction.channels import InboundAdmissionHandler, MessageHandler
 from imagent.interaction.controllers import (
     CommandDefinition,
     CommandRegistry,
@@ -25,34 +49,171 @@ from imagent.interaction.controllers import (
 from imagent.interaction.messages import ConversationRef, OutboundMessage, TextContent
 
 
+class _CountingMemoryGatewayStore(MemoryGatewayStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.acquire_count = 0
+        self.close_count = 0
+
+    async def acquire_runtime(
+        self,
+        *,
+        gateway_id: str,
+        owner_token: str,
+        lease_duration_seconds: float,
+    ):
+        self.acquire_count += 1
+        return await super().acquire_runtime(
+            gateway_id=gateway_id,
+            owner_token=owner_token,
+            lease_duration_seconds=lease_duration_seconds,
+        )
+
+    async def close(self) -> None:
+        self.close_count += 1
+        await super().close()
+
+
+class _FailingRenewSession:
+    def __init__(
+        self,
+        delegate: GatewayStoreSession,
+        failed: asyncio.Event,
+        allow_failure: asyncio.Event,
+    ) -> None:
+        self._delegate = delegate
+        self._failed = failed
+        self._allow_failure = allow_failure
+
+    def __getattr__(self, name: str):
+        return getattr(self._delegate, name)
+
+    async def renew(self, *, lease_duration_seconds: float):
+        del lease_duration_seconds
+        await self._allow_failure.wait()
+        self._failed.set()
+        raise RuntimeError("simulated lease renewal loss")
+
+
+class _FailingRenewMemoryGatewayStore:
+    def __init__(self) -> None:
+        self._delegate = _CountingMemoryGatewayStore()
+        self.renew_failed = asyncio.Event()
+        self._allow_failure = asyncio.Event()
+
+    @property
+    def max_effect_receipts(self) -> int:
+        return self._delegate.max_effect_receipts
+
+    @property
+    def close_count(self) -> int:
+        return self._delegate.close_count
+
+    async def acquire_runtime(
+        self,
+        *,
+        gateway_id: str,
+        owner_token: str,
+        lease_duration_seconds: float,
+    ):
+        session = await self._delegate.acquire_runtime(
+            gateway_id=gateway_id,
+            owner_token=owner_token,
+            lease_duration_seconds=lease_duration_seconds,
+        )
+        return cast(
+            GatewayStoreSession,
+            _FailingRenewSession(session, self.renew_failed, self._allow_failure),
+        )
+
+    async def close(self) -> None:
+        await self._delegate.close()
+
+    def allow_renew_failure(self) -> None:
+        self._allow_failure.set()
+
+
+class _BlockingAcquireMemoryGatewayStore(_CountingMemoryGatewayStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.first_acquired = asyncio.Event()
+        self.allow_first_return = asyncio.Event()
+
+    async def acquire_runtime(
+        self,
+        *,
+        gateway_id: str,
+        owner_token: str,
+        lease_duration_seconds: float,
+    ):
+        session = await super().acquire_runtime(
+            gateway_id=gateway_id,
+            owner_token=owner_token,
+            lease_duration_seconds=lease_duration_seconds,
+        )
+        if self.acquire_count == 1:
+            self.first_acquired.set()
+            await self.allow_first_return.wait()
+        return session
+
+
+class _BlockingStartChannel(ReferenceChannel):
+    def __init__(self, on_blocked: Callable[[], None]) -> None:
+        super().__init__()
+        self._on_blocked = on_blocked
+        self.start_blocked = asyncio.Event()
+        self._never = asyncio.Event()
+
+    async def start(
+        self,
+        on_message: MessageHandler,
+        on_admission: InboundAdmissionHandler | None = None,
+    ) -> None:
+        await super().start(on_message, on_admission)
+        self.start_blocked.set()
+        self._on_blocked()
+        await self._never.wait()
+
+
 class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
-    async def test_executable_composition_covers_routing_recovery_and_shutdown(self) -> None:
-        report = await run_demo()
+    async def test_same_executable_entry_point_proves_the_v1_golden_path(self) -> None:
+        with TemporaryDirectory() as cwd:
+            report = await run_reference_consumer(cwd)
 
         self.assertIs(report.projection_policy, ProjectionPolicy.FOREGROUND_ONLY)
-        self.assertEqual(report.command_outputs, ())
+        self.assertEqual(report.project_count, 1)
+        self.assertEqual(report.thread_count, 2)
+        self.assertEqual(report.conversation_count, 2)
+        self.assertEqual(report.command_count, 3)
+        self.assertEqual(report.project_ref.project_id, "reference-project-1")
+        self.assertEqual(report.first_thread_ref.thread_id, "reference-thread-1")
+        self.assertEqual(report.second_thread_ref.thread_id, "reference-thread-2")
+        self.assertEqual(report.first_thread_ref.project_ref, report.project_ref)
+        self.assertEqual(report.second_thread_ref.project_ref, report.project_ref)
 
         conversation_a = ConversationRef("reference-channel", "conversation-a")
         conversation_b = ConversationRef("reference-channel", "conversation-b")
+        self.assertEqual(report.initial_thread_conversations, (conversation_a,))
         self.assertEqual(
             report.shared_thread_conversations,
             (conversation_a, conversation_b),
         )
         self.assertEqual(report.switched_old_thread_conversations, (conversation_b,))
         self.assertEqual(report.switched_new_thread_conversations, (conversation_a,))
-        self.assertEqual(report.recovered_conversations, (conversation_b,))
+        self.assertEqual(report.switched_back_conversations, (conversation_a, conversation_b))
 
         self.assertEqual(report.worker_max_active, (1, 1))
-        self.assertTrue(all(calls >= 1 for calls in report.worker_subscription_calls))
+        self.assertEqual(report.worker_subscription_calls, (1, 1))
 
         self.assertEqual(report.diagnostics_schema_version, 8)
-        self.assertEqual(report.diagnostics_application_ids, ("reference-agent",))
-        self.assertEqual(report.diagnostics_channel_ids, ("reference-channel",))
+        self.assertLess(report.diagnostics_size, 4_096)
         self.assertFalse(report.diagnostics_authoritative)
-        self.assertTrue(report.registry_frozen)
-        self.assertTrue(report.gateway_stopped)
+        self.assertTrue(report.adapters_stopped)
+        self.assertEqual(report.active_workers_after_shutdown, 0)
+        self.assertEqual(report.registry_active_after_shutdown, 0)
+        self.assertEqual(report.owned_tasks_after_shutdown, 0)
 
-    async def test_local_composition_is_typed_and_registry_is_frozen(self) -> None:
+    async def test_local_registry_is_frozen_and_rejects_duplicate_registration(self) -> None:
         consumer = build_reference_consumer()
 
         self.assertIsInstance(consumer.registry, CommandRegistry)
@@ -64,6 +225,680 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(CommandRegistryFrozenError):
             consumer.registry.register(CommandDefinition(name="late", handler=late_command))
+
+        registry = CommandRegistry()
+        registry.register(CommandDefinition(name="duplicate", handler=late_command))
+        with self.assertRaises(ValueError):
+            registry.register(CommandDefinition(name="duplicate", handler=late_command))
+
+    async def test_unfrozen_registry_fails_before_gateway_accepts_input(self) -> None:
+        channel = ReferenceChannel()
+        application = ReferenceApplication()
+        store = _CountingMemoryGatewayStore()
+        registry = CommandRegistry()
+
+        async def retry_command(invocation, actions) -> CommandResult:
+            del invocation, actions
+            return CommandResult.text("retry")
+
+        registry.register(CommandDefinition(name="retry", handler=retry_command))
+        gateway = Gateway(
+            gateway_id="reference-unfrozen",
+            channels=[channel],
+            applications=[application],
+            store=store,
+            controller=registry,
+        )
+
+        with self.assertRaisesRegex(ValueError, "frozen"):
+            await gateway.start()
+        self.assertFalse(channel.started)
+        self.assertFalse(application.started)
+        self.assertFalse(gateway.running)
+        self.assertEqual(store.acquire_count, 0)
+
+        registry.freeze()
+        await gateway.start()
+        self.assertTrue(gateway.running)
+        self.assertEqual(store.acquire_count, 1)
+        await gateway.stop()
+        self.assertFalse(channel.started)
+        self.assertFalse(application.started)
+        self.assertEqual(store.close_count, 1)
+
+    async def test_gateway_acquires_one_coherent_store_and_closes_it_once(self) -> None:
+        channel = ReferenceChannel()
+        application = ReferenceApplication()
+        store = _CountingMemoryGatewayStore()
+        gateway = Gateway(
+            gateway_id="reference-coherent-store",
+            channels=[channel],
+            applications=[application],
+            store=store,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "running"):
+            gateway.actions(
+                channel.conversation("before-start").ref,
+                actor="reference-user",
+            )
+        async with gateway:
+            self.assertTrue(gateway.running)
+            self.assertEqual(store.acquire_count, 1)
+        self.assertFalse(gateway.running)
+        self.assertEqual(store.acquire_count, 1)
+        self.assertEqual(store.close_count, 1)
+
+    async def test_scoped_create_and_bind_activates_observation_before_input(self) -> None:
+        channel = ReferenceChannel()
+        application = ReferenceApplication()
+        conversation = channel.conversation("conversation-action-route")
+        gateway = Gateway(
+            gateway_id="reference-action-route",
+            channels=[channel],
+            applications=[application],
+            store=MemoryGatewayStore(),
+            projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+        )
+
+        with TemporaryDirectory() as cwd:
+            async with gateway:
+                actions = gateway.actions(
+                    conversation.ref,
+                    actor=conversation.authenticated_actor,
+                )
+                project = await actions.create_and_select_project(
+                    application.ref,
+                    cwd=cwd,
+                    action_id="reference:action-route:project",
+                )
+                project_ref = project.value.ref if isinstance(project, Succeeded) else None
+                self.assertIsInstance(project_ref, ProjectRef)
+                assert isinstance(project_ref, ProjectRef)
+                thread = await actions.create_and_bind_thread(
+                    project_ref,
+                    action_id="reference:action-route:thread",
+                )
+                thread_ref = thread.value.ref if isinstance(thread, Succeeded) else None
+                self.assertIsInstance(thread_ref, ThreadRef)
+                assert isinstance(thread_ref, ThreadRef)
+                self.assertEqual(application.active_observation_workers(thread_ref), 1)
+
+                await application.send_input(
+                    thread_ref,
+                    AgentInput(
+                        client_message_id="reference:action-route:native-output",
+                        content=(TextContent("native-output-without-inbound"),),
+                    ),
+                )
+                delivered = await conversation.wait_for_text(
+                    "Neutral response: native-output-without-inbound"
+                )
+                self.assertEqual(len(delivered), 1)
+                self.assertEqual(application.subscription_calls(thread_ref), 1)
+
+    async def test_scoped_workflow_hands_one_worker_slot_to_the_new_thread(self) -> None:
+        channel = ReferenceChannel()
+        application = ReferenceApplication()
+        conversation = channel.conversation("conversation-workflow-handoff")
+        gateway = Gateway(
+            gateway_id="reference-workflow-handoff",
+            channels=[channel],
+            applications=[application],
+            store=MemoryGatewayStore(),
+            projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+            limits=GatewayLimits(projection_max_active_threads=1),
+        )
+
+        with TemporaryDirectory() as cwd:
+            async with gateway:
+                actions = gateway.actions(
+                    conversation.ref,
+                    actor=conversation.authenticated_actor,
+                )
+                project = await actions.create_and_select_project(
+                    application.ref,
+                    cwd=cwd,
+                    action_id="reference:workflow-handoff:project",
+                )
+                self.assertIsInstance(project, Succeeded)
+                assert isinstance(project, Succeeded)
+                project_ref = project.value.ref
+                self.assertIsInstance(project_ref, ProjectRef)
+                assert isinstance(project_ref, ProjectRef)
+
+                first = await actions.create_and_bind_thread(
+                    project_ref,
+                    action_id="reference:workflow-handoff:first",
+                )
+                second = await actions.create_and_bind_thread(
+                    project_ref,
+                    action_id="reference:workflow-handoff:second",
+                )
+                self.assertIsInstance(first, Succeeded)
+                self.assertIsInstance(second, Succeeded)
+                assert isinstance(first, Succeeded)
+                assert isinstance(second, Succeeded)
+                first_ref = first.value.ref
+                second_ref = second.value.ref
+                self.assertIsInstance(first_ref, ThreadRef)
+                self.assertIsInstance(second_ref, ThreadRef)
+                assert isinstance(first_ref, ThreadRef)
+                assert isinstance(second_ref, ThreadRef)
+
+                self.assertEqual(application.active_observation_workers(first_ref), 0)
+                self.assertEqual(application.active_observation_workers(second_ref), 1)
+                binding = await actions.get_binding()
+                self.assertIsNotNone(binding)
+                assert binding is not None
+                self.assertEqual(binding.thread_ref, second_ref)
+
+    async def test_cancellation_after_bind_commit_finishes_worker_handoff(self) -> None:
+        channel = ReferenceChannel()
+        application = ReferenceApplication()
+        conversation = channel.conversation("conversation-cancel-handoff")
+        gateway = Gateway(
+            gateway_id="reference-cancel-handoff",
+            channels=[channel],
+            applications=[application],
+            store=MemoryGatewayStore(),
+            projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+            limits=GatewayLimits(projection_max_active_threads=1),
+        )
+
+        reconciliation_started = asyncio.Event()
+        allow_reconciliation = asyncio.Event()
+        reconciliation_finished = asyncio.Event()
+        block_reconciliation = asyncio.Event()
+        original_reconcile = ThreadProjectionRuntime.reconcile_action_route
+
+        async def blocking_reconcile(
+            runtime: ThreadProjectionRuntime,
+            route_id,
+            action_lease=None,
+        ):
+            if block_reconciliation.is_set():
+                reconciliation_started.set()
+                await allow_reconciliation.wait()
+            result = await original_reconcile(runtime, route_id, action_lease)
+            if block_reconciliation.is_set():
+                reconciliation_finished.set()
+            return result
+
+        with (
+            TemporaryDirectory() as cwd,
+            patch.object(
+                ThreadProjectionRuntime,
+                "reconcile_action_route",
+                blocking_reconcile,
+            ),
+        ):
+            async with gateway:
+                actions = gateway.actions(
+                    conversation.ref,
+                    actor=conversation.authenticated_actor,
+                )
+                project = await actions.create_and_select_project(
+                    application.ref,
+                    cwd=cwd,
+                    action_id="reference:cancel-handoff:project",
+                )
+                self.assertIsInstance(project, Succeeded)
+                assert isinstance(project, Succeeded)
+                project_ref = project.value.ref
+                self.assertIsInstance(project_ref, ProjectRef)
+                assert isinstance(project_ref, ProjectRef)
+                first = await actions.create_and_bind_thread(
+                    project_ref,
+                    action_id="reference:cancel-handoff:first",
+                )
+                self.assertIsInstance(first, Succeeded)
+                assert isinstance(first, Succeeded)
+                first_ref = first.value.ref
+                self.assertIsInstance(first_ref, ThreadRef)
+                assert isinstance(first_ref, ThreadRef)
+
+                block_reconciliation.set()
+                bind = asyncio.create_task(
+                    actions.create_and_bind_thread(
+                        project_ref,
+                        action_id="reference:cancel-handoff:second",
+                    )
+                )
+                await asyncio.wait_for(reconciliation_started.wait(), timeout=1.0)
+                bind.cancel()
+                await asyncio.sleep(0)
+                self.assertFalse(bind.done())
+                allow_reconciliation.set()
+                result = await asyncio.wait_for(bind, timeout=1.0)
+                self.assertIsInstance(result, Succeeded)
+
+                self.assertTrue(reconciliation_finished.is_set())
+                binding = await actions.get_binding()
+                self.assertIsNotNone(binding)
+                assert binding is not None
+                second_ref = binding.thread_ref
+                self.assertIsNotNone(second_ref)
+                assert second_ref is not None
+                self.assertNotEqual(second_ref, first_ref)
+                self.assertEqual(application.active_observation_workers(first_ref), 0)
+                self.assertEqual(application.active_observation_workers(second_ref), 1)
+
+    async def test_scoped_observe_activates_an_unbound_remembered_route(self) -> None:
+        channel = ReferenceChannel()
+        application = ReferenceApplication()
+        conversation = channel.conversation("conversation-observe-route")
+        gateway = Gateway(
+            gateway_id="reference-observe-route",
+            channels=[channel],
+            applications=[application],
+            store=MemoryGatewayStore(),
+        )
+
+        with TemporaryDirectory() as cwd:
+            async with gateway:
+                actions = gateway.actions(
+                    conversation.ref,
+                    actor=conversation.authenticated_actor,
+                )
+                project = await actions.create_project(
+                    application.ref,
+                    cwd=cwd,
+                    action_id="reference:observe-route:project",
+                )
+                project_ref = project.value.ref if isinstance(project, Succeeded) else None
+                self.assertIsInstance(project_ref, ProjectRef)
+                assert isinstance(project_ref, ProjectRef)
+                thread = await actions.create_thread(
+                    project_ref,
+                    action_id="reference:observe-route:thread",
+                )
+                thread_ref = thread.value.ref if isinstance(thread, Succeeded) else None
+                self.assertIsInstance(thread_ref, ThreadRef)
+                assert isinstance(thread_ref, ThreadRef)
+                observed = await actions.observe_thread(
+                    thread_ref,
+                    action_id="reference:observe-route:observe",
+                )
+                self.assertIsInstance(observed, Succeeded)
+                self.assertEqual(application.active_observation_workers(thread_ref), 1)
+
+                await application.send_input(
+                    thread_ref,
+                    AgentInput(
+                        client_message_id="reference:observe-route:native-output",
+                        content=(TextContent("observed-without-binding"),),
+                    ),
+                )
+                delivered = await conversation.wait_for_text(
+                    "Neutral response: observed-without-binding"
+                )
+                self.assertEqual(len(delivered), 1)
+                self.assertEqual(application.subscription_calls(thread_ref), 1)
+
+    async def test_terminal_bind_replay_ignores_current_worker_capacity(self) -> None:
+        channel = ReferenceChannel()
+        application = ReferenceApplication()
+        conversation = channel.conversation("conversation-terminal-replay")
+        gateway = Gateway(
+            gateway_id="reference-terminal-replay",
+            channels=[channel],
+            applications=[application],
+            store=MemoryGatewayStore(),
+            projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+            limits=GatewayLimits(projection_max_active_threads=1),
+        )
+
+        with TemporaryDirectory() as cwd:
+            async with gateway:
+                actions = gateway.actions(
+                    conversation.ref,
+                    actor=conversation.authenticated_actor,
+                )
+                project = await actions.create_and_select_project(
+                    application.ref,
+                    cwd=cwd,
+                    action_id="reference:terminal-replay:project",
+                )
+                self.assertIsInstance(project, Succeeded)
+                assert isinstance(project, Succeeded)
+                project_ref = project.value.ref
+                self.assertIsInstance(project_ref, ProjectRef)
+                assert isinstance(project_ref, ProjectRef)
+                first = await actions.create_thread(
+                    project_ref,
+                    action_id="reference:terminal-replay:first-thread",
+                )
+                second = await actions.create_thread(
+                    project_ref,
+                    action_id="reference:terminal-replay:second-thread",
+                )
+                self.assertIsInstance(first, Succeeded)
+                self.assertIsInstance(second, Succeeded)
+                assert isinstance(first, Succeeded)
+                assert isinstance(second, Succeeded)
+                first_ref = first.value.ref
+                second_ref = second.value.ref
+                self.assertIsInstance(first_ref, ThreadRef)
+                self.assertIsInstance(second_ref, ThreadRef)
+                assert isinstance(first_ref, ThreadRef)
+                assert isinstance(second_ref, ThreadRef)
+
+                first_binding = await actions.bind_thread(
+                    first_ref,
+                    action_id="reference:terminal-replay:first-bind",
+                    expected_generation=project.value.binding_generation,
+                )
+                self.assertIsInstance(first_binding, Succeeded)
+                assert isinstance(first_binding, Succeeded)
+                cleared = await actions.clear_thread(
+                    action_id="reference:terminal-replay:clear",
+                    expected_generation=first_binding.value.binding_generation,
+                )
+                self.assertIsInstance(cleared, Succeeded)
+                assert isinstance(cleared, Succeeded)
+                second_binding = await actions.bind_thread(
+                    second_ref,
+                    action_id="reference:terminal-replay:second-bind",
+                    expected_generation=cleared.value.binding_generation,
+                )
+                self.assertIsInstance(second_binding, Succeeded)
+                self.assertEqual(application.active_observation_workers(first_ref), 0)
+                self.assertEqual(application.active_observation_workers(second_ref), 1)
+
+                replay = await actions.bind_thread(
+                    first_ref,
+                    action_id="reference:terminal-replay:first-bind",
+                    expected_generation=project.value.binding_generation,
+                )
+                self.assertEqual(replay, first_binding)
+                current = await actions.get_binding()
+                self.assertIsNotNone(current)
+                assert current is not None
+                self.assertEqual(current.thread_ref, second_ref)
+                self.assertEqual(application.active_observation_workers(first_ref), 0)
+                self.assertEqual(application.active_observation_workers(second_ref), 1)
+
+    async def test_runtime_construction_failure_closes_the_acquired_store(self) -> None:
+        store = _CountingMemoryGatewayStore()
+        gateway = Gateway(
+            gateway_id="reference-construction-failure",
+            channels=[ReferenceChannel()],
+            applications=[ReferenceApplication()],
+            store=store,
+            limits=GatewayLimits(startup_buffer_max_pending=0),
+        )
+
+        with self.assertRaises(ValueError):
+            await gateway.start()
+        self.assertFalse(gateway.running)
+        self.assertEqual(store.acquire_count, 1)
+        self.assertEqual(store.close_count, 1)
+        with self.assertRaisesRegex(RuntimeError, "cannot restart"):
+            await gateway.start()
+
+    async def test_lease_renewal_loss_stops_admission_adapters_and_store(self) -> None:
+        channel = ReferenceChannel()
+        application = ReferenceApplication()
+        store = _FailingRenewMemoryGatewayStore()
+        gateway = Gateway(
+            gateway_id="reference-lease-loss",
+            channels=[channel],
+            applications=[application],
+            store=store,
+        )
+
+        with patch("imagent.gateway.runtime._LEASE_RENEWAL_SECONDS", 0.001):
+            await gateway.start()
+            store.allow_renew_failure()
+            await asyncio.wait_for(store.renew_failed.wait(), timeout=1.0)
+            with self.assertRaisesRegex(RuntimeError, "runtime failure"):
+                await asyncio.wait_for(gateway.wait_closed(), timeout=1.0)
+
+        self.assertFalse(gateway.running)
+        self.assertFalse(channel.started)
+        self.assertFalse(application.started)
+        self.assertEqual(store.close_count, 1)
+
+    async def test_lease_renewal_loss_racing_stop_closes_every_owner_once(self) -> None:
+        channel = ReferenceChannel()
+        application = ReferenceApplication()
+        store = _FailingRenewMemoryGatewayStore()
+        gateway = Gateway(
+            gateway_id="reference-lease-loss-stop-race",
+            channels=[channel],
+            applications=[application],
+            store=store,
+        )
+
+        with patch("imagent.gateway.runtime._LEASE_RENEWAL_SECONDS", 0.001):
+            await gateway.start()
+            store.allow_renew_failure()
+            await asyncio.wait_for(store.renew_failed.wait(), timeout=1.0)
+            explicit_stop = asyncio.create_task(gateway.stop())
+            with self.assertRaisesRegex(RuntimeError, "runtime failure"):
+                await asyncio.wait_for(gateway.wait_closed(), timeout=1.0)
+            await asyncio.wait_for(explicit_stop, timeout=1.0)
+
+        self.assertFalse(gateway.running)
+        self.assertFalse(channel.started)
+        self.assertFalse(application.started)
+        self.assertEqual(store.close_count, 1)
+
+    async def test_lease_loss_cancels_blocked_startup_and_rolls_back(self) -> None:
+        store = _FailingRenewMemoryGatewayStore()
+        channel = _BlockingStartChannel(store.allow_renew_failure)
+        application = ReferenceApplication()
+        gateway = Gateway(
+            gateway_id="reference-startup-lease-loss",
+            channels=[channel],
+            applications=[application],
+            store=store,
+        )
+
+        with patch("imagent.gateway.runtime._LEASE_RENEWAL_SECONDS", 0.001):
+            startup = asyncio.create_task(gateway.start())
+            await asyncio.wait_for(channel.start_blocked.wait(), timeout=1.0)
+            await asyncio.wait_for(store.renew_failed.wait(), timeout=1.0)
+            with self.assertRaisesRegex(RuntimeError, "renewal failed during startup"):
+                await asyncio.wait_for(startup, timeout=1.0)
+            with self.assertRaisesRegex(RuntimeError, "runtime failure"):
+                await asyncio.wait_for(gateway.wait_closed(), timeout=1.0)
+
+        self.assertFalse(gateway.running)
+        self.assertFalse(channel.started)
+        self.assertFalse(application.started)
+        self.assertEqual(store.close_count, 1)
+
+    async def test_stop_cancels_and_joins_blocked_startup_rollback(self) -> None:
+        channel = _BlockingStartChannel(lambda: None)
+        application = ReferenceApplication()
+        store = _CountingMemoryGatewayStore()
+        gateway = Gateway(
+            gateway_id="reference-stop-during-start",
+            channels=[channel],
+            applications=[application],
+            store=store,
+        )
+
+        startup = asyncio.create_task(gateway.start())
+        await asyncio.wait_for(channel.start_blocked.wait(), timeout=1.0)
+        await asyncio.wait_for(gateway.stop(), timeout=1.0)
+        with self.assertRaises(asyncio.CancelledError):
+            await startup
+
+        self.assertFalse(gateway.running)
+        self.assertFalse(channel.started)
+        self.assertFalse(application.started)
+        self.assertEqual(store.acquire_count, 1)
+        self.assertEqual(store.close_count, 1)
+        with self.assertRaisesRegex(RuntimeError, "cannot restart"):
+            await gateway.start()
+
+    async def test_concurrent_starts_share_one_serialized_transition(self) -> None:
+        channel = ReferenceChannel()
+        application = ReferenceApplication()
+        store = _BlockingAcquireMemoryGatewayStore()
+        gateway = Gateway(
+            gateway_id="reference-concurrent-start",
+            channels=[channel],
+            applications=[application],
+            store=store,
+        )
+
+        first = asyncio.create_task(gateway.start())
+        await asyncio.wait_for(store.first_acquired.wait(), timeout=1.0)
+        second = asyncio.create_task(gateway.start())
+        await asyncio.sleep(0)
+        self.assertFalse(second.done())
+        store.allow_first_return.set()
+        await asyncio.wait_for(asyncio.gather(first, second), timeout=1.0)
+
+        self.assertTrue(gateway.running)
+        self.assertTrue(channel.started)
+        self.assertTrue(application.started)
+        self.assertEqual(store.acquire_count, 1)
+        await gateway.stop()
+        self.assertFalse(channel.started)
+        self.assertFalse(application.started)
+        self.assertEqual(store.close_count, 1)
+
+    async def test_cancelled_async_context_start_rolls_back_once(self) -> None:
+        channel = _BlockingStartChannel(lambda: None)
+        application = ReferenceApplication()
+        store = _CountingMemoryGatewayStore()
+        gateway = Gateway(
+            gateway_id="reference-cancelled-context-start",
+            channels=[channel],
+            applications=[application],
+            store=store,
+        )
+
+        async def enter_context() -> None:
+            async with gateway:
+                self.fail("a blocked Gateway context must not enter")
+
+        context_task = asyncio.create_task(enter_context())
+        await asyncio.wait_for(channel.start_blocked.wait(), timeout=1.0)
+        context_task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await context_task
+
+        self.assertFalse(gateway.running)
+        self.assertFalse(channel.started)
+        self.assertFalse(application.started)
+        self.assertEqual(store.close_count, 1)
+        await gateway.stop()
+        self.assertEqual(store.close_count, 1)
+
+    async def test_retained_scoped_actions_are_invalid_after_shutdown(self) -> None:
+        channel = ReferenceChannel()
+        application = ReferenceApplication()
+        gateway = Gateway(
+            gateway_id="reference-retained-actions",
+            channels=[channel],
+            applications=[application],
+            store=MemoryGatewayStore(),
+        )
+        with TemporaryDirectory() as cwd:
+            await gateway.start()
+            actions = gateway.actions(
+                channel.conversation("retained").ref,
+                actor="reference-user",
+            )
+            application_actions = gateway.application(
+                application.ref,
+                principal="reference-user",
+            )
+            self.assertEqual(application_actions.principal, "reference-user")
+            self.assertFalse(hasattr(application_actions, "conversation_ref"))
+            application_read = await application_actions.get_application()
+            self.assertIsInstance(application_read, Succeeded)
+            created = await actions.create_project(
+                application.ref,
+                cwd=cwd,
+                action_id="reference:retained:project",
+            )
+            self.assertIsInstance(created, Succeeded)
+            await gateway.stop()
+
+            with self.assertRaisesRegex(RuntimeError, "not active"):
+                await actions.list_applications()
+            with self.assertRaisesRegex(RuntimeError, "not active"):
+                await application_actions.get_application()
+            with self.assertRaisesRegex(RuntimeError, "not active"):
+                await actions.create_project(
+                    application.ref,
+                    cwd=cwd,
+                    action_id="reference:retained:project",
+                )
+        self.assertFalse(application.started)
+
+    async def test_no_controller_treats_slash_text_as_ordinary_agent_input(self) -> None:
+        channel = ReferenceChannel()
+        application = ReferenceApplication()
+        conversation = channel.conversation("conversation-no-controller")
+        gateway = Gateway(
+            gateway_id="reference-no-controller",
+            channels=[channel],
+            applications=[application],
+            store=MemoryGatewayStore(),
+            projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+            limits=GatewayLimits(projection_max_active_threads=2),
+        )
+
+        with TemporaryDirectory() as cwd:
+            async with gateway:
+                actions = gateway.actions(
+                    conversation.ref,
+                    actor=conversation.authenticated_actor,
+                )
+                project = await actions.create_and_select_project(
+                    application.ref,
+                    cwd=cwd,
+                    action_id="reference:no-controller:project",
+                )
+                self.assertIsInstance(project, Succeeded)
+                assert isinstance(project, Succeeded)
+                self.assertIsInstance(project.value.ref, ProjectRef)
+                assert isinstance(project.value.ref, ProjectRef)
+                thread = await actions.create_and_bind_thread(
+                    project.value.ref,
+                    action_id="reference:no-controller:thread",
+                )
+                self.assertIsInstance(thread, Succeeded)
+                await conversation.receive_text(
+                    message_id="reference:no-controller:message",
+                    text="/about",
+                )
+                delivered = await conversation.wait_for_text("Neutral response: /about")
+                self.assertEqual(len(delivered), 1)
+
+        self.assertFalse(channel.started)
+        self.assertFalse(application.started)
+
+    def test_example_imports_only_clean_installed_public_sdk_modules(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        example = root / "examples" / "reference_consumer"
+        forbidden = (
+            "imagent.gateway.composition",
+            "imagent.gateway.effect_execution",
+            "imagent.gateway.persistence",
+            "imagent.gateway.runtime",
+        )
+        for path in sorted(example.glob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            imports = tuple(
+                node.module
+                for node in ast.walk(tree)
+                if isinstance(node, ast.ImportFrom) and node.module is not None
+            )
+            with self.subTest(path=path.name):
+                self.assertFalse(any(name.startswith(forbidden) for name in imports))
+                self.assertNotIn("ImAgentGateway", path.read_text(encoding="utf-8"))
+                self.assertNotIn("GatewayRepositories", path.read_text(encoding="utf-8"))
+
+        self.assertTrue(build_command_registry(ReferenceStatusService()).frozen)
 
     async def test_channel_capacity_fails_before_append(self) -> None:
         with self.assertRaises(ValueError):
@@ -88,7 +923,202 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
             await channel.send(message)
         self.assertEqual(channel.sent, (message,))
 
+    async def test_channel_conversation_uses_native_ingress_and_bounded_wait(self) -> None:
+        with self.assertRaises(ValueError):
+            ReferenceChannel("")
+        channel = ReferenceChannel()
+        with self.assertRaises(ValueError):
+            channel.conversation("")
+        with self.assertRaises(ValueError):
+            channel.conversation("conversation-a", authenticated_actor="")
+        conversation = channel.conversation(
+            "conversation-a",
+            authenticated_actor="actor-a",
+        )
+        received = []
+
+        async def on_message(message) -> None:
+            received.append(message)
+
+        await channel.start(on_message)
+        try:
+            with self.assertRaises(ValueError):
+                conversation.text_message(message_id="", text="ordinary input")
+            await conversation.receive_text(
+                message_id="reference:message:ingress",
+                text="ordinary input",
+            )
+            self.assertEqual(len(received), 1)
+            self.assertEqual(received[0].conversation_ref, conversation.ref)
+            self.assertEqual(received[0].sender, conversation.authenticated_actor)
+
+            outbound = OutboundMessage(
+                delivery_id="reference:delivery:one",
+                conversation_ref=conversation.ref,
+                content=(TextContent("ordinary output"),),
+                created_at=datetime.now(UTC),
+            )
+            await channel.send(outbound)
+            self.assertEqual(
+                await conversation.wait_for_text("ordinary output"),
+                (outbound,),
+            )
+            with self.assertRaises(ValueError):
+                await channel.wait_for_text("never", count=True)
+        finally:
+            await channel.stop()
+
+        self.assertFalse(channel.started)
+
+    async def test_managed_resources_are_stable_through_the_application_port(self) -> None:
+        application = ReferenceApplication()
+        with TemporaryDirectory() as cwd:
+            foreign = await application.execute(
+                ListProjects(
+                    operation_id="reference:project:list-foreign",
+                    application_ref=ApplicationRef("different-application"),
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(foreign, ApplicationOperationFailed)
+
+            empty = await application.execute(
+                ListProjects(
+                    operation_id="reference:project:list-empty",
+                    application_ref=application.ref,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(empty, ProjectsListed)
+            assert isinstance(empty, ProjectsListed)
+            self.assertEqual(empty.projects.items, ())
+
+            create_project = CreateProject(
+                operation_id="reference:project:stable",
+                application_ref=application.ref,
+                cwd=cwd,
+                created_at=datetime.now(UTC),
+            )
+            first_project = await application.execute(create_project)
+            repeated_project = await application.execute(create_project)
+            self.assertIsInstance(first_project, ProjectCreated)
+            self.assertIsInstance(repeated_project, ProjectCreated)
+            assert isinstance(first_project, ProjectCreated)
+            assert isinstance(repeated_project, ProjectCreated)
+            self.assertEqual(repeated_project, first_project)
+
+            conflicting_project = await application.execute(
+                CreateProject(
+                    operation_id=create_project.operation_id,
+                    application_ref=application.ref,
+                    cwd=f"{cwd}/different",
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(conflicting_project, ApplicationOperationFailed)
+            assert isinstance(conflicting_project, ApplicationOperationFailed)
+            self.assertEqual(conflicting_project.error.code, "conflict")
+
+            listed = await application.execute(
+                ListProjects(
+                    operation_id="reference:project:list-created",
+                    application_ref=application.ref,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(listed, ProjectsListed)
+            assert isinstance(listed, ProjectsListed)
+            self.assertEqual(
+                tuple(project.ref for project in listed.projects.items),
+                (first_project.project.ref,),
+            )
+
+            create_thread = CreateThread(
+                operation_id="reference:thread:stable",
+                application_ref=application.ref,
+                project_ref=first_project.project.ref,
+                created_at=datetime.now(UTC),
+            )
+            first_thread = await application.execute(create_thread)
+            repeated_thread = await application.execute(create_thread)
+            self.assertIsInstance(first_thread, ThreadCreated)
+            self.assertIsInstance(repeated_thread, ThreadCreated)
+            assert isinstance(first_thread, ThreadCreated)
+            assert isinstance(repeated_thread, ThreadCreated)
+            self.assertEqual(repeated_thread, first_thread)
+
+            conflicting_thread = await application.execute(
+                CreateThread(
+                    operation_id=create_thread.operation_id,
+                    application_ref=application.ref,
+                    project_ref=first_project.project.ref,
+                    title="different intent",
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(conflicting_thread, ApplicationOperationFailed)
+            assert isinstance(conflicting_thread, ApplicationOperationFailed)
+            self.assertEqual(conflicting_thread.error.code, "conflict")
+
+    async def test_adapter_diagnostics_are_bounded_redacted_and_cleanup_is_explicit(self) -> None:
+        application = ReferenceApplication()
+        channel = ReferenceChannel()
+        secret_content = "content-that-must-not-enter-diagnostics"
+        secret_conversation = "conversation-that-must-not-enter-diagnostics"
+        secret_message = "message-that-must-not-enter-diagnostics"
+
+        with TemporaryDirectory(prefix="path-that-must-not-enter-diagnostics-") as cwd:
+            project = await application.create_project(
+                cwd,
+                operation_id="reference:diagnostics:project",
+            )
+            thread = await application.create_thread(
+                project.ref,
+                operation_id="reference:diagnostics:thread",
+            )
+            conversation = channel.conversation(secret_conversation)
+            message = conversation.text_message(
+                message_id=secret_message,
+                text=secret_content,
+            )
+
+            async def discard(received) -> None:
+                del received
+
+            await application.start()
+            await channel.start(discard)
+            subscription = application.subscribe_thread(thread.ref)
+            self.assertEqual(application.active_observation_workers(thread.ref), 1)
+            try:
+                facts = repr(
+                    (
+                        application.diagnostic_facts(),
+                        channel.diagnostic_facts(),
+                    )
+                )
+                self.assertLess(len(facts), 2_048)
+                for secret in (
+                    cwd,
+                    project.ref.project_id,
+                    thread.ref.thread_id,
+                    secret_conversation,
+                    secret_message,
+                    secret_content,
+                ):
+                    self.assertNotIn(secret, facts)
+                self.assertNotIn(message.message_id, facts)
+            finally:
+                await subscription.aclose()
+                await channel.stop()
+                await application.stop()
+
+            self.assertEqual(application.active_observation_workers(thread.ref), 0)
+            self.assertFalse(channel.started)
+            self.assertFalse(application.started)
+
     async def test_application_limits_are_positive_and_capacity_is_pre_dispatch(self) -> None:
+        with self.assertRaises(ValueError):
+            ReferenceApplication(max_projects=0)
         with self.assertRaises(ValueError):
             ReferenceApplication(max_threads=0)
         with self.assertRaises(ValueError):
@@ -98,65 +1128,129 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             ReferenceApplication(max_threads=True)
 
-        application = ReferenceApplication(max_threads=1)
-        await application.create_thread(application.default_project_ref)
-        with self.assertRaises(ValueError):
-            await application.create_thread(application.default_project_ref)
-        with self.assertRaises(KeyError):
-            await application.get_thread(
-                ThreadRef(
-                    project_ref=ProjectRef("reference-agent", "workspace"),
-                    thread_id="reference-thread-2",
+        with TemporaryDirectory() as cwd:
+            application = ReferenceApplication(max_projects=1, max_threads=1)
+            project = await application.create_project(
+                cwd,
+                operation_id="reference-project-one",
+            )
+            self.assertIs(
+                await application.create_project(
+                    cwd,
+                    operation_id="reference-project-one",
+                ),
+                project,
+            )
+            with self.assertRaises(ValueError):
+                await application.create_project(
+                    f"{cwd}/different",
+                    operation_id="reference-project-one",
+                )
+            with self.assertRaises(ValueError):
+                await application.create_project(
+                    f"{cwd}/second",
+                    operation_id="reference-project-two",
+                )
+            project_capacity = await application.execute(
+                CreateProject(
+                    operation_id="reference-project-three",
+                    application_ref=application.ref,
+                    cwd=f"{cwd}/third",
+                    created_at=datetime.now(UTC),
                 )
             )
+            self.assertIsInstance(project_capacity, ApplicationOperationFailed)
+            assert isinstance(project_capacity, ApplicationOperationFailed)
+            self.assertEqual(project_capacity.error.code, "capacity_exhausted")
 
-        turn_limited = ReferenceApplication(
-            max_turns_per_thread=1,
-            max_events_per_thread=6,
-        )
-        turn_thread = await turn_limited.create_thread(turn_limited.default_project_ref)
-        await turn_limited.emit_native_turn(turn_thread.ref, "first")
-        callback_calls: list[str] = []
+            await application.create_thread(
+                project.ref,
+                operation_id="reference-thread-one",
+            )
+            with self.assertRaises(ValueError):
+                await application.create_thread(
+                    project.ref,
+                    operation_id="reference-thread-two",
+                )
+            with self.assertRaises(KeyError):
+                await application.get_thread(
+                    ThreadRef(
+                        project_ref=ProjectRef("reference-agent", "unknown-project"),
+                        thread_id="reference-thread-2",
+                    )
+                )
 
-        async def before_dispatch(dispatch) -> None:
-            callback_calls.append(dispatch.client_message_id)
-
-        with self.assertRaises(ValueError):
+            turn_limited = ReferenceApplication(
+                max_turns_per_thread=1,
+                max_events_per_thread=6,
+            )
+            turn_project = await turn_limited.create_project(
+                cwd,
+                operation_id="reference-turn-project",
+            )
+            turn_thread = await turn_limited.create_thread(
+                turn_project.ref,
+                operation_id="reference-turn-thread",
+            )
             await turn_limited.send_input(
                 turn_thread.ref,
                 AgentInput(
-                    client_message_id="rejected-turn",
-                    content=(TextContent("second"),),
+                    client_message_id="accepted-turn",
+                    content=(TextContent("first"),),
                 ),
-                before_dispatch=before_dispatch,
             )
-        self.assertEqual(callback_calls, [])
-        self.assertEqual(len((await _history(turn_limited, turn_thread.ref)).turns), 1)
+            callback_calls: list[str] = []
 
-        event_limited = ReferenceApplication(
-            max_turns_per_thread=2,
-            max_events_per_thread=3,
-        )
-        event_thread = await event_limited.create_thread(event_limited.default_project_ref)
-        await event_limited.emit_native_turn(event_thread.ref, "first")
-        event_callback_calls: list[str] = []
+            async def before_dispatch(dispatch) -> None:
+                callback_calls.append(dispatch.client_message_id)
 
-        async def before_event_dispatch(dispatch) -> None:
-            event_callback_calls.append(dispatch.client_message_id)
+            with self.assertRaises(ValueError):
+                await turn_limited.send_input(
+                    turn_thread.ref,
+                    AgentInput(
+                        client_message_id="rejected-turn",
+                        content=(TextContent("second"),),
+                    ),
+                    before_dispatch=before_dispatch,
+                )
+            self.assertEqual(callback_calls, [])
+            self.assertEqual(len((await _history(turn_limited, turn_thread.ref)).turns), 1)
 
-        with self.assertRaises(ValueError):
+            event_limited = ReferenceApplication(
+                max_turns_per_thread=2,
+                max_events_per_thread=3,
+            )
+            event_project = await event_limited.create_project(
+                cwd,
+                operation_id="reference-event-project",
+            )
+            event_thread = await event_limited.create_thread(
+                event_project.ref,
+                operation_id="reference-event-thread",
+            )
             await event_limited.send_input(
                 event_thread.ref,
                 AgentInput(
-                    client_message_id="rejected-event",
-                    content=(TextContent("rejected"),),
+                    client_message_id="accepted-event",
+                    content=(TextContent("first"),),
                 ),
-                before_dispatch=before_event_dispatch,
             )
-        self.assertEqual(event_callback_calls, [])
-        with self.assertRaises(ValueError):
-            await event_limited.emit_native_turn(event_thread.ref, "rejected")
-        self.assertEqual(len((await _history(event_limited, event_thread.ref)).turns), 1)
+            event_callback_calls: list[str] = []
+
+            async def before_event_dispatch(dispatch) -> None:
+                event_callback_calls.append(dispatch.client_message_id)
+
+            with self.assertRaises(ValueError):
+                await event_limited.send_input(
+                    event_thread.ref,
+                    AgentInput(
+                        client_message_id="rejected-event",
+                        content=(TextContent("rejected"),),
+                    ),
+                    before_dispatch=before_event_dispatch,
+                )
+            self.assertEqual(event_callback_calls, [])
+            self.assertEqual(len((await _history(event_limited, event_thread.ref)).turns), 1)
 
 
 async def _history(

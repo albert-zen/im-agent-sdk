@@ -41,7 +41,6 @@ from imagent.applications.contract import (
     TurnRef,
     TurnReplyCorrelationPolicy,
     TurnStatus,
-    WorkspaceIdentity,
     fingerprint_canonical_workspace_root,
     validate_application_summary,
     validate_project_summary,
@@ -58,6 +57,7 @@ from imagent.applications.operations import (
     ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,
+    CreateProject,
     CreateThread,
     DeleteThread,
     GetProject,
@@ -68,6 +68,7 @@ from imagent.applications.operations import (
     InterruptTurn,
     ListProjects,
     ListThreads,
+    ProjectCreated,
     ProjectRead,
     ProjectsListed,
     ThreadCreated,
@@ -85,8 +86,12 @@ from imagent.diagnostics import (
     ConnectionDiagnosticFacts,
     ConnectionDiagnosticState,
 )
-from imagent.interaction.messages import MessageRole, TextContent, TextFormat
-from imagent.interaction.operations import operation_error
+from imagent.interaction.messages import Content, MessageRole, TextContent, TextFormat
+from imagent.interaction.operations import (
+    OperationErrorCode,
+    operation_error,
+    require_identifier,
+)
 
 
 def _now() -> datetime:
@@ -98,7 +103,11 @@ _EVENT_BROADCASTER_MAX_PENDING = 256
 
 
 class _CapacityExceeded(ValueError):
-    """A reference Application or Channel bound rejected before mutation."""
+    """A reference Application bound rejected before mutation."""
+
+
+class _IntentConflict(ValueError):
+    """A stable native operation ID was reused with different intent."""
 
 
 def _require_positive_int(value: int, name: str) -> int:
@@ -158,12 +167,12 @@ class ReferenceApplication:
         self,
         application_instance_id: str = "reference-agent",
         *,
-        workspace_id: str = "reference-workspace",
-        workspace_root: str = "/reference/workspace",
+        max_projects: int = 4,
         max_threads: int = 8,
         max_turns_per_thread: int = 8,
         max_events_per_thread: int = 64,
     ) -> None:
+        self._max_projects = _require_positive_int(max_projects, "max_projects")
         self._max_threads = _require_positive_int(max_threads, "max_threads")
         self._max_turns_per_thread = _require_positive_int(
             max_turns_per_thread,
@@ -175,9 +184,10 @@ class ReferenceApplication:
         )
         capabilities = ApplicationCapabilities(
             projects=ProjectCapabilities(
-                mode=ProjectMode.FLAT,
-                discovery=SupportLevel.FALLBACK,
-                reading=SupportLevel.FALLBACK,
+                mode=ProjectMode.MANAGED,
+                discovery=SupportLevel.NATIVE,
+                reading=SupportLevel.NATIVE,
+                creation=SupportLevel.NATIVE,
             ),
             threads=ThreadCapabilities(
                 listing=SupportLevel.NATIVE,
@@ -196,27 +206,25 @@ class ReferenceApplication:
             ),
         )
         validate_application_capabilities(capabilities)
-        canonical_root = _canonical_workspace_root(workspace_root)
-        root_fingerprint = fingerprint_canonical_workspace_root(canonical_root)
-        self._workspace_project = ProjectSummary(
-            ref=ProjectRef(application_instance_id, workspace_id),
-            display_name="Reference Workspace",
-            root_path=canonical_root,
-            workspace_root_fingerprint=root_fingerprint,
-        )
         self._summary = ApplicationSummary(
             ref=ApplicationRef(application_instance_id),
             kind="reference",
             display_name="Neutral Reference Agent",
             capabilities=capabilities,
-            workspace_identity=WorkspaceIdentity(
-                self._workspace_project.ref,
-                root_fingerprint,
-            ),
         )
-        validate_project_summary(self._workspace_project)
         validate_application_summary(self._summary)
+        self._projects: dict[ProjectRef, ProjectSummary] = {}
+        self._project_creations: dict[
+            str,
+            tuple[str, str | None, ProjectSummary],
+        ] = {}
+        self._project_creation_completed_at: dict[str, datetime] = {}
         self._threads: dict[ThreadRef, ThreadSummary] = {}
+        self._thread_creations: dict[
+            str,
+            tuple[ProjectRef, str | None, tuple[Content, ...], ThreadSummary],
+        ] = {}
+        self._thread_creation_completed_at: dict[str, datetime] = {}
         self._turn_history: dict[ThreadRef, list[TurnHistoryEntry]] = {}
         self._event_history: dict[ThreadRef, list[AgentEvent]] = {}
         self._sequences: dict[ThreadRef, int] = {}
@@ -229,6 +237,7 @@ class ReferenceApplication:
             max_pending=_EVENT_BROADCASTER_MAX_PENDING
         )
         self._event_epoch = "reference-epoch-1"
+        self._next_project = 1
         self._next_thread = 1
         self._next_turn = 1
         self._start_count = 0
@@ -237,6 +246,10 @@ class ReferenceApplication:
     @property
     def summary(self) -> ApplicationSummary:
         return self._summary
+
+    @property
+    def ref(self) -> ApplicationRef:
+        return self._summary.ref
 
     @property
     def capabilities(self) -> ApplicationCapabilities:
@@ -251,16 +264,16 @@ class ReferenceApplication:
         return self._max_threads
 
     @property
+    def max_projects(self) -> int:
+        return self._max_projects
+
+    @property
     def max_turns_per_thread(self) -> int:
         return self._max_turns_per_thread
 
     @property
     def max_events_per_thread(self) -> int:
         return self._max_events_per_thread
-
-    @property
-    def default_project_ref(self) -> ProjectRef:
-        return self._workspace_project.ref
 
     async def start(self) -> None:
         if self._started:
@@ -274,17 +287,67 @@ class ReferenceApplication:
     async def list_pending_requests(self) -> tuple[InteractiveRequest, ...]:
         return ()
 
+    async def create_project(
+        self,
+        cwd: str,
+        *,
+        operation_id: str,
+        display_name: str | None = None,
+    ) -> ProjectSummary:
+        require_identifier(operation_id, "operation ID")
+        canonical_root = _canonical_workspace_root(cwd)
+        existing = self._project_creations.get(operation_id)
+        if existing is not None:
+            existing_root, existing_name, project = existing
+            if (existing_root, existing_name) != (canonical_root, display_name):
+                raise _IntentConflict("Project operation ID was reused with different intent")
+            return project
+        if len(self._projects) >= self._max_projects:
+            raise _CapacityExceeded("reference Application Project capacity is exhausted")
+        project_ref = ProjectRef(
+            self.summary.ref.application_instance_id,
+            f"reference-project-{self._next_project}",
+        )
+        self._next_project += 1
+        project = ProjectSummary(
+            ref=project_ref,
+            display_name=display_name or f"Reference Project {len(self._projects) + 1}",
+            root_path=canonical_root,
+            workspace_root_fingerprint=fingerprint_canonical_workspace_root(canonical_root),
+        )
+        validate_project_summary(project)
+        self._projects[project.ref] = project
+        self._project_creations[operation_id] = (canonical_root, display_name, project)
+        self._project_creation_completed_at[operation_id] = _now()
+        return project
+
     async def create_thread(
         self,
         project_ref: ProjectRef,
+        *,
+        operation_id: str,
         title: str | None = None,
+        initial_context: tuple[Content, ...] = (),
     ) -> ThreadSummary:
-        if project_ref != self._workspace_project.ref:
-            raise ValueError("Thread belongs to a different workspace Project")
+        require_identifier(operation_id, "operation ID")
+        if project_ref not in self._projects:
+            raise ValueError("Thread belongs to an unknown managed Project")
+        existing = self._thread_creations.get(operation_id)
+        if existing is not None:
+            existing_project, existing_title, existing_context, thread = existing
+            if (existing_project, existing_title, existing_context) != (
+                project_ref,
+                title,
+                initial_context,
+            ):
+                raise _IntentConflict("Thread operation ID was reused with different intent")
+            return thread
+        if initial_context:
+            raise NotImplementedError("reference Thread initial context is unsupported")
         if len(self._threads) >= self._max_threads:
             raise _CapacityExceeded("reference Application Thread capacity is exhausted")
         thread_ref = ThreadRef(
-            project_ref=self._workspace_project.ref,
+            project_ref=project_ref,
             thread_id=f"reference-thread-{self._next_thread}",
         )
         self._next_thread += 1
@@ -301,6 +364,13 @@ class ReferenceApplication:
         self._subscriptions[thread_ref] = 0
         self._subscription_calls[thread_ref] = 0
         self._max_active_subscriptions[thread_ref] = 0
+        self._thread_creations[operation_id] = (
+            project_ref,
+            title,
+            initial_context,
+            summary,
+        )
+        self._thread_creation_completed_at[operation_id] = _now()
         return summary
 
     async def get_thread(self, thread_ref: ThreadRef) -> ThreadSummary:
@@ -316,6 +386,7 @@ class ReferenceApplication:
         ),
         before_dispatch: ApplicationInputDispatchHandler | None = None,
     ) -> AcceptedTurn:
+        require_identifier(message.client_message_id, "client message ID")
         if not isinstance(continuation, InputContinuationPreference):
             raise ValueError("unknown input continuation preference")
         current = self._threads[thread_ref]
@@ -400,24 +471,11 @@ class ReferenceApplication:
         finally:
             self._release_turn_and_events(thread_ref)
 
-    async def emit_native_turn(self, thread_ref: ThreadRef, text: str) -> AcceptedTurn:
-        """Simulate an Application-owned turn without inventing a second runtime."""
-
-        turn_number = self._next_turn
-        return await self.send_input(
-            thread_ref,
-            AgentInput(
-                client_message_id=f"reference-native-input-{turn_number}",
-                content=(TextContent(text, TextFormat.PLAIN),),
-                sender="reference-native",
-            ),
-        )
-
     def subscribe_thread(
         self,
         thread_ref: ThreadRef,
         after_cursor: str | None = None,
-    ) -> AsyncIterator[AgentEvent]:
+    ) -> _CountingSubscription:
         if thread_ref not in self._threads:
             raise KeyError(thread_ref)
         initial: tuple[AgentEvent, ...] = ()
@@ -467,46 +525,75 @@ class ReferenceApplication:
             validate_application_operation_result(operation, result)
             return result
         except Exception as error:
+            error_code = None
+            if isinstance(error, _CapacityExceeded):
+                error_code = OperationErrorCode.CAPACITY_EXHAUSTED
+            elif isinstance(error, _IntentConflict):
+                error_code = OperationErrorCode.CONFLICT
             return ApplicationOperationFailed(
                 operation_id=operation.operation_id,
                 type=operation.type,
                 completed_at=_now(),
-                error=operation_error(error),
+                error=operation_error(error, code=error_code),
             )
 
     async def _execute(self, operation: ApplicationOperation) -> ApplicationOperationResult:
+        if operation.application_ref != self.ref:
+            raise ValueError("operation belongs to a different Application")
         completed_at = _now()
         if isinstance(operation, ListProjects):
             if operation.cursor is not None:
                 raise ValueError("reference Project listing does not support cursors")
-            projects = (self._workspace_project,)
-            if operation.query and operation.query.casefold() not in (
-                self._workspace_project.display_name.casefold()
-            ):
-                projects = ()
+            projects = tuple(self._projects.values())
+            if operation.query:
+                query = operation.query.casefold()
+                projects = tuple(
+                    project for project in projects if query in project.display_name.casefold()
+                )
             return ProjectsListed(
                 operation_id=operation.operation_id,
                 completed_at=completed_at,
                 projects=Page(projects),
             )
         if isinstance(operation, GetProject):
-            if operation.project_ref != self._workspace_project.ref:
-                raise ValueError("Project belongs to a different reference workspace")
             return ProjectRead(
                 operation_id=operation.operation_id,
                 completed_at=completed_at,
-                project=self._workspace_project,
+                project=self._projects[operation.project_ref],
+            )
+        if isinstance(operation, CreateProject):
+            project = await self.create_project(
+                operation.cwd,
+                operation_id=operation.operation_id,
+                display_name=operation.display_name,
+            )
+            return ProjectCreated(
+                operation_id=operation.operation_id,
+                completed_at=self._project_creation_completed_at[operation.operation_id],
+                project=project,
             )
         if isinstance(operation, CreateThread):
+            thread = await self.create_thread(
+                operation.project_ref,
+                operation_id=operation.operation_id,
+                title=operation.title,
+                initial_context=operation.initial_context,
+            )
             return ThreadCreated(
                 operation_id=operation.operation_id,
-                completed_at=completed_at,
-                thread=await self.create_thread(operation.project_ref, operation.title),
+                completed_at=self._thread_creation_completed_at[operation.operation_id],
+                thread=thread,
             )
         if isinstance(operation, ListThreads):
-            if operation.project_ref != self._workspace_project.ref:
-                raise ValueError("Project belongs to a different reference workspace")
-            threads = tuple(self._threads.values())
+            if operation.project_ref not in self._projects:
+                raise ValueError("Project belongs to a different reference Application")
+            if operation.cursor is not None:
+                raise ValueError("reference Thread listing does not support cursors")
+            threads = tuple(
+                thread
+                for thread in self._threads.values()
+                if thread.ref.project_ref == operation.project_ref
+            )
             if operation.query:
                 query = operation.query.casefold()
                 threads = tuple(

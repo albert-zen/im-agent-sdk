@@ -38,6 +38,15 @@ silently import them or require a consumer package. The wheel contains the
 typed SDK package and its marker; it does not contain transcripts, credentials,
 bridge state, delivery jobs, or consumer configuration.
 
+The wheel also contains the one product-neutral executable acceptance consumer
+under `examples/reference_consumer/`. It is installed so the base clean-wheel
+case can run `python -m examples.reference_consumer.main` outside the source
+tree. Inclusion does not make examples a second public SDK implementation:
+their behavior is owned by the reference-consumer engineering leaf and every
+SDK import resolves to the same installed public surfaces as downstream code.
+No duplicate example, source-path fallback, or example-private copy of a
+Gateway contract is packaged.
+
 The `imagent-send` console metadata resolves directly to the Interaction-owned
 `imagent.interaction.client_tools.send:main` implementation. Packaging does
 not own that behavior and must not preserve or synthesize the historical
@@ -67,7 +76,10 @@ only lazy module names are `adapters`, `contracts`, `delivery_coordination`,
 `delivery_planning`, `diagnostics`, and `events`. It declares
 those names under `TYPE_CHECKING`, resolves each to its exact canonical module
 object, and caches that object on the package root, preserving identity for
-later access. A cold `import imagent` loads neither Gateway nor optional native
+later access. Its finite value exports additionally expose the canonical
+`Gateway`, composition values, coherent store choices, projection policy,
+closed outcomes, scoped actions, and Controller composition contracts by exact
+owner identity. A cold `import imagent` loads neither Gateway nor optional native
 dependencies; resolving a delivery module is an explicit later access, not an
 import-time side effect. The separate finite `imagent.applications`
 package-root lazy resolver follows the same non-compatibility rule for its own

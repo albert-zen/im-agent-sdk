@@ -7,9 +7,9 @@ replace its local seams before deploying a real integration.
       native message identity, media staging, native encoding, and receipts.
 - [ ] Use a real Agent Application adapter for native resource identity,
       input acceptance, event fan-out, authoritative history, and recovery.
-- [ ] Keep `GatewayRepositories`, `GatewayLimits`, and `GatewayExtensions`
-      explicit and immutable. Do not add a registry, service locator, or
-      mutable context bag.
+- [ ] Keep one `GatewayStore`, `GatewayLimits`, and frozen Controller explicit.
+      Do not assemble private sessions/executors, repositories, a service
+      locator, or a mutable context bag.
 - [ ] Choose `foreground_only`, `remembered_last_recipient`, or
       `all_observers` deliberately for the consumer’s output policy.
 - [ ] Persist Conversation bindings, projection routes, idempotency state, and
@@ -25,12 +25,13 @@ replace its local seams before deploying a real integration.
 - [ ] Keep product commands in the consumer’s frozen local `CommandRegistry`
       or another typed Controller composition. Keep native policy in the
       adapter and deployment.
-- [ ] Expose `diagnostics_snapshot()` to the consumer’s own health/metrics
+- [ ] Expose `diagnostics()` to the consumer’s own health/metrics
       layer without treating it as authoritative or adding an SDK exporter.
 - [ ] Start and stop the Gateway in one owned lifecycle. Join all consumer
       tasks and verify callbacks cannot reach a stopping Application.
 - [ ] Run the vertical-slice tests with two Conversations on one Thread,
-      switching, restart recovery, duplicate identity, and shutdown races.
+      switching and switch-back, duplicate identity, and shutdown races; run
+      durable SQLite restart evidence separately.
 - [ ] Run the repository’s full schema, documentation, static, typing, wheel,
       and clean-install gates before publishing a pull request.
 

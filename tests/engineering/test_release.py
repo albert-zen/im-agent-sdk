@@ -110,6 +110,22 @@ assert not any(
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
+    def test_wheel_includes_the_one_reference_consumer_entry_point(self) -> None:
+        metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        wheel = metadata["tool"]["hatch"]["build"]["targets"]["wheel"]
+        self.assertEqual(
+            wheel["force-include"],
+            {"examples/reference_consumer": "examples/reference_consumer"},
+        )
+        self.assertEqual(
+            {path.name for path in (ROOT / "examples" / "reference_consumer").glob("*.py")},
+            {"application.py", "gateway.py", "interaction.py", "main.py"},
+        )
+        self.assertEqual(
+            set((ROOT / "examples").rglob("main.py")),
+            {ROOT / "examples" / "reference_consumer" / "main.py"},
+        )
+
     def test_top_level_facade_is_finite_lazy_and_exact_in_a_clean_process(self) -> None:
         environment = os.environ.copy()
         source_root = str(ROOT / "src")
@@ -140,6 +156,17 @@ value_exports = {
     "ApplicationActions": "imagent.gateway.actions",
     "ConversationActions": "imagent.gateway.actions",
     "ReadOutcome": "imagent.gateway.actions",
+    "Failed": "imagent.gateway.outcomes",
+    "Gateway": "imagent.gateway.runtime",
+    "GatewayExtensions": "imagent.gateway.composition",
+    "GatewayLimits": "imagent.gateway.composition",
+    "GatewayStore": "imagent.gateway.persistence",
+    "MemoryGatewayStore": "imagent.gateway.persistence",
+    "OutcomeUnknown": "imagent.gateway.outcomes",
+    "Partial": "imagent.gateway.outcomes",
+    "ProjectionPolicy": "imagent.gateway.routing",
+    "SQLiteGatewayStore": "imagent.gateway.persistence",
+    "Succeeded": "imagent.gateway.outcomes",
     "CommandArgumentContract": "imagent.interaction.controllers",
     "CommandDefinition": "imagent.interaction.controllers",
     "CommandExecutionSafety": "imagent.interaction.controllers",
@@ -161,7 +188,18 @@ assert imagent.__all__ == [
     "CommandRegistry",
     "CommandResult",
     "ConversationActions",
+    "Failed",
+    "Gateway",
+    "GatewayExtensions",
+    "GatewayLimits",
+    "GatewayStore",
+    "MemoryGatewayStore",
+    "OutcomeUnknown",
+    "Partial",
+    "ProjectionPolicy",
     "ReadOutcome",
+    "SQLiteGatewayStore",
+    "Succeeded",
     "adapters",
     "contracts",
     "delivery_coordination",

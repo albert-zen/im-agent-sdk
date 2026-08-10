@@ -3,10 +3,12 @@
 The normative v1 public architecture and executable acceptance contract are
 [V1_DESIGN.md](V1_DESIGN.md) and
 [V1_EXECUTABLE_SPEC.md](V1_EXECUTABLE_SPEC.md). The uniform resource contract
-is now implemented as Application → Project/Workspace → Thread → Turn.
-Scoped consumer actions and the policy-free ordinary-input path are also
-implemented. The remaining public persistence/lifecycle composition is still
-transformation evidence until its later DAG blocks land.
+is now implemented as Application → Project/Workspace → Thread → Turn. Scoped
+consumer actions, the policy-free ordinary-input path, coherent store-backed
+public Gateway composition, and the executable reference consumer are
+implemented. Implicit onboarding and the remaining recovery,
+request/media/delivery, and final-deletion work remain transformation evidence
+until their later DAG blocks land.
 
 ## System shape
 

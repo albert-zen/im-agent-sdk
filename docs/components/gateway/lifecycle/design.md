@@ -14,11 +14,11 @@ ordering and rollback, not native transport supervision or durable work.
 
 This leaf owns the `GatewayStartupAdmission` FIFO and the
 `GatewayStartupOverflow` and `GatewayNotRunning` failures, implemented in
-`src/imagent/gateway/lifecycle.py`. `ImAgentGateway.start()` and
-`ImAgentGateway.stop()` remain the lifecycle behavior owned by this leaf, but
-their orchestration is still physically implemented at the `imagent.gateway`
-package root. That explicit package-root gap is retained in this slice so the
-formal facade and lifecycle ordering do not change. This leaf does not own
+`src/imagent/gateway/lifecycle.py`. Canonical `Gateway.start()`,
+`Gateway.stop()`, and its async context own the store lease and delegate runtime
+ordering to the existing orchestration. `ImAgentGateway.start()` and
+`ImAgentGateway.stop()` remain physically at the package root during migration.
+This leaf does not own
 Application/Channel internal reconnect loops, projection recovery policy,
 idempotency state, Controller product behavior, or a durable queue.
 
@@ -52,6 +52,23 @@ the Controller, and stops started Applications in reverse order. Normal
 shutdown closes the gate first and then performs the same bounded owner cleanup.
 A callback outside the live window fails explicitly or is released; it never
 starts Application work during teardown.
+
+The canonical wrapper starts lease renewal immediately after acquisition, not
+after potentially slow adapter startup. A renewal failure uses the same
+serialized shutdown path: scoped action/effect surfaces are invalidated before
+runtime stop, admission and observation close, and the session/store are
+released. `wait_closed()` reports that terminal runtime failure. Construction
+or startup failure after acquisition also closes every acquired owner before
+the failed `start()` returns. During slow startup, the lease supervisor cancels
+the startup owner so the existing startup rollback—not a concurrent second
+cleanup path—stops partially started adapters.
+
+Public lifecycle transitions are serialized per `Gateway` instance. Concurrent
+`start()` calls join one startup transition and acquire one lease; a `stop()`
+racing startup cancels and joins that startup owner so its existing rollback
+closes partially started adapters before `stop()` returns. Cancellation while
+entering the async context follows the same rollback. A losing or waiting
+lifecycle caller never closes another transition's session or store state.
 
 ## Bounds, state, and recovery
 
@@ -87,12 +104,13 @@ registry or durable capacity state survives lifecycle reset.
 
 ## Contracts and structure
 
-The stable public lifecycle contract is `ImAgentGateway`; startup helper types
-are internal implementation facts. `src/imagent/gateway/lifecycle.py` is the
-one helper implementation and `imagent.gateway` remains the formal facade.
-`ImAgentGateway.start()` and `ImAgentGateway.stop()` remain in
-`src/imagent/gateway/__init__.py` as the explicitly recorded physical
-orchestration gap; this slice does not move, redesign, or reorder them.
+The canonical public lifecycle contract is `Gateway`, with explicit
+`start()`/`stop()`, `wait_closed()`, and a preferred async context. Startup
+helper and lease-session types remain internal.
+`src/imagent/gateway/runtime.py` owns the canonical wrapper;
+`ImAgentGateway.start()` and `ImAgentGateway.stop()` remain in the package root
+as an explicitly recorded physical migration gap and are not compatibility
+aliases for `Gateway`.
 
 Dependencies are `gateway.composition`, `gateway.admission`, and
 `gateway.projection.observation`, plus the lifecycle contracts of configured

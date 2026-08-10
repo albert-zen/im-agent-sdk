@@ -2,6 +2,12 @@
 
 ## Critical scenarios
 
+- the canonical public `Gateway` acquires one coherent store session and only
+  injects the fenced executor into scoped actions; the consumer cannot import
+  or access repositories, session, lease, or executor;
+- the same reference entry point proves async-context startup/shutdown,
+  Controller and ordinary input, two-Conversation fan-out, switch-back, and
+  one Application subscription per Thread;
 - the target `imagent.gateway` package preserves the exact public export set
   and one implementation identity while the historical single-file module is
   absent;

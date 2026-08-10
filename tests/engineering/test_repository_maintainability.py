@@ -200,6 +200,10 @@ class ComponentMapTests(unittest.TestCase):
         self.assertEqual(
             composition["public_exports"]["current"],
             [
+                "imagent:GatewayLimits",
+                "imagent:GatewayExtensions",
+                "imagent.gateway:GatewayLimits",
+                "imagent.gateway:GatewayExtensions",
                 "imagent.gateway.composition:GatewayRepositories",
                 "imagent.gateway.composition:GatewayLimits",
                 "imagent.gateway.composition:GatewayExtensions",

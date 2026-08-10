@@ -13,6 +13,22 @@
 
 ## Required invariants
 
+- canonical `Gateway` acquires one coherent store session, constructs the
+  private fenced executor once, and exposes only scoped actions to consumers;
+- successful scoped bind/observe/workflow routes activate the one projection
+  worker immediately, before a later inbound message, without duplicate
+  Application subscriptions;
+- terminal success replay remains exact under later binding and worker-capacity
+  drift, and a new direct/workflow route has a bootstrap barrier before commit;
+- a one-slot create-and-bind workflow transfers capacity from the previous
+  foreground Thread without a live-before-baseline window, and caller
+  cancellation after commit still joins D-owned route reconciliation and exact
+  bootstrap-lease release;
+- async-context shutdown joins lease renewal, Controller, projection workers,
+  Channels, Applications, session, and store resources;
+- post-acquisition construction failure closes the lease/store, lease-renewal
+  loss cancels even blocked startup and closes live admission/adapters, and
+  retained action surfaces reject work after shutdown;
 - each public composition symbol has one exact implementation identity;
 - repositories, limits, and extensions are immutable and typed;
 - missing optional dependencies preserve documented defaults and missing
@@ -44,6 +60,10 @@
   per Thread, with no locator, generic hook, transcript, spool, or runtime;
 - the historical `imagent.gateway_composition` internal module cannot be
   imported.
+
+`tests/gateway/test_reference_consumer.py` is the canonical public composition
+acceptance. It uses the same entry point as the installed-wheel smoke and
+rejects private store/session/executor/repository imports from the example.
 
 The target focused suite is `tests/gateway/test_composition.py`, with facade
 checks retained in `tests/gateway/test_package_root.py`. Until focused group

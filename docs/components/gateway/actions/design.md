@@ -14,8 +14,8 @@ Neither surface exposes Gateway, a concrete adapter, native client, store,
 repository, session, lease, claim, checkpoint, credential, or an `Any` context.
 No Conversation method accepts a substitute Conversation. Public construction
 is owned by Gateway composition; callers obtain the surfaces through
-`gateway.application(...)` and `gateway.actions(...)` when that composition
-slice is present.
+`gateway.application(...)` and `gateway.actions(...)` while the canonical
+public `Gateway` context is running.
 
 ## Semantic groups
 
@@ -203,19 +203,22 @@ memory and SQLite executors to run the same request shapes with atomic receipt,
 restart, lease, unknown-outcome, and workflow-CAS evidence. No C-owned fallback
 persistence or repository sequence is permitted.
 
-## Composition migration
+## Composition
 
 `src/imagent/gateway/actions.py` owns the surfaces. They are exact lazy exports
-from `imagent.gateway` and `imagent`. The pre-v1 `ImAgentGateway` repository
-graph is not an accepted constructor for this action engine; its final
-`gateway.actions`/`gateway.application` factory wiring is accepted only when
-the coherent B store session is present. This is an explicit DAG integration
-edge, not permission to run mutations through loose repositories. D uses that
-edge only to freeze one inbound `ConversationActions` to the admitted
-Conversation/actor and B executor; Controller code receives no session,
-receipt, runtime, adapter, or alternate input dispatcher. The private
-composition adapter receives the public projection runtime reconciliation
-method as one narrow callable; it does not read or mutate a repository.
+from `imagent.gateway` and `imagent`. Canonical `Gateway` acquires one coherent
+B store session and lets the D composition seam construct exactly one private
+store-backed executor. That same lifecycle-bound `GatewayEffectExecutor` serves
+explicit public factories and inbound Controller actions; neither path receives
+a session, receipt, runtime, adapter, or alternate input dispatcher.
+
+Route-bearing actions retain D's receipt-first replay, exact bootstrap lease,
+commit fence, post-commit reconciliation, and cancellation join. E adds no
+route write, binding synchronization, worker subscription, or fallback
+workflow. The public `gateway.actions` and `gateway.application` factories are
+available only for the coherent session, and retained surfaces are invalidated
+before canonical shutdown. Loose repository graphs still cannot construct
+these surfaces.
 
 ## Authority
 

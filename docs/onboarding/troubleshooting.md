@@ -2,8 +2,8 @@
 
 ## A command does not run
 
-Confirm that the consumer constructs a `CommandRegistry`, registers at least
-one command, freezes it, and passes it as `GatewayExtensions(controller=...)`.
+Confirm that the consumer constructs a bounded `CommandRegistry`, registers at
+least one command, freezes it, and passes it as `Gateway(controller=...)`.
 Gateway startup validates the Controller lifecycle. A missing or unfrozen
 registry fails explicitly; it is not silently replaced by global state.
 
@@ -13,19 +13,18 @@ binding and Application dispatch.
 
 ## A Conversation receives no Thread output
 
-Check the binding returned by `BindConversationToThread` and the selected
+Check the binding returned by the scoped `bind_thread` action and the selected
 `ProjectionPolicy`. With `foreground_only`, the route is active only while
 the stored binding’s Thread equals the route’s Thread. Binding alone does not
 activate native UI state, and observing a Thread does not select future input.
 
-Use `gateway.list_projection_health()` for per-Thread troubleshooting and
-`gateway.diagnostics_snapshot()` for redacted aggregate facts. The stable
-snapshot intentionally omits Conversation, route, Thread, native message,
-content, path, endpoint, and error-text identities.
+Use `gateway.diagnostics()` for redacted aggregate and projection-health facts.
+The stable snapshot intentionally omits Conversation, route, Thread, native
+message, content, path, endpoint, and error-text identities.
 
 ## A switched Conversation still sees the old Thread
 
-Verify that the switch used a typed `BindConversationToThread` operation and
+Verify that the switch used the Conversation-scoped `bind_thread` action and
 the current binding generation. Under `foreground_only`, the old route becomes
 inactive after the binding changes. A different Conversation that remains
 bound to that Thread must continue to receive its output. If both stop, check
@@ -40,10 +39,10 @@ reconciliation, and reads a bounded baseline or checkpoint window. A missing
 or expired checkpoint is reported as degraded recovery; it is never repaired
 by reading an SDK transcript or guessing order from timestamps.
 
-The reference sample intentionally reuses the same process-local Application
-and Gateway repository objects across stop/start. A production restart must
-instead restore durable Application history and durable Gateway repositories;
-stable Thread and Agent item IDs must remain unchanged.
+The in-memory reference run does not claim durable restart. Use the executable
+specification's fresh-object SQLite scenario: restore durable Application
+history and one `SQLiteGatewayStore`, and keep stable Thread and Agent item IDs
+unchanged.
 
 If the reference Application reports a capacity error, increase its explicit
 positive limits or replace it with a production Application. Do not add

@@ -6,7 +6,7 @@ installable. It is outside the runtime dependency graph: Interaction owns IM
 messages, media, Controllers, and Channels; Gateway owns bridge composition and
 state; Applications owns native Application contracts and adapters.
 
-The five engineering leaves are the authority for their named responsibility:
+The engineering leaves are the authority for their named responsibility:
 
 | Leaf | Authority |
 |---|---|
@@ -15,6 +15,7 @@ The five engineering leaves are the authority for their named responsibility:
 | [Repository maintainability](repository-maintainability/design.md) | Ownership maps, documentation, repository checks, provenance, and maintainability budgets. |
 | [AgentKit](agentkit/design.md) | Pinned lifecycle tooling, change routing, architecture gates, and review guidance. |
 | [Release](release/design.md) | Package metadata, public facades, typing markers, wheels, and clean-install verification. |
+| [Reference consumer](reference-consumer/design.md) | The one public-path executable acceptance consumer, onboarding, and focused vertical evidence. |
 
 ## Reading order
 
