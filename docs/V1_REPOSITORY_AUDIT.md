@@ -1,6 +1,6 @@
 # V1 repository audit and transformation DAG
 
-Status: DAG blocks A–C implemented; blocks D–I remain transformation targets
+Status: DAG blocks A–D implemented; blocks E–I remain transformation targets
 
 This audit compares the repository with `V1_DESIGN.md`. Existing behavior is
 not retained merely because it has tests. Safety evidence is reused; conflicting
@@ -27,21 +27,30 @@ Landed evidence:
 - legacy Project-less persistence rows fail closed instead of being inferred
   from path, display text, timestamps, or empty sentinels.
 
-### P0: product onboarding policy inside Gateway input
+### Resolved in D: policy-free ordinary input
 
-Current ordinary input selects the only Application when none is bound and
-creates/binds a Thread when none is selected. That policy belongs to the
-consumer and creates native resources as a hidden side effect of message
-dispatch.
+Ordinary input now requires one explicit complete Application/Project/Thread
+binding and invokes one canonical dispatch runtime. `MissingBindingError`
+carries the stable `missing_binding` classification through the existing
+pre-acceptance/I2 path without binding, effect-receipt, route, resource,
+native-input, or fallback-delivery mutation. Required admission claim/release
+or completion bookkeeping remains intact.
 
-Required transformation:
+Landed evidence:
 
-- unbound input returns an explicit missing-binding outcome;
-- remove implicit sole-Application selection and implicit Thread creation;
-- expose the same explicit actions to commands, native UI interactions, and
-  consumer onboarding policy;
-- preserve durable admission and unknown-outcome protection while removing the
-  hidden workflow.
+- sole-Application discovery, implicit Thread creation, default CWD, and
+  hand-rendered Gateway onboarding errors are absent from ordinary input;
+- binding resolution precedes I1, route preparation, and native dispatch;
+- a Controller backed by one coherent B store session receives only C's scoped
+  `ConversationActions`, can explicitly create/select and create/bind, and can
+  return `None` to pass the same original Message through the same dispatch
+  path;
+- two Conversations retain independent binding/route/input ancestry, while C,
+  the coherent store, and the ordinary-input resolver reject foreign
+  Conversation/resource hierarchy; and
+- durable admission and unknown-outcome protection remain intact, including
+  released pre-acceptance replay, terminal accepted replay, cancellation
+  fences, prefer-active-Turn behavior, and Turn/reply correlation.
 
 ### Resolved in B/C: scoped actions, workflows, and durable execution seam
 
@@ -73,12 +82,12 @@ of manual consumer composition. For foreground-safe clear-observation, C sets
 `StoreMutationPlan.route_delete_condition` to
 `RouteDeleteCondition.UNLESS_BOUND_TO_ROUTE_THREAD`; B evaluates it atomically
 against resulting binding state and C performs no store/session pre-read.
-The retiring repository-wired
-`ImAgentGateway` cannot create those actions, so it rejects Controller
-configuration before input rather than substituting its old generic wrapper.
-The executable reference Controller path remains block E work over the final
-coherent store/lifecycle composition; C's registry acceptance is focused at
-the exact action/handler boundary.
+Block D now composes those actions for ordinary input only when all Gateway
+runtime owners share one already-leased coherent B store session. Loose or
+mixed repositories still reject Controller configuration rather than
+substituting the old generic wrapper. The executable reference Controller and
+final public store-acquisition/lifecycle surface remain block E/H work; D adds
+no second action or dispatch implementation.
 
 ### Resolved in A: Project-creation evidence revised onto the uniform model
 
@@ -243,12 +252,24 @@ Gateway factory and lifecycle wiring remain later DAG work.
 
 ### D. Policy-free ordinary input
 
+Status: complete.
+
 1. Remove implicit Application selection and Thread creation.
 2. Return explicit missing-binding through the classified failure path.
 3. Preserve admission, I1/I2, prefer-active-Turn, correlation, and no-retry
    invariants.
 4. Prove a consumer Controller can implement optional onboarding explicitly
    without creating a second dispatch path.
+
+Landed evidence includes the exact public `MissingBindingError` identity and
+language-neutral `missing_binding` code, pre-acceptance release/I2
+classification, zero-effect incomplete-binding tests at every hierarchy depth,
+explicit C workflow onboarding followed by the unchanged Message, stable
+accepted-message replay, hostile binding-repository Conversation/resource
+ancestry rejection, two-Conversation isolation, and retained dispatch/
+correlation/cancellation/unknown-outcome suites. Obsolete fixtures now create
+and bind their Threads explicitly; existing-Thread vertical evidence waits for
+the correlated reply after any authoritative baseline recovery.
 
 ### E. Executable vertical consumer
 

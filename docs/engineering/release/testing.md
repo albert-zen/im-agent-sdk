@@ -52,6 +52,11 @@ cover them.
 The base case also resolves `GatewayStore`, `MemoryGatewayStore`, and
 `SQLiteGatewayStore` from the installed persistence facade and proves their
 identity with the canonical Block-B owners.
+It resolves `MissingBindingError` through both installed Gateway facades,
+proves exact identity with the input-dispatch owner and the stable
+`missing_binding` classification, and proves that the Gateway-specific type
+does not escape through either the top-level package or language-neutral
+contracts facade.
 The base case also proves, in the original transition-first clean process,
 that `imagent.diagnostics` preserves exact identity for the canonical
 Interaction, Channel, and Application diagnostics objects. It additionally

@@ -582,8 +582,8 @@ components:
   gateway.composition:
     id: gateway.composition
     parent: gateway
-    purpose: Assemble one immutable Gateway graph from explicit Applications, Channels, repositories, limits, and extensions.
-    owns: [GatewayRepositories, GatewayLimits, GatewayExtensions, explicit dependency wiring]
+    purpose: Assemble one immutable Gateway graph from explicit Applications, Channels, repositories, limits, extensions, and the D coherent-session Controller seam.
+    owns: [GatewayRepositories, GatewayLimits, GatewayExtensions, explicit dependency wiring, exact coherent-session detection and scoped-action executor wiring]
     does_not_own: [service lookup, product policy, native adapter internals]
     inputs: [configured typed dependencies]
     outputs: [ImAgentGateway composition]
@@ -591,10 +591,10 @@ components:
     public_exports:
       current: [imagent.gateway.composition:GatewayRepositories, imagent.gateway.composition:GatewayLimits, imagent.gateway.composition:GatewayExtensions]
       target: [imagent.gateway.composition:GatewayRepositories, imagent.gateway.composition:GatewayLimits, imagent.gateway.composition:GatewayExtensions]
-    dependencies: [interaction.controllers.controller-contract, interaction.controllers.request-presentation, interaction.channels.channel-contract, applications.application-contract, gateway.concurrency, gateway.admission, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.projection.observation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.routing.gateway-operations, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.memory, gateway.persistence.idempotency]
+    dependencies: [interaction.messages, interaction.controllers.controller-contract, interaction.controllers.request-presentation, interaction.channels.channel-contract, applications.application-contract, applications.operations, applications.requests, gateway.actions, gateway.effect-execution, gateway.concurrency, gateway.admission, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.projection.observation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.routing.gateway-operations, gateway.persistence.effects, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.gateway-store, gateway.persistence.memory, gateway.persistence.idempotency]
     state_recovery: Frozen construction values only; no runtime state or locator lookup.
-    current_code: [src/imagent/gateway/composition.py, src/imagent/gateway/__init__.py]
-    target_code: [src/imagent/gateway/composition.py]
+    current_code: [src/imagent/gateway/composition.py, src/imagent/gateway/controller_input.py, src/imagent/gateway/__init__.py]
+    target_code: [src/imagent/gateway/composition.py, src/imagent/gateway/controller_input.py]
     current_tests: [tests/gateway/test_package_root.py, tests/gateway/test_operations_integration.py, tests/gateway/test_vertical_slice.py, tests/gateway/test_reference_consumer.py]
     target_tests: [tests/gateway/test_composition.py, tests/gateway/test_package_root.py, tests/gateway/test_reference_consumer.py]
     authoritative_docs: [docs/components/gateway/composition/design.md, docs/components/gateway/composition/testing.md, docs/components/gateway/design.md]
@@ -758,24 +758,24 @@ components:
   gateway.input.dispatch:
     id: gateway.input.dispatch
     parent: gateway.input
-    purpose: Canonically derive stable input identity, authorize one native side-effect pre-dispatch fact, validate/correlate AcceptedTurn truth, and own a distinct finite per-Thread acceptance-ordering gate.
-    owns: [derive_client_message_id, prefer_active_turn default, exactly-once native side-effect ApplicationInputDispatch authorization, AcceptedTurn validation/correlation invocation, finite per-Thread acceptance-ordering gate/buffer/ordered drain]
-    does_not_own: [Gateway Conversation serialization, Controller/I1/I2, binding mutation, Thread creation, route preparation, native steer implementation, active Turn truth, worker lifecycle, recovery policy, Channel input work]
-    inputs: [verified content, established Conversation lock, prepared Application/Thread route, Application adapter]
-    outputs: [AcceptedTurn or classified dispatch failure, ordered typed projection-event release]
-    public_contracts: [derive_client_message_id]
+    purpose: Require exact complete ordinary-input binding, canonically derive stable input identity, authorize one native side-effect pre-dispatch fact, validate/correlate AcceptedTurn truth, and own a distinct finite per-Thread acceptance-ordering gate.
+    owns: [MissingBindingError and missing_binding classification, derive_client_message_id, prefer_active_turn default, exactly-once native side-effect ApplicationInputDispatch authorization, AcceptedTurn validation/correlation invocation, finite per-Thread acceptance-ordering gate/buffer/ordered drain]
+    does_not_own: [Application discovery or selection, Project or Thread creation, default CWD or onboarding policy, Gateway Conversation serialization, Controller/I1/I2, binding mutation, route preparation, native steer implementation, active Turn truth, worker lifecycle, recovery policy, Channel input work]
+    inputs: [verified admitted Message, exact complete Conversation binding, established Conversation lock, prepared Application/Thread route, Application adapter]
+    outputs: [MissingBindingError before effects or AcceptedTurn/classified dispatch failure, ordered typed projection-event release]
+    public_contracts: [MissingBindingError, derive_client_message_id]
     public_exports:
-      current: [imagent.gateway.input:derive_client_message_id]
-      target: [imagent.gateway.input:derive_client_message_id]
-    dependencies: [interaction.messages, interaction.operations, applications.application-contract, applications.events, applications.operations, gateway.admission, gateway.projection.request-correlation]
+      current: [imagent.gateway:MissingBindingError, imagent.gateway.input:MissingBindingError, imagent.gateway.input:derive_client_message_id]
+      target: [imagent.gateway:MissingBindingError, imagent.gateway.input:MissingBindingError, imagent.gateway.input:derive_client_message_id]
+    dependencies: [interaction.messages, interaction.operations, applications.application-contract, applications.events, applications.operations, gateway.admission, gateway.persistence.state-contracts, gateway.projection.request-correlation]
     state_recovery: The final pending dispatch exit always signals/drains/removes process-local acceptance-ordering-gate state. Buffer overflow or a mid-drain applier failure records an explicit per-Thread gap for the existing authoritative worker recovery; neither itself transitions an inbound claim. Known pre-native-side-effect-fence failure releases, while native-side-effect-fence-unknown and accepted input remain non-redeliverable.
     current_code: [src/imagent/gateway/input/dispatch.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/input/dispatch.py]
-    current_tests: [tests/gateway/input/test_dispatch.py]
-    target_tests: [tests/gateway/input/test_dispatch.py]
+    current_tests: [tests/gateway/input/test_dispatch.py, tests/gateway/input/test_policy_free_ordinary_input.py]
+    target_tests: [tests/gateway/input/test_dispatch.py, tests/gateway/input/test_policy_free_ordinary_input.py]
     authoritative_docs: [docs/components/gateway/input/dispatch/design.md, docs/components/gateway/input/dispatch/testing.md, docs/components/gateway/design.md, docs/components/projections-and-recovery/design.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0013-bounded-application-event-admission.md]
-    gaps: [Gateway root retains the owned Conversation lock/I2 orchestration; projection worker lifecycle remains an explained separate move]
+    gaps: [Gateway root retains the owned Conversation lock/Controller/I2 orchestration; projection worker lifecycle remains an explained separate move]
 
   gateway.input.failure-presentation:
     id: gateway.input.failure-presentation

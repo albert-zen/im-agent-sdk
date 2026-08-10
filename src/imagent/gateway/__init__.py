@@ -21,14 +21,13 @@ from ..applications.contract import (
     ThreadRef,
 )
 from ..applications.operations import (
+    ApplicationOperation,
     ApplicationOperationFailed,
     ApplicationOperationResult,
-    CreateThread,
     DeleteProject,
     GetProject,
     GetThread,
     ProjectRead,
-    ThreadCreated,
     ThreadRead,
     _LegacyApplicationOperation,
     validate_application_operation,
@@ -41,8 +40,6 @@ from ..interaction.messages import (
     ConversationRef,
     InboundMessage,
     OutboundMessage,
-    TextContent,
-    TextFormat,
 )
 from ..interaction.operations import (
     ContractError,
@@ -58,6 +55,7 @@ from .admission import (
 )
 from .composition import GatewayExtensions, GatewayLimits, GatewayRepositories
 from .concurrency import KeyedLockCapacityError as _KeyedLockCapacityError
+from .controller_input import _ScopedControllerActionRuntime
 from .delivery.coordination import DeliveryCoordinator
 from .delivery.outcome_observation import (
     DeliveryOutcomeObserver as DeliveryOutcomeObserver,
@@ -80,7 +78,9 @@ from .diagnostics import (
     new_diagnostics_snapshot,
     summarize_projection_health,
 )
+from .effect_execution import StoreBackedGatewayEffectExecutor
 from .input import InboundContentTransformer as InboundContentTransformer
+from .input import MissingBindingError as MissingBindingError
 from .input.content_transformation import InboundContentTransformRuntime
 from .input.dispatch import InputDispatchRuntime, TurnAcceptanceOrderingGate
 from .input.failure_presentation import InboundFailurePhase as InboundFailurePhase
@@ -104,7 +104,9 @@ from .persistence.repository_contracts import (
 from .persistence.state_contracts import (
     ConversationBinding,
     DeliverySubmissionState,
+    validate_binding,
 )
+from .persistence.store import GatewayStoreSession
 from .presentation import (
     OutboundPresentationContext,
     OutboundPresentationRuntime,
@@ -193,19 +195,34 @@ class ImAgentGateway:
             application.summary.ref.application_instance_id: application
             for application in applications
         }
-        self._binding_runtime = _BindingRuntime(repositories.bindings)
+        coherent_session = _coherent_store_session(repositories)
+        bindings = coherent_session if coherent_session is not None else repositories.bindings
+        self._binding_runtime = _BindingRuntime(bindings)
         self._projection_policy = projection_policy
-        idempotency = repositories.idempotency
+        idempotency = coherent_session if coherent_session is not None else repositories.idempotency
         if idempotency is None:
             idempotency = InMemoryIdempotencyRepository(
                 max_records=limits.idempotency_max_records,
             )
         self._idempotency = idempotency
         request_correlations = (
-            repositories.request_correlations or InMemoryRequestCorrelationRepository()
+            coherent_session if coherent_session is not None else repositories.request_correlations
         )
+        if request_correlations is None:
+            request_correlations = InMemoryRequestCorrelationRepository()
         self._delivery_coordinator = delivery_coordinator or DeliveryCoordinator()
         self._controller = extensions.controller
+        self._controller_action_runtime = (
+            _ScopedControllerActionRuntime(
+                gateway_id=coherent_session.lease.gateway_id,
+                applications=self._applications,
+                execute_application=self._execute_scoped_application,
+                get_binding=self._binding_runtime.current,
+                effects=StoreBackedGatewayEffectExecutor(coherent_session),
+            )
+            if coherent_session is not None
+            else None
+        )
         self._inbound_content_transform_runtime = (
             InboundContentTransformRuntime(
                 extensions.inbound_content_transformer,
@@ -258,13 +275,17 @@ class ImAgentGateway:
         self._startup_admission = GatewayStartupAdmission[ClaimedInbound](
             max_pending=limits.startup_buffer_max_pending
         )
-        projection_repository = repositories.projections or InMemoryProjectionRouteRepository()
+        projection_repository = (
+            coherent_session if coherent_session is not None else repositories.projections
+        )
+        if projection_repository is None:
+            projection_repository = InMemoryProjectionRouteRepository()
         self._turn_acceptance_gate = TurnAcceptanceOrderingGate(
             max_pending=limits.turn_acceptance_event_max_pending,
         )
         self._projection_runtime = ThreadProjectionRuntime(
             applications=self._applications,
-            bindings=repositories.bindings,
+            bindings=bindings,
             projections=projection_repository,
             request_correlations=request_correlations,
             request_presenter=extensions.request_presenter,
@@ -302,7 +323,9 @@ class ImAgentGateway:
             contract_error=_contract_error,
         )
         self._conversation_locks = self._gateway_operations.conversation_locks
-        delivery_submissions = repositories.delivery_submissions
+        delivery_submissions = (
+            coherent_session if coherent_session is not None else repositories.delivery_submissions
+        )
         if delivery_submissions is None:
             delivery_submissions = InMemoryDeliverySubmissionRepository(
                 max_records=limits.delivery_submission_max_records,
@@ -323,11 +346,8 @@ class ImAgentGateway:
     async def start(self) -> None:
         if isinstance(self._controller, ControllerLifecycle):
             self._controller.validate_startup()
-        if self._controller is not None:
-            raise RuntimeError(
-                "ImAgentGateway cannot compose a v1 Controller until coherent "
-                "GatewayStore action wiring is present"
-            )
+        if self._controller is not None and self._controller_action_runtime is None:
+            raise RuntimeError("Controller composition requires one coherent GatewayStore session")
         self._delivery_coordinator.start()
         if self._delivery_outcome_observer_runtime is not None:
             self._delivery_outcome_observer_runtime.start()
@@ -396,6 +416,8 @@ class ImAgentGateway:
             await self._delivery_coordinator.close()
             for channel in reversed(started_channels):
                 await channel.stop()
+            if isinstance(self._controller, ControllerLifecycle):
+                await self._controller.close()
             if self._inbound_content_transform_runtime is not None:
                 await self._inbound_content_transform_runtime.close()
             if self._inbound_failure_presentation_runtime is not None:
@@ -415,6 +437,8 @@ class ImAgentGateway:
         await self._delivery_coordinator.close()
         for channel in reversed(tuple(self._channels.values())):
             await channel.stop()
+        if isinstance(self._controller, ControllerLifecycle):
+            await self._controller.close()
         if self._inbound_content_transform_runtime is not None:
             await self._inbound_content_transform_runtime.close()
         if self._inbound_failure_presentation_runtime is not None:
@@ -491,6 +515,13 @@ class ImAgentGateway:
                     )
                 ),
             )
+        return await self._execute_scoped_application(operation)
+
+    async def _execute_scoped_application(
+        self,
+        operation: ApplicationOperation,
+    ) -> ApplicationOperationResult:
+        """Execute one validated Application operation for a scoped SDK owner."""
         try:
             validate_application_operation(operation)
             application = self._applications[operation.application_ref.application_instance_id]
@@ -863,8 +894,6 @@ class ImAgentGateway:
         idempotency_owner_token: str,
         before_application_send: Callable[[], Awaitable[None]],
     ) -> None:
-        from .routing.operations import SelectApplication
-
         async with self._gateway_operations.hold_conversation(message.conversation_ref):
             scope, key = inbound_idempotency_identity(
                 message.conversation_ref,
@@ -875,76 +904,64 @@ class ImAgentGateway:
                 key,
                 owner_token=idempotency_owner_token,
             )
-            thread_was_created = False
+            if self._controller is not None:
+                action_runtime = self._controller_action_runtime
+                if action_runtime is None:
+                    raise RuntimeError(
+                        "Controller composition requires one coherent GatewayStore session"
+                    )
+                outputs = await self._controller.handle(
+                    message,
+                    action_runtime.actions(
+                        message.conversation_ref,
+                        actor=message.sender,
+                        foreground_route=(
+                            self._projection_policy
+                            is _projection_routes.ProjectionPolicy.FOREGROUND_ONLY
+                        ),
+                        inbound_message_id=message.message_id,
+                        inbound_created_at=message.created_at,
+                        enter_effect_fence=before_application_send,
+                    ),
+                )
+                if outputs is not None:
+                    if not isinstance(outputs, tuple):
+                        raise TypeError("Controller output must be a tuple or None")
+                    for output in outputs:
+                        if not isinstance(output, OutboundMessage):
+                            raise TypeError("Controller output must contain OutboundMessage values")
+                        if output.conversation_ref != message.conversation_ref:
+                            raise ValueError(
+                                "Controller output belongs to a different Conversation"
+                            )
+                        await self._deliver_outbound(output)
+                    return
+            binding = await self._binding_runtime.current(message.conversation_ref)
+            if binding is not None:
+                validate_binding(binding)
+                if binding.conversation_ref != message.conversation_ref:
+                    raise ContractViolation("binding belongs to a different Conversation")
+            if (
+                binding is None
+                or binding.application_ref is None
+                or binding.project_ref is None
+                or binding.thread_ref is None
+            ):
+                raise MissingBindingError()
+            application = self._bound_application(binding)
+            if application is None:
+                raise RuntimeError("bound Agent application is unavailable")
             content = (
                 await self._inbound_content_transform_runtime.transform(message)
                 if self._inbound_content_transform_runtime is not None
                 else message.content
             )
-            binding = await self._binding_runtime.current(message.conversation_ref)
-            application = self._bound_application(binding)
-            if binding is None or binding.application_ref is None:
-                application = self._single_application_or_none()
-                if application is None:
-                    await self._deliver_error(message, "No Agent application is selected.")
-                    return
-                selection = await self._execute_gateway_locked(
-                    SelectApplication(
-                        operation_id=_operation_id(message, "application.select"),
-                        conversation_ref=message.conversation_ref,
-                        actor=message.sender,
-                        application_ref=application.summary.ref,
-                        expected_generation=(binding.generation if binding is not None else None),
-                        created_at=message.created_at,
-                    )
-                )
-                if not isinstance(selection, ConversationBound):
-                    await self._deliver_operation_error(message, selection)
-                    return
-                binding = selection.binding
-            if application is None:
-                raise RuntimeError("bound Agent application is unavailable")
-            if binding.thread_ref is None:
-                if binding.project_ref is None:
-                    await self._deliver_error(message, "No project is selected.")
-                    return
-                result = await self.execute_application(
-                    CreateThread(
-                        operation_id=_operation_id(message, "thread.create"),
-                        application_ref=application.summary.ref,
-                        project_ref=binding.project_ref,
-                        created_at=message.created_at,
-                    )
-                )
-                if not isinstance(result, ThreadCreated):
-                    await self._deliver_operation_error(message, result)
-                    return
-                bound = await self._execute_gateway_locked(
-                    BindConversationToThread(
-                        operation_id=_operation_id(
-                            message,
-                            "conversation.bind_thread",
-                        ),
-                        conversation_ref=message.conversation_ref,
-                        actor=message.sender,
-                        thread_ref=result.thread.ref,
-                        expected_generation=binding.generation,
-                        created_at=message.created_at,
-                    )
-                )
-                if not isinstance(bound, ConversationBound):
-                    await self._deliver_operation_error(message, bound)
-                    return
-                binding = bound.binding
-                thread_was_created = True
             thread_ref = binding.thread_ref
-            if thread_ref is None:
-                raise RuntimeError("thread binding was not established")
             await self._projection_runtime.prepare_input_route(
                 application,
                 thread_ref,
                 message.conversation_ref,
-                thread_was_created=thread_was_created,
+                thread_was_created=False,
             )
             await self._input_dispatch.dispatch(
                 application,
@@ -953,42 +970,6 @@ class ImAgentGateway:
                 content=content,
                 before_application_send=before_application_send,
             )
-
-    async def _deliver_error(
-        self,
-        inbound: InboundMessage,
-        text: str,
-    ) -> None:
-        await self._deliver_outbound(
-            OutboundMessage(
-                delivery_id=(
-                    f"imagent:gateway:{inbound.conversation_ref.channel_instance_id}:"
-                    f"{inbound.conversation_ref.native_conversation_id}:"
-                    f"{inbound.message_id}:error"
-                ),
-                conversation_ref=inbound.conversation_ref,
-                content=(TextContent(f"**Error:** {text}", TextFormat.MARKDOWN),),
-                created_at=datetime.now(UTC),
-                reply_to=inbound.message_id,
-            )
-        )
-
-    async def _deliver_operation_error(
-        self,
-        inbound: InboundMessage,
-        result: ApplicationOperationResult | contracts_facade.GatewayOperationResult,
-    ) -> None:
-        from .routing.operations import GatewayOperationFailed
-
-        error = (
-            result.error
-            if isinstance(result, (ApplicationOperationFailed, GatewayOperationFailed))
-            else None
-        )
-        await self._deliver_error(
-            inbound,
-            error.message if error is not None else "Operation returned an incompatible result.",
-        )
 
     async def _deliver_outbound(
         self,
@@ -1146,11 +1127,6 @@ class ImAgentGateway:
         except KeyError as error:
             raise RuntimeError("bound Agent application is not registered") from error
 
-    def _single_application_or_none(self) -> AgentApplicationAdapter | None:
-        if len(self._applications) != 1:
-            return None
-        return next(iter(self._applications.values()))
-
     def _require_application(
         self,
         application_instance_id: str,
@@ -1161,6 +1137,23 @@ class ImAgentGateway:
             raise KeyError(
                 f"Agent application is not registered: {application_instance_id}"
             ) from error
+
+
+def _coherent_store_session(
+    repositories: GatewayRepositories,
+) -> GatewayStoreSession | None:
+    session = repositories.bindings
+    if not isinstance(session, GatewayStoreSession):
+        return None
+    for repository in (
+        repositories.idempotency,
+        repositories.projections,
+        repositories.request_correlations,
+        repositories.delivery_submissions,
+    ):
+        if repository is not None and repository is not session:
+            raise ValueError("a GatewayStore session cannot be mixed with another repository")
+    return session
 
 
 def _contract_error(error: Exception) -> ContractError:
@@ -1174,10 +1167,6 @@ def _contract_error(error: Exception) -> ContractError:
             metadata={"native_exception": type(error).__name__},
         )
     return operation_error(error)
-
-
-def _operation_id(message: InboundMessage, operation_type: str) -> str:
-    return f"imagent:operation:{message.message_id}:{operation_type}"
 
 
 def __getattr__(name: str) -> object:

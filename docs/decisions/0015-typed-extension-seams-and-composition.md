@@ -40,8 +40,9 @@ An extension has exactly one documented position and one typed responsibility:
 Channel verify/access
   -> durable inbound admission and media preparation
   -> optional Controller
+  -> exact complete binding or typed pre-acceptance failure
   -> [I1] inbound content transformer
-  -> binding, route preparation, and default prefer-active-Turn input
+  -> route preparation and default prefer-active-Turn input
   -> Application dispatch
   -> [I2] classified inbound failure presenter
 
@@ -65,11 +66,13 @@ fidelity invariant, not an extension seam.
 - **I1 transformer:** may replace only the verified message's typed content.
   It cannot change Conversation, sender, native message/reply identity,
   admission ownership, binding, client-message identity, continuation
-  preference, or dispatch policy. It runs only for Controller-unconsumed
-  input and fails before Application dispatch. It is replay-safe for the same
-  stable inbound identity: a reclaimable pre-dispatch claim may invoke it
-  again after cancellation, failure, or process restart. It therefore cannot
-  use invocation as an external side-effect or one-time delivery signal.
+  preference, or dispatch policy. It runs only for Controller-unconsumed input
+  after the exact complete binding is resolved and validated, and fails before
+  route mutation or Application dispatch. Missing, incomplete, foreign, or
+  malformed binding never invokes I1. It is replay-safe for the same stable
+  inbound identity: a reclaimable pre-dispatch claim may invoke it again after
+  cancellation, failure, or process restart. It therefore cannot use
+  invocation as an external side-effect or one-time delivery signal.
 - **I2 failure presenter:** receives one fixed origin plus a bounded failure
   classification of `pre_acceptance`, `outcome_unknown`, or
   `post_acceptance`. Gateway, not the presenter, owns the inbound claim

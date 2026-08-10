@@ -11,6 +11,8 @@ Tests for `interaction.operations` must prove:
   discriminants using the common validation vocabulary;
 - every public error code is stable, explicit, and maps representative native
   exceptions without implying hidden fallback or retry;
+- Gateway-owned `MissingBindingError` preserves the exact `missing_binding`
+  projection without making Interaction import Gateway binding truth;
 - `capacity_exhausted` is retryable only for a proved pre-side-effect capacity
   rejection;
 - unsupported behavior remains unsupported rather than being silently

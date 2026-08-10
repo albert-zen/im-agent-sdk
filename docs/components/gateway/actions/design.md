@@ -152,7 +152,10 @@ from `imagent.gateway` and `imagent`. The pre-v1 `ImAgentGateway` repository
 graph is not an accepted constructor for this action engine; its final
 `gateway.actions`/`gateway.application` factory wiring is accepted only when
 the coherent B store session is present. This is an explicit DAG integration
-edge, not permission to run mutations through loose repositories.
+edge, not permission to run mutations through loose repositories. D uses that
+edge only to freeze one inbound `ConversationActions` to the admitted
+Conversation/actor and B executor; Controller code receives no session,
+receipt, runtime, adapter, or alternate input dispatcher.
 
 ## Authority
 

@@ -3,10 +3,10 @@
 The normative v1 public architecture and executable acceptance contract are
 [V1_DESIGN.md](V1_DESIGN.md) and
 [V1_EXECUTABLE_SPEC.md](V1_EXECUTABLE_SPEC.md). The uniform resource contract
-is now implemented as Application → Project/Workspace → Thread → Turn. The
-remaining low-level consumer actions, persistence composition, and implicit
-onboarding are still transformation evidence until their later DAG blocks
-land.
+is now implemented as Application → Project/Workspace → Thread → Turn.
+Scoped consumer actions and the policy-free ordinary-input path are also
+implemented. The remaining public persistence/lifecycle composition is still
+transformation evidence until its later DAG blocks land.
 
 ## System shape
 
@@ -147,10 +147,11 @@ recovery rather than pretending the prior delivery boundary is known.
 Inbound admission uses the same Gateway-owned idempotency state before Channel
 media preparation. Its fenced `in_flight` lease stores identity and ownership
 only; media content, paths, and sender data remain outside persistence.
-I1 runs only after that lease is refreshed and the optional Controller has
-declined the input. Its result is process-local and is never persisted: a
-confirmed pre-dispatch release or restart may invoke it again for the same
-stable inbound identity, so consumer implementations must be replay-safe.
+I1 runs only after that lease is refreshed, the optional Controller has
+declined the input, and the exact complete binding has been validated. Its
+result is process-local and is never persisted: a confirmed pre-dispatch
+release or restart may invoke it again for the same stable inbound identity, so
+consumer implementations must be replay-safe.
 With I2 configured, a known pre-acceptance failure is completed before stable
 error presentation. An unknown dispatch outcome stays `side_effect_started`
 and a post-acceptance failure stays terminal. Presenter or Channel failure
@@ -191,19 +192,25 @@ Per-user group selection is a future consumer policy, not current Core.
 4. Channel stages permitted media, then hands the completed message and lease
    to Gateway. Preparation failure releases only the owned pre-side-effect
    lease.
-5. Optional Controller translates UX into typed actions.
-6. Gateway derives/preserves a stable client message ID.
-7. Gateway resolves the Conversation binding.
-8. It records/refreshes output observation and establishes live subscription
+5. An optional Controller translates UX into scoped typed actions. It may
+   explicitly onboard and return `None` to retry the original Message through
+   the same ordinary-input path; a tuple consumes the Message.
+6. Gateway resolves the exact Application → Project → Thread binding. An
+   incomplete or absent binding fails as typed `missing_binding` before I1,
+   route mutation, or native Application work. Gateway never selects a sole
+   candidate, creates a resource, or chooses a default CWD.
+7. Optional I1 transforms content only after that binding is complete.
+8. Gateway derives/preserves a stable client message ID.
+9. It records/refreshes output observation and establishes live subscription
    before sending input.
-9. Gateway supplies the default `prefer_active_turn` input preference. The
+10. Gateway supplies the default `prefer_active_turn` input preference. The
    adapter declares `started/create_new` or `steered/preserve_existing`
    immediately before native dispatch; Gateway authorizes the correlation
    policy, then the Application accepts input and emits authoritative events.
-10. Projection resolves current destinations at delivery time.
-11. Delivery planning maps the logical message to deterministic segments.
-12. The Coordinator executes them through the Channel's ordered bounded lane.
-13. Channel performs native encoding/delivery and returns typed receipts.
+11. Projection resolves current destinations at delivery time.
+12. Delivery planning maps the logical message to deterministic segments.
+13. The Coordinator executes them through the Channel's ordered bounded lane.
+14. Channel performs native encoding/delivery and returns typed receipts.
 
 ## Typed extension positions
 
@@ -213,8 +220,9 @@ typed positions governed by ADR 0015:
 ```text
 verified/admitted input
   -> optional Controller
+  -> exact complete binding or typed missing-binding
   -> inbound content transform
-  -> binding + prefer-active-Turn dispatch
+  -> prefer-active-Turn dispatch
   -> classified inbound failure presentation
 
 native Application event/history

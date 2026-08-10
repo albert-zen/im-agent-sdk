@@ -23,11 +23,13 @@ class OptionalControllerTests(unittest.IsolatedAsyncioTestCase):
         channel = FakeChannelAdapter()
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
         bindings = InMemoryBindingRepository()
+        thread = await application.create_thread(application.default_project_ref)
         await bindings.put(
             ConversationBinding(
                 conversation_ref=ConversationRef("fake-channel", "conversation-1"),
                 application_ref=application.summary.ref,
                 project_ref=application.default_project_ref,
+                thread_ref=thread.ref,
             )
         )
         gateway = ImAgentGateway(
@@ -66,7 +68,7 @@ class OptionalControllerTests(unittest.IsolatedAsyncioTestCase):
                 controller=common_command_registry(),
             ),
         )
-        with self.assertRaisesRegex(RuntimeError, "coherent GatewayStore action wiring"):
+        with self.assertRaisesRegex(RuntimeError, "coherent GatewayStore session"):
             await gateway.start()
         self.assertFalse(channel.started)
 

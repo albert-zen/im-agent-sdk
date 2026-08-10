@@ -29,6 +29,12 @@ reconciles pending requests, and drains claimed inbound FIFO. The gate remains
 in startup mode through the entire drain, so a callback racing a drain failure
 joins rollback rather than entering live processing.
 
+A configured Controller must have coherent scoped-action wiring before any
+runtime owner starts. Once accepted, its optional lifecycle follows the
+existing owner order: validation before startup, bounded `close()` on rollback
+after Channels and on normal shutdown before Applications. Controller policy
+cannot acquire/release the store session or alter admission ownership.
+
 Gateway starts each Channel exactly once with the completed-message callback
 and that Channel's admission handler. It performs no signature compatibility
 inspection and never retries `start` with one argument. A call-binding failure

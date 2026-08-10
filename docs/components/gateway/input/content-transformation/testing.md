@@ -1,12 +1,14 @@
 # Gateway inbound content transformation testing
 
-Focused evidence is
-`tests/gateway/input/test_content_transformation.py`.
+Focused evidence is `tests/gateway/input/test_content_transformation.py` and
+`tests/gateway/input/test_policy_free_ordinary_input.py`.
 
 Tests must prove:
 
 - absence is exact identity behavior and Controller-consumed/duplicate input
   bypasses I1;
+- missing/incomplete binding and foreign Conversation/resource ancestry bypass
+  I1 before route or native work;
 - the transformer receives the original frozen message and can replace content
   without changing any envelope, binding, client ID, continuation, or
   correlation fact;

@@ -22,12 +22,14 @@ handlers receive the same object identity, not a narrowed wrapper, repository,
 claim, or service locator. Durable action replay is owned by the action effect
 executor, not by the Controller.
 
-The retiring repository-wired `ImAgentGateway` cannot construct this surface
-because it has no coherent B store session. It therefore rejects Controller
-configuration before accepting input and never casts or substitutes its old
-generic-operation wrapper. Final Controller wiring belongs to the v1 lifecycle
-composition that injects `GatewayEffectExecutor` into the scoped action
-factory.
+Ordinary input composes this surface only from one lease-bound coherent B store
+session and B's `StoreBackedGatewayEffectExecutor`; it never casts or
+substitutes the old generic-operation wrapper. If coherent action wiring is
+unavailable, Controller configuration fails before input. A Controller may
+implement optional onboarding with `create_and_select_project` and
+`create_and_bind_thread`, then return `None` so the exact original Message is
+resolved and sent by the same ordinary-input dispatcher. Gateway itself never
+performs that policy, guesses a CWD, or creates a second dispatch route.
 
 `ControllerLifecycle` remains an optional structural capability for startup
 validation and bounded shutdown. An unfrozen registry fails before input.

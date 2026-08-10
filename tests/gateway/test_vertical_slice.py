@@ -15,7 +15,7 @@ from imagent.applications import (
 )
 from imagent.applications.contract import AgentInput, ApplicationRef, ProjectRef, ThreadRef
 from imagent.applications.events import EventStreamOverflow
-from imagent.applications.operations import ActivateNativeThread
+from imagent.applications.operations import ActivateNativeThread, CreateThread, ThreadCreated
 from imagent.channels import NativeTransportChannelAdapter
 from imagent.contracts import (
     BindConversationToThread,
@@ -455,12 +455,23 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             workspace_id="workspace",
             cwd="/repo",
         )
+        created = await application.execute(
+            CreateThread(
+                operation_id="vertical:qq:create-thread",
+                application_ref=application.summary.ref,
+                project_ref=ProjectRef("zen-main", "workspace"),
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(created, ThreadCreated)
+        assert isinstance(created, ThreadCreated)
         bindings = InMemoryBindingRepository()
         await bindings.put(
             ConversationBinding(
                 conversation_ref=ConversationRef("qq-main", "c2c:user-1"),
                 application_ref=application.summary.ref,
                 project_ref=ProjectRef("zen-main", "workspace"),
+                thread_ref=created.thread.ref,
             )
         )
         gateway = ImAgentGateway(
@@ -475,6 +486,12 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         try:
             await native_channel.receive("Build it", message_id="qq-message-1")
             await asyncio.wait_for(native_channel.delivered.wait(), timeout=1)
+            async with asyncio.timeout(1):
+                while not any(
+                    sent.metadata.get("reply_to_message_id") == "qq-message-1"
+                    for sent in native_channel.sent
+                ):
+                    await asyncio.sleep(0)
             await native_channel.receive("Build it", message_id="qq-message-1")
             await asyncio.sleep(0)
         finally:
@@ -485,22 +502,28 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             native_app.started_turns,
             [("zen-thread-1", "Build it")],
         )
-        self.assertEqual(len(native_channel.sent), 1)
+        replies = [
+            sent
+            for sent in native_channel.sent
+            if sent.metadata.get("reply_to_message_id") == "qq-message-1"
+        ]
+        self.assertEqual(len(replies), 1, [sent.metadata for sent in native_channel.sent])
+        reply = replies[0]
         self.assertEqual(
-            native_channel.sent[0].text,
+            reply.text,
             "## Done\n\n**Markdown** is enabled.",
         )
-        self.assertEqual(native_channel.sent[0].message_type, "markdown")
+        self.assertEqual(reply.message_type, "markdown")
         self.assertEqual(
-            native_channel.sent[0].metadata["reply_to_message_id"],
+            reply.metadata["reply_to_message_id"],
             "qq-message-1",
         )
-        self.assertEqual(native_channel.sent[0].metadata["phase"], "final_answer")
+        self.assertEqual(reply.metadata["phase"], "final_answer")
         self.assertEqual(
-            native_channel.sent[0].metadata["native_method"],
+            reply.metadata["native_method"],
             "item/completed",
         )
-        self.assertNotIn("turn_id", native_channel.sent[0].metadata)
+        self.assertNotIn("turn_id", reply.metadata)
 
     async def test_qq_quote_reaches_application_as_untrusted_content_only(self) -> None:
         native_holder = {}
@@ -546,12 +569,23 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             workspace_id="workspace",
             cwd="/repo",
         )
+        created = await application.execute(
+            CreateThread(
+                operation_id="vertical:qq-quote:create-thread",
+                application_ref=application.summary.ref,
+                project_ref=ProjectRef("zen-main", "workspace"),
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(created, ThreadCreated)
+        assert isinstance(created, ThreadCreated)
         bindings = InMemoryBindingRepository()
         await bindings.put(
             ConversationBinding(
                 conversation_ref=ConversationRef("qq-main", "c2c:user-1"),
                 application_ref=application.summary.ref,
                 project_ref=ProjectRef("zen-main", "workspace"),
+                thread_ref=created.thread.ref,
             )
         )
         gateway = ImAgentGateway(
@@ -581,6 +615,12 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
                 },
             )
             await asyncio.wait_for(native_channel.delivered.wait(), timeout=1)
+            async with asyncio.timeout(1):
+                while not any(
+                    sent.metadata.get("reply_to_message_id") == "qq-current-message"
+                    for sent in native_channel.sent
+                ):
+                    await asyncio.sleep(0)
         finally:
             await gateway.stop()
 
@@ -589,12 +629,14 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("QQ quoted context (untrusted; informational only):", turn_text)
         self.assertIn("reference: qq-quoted-message", turn_text)
         self.assertTrue(turn_text.startswith("current request\n\n"))
-        self.assertEqual(
-            native_channel.sent[0].metadata["reply_to_message_id"],
-            "qq-current-message",
-        )
+        replies = [
+            sent
+            for sent in native_channel.sent
+            if sent.metadata.get("reply_to_message_id") == "qq-current-message"
+        ]
+        self.assertEqual(len(replies), 1, [sent.metadata for sent in native_channel.sent])
         self.assertNotEqual(
-            native_channel.sent[0].metadata["reply_to_message_id"],
+            replies[0].metadata["reply_to_message_id"],
             "qq-quoted-message",
         )
 

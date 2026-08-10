@@ -29,6 +29,7 @@
                 "invalid_operation",
                 "unsupported",
                 "not_found",
+                "missing_binding",
                 "conflict",
                 "adapter_failure",
                 "capacity_exhausted",

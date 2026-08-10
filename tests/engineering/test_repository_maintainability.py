@@ -209,6 +209,7 @@ class ComponentMapTests(unittest.TestCase):
             composition["current_code"],
             [
                 "src/imagent/gateway/composition.py",
+                "src/imagent/gateway/controller_input.py",
                 "src/imagent/gateway/__init__.py",
             ],
         )
@@ -435,7 +436,7 @@ class ComponentMapTests(unittest.TestCase):
 
         self.assertEqual(
             components["gateway.input.dispatch"]["public_contracts"],
-            ["derive_client_message_id"],
+            ["MissingBindingError", "derive_client_message_id"],
         )
         self.assertGreaterEqual(
             set(components["applications.application-contract"]["public_contracts"]),

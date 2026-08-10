@@ -26,6 +26,8 @@ It does not own:
 
 - native resource registries, transcript, Turn, request, or execution truth;
 - native active/open Thread state;
+- Application discovery, sole-candidate selection, resource creation, default
+  CWD, onboarding, or any other product policy during ordinary input;
 - Slash grammar, command aliases, or fixed presentation;
 - Channel-native encoding, escaping, rate limits, or credentials;
 - Application workspace, model, provider, sandbox, or runtime mode;
@@ -90,12 +92,20 @@ Channel startup validation remain on their owning concrete adapters.
    idempotency repository rejects only a new identity explicitly at this same
    boundary, before media preparation. An admitted Channel prepares media and
    hands one verified `InboundMessage` through the lease.
-4. An optional Controller may consume the input through typed actions.
-5. An optional I1 `InboundContentTransformer` may replace only unconsumed
+4. An optional Controller receives one `ConversationActions` frozen to the
+   admitted Conversation and actor. It may consume the input or explicitly
+   onboard through scoped actions and return `None`, which continues the same
+   original Message; it cannot call a second dispatch implementation.
+5. Gateway requires one complete Application/Project/Thread
+   `ConversationBinding` and validates its Conversation and full resource
+   ancestry. Missing ancestry raises typed `MissingBindingError`; foreign or
+   malformed ancestry fails as a contract violation. Both occur before I1,
+   route mutation, or native work. Candidate count, default CWD, and resource
+   creation are never inspected here.
+6. An optional I1 `InboundContentTransformer` may replace only unconsumed
    typed content. Gateway awaits it under the configured finite lifetime and
    validates a non-empty, bounded tuple of `TextContent` and
    `AttachmentContent` before continuing.
-6. Unconsumed content resolves the current `ConversationBinding`.
 7. Gateway establishes or refreshes a `ThreadProjectionRoute`.
 8. It starts Thread observation before calling `send_input` with the default
    continuation preference defined by ADR 0012.
@@ -255,6 +265,13 @@ failure cannot expose a temporary live-processing window before rollback.
 
 Application and Channel failures remain typed or explicitly reported. Gateway
 does not convert unknown delivery into success.
+
+An absent or incomplete ordinary-input binding is the exact typed
+`MissingBindingError`. It is a known `pre_acceptance` failure: with no I2 the
+claim is released and the error reaches the Channel consumer; with I2 the claim
+is completed before fixed-phase presentation. Neither branch mutates binding,
+route, Application resources, or native input. A stale bound Application is a
+separate explicit failure and never triggers discovery or fallback.
 
 Observation capacity is separate from durable route or checkpoint state. The
 runtime keys it by stable `ThreadRef`, joins an existing starting/running

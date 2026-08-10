@@ -401,8 +401,8 @@ The only ordinary-message path is:
 Channel authentication and normalization
   -> durable stable-ID admission before media work
   -> optional Controller
+  -> exact complete hierarchical binding or typed pre-acceptance failure
   -> optional typed content transformation
-  -> hierarchical binding resolution
   -> Thread observation established before dispatch
   -> prefer-active-Turn native input
   -> authoritative Application events/history

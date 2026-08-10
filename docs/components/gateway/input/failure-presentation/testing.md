@@ -8,6 +8,8 @@ Tests must prove:
 
 - exact phase classification for I1/Controller/pre-dispatch failure, unknown
   native outcome, and post-acceptance failure;
+- exact `MissingBindingError` preservation as `pre_acceptance`, including no
+  binding, route, Application resource/input, or fallback delivery mutation;
 - configured pre-acceptance completion precedes rendering/delivery, while
   absence retains release-and-raise;
 - unknown remains `side_effect_started` and post-acceptance remains terminal

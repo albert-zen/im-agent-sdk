@@ -34,6 +34,7 @@ class OperationErrorCode(StrEnum):
     INVALID_OPERATION = "invalid_operation"
     UNSUPPORTED = "unsupported"
     NOT_FOUND = "not_found"
+    MISSING_BINDING = "missing_binding"
     CONFLICT = "conflict"
     ADAPTER_FAILURE = "adapter_failure"
     CAPACITY_EXHAUSTED = "capacity_exhausted"

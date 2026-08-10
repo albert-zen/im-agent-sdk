@@ -2433,6 +2433,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         conversation = ConversationRef("eager-channel", "conversation")
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        thread = await application.create_thread(application.default_project_ref)
         channel = EagerInboundChannel(_inbound(conversation, "startup-message"))
         bindings = InMemoryBindingRepository()
         await bindings.put(
@@ -2440,6 +2441,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
                 project_ref=application.default_project_ref,
+                thread_ref=thread.ref,
             )
         )
         gateway = ImAgentGateway(

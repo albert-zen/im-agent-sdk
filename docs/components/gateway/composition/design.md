@@ -59,6 +59,17 @@ synthetic callback, diagnostic invocation, persistence, or side effect. The
 grouped constructor is the one supported construction shape; composition does
 not preserve an unlimited parallel flat-keyword API.
 
+The D ordinary-input integration accepts a Controller only when the retiring
+composition is already backed by one lease-bound `GatewayStoreSession` used as
+bindings, projections, idempotency, request correlations, and delivery
+submissions together. Every optional repository must be absent or that exact
+object; mixing the session with any other repository fails during construction.
+Gateway then constructs `StoreBackedGatewayEffectExecutor` and exposes only the
+resulting `ConversationActions` to Controller code. This focused integration
+does not expose the private session or turn `GatewayRepositories` into the v1
+public store port; final `GatewayStore` acquisition and lifecycle ownership
+remain later DAG composition work.
+
 `projection_max_active_threads` is passed only to the Thread observation
 runtime. It bounds distinct stable `ThreadRef` workers in one Gateway process:
 an existing, starting, or in-flight same-Thread admission joins before
@@ -81,11 +92,14 @@ runtime, content spool, or outbox.
 ## Current structure and remaining split
 
 `src/imagent/gateway/composition.py` is the current and sole owner of the
-three composition values. `src/imagent/gateway/__init__.py` imports those exact
-objects for the stable package facade and still contains `ImAgentGateway`
-runtime orchestration. Separating that remaining package-root facade/runtime
-combination is a later mechanical slice; it does not duplicate the composition
-values or alter their grouped constructor API.
+three composition values. `src/imagent/gateway/controller_input.py` privately
+adapts the exact Application/binding/effect callbacks required by C and creates
+the inbound scoped surface; it exposes no public factory or runtime object.
+`src/imagent/gateway/__init__.py` imports those exact values for the stable
+package facade and still contains `ImAgentGateway` runtime orchestration.
+Separating that remaining package-root facade/runtime combination is a later
+mechanical slice; it does not duplicate the composition values or alter their
+grouped constructor API.
 
 ## Authority
 

@@ -41,6 +41,14 @@
   request-correlation, Controller/Presenter, Coordinator, proactive-delivery,
   startup, or shutdown identity and ordering;
 - grouped Gateway composition preserves every existing no-extension behavior;
+- ordinary input never discovers/selects an Application, creates a Project or
+  Thread, or chooses a CWD; absent Application/Project/Thread ancestry returns
+  exact typed/classified missing-binding before I1, route, native, or fallback
+  delivery effects;
+- a coherent-session Controller receives only scoped `ConversationActions`,
+  may explicitly execute C's create/select and create/bind workflows, and then
+  passes the unchanged Message through the one existing dispatcher; stable
+  replay dispatches it once and two Conversations retain separate ancestry;
 - each configured extension runs only at its ADR 0015 position with stable
   identity, bounded lifetime, explicit cancellation, and fixed diagnostics;
 - inbound content transformation cannot change envelope, admission, binding,

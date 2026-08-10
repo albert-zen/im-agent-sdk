@@ -17,13 +17,24 @@ This leaf owns the canonical stable `derive_client_message_id` derivation,
 typed `ApplicationInputDispatch` pre-dispatch fact, validation and correlation
 of the returned `AcceptedTurn`, and the finite per-Thread acceptance-ordering
 fence. The Gateway aggregate retains the existing per-Conversation serializer,
-Controller/I1, binding mutation, Thread creation, route preparation, and I2
-claim-phase wrapper. Native steer implementation and active-Turn truth remain
+Controller/I1, strict binding resolution, route preparation, and I2
+claim-phase wrapper. It owns no binding mutation or Thread creation. Native
+steer implementation and active-Turn truth remain
 with the Application; projection worker lifecycle, recovery, and delivery
 remain with their owning leaves.
 
-After Controller decline and optional I1, the Gateway aggregate resolves or
-creates the bound Thread through typed operations and prepares its projection
+After Controller decline, the Gateway aggregate requires an already complete
+Application/Project/Thread binding and validates that its Conversation and
+resource ancestry match exactly. Missing ancestry raises the public typed
+`MissingBindingError` with stable `missing_binding` classification; foreign or
+malformed ancestry fails as a contract violation. Both occur before I1, route
+mutation, or native work. Gateway never discovers a sole Application, creates
+a Project/Thread, selects a default CWD, or interprets Message content as
+control intent. An optional Controller may explicitly create/select and
+create/bind through `ConversationActions`, then return `None`; the unchanged
+Message continues through this exact same resolution and dispatch path.
+
+After strict resolution and optional I1, the aggregate prepares the projection
 route. It invokes this leaf once with the verified input and established
 Conversation lock. This leaf derives the client message ID only from stable
 Conversation and native message identity, then calls the Application with the
@@ -91,7 +102,8 @@ binding, claim, or side-effect policy.
 
 ## Contracts and structure
 
-The exact public facade is
+The exact public facade exports
+`imagent.gateway.input:MissingBindingError` and
 `imagent.gateway.input:derive_client_message_id`; the historical
 `imagent.contracts.validators` module and validator alias are physically
 absent. Implementation is
@@ -103,10 +115,13 @@ outbox, spool, generic hook, service locator, global registry, or `Any`-typed
 extension seam. The canonical observation owner retains the shared worker
 lifecycle; dispatch consumes only its narrow typed event-applier boundary.
 
-Dependencies are the common Application contract/operations/events, Gateway
-admission, the request/reply-correlation owner, and the existing typed
-projection event/recovery path. Binding/route preparation is complete before
-this leaf begins.
+Dependencies are the common Interaction operation-error vocabulary,
+Application contract/operations/events, Gateway
+admission, Gateway binding-state validation, the request/reply-correlation
+owner, and the existing typed projection event/recovery path. Strict binding
+resolution and route preparation are complete before this leaf begins; the
+missing-binding type remains in this owner because it classifies entry into the
+one ordinary-input dispatch path.
 
 ## Authority
 

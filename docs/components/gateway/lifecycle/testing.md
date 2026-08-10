@@ -25,12 +25,15 @@ Tests must prove:
 - failed Channel startup closes inbound admission, performs no Controller or
   Application work, stops the current and prior applicable Channels exactly
   once per attempt, and leaves a later restart bounded and explicit;
-- normal stop closes projection and each bounded extension/delivery runtime and
-  leaves no second Application subscription, Channel admission path, or stale
+- normal stop closes projection, each bounded extension/delivery runtime, and
+  the accepted Controller lifecycle in owner order, while loose/mixed
+  Controller persistence fails before any owner starts;
+- normal stop leaves no second dispatch implementation, Application
+  subscription, Channel admission path, or stale
   active-Thread observation slot/health entry; a pending accepted-input fence
   remains ordered until its input owner completes rather than being cleared by
   worker cancellation, while the established restore boundary resets its
-  process-local acceptance buffers before route recovery.
+  process-local acceptance buffers before route recovery;
 - `GatewayStartupAdmission`, `GatewayStartupOverflow`, and
   `GatewayNotRunning` have one owner in `imagent.gateway.lifecycle`, while
   importing the removed `imagent.gateway_startup` module fails explicitly.

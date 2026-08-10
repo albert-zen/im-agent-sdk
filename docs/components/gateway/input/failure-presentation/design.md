@@ -43,6 +43,13 @@ in the package root and diagnostic facts owned by
 - Original cancellation before the dispatch fence releases and does not invent
   presentation; cancellation racing after the fence stays protected.
 
+`MissingBindingError` is the exact known pre-acceptance classification for an
+absent Application, Project, or Thread binding. It carries no free-form
+consumer presentation and does not inspect candidate Applications. With no I2
+it is released and re-raised unchanged; with I2 it follows the existing
+terminal `pre_acceptance` rule. Neither branch authorizes binding/resource,
+route, or native-input effects.
+
 Stable outbound idempotency may converge a repeated presentation delivery, but
 the SDK adds no error transcript, durable presentation job, spool, or outbox.
 

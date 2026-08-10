@@ -19,11 +19,24 @@ from ...applications.contract import (
 )
 from ...applications.events import AgentEvent, EventBufferOverflow
 from ...interaction.messages import Content, ConversationRef, InboundMessage
-from ...interaction.operations import require_identifier
+from ...interaction.operations import (
+    OperationErrorCode,
+    _MappedOperationError,
+    require_identifier,
+)
 
 logger = logging.getLogger(__name__)
 
 NativeSideEffectFence = Callable[[], Awaitable[None]]
+
+
+class MissingBindingError(_MappedOperationError):
+    """Ordinary input has no explicit complete Application/Project/Thread binding."""
+
+    operation_error_code = OperationErrorCode.MISSING_BINDING
+
+    def __init__(self) -> None:
+        super().__init__("ordinary input requires an explicit Application/Project/Thread binding")
 
 
 class OrderedProjectionEventApplier(Protocol):

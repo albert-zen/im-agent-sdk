@@ -215,6 +215,7 @@ components:
       - docs/decisions/0015-typed-extension-seams-and-composition.md
       - src/imagent/gateway/admission.py
       - src/imagent/gateway/concurrency.py
+      - src/imagent/gateway/controller_input.py
       - src/imagent/gateway/input/__init__.py
       - src/imagent/gateway/input/content_transformation.py
       - src/imagent/gateway/input/dispatch.py
@@ -247,6 +248,7 @@ components:
       - tests/gateway/test_actions.py
       - tests/gateway/input/test_content_transformation.py
       - tests/gateway/input/test_dispatch.py
+      - tests/gateway/input/test_policy_free_ordinary_input.py
       - tests/gateway/input/test_failure_presentation.py
     docs:
       - docs/components/gateway/README.md

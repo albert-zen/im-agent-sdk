@@ -373,13 +373,13 @@ clean-wheel executions both pass.
 | managed Project deletion | typed action, capability honesty, stale binding, durable native fence | B/C seam acceptance implemented; concrete native support remains capability-gated |
 | Project create-and-select workflow | success/partial/unknown/conflict | B/C durable coordinator and scoped action mapping implemented |
 | Thread create-and-bind workflow | success/partial/unknown/conflict | B/C durable coordinator and scoped action mapping implemented |
-| scoped consumer actions | principal, Conversation isolation, no adapter/store escape | implemented in DAG C; public composition factory integration follows coherent B store wiring |
-| ordinary Channel → Agent → Channel text | no direct fake mutation | missing from reference flow |
+| scoped consumer actions | principal, Conversation isolation, no adapter/store escape | implemented in DAG C; D wires the Controller input seam over one coherent session, while the final public factory remains later composition work |
+| ordinary Channel → Agent → Channel text | no direct fake mutation | D implements policy-free binding/dispatch and explicit Controller onboarding focused evidence; the reference executable remains block E |
 | multi-Conversation one-Thread fan-out | one worker, two destinations | existing evidence requires public-path review |
 | foreground switch and switch-back | route authority in both directions, no duplicates | partial existing evidence |
 | SQLite restart recovery | fresh Gateway/store objects, no SDK content truth | missing |
 | local common and product commands | read-only plus effectful typed service/action | implemented in DAG C focused registry/action evidence |
-| unsupported/stale/capacity/partial/unknown | typed consumer-visible outcomes | incomplete |
+| unsupported/stale/capacity/partial/unknown | typed consumer-visible outcomes | D adds exact typed/classified `missing_binding`; remaining vertical outcome coverage is incomplete |
 | request response routing | recipient correlation and native first-writer truth | B replay-before-preflight and C authorized scoped action implemented; final lifecycle/projection integration remains |
 | media/artifact boundaries | trust, bounds, consumer-owned bytes/cleanup | existing evidence requires integration |
 | diagnostics and graceful shutdown | redaction, finite cleanup, late callback rejection | partial existing evidence |

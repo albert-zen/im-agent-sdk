@@ -8,7 +8,13 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 from imagent.applications.capabilities import ProjectMode
-from imagent.applications.contract import AgentInput, InputContinuationPreference
+from imagent.applications.contract import (
+    AgentInput,
+    InputContinuationPreference,
+    ThreadRef,
+    ThreadStatus,
+    ThreadSummary,
+)
 from imagent.gateway import (
     GatewayExtensions,
     GatewayLimits,
@@ -40,6 +46,16 @@ class _RecordingApplication(FakeAgentApplicationAdapter):
     def __init__(self) -> None:
         super().__init__(project_mode=ProjectMode.FLAT)
         self.continuations: list[InputContinuationPreference] = []
+        self.configured_thread_ref = ThreadRef(
+            self.default_project_ref,
+            "configured-thread",
+        )
+        self._threads[self.configured_thread_ref] = ThreadSummary(
+            ref=self.configured_thread_ref,
+            status=ThreadStatus.IDLE,
+            updated_at=datetime.now(UTC),
+        )
+        self._turn_history[self.configured_thread_ref] = []
 
     @property
     def inputs(self) -> tuple[AgentInput, ...]:
@@ -462,6 +478,7 @@ class InboundContentTransformerTests(unittest.IsolatedAsyncioTestCase):
                 conversation_ref=conversation,
                 application_ref=application.summary.ref,
                 project_ref=application.default_project_ref,
+                thread_ref=application.configured_thread_ref,
                 generation=1,
                 updated_at=datetime.now(UTC),
             )

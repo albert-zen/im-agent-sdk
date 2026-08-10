@@ -469,7 +469,7 @@ class CommandRegistryGatewayFenceTests(unittest.IsolatedAsyncioTestCase):
             await gateway.start()
         self.assertFalse(channel.started)
 
-    async def test_frozen_registry_is_rejected_without_v1_action_factory(self) -> None:
+    async def test_frozen_registry_is_rejected_without_coherent_store_session(self) -> None:
         registry = CommandRegistry()
 
         async def handler(invocation, actions):
@@ -484,7 +484,7 @@ class CommandRegistryGatewayFenceTests(unittest.IsolatedAsyncioTestCase):
             registry,
             InMemoryIdempotencyRepository(),
         )
-        with self.assertRaisesRegex(RuntimeError, "coherent GatewayStore action wiring"):
+        with self.assertRaisesRegex(RuntimeError, "coherent GatewayStore session"):
             await gateway.start()
         self.assertFalse(channel.started)
 
