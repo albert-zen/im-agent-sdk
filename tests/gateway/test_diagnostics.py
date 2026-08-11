@@ -25,6 +25,7 @@ from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.diagnostics import (
     DiagnosticsSnapshot,
     _DiagnosticApplication,
+    _ProjectionHealth,
     collect_application_diagnostics,
     collect_channel_diagnostics,
     summarize_projection_health,
@@ -263,6 +264,51 @@ for name in (
         self.assertNotIn("secret transport failure", serialized)
         self.assertNotIn("consumer-controlled-unbounded-value", serialized)
         self.assertNotIn("secret-route", serialized)
+
+    def test_projection_summary_saturates_cardinality_counters_and_hostile_records(
+        self,
+    ) -> None:
+        record = SimpleNamespace(
+            state="running",
+            restart_count=10**100,
+            delivery_failure_count=10**100,
+            event_overflow_count=10**100,
+            last_subscription_error=None,
+            last_recovery_error=None,
+            last_delivery_error=None,
+            last_gap=None,
+            last_event_gap=None,
+            interactive_request_recovery_degraded=False,
+        )
+        bounded = summarize_projection_health(cast(_ProjectionHealth, record) for _ in range(5_000))
+        self.assertEqual(bounded.worker_count, 4_096)
+        self.assertEqual(bounded.running_count, 4_096)
+        self.assertEqual(bounded.restart_count, 1_000_000)
+        self.assertEqual(bounded.delivery_failure_count, 1_000_000)
+        self.assertEqual(bounded.event_overflow_count, 1_000_000)
+
+        class Hostile:
+            @property
+            def state(self):
+                raise RuntimeError("native-thread-secret")
+
+        hostile = summarize_projection_health((cast(_ProjectionHealth, Hostile()),))
+        self.assertEqual(hostile.worker_count, 1)
+        self.assertEqual(hostile.stopped_count, 1)
+        self.assertEqual(hostile.degraded_count, 1)
+        self.assertEqual(hostile.recovery_gap_codes, ("other",))
+        self.assertNotIn("native-thread-secret", repr(hostile))
+
+        class HostileIterable:
+            def __iter__(self):
+                raise RuntimeError("native-thread-secret")
+
+        self.assertEqual(
+            summarize_projection_health(
+                cast(typing.Iterable[_ProjectionHealth], HostileIterable())
+            ),
+            gateway_diagnostics.ProjectionDiagnosticFacts(),
+        )
 
     def test_gateway_snapshot_is_stable_read_only_and_non_authoritative(self) -> None:
         application = FakeAgentApplicationAdapter(

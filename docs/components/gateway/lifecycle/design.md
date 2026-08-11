@@ -90,6 +90,24 @@ closes partially started adapters before `stop()` returns. Cancellation while
 entering the async context follows the same rollback. A losing or waiting
 lifecycle caller never closes another transition's session or store state.
 
+`Gateway.run()` is an async convenience over that same instance and state
+machine: it starts the object, waits for `wait_closed()`, and always joins the
+same stop transition when the caller is cancelled. It installs no signal
+handler, event loop, daemon, or second runtime; a process runner translates its
+chosen signals into ordinary task cancellation or an explicit `stop()` call.
+The object is terminal after owned store close. Repeated `start()` while live
+and repeated/concurrent `stop()` join the current transition, while a later
+runtime is constructed as a fresh `Gateway` with fresh Channel and store
+objects.
+
+Async-context exit preserves the body exception as primary. Cleanup failures
+are attached as bounded sanitized notes and every owner is still attempted.
+Cancellation arriving during exit or `run()` cancellation cannot abandon the
+close transition: the caller observes cancellation only after the one owned
+cleanup task has joined. Each owner cleanup and the outer session/store cleanup
+uses the positive finite `GatewayLimits.lifecycle_owner_timeout_seconds`;
+timeout is one bounded cleanup failure and does not skip later owners.
+
 ## Bounds, state, and recovery
 
 `GatewayLimits.startup_buffer_max_pending` fixes FIFO capacity. Overflow is
@@ -125,7 +143,8 @@ registry or durable capacity state survives lifecycle reset.
 ## Contracts and structure
 
 The canonical public lifecycle contract is `Gateway`, with explicit
-`start()`/`stop()`, `wait_closed()`, and a preferred async context. Startup
+`start()`/`stop()`, `wait_closed()`, async `run()`, and a preferred async
+context. Startup
 helper and lease-session types remain internal.
 `src/imagent/gateway/runtime.py` owns the canonical wrapper;
 `ImAgentGateway.start()` and `ImAgentGateway.stop()` remain in the package root

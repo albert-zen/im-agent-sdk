@@ -64,6 +64,7 @@ class GatewayLimits:
     conversation_serialization_max_active_keys: int = 4096
     idempotency_max_records: int = 4096
     projection_max_active_threads: int = 4096
+    lifecycle_owner_timeout_seconds: float = 30.0
 
     def __post_init__(self) -> None:
         for name in (
@@ -99,6 +100,7 @@ class GatewayLimits:
             "inbound_failure_present_timeout_seconds",
             "outbound_presentation_timeout_seconds",
             "delivery_outcome_observer_timeout_seconds",
+            "lifecycle_owner_timeout_seconds",
         ):
             _require_positive_finite_number(getattr(self, name), name)
         for name in (

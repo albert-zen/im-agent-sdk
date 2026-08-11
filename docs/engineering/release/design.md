@@ -47,6 +47,11 @@ SDK import resolves to the same installed public surfaces as downstream code.
 No duplicate example, source-path fallback, or example-private copy of a
 Gateway contract is packaged.
 
+The exact same installed executable is run from a temporary working directory
+in all six clean profiles (base, QQ, Telegram, Feishu, Weixin, and App Server).
+An extra may add only its declared optional dependency; it cannot select a
+different facade, example, lifecycle, or golden path.
+
 The `imagent-send` console metadata resolves directly to the Interaction-owned
 `imagent.interaction.client_tools.send:main` implementation. Packaging does
 not own that behavior and must not preserve or synthesize the historical

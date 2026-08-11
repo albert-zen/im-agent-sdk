@@ -57,6 +57,7 @@ class GatewayPackageRootTests(unittest.TestCase):
         self.assertNotIn("session", parameters)
         self.assertTrue(callable(Gateway.diagnostics))
         self.assertTrue(callable(Gateway.wait_closed))
+        self.assertTrue(callable(Gateway.run))
         self.assertFalse(hasattr(Gateway, "diagnostics_snapshot"))
 
     def test_public_gateway_surface_resolves_to_target_package(self) -> None:

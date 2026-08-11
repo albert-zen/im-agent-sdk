@@ -1,6 +1,6 @@
 # V1 repository audit and transformation DAG
 
-Status: DAG blocks A–F implemented; blocks G–I remain transformation targets
+Status: DAG blocks A–H implemented; block I remains the SDK transformation target
 
 This audit compares the repository with `V1_DESIGN.md`. Existing behavior is
 not retained merely because it has tests. Safety evidence is reused; conflicting
@@ -391,9 +391,27 @@ pathname replacement, and growth during startup.
 
 ### H. Lifecycle, diagnostics, adapters, and release surface
 
-Complete async context/run convenience, adapter conformance, bounded shutdown,
-redacted diagnostics, wheel API, `py.typed`, production checklist, and
-troubleshooting around the one final facade.
+Status: complete.
+
+The canonical `Gateway` now has one serialized terminal lifecycle for explicit
+start/stop, async context, `wait_closed()`, and async `run()`. Caller/exit
+cancellation joins the same close task; body failures remain primary; every
+runtime owner uses one configured finite cleanup timeout and later owners still
+run after failure. Fresh reconstruction, lease loss, startup overflow, late
+callbacks, and concurrent transition races retain the D/F lifecycle and store
+fences.
+
+Diagnostics now bound direct projection aggregation to 4,096 records and
+saturate counters at 1,000,000 while hostile records/iterables collapse to
+fixed redacted facts. The reusable conformance ledger names all four shipped
+Channels and all three concrete Application adapters, with native-specific
+evidence remaining in their owner suites. The one finite lazy facade,
+`__version__`, `py.typed`, wheel metadata/entry point, and exact public
+identities are exercised in clean processes. All six isolated install profiles
+run the same installed golden executable from a temporary CWD. Production
+checklist and troubleshooting now cover limits, trust roots, store path,
+workspace identity, lease/recovery, shutdown, diagnostics, and explicit
+unsupported behavior without product policy.
 
 ### I. Delete pre-v1 architecture and final review
 

@@ -57,6 +57,11 @@ accepted finite vocabulary or `other`; no free-form exception, gap, route,
 Thread, Turn, request, message, content, credential, endpoint, path, or native
 resource value is retained. Queue names and capacities remain bounded, and
 queue scope is validated by the canonical lower-layer contracts.
+Projection aggregation examines at most 4,096 process-local worker records and
+saturates every cumulative counter at 1,000,000. A raising record, invalid
+counter, oversized state/gap string, or hostile iterable fails closed to fixed
+degraded/`other` facts or the empty aggregate; provider data never widens the
+snapshot.
 
 `DiagnosticsSnapshot` remains schema version 8 and non-authoritative.
 `generated_at` is observation time only. Repeated reads do not mutate counters,

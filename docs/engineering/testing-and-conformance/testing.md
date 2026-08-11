@@ -41,6 +41,12 @@ Every adapter contract change should cover the applicable rows:
 | Capacity | Each fake queue, task lane, and fixture collection has a finite limit and explicit overflow behavior. |
 | Absence | The adapter or extension-free path keeps the prior behavior and does not require an optional extension. |
 
+The shipped-adapter ledger runs this reusable surface for QQ, Telegram,
+Feishu, and Weixin with disabled, side-effect-free native configuration, and
+for Codex, Zen, and T3 with deterministic native clients. Adapter-owned suites
+then supply the native input/event/history/request/media/diagnostic and
+cancellation evidence that cannot honestly be manufactured by the common kit.
+
 ## Adding an adapter or common assertion
 
 1. Document the native source of truth and capability limits in its runtime

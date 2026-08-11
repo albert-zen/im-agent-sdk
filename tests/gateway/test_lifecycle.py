@@ -5,6 +5,7 @@ import importlib
 import unittest
 from datetime import UTC, datetime
 
+from imagent import Gateway, MemoryGatewayStore
 from imagent.applications.capabilities import ProjectMode
 from imagent.contracts import ConversationRef, InboundMessage, TextContent
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
@@ -39,6 +40,138 @@ class GatewayLifecycleHelperTests(unittest.TestCase):
         self.assertEqual(admission.popleft(), "first")
         self.assertEqual(admission.popleft(), "second")
         self.assertEqual(admission.overflow_count, 1)
+
+    def test_lifecycle_owner_timeout_is_positive_and_finite(self) -> None:
+        self.assertEqual(GatewayLimits().lifecycle_owner_timeout_seconds, 30.0)
+        for value in (0, -1, float("inf"), float("nan"), True):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                GatewayLimits(lifecycle_owner_timeout_seconds=value)
+
+
+class PublicGatewayLifecycleMatrixTests(unittest.IsolatedAsyncioTestCase):
+    async def test_run_uses_same_lifecycle_and_explicit_stop_wakes_waiter(self) -> None:
+        gateway, channel, _ = _public_gateway("run-stop")
+        running = asyncio.create_task(gateway.run())
+        while not gateway.running:
+            await asyncio.sleep(0)
+
+        await gateway.stop()
+        await asyncio.wait_for(running, timeout=1.0)
+        await asyncio.wait_for(gateway.wait_closed(), timeout=1.0)
+
+        self.assertFalse(gateway.running)
+        self.assertFalse(channel.started)
+
+    async def test_run_caller_cancellation_joins_cleanup_before_propagating(self) -> None:
+        gateway, channel, _ = _public_gateway("run-cancel")
+        running = asyncio.create_task(gateway.run())
+        while not gateway.running:
+            await asyncio.sleep(0)
+
+        running.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await running
+
+        self.assertFalse(gateway.running)
+        self.assertFalse(channel.started)
+        await asyncio.wait_for(gateway.wait_closed(), timeout=1.0)
+
+    async def test_run_cancellation_stays_primary_when_cleanup_fails(self) -> None:
+        gateway, _, _ = _public_gateway(
+            "run-cancel-primary",
+            channel=_FailingStopChannel("run-cancel-primary-channel"),
+        )
+        running = asyncio.create_task(gateway.run())
+        while not gateway.running:
+            await asyncio.sleep(0)
+
+        running.cancel()
+        with self.assertRaises(asyncio.CancelledError) as raised:
+            await running
+
+        notes = tuple(getattr(raised.exception, "__notes__", ()))
+        self.assertTrue(any("run cleanup also failed" in note for note in notes))
+        with self.assertRaisesRegex(RuntimeError, "runtime failure"):
+            await asyncio.wait_for(gateway.wait_closed(), timeout=1.0)
+
+    async def test_context_body_failure_stays_primary_when_cleanup_fails(self) -> None:
+        class BodyFailure(RuntimeError):
+            pass
+
+        gateway, _, _ = _public_gateway(
+            "body-primary",
+            channel=_FailingStopChannel("body-primary-channel"),
+        )
+
+        with self.assertRaises(BodyFailure) as raised:
+            async with gateway:
+                raise BodyFailure("body is primary")
+
+        notes = tuple(getattr(raised.exception, "__notes__", ()))
+        self.assertTrue(any("context cleanup also failed" in note for note in notes))
+        self.assertIsNone(raised.exception.__context__)
+        with self.assertRaisesRegex(RuntimeError, "runtime failure"):
+            await asyncio.wait_for(gateway.wait_closed(), timeout=1.0)
+
+    async def test_concurrent_and_repeated_transitions_are_terminal(self) -> None:
+        gateway, channel, _ = _public_gateway("transition-matrix")
+        await asyncio.gather(gateway.start(), gateway.start())
+        await gateway.start()
+        self.assertTrue(gateway.running)
+
+        await asyncio.gather(gateway.stop(), gateway.stop())
+        await gateway.stop()
+        self.assertFalse(channel.started)
+        with self.assertRaisesRegex(RuntimeError, "cannot restart"):
+            await gateway.start()
+
+    async def test_owner_timeout_continues_cleanup_through_later_owners(self) -> None:
+        channel = _BlockingStopChannel()
+        application = _CountingStopApplication()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            repositories=GatewayRepositories(bindings=InMemoryBindingRepository()),
+            limits=GatewayLimits(lifecycle_owner_timeout_seconds=0.01),
+        )
+        await gateway.start()
+
+        with self.assertRaisesRegex(RuntimeError, "lifecycle failure"):
+            await asyncio.wait_for(gateway.stop(), timeout=1.0)
+
+        self.assertTrue(channel.stop_cancelled)
+        self.assertEqual(application.stop_count, 1)
+
+
+class _FailingStopChannel(FakeChannelAdapter):
+    async def stop(self) -> None:
+        await super().stop()
+        raise RuntimeError("channel cleanup failed")
+
+
+class _BlockingStopChannel(FakeChannelAdapter):
+    def __init__(self) -> None:
+        super().__init__("blocking-stop-channel")
+        self.stop_cancelled = False
+
+    async def stop(self) -> None:
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            self.stop_cancelled = True
+            raise
+
+
+class _CountingStopApplication(FakeAgentApplicationAdapter):
+    def __init__(self) -> None:
+        super().__init__(
+            application_instance_id="counting-stop-application",
+            project_mode=ProjectMode.FLAT,
+        )
+        self.stop_count = 0
+
+    async def stop(self) -> None:
+        self.stop_count += 1
 
 
 class GatewayStartupAdmissionTests(unittest.IsolatedAsyncioTestCase):
@@ -197,6 +330,27 @@ def _inbound(conversation: ConversationRef, message_id: str) -> InboundMessage:
         content=(TextContent("run"),),
         created_at=datetime.now(UTC),
     )
+
+
+def _public_gateway(
+    gateway_id: str,
+    *,
+    channel: FakeChannelAdapter | None = None,
+) -> tuple[Gateway, FakeChannelAdapter, FakeAgentApplicationAdapter]:
+    configured_channel = channel or FakeChannelAdapter(f"{gateway_id}-channel")
+    application = FakeAgentApplicationAdapter(
+        application_instance_id=f"{gateway_id}-application",
+        project_mode=ProjectMode.FLAT,
+        workspace_id=f"{gateway_id}-workspace",
+        workspace_root="/reference",
+    )
+    gateway = Gateway(
+        gateway_id=gateway_id,
+        channels=[configured_channel],
+        applications=[application],
+        store=MemoryGatewayStore(),
+    )
+    return gateway, configured_channel, application
 
 
 if __name__ == "__main__":

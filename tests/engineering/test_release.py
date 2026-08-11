@@ -24,6 +24,17 @@ def _is_dependency_boundary_text(path: Path) -> bool:
 
 
 class PackageIndependenceTests(unittest.TestCase):
+    def test_version_typing_marker_and_profile_inventory_are_exact(self) -> None:
+        metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        init_source = (ROOT / "src" / "imagent" / "__init__.py").read_text(encoding="utf-8")
+        version = metadata["project"]["version"]
+        self.assertIn(f'__version__ = "{version}"', init_source)
+        self.assertTrue((ROOT / "src" / "imagent" / "py.typed").is_file())
+
+        smoke_source = (ROOT / "scripts" / "smoke_clean_install.py").read_text(encoding="utf-8")
+        for profile in ("base", "qq", "telegram", "feishu", "weixin", "appserver"):
+            self.assertIn(f'"{profile}": (', smoke_source)
+
     def test_release_mirror_has_one_owner_and_no_historical_module(self) -> None:
         expected = ROOT / "tests" / "engineering" / "test_release.py"
         self.assertTrue(expected.is_file())
@@ -125,6 +136,11 @@ assert not any(
             set((ROOT / "examples").rglob("main.py")),
             {ROOT / "examples" / "reference_consumer" / "main.py"},
         )
+
+        smoke_source = (ROOT / "scripts" / "smoke_clean_install.py").read_text(encoding="utf-8")
+        self.assertIn("REFERENCE_CONSUMER_CHECK,", smoke_source)
+        self.assertIn("for name, (extra, code) in CASES.items():", smoke_source)
+        self.assertNotIn("+ REFERENCE_CONSUMER_CHECK\n        + (", smoke_source)
 
     def test_top_level_facade_is_finite_lazy_and_exact_in_a_clean_process(self) -> None:
         environment = os.environ.copy()

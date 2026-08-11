@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
 import unittest
 from datetime import UTC, datetime
 
@@ -14,6 +15,7 @@ from imagent.applications import (
 )
 from imagent.applications.capabilities import ProjectMode
 from imagent.applications.operations import CreateProject, ProjectCreated
+from imagent.channels import channel_from_config
 from imagent.interaction.channels import ChannelStartupConfigurationValidator
 from imagent.interaction.messages import (
     ConversationRef,
@@ -89,6 +91,28 @@ class ChannelAdapterContractKitTests(unittest.IsolatedAsyncioTestCase):
             adapter,
             ChannelStartupConfigurationValidator,
         )
+
+    async def test_all_shipped_channels_pass_lifecycle_and_capability_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as state_dir:
+            adapters = (
+                channel_from_config("qq", config={"enabled": False}),
+                channel_from_config("telegram", config={"enabled": False}),
+                channel_from_config("feishu", config={"enabled": False}),
+                channel_from_config(
+                    "weixin",
+                    config={"enabled": False, "state_dir": state_dir},
+                ),
+            )
+            for adapter in adapters:
+                with self.subTest(kind=adapter.kind):
+                    self.assertIsInstance(adapter, ChannelStartupConfigurationValidator)
+                    adapter.validate_startup_configuration()
+                    report = await verify_channel_adapter(adapter)
+                    self.assertIn("valid channel capabilities", report.check_names)
+                    self.assertIn("start and stop lifecycle", report.check_names)
+                    facts = adapter.diagnostic_facts()
+                    self.assertEqual(facts.channel_instance_id, adapter.channel_instance_id)
+                    self.assertEqual(facts.kind, adapter.kind)
 
 
 class AgentApplicationContractKitTests(unittest.IsolatedAsyncioTestCase):

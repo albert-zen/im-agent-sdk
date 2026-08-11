@@ -413,7 +413,7 @@ clean-wheel executions both pass.
 
 | Capability | Required executable evidence | State at design baseline |
 |---|---|---|
-| public composition and owned lifecycle | async context manager, pre-I/O validation, start/stop rollback with cleanup failures | canonical Gateway/store/action composition, full limit/capability/structure validation, exactly-once owner cleanup continuation, and deterministic reference shutdown implemented in DAG E; broader lifecycle fault matrix remains H |
+| public composition and owned lifecycle | async context manager, pre-I/O validation, start/stop rollback with cleanup failures | implemented through H: one serialized explicit/context/run lifecycle, cancellation-resistant joined close, finite owner timeouts, body-primary cleanup evidence, lease-loss reporting, terminal reconstruction semantics, and exactly-once continuation |
 | uniform Application → Project → Thread → Turn resources | managed/fixed/flat tests; every Thread has ProjectRef | implemented in DAG A |
 | managed Project CWD creation | success, capability honesty, stable action identity | contract and deterministic fake evidence implemented in A; native support remains capability-gated |
 | store-only Gateway mutation fencing | atomic terminal receipt; old same-ID retry never overwrites newer intent | B memory/SQLite executor parity, C scoped request mapping, and E public lifecycle wiring implemented |
@@ -430,8 +430,8 @@ clean-wheel executions both pass.
 | unsupported/stale/capacity/partial/unknown | typed consumer-visible outcomes | D covers input/binding failures; G adds explicit request stale/unauthorized/duplicate, proactive rejected/partial/unknown, sticky unknown replay, finite authorization/submission bounds, and side-effect-free media rejection |
 | request response routing | recipient correlation and native first-writer truth | implemented in DAG G through canonical `ConversationActions`, authoritative pending-snapshot recovery, and explicit no-snapshot staleness |
 | media/artifact boundaries | trust, bounds, consumer-owned bytes/cleanup | implemented in DAG G through public planning/delivery plus the injected reference artifact ledger and exact SQLite/WAL/sidecar non-persistence inspection; the same executable proves live/history presentation parity and no checkpoint advance for live-only output |
-| diagnostics and graceful shutdown | redaction, finite cleanup, late callback rejection | bounded/redacted snapshot and zero-work reference shutdown implemented in E; full failure matrix remains H |
-| installed-wheel usability | same executable specification from clean wheel | full golden reference entry point included and executed from an isolated base wheel in DAG E |
+| diagnostics and graceful shutdown | redaction, finite cleanup, late callback rejection | implemented through H with fixed provider/cardinality/counter bounds, hostile fail-closed aggregation, every I1/I2/A1/O1/O2 and adapter owner, startup/worker/recovery/lifecycle facts, and cold/after-stop failure behavior |
+| installed-wheel usability | same executable specification from clean wheel | implemented through H: one typed lazy facade, exact clean-process identities/import orders, metadata/marker/entry point inspection, and the same golden executable in all six isolated install profiles |
 | downstream experimental rewrites | IMCodex, IMT3, IMZen isolated worktrees on exact SDK candidate | final acceptance only |
 
 No pre-v1 test name, module boundary, or passing count is itself acceptance

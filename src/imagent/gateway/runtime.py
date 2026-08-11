@@ -104,6 +104,7 @@ class Gateway:
         self._lease_stop: asyncio.Event | None = None
         self._lease_task: asyncio.Task[None] | None = None
         self._startup_task: asyncio.Task[object] | None = None
+        self._close_task: asyncio.Task[BaseException | None] | None = None
         self._lifecycle_lock = asyncio.Lock()
         self._shutdown_lock = asyncio.Lock()
         self._closed_event = asyncio.Event()
@@ -127,8 +128,18 @@ class Gateway:
         exc: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        del exc_type, exc, traceback
-        await self.stop()
+        del exc_type, traceback
+        try:
+            await self.stop()
+        except asyncio.CancelledError:
+            raise
+        except BaseException as cleanup_error:
+            if exc is None:
+                raise
+            exc.add_note(
+                "Gateway context cleanup also failed: "
+                + _bounded_cleanup_error_summary("Gateway", cleanup_error)
+            )
 
     async def start(self) -> None:
         async with self._lifecycle_lock:
@@ -207,9 +218,36 @@ class Gateway:
         async with self._lifecycle_lock:
             if self._closed:
                 return
-            error = await self._close_owned_resources(None, from_lease_task=False)
+            close_task = self._close_task
+            if close_task is None:
+                close_task = asyncio.create_task(
+                    self._close_owned_resources(None, from_lease_task=False),
+                    name="imagent-gateway-close",
+                )
+                self._close_task = close_task
+            error = await _join_close_task(close_task)
             if error is not None:
                 raise error
+
+    async def run(self) -> None:
+        """Run this Gateway until explicit stop, lease loss, or caller cancellation."""
+
+        await self.start()
+        try:
+            await self.wait_closed()
+        except BaseException as primary:
+            try:
+                await self.stop()
+            except asyncio.CancelledError:
+                raise
+            except BaseException as cleanup_error:
+                primary.add_note(
+                    "Gateway run cleanup also failed: "
+                    + _bounded_cleanup_error_summary("Gateway", cleanup_error)
+                )
+            raise
+        else:
+            await self.stop()
 
     async def wait_closed(self) -> None:
         """Wait for explicit stop or lease-loss shutdown and surface runtime failure."""
@@ -350,11 +388,17 @@ class Gateway:
             session = self._session
             if session is not None:
                 try:
-                    await session.close()
+                    await asyncio.wait_for(
+                        session.close(),
+                        timeout=self._limits.lifecycle_owner_timeout_seconds,
+                    )
                 except BaseException as session_error:
                     error = _append_cleanup_error(error, "Gateway session", session_error)
             try:
-                await self._store.close()
+                await asyncio.wait_for(
+                    self._store.close(),
+                    timeout=self._limits.lifecycle_owner_timeout_seconds,
+                )
             except BaseException as store_error:
                 error = _append_cleanup_error(error, "Gateway store", store_error)
             self._runtime = None
@@ -368,6 +412,23 @@ class Gateway:
             if from_lease_task:
                 return None
             return error
+
+
+async def _join_close_task(
+    task: asyncio.Task[BaseException | None],
+) -> BaseException | None:
+    """Join the one close owner before propagating caller cancellation."""
+
+    cancelled = False
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            cancelled = True
+    result = task.result()
+    if cancelled:
+        raise asyncio.CancelledError
+    return result
 
 
 def _append_cleanup_error(

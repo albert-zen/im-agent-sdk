@@ -594,7 +594,6 @@ CASES = {
         + BINDING_IMPORT_ORDER_CHECK
         + PROJECTION_ROUTE_IMPORT_ORDER_CHECK
         + REQUEST_CORRELATION_IMPORT_ORDER_CHECK
-        + REFERENCE_CONSUMER_CHECK
         + (
             "import asyncio, importlib, importlib.util, typing, imagent; "
             "import imagent.events as event_facade; "
@@ -893,7 +892,15 @@ CASES = {
 
 def _case_source(code: str) -> str:
     """Build one executable, multiline source string for a clean-wheel case."""
-    return "\n".join((CLIENT_TOOLS_CHECK, DIAGNOSTICS_FACADE_CHECK, CHANNEL_FACADE_CHECK, code))
+    return "\n".join(
+        (
+            CLIENT_TOOLS_CHECK,
+            DIAGNOSTICS_FACADE_CHECK,
+            CHANNEL_FACADE_CHECK,
+            code,
+            REFERENCE_CONSUMER_CHECK,
+        )
+    )
 
 
 def main() -> int:

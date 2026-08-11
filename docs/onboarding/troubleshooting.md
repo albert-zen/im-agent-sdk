@@ -57,3 +57,30 @@ Controllers, extension runtimes, and Applications in order. A late Channel
 callback must fail or release its owned pre-side-effect admission; it must not
 reach a stopping Application. Inspect task ownership in the consumer, not by
 adding a second SDK runtime or queue.
+
+If shutdown reports a lifecycle owner timeout, identify the fixed owner class
+in the bounded failure note and repair that adapter or consumer lifecycle. Do
+not raise the limit indefinitely, retry the owner, or start a replacement
+Gateway before the old store lease has expired or closed. `Gateway` instances
+are terminal after stop; reconstruct a fresh object graph for restart.
+
+## Startup reports a workspace or lease conflict
+
+A workspace fingerprint conflict means a configured stable workspace ID now
+points at a different canonical execution root. Restore the intended root or
+assign a new workspace ID so retained bindings become explicitly stale. Do not
+edit bridge rows or expose the root path through diagnostics.
+
+A lease conflict means another Gateway currently owns the same
+`gateway_id`/store namespace. Stop that owner or wait for store-authoritative
+expiry; do not bypass fencing or mix Memory and SQLite repository owners.
+
+## Diagnostics look incomplete
+
+Diagnostics are synchronous, process-local, redacted aggregate facts. A
+stopped/cold Gateway has no live snapshot, T3 has no synthetic App Server
+connection epoch, and Telegram/Weixin have no invented inbound queue. Use the
+native Application for Thread, Turn, request, transcript, and execution truth.
+Export schedules, labels, alerts, and operator wording belong to the consumer;
+never add content, IDs, paths, endpoints, credentials, or exception text to
+the SDK snapshot.

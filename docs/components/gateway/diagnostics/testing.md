@@ -13,6 +13,8 @@ Required Gateway coverage:
   constructor order, absence behavior, validation messages, and queue bounds;
 - projection/recovery aggregation with fixed gap codes and no native IDs,
   exception text, or consumer-controlled strings in serialized facts;
+- hostile, raising, infinite, and over-bound projection providers with the
+  exact 4,096-record and 1,000,000-counter saturation bounds;
 - startup admission and I1/I2/O1/O2 facts with fixed failure vocabularies,
   bounded counters, cancellation-overrun/capacity relationships, and absent
   optional providers remaining absent;

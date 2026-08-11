@@ -39,6 +39,8 @@ _CLEANUP_OWNER_MAX_CHARS = 96
 _CLEANUP_TYPE_MAX_CHARS = 64
 _CLEANUP_DETAIL_MAX_CHARS = 192
 _CLEANUP_SUMMARY_MAX_CHARS = 384
+_DIAGNOSTIC_COUNTER_MAX = 1_000_000
+_PROJECTION_DIAGNOSTIC_MAX_RECORDS = 4_096
 
 
 def _bounded_cleanup_error_summary(owner: str, error: BaseException) -> str:
@@ -121,6 +123,46 @@ class ProjectionDiagnosticFacts:
     request_recovery_degraded_count: int = 0
     recovery_gap_count: int = 0
     recovery_gap_codes: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        counts = (
+            self.worker_count,
+            self.running_count,
+            self.retrying_count,
+            self.stopped_count,
+            self.degraded_count,
+            self.restart_count,
+            self.delivery_failure_count,
+            self.event_overflow_count,
+            self.request_recovery_degraded_count,
+            self.recovery_gap_count,
+        )
+        if any(
+            not isinstance(count, int)
+            or isinstance(count, bool)
+            or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX
+            for count in counts
+        ):
+            raise ValueError("projection diagnostic counts exceed the fixed bound")
+        if self.worker_count > _PROJECTION_DIAGNOSTIC_MAX_RECORDS:
+            raise ValueError("projection diagnostic worker count exceeds the fixed bound")
+        if self.running_count + self.retrying_count + self.stopped_count > self.worker_count:
+            raise ValueError("projection diagnostic state counts exceed worker count")
+        if self.degraded_count > self.worker_count:
+            raise ValueError("projection degraded count exceeds worker count")
+        if self.request_recovery_degraded_count > self.worker_count:
+            raise ValueError("projection request recovery count exceeds worker count")
+        if self.recovery_gap_count > self.worker_count:
+            raise ValueError("projection recovery gap count exceeds worker count")
+        if (
+            not isinstance(self.recovery_gap_codes, tuple)
+            or len(self.recovery_gap_codes) > len(_KNOWN_RECOVERY_GAPS) + 1
+            or any(
+                code not in _KNOWN_RECOVERY_GAPS and code != "other"
+                for code in self.recovery_gap_codes
+            )
+        ):
+            raise ValueError("projection recovery gaps must use the fixed vocabulary")
 
 
 @dataclass(frozen=True, slots=True)
@@ -390,41 +432,77 @@ def summarize_projection_health(
 ) -> ProjectionDiagnosticFacts:
     """Aggregate worker facts without copying Thread, route, or error identities."""
 
-    materialized = tuple(records)
+    materialized: list[_ProjectionHealth] = []
+    try:
+        iterator = iter(records)
+        for _ in range(_PROJECTION_DIAGNOSTIC_MAX_RECORDS):
+            try:
+                materialized.append(next(iterator))
+            except StopIteration:
+                break
+    except Exception:
+        # A hostile provider cannot widen diagnostics or leak its failure.
+        materialized = []
     state_counts = {"running": 0, "retrying": 0, "stopped": 0}
     degraded_count = 0
     gap_codes: set[str] = set()
+    restart_count = 0
+    delivery_failure_count = 0
+    event_overflow_count = 0
+    request_recovery_degraded_count = 0
+    recovery_gap_count = 0
     for record in materialized:
-        state = str(record.state)
+        try:
+            raw_state = record.state
+            state = raw_state if isinstance(raw_state, str) and len(raw_state) <= 16 else "stopped"
+            last_subscription_error = record.last_subscription_error
+            last_recovery_error = record.last_recovery_error
+            last_delivery_error = record.last_delivery_error
+            interactive_degraded = bool(record.interactive_request_recovery_degraded)
+            raw_gaps = tuple(
+                gap
+                for gap in (record.last_gap, record.last_event_gap)
+                if isinstance(gap, str) and len(gap) <= 128
+            )
+            restart_count = _saturating_add(restart_count, record.restart_count)
+            delivery_failure_count = _saturating_add(
+                delivery_failure_count, record.delivery_failure_count
+            )
+            event_overflow_count = _saturating_add(
+                event_overflow_count, record.event_overflow_count
+            )
+        except Exception:
+            state = "stopped"
+            last_subscription_error = True
+            last_recovery_error = None
+            last_delivery_error = None
+            interactive_degraded = False
+            raw_gaps = ("other",)
         if state in state_counts:
             state_counts[state] += 1
-        raw_gaps = tuple(gap for gap in (record.last_gap, record.last_event_gap) if gap is not None)
         degraded = (
             state == "retrying"
-            or record.last_subscription_error is not None
-            or record.last_recovery_error is not None
-            or record.last_delivery_error is not None
-            or record.interactive_request_recovery_degraded
+            or last_subscription_error is not None
+            or last_recovery_error is not None
+            or last_delivery_error is not None
+            or interactive_degraded
             or bool(raw_gaps)
         )
         degraded_count += int(degraded)
         gap_codes.update(_bounded_gap_code(gap) for gap in raw_gaps)
+        request_recovery_degraded_count += int(interactive_degraded)
+        recovery_gap_count += int(bool(raw_gaps))
     return ProjectionDiagnosticFacts(
         worker_count=len(materialized),
         running_count=state_counts["running"],
         retrying_count=state_counts["retrying"],
         stopped_count=state_counts["stopped"],
         degraded_count=degraded_count,
-        restart_count=sum(record.restart_count for record in materialized),
-        delivery_failure_count=sum(record.delivery_failure_count for record in materialized),
-        event_overflow_count=sum(record.event_overflow_count for record in materialized),
-        request_recovery_degraded_count=sum(
-            int(record.interactive_request_recovery_degraded) for record in materialized
-        ),
-        recovery_gap_count=sum(
-            record.last_gap is not None or record.last_event_gap is not None
-            for record in materialized
-        ),
+        restart_count=restart_count,
+        delivery_failure_count=delivery_failure_count,
+        event_overflow_count=event_overflow_count,
+        request_recovery_degraded_count=request_recovery_degraded_count,
+        recovery_gap_count=recovery_gap_count,
         recovery_gap_codes=tuple(sorted(gap_codes)),
     )
 
@@ -569,3 +647,9 @@ def _bounded_gap_code(value: str) -> str:
         if value == code or value.endswith(f":{code}"):
             return code
     return "other"
+
+
+def _saturating_add(total: int, value: object) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        return total
+    return min(_DIAGNOSTIC_COUNTER_MAX, total + value)

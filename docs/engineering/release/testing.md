@@ -57,7 +57,7 @@ the canonical owners. It resolves `MissingBindingError` and
 identity with the input-dispatch owner and their stable classifications, and
 proves that those Gateway-specific types do not escape through either the
 top-level package or language-neutral contracts facade.
-The same base environment executes the installed
+Every clean environment executes the installed
 `examples.reference_consumer.main` module from a temporary working directory
 with no repository `PYTHONPATH`. The bounded success line is accepted only
 after the complete public-path scenario has asserted its managed resource

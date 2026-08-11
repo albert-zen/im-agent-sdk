@@ -24,6 +24,14 @@ Tests must prove:
   validation failure permits one corrected retry without acquiring or closing
   another transition's store, and renewal loss racing explicit stop closes all
   owners once without deadlock or a second cleanup;
+- async-context success and body failure, enter cancellation, exit
+  cancellation, async `run()` caller cancellation, explicit stop waking
+  `run()`, and signal-runner cancellation all join the same transition; body
+  failure remains primary when cleanup also fails, and a cancelled closer
+  leaves no owner running;
+- concurrent start/start, start/stop, and stop/stop plus repeated live start and
+  terminal repeated stop are deterministic; a stopped object cannot restart
+  and the documented recovery path constructs a fresh `Gateway`;
 - startup ordering installs restored observation before live delivery and
   keeps startup admission active through FIFO drain;
 - FIFO capacity, ordering, sticky overflow, diagnostics, and reset are finite;
@@ -44,6 +52,9 @@ Tests must prove:
   attributes, `repr`, nested causes, or contexts; subclasses of the bounded
   lifecycle failure and typed sentinels are projected rather than inheriting
   exact-object authority;
+- a blocked owner, session, or store cleanup reaches the configured finite
+  lifecycle timeout, later owners are still attempted exactly once, and the
+  public failure remains bounded and sanitized;
 - all SDK-owned Channels receive their exact admission handler through one
   two-argument start invocation; a legacy one-argument body runs zero times,
   and an internal two-argument `TypeError` runs once;
