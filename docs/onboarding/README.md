@@ -14,11 +14,13 @@ Application; the SDK stores only the bridge bindings, projection routes,
 idempotency records, and rebuildable projection checkpoints supplied by its
 composition.
 
-The run starts from an explicit caller-managed temporary CWD, exercises the
-public Memory store path, then closes it and reconstructs fresh runtime objects
-over a SQLite store to prove restart recovery. It does not infer a default
-workspace or auto-create on first ordinary input; all Project/Thread creation
-uses scoped public actions.
+The run starts from an explicit caller-managed temporary CWD and an explicit
+SQLite store, then closes the first graph and reconstructs fresh Gateway,
+Channel, registry, and SQLite store objects over the same database to prove
+restart recovery. It reuses only the Application that owns Project, Thread,
+and authoritative history truth. It does not infer a default workspace or
+auto-create on first ordinary input; all Project/Thread creation uses scoped
+public actions.
 
 Read the guides in this order:
 

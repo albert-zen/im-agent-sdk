@@ -89,9 +89,10 @@ contract kit makes the handler part of the Channel Port so this is not hidden
 Gateway-specific duck typing.
 
 The Gateway migration is complete. `ChannelAdapter.start` keeps its optional
-admission parameter only for direct standalone Channel use, but
-`ImAgentGateway` always calls each Channel once with both the completed-message
-callback and its exact Channel-scoped admission handler. Gateway performs no
+admission parameter only for direct standalone Channel use, but the public
+`Gateway` composition always calls each Channel once with both the
+completed-message callback and its exact Channel-scoped admission handler.
+Gateway performs no
 signature inspection, reflective compatibility check, `TypeError` fallback,
 or message-only retry. A legacy one-argument implementation therefore fails at
 call binding before its body runs, while a `TypeError` raised inside a valid

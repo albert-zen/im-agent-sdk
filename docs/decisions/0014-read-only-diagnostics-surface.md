@@ -22,7 +22,7 @@ or Channel port.
 ## Decision
 
 The SDK provides immutable, process-local diagnostic fact types and a
-synchronous `ImAgentGateway.diagnostics_snapshot()` read. The snapshot is:
+synchronous `Gateway.diagnostics()` read. The snapshot is:
 
 - stable and versioned, but explicitly non-authoritative;
 - read-only and computed without I/O, awaiting, callbacks, or persistence;

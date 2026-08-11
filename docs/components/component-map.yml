@@ -1842,7 +1842,7 @@ structural_status:
       rationale: Gateway input facade re-exports exact I1, dispatch, and I2 public contracts from their focused implementations without retaining historical modules.
     - path: src/imagent/gateway/routing/__init__.py
       owner: gateway.routing.gateway-operations
-      rationale: Gateway routing facade re-exports exact binding-owner, projection-route-owner, and aggregate-operation-owner contracts, including canonical aggregate validators, without exposing the private executor or retaining a compatibility implementation. The mixed imagent.gateway orchestration root separately has a finite lazy resolver for exactly ApplicationsListed, GatewayOperation, GatewayOperationFailed, GatewayOperationResult, GatewayOperationType, ListApplications, SelectApplication, validate_gateway_operation, and validate_gateway_operation_result; it resolves and caches exact routing-operation owner objects only after aggregate bootstrap, preserves import-order identity, rejects unknown names, and has no compatibility implementation.
+      rationale: Gateway routing facade re-exports exact binding-owner, projection-route-owner, and aggregate-operation-owner contracts, including canonical aggregate validators, without exposing the private executor or retaining a compatibility implementation. The finite imagent.gateway package facade does not export aggregate Gateway operations or validators.
     - path: src/imagent/gateway/projection/__init__.py
       owner: gateway.projection.recovery
       rationale: Gateway projection facade re-exports exact public contracts from focused observation, checkpoint, request-correlation, and recovery leaves without implementing any leaf.

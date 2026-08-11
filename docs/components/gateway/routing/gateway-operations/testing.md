@@ -2,16 +2,16 @@
 
 Gateway operation conformance must prove:
 
-- the focused owner and every finite public facade expose the same exact
-  operation/result objects, signatures, and `typing.get_type_hints` results in
-  clean processes regardless of import order;
-- the Gateway-root finite resolver accepts only its nine aggregate
-  operation/validator names, caches the exact focused-owner object after first
-  access, and rejects unknown names; root observation helper annotations
-  resolve to the exact projection-route owner values and request helper
-  annotations resolve to the exact request-correlation owner values in a clean
-  process, while request convergence constructs `RequestResponseRouted` and
-  the locked route delegate returns that exact result;
+- the focused owner and finite `imagent.gateway.routing` facade expose the same
+  exact operation/result objects, signatures, and `typing.get_type_hints`
+  results in clean processes regardless of import order;
+- the finite `imagent.gateway` package facade does not expose aggregate Gateway
+  operations or validators and importing focused operation owners never grows
+  that root surface; observation helper annotations resolve to the exact
+  projection-route owner values and request helper annotations resolve to the
+  exact request-correlation owner values in a clean process, while request
+  convergence constructs `RequestResponseRouted` and the locked route delegate
+  returns that exact result;
 - the aggregate delegates binding mutations, projection observation, and
   request-response routing through explicit typed owner methods or ports, with
   no generic repository/context parameter and no duplicated owner validator;

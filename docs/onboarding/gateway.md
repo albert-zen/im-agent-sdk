@@ -86,9 +86,20 @@ async with gateway:
 Startup validates composition, acquires the store lease, starts the Application
 and Channel, and releases projection delivery. Stop closes observation and
 bounded delivery work, the Controller, adapters, and store lease/resources.
-The reference run constructs a fresh Gateway once and proves that no owned task
-or subscription remains. Durable fresh-object restart is a separate SQLite
-acceptance scenario.
+The reference run first composes Gateway, Channel, registry, and SQLite store
+objects over one explicit database. After that graph closes, it creates one
+authoritative Application output while Gateway is absent, then reconstructs
+fresh Gateway, Channel, registry, and SQLite store objects over the same
+database while reusing only the Application that owns Project, Thread, and
+history truth.
+
+The restarted graph proves that both bindings, active routes, per-destination
+checkpoints, and terminal workflow receipts are reconstructed. The missed
+output reaches both destinations exactly once without replaying older output;
+stable create-and-bind action IDs replay without another native create, and a
+duplicate completed inbound message ID causes neither another Application
+dispatch nor another delivery. Final shutdown proves that no owned task or
+subscription remains.
 
 Read `diagnostics()` synchronously for redacted, process-local
 facts. It is not authoritative health state and does not perform I/O.
