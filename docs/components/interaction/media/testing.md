@@ -23,6 +23,11 @@ Tests for `interaction.media` must prove:
   digest, and cleans process-local staging after synchronous submission;
 - public proactive `LocalPath` content requires lowercase SHA-256 identity and
   native loading rejects changed bytes;
+- a post-open symlink swap leaves the descriptor-bound trusted bytes unchanged,
+  while escaped/symlinked acquisition and byte-ceiling violations fail before
+  the native-send counter;
+- non-integer/bool declared sizes fail before acquisition and caller-owned
+  attachment metadata cannot mutate a paused admitted attempt;
 - A1 candidates confer no trust, materialization is bounded and replay-safe,
   and O2 loss cannot turn the SDK into a durable spool or cleanup ledger;
 - absence of optional materialization preserves existing adapter behavior.
@@ -61,4 +66,5 @@ wide checks in `AGENTS.md`.
 The installed reference executable covers a supported rooted `LocalPath` plus
 unsupported `RemoteUrl`/handle, escaped root, digest mismatch, count, size,
 media, and group-limit cases through canonical proactive delivery. Every
-rejected case leaves its native-send counter unchanged.
+rejected case leaves its native-send counter unchanged; its deterministic
+pathname-swap case proves the bytes hashed are the bytes submitted.

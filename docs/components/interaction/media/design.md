@@ -136,7 +136,11 @@ Channel ingress implementation.
 On outbound public composition, the same finite source/media/count/size/group
 facts are planned before Channel execution. A configured consumer root and
 digest are then validated by the real Channel adapter before its native-send
-boundary; a `Message` grants neither filesystem nor network authority.
+boundary. The shared rooted reader requires an explicit byte ceiling, opens
+every component relative to the configured root with no-follow semantics, and
+returns the exact regular-file bytes used for digest and upload. A `Message`
+grants neither filesystem nor network authority, and a resolve/read pathname
+race cannot enlarge it.
 
 ## Authority
 

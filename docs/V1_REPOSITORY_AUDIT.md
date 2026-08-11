@@ -368,6 +368,18 @@ the recoverable presentation signature on live and history-recovered output and
 proves that a delivered live-only item leaves both destination completion
 checkpoints unchanged.
 
+Pass-1 counterexamples additionally prove that terminal/unknown submission
+identity is origin-plus-caller-delivery scoped and wins before current
+credential work: revoked credentials and same-token principal rotation replay
+the authoritative Memory/SQLite result with zero resend. Public intents are
+canonically snapshotted before their first await; bool/float declared sizes
+fail before acquisition. The reference Channel opens rooted paths through a
+no-follow descriptor chain and hashes the exact acquired bytes, closing the
+resolve/read swap window. Retryable O2 outcomes retain consumer artifact
+leases until an explicit retry reaches a terminal outcome. Ledger payload and
+JSON replacement are fsync-backed, and startup enumeration fails closed at a
+finite directory-entry bound before deleting any candidate.
+
 ### H. Lifecycle, diagnostics, adapters, and release surface
 
 Complete async context/run convenience, adapter conformance, bounded shutdown,

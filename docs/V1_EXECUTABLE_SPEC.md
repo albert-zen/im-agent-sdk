@@ -339,12 +339,18 @@ run:
   in the Application, and a non-recipient cannot respond;
 - reconnect without native pending-request evidence becomes stale rather than
   manufactured recovery;
-- attachment source support and trust are preflighted before native side
-  effects;
+- attachment source support, scalar types, immutable metadata snapshots, and
+  trust are preflighted before native side effects; rooted `LocalPath` bytes
+  are acquired through a no-follow descriptor chain so the bytes hashed are
+  the bytes submitted even if the pathname is swapped;
 - recoverable presentation is identical in live and history normalization;
 - live-only presentation never advances a completion checkpoint; and
-- artifact materialization uses a consumer-owned bounded ledger and cleanup
-  path while the SDK stores no bytes or durable spool.
+- artifact materialization uses a consumer-owned bounded, fsync-backed ledger
+  and finite startup sweep while the SDK stores no bytes or durable spool;
+  retryable destinations retain their lease through the explicit retry; and
+- Memory and SQLite terminal proactive replay precede credential
+  reauthorization, including revocation and same-token principal rotation,
+  and perform no second native send.
 
 ## Lifecycle and diagnostics path
 

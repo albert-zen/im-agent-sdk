@@ -18,6 +18,10 @@ the shared transaction owner. Those tests remain outside this leaf directory
 until their later test-convergence slice because moving their surrounding
 orchestration fixtures here would mix proactive-delivery behavior into a
 mechanical ownership move.
+Public reference tests also prove that stable origin/caller-delivery identity
+survives credential revocation and principal rotation in Memory and across a
+fresh SQLite store, returning one authoritative result without another native
+send.
 
 Current-schema row tests also prove that malformed delivery snapshot scope,
 timestamp, state, enum, or receipt JSON is rejected after complete typed

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import hashlib
 import os
 import pickle
 import sqlite3
@@ -78,6 +79,7 @@ from imagent.gateway.persistence.sqlite_store import SQLiteGatewayStore
 from imagent.gateway.persistence.store import GatewayStoreSession, RuntimeLease
 from imagent.gateway.projection.observation import ThreadProjectionRuntime
 from imagent.interaction.channels import (
+    DeliveryReceiptStatus,
     DeliverySupportLevel,
     InboundAdmissionHandler,
     MessageHandler,
@@ -119,6 +121,18 @@ class _HostileOverflow(GatewayStartupOverflow):
 
 class _HostileLifecycleFailure(GatewayLifecycleFailure):
     pass
+
+
+class _PausingReferenceChannel(ReferenceChannel):
+    def __init__(self, *, trusted_attachment_root: Path) -> None:
+        super().__init__(trusted_attachment_root=trusted_attachment_root)
+        self.entered = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def send(self, message: OutboundMessage):
+        self.entered.set()
+        await self.release.wait()
+        return await super().send(message)
 
 
 class _CountingMemoryGatewayStore(MemoryGatewayStore):
@@ -821,6 +835,26 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(all(item.replayed for item in replay.destinations))
             self.assertEqual(channel.native_send_calls, native_calls)
 
+            self.assertTrue(await authorizer.revoke(credential))
+            revoked_replay = await consumer.gateway.deliver_proactively(
+                first_intent,
+                credential=credential,
+            )
+            self.assertTrue(all(item.replayed for item in revoked_replay.destinations))
+            rotated_credential = await authorizer.issue(
+                DeliveryPrincipal(
+                    principal_id="rotated-principal",
+                    allowed_conversations=(conversation.ref,),
+                ),
+                credential=credential,
+            )
+            rotated_replay = await consumer.gateway.deliver_proactively(
+                first_intent,
+                credential=rotated_credential,
+            )
+            self.assertTrue(all(item.replayed for item in rotated_replay.destinations))
+            self.assertEqual(channel.native_send_calls, native_calls)
+
             with self.assertRaises(DeliverySubmissionCapacityError):
                 await consumer.gateway.deliver_proactively(
                     DeliveryIntent(
@@ -852,6 +886,279 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
                     credential=credential,
                 )
             self.assertEqual(channel.native_send_calls, native_calls)
+
+    async def test_public_sqlite_terminal_replay_ignores_revoked_credential(self) -> None:
+        with TemporaryDirectory() as cwd:
+            database = Path(cwd) / "proactive-replay.sqlite3"
+            channel = ReferenceChannel()
+            conversation = channel.conversation("sqlite-proactive-replay")
+            authorizer = ScopedDeliveryAuthorizer(max_principals=1)
+            credential = await authorizer.issue(
+                DeliveryPrincipal(
+                    principal_id="original-principal",
+                    allowed_conversations=(conversation.ref,),
+                ),
+                credential="rotating-credential",
+            )
+            intent = DeliveryIntent(
+                delivery_id="sqlite-proactive:stable",
+                target=ConversationDeliveryTarget(conversation.ref),
+                content=(TextContent("one execution"),),
+                created_at=datetime.now(UTC),
+            )
+            first = build_reference_consumer(
+                channel=channel,
+                store=SQLiteGatewayStore(database),
+                delivery_authorizer=authorizer,
+            )
+            async with first.gateway:
+                result = await first.gateway.deliver_proactively(
+                    intent,
+                    credential=credential,
+                )
+                self.assertIs(result.state, DeliverySubmissionState.ACCEPTED)
+            self.assertTrue(await authorizer.revoke(credential))
+
+            restarted = build_reference_consumer(
+                channel=channel,
+                store=SQLiteGatewayStore(database),
+                delivery_authorizer=authorizer,
+            )
+            async with restarted.gateway:
+                replay = await restarted.gateway.deliver_proactively(
+                    intent,
+                    credential=credential,
+                )
+                self.assertTrue(all(item.replayed for item in replay.destinations))
+                rotated = await authorizer.issue(
+                    DeliveryPrincipal(
+                        principal_id="sqlite-rotated-principal",
+                        allowed_conversations=(conversation.ref,),
+                    ),
+                    credential=credential,
+                )
+                rotated_replay = await restarted.gateway.deliver_proactively(
+                    intent,
+                    credential=rotated,
+                )
+                self.assertTrue(all(item.replayed for item in rotated_replay.destinations))
+            self.assertEqual(channel.native_send_calls, 1)
+
+    async def test_public_local_path_descriptor_binds_trust_digest_and_send(self) -> None:
+        with TemporaryDirectory() as cwd:
+            root = Path(cwd) / "trusted"
+            root.mkdir()
+            inside = root / "payload.txt"
+            original = b"trusted bytes"
+            outside = Path(cwd) / "outside.txt"
+            outside.write_bytes(b"outside bytes")
+            inside.write_bytes(original)
+            channel = ReferenceChannel(trusted_attachment_root=root)
+            conversation = channel.conversation("descriptor-race")
+            authorizer = ScopedDeliveryAuthorizer()
+            credential = await authorizer.issue(
+                DeliveryPrincipal(
+                    principal_id="descriptor-principal",
+                    allowed_conversations=(conversation.ref,),
+                )
+            )
+            intent = DeliveryIntent(
+                delivery_id="descriptor-race",
+                target=ConversationDeliveryTarget(conversation.ref),
+                content=(
+                    AttachmentContent(
+                        "descriptor-artifact",
+                        "text/plain",
+                        LocalPath(str(inside)),
+                        size_bytes=len(original),
+                        metadata={"sha256": hashlib.sha256(original).hexdigest()},
+                    ),
+                ),
+                created_at=datetime.now(UTC),
+            )
+            real_open = os.open
+            swapped = False
+
+            def racing_open(path, flags, mode=0o777, *, dir_fd=None):
+                nonlocal swapped
+                descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
+                if path == inside.name and dir_fd is not None and not swapped:
+                    inside.unlink()
+                    inside.symlink_to(outside)
+                    swapped = True
+                return descriptor
+
+            consumer = build_reference_consumer(
+                channel=channel,
+                delivery_authorizer=authorizer,
+            )
+            with patch(
+                "imagent.interaction.media.os.open",
+                side_effect=racing_open,
+            ):
+                async with consumer.gateway:
+                    result = await consumer.gateway.deliver_proactively(
+                        intent,
+                        credential=credential,
+                    )
+            self.assertTrue(swapped)
+            self.assertTrue(inside.is_symlink())
+            self.assertIs(
+                result.state,
+                DeliverySubmissionState.ACCEPTED,
+                repr(result),
+            )
+            self.assertEqual(channel.native_send_calls, 1)
+
+    async def test_public_media_scalars_and_metadata_are_frozen_before_io(self) -> None:
+        with TemporaryDirectory() as cwd:
+            root = Path(cwd)
+            payload = b"x"
+            path = root / "payload.txt"
+            path.write_bytes(payload)
+            conversation_ref = ConversationRef("reference-channel", "metadata-snapshot")
+            authorizer = ScopedDeliveryAuthorizer()
+            credential = await authorizer.issue(
+                DeliveryPrincipal(
+                    principal_id="snapshot-principal",
+                    allowed_conversations=(conversation_ref,),
+                )
+            )
+            digest = hashlib.sha256(payload).hexdigest()
+            for declared_size in (True, 1.0):
+                with self.subTest(declared_size=declared_size):
+                    channel = ReferenceChannel(trusted_attachment_root=root)
+                    consumer = build_reference_consumer(
+                        channel=channel,
+                        delivery_authorizer=authorizer,
+                    )
+                    intent = DeliveryIntent(
+                        delivery_id=f"bad-size:{declared_size!r}",
+                        target=ConversationDeliveryTarget(conversation_ref),
+                        content=(
+                            AttachmentContent(
+                                "bad-size",
+                                "text/plain",
+                                LocalPath(str(path)),
+                                size_bytes=declared_size,  # type: ignore[arg-type]
+                                metadata={"sha256": digest},
+                            ),
+                        ),
+                        created_at=datetime.now(UTC),
+                    )
+                    async with consumer.gateway:
+                        with self.assertRaisesRegex(ValueError, "size_bytes"):
+                            await consumer.gateway.deliver_proactively(
+                                intent,
+                                credential=credential,
+                            )
+                    self.assertEqual(channel.native_send_calls, 0)
+
+            metadata = {"sha256": digest}
+            channel = _PausingReferenceChannel(trusted_attachment_root=root)
+            consumer = build_reference_consumer(
+                channel=channel,
+                delivery_authorizer=authorizer,
+            )
+            intent = DeliveryIntent(
+                delivery_id="metadata-snapshot",
+                target=ConversationDeliveryTarget(conversation_ref),
+                content=(
+                    AttachmentContent(
+                        "snapshotted",
+                        "text/plain",
+                        LocalPath(str(path)),
+                        size_bytes=1,
+                        metadata=metadata,
+                    ),
+                ),
+                created_at=datetime.now(UTC),
+            )
+            async with consumer.gateway:
+                delivery = asyncio.create_task(
+                    consumer.gateway.deliver_proactively(intent, credential=credential)
+                )
+                await channel.entered.wait()
+                metadata["sha256"] = "0" * 64
+                channel.release.set()
+                result = await delivery
+                metadata["sha256"] = digest
+                replay = await consumer.gateway.deliver_proactively(
+                    intent,
+                    credential=credential,
+                )
+            self.assertIs(
+                result.state,
+                DeliverySubmissionState.ACCEPTED,
+                repr(result),
+            )
+            self.assertTrue(all(item.replayed for item in replay.destinations))
+            self.assertEqual(channel.native_send_calls, 1)
+
+    async def test_retryable_artifact_lease_survives_until_explicit_retry(self) -> None:
+        with TemporaryDirectory() as cwd:
+            ledger = ReferenceArtifactLedger(cwd, max_leases=1)
+            attachment = ledger.stage(
+                "retryable-artifact",
+                b"retry me",
+                expected_destinations=1,
+            )
+            assert isinstance(attachment.source, LocalPath)
+            artifact_path = Path(attachment.source.path)
+            channel = ReferenceChannel(trusted_attachment_root=cwd)
+            conversation = channel.conversation("artifact-retry")
+            channel.set_next_delivery_status(
+                conversation.ref,
+                DeliveryReceiptStatus.RETRYABLE_FAILURE,
+            )
+            authorizer = ScopedDeliveryAuthorizer()
+            credential = await authorizer.issue(
+                DeliveryPrincipal(
+                    principal_id="artifact-principal",
+                    allowed_conversations=(conversation.ref,),
+                )
+            )
+            consumer = build_reference_consumer(
+                channel=channel,
+                delivery_authorizer=authorizer,
+                delivery_outcome_observer=ledger,
+                trusted_attachment_root=cwd,
+            )
+            intent = DeliveryIntent(
+                delivery_id="artifact-retry",
+                target=ConversationDeliveryTarget(conversation.ref),
+                content=(attachment,),
+                created_at=datetime.now(UTC),
+            )
+            async with consumer.gateway:
+                first = await consumer.gateway.deliver_proactively(
+                    intent,
+                    credential=credential,
+                )
+                await asyncio.sleep(0.05)
+                self.assertIs(first.state, DeliverySubmissionState.RETRYABLE)
+                self.assertEqual(ledger.active_leases, 1)
+                self.assertTrue(artifact_path.exists())
+                resumed = await consumer.gateway.deliver_proactively(
+                    intent,
+                    credential=credential,
+                )
+                await asyncio.sleep(0.05)
+            self.assertIs(resumed.state, DeliverySubmissionState.ACCEPTED)
+            self.assertEqual(channel.native_send_calls, 2)
+            self.assertEqual(ledger.active_leases, 0)
+            self.assertFalse(artifact_path.exists())
+
+    def test_consumer_artifact_sweep_fails_before_unbounded_enumeration(self) -> None:
+        with TemporaryDirectory() as cwd:
+            root = Path(cwd)
+            ledger = ReferenceArtifactLedger(root, max_leases=1)
+            orphans = [root / f"artifact-orphan-{index}.txt" for index in range(1_000)]
+            for orphan in orphans:
+                orphan.touch()
+            with self.assertRaisesRegex(RuntimeError, "directory-entry bound"):
+                ledger.sweep()
+            self.assertTrue(all(orphan.exists() for orphan in orphans))
 
     def test_sqlite_inspection_rejects_encoded_and_fragmented_authority_state(self) -> None:
         marker = "authority-owned-transcript-marker"

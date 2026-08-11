@@ -62,8 +62,9 @@ one declared state; the repository contract separately enforces the monotonic
 transition graph and uses caller-supplied expected states only as an atomic
 compare-and-swap fence.
 
-A delivery submission contains an SDK-controlled origin/principal identity,
-target and payload fingerprints, the complete immutable destination snapshot
+A delivery submission contains an SDK-controlled origin/caller-delivery
+identity plus the admitting principal as reservation evidence, target and
+payload fingerprints, the complete immutable destination snapshot
 set, and mutable per-destination outcome evidence. The snapshot set pins one
 logical delivery to the originally resolved destinations across retries and
 restart. It contains no text, artifact bytes, arbitrary local path, callback,

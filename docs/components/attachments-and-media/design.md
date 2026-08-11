@@ -42,12 +42,20 @@ the lease persists identity and ownership only, never media content or paths.
 `LocalPath` conveys a location, not authority. Deployment configuration must
 establish a shared filesystem namespace and root. Resolution rejects missing
 trust, relative paths, and paths outside that root.
+Consumers that acquire bytes open each path component relative to the trusted
+root with no-follow semantics, validate the opened regular-file descriptor,
+and hash/upload the one bounded read. Resolve-then-open is not a trust boundary
+because a caller can replace the checked path between those operations.
 
 Public proactive `LocalPath` input must also carry a lowercase-hex SHA-256
 digest in `AttachmentContent.metadata["sha256"]`. The canonical lowercase
 representation gives idempotency a content identity independent from a
 temporary path; the accepting Channel still verifies that the bytes at the
 trusted path match that digest before upload.
+The Gateway copies JSON-compatible delivery and attachment metadata into a
+private canonical snapshot before its first asynchronous authorization,
+planning, or Channel boundary. Declared sizes are non-bool integers and are
+validated before any byte acquisition.
 
 `RemoteUrl` materialization belongs to an accepting integration with scheme,
 address, redirect, credential, size, and media validation. `AttachmentHandle`

@@ -1,7 +1,7 @@
 # Gateway proactive delivery testing
 
 The mirrored proactive suite covers authorization/scope, first-reservation
-route pinning, origin/principal namespace isolation, concurrent duplicate
+route pinning, origin/caller-delivery namespace isolation, concurrent duplicate
 suppression, payload/target conflicts, complete preflight, sticky unknown,
 retryable-only resumption and retry-after, partial multi-destination results,
 redaction, SQLite restart, and O2 integration.
@@ -89,3 +89,8 @@ Also run every repository gate in `AGENTS.md`.
 with exact principal scope, immutable route IDs across a later binding change,
 two-destination accepted/unknown isolation, sticky replay, SQLite restart, and
 Memory capacity parity.
+It additionally proves terminal replay before current authentication in both
+Memory and restarted SQLite stores: credential revocation and same-token
+principal rotation return the one stored result with zero resend. Mutable
+caller metadata is snapshotted before a paused Channel attempt, and bool/float
+declared sizes fail before file or native work.

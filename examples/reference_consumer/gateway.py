@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,6 +24,7 @@ from imagent.gateway.delivery import (
     DeliveryOutcomeContext,
     DeliveryOutcomeObserver,
 )
+from imagent.interaction.channels import DeliveryReceiptStatus
 from imagent.interaction.controllers import CommandRegistry, MarkdownRequestPresenter
 from imagent.interaction.media import AttachmentContent, LocalPath
 
@@ -43,10 +46,15 @@ class ReferenceArtifactLedger:
     """Bounded consumer-owned artifact bytes, leases, and restart cleanup."""
 
     _MAX_LEDGER_BYTES = 64 * 1024
+    _OWNED_PAYLOAD = re.compile(r"artifact-[0-9a-f]{64}\.(?:txt|part)\Z")
 
     def __init__(self, root: str | Path, *, max_leases: int = 8) -> None:
-        if not isinstance(max_leases, int) or isinstance(max_leases, bool) or max_leases < 1:
-            raise ValueError("artifact ledger max_leases must be a positive integer")
+        if (
+            not isinstance(max_leases, int)
+            or isinstance(max_leases, bool)
+            or not 1 <= max_leases <= 64
+        ):
+            raise ValueError("artifact ledger max_leases must be between 1 and 64")
         self._root = Path(root).resolve()
         self._root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self._ledger_path = self._root / "consumer-artifact-ledger.json"
@@ -77,10 +85,27 @@ class ReferenceArtifactLedger:
             raise ValueError("reference artifact bytes must be non-empty and bounded")
         if artifact_id not in self._records and len(self._records) >= self._max_leases:
             raise RuntimeError("consumer artifact ledger capacity is exhausted")
+        if artifact_id in self._records:
+            raise RuntimeError("consumer artifact lease is already active")
         path = self._root / f"artifact-{hashlib.sha256(artifact_id.encode()).hexdigest()}.txt"
         temporary = path.with_suffix(".part")
-        temporary.write_bytes(payload)
+        descriptor = os.open(
+            temporary,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+        )
+        try:
+            view = memoryview(payload)
+            while view:
+                written = os.write(descriptor, view)
+                if written < 1:
+                    raise OSError("consumer artifact payload write made no progress")
+                view = view[written:]
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
         os.replace(temporary, path)
+        self._fsync_root()
         digest = hashlib.sha256(payload).hexdigest()
         self._records[artifact_id] = {
             "path": str(path),
@@ -104,7 +129,11 @@ class ReferenceArtifactLedger:
         context: DeliveryOutcomeContext,
         outcome: DeliveryOutcome,
     ) -> None:
-        del outcome
+        if (
+            outcome.receipt is not None
+            and outcome.receipt.status is DeliveryReceiptStatus.RETRYABLE_FAILURE
+        ):
+            return
         for content in context.message.content:
             if not isinstance(content, AttachmentContent):
                 continue
@@ -127,20 +156,25 @@ class ReferenceArtifactLedger:
         self._remove(artifact_id)
 
     def sweep(self) -> int:
-        """Crash-safe startup sweep of every leftover consumer-owned lease."""
+        """Crash-safe bounded startup sweep of consumer-owned lease files."""
 
-        artifact_ids = tuple(self._records)
-        payload_paths = {Path(str(record["path"])) for record in self._records.values()}
-        for artifact_id in artifact_ids:
-            self._remove(artifact_id, persist=False)
-        for pattern in ("artifact-*.txt", "artifact-*.part"):
-            for candidate in self._root.glob(pattern):
-                if candidate.exists() or candidate.is_symlink():
-                    payload_paths.add(candidate)
-                    candidate.unlink(missing_ok=True)
+        entry_limit = (self._max_leases * 2) + 2
+        with os.scandir(self._root) as entries:
+            bounded_entries = tuple(itertools.islice(entries, entry_limit + 1))
+        if len(bounded_entries) > entry_limit:
+            raise RuntimeError("consumer artifact sweep directory-entry bound exceeded")
+        payload_paths = {
+            self._root / entry.name
+            for entry in bounded_entries
+            if self._OWNED_PAYLOAD.fullmatch(entry.name)
+        }
+        self._records.clear()
+        self._persist()
+        for candidate in payload_paths:
+            candidate.unlink(missing_ok=True)
         temporary_ledger = self._ledger_path.with_suffix(".tmp")
         temporary_ledger.unlink(missing_ok=True)
-        self._persist()
+        self._fsync_root()
         return len(payload_paths)
 
     def _load(self) -> dict[str, dict[str, object]]:
@@ -160,11 +194,12 @@ class ReferenceArtifactLedger:
                 or not isinstance(record, dict)
             ):
                 raise RuntimeError("consumer artifact ledger record is malformed")
-            path = Path(str(record.get("path", ""))).resolve()
-            try:
-                path.relative_to(self._root)
-            except ValueError as error:
-                raise RuntimeError("consumer artifact ledger path escaped its root") from error
+            path = Path(str(record.get("path", "")))
+            expected_path = self._root / (
+                f"artifact-{hashlib.sha256(artifact_id.encode()).hexdigest()}.txt"
+            )
+            if path != expected_path:
+                raise RuntimeError("consumer artifact ledger path escaped its root")
             expected = record.get("expected")
             observed = record.get("observed")
             size = record.get("size")
@@ -189,20 +224,42 @@ class ReferenceArtifactLedger:
 
     def _remove(self, artifact_id: str, *, persist: bool = True) -> None:
         record = self._records.pop(artifact_id, None)
-        if record is not None:
-            path = Path(str(record["path"])).resolve()
-            path.relative_to(self._root)
-            path.unlink(missing_ok=True)
         if persist:
             self._persist()
+        if record is not None:
+            path = Path(str(record["path"]))
+            if path.parent != self._root or not self._OWNED_PAYLOAD.fullmatch(path.name):
+                raise RuntimeError("consumer artifact ledger path escaped its root")
+            path.unlink(missing_ok=True)
+            self._fsync_root()
 
     def _persist(self) -> None:
         temporary = self._ledger_path.with_suffix(".tmp")
-        temporary.write_text(
-            json.dumps(self._records, sort_keys=True, separators=(",", ":")),
-            encoding="utf-8",
+        encoded = json.dumps(self._records, sort_keys=True, separators=(",", ":")).encode()
+        descriptor = os.open(
+            temporary,
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
         )
+        try:
+            view = memoryview(encoded)
+            while view:
+                written = os.write(descriptor, view)
+                if written < 1:
+                    raise OSError("consumer artifact ledger write made no progress")
+                view = view[written:]
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
         os.replace(temporary, self._ledger_path)
+        self._fsync_root()
+
+    def _fsync_root(self) -> None:
+        descriptor = os.open(self._root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
 
 
 def build_reference_consumer(

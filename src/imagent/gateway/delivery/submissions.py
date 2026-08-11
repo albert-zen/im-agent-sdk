@@ -84,9 +84,12 @@ def derive_delivery_submission_id(
         raise ContractViolation("delivery submission origin is invalid")
     require_identifier(principal_id, "principal_id")
     require_identifier(delivery_id, "delivery_id")
+    # The admitting principal remains part of the durable reservation, but it
+    # cannot be part of the lookup identity: credential rotation must never
+    # turn one caller delivery ID into a second native execution.
     return _sha256_identity(
         "submission",
-        [origin.value, principal_id, delivery_id],
+        [origin.value, delivery_id],
     )
 
 

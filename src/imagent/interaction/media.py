@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import re
+import stat
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -184,6 +186,91 @@ def resolve_local_attachment(
     return resolved
 
 
+def read_local_attachment(
+    source: AttachmentSource,
+    *,
+    shared_filesystem_root: Path | None,
+    consumer: str,
+    expected_size: int,
+    max_bytes: int,
+) -> bytes:
+    """Read one rooted regular file through a no-follow descriptor chain."""
+
+    if not isinstance(expected_size, int) or isinstance(expected_size, bool) or expected_size < 0:
+        raise ValueError(f"{consumer} LocalPath expected_size must be a non-negative integer")
+    if not isinstance(max_bytes, int) or isinstance(max_bytes, bool) or max_bytes < 1:
+        raise ValueError(f"{consumer} LocalPath max_bytes must be a positive integer")
+    if expected_size > max_bytes:
+        raise ValueError(f"{consumer} LocalPath exceeds its byte bound")
+    if not isinstance(source, LocalPath):
+        raise NotImplementedError(
+            f"{consumer} does not support attachment source {source.kind.value}"
+        )
+    if shared_filesystem_root is None:
+        raise ValueError(f"{consumer} LocalPath requires a configured shared_filesystem_root")
+    candidate = Path(source.path)
+    if not candidate.is_absolute():
+        raise ValueError(f"{consumer} LocalPath must be absolute")
+    try:
+        # Resolve only the parent to normalize platform aliases such as
+        # /var -> /private/var. Every component is then reopened relative to
+        # the trusted root with O_NOFOLLOW, so a later swap can only fail.
+        parent = candidate.parent.resolve(strict=True)
+        relative_parent = parent.relative_to(shared_filesystem_root)
+        relative = relative_parent / candidate.name
+    except (OSError, ValueError) as error:
+        raise ValueError(
+            f"{consumer} LocalPath is outside the trusted shared_filesystem_root"
+        ) from error
+    if not relative.parts or any(part in {"", ".", ".."} for part in relative.parts):
+        raise ValueError(f"{consumer} LocalPath contains an unsafe path component")
+    no_follow = getattr(os, "O_NOFOLLOW", None)
+    directory = getattr(os, "O_DIRECTORY", None)
+    if no_follow is None or directory is None:
+        raise NotImplementedError(f"{consumer} cannot safely acquire rooted LocalPath bytes")
+    descriptors: list[int] = []
+    try:
+        current = os.open(shared_filesystem_root, os.O_RDONLY | directory | no_follow)
+        descriptors.append(current)
+        for component in relative.parts[:-1]:
+            current = os.open(
+                component,
+                os.O_RDONLY | directory | no_follow,
+                dir_fd=current,
+            )
+            descriptors.append(current)
+        payload_fd = os.open(
+            relative.parts[-1],
+            os.O_RDONLY | no_follow,
+            dir_fd=current,
+        )
+        descriptors.append(payload_fd)
+        details = os.fstat(payload_fd)
+        if not stat.S_ISREG(details.st_mode):
+            raise ValueError(f"{consumer} LocalPath must reference a regular file")
+        if details.st_size != expected_size:
+            raise ValueError(f"{consumer} LocalPath declared size does not match bytes")
+        chunks: list[bytes] = []
+        remaining = expected_size + 1
+        while remaining:
+            chunk = os.read(payload_fd, min(64 * 1024, remaining))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        payload = b"".join(chunks)
+        if len(payload) != expected_size:
+            raise ValueError(f"{consumer} LocalPath declared size does not match bytes")
+        return payload
+    except OSError as error:
+        raise ValueError(
+            f"{consumer} LocalPath is outside the trusted shared_filesystem_root"
+        ) from error
+    finally:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+
+
 __all__ = [
     "AttachmentContent",
     "AttachmentGrouping",
@@ -193,5 +280,6 @@ __all__ = [
     "LocalPath",
     "RemoteUrl",
     "configure_shared_filesystem_root",
+    "read_local_attachment",
     "resolve_local_attachment",
 ]

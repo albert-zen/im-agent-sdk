@@ -3,7 +3,7 @@
 ## Purpose and boundary
 
 `gateway.delivery.submissions` owns the stable identity and durable outcome
-boundary for one proactive delivery. It reserves the origin/principal-scoped
+boundary for one proactive delivery. It reserves the origin/caller-delivery-scoped
 submission identity and immutable destination snapshots, then permits only
 typed per-destination state transitions. It persists identity, snapshots,
 receipts, bounded errors, and timestamps; it never persists message or
@@ -25,8 +25,10 @@ the state-contracts leaf.
 
 ## Identity and state
 
-- a submission ID derives from the SDK-fixed origin, trusted principal ID,
-  and caller delivery ID;
+- a submission ID derives from the SDK-fixed origin and caller delivery ID;
+- the admitting trusted principal remains part of reservation identity and
+  durable evidence, but credential/principal rotation cannot derive another
+  submission for the same origin and caller delivery ID;
 - target and payload fingerprints prevent reuse of the same identity for
   different intent;
 - destination delivery IDs derive from the submission and stable Conversation
@@ -69,6 +71,9 @@ of conflicting with route movement. The complete snapshot comparison applies
 when two first-reservation contenders race after independently resolving their
 destinations, and at each repository boundary; it prevents the losing caller
 or a non-conforming repository from silently changing the pinned set.
+Terminal and unknown replay also precede current authentication. In-flight and
+retryable work remains authorization-gated, and only retryable evidence can
+resume a native attempt.
 
 SQLite table access, reservation CAS, destination mutation, and schema
 initialization are owned by the single

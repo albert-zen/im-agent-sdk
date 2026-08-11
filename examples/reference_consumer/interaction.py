@@ -41,7 +41,7 @@ from imagent.interaction.media import (
     AttachmentGrouping,
     AttachmentSourceKind,
     configure_shared_filesystem_root,
-    resolve_local_attachment,
+    read_local_attachment,
 )
 from imagent.interaction.messages import (
     ConversationRef,
@@ -234,14 +234,15 @@ class ReferenceChannel:
             if not isinstance(content, AttachmentContent):
                 continue
             try:
-                resolved = resolve_local_attachment(
+                if content.size_bytes is None:
+                    raise ValueError("reference attachment requires a declared size")
+                payload = read_local_attachment(
                     content.source,
                     shared_filesystem_root=self._trusted_attachment_root,
                     consumer="reference Channel",
+                    expected_size=content.size_bytes,
+                    max_bytes=2_048,
                 )
-                payload = resolved.read_bytes()
-                if content.size_bytes != len(payload):
-                    raise ValueError("reference attachment declared size does not match bytes")
                 digest = content.metadata.get("sha256")
                 if not isinstance(digest, str) or hashlib.sha256(payload).hexdigest() != digest:
                     raise ValueError("reference attachment digest does not match bytes")

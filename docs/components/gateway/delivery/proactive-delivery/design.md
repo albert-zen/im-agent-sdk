@@ -38,11 +38,16 @@ This is an ownership-only move: route resolution, authorization, planning,
 coordination, submission identity, replay, receipt, capacity, cancellation,
 and failure semantics remain unchanged.
 
-Authorization completes before route resolution. Full intent/capability
-preflight completes before any Channel side effect. The first atomic
+The public intent is canonically copied before its first await. Full
+intent/capability preflight completes before any Channel side effect. For a
+new or explicitly retryable submission, authorization completes before route
+resolution or a resumed Channel attempt. A terminal/unknown stable submission
+is instead checked and returned before current credential and route work. The first atomic
 reservation pins the destination set and payload/target fingerprints; replay
 never follows a moved route. External and Gateway-internal identities are
-namespaced by fixed origin plus trusted principal.
+namespaced by fixed origin plus caller delivery ID; the admitting principal is
+stored as reservation evidence but credential rotation cannot create another
+execution for that ID.
 
 An existing stable submission is loaded before current route resolution, so a
 retry uses its authoritative pinned snapshots even if routing has moved. If
@@ -50,6 +55,9 @@ two callers both observe no record and race after resolving different route
 snapshots, the repository's complete reservation-identity comparison permits
 only the first set and rejects the other; orchestration verifies the same rule
 on every non-acquired reservation result.
+Changed target/payload input remains an explicit conflict even when the
+credential is revoked or rotated. In-flight and explicitly retryable records
+still require current authorization; terminal and unknown records never resend.
 
 ## Outcome and retry safety
 

@@ -461,10 +461,13 @@ Thread or explicit Conversation scope before route resolution.
 
 The first resolved route set is stored as immutable
 `DeliveryRouteSnapshot` values. Delivery identity is namespaced by an
-SDK-controlled external/internal origin and the trusted principal, so two
-principals cannot poison each other and an authorizer cannot impersonate the
-Gateway-internal domain. Within one principal, reusing a delivery ID with a
-different target or payload is a conflict. A retry returns the stored
+SDK-controlled external/internal origin and the caller delivery ID; the
+admitting trusted principal remains durable reservation evidence but credential
+rotation cannot create a second execution for that stable ID. External callers
+cannot impersonate the Gateway-internal domain. Reusing a delivery ID with a
+different target or payload is a conflict. A terminal or unknown retry returns
+the stored result before current authentication or target/route work; only an
+explicitly retryable destination requires fresh authorization. A retry returns the stored
 accepted, retryable, rejected, partial, in-flight, or unknown result; it never
 silently follows a route that moved after the first submission. Unknown
 remains ambiguous and is not treated as permission to resend.
@@ -476,7 +479,8 @@ explicit Conversation caller receives the Conversation it already supplied.
 
 External proactive `LocalPath` content requires lowercase `metadata.sha256` as its
 logical content identity. The accepting Channel verifies that digest while
-reading its configured trusted spool. Temporary paths therefore do not define
+reading its configured trusted spool through a descriptor-relative no-follow
+chain; it hashes and uploads the same acquired bytes. Temporary paths therefore do not define
 retry identity, and changing bytes without changing the authoritative digest
 cannot become a new send.
 

@@ -34,12 +34,20 @@ entry point used by `python -m examples.reference_consumer.main` and proves:
 - exact proactive authorization, pinned multi-destination routes, Memory and
   SQLite replay, isolated accepted/unknown results, sticky unknown, and finite
   principal/submission capacity all use the canonical public Gateway;
+- revoked and same-token rotated credentials return the authoritative terminal
+  Memory/SQLite result with zero resend, while retryable replay remains
+  explicitly authorization-gated;
 - supported artifact delivery and unsupported/hostile source, root, digest,
   count, size, media, and grouping cases cross real public planning while no
   rejected case increments the Channel native-send boundary;
 - the bounded consumer artifact ledger covers cancellation/failure release,
-  partial-file startup recovery, per-destination cleanup, restart sweep, root
-  confinement, and capacity exhaustion without SDK byte/path ownership;
+  partial-file startup recovery, retryable retention through explicit retry,
+  per-destination terminal cleanup, fsync-backed replacement, bounded restart
+  sweep refusal, root confinement, and capacity exhaustion without SDK
+  byte/path ownership;
+- descriptor-pinned LocalPath acquisition survives a deterministic outside-root
+  symlink swap, bool/float sizes fail before acquisition, and caller metadata
+  mutation after admission cannot alter the attempt;
 - recoverable live/history presentation has one signature and live-only output
   does not advance either destination checkpoint;
 - read-only SQLite integrity, exact `sqlite_schema` object/definition and column

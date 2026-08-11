@@ -77,14 +77,20 @@ support makes restored routing evidence stale before native work.
 Proactive delivery injects a bounded principal-scoped authorizer and uses the
 canonical Gateway's one Coordinator/store. A consumer-owned private artifact
 ledger stages bounded bytes under a configured root, records leases outside the
-SDK, observes typed per-destination outcomes, releases cancellation/failure
-work, and sweeps recorded or partial crash leftovers at startup. Exact route
+SDK, fsyncs payload/ledger replacement, observes typed per-destination outcomes,
+retains retryable leases through explicit retry, releases terminal/cancellation/failure
+work, and sweeps recorded or partial crash leftovers under a finite
+directory-entry bound at startup. Exact route
 snapshots remain pinned across a later binding change; accepted/unknown partial
 outcomes stay isolated and unknown is not resent on replay or SQLite restart.
 Unsupported sources plus hostile root/digest/count/size/media/grouping facts
 are rejected before the reference Channel's native-send counter. A live-only
 projected item leaves completion checkpoints unchanged, while recoverable live
 and history output share the same presentation signature.
+Focused public runs also revoke and rotate credentials around Memory/SQLite
+terminal replay, mutate attachment metadata after admission, and swap a rooted
+pathname to an outside symlink after descriptor acquisition; none causes a
+second or escaped native send.
 
 Once the second composition closes, the executable opens the database read-only
 and runs an integrity check over one consistent WAL-aware read transaction. A

@@ -527,7 +527,7 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(completed.state, DeliverySubmissionState.ACCEPTED)
         self.assertEqual(len(self.channel_a.sent), 1)
 
-    async def test_same_id_conflicts_per_principal_but_principals_are_namespaced(
+    async def test_same_id_is_authoritative_across_principal_rotation(
         self,
     ) -> None:
         await self.put_route(self.conversation_a, route_id="route-a")
@@ -550,7 +550,8 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
             credential=other_token,
         )
         self.assertEqual(other.state, DeliverySubmissionState.ACCEPTED)
-        self.assertEqual(len(self.channel_a.sent), 2)
+        self.assertTrue(other.destinations[0].replayed)
+        self.assertEqual(len(self.channel_a.sent), 1)
 
     async def test_external_delivery_id_cannot_poison_internal_projection_namespace(
         self,

@@ -121,8 +121,12 @@ def validate_delivery_intent(intent: DeliveryIntent) -> None:
             raise ContractViolation(f"content[{index}].media_type cannot be empty")
         if item.filename is not None and not item.filename.strip():
             raise ContractViolation(f"content[{index}].filename cannot be empty")
-        if item.size_bytes is not None and item.size_bytes < 0:
-            raise ContractViolation(f"content[{index}].size_bytes cannot be negative")
+        if item.size_bytes is not None and (
+            not isinstance(item.size_bytes, int)
+            or isinstance(item.size_bytes, bool)
+            or item.size_bytes < 0
+        ):
+            raise ContractViolation(f"content[{index}].size_bytes must be a non-negative integer")
         _canonical_metadata(item.metadata)
         if isinstance(item.source, LocalPath):
             if not item.source.path:

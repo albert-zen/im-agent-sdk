@@ -58,6 +58,7 @@ from .proactive_authorization import (
     validate_delivery_principal,
 )
 from .submissions import (
+    _canonical_metadata,
     derive_delivery_payload_fingerprint,
     derive_delivery_submission_id,
     derive_delivery_target_fingerprint,
@@ -100,6 +101,28 @@ class ProactiveDeliveryService:
         *,
         credential: str,
     ) -> ProactiveDeliveryResult:
+        intent = self._snapshot_intent(intent)
+        self._validate_external_intent(intent)
+        replay_id = derive_delivery_submission_id(
+            DeliverySubmissionOrigin.EXTERNAL,
+            "imagent:lookup-only",
+            intent.delivery_id,
+        )
+        existing = await self._submissions.get_delivery_submission(replay_id)
+        if existing is not None and not any(
+            destination.state
+            in {DeliverySubmissionState.IN_FLIGHT, DeliverySubmissionState.RETRYABLE}
+            for destination in existing.destinations
+        ):
+            self._ensure_replay_identity(intent, existing)
+            return _result_from_record(
+                existing,
+                replayed=True,
+                expose_conversations=isinstance(
+                    intent.target,
+                    ConversationDeliveryTarget,
+                ),
+            )
         principal = await self.authorize(intent.target, credential=credential)
         return await self._submit(intent, principal=principal, authorize=True)
 
@@ -123,13 +146,15 @@ class ProactiveDeliveryService:
         self,
         message: OutboundMessage,
     ) -> ProactiveDeliveryResult:
-        intent = DeliveryIntent(
-            delivery_id=message.delivery_id,
-            target=ConversationDeliveryTarget(message.conversation_ref),
-            content=message.content,
-            created_at=message.created_at,
-            reply_to=message.reply_to,
-            metadata=message.metadata,
+        intent = self._snapshot_intent(
+            DeliveryIntent(
+                delivery_id=message.delivery_id,
+                target=ConversationDeliveryTarget(message.conversation_ref),
+                content=message.content,
+                created_at=message.created_at,
+                reply_to=message.reply_to,
+                metadata=message.metadata,
+            )
         )
         return await self._submit(
             intent,
@@ -310,6 +335,39 @@ class ProactiveDeliveryService:
                 intent.target,
                 ConversationDeliveryTarget,
             ),
+        )
+
+    def _validate_external_intent(self, intent: DeliveryIntent) -> None:
+        self._coordinator.validate_source_item_count(len(intent.content))
+        validate_delivery_intent(intent)
+        _require_external_local_digests(intent)
+
+    @staticmethod
+    def _snapshot_intent(intent: DeliveryIntent) -> DeliveryIntent:
+        """Detach public input from every caller-owned mutable container."""
+
+        content = tuple(
+            replace(item, metadata=_canonical_metadata(item.metadata))
+            if isinstance(item, AttachmentContent)
+            else item
+            for item in tuple(intent.content)
+        )
+        return replace(
+            intent,
+            content=content,
+            metadata=_canonical_metadata(intent.metadata),
+        )
+
+    @staticmethod
+    def _ensure_replay_identity(
+        intent: DeliveryIntent,
+        existing: DeliverySubmissionRecord,
+    ) -> None:
+        _ensure_submission_identity(
+            existing,
+            principal_id=existing.principal_id,
+            target_fingerprint=derive_delivery_target_fingerprint(intent.target),
+            payload_fingerprint=derive_delivery_payload_fingerprint(intent),
         )
 
     async def _resume_retryable_destinations(

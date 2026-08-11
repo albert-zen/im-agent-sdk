@@ -37,6 +37,10 @@ Required scenarios:
   bytes after delivery;
 - public proactive `LocalPath` input requires a SHA-256 content identity, and
   native Channel loading rejects bytes that no longer match it;
+- a deterministic post-open pathname-to-symlink swap cannot change the bytes
+  hashed/submitted or escape the configured root;
+- bool/float declared sizes fail before file access, and mutation of caller
+  attachment metadata after admission cannot alter the snapshotted attempt;
 - Codex/Zen/T3 materialization preserves size/type policy and native errors.
 
 Run:

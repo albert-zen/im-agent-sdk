@@ -512,12 +512,20 @@ outside that correlation check.
 
 Attachment sources are typed. A message never grants filesystem or network
 trust. Channel staging and Application materialization use configured bounds
-and trusted roots/policies.
+and trusted roots/policies. A rooted local path is acquired through a
+descriptor-relative no-follow read; validation, digesting, and native upload
+consume the same acquired bytes rather than resolving a pathname and opening
+it later. Public delivery metadata is copied into a canonical private snapshot
+before asynchronous planning or Channel work.
 
 Artifact bytes, paths, quota, leases, cleanup ledger, crash-safe cleanup, and
 startup sweep belong to the consumer. Adapter presentation/materialization may
 receive bounded typed facts but cannot create a second native subscription or
 expose raw protocol events.
+Retryable per-destination outcomes retain the corresponding consumer lease
+until the explicit retry reaches a terminal outcome. Consumer ledgers and
+startup enumeration remain finite and crash-durable; the SDK does not absorb
+either responsibility.
 
 ## Extension rule
 
