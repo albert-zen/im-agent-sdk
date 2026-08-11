@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from ..interaction.controllers.contract import InboundController
@@ -65,32 +66,51 @@ class GatewayLimits:
     projection_max_active_threads: int = 4096
 
     def __post_init__(self) -> None:
-        if (
-            not isinstance(self.idempotency_max_records, int)
-            or isinstance(self.idempotency_max_records, bool)
-            or self.idempotency_max_records < 1
+        for name in (
+            "baseline_history_limit",
+            "recovery_history_page_size",
+            "recovery_max_pages",
+            "catchup_limit",
+            "projection_item_limit",
+            "request_delivery_max_pending",
+            "startup_buffer_max_pending",
+            "turn_acceptance_event_max_pending",
+            "inbound_content_transform_max_items",
+            "inbound_content_transform_max_concurrency",
+            "inbound_failure_present_max_items",
+            "inbound_failure_present_max_text_characters",
+            "inbound_failure_present_max_concurrency",
+            "outbound_presentation_max_items",
+            "outbound_presentation_max_text_characters",
+            "outbound_presentation_max_concurrency",
+            "delivery_outcome_observer_max_items",
+            "delivery_outcome_observer_max_text_characters",
+            "delivery_outcome_observer_max_concurrency",
+            "delivery_submission_max_records",
+            "conversation_serialization_max_active_keys",
+            "idempotency_max_records",
+            "projection_max_active_threads",
         ):
-            raise ValueError("idempotency_max_records must be a positive integer")
-        if (
-            not isinstance(self.delivery_submission_max_records, int)
-            or isinstance(self.delivery_submission_max_records, bool)
-            or self.delivery_submission_max_records < 1
+            _require_positive_integer(getattr(self, name), name)
+        for name in (
+            "turn_correlation_retention_seconds",
+            "request_correlation_retention_seconds",
+            "inbound_content_transform_timeout_seconds",
+            "inbound_failure_present_timeout_seconds",
+            "outbound_presentation_timeout_seconds",
+            "delivery_outcome_observer_timeout_seconds",
         ):
-            raise ValueError("delivery_submission_max_records must be a positive integer")
-        if (
-            not isinstance(self.conversation_serialization_max_active_keys, int)
-            or isinstance(self.conversation_serialization_max_active_keys, bool)
-            or self.conversation_serialization_max_active_keys < 1
+            _require_positive_finite_number(getattr(self, name), name)
+        for name in (
+            "subscription_retry_initial_seconds",
+            "subscription_retry_max_seconds",
         ):
+            _require_non_negative_finite_number(getattr(self, name), name)
+        if self.subscription_retry_max_seconds < self.subscription_retry_initial_seconds:
             raise ValueError(
-                "conversation_serialization_max_active_keys must be a positive integer"
+                "subscription_retry_max_seconds must be greater than or equal to "
+                "subscription_retry_initial_seconds"
             )
-        if (
-            not isinstance(self.projection_max_active_threads, int)
-            or isinstance(self.projection_max_active_threads, bool)
-            or self.projection_max_active_threads < 1
-        ):
-            raise ValueError("projection_max_active_threads must be a positive integer")
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,3 +123,28 @@ class GatewayExtensions:
     inbound_failure_presenter: InboundFailurePresenter | None = None
     outbound_presentation: OutboundPresentationPolicy | None = None
     delivery_outcome_observer: DeliveryOutcomeObserver | None = None
+
+
+def _require_positive_integer(value: object, name: str) -> None:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise ValueError(f"{name} must be a positive integer")
+
+
+def _require_positive_finite_number(value: object, name: str) -> None:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+        or value <= 0
+    ):
+        raise ValueError(f"{name} must be a positive finite number")
+
+
+def _require_non_negative_finite_number(value: object, name: str) -> None:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+        or value < 0
+    ):
+        raise ValueError(f"{name} must be a finite non-negative number")

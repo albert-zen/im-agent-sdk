@@ -31,8 +31,12 @@ Tests must prove:
   owned pre-side-effect claims, and leaves no task or queued message behind;
 - Channel callbacks racing overflow, rollback, failed startup, or shutdown
   cannot reach Controller or Application work;
-- partial startup stops only successfully started owners in reverse order and
-  preserves the primary failure when cleanup also fails;
+- partial startup stops the current potentially partial Application/Channel
+  once plus successfully started owners in reverse order, preserves the primary
+  failure when any of those cleanup calls also fail, continues through
+  Controller/Application cleanup, and records every cleanup failure without
+  invoking an owner twice; million-character cleanup exceptions produce only
+  fixed-size sanitized notes/log evidence in both inner and public teardown;
 - all SDK-owned Channels receive their exact admission handler through one
   two-argument start invocation; a legacy one-argument body runs zero times,
   and an internal two-argument `TypeError` runs once;
@@ -41,7 +45,9 @@ Tests must prove:
   once per attempt, and leaves a later restart bounded and explicit;
 - normal stop closes projection, each bounded extension/delivery runtime, and
   the accepted Controller lifecycle in owner order, while loose/mixed
-  Controller persistence fails before any owner starts;
+  Controller persistence fails before any owner starts; failed Channel,
+  Controller, or Application cleanup does not skip remaining owners, and the
+  public Gateway still closes its session/store with honest failure evidence;
 - normal stop leaves no second dispatch implementation, Application
   subscription, Channel admission path, or stale
   active-Thread observation slot/health entry; a pending accepted-input fence

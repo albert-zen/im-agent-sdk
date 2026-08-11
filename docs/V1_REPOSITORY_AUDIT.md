@@ -153,7 +153,10 @@ repository-wiring surface; they must not add a bridge between the two APIs.
 
 The public `Gateway` now owns one coherent store lease, async-context and
 explicit lifecycle, bounded diagnostics, scoped action factories, and
-deterministic shutdown. The installed reference consumer uses only that public
+deterministic shutdown. Composition validates all limits, Application
+capabilities, Channel/store/session structure, and stable identities before
+external work; teardown continues through every owner exactly once while
+preserving primary and cleanup failures. The installed reference consumer uses only that public
 surface for explicit managed-CWD Project creation/selection, Thread
 creation/binding, D's policy-free ordinary-input dispatch, two-Conversation
 fan-out, switch and switch-back, and exact worker/delivery/shutdown evidence.

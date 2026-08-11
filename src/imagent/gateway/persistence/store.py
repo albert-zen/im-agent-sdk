@@ -227,12 +227,16 @@ def _is_gateway_store_session(value: object) -> TypeGuard[GatewayStoreSession]:
 def validate_runtime_lease(lease: RuntimeLease) -> None:
     from ...interaction.operations import ContractViolation, require_identifier
 
+    if not isinstance(lease, RuntimeLease):
+        raise ContractViolation("runtime lease must be RuntimeLease")
     require_identifier(lease.gateway_id, "gateway_id")
     require_identifier(lease.owner_token, "owner_token")
-    if lease.epoch < 1:
-        raise ContractViolation("runtime lease epoch must be positive")
-    if lease.expires_at.tzinfo is None:
-        raise ContractViolation("runtime lease expiry must include a timezone")
+    if isinstance(lease.epoch, bool) or not isinstance(lease.epoch, int) or lease.epoch < 1:
+        raise ContractViolation("runtime lease epoch must be a positive integer")
+    if not isinstance(lease.expires_at, datetime):
+        raise ContractViolation("runtime lease expiry must be a datetime")
+    if lease.expires_at.tzinfo is None or lease.expires_at.utcoffset() is None:
+        raise ContractViolation("runtime lease expiry must include a valid timezone")
 
 
 def validate_lease_duration(value: float) -> None:

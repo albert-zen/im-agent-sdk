@@ -30,6 +30,10 @@ Focused lifecycle counterexamples additionally force concurrent starts,
 stop/cancellation during blocked startup, inner-runtime construction failure,
 live renewal loss, and renewal loss during blocked Channel startup, proving
 every path closes the one acquired store and leaves no live adapter authority.
+They also force partial-start and normal-stop cleanup failures across Channel,
+Controller, and Application owners, plus pre-acquisition validation failures
+for all limit categories, invalid Application capabilities, malformed
+Channel/store/session structure, and mutable identity drift.
 A one-worker-capacity switch also proves replay of
 an older terminal bind remains the exact stored success without changing the
 newer Conversation binding. The same capacity bound proves create-and-bind can

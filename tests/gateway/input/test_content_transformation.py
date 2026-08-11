@@ -450,12 +450,15 @@ class InboundContentTransformerTests(unittest.IsolatedAsyncioTestCase):
                 cast(InboundContentTransformer, object()),
                 limits=GatewayLimits(inbound_content_transform_timeout_seconds=float("inf")),
             )
-        with self.assertRaisesRegex(ValueError, "item limit"):
+        with self.assertRaisesRegex(ValueError, "inbound_content_transform_max_items"):
             self._gateway(
                 cast(InboundContentTransformer, object()),
                 limits=GatewayLimits(inbound_content_transform_max_items=0),
             )
-        with self.assertRaisesRegex(ValueError, "concurrency"):
+        with self.assertRaisesRegex(
+            ValueError,
+            "inbound_content_transform_max_concurrency",
+        ):
             self._gateway(
                 cast(InboundContentTransformer, object()),
                 limits=GatewayLimits(inbound_content_transform_max_concurrency=0),

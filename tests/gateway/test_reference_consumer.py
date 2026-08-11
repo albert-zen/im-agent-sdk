@@ -4,10 +4,11 @@ import ast
 import asyncio
 import unittest
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import cast
+from typing import Any, cast
 from unittest.mock import patch
 
 from examples.reference_consumer.application import ReferenceApplication
@@ -19,6 +20,7 @@ from examples.reference_consumer.interaction import (
 )
 from examples.reference_consumer.main import run_reference_consumer
 from imagent import Gateway, GatewayLimits, MemoryGatewayStore, ProjectionPolicy, Succeeded
+from imagent.applications.capabilities import SupportLevel
 from imagent.applications.contract import (
     AgentInput,
     ApplicationRef,
@@ -37,7 +39,8 @@ from imagent.applications.operations import (
     ThreadCreated,
     ThreadHistoryRead,
 )
-from imagent.gateway.persistence.store import GatewayStoreSession
+from imagent.gateway.persistence.sqlite_store import SQLiteGatewayStore
+from imagent.gateway.persistence.store import GatewayStoreSession, RuntimeLease
 from imagent.gateway.projection.observation import ThreadProjectionRuntime
 from imagent.interaction.channels import InboundAdmissionHandler, MessageHandler
 from imagent.interaction.controllers import (
@@ -47,6 +50,8 @@ from imagent.interaction.controllers import (
     CommandResult,
 )
 from imagent.interaction.messages import ConversationRef, OutboundMessage, TextContent
+
+_UNSAFE_HUGE_CLEANUP_DETAIL = "secret\x1b[2J\nline\u202e" + ("x" * 1_000_000)
 
 
 class _CountingMemoryGatewayStore(MemoryGatewayStore):
@@ -72,6 +77,37 @@ class _CountingMemoryGatewayStore(MemoryGatewayStore):
     async def close(self) -> None:
         self.close_count += 1
         await super().close()
+
+
+class _CountingSQLiteGatewayStore(SQLiteGatewayStore):
+    def __init__(self, path: Path) -> None:
+        super().__init__(path)
+        self.acquire_count = 0
+        self.close_count = 0
+
+    async def acquire_runtime(
+        self,
+        *,
+        gateway_id: str,
+        owner_token: str,
+        lease_duration_seconds: float,
+    ):
+        self.acquire_count += 1
+        return await super().acquire_runtime(
+            gateway_id=gateway_id,
+            owner_token=owner_token,
+            lease_duration_seconds=lease_duration_seconds,
+        )
+
+    async def close(self) -> None:
+        self.close_count += 1
+        await super().close()
+
+
+class _HugeCloseFailureStore(_CountingMemoryGatewayStore):
+    async def close(self) -> None:
+        await super().close()
+        raise RuntimeError(_UNSAFE_HUGE_CLEANUP_DETAIL)
 
 
 class _FailingRenewSession:
@@ -155,6 +191,175 @@ class _BlockingAcquireMemoryGatewayStore(_CountingMemoryGatewayStore):
             self.first_acquired.set()
             await self.allow_first_return.wait()
         return session
+
+
+class _MalformedSession:
+    def __init__(self) -> None:
+        self.close_count = 0
+
+    async def close(self) -> None:
+        self.close_count += 1
+
+
+class _MalformedSessionStore:
+    max_effect_receipts = 16
+
+    def __init__(self) -> None:
+        self.acquire_count = 0
+        self.close_count = 0
+        self.session = _MalformedSession()
+
+    async def acquire_runtime(
+        self,
+        *,
+        gateway_id: str,
+        owner_token: str,
+        lease_duration_seconds: float,
+    ) -> Any:
+        del gateway_id, owner_token, lease_duration_seconds
+        self.acquire_count += 1
+        return self.session
+
+    async def close(self) -> None:
+        self.close_count += 1
+
+
+class _ChangedLeaseSession:
+    def __init__(self, delegate: GatewayStoreSession, lease: RuntimeLease) -> None:
+        self._delegate = delegate
+        self._lease = lease
+        self.close_count = 0
+
+    @property
+    def lease(self) -> RuntimeLease:
+        return self._lease
+
+    def __getattr__(self, name: str):
+        return getattr(self._delegate, name)
+
+    async def close(self) -> None:
+        self.close_count += 1
+        await self._delegate.close()
+
+
+class _ChangedLeaseStore:
+    def __init__(self, changed_fields: dict[str, Any]) -> None:
+        self._delegate = _CountingMemoryGatewayStore()
+        self._changed_fields = changed_fields
+        self.session: _ChangedLeaseSession | None = None
+
+    @property
+    def max_effect_receipts(self) -> int:
+        return self._delegate.max_effect_receipts
+
+    @property
+    def acquire_count(self) -> int:
+        return self._delegate.acquire_count
+
+    @property
+    def close_count(self) -> int:
+        return self._delegate.close_count
+
+    async def acquire_runtime(
+        self,
+        *,
+        gateway_id: str,
+        owner_token: str,
+        lease_duration_seconds: float,
+    ) -> GatewayStoreSession:
+        delegate = await self._delegate.acquire_runtime(
+            gateway_id=gateway_id,
+            owner_token=owner_token,
+            lease_duration_seconds=lease_duration_seconds,
+        )
+        self.session = _ChangedLeaseSession(
+            delegate,
+            replace(delegate.lease, **self._changed_fields),
+        )
+        return cast(GatewayStoreSession, self.session)
+
+    async def close(self) -> None:
+        await self._delegate.close()
+
+
+class _CleanupFailingChannel(ReferenceChannel):
+    def __init__(
+        self,
+        channel_instance_id: str,
+        *,
+        fail_start: bool = False,
+        fail_stop_before_cleanup: bool = False,
+        fail_stop_after_cleanup: bool = False,
+    ) -> None:
+        super().__init__(channel_instance_id)
+        self._fail_start = fail_start
+        self._fail_stop_before_cleanup = fail_stop_before_cleanup
+        self._fail_stop_after_cleanup = fail_stop_after_cleanup
+        self.stop_count = 0
+
+    async def start(
+        self,
+        on_message: MessageHandler,
+        on_admission: InboundAdmissionHandler | None = None,
+    ) -> None:
+        await super().start(on_message, on_admission)
+        if self._fail_start:
+            raise RuntimeError(f"{self.channel_instance_id} start failed")
+
+    async def stop(self) -> None:
+        self.stop_count += 1
+        if self._fail_stop_before_cleanup:
+            raise RuntimeError(f"{self.channel_instance_id} stop failed")
+        await super().stop()
+        if self._fail_stop_after_cleanup:
+            raise RuntimeError(f"{self.channel_instance_id} stop failed")
+
+
+class _CleanupFailingApplication(ReferenceApplication):
+    def __init__(
+        self,
+        application_instance_id: str = "reference-agent",
+        *,
+        fail_start: bool = False,
+        fail_stop: bool = False,
+    ) -> None:
+        super().__init__(application_instance_id=application_instance_id)
+        self._fail_start = fail_start
+        self._fail_stop = fail_stop
+        self.stop_count = 0
+
+    async def start(self) -> None:
+        await super().start()
+        if self._fail_start:
+            raise RuntimeError(f"{self.ref.application_instance_id} start failed")
+
+    async def stop(self) -> None:
+        self.stop_count += 1
+        await super().stop()
+        if self._fail_stop:
+            raise RuntimeError("application stop failed")
+
+
+class _HugeCleanupApplication(ReferenceApplication):
+    def __init__(self) -> None:
+        super().__init__(application_instance_id="reference-huge-cleanup")
+        self.stop_count = 0
+
+    async def stop(self) -> None:
+        self.stop_count += 1
+        await super().stop()
+        raise RuntimeError(_UNSAFE_HUGE_CLEANUP_DETAIL)
+
+
+class _CleanupFailingRegistry(CommandRegistry):
+    def __init__(self) -> None:
+        super().__init__()
+        self.close_count = 0
+
+    async def close(self) -> None:
+        self.close_count += 1
+        await super().close()
+        raise RuntimeError("controller close failed")
 
 
 class _BlockingStartChannel(ReferenceChannel):
@@ -619,23 +824,390 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(application.active_observation_workers(first_ref), 0)
                 self.assertEqual(application.active_observation_workers(second_ref), 1)
 
-    async def test_runtime_construction_failure_closes_the_acquired_store(self) -> None:
+    async def test_invalid_limit_fails_before_store_acquisition(self) -> None:
+        store = _CountingMemoryGatewayStore()
+        with self.assertRaisesRegex(ValueError, "startup_buffer_max_pending"):
+            Gateway(
+                gateway_id="reference-invalid-limit",
+                channels=[ReferenceChannel()],
+                applications=[ReferenceApplication()],
+                store=store,
+                limits=GatewayLimits(startup_buffer_max_pending=0),
+            )
+        self.assertEqual(store.acquire_count, 0)
+        self.assertEqual(store.close_count, 0)
+
+    async def test_post_acquisition_runtime_construction_failure_closes_store(self) -> None:
         store = _CountingMemoryGatewayStore()
         gateway = Gateway(
             gateway_id="reference-construction-failure",
             channels=[ReferenceChannel()],
             applications=[ReferenceApplication()],
             store=store,
-            limits=GatewayLimits(startup_buffer_max_pending=0),
         )
 
-        with self.assertRaises(ValueError):
-            await gateway.start()
+        with patch(
+            "imagent.gateway.runtime.ImAgentGateway",
+            side_effect=RuntimeError("simulated runtime construction failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "construction failure"):
+                await gateway.start()
         self.assertFalse(gateway.running)
         self.assertEqual(store.acquire_count, 1)
         self.assertEqual(store.close_count, 1)
         with self.assertRaisesRegex(RuntimeError, "cannot restart"):
             await gateway.start()
+
+    async def test_partial_start_cleanup_continues_after_channel_stop_failure(self) -> None:
+        first = _CleanupFailingChannel(
+            "reference-cleanup-first",
+            fail_stop_before_cleanup=True,
+        )
+        second = _CleanupFailingChannel(
+            "reference-cleanup-second",
+            fail_start=True,
+            fail_stop_before_cleanup=True,
+        )
+        application = _CleanupFailingApplication()
+        store = _CountingMemoryGatewayStore()
+        gateway = Gateway(
+            gateway_id="reference-partial-cleanup",
+            channels=[first, second],
+            applications=[application],
+            store=store,
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError, "reference-cleanup-second start failed"
+        ) as caught:
+            await gateway.start()
+
+        self.assertTrue(first.started)
+        self.assertTrue(second.started)
+        self.assertFalse(application.started)
+        self.assertEqual(first.stop_count, 1)
+        self.assertEqual(second.stop_count, 1)
+        self.assertEqual(application.stop_count, 1)
+        self.assertEqual(store.close_count, 1)
+        self.assertTrue(
+            any("reference-cleanup-first" in note for note in caught.exception.__notes__)
+        )
+        self.assertTrue(
+            any("reference-cleanup-second" in note for note in caught.exception.__notes__)
+        )
+
+    async def test_partial_application_start_failure_cleans_current_and_prior_once(
+        self,
+    ) -> None:
+        first = _CleanupFailingApplication("reference-application-first")
+        second = _CleanupFailingApplication(
+            "reference-application-second",
+            fail_start=True,
+            fail_stop=True,
+        )
+        store = _CountingMemoryGatewayStore()
+        gateway = Gateway(
+            gateway_id="reference-partial-application-cleanup",
+            channels=[ReferenceChannel()],
+            applications=[first, second],
+            store=store,
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "reference-application-second start failed",
+        ) as caught:
+            await gateway.start()
+
+        self.assertFalse(first.started)
+        self.assertFalse(second.started)
+        self.assertEqual(first.stop_count, 1)
+        self.assertEqual(second.stop_count, 1)
+        self.assertEqual(store.close_count, 1)
+        self.assertTrue(
+            any("application stop failed" in note for note in caught.exception.__notes__)
+        )
+
+    async def test_normal_stop_continues_after_channel_controller_and_application_failures(
+        self,
+    ) -> None:
+        channel = _CleanupFailingChannel(
+            "reference-normal-cleanup",
+            fail_stop_after_cleanup=True,
+        )
+        application = _CleanupFailingApplication(fail_stop=True)
+        registry = _CleanupFailingRegistry()
+
+        async def status(invocation, actions) -> CommandResult:
+            del invocation, actions
+            return CommandResult.text("status")
+
+        registry.register(CommandDefinition(name="status", handler=status))
+        registry.freeze()
+        store = _CountingMemoryGatewayStore()
+        gateway = Gateway(
+            gateway_id="reference-normal-cleanup",
+            channels=[channel],
+            applications=[application],
+            store=store,
+            controller=registry,
+        )
+        await gateway.start()
+
+        with self.assertRaisesRegex(RuntimeError, "reference-normal-cleanup stop failed") as caught:
+            await gateway.stop()
+
+        self.assertFalse(gateway.running)
+        self.assertFalse(channel.started)
+        self.assertFalse(application.started)
+        self.assertEqual(channel.stop_count, 1)
+        self.assertEqual(registry.close_count, 1)
+        self.assertEqual(application.stop_count, 1)
+        self.assertEqual(store.close_count, 1)
+        notes = "\n".join(caught.exception.__notes__)
+        self.assertIn("Gateway cleanup also failed: Controller", notes)
+        self.assertIn("Application", notes)
+
+    async def test_cleanup_notes_and_logs_are_bounded_for_large_owner_errors(self) -> None:
+        channel = _CleanupFailingChannel(
+            "reference-bounded-cleanup",
+            fail_stop_after_cleanup=True,
+        )
+        application = _HugeCleanupApplication()
+        store = _HugeCloseFailureStore()
+        gateway = Gateway(
+            gateway_id="reference-bounded-cleanup",
+            channels=[channel],
+            applications=[application],
+            store=store,
+        )
+        await gateway.start()
+
+        with self.assertLogs("imagent.gateway", level="ERROR") as logged:
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "reference-bounded-cleanup stop failed",
+            ) as caught:
+                await gateway.stop()
+
+        self.assertFalse(channel.started)
+        self.assertFalse(application.started)
+        self.assertEqual(channel.stop_count, 1)
+        self.assertEqual(application.stop_count, 1)
+        self.assertEqual(store.close_count, 1)
+        self.assertTrue(caught.exception.__notes__)
+        self.assertTrue(all(len(note) <= 450 for note in caught.exception.__notes__))
+        self.assertTrue(all(len(entry) <= 500 for entry in logged.output))
+        evidence = "\n".join((*caught.exception.__notes__, *logged.output))
+        self.assertNotIn("x" * 193, evidence)
+        self.assertNotIn("\x1b", evidence)
+        self.assertNotIn("\u202e", evidence)
+        self.assertIn("secret?[2J?line?", evidence)
+
+    async def test_invalid_application_capability_fails_before_memory_or_sqlite_io(
+        self,
+    ) -> None:
+        application = ReferenceApplication()
+        summary = application.summary
+        malformed_projects = replace(
+            summary.capabilities.projects,
+            discovery=SupportLevel.FALLBACK,
+        )
+        application._summary = replace(  # type: ignore[reportPrivateUsage]
+            summary,
+            capabilities=replace(summary.capabilities, projects=malformed_projects),
+        )
+
+        memory = _CountingMemoryGatewayStore()
+        with self.assertRaisesRegex(ValueError, "native project discovery"):
+            Gateway(
+                gateway_id="reference-invalid-capability-memory",
+                channels=[ReferenceChannel()],
+                applications=[application],
+                store=memory,
+            )
+        self.assertEqual(memory.acquire_count, 0)
+        self.assertEqual(memory.close_count, 0)
+
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "invalid-capability.sqlite3"
+            sqlite = _CountingSQLiteGatewayStore(path)
+            with self.assertRaisesRegex(ValueError, "native project discovery"):
+                Gateway(
+                    gateway_id="reference-invalid-capability-sqlite",
+                    channels=[ReferenceChannel("reference-sqlite")],
+                    applications=[application],
+                    store=sqlite,
+                )
+            self.assertEqual(sqlite.acquire_count, 0)
+            self.assertEqual(sqlite.close_count, 0)
+            await sqlite.close()
+
+        for owner, malformed_capabilities in (
+            (
+                "Thread",
+                replace(
+                    summary.capabilities,
+                    threads=replace(
+                        summary.capabilities.threads,
+                        listing=cast(Any, "bogus"),
+                    ),
+                ),
+            ),
+            (
+                "runtime",
+                replace(
+                    summary.capabilities,
+                    runtime=replace(
+                        summary.capabilities.runtime,
+                        history=cast(Any, "bogus"),
+                    ),
+                ),
+            ),
+        ):
+            with self.subTest(owner=owner):
+                malformed = ReferenceApplication(
+                    application_instance_id=f"reference-invalid-{owner.lower()}"
+                )
+                malformed._summary = replace(  # type: ignore[reportPrivateUsage]
+                    malformed.summary,
+                    capabilities=malformed_capabilities,
+                )
+                store = _CountingMemoryGatewayStore()
+                with self.assertRaisesRegex(ValueError, owner):
+                    Gateway(
+                        gateway_id=f"reference-invalid-{owner.lower()}",
+                        channels=[ReferenceChannel(f"reference-{owner.lower()}")],
+                        applications=[malformed],
+                        store=store,
+                    )
+                self.assertEqual(store.acquire_count, 0)
+                self.assertEqual(store.close_count, 0)
+
+    async def test_malformed_store_and_acquired_session_fail_explicitly(self) -> None:
+        channel_store = _CountingMemoryGatewayStore()
+        with self.assertRaisesRegex(TypeError, "instance ID"):
+            Gateway(
+                gateway_id="reference-malformed-channel",
+                channels=[cast(Any, object())],
+                applications=[ReferenceApplication()],
+                store=channel_store,
+            )
+        self.assertEqual(channel_store.acquire_count, 0)
+
+        malformed_store = cast(Any, object())
+        with self.assertRaisesRegex(TypeError, "max_effect_receipts"):
+            Gateway(
+                gateway_id="reference-malformed-store",
+                channels=[ReferenceChannel()],
+                applications=[ReferenceApplication()],
+                store=malformed_store,
+            )
+
+        store = _MalformedSessionStore()
+        gateway = Gateway(
+            gateway_id="reference-malformed-session",
+            channels=[ReferenceChannel()],
+            applications=[ReferenceApplication()],
+            store=cast(Any, store),
+        )
+        with self.assertRaisesRegex(TypeError, "GatewayStoreSession"):
+            await gateway.start()
+        self.assertEqual(store.acquire_count, 1)
+        self.assertEqual(store.session.close_count, 1)
+        self.assertEqual(store.close_count, 1)
+
+    async def test_mismatched_or_malformed_acquired_lease_is_closed(self) -> None:
+        cases = (
+            ({"gateway_id": "another-gateway"}, "another Gateway"),
+            ({"owner_token": "another-owner"}, "owner token"),
+            ({"epoch": cast(Any, 1.5)}, "positive integer"),
+        )
+        for index, (changed_fields, message) in enumerate(cases):
+            with self.subTest(changed_fields=changed_fields):
+                store = _ChangedLeaseStore(changed_fields)
+                gateway = Gateway(
+                    gateway_id=f"reference-invalid-lease-{index}",
+                    channels=[ReferenceChannel(f"reference-invalid-lease-{index}")],
+                    applications=[
+                        ReferenceApplication(
+                            application_instance_id=f"reference-invalid-lease-{index}"
+                        )
+                    ],
+                    store=store,
+                )
+                with self.assertRaisesRegex(ValueError, message):
+                    await gateway.start()
+                self.assertEqual(store.acquire_count, 1)
+                self.assertIsNotNone(store.session)
+                assert store.session is not None
+                self.assertEqual(store.session.close_count, 1)
+                self.assertEqual(store.close_count, 1)
+
+    async def test_identity_drift_and_collision_fail_before_acquisition(self) -> None:
+        first_channel = ReferenceChannel("reference-drift-a")
+        second_channel = ReferenceChannel("reference-drift-b")
+        first_application = ReferenceApplication(application_instance_id="reference-app-a")
+        second_application = ReferenceApplication(application_instance_id="reference-app-b")
+        store = _CountingMemoryGatewayStore()
+        gateway = Gateway(
+            gateway_id="reference-identity-drift",
+            channels=[first_channel, second_channel],
+            applications=[first_application, second_application],
+            store=store,
+        )
+        second_channel._channel_instance_id = first_channel.channel_instance_id  # type: ignore[reportPrivateUsage]
+
+        with self.assertRaisesRegex(ValueError, "Channel instance IDs must be unique"):
+            await gateway.start()
+        self.assertEqual(store.acquire_count, 0)
+        self.assertEqual(store.close_count, 0)
+
+        application_store = _CountingMemoryGatewayStore()
+        application_gateway = Gateway(
+            gateway_id="reference-application-identity-drift",
+            channels=[ReferenceChannel("reference-application-drift")],
+            applications=[first_application, second_application],
+            store=application_store,
+        )
+        second_application._summary = replace(  # type: ignore[reportPrivateUsage]
+            second_application.summary,
+            ref=first_application.ref,
+        )
+        with self.assertRaisesRegex(ValueError, "Application instance IDs must be unique"):
+            await application_gateway.start()
+        self.assertEqual(application_store.acquire_count, 0)
+        self.assertEqual(application_store.close_count, 0)
+
+    async def test_valid_noncolliding_identity_drift_fails_before_acquisition(self) -> None:
+        channel = ReferenceChannel("reference-original-channel")
+        channel_store = _CountingMemoryGatewayStore()
+        channel_gateway = Gateway(
+            gateway_id="reference-channel-noncollision-drift",
+            channels=[channel],
+            applications=[ReferenceApplication()],
+            store=channel_store,
+        )
+        channel._channel_instance_id = "reference-changed-channel"  # type: ignore[reportPrivateUsage]
+        with self.assertRaisesRegex(ValueError, "identity changed"):
+            await channel_gateway.start()
+        self.assertEqual(channel_store.acquire_count, 0)
+
+        application = ReferenceApplication(application_instance_id="reference-original-application")
+        application_store = _CountingMemoryGatewayStore()
+        application_gateway = Gateway(
+            gateway_id="reference-application-noncollision-drift",
+            channels=[ReferenceChannel("reference-application-channel")],
+            applications=[application],
+            store=application_store,
+        )
+        application._summary = replace(  # type: ignore[reportPrivateUsage]
+            application.summary,
+            ref=ApplicationRef("reference-changed-application"),
+        )
+        with self.assertRaisesRegex(ValueError, "identity changed"):
+            await application_gateway.start()
+        self.assertEqual(application_store.acquire_count, 0)
 
     async def test_lease_renewal_loss_stops_admission_adapters_and_store(self) -> None:
         channel = ReferenceChannel()

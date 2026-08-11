@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import fields, replace
 from subprocess import run
 from sys import executable
+from typing import Any, cast
 
 import imagent.applications as applications
 from imagent import contracts
@@ -111,3 +113,56 @@ class ApplicationCapabilitiesTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ContractViolation, "must be unique"):
             capabilities.validate_application_capabilities(duplicate_sources)
+
+    def test_rejects_every_malformed_capability_discriminant(self) -> None:
+        valid = _capabilities(capabilities.ProjectMode.MANAGED)
+        for field in fields(valid.projects):
+            with self.subTest(owner="projects", field=field.name):
+                malformed = replace(
+                    valid,
+                    projects=replace(
+                        valid.projects,
+                        **{field.name: cast(Any, "bogus")},
+                    ),
+                )
+                with self.assertRaises(ContractViolation):
+                    capabilities.validate_application_capabilities(malformed)
+
+        for field in fields(valid.threads):
+            with self.subTest(owner="threads", field=field.name):
+                malformed = replace(
+                    valid,
+                    threads=replace(
+                        valid.threads,
+                        **{field.name: cast(Any, "bogus")},
+                    ),
+                )
+                with self.assertRaises(ContractViolation):
+                    capabilities.validate_application_capabilities(malformed)
+
+        for field in fields(valid.runtime):
+            with self.subTest(owner="runtime", field=field.name):
+                malformed = replace(
+                    valid,
+                    runtime=replace(
+                        valid.runtime,
+                        **{field.name: cast(Any, "bogus")},
+                    ),
+                )
+                with self.assertRaises(ContractViolation):
+                    capabilities.validate_application_capabilities(malformed)
+
+    def test_rejects_malformed_capability_structure_and_attachment_sources(self) -> None:
+        valid = _capabilities(capabilities.ProjectMode.MANAGED)
+        malformed_values = (
+            cast(Any, object()),
+            replace(valid, projects=cast(Any, object())),
+            replace(valid, threads=cast(Any, object())),
+            replace(valid, runtime=cast(Any, object())),
+            replace(valid, attachment_sources=cast(Any, [AttachmentSourceKind.LOCAL_PATH])),
+            replace(valid, attachment_sources=(cast(Any, "bogus"),)),
+        )
+        for malformed in malformed_values:
+            with self.subTest(malformed=malformed):
+                with self.assertRaises(ContractViolation):
+                    capabilities.validate_application_capabilities(malformed)

@@ -379,7 +379,7 @@ clean-wheel executions both pass.
 
 | Capability | Required executable evidence | State at design baseline |
 |---|---|---|
-| public composition and owned lifecycle | async context manager, start/stop rollback | canonical Gateway/store/action composition and deterministic reference shutdown implemented in DAG E; broader lifecycle fault matrix remains H |
+| public composition and owned lifecycle | async context manager, pre-I/O validation, start/stop rollback with cleanup failures | canonical Gateway/store/action composition, full limit/capability/structure validation, exactly-once owner cleanup continuation, and deterministic reference shutdown implemented in DAG E; broader lifecycle fault matrix remains H |
 | uniform Application → Project → Thread → Turn resources | managed/fixed/flat tests; every Thread has ProjectRef | implemented in DAG A |
 | managed Project CWD creation | success, capability honesty, stable action identity | contract and deterministic fake evidence implemented in A; native support remains capability-gated |
 | store-only Gateway mutation fencing | atomic terminal receipt; old same-ID retry never overwrites newer intent | B memory/SQLite executor parity, C scoped request mapping, and E public lifecycle wiring implemented |

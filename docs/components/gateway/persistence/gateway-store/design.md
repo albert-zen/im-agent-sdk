@@ -29,6 +29,9 @@ than merging bridge authorities. The namespace has one renewable lease with:
 
 Lease acquisition, renewal, release, and every bridge-state mutation compare
 the owner token, epoch, and unexpired lease inside the same store transaction.
+The public composition validator admits only a positive non-boolean integer
+epoch and a timezone-aware `datetime` expiry, in addition to the exact stable
+Gateway and owner identities requested by acquisition.
 Callers never supply the current time. Expiry permits takeover and increments
 the epoch, but it cannot revoke a native call already fenced by the old owner.
 Reacquisition by the current owner renews that one lease without changing its

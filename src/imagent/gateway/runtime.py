@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from types import TracebackType
-from typing import Self
+from typing import Self, cast
 from uuid import uuid4
 
-from ..applications.contract import AgentApplicationAdapter, ApplicationRef
-from ..interaction.channels.contract import ChannelAdapter
+from ..applications.contract import (
+    AgentApplicationAdapter,
+    ApplicationRef,
+    ApplicationSummary,
+    validate_application_summary,
+)
+from ..interaction.channels.contract import ChannelAdapter, ChannelCapabilities
 from ..interaction.controllers.contract import ControllerLifecycle, InboundController
 from ..interaction.messages import ConversationRef
 from ..interaction.operations import require_identifier
@@ -17,7 +23,13 @@ from . import ImAgentGateway
 from .actions import ApplicationActions, ConversationActions
 from .composition import GatewayExtensions, GatewayLimits, GatewayRepositories
 from .diagnostics import DiagnosticsSnapshot
-from .persistence.store import GatewayStore, GatewayStoreSession
+from .lifecycle import _bounded_cleanup_error_summary
+from .persistence.store import (
+    GatewayStore,
+    GatewayStoreSession,
+    _is_gateway_store_session,
+    validate_runtime_lease,
+)
 from .routing.projection_routes import ProjectionPolicy
 
 _LEASE_DURATION_SECONDS = 30.0
@@ -40,18 +52,20 @@ class Gateway:
         extensions: GatewayExtensions = GatewayExtensions(),
     ) -> None:
         require_identifier(gateway_id, "gateway_id")
+        if not isinstance(limits, GatewayLimits):
+            raise TypeError("limits must be GatewayLimits")
+        if not isinstance(extensions, GatewayExtensions):
+            raise TypeError("extensions must be GatewayExtensions")
         if not channels:
             raise ValueError("Gateway requires at least one Channel")
         if not applications:
             raise ValueError("Gateway requires at least one Agent Application")
-        channel_ids = tuple(channel.channel_instance_id for channel in channels)
+        channel_ids = _validate_channels(channels)
+        application_summaries = _validate_applications(applications)
         application_ids = tuple(
-            application.summary.ref.application_instance_id for application in applications
+            summary.ref.application_instance_id for summary in application_summaries
         )
-        if len(channel_ids) != len(set(channel_ids)):
-            raise ValueError("Gateway Channel instance IDs must be unique")
-        if len(application_ids) != len(set(application_ids)):
-            raise ValueError("Gateway Application instance IDs must be unique")
+        _validate_store(store)
         if controller is not None and extensions.controller is not None:
             raise ValueError("configure the Controller once through Gateway.controller")
         if not isinstance(projection_policy, ProjectionPolicy):
@@ -59,7 +73,9 @@ class Gateway:
 
         self._gateway_id = gateway_id
         self._channels = list(channels)
+        self._channel_ids = channel_ids
         self._applications = list(applications)
+        self._application_ids = application_ids
         self._store = store
         self._controller = controller if controller is not None else extensions.controller
         self._projection_policy = projection_policy
@@ -102,6 +118,7 @@ class Gateway:
                 return
             if self._closed:
                 raise RuntimeError("Gateway cannot restart after its owned store is closed")
+            self._validate_stable_composition()
             if isinstance(self._controller, ControllerLifecycle):
                 self._controller.validate_startup()
             startup_task = asyncio.current_task()
@@ -109,11 +126,22 @@ class Gateway:
                 raise RuntimeError("Gateway startup requires an asyncio Task owner")
             self._startup_task = startup_task
             try:
-                session = await self._store.acquire_runtime(
+                owner_token = uuid4().hex
+                candidate = await self._store.acquire_runtime(
                     gateway_id=self._gateway_id,
-                    owner_token=uuid4().hex,
+                    owner_token=owner_token,
                     lease_duration_seconds=_LEASE_DURATION_SECONDS,
                 )
+                try:
+                    session = _validate_acquired_session(
+                        candidate,
+                        gateway_id=self._gateway_id,
+                        owner_token=owner_token,
+                    )
+                    self._validate_stable_composition()
+                except BaseException as validation_error:
+                    await _close_invalid_session_candidate(candidate, validation_error)
+                    raise
                 self._session = session
                 self._lease_stop = asyncio.Event()
                 self._lease_task = asyncio.create_task(
@@ -197,6 +225,16 @@ class Gateway:
         if not self._started or self._runtime is None:
             raise RuntimeError("Gateway actions require a running Gateway")
         return self._runtime
+
+    def _validate_stable_composition(self) -> None:
+        channel_ids = _validate_channels(self._channels)
+        if channel_ids != self._channel_ids:
+            raise ValueError("Gateway Channel instance identity changed after composition")
+        summaries = _validate_applications(self._applications)
+        application_ids = tuple(summary.ref.application_instance_id for summary in summaries)
+        if application_ids != self._application_ids:
+            raise ValueError("Gateway Application instance identity changed after composition")
+        _validate_store(self._store)
 
     async def _supervise_lease(
         self,
@@ -285,9 +323,97 @@ def _append_cleanup_error(
     cleanup_error: BaseException,
 ) -> BaseException:
     if primary is None:
+        cleanup_error.add_note(
+            f"Gateway cleanup failed: {_bounded_cleanup_error_summary(owner, cleanup_error)}"
+        )
         return cleanup_error
-    primary.add_note(f"{owner} cleanup also failed: {cleanup_error!r}")
+    primary.add_note(
+        f"Gateway cleanup also failed: {_bounded_cleanup_error_summary(owner, cleanup_error)}"
+    )
     return primary
+
+
+def _validate_channels(channels: list[ChannelAdapter]) -> tuple[str, ...]:
+    channel_ids: list[str] = []
+    for channel in channels:
+        channel_id = getattr(channel, "channel_instance_id", None)
+        if not isinstance(channel_id, str):
+            raise TypeError("Gateway Channel instance ID must be a string")
+        require_identifier(channel_id, "channel_instance_id")
+        if not isinstance(getattr(channel, "capabilities", None), ChannelCapabilities):
+            raise TypeError("Gateway Channel capabilities must be ChannelCapabilities")
+        for method_name in ("start", "stop", "send"):
+            if not callable(getattr(channel, method_name, None)):
+                raise TypeError(f"Gateway Channel must define callable {method_name}()")
+        channel_ids.append(channel_id)
+    if len(channel_ids) != len(set(channel_ids)):
+        raise ValueError("Gateway Channel instance IDs must be unique")
+    return tuple(channel_ids)
+
+
+def _validate_applications(
+    applications: list[AgentApplicationAdapter],
+) -> tuple[ApplicationSummary, ...]:
+    summaries: list[ApplicationSummary] = []
+    for application in applications:
+        summary = getattr(application, "summary", None)
+        if not isinstance(summary, ApplicationSummary):
+            raise TypeError("Gateway Application summary must be ApplicationSummary")
+        validate_application_summary(summary)
+        summaries.append(summary)
+    application_ids = tuple(summary.ref.application_instance_id for summary in summaries)
+    if len(application_ids) != len(set(application_ids)):
+        raise ValueError("Gateway Application instance IDs must be unique")
+    return tuple(summaries)
+
+
+def _validate_store(store: GatewayStore) -> None:
+    max_effect_receipts = getattr(store, "max_effect_receipts", None)
+    if (
+        not isinstance(max_effect_receipts, int)
+        or isinstance(max_effect_receipts, bool)
+        or max_effect_receipts < 1
+    ):
+        raise TypeError("GatewayStore max_effect_receipts must be a positive integer")
+    for method_name in ("acquire_runtime", "close"):
+        if not callable(getattr(store, method_name, None)):
+            raise TypeError(f"GatewayStore must define callable {method_name}()")
+
+
+def _validate_acquired_session(
+    candidate: object,
+    *,
+    gateway_id: str,
+    owner_token: str,
+) -> GatewayStoreSession:
+    if not _is_gateway_store_session(candidate):
+        raise TypeError("GatewayStore.acquire_runtime() must return GatewayStoreSession")
+    validate_runtime_lease(candidate.lease)
+    if candidate.lease.gateway_id != gateway_id:
+        raise ValueError("GatewayStoreSession lease belongs to another Gateway")
+    if candidate.lease.owner_token != owner_token:
+        raise ValueError("GatewayStoreSession lease owner token does not match acquisition")
+    return candidate
+
+
+async def _close_invalid_session_candidate(
+    candidate: object,
+    primary: BaseException,
+) -> None:
+    close = getattr(candidate, "close", None)
+    if not callable(close):
+        primary.add_note("Malformed GatewayStoreSession exposed no callable close()")
+        return
+    try:
+        await cast(Callable[[], Awaitable[None]], close)()
+    except BaseException as cleanup_error:
+        primary.add_note(
+            "Gateway cleanup also failed: "
+            + _bounded_cleanup_error_summary(
+                "Malformed GatewayStoreSession",
+                cleanup_error,
+            )
+        )
 
 
 __all__ = ["Gateway"]

@@ -47,7 +47,12 @@
   and real Memory/SQLite Controller graphs apply the same rule to a known
   foreground workflow binding/route commit;
 - invalid finite capacities, including the default in-memory idempotency record
-  bound, fail during construction before startup or I/O;
+  bound, plus invalid finite timeout/retention/retry values fail during
+  construction before startup or I/O;
+- invalid Application summary/capability contracts, malformed Channel/store
+  structure, and constructor-to-start identity drift fail before store
+  acquisition for Memory and SQLite compositions; an acquired malformed or
+  mismatched session is closed before runtime construction;
 - the positive active-Thread observation bound reaches the one projection
   runtime, rejects only a distinct Thread before Application subscription or
   projection delivery work, and has no durable slot state; a full

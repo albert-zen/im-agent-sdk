@@ -10,7 +10,8 @@ prove:
   session or silently resolving Protocol stubs;
 - one namespace, exclusive acquisition, store-authored expiry, renewal,
   monotonic epochs, release, crash takeover, and stale owner/token/epoch/
-  expired-current-lease rejection for every mutation family, plus parity when
+  expired-current-lease rejection for every mutation family, exact rejection
+  of boolean/fractional epochs and non-datetime/naive expiries, plus parity when
   same-owner reacquisition renews the shared lease past an older session's
   copied expiry;
 - unchanged reads cannot grant mutation authority after lease loss;

@@ -45,6 +45,15 @@ live in `imagent.gateway.composition`. The removed
 `imagent.gateway_composition` module has no compatibility shim.
 
 At startup `Gateway` acquires exactly one lease-bound `GatewayStore` session.
+Before that acquisition or any adapter/store I/O, the public composition
+boundary validates every finite `GatewayLimits` field, each current
+Application summary and capability contract, Channel and store structure, and
+stable unique Channel/Application identities. Startup repeats the identity and
+summary validation against the constructor snapshot so mutable adapters cannot
+drift into dictionary-key replacement. The returned session must expose the
+complete structural session contract and the exact requested Gateway/owner
+lease before any runtime is constructed; malformed candidates are closed and
+reported explicitly.
 That same session supplies each focused internal bridge-state owner and creates
 one `StoreBackedGatewayEffectExecutor`; scoped action factories receive only
 the lifecycle-bound fenced `GatewayEffectExecutor` protocol. Composition
@@ -66,8 +75,10 @@ opening a live-before-baseline window.
 
 `GatewayLimits` carries finite startup, recovery, projection (including active
 Thread-observation), request, extension, in-memory idempotency, delivery-submission, and
-Conversation-serialization limits. Leaf runtimes validate the limits they
-consume during construction, before startup or external work. The default
+Conversation-serialization limits. The immutable group validates every field
+at construction, including positive integer capacities, positive finite
+timeouts/retention, finite non-negative retry delays, and retry ordering. Leaf
+runtimes retain their local defensive checks. The default
 process-local idempotency repository receives its positive record bound only
 from this group; an explicitly supplied repository remains unmodified. Invalid
 finite-capacity configuration fails explicitly. `GatewayExtensions` contains

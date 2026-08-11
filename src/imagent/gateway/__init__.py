@@ -21,6 +21,7 @@ from ..applications.contract import (
     ApplicationRef,
     ApplicationSummary,
     ThreadRef,
+    validate_application_summary,
 )
 from ..applications.operations import (
     ApplicationOperation,
@@ -98,6 +99,7 @@ from .input.failure_presentation import InboundFailurePresenter as InboundFailur
 from .lifecycle import (
     GatewayNotRunning,
     GatewayStartupAdmission,
+    _bounded_cleanup_error_summary,
 )
 from .persistence import BindingConflict, InMemoryIdempotencyRepository
 from .persistence.memory import (
@@ -199,11 +201,19 @@ class ImAgentGateway:
             _projection_routes.ProjectionPolicy.REMEMBERED_LAST_RECIPIENT
         ),
     ) -> None:
-        self._channels = {channel.channel_instance_id: channel for channel in channels}
-        self._applications = {
-            application.summary.ref.application_instance_id: application
-            for application in applications
-        }
+        channel_ids = tuple(channel.channel_instance_id for channel in channels)
+        if len(channel_ids) != len(set(channel_ids)):
+            raise ValueError("Gateway Channel instance IDs must be unique")
+        application_summaries = tuple(application.summary for application in applications)
+        for summary in application_summaries:
+            validate_application_summary(summary)
+        application_ids = tuple(
+            summary.ref.application_instance_id for summary in application_summaries
+        )
+        if len(application_ids) != len(set(application_ids)):
+            raise ValueError("Gateway Application instance IDs must be unique")
+        self._channels = dict(zip(channel_ids, channels, strict=True))
+        self._applications = dict(zip(application_ids, applications, strict=True))
         coherent_session = _coherent_store_session(repositories)
         bindings = coherent_session if coherent_session is not None else repositories.bindings
         self._binding_runtime = _BindingRuntime(bindings)
@@ -376,7 +386,18 @@ class ImAgentGateway:
             restart_open_requests = await self._projection_runtime.open_request_refs()
             await self._projection_runtime.restore()
             for application in self._applications.values():
-                await application.start()
+                try:
+                    await application.start()
+                except BaseException as start_error:
+                    await _cleanup_lifecycle_owner(
+                        start_error,
+                        (
+                            "Application "
+                            f"{application.summary.ref.application_instance_id!r} partial startup"
+                        ),
+                        application.stop,
+                    )
+                    raise
                 started_applications.append(application)
                 self._startup_admission.raise_if_overflowed()
             for channel in self._channels.values():
@@ -387,16 +408,11 @@ class ImAgentGateway:
                         partial(self._begin_inbound, channel.channel_instance_id),
                     )
                 except BaseException as start_error:
-                    try:
-                        await channel.stop()
-                    except BaseException as stop_error:
-                        start_error.add_note(
-                            f"Channel cleanup after startup failure also failed: {stop_error!r}"
-                        )
-                        logger.exception(
-                            "Channel cleanup after startup failure failed",
-                            exc_info=stop_error,
-                        )
+                    await _cleanup_lifecycle_owner(
+                        start_error,
+                        f"Channel {channel.channel_instance_id!r} partial startup",
+                        channel.stop,
+                    )
                     raise
                 started_channels.append(channel)
                 self._startup_admission.raise_if_overflowed()
@@ -425,43 +441,118 @@ class ImAgentGateway:
                         f"Gateway startup rollback: {release_error!r}"
                     )
             self._startup_admission.clear()
-            await self._projection_runtime.stop()
+            await _cleanup_lifecycle_owner(
+                error,
+                "projection runtime",
+                self._projection_runtime.stop,
+            )
             if self._outbound_presentation_runtime is not None:
-                await self._outbound_presentation_runtime.close()
-            await self._delivery_coordinator.close()
+                await _cleanup_lifecycle_owner(
+                    error,
+                    "outbound presentation runtime",
+                    self._outbound_presentation_runtime.close,
+                )
+            await _cleanup_lifecycle_owner(
+                error,
+                "delivery coordinator",
+                self._delivery_coordinator.close,
+            )
             for channel in reversed(started_channels):
-                await channel.stop()
+                await _cleanup_lifecycle_owner(
+                    error,
+                    f"Channel {channel.channel_instance_id!r}",
+                    channel.stop,
+                )
             if isinstance(self._controller, ControllerLifecycle):
-                await self._controller.close()
+                await _cleanup_lifecycle_owner(
+                    error,
+                    "Controller",
+                    self._controller.close,
+                )
             if self._inbound_content_transform_runtime is not None:
-                await self._inbound_content_transform_runtime.close()
+                await _cleanup_lifecycle_owner(
+                    error,
+                    "inbound content transform runtime",
+                    self._inbound_content_transform_runtime.close,
+                )
             if self._inbound_failure_presentation_runtime is not None:
-                await self._inbound_failure_presentation_runtime.close()
+                await _cleanup_lifecycle_owner(
+                    error,
+                    "inbound failure presentation runtime",
+                    self._inbound_failure_presentation_runtime.close,
+                )
             if self._delivery_outcome_observer_runtime is not None:
-                await self._delivery_outcome_observer_runtime.close()
+                await _cleanup_lifecycle_owner(
+                    error,
+                    "delivery outcome observer runtime",
+                    self._delivery_outcome_observer_runtime.close,
+                )
             for application in reversed(started_applications):
-                await application.stop()
+                await _cleanup_lifecycle_owner(
+                    error,
+                    f"Application {application.summary.ref.application_instance_id!r}",
+                    application.stop,
+                )
             raise
 
     async def stop(self) -> None:
         self._accepting_inbound = False
         self._starting = False
-        await self._projection_runtime.stop()
+        error: BaseException | None = None
+        error = await _cleanup_lifecycle_owner(
+            error,
+            "projection runtime",
+            self._projection_runtime.stop,
+        )
         if self._outbound_presentation_runtime is not None:
-            await self._outbound_presentation_runtime.close()
-        await self._delivery_coordinator.close()
+            error = await _cleanup_lifecycle_owner(
+                error,
+                "outbound presentation runtime",
+                self._outbound_presentation_runtime.close,
+            )
+        error = await _cleanup_lifecycle_owner(
+            error,
+            "delivery coordinator",
+            self._delivery_coordinator.close,
+        )
         for channel in reversed(tuple(self._channels.values())):
-            await channel.stop()
+            error = await _cleanup_lifecycle_owner(
+                error,
+                f"Channel {channel.channel_instance_id!r}",
+                channel.stop,
+            )
         if isinstance(self._controller, ControllerLifecycle):
-            await self._controller.close()
+            error = await _cleanup_lifecycle_owner(
+                error,
+                "Controller",
+                self._controller.close,
+            )
         if self._inbound_content_transform_runtime is not None:
-            await self._inbound_content_transform_runtime.close()
+            error = await _cleanup_lifecycle_owner(
+                error,
+                "inbound content transform runtime",
+                self._inbound_content_transform_runtime.close,
+            )
         if self._inbound_failure_presentation_runtime is not None:
-            await self._inbound_failure_presentation_runtime.close()
+            error = await _cleanup_lifecycle_owner(
+                error,
+                "inbound failure presentation runtime",
+                self._inbound_failure_presentation_runtime.close,
+            )
         if self._delivery_outcome_observer_runtime is not None:
-            await self._delivery_outcome_observer_runtime.close()
+            error = await _cleanup_lifecycle_owner(
+                error,
+                "delivery outcome observer runtime",
+                self._delivery_outcome_observer_runtime.close,
+            )
         for application in reversed(tuple(self._applications.values())):
-            await application.stop()
+            error = await _cleanup_lifecycle_owner(
+                error,
+                f"Application {application.summary.ref.application_instance_id!r}",
+                application.stop,
+            )
+        if error is not None:
+            raise error
 
     def get_projection_health(
         self,
@@ -1196,6 +1287,26 @@ class ImAgentGateway:
             raise KeyError(
                 f"Agent application is not registered: {application_instance_id}"
             ) from error
+
+
+async def _cleanup_lifecycle_owner(
+    primary: BaseException | None,
+    owner: str,
+    cleanup: Callable[[], Awaitable[None]],
+) -> BaseException | None:
+    """Continue teardown after one owner fails while preserving the first error."""
+
+    try:
+        await cleanup()
+    except BaseException as cleanup_error:
+        summary = _bounded_cleanup_error_summary(owner, cleanup_error)
+        if primary is None:
+            cleanup_error.add_note(f"Gateway cleanup failed: {summary}")
+            primary = cleanup_error
+        else:
+            primary.add_note(f"Gateway cleanup also failed: {summary}")
+        logger.error("Gateway cleanup failed: %s", summary)
+    return primary
 
 
 def _coherent_store_session(

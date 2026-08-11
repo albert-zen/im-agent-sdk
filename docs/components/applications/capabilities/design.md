@@ -49,8 +49,11 @@ cursor, provider setting, or product retry policy.
 The implementation is `schemas/v1/capabilities.schema.json` plus
 `src/imagent/applications/capabilities.py`. Focused ownership evidence is
 `tests/applications/test_capabilities.py`, alongside adapter conformance and
-negative clean-process facade/import-order checks. The schema and capability
-semantics are unchanged by this mechanical move.
+negative clean-process facade/import-order checks. Runtime validation rejects
+the wrong aggregate, nested record, enum/discriminant, attachment collection,
+or attachment-source type before any consumer composes an advertised
+capability. The schema and capability semantics are unchanged by this
+mechanical move.
 
 ## Authority
 

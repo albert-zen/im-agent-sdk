@@ -9,6 +9,7 @@ from collections.abc import Callable
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any, cast
 
 from imagent.applications.contract import (
     ApplicationRef,
@@ -42,9 +43,11 @@ from imagent.gateway.persistence.store import (
     EffectReceiptConflict,
     GatewayNamespaceConflict,
     GatewayStore,
+    RuntimeLease,
     RuntimeLeaseUnavailable,
     StaleRuntimeFence,
     WorkspaceIdentityConflict,
+    validate_runtime_lease,
 )
 from imagent.interaction.messages import ConversationRef
 from imagent.interaction.operations import ContractViolation
@@ -86,6 +89,26 @@ class GatewayStoreParityTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("GatewayStore", persistence.__all__)
         self.assertIn("MemoryGatewayStore", persistence.__all__)
         self.assertIn("SQLiteGatewayStore", persistence.__all__)
+
+    def test_runtime_lease_requires_exact_fencing_types(self) -> None:
+        valid = RuntimeLease(
+            gateway_id="gateway",
+            owner_token="owner",
+            epoch=1,
+            expires_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+        validate_runtime_lease(valid)
+        malformed = (
+            RuntimeLease("gateway", "owner", cast(Any, True), valid.expires_at),
+            RuntimeLease("gateway", "owner", cast(Any, 1.5), valid.expires_at),
+            RuntimeLease("gateway", "owner", 0, valid.expires_at),
+            RuntimeLease("gateway", "owner", 1, cast(Any, "later")),
+            RuntimeLease("gateway", "owner", 1, datetime(2026, 1, 1)),
+        )
+        for lease in malformed:
+            with self.subTest(lease=lease):
+                with self.assertRaises(ContractViolation):
+                    validate_runtime_lease(lease)
 
     async def test_public_stores_are_one_protocol_and_one_namespace(self) -> None:
         for factory in self._factories():

@@ -176,16 +176,65 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(FrozenInstanceError):
             limits.baseline_history_limit = 4  # type: ignore[misc]
 
-        for invalid in (0, -1, True, cast(int, 1.5)):
-            with self.subTest(invalid_idempotency_max_records=invalid):
-                with self.assertRaisesRegex(ValueError, "positive integer"):
-                    GatewayLimits(idempotency_max_records=invalid)
-            with self.subTest(invalid_delivery_submission_max_records=invalid):
-                with self.assertRaisesRegex(ValueError, "positive integer"):
-                    GatewayLimits(delivery_submission_max_records=invalid)
-            with self.subTest(invalid_conversation_serialization_max_active_keys=invalid):
-                with self.assertRaisesRegex(ValueError, "positive integer"):
-                    GatewayLimits(conversation_serialization_max_active_keys=invalid)
+        integer_fields = (
+            "baseline_history_limit",
+            "recovery_history_page_size",
+            "recovery_max_pages",
+            "catchup_limit",
+            "projection_item_limit",
+            "request_delivery_max_pending",
+            "startup_buffer_max_pending",
+            "turn_acceptance_event_max_pending",
+            "inbound_content_transform_max_items",
+            "inbound_content_transform_max_concurrency",
+            "inbound_failure_present_max_items",
+            "inbound_failure_present_max_text_characters",
+            "inbound_failure_present_max_concurrency",
+            "outbound_presentation_max_items",
+            "outbound_presentation_max_text_characters",
+            "outbound_presentation_max_concurrency",
+            "delivery_outcome_observer_max_items",
+            "delivery_outcome_observer_max_text_characters",
+            "delivery_outcome_observer_max_concurrency",
+            "delivery_submission_max_records",
+            "conversation_serialization_max_active_keys",
+            "idempotency_max_records",
+            "projection_max_active_threads",
+        )
+        for name in integer_fields:
+            for invalid in (0, -1, True, cast(int, 1.5)):
+                with self.subTest(name=name, invalid=invalid):
+                    with self.assertRaisesRegex(ValueError, "positive integer"):
+                        replace(limits, **{name: invalid})
+
+        positive_number_fields = (
+            "turn_correlation_retention_seconds",
+            "request_correlation_retention_seconds",
+            "inbound_content_transform_timeout_seconds",
+            "inbound_failure_present_timeout_seconds",
+            "outbound_presentation_timeout_seconds",
+            "delivery_outcome_observer_timeout_seconds",
+        )
+        for name in positive_number_fields:
+            for invalid in (0, -1.0, True, float("nan"), float("inf"), "1"):
+                with self.subTest(name=name, invalid=invalid):
+                    with self.assertRaisesRegex(ValueError, "positive finite number"):
+                        replace(limits, **{name: invalid})
+
+        for name in (
+            "subscription_retry_initial_seconds",
+            "subscription_retry_max_seconds",
+        ):
+            for invalid in (-1.0, True, float("nan"), float("inf"), "1"):
+                with self.subTest(name=name, invalid=invalid):
+                    with self.assertRaisesRegex(ValueError, "finite non-negative number"):
+                        replace(limits, **{name: invalid})
+        with self.assertRaisesRegex(ValueError, "greater than or equal"):
+            replace(
+                limits,
+                subscription_retry_initial_seconds=2.0,
+                subscription_retry_max_seconds=1.0,
+            )
 
     def test_gateway_limits_preserve_existing_positional_layout(self) -> None:
         limits = GatewayLimits(

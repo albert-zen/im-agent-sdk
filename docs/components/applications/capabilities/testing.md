@@ -4,8 +4,10 @@ Focused ownership coverage lives in `tests/applications/test_capabilities.py`;
 `tests/conformance/test_adapter_contracts.py` retains the cross-adapter conformance
 evidence.
 
-Tests validate every enum/discriminant, project mode and Thread deletion
-declaration, attachment-source support, replay/order/request/runtime claims,
+Tests validate the exact aggregate and nested record types, every
+enum/discriminant field, project mode and Thread deletion declaration, the
+attachment collection and every attachment-source value,
+replay/order/request/runtime claims,
 rejection of inconsistent capability combinations, and that importing the
 capability owner does not initialize concrete adapters or Gateway modules.
 Clean-process import-order cases prove the owner is the sole capability public

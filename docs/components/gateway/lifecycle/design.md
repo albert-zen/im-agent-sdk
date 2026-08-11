@@ -35,7 +35,9 @@ existing owner order: validation before startup, bounded `close()` on rollback
 after Channels and on normal shutdown before Applications. Controller policy
 cannot acquire/release the store session or alter admission ownership.
 
-Gateway starts each Channel exactly once with the completed-message callback
+Gateway starts each Application exactly once; an Application that raises after
+partial startup receives its one cleanup call before common rollback handles
+previously started Applications. Gateway starts each Channel exactly once with the completed-message callback
 and that Channel's admission handler. It performs no signature compatibility
 inspection and never retries `start` with one argument. A call-binding failure
 from a legacy implementation or a `TypeError` raised inside a valid
@@ -50,6 +52,15 @@ pre-side-effect claims owned by that startup, stops projection and bounded
 extension/delivery runtimes, stops started Channels in reverse order, closes
 the Controller, and stops started Applications in reverse order. Normal
 shutdown closes the gate first and then performs the same bounded owner cleanup.
+A cleanup failure from any one owner is recorded against the primary failure
+and does not skip later owners. On rollback the startup failure remains primary;
+on normal stop the first cleanup failure is primary and later cleanup failures
+are attached as bounded exception notes. Owner, exception type, and sanitized
+detail use one fixed-size summary for both inner teardown and the public
+wrapper; C0/C1 and Unicode format controls become visible placeholders, and
+cleanup logging emits that summary without an arbitrary traceback.
+Each owner is invoked exactly once;
+the wrapper does not retry the inner runtime teardown to manufacture success.
 A callback outside the live window fails explicitly or is released; it never
 starts Application work during teardown.
 
