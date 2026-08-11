@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
-from dataclasses import replace
+import inspect
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import fields, is_dataclass, replace
+from enum import Enum
 from types import TracebackType
 from typing import Self, cast
 from uuid import uuid4
@@ -22,8 +24,8 @@ from ..interaction.operations import require_identifier
 from . import ImAgentGateway
 from .actions import ApplicationActions, ConversationActions
 from .composition import GatewayExtensions, GatewayLimits, GatewayRepositories
-from .diagnostics import DiagnosticsSnapshot
-from .lifecycle import _bounded_cleanup_error_summary
+from .diagnostics import DiagnosticsSnapshot, _bounded_cleanup_error_summary
+from .lifecycle import _public_lifecycle_error
 from .persistence.store import (
     GatewayStore,
     GatewayStoreSession,
@@ -74,9 +76,12 @@ class Gateway:
         self._gateway_id = gateway_id
         self._channels = list(channels)
         self._channel_ids = channel_ids
+        self._channel_snapshot = _channel_composition_snapshot(self._channels)
         self._applications = list(applications)
         self._application_ids = application_ids
+        self._application_snapshot = _application_composition_snapshot(self._applications)
         self._store = store
+        self._store_snapshot = _store_composition_snapshot(self._store)
         self._controller = controller if controller is not None else extensions.controller
         self._projection_policy = projection_policy
         self._limits = limits
@@ -230,11 +235,17 @@ class Gateway:
         channel_ids = _validate_channels(self._channels)
         if channel_ids != self._channel_ids:
             raise ValueError("Gateway Channel instance identity changed after composition")
+        if _channel_composition_snapshot(self._channels) != self._channel_snapshot:
+            raise ValueError("Gateway Channel composition changed after composition")
         summaries = _validate_applications(self._applications)
         application_ids = tuple(summary.ref.application_instance_id for summary in summaries)
         if application_ids != self._application_ids:
             raise ValueError("Gateway Application instance identity changed after composition")
+        if _application_composition_snapshot(self._applications) != self._application_snapshot:
+            raise ValueError("Gateway Application composition changed after composition")
         _validate_store(self._store)
+        if _store_composition_snapshot(self._store) != self._store_snapshot:
+            raise ValueError("GatewayStore composition changed after composition")
 
     async def _supervise_lease(
         self,
@@ -323,14 +334,115 @@ def _append_cleanup_error(
     cleanup_error: BaseException,
 ) -> BaseException:
     if primary is None:
-        cleanup_error.add_note(
+        primary = _public_lifecycle_error(cleanup_error, owner)
+        primary.add_note(
             f"Gateway cleanup failed: {_bounded_cleanup_error_summary(owner, cleanup_error)}"
         )
-        return cleanup_error
+        return primary
+    primary = _public_lifecycle_error(primary, "Gateway lifecycle")
     primary.add_note(
         f"Gateway cleanup also failed: {_bounded_cleanup_error_summary(owner, cleanup_error)}"
     )
     return primary
+
+
+def _freeze_composition_value(value: object) -> object:
+    """Capture validated composition values without retaining mutable mappings."""
+
+    if isinstance(value, Enum):
+        return ("enum", type(value), value.value)
+    if is_dataclass(value) and not isinstance(value, type):
+        return (
+            "dataclass",
+            type(value),
+            tuple(
+                (field.name, _freeze_composition_value(getattr(value, field.name)))
+                for field in fields(value)
+            ),
+        )
+    if isinstance(value, Mapping):
+        entries = tuple(
+            (_freeze_composition_value(key), _freeze_composition_value(item))
+            for key, item in value.items()
+        )
+        return ("mapping", tuple(sorted(entries, key=repr)))
+    if isinstance(value, (tuple, list)):
+        return ("sequence", tuple(_freeze_composition_value(item) for item in value))
+    if isinstance(value, (set, frozenset)):
+        return (
+            "set",
+            tuple(sorted((_freeze_composition_value(item) for item in value), key=repr)),
+        )
+    if isinstance(value, float) and value != value:
+        return ("scalar", type(value), "nan")
+    if isinstance(value, (str, int, float, bool, bytes, type(None))):
+        return ("scalar", type(value), value)
+    try:
+        representation = repr(value)
+    except BaseException:
+        representation = "<unrepresentable>"
+    return ("object", type(value), representation[:512])
+
+
+def _callable_composition_shape(value: object) -> tuple[object, ...]:
+    target = getattr(value, "__func__", value)
+    return (
+        type(target),
+        getattr(target, "__module__", None),
+        getattr(target, "__qualname__", None),
+        inspect.iscoroutinefunction(target),
+    )
+
+
+def _channel_composition_snapshot(
+    channels: list[ChannelAdapter],
+) -> tuple[object, ...]:
+    return tuple(
+        (
+            type(channel),
+            channel.channel_instance_id,
+            _freeze_composition_value(channel.capabilities),
+            tuple(
+                (name, _callable_composition_shape(getattr(channel, name)))
+                for name in ("start", "stop", "send")
+            ),
+        )
+        for channel in channels
+    )
+
+
+def _application_composition_snapshot(
+    applications: list[AgentApplicationAdapter],
+) -> tuple[object, ...]:
+    return tuple(
+        (
+            type(application),
+            _freeze_composition_value(application.summary),
+            tuple(
+                (name, _callable_composition_shape(getattr(application, name)))
+                for name in (
+                    "start",
+                    "stop",
+                    "execute",
+                    "send_input",
+                    "list_pending_requests",
+                    "subscribe_thread",
+                )
+            ),
+        )
+        for application in applications
+    )
+
+
+def _store_composition_snapshot(store: GatewayStore) -> tuple[object, ...]:
+    return (
+        type(store),
+        _freeze_composition_value(store.max_effect_receipts),
+        tuple(
+            (name, _callable_composition_shape(getattr(store, name)))
+            for name in ("acquire_runtime", "close")
+        ),
+    )
 
 
 def _validate_channels(channels: list[ChannelAdapter]) -> tuple[str, ...]:
@@ -343,8 +455,10 @@ def _validate_channels(channels: list[ChannelAdapter]) -> tuple[str, ...]:
         if not isinstance(getattr(channel, "capabilities", None), ChannelCapabilities):
             raise TypeError("Gateway Channel capabilities must be ChannelCapabilities")
         for method_name in ("start", "stop", "send"):
-            if not callable(getattr(channel, method_name, None)):
-                raise TypeError(f"Gateway Channel must define callable {method_name}()")
+            _require_async_callable(
+                getattr(channel, method_name, None),
+                f"Gateway Channel {method_name}()",
+            )
         channel_ids.append(channel_id)
     if len(channel_ids) != len(set(channel_ids)):
         raise ValueError("Gateway Channel instance IDs must be unique")
@@ -360,6 +474,19 @@ def _validate_applications(
         if not isinstance(summary, ApplicationSummary):
             raise TypeError("Gateway Application summary must be ApplicationSummary")
         validate_application_summary(summary)
+        for method_name in (
+            "start",
+            "stop",
+            "execute",
+            "send_input",
+            "list_pending_requests",
+        ):
+            _require_async_callable(
+                getattr(application, method_name, None),
+                f"Gateway Application {method_name}()",
+            )
+        if not callable(getattr(application, "subscribe_thread", None)):
+            raise TypeError("Gateway Application must define callable subscribe_thread()")
         summaries.append(summary)
     application_ids = tuple(summary.ref.application_instance_id for summary in summaries)
     if len(application_ids) != len(set(application_ids)):
@@ -376,8 +503,21 @@ def _validate_store(store: GatewayStore) -> None:
     ):
         raise TypeError("GatewayStore max_effect_receipts must be a positive integer")
     for method_name in ("acquire_runtime", "close"):
-        if not callable(getattr(store, method_name, None)):
-            raise TypeError(f"GatewayStore must define callable {method_name}()")
+        _require_async_callable(
+            getattr(store, method_name, None),
+            f"GatewayStore {method_name}()",
+        )
+
+
+def _require_async_callable(value: object, description: str) -> None:
+    if not callable(value):
+        raise TypeError(f"{description} must be an async callable")
+    if inspect.iscoroutinefunction(value):
+        return
+    call = getattr(value, "__call__", None)
+    if inspect.iscoroutinefunction(call):
+        return
+    raise TypeError(f"{description} must be an async callable")
 
 
 def _validate_acquired_session(

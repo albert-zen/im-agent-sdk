@@ -618,7 +618,8 @@ class BindingRuntimeTests(unittest.IsolatedAsyncioTestCase):
             context.exception.__notes__,
             [
                 "Binding outcome verification also failed; the prepared route remains "
-                "fenced: RuntimeError('binding verification unavailable')"
+                "fenced: route binding verification: RuntimeError: "
+                "binding verification unavailable"
             ],
         )
 

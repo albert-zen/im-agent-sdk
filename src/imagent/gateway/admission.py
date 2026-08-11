@@ -11,6 +11,7 @@ from ..interaction.channels.contract import (
     MessageHandler,
 )
 from ..interaction.messages import ConversationRef, InboundMessage
+from .diagnostics import _bounded_cleanup_error_summary
 from .persistence.repository_contracts import (
     IdempotencyClaimStatus,
     IdempotencyRepository,
@@ -132,7 +133,10 @@ class _InboundAdmissionLease:
             except BaseException as release_error:
                 error.add_note(
                     "Failed to release an inbound claim after handoff fencing failed: "
-                    f"{release_error!r}"
+                    + _bounded_cleanup_error_summary(
+                        "inbound claim release",
+                        release_error,
+                    )
                 )
             raise
         self._state = "transferred"

@@ -35,6 +35,7 @@ from ...interaction.operations import (
     _MappedOperationError,
     require_identifier,
 )
+from ..diagnostics import _bounded_cleanup_error_summary
 
 logger = logging.getLogger(__name__)
 
@@ -285,12 +286,19 @@ class TurnAcceptanceOrderingGate:
                 except BaseException as recovery_error:
                     ordered_event_error.add_note(
                         "Ordering-gap recovery scheduling also failed after "
-                        f"ordered event application: {recovery_error!r}"
+                        "ordered event application: "
+                        + _bounded_cleanup_error_summary(
+                            "ordering-gap recovery",
+                            recovery_error,
+                        )
                     )
-                    logger.exception(
+                    logger.error(
                         "Ordering-gap recovery scheduling failed while preserving "
-                        "the ordered-event error",
-                        exc_info=recovery_error,
+                        "the ordered-event error: %s",
+                        _bounded_cleanup_error_summary(
+                            "ordering-gap recovery",
+                            recovery_error,
+                        ),
                     )
                 raise
 
@@ -392,11 +400,19 @@ class InputDispatchRuntime:
                     primary_error = drain_error
                 else:
                     primary_error.add_note(
-                        f"Buffered-event draining also failed after input handling: {drain_error!r}"
+                        "Buffered-event draining also failed after input handling: "
+                        + _bounded_cleanup_error_summary(
+                            "buffered-event drain",
+                            drain_error,
+                        )
                     )
-                    logger.exception(
-                        "Buffered-event draining failed while preserving the primary input error",
-                        exc_info=drain_error,
+                    logger.error(
+                        "Buffered-event draining failed while preserving the "
+                        "primary input error: %s",
+                        _bounded_cleanup_error_summary(
+                            "buffered-event drain",
+                            drain_error,
+                        ),
                     )
         if primary_error is not None:
             if accepted is not None:

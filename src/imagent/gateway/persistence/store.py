@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol, TypeGuard, runtime_checkable
@@ -220,8 +221,28 @@ def _is_gateway_store_session(value: object) -> TypeGuard[GatewayStoreSession]:
     except AttributeError:
         return False
     return isinstance(lease, RuntimeLease) and all(
-        callable(getattr(value, name, None)) for name in _GATEWAY_STORE_SESSION_METHODS
+        _is_concrete_async_session_member(value, name) for name in _GATEWAY_STORE_SESSION_METHODS
     )
+
+
+def _is_concrete_async_session_member(value: object, name: str) -> bool:
+    """Reject inherited Protocol ellipses while allowing SQLite delegation."""
+
+    try:
+        static_member = inspect.getattr_static(type(value), name)
+    except AttributeError:
+        # SQLite and narrow consumer wrappers deliberately expose focused
+        # repository methods through a concrete __getattr__ delegation seam.
+        member = getattr(value, name, None)
+    else:
+        owner = next(
+            (base for base in type(value).__mro__ if base.__dict__.get(name) is static_member),
+            None,
+        )
+        if owner is not None and getattr(owner, "_is_protocol", False):
+            return False
+        member = getattr(value, name, None)
+    return callable(member) and inspect.iscoroutinefunction(member)
 
 
 def validate_runtime_lease(lease: RuntimeLease) -> None:

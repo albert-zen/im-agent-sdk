@@ -36,7 +36,9 @@ Tests must prove:
   failure when any of those cleanup calls also fail, continues through
   Controller/Application cleanup, and records every cleanup failure without
   invoking an owner twice; million-character cleanup exceptions produce only
-  fixed-size sanitized notes/log evidence in both inner and public teardown;
+  fixed-size sanitized public exception messages, notes, and log evidence in
+  both inner and public teardown, including a huge first startup/partial-
+  rollback failure;
 - all SDK-owned Channels receive their exact admission handler through one
   two-argument start invocation; a legacy one-argument body runs zero times,
   and an internal two-argument `TypeError` runs once;

@@ -1,40 +1,53 @@
 from __future__ import annotations
 
+from asyncio import CancelledError
 from collections import deque
 from typing import Generic, TypeVar
 from unicodedata import category
 
+from .diagnostics import (
+    _CLEANUP_DETAIL_MAX_CHARS,
+    _CLEANUP_OWNER_MAX_CHARS,
+    _bounded_cleanup_error_summary,
+    _bounded_cleanup_text,
+)
+
 T = TypeVar("T")
 
-_CLEANUP_OWNER_MAX_CHARS = 96
-_CLEANUP_TYPE_MAX_CHARS = 64
-_CLEANUP_DETAIL_MAX_CHARS = 192
-_CLEANUP_SUMMARY_MAX_CHARS = 384
+class GatewayLifecycleFailure(RuntimeError):
+    """Bounded public projection of one lifecycle owner failure."""
+
+    def __init__(self, owner: str, error: BaseException) -> None:
+        self.owner = _bounded_cleanup_text(owner, _CLEANUP_OWNER_MAX_CHARS)
+        self.original_error = error
+        self.original_type = type(error).__name__
+        summary = _bounded_cleanup_error_summary(owner, error)
+        super().__init__(f"Gateway lifecycle failure: {summary}")
+        self.__cause__ = error
+        self.__suppress_context__ = True
 
 
-def _bounded_cleanup_error_summary(owner: str, error: BaseException) -> str:
-    """Return content-safe finite evidence without expanding a traceback."""
+def _public_lifecycle_error(
+    error: BaseException,
+    owner: str,
+) -> BaseException:
+    """Project lifecycle failures before they cross a public error boundary."""
 
-    owner_summary = _bounded_cleanup_text(owner, _CLEANUP_OWNER_MAX_CHARS)
-    error_type = _bounded_cleanup_text(type(error).__name__, _CLEANUP_TYPE_MAX_CHARS)
+    if isinstance(error, GatewayLifecycleFailure):
+        return error
+    if isinstance(error, (GatewayStartupOverflow, GatewayNotRunning)):
+        return error
+    if isinstance(error, (CancelledError, KeyboardInterrupt, SystemExit)):
+        return error
     try:
         detail = str(error)
     except BaseException:
         detail = "<unprintable>"
-    detail_summary = _bounded_cleanup_text(detail, _CLEANUP_DETAIL_MAX_CHARS)
-    return f"{owner_summary}: {error_type}: {detail_summary}"[:_CLEANUP_SUMMARY_MAX_CHARS]
-
-
-def _bounded_cleanup_text(value: str, max_chars: int) -> str:
-    sanitized = "".join(
-        "?" if category(character) in {"Cc", "Cf"} else character for character in value
-    )
-    normalized = " ".join(sanitized.split())
-    if not normalized:
-        normalized = "<empty>"
-    if len(normalized) <= max_chars:
-        return normalized
-    return f"{normalized[: max_chars - 3]}..."
+    if len(detail) <= _CLEANUP_DETAIL_MAX_CHARS and not any(
+        category(character) in {"Cc", "Cf"} for character in detail
+    ):
+        return error
+    return GatewayLifecycleFailure(owner, error)
 
 
 class GatewayStartupOverflow(RuntimeError):

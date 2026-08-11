@@ -58,7 +58,10 @@ on normal stop the first cleanup failure is primary and later cleanup failures
 are attached as bounded exception notes. Owner, exception type, and sanitized
 detail use one fixed-size summary for both inner teardown and the public
 wrapper; C0/C1 and Unicode format controls become visible placeholders, and
-cleanup logging emits that summary without an arbitrary traceback.
+cleanup logging emits that summary without an arbitrary traceback. The first
+cleanup failure itself is projected to a `GatewayLifecycleFailure` carrying a
+bounded public message and inspectable original cause; raw owner text never
+becomes the public exception detail.
 Each owner is invoked exactly once;
 the wrapper does not retry the inner runtime teardown to manufacture success.
 A callback outside the live window fails explicitly or is released; it never

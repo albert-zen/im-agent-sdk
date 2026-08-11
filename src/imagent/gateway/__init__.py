@@ -77,6 +77,7 @@ from .delivery.proactive_runtime import ProactiveDeliveryService
 from .diagnostics import (
     DiagnosticsSnapshot,
     GatewayDiagnosticFacts,
+    _bounded_cleanup_error_summary,
     collect_application_diagnostics,
     collect_channel_diagnostics,
     new_diagnostics_snapshot,
@@ -99,7 +100,7 @@ from .input.failure_presentation import InboundFailurePresenter as InboundFailur
 from .lifecycle import (
     GatewayNotRunning,
     GatewayStartupAdmission,
-    _bounded_cleanup_error_summary,
+    _public_lifecycle_error,
 )
 from .persistence import BindingConflict, InMemoryIdempotencyRepository
 from .persistence.memory import (
@@ -389,7 +390,7 @@ class ImAgentGateway:
                 try:
                     await application.start()
                 except BaseException as start_error:
-                    await _cleanup_lifecycle_owner(
+                    start_error = await _cleanup_lifecycle_owner(
                         start_error,
                         (
                             "Application "
@@ -397,7 +398,8 @@ class ImAgentGateway:
                         ),
                         application.stop,
                     )
-                    raise
+                    assert start_error is not None
+                    raise start_error
                 started_applications.append(application)
                 self._startup_admission.raise_if_overflowed()
             for channel in self._channels.values():
@@ -408,12 +410,13 @@ class ImAgentGateway:
                         partial(self._begin_inbound, channel.channel_instance_id),
                     )
                 except BaseException as start_error:
-                    await _cleanup_lifecycle_owner(
+                    start_error = await _cleanup_lifecycle_owner(
                         start_error,
                         f"Channel {channel.channel_instance_id!r} partial startup",
                         channel.stop,
                     )
-                    raise
+                    assert start_error is not None
+                    raise start_error
                 started_channels.append(channel)
                 self._startup_admission.raise_if_overflowed()
             self._projection_runtime.mark_delivery_ready()
@@ -427,6 +430,7 @@ class ImAgentGateway:
         except BaseException as error:
             self._accepting_inbound = False
             self._starting = False
+            error = _public_lifecycle_error(error, "Gateway startup")
             while self._startup_admission:
                 entry = self._startup_admission.popleft()
                 try:
@@ -438,7 +442,11 @@ class ImAgentGateway:
                 except BaseException as release_error:
                     error.add_note(
                         "Failed to release a pre-side-effect inbound claim during "
-                        f"Gateway startup rollback: {release_error!r}"
+                        "Gateway startup rollback: "
+                        + _bounded_cleanup_error_summary(
+                            "inbound claim release",
+                            release_error,
+                        )
                     )
             self._startup_admission.clear()
             await _cleanup_lifecycle_owner(
@@ -493,7 +501,7 @@ class ImAgentGateway:
                     f"Application {application.summary.ref.application_instance_id!r}",
                     application.stop,
                 )
-            raise
+            raise error
 
     async def stop(self) -> None:
         self._accepting_inbound = False
@@ -1024,7 +1032,11 @@ class ImAgentGateway:
                 except BaseException as release_error:
                     error.add_note(
                         "Failed to release an inbound claim rejected by bounded "
-                        f"startup admission: {release_error!r}"
+                        "startup admission: "
+                        + _bounded_cleanup_error_summary(
+                            "inbound claim release",
+                            release_error,
+                        )
                     )
                 raise
             return
@@ -1301,9 +1313,10 @@ async def _cleanup_lifecycle_owner(
     except BaseException as cleanup_error:
         summary = _bounded_cleanup_error_summary(owner, cleanup_error)
         if primary is None:
-            cleanup_error.add_note(f"Gateway cleanup failed: {summary}")
-            primary = cleanup_error
+            primary = _public_lifecycle_error(cleanup_error, owner)
+            primary.add_note(f"Gateway cleanup failed: {summary}")
         else:
+            primary = _public_lifecycle_error(primary, "Gateway lifecycle")
             primary.add_note(f"Gateway cleanup also failed: {summary}")
         logger.error("Gateway cleanup failed: %s", summary)
     return primary

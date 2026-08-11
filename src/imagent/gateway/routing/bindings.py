@@ -8,6 +8,7 @@ from typing import ForwardRef, TypeAlias
 from ...applications.contract import ApplicationRef, ProjectRef, ThreadRef
 from ...interaction.messages import ConversationRef
 from ...interaction.operations import ContractViolation, require_identifier
+from ..diagnostics import _bounded_cleanup_error_summary
 from ..persistence.repository_contracts import BindingConflict, BindingRepository
 from ..persistence.state_contracts import ConversationBinding
 from .operations import (
@@ -143,7 +144,11 @@ class _BindingRuntime:
         except BaseException as verification_error:
             error.add_note(
                 "Binding outcome verification also failed; the prepared "
-                f"route remains fenced: {verification_error!r}"
+                "route remains fenced: "
+                + _bounded_cleanup_error_summary(
+                    "route binding verification",
+                    verification_error,
+                )
             )
             return True
         return _has_same_target(current, prepared.desired)
