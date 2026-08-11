@@ -136,12 +136,16 @@ The default run performs this sequence:
     without another native call, and resend a prior stable Channel input identity
     without another Application call or delivery. Then close every fresh runtime
     object.
-14. Inspect the database and every present SQLite sidecar read-only; fail if
-    the complete current table/column/type schema, bounded deterministic row
-    shape, bounded JSON values, or bridge-state invariants differ. Bounded
-    descriptor reads also reject exact, UTF-16, base64, hex, and common
-    compressed forms of transcript, native payload, request body, media,
-    artifact, credential, or workspace-path sentinels.
+14. Inspect one consistent WAL-aware read-only database snapshot and every
+    present SQLite sidecar; fail if the exact `sqlite_schema` object set or
+    normalized table/index/trigger definitions, column/type schema, bounded
+    deterministic row shape, bounded JSON values, or bridge-state invariants
+    differ. Bounded descriptor reads also reject exact, UTF-16, base64, hex,
+    and common compressed forms of transcript, native payload, request body,
+    media, artifact, credential, or workspace-path sentinels. The bounded
+    sidecar set, entry kind, path identity, size, and timestamps must remain
+    stable across inspection; appearance, disappearance, replacement, or a
+    non-file sidecar fails closed.
 
 The executable prints one bounded summary only after all assertions pass.
 

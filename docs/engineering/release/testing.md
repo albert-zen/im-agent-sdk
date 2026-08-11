@@ -68,8 +68,10 @@ reconstructs bindings/routes/checkpoints/terminal receipts from bridge state,
 recovers one authoritative missed output without duplicate delivery or native
 redispatch, preserves public binding generations and completed idempotency,
 suppresses a duplicate prior Channel identity, and validates the database and
-all sidecars through the complete schema/column allowlist, bounded value-shape
-validation, and encoded or fragmented authority-data counterexamples.
+all sidecars through one consistent WAL-aware read snapshot, the exact
+`sqlite_schema` object/definition and column allowlist, bounded value-shape
+validation, stable descriptor path identities, and encoded or fragmented
+authority-data counterexamples.
 The base case also proves, in the original transition-first clean process,
 that `imagent.diagnostics` preserves exact identity for the canonical
 Interaction, Channel, and Application diagnostics objects. It additionally

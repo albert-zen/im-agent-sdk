@@ -6,6 +6,7 @@ import asyncio
 import base64
 import bz2
 import gzip
+import hashlib
 import json
 import lzma
 import math
@@ -16,7 +17,7 @@ import zlib
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TypeVar
@@ -35,6 +36,8 @@ _SQLITE_INSPECTION_MAX_FILE_BYTES = 8 * 1024 * 1024
 _SQLITE_TEXT_VALUE_MAX_BYTES = 16 * 1024
 _SQLITE_JSON_MAX_DEPTH = 8
 _SQLITE_JSON_MAX_ITEMS = 256
+
+_SQLiteSchemaObjectKey = tuple[str, str, str]
 
 _SQLiteColumn = tuple[str, str, int, int]
 _SQLITE_SCHEMA: dict[str, tuple[_SQLiteColumn, ...]] = {
@@ -180,6 +183,66 @@ _SQLITE_JSON_COLUMNS = frozenset(
         ("request_route_correlations", "response_shape_json"),
     }
 )
+_SQLITE_TABLE_SQL_DIGESTS = {
+    "conversation_binding_generations": (
+        "53236f41d23b16d1790a11a9dcc778cd86e1c2abf52c5ebdf5f3b5db87e1f83e"
+    ),
+    "conversation_bindings": "b7e0683549f191ca98f5020b204eb3d4cd7817490f6eaf388dd10f8f17ac5f03",
+    "delivery_submission_destinations": (
+        "9a175788682fb13cee0730654e7ac88be668bf0b1dd455434a65ecf1b9d7bc4c"
+    ),
+    "delivery_submissions": "978f5ff466ea39bd72c07bd38225c10efb31676337958c46bffc76386a443fc3",
+    "gateway_effect_receipts": "f0e610b815eb5cd9fc59acf1bce719aaa683b48bd0f7d545d5781345efeef6aa",
+    "gateway_namespace": "ed339c07b144fca178313cbf6234e677e8defd954a54337c225c35c867456f91",
+    "gateway_runtime_lease": "173665e5dd6df99b63f4e8061499e311052d6bacb1d736fde1bf4e261f5d3ada",
+    "gateway_schema_metadata": "dfd88fedbdc1b320404a3abf93b7d03596532b64563a61f85f594041cce307ea",
+    "gateway_workspace_identities": (
+        "bd386fa4861cd1723d57f91aa8ba2f23eccca76e88a38d390f7a889ef2c95f5f"
+    ),
+    "idempotency_records": "ead8a5757ace8d30c65fc77537530d9bacaadd9cc60dfc13fb8ba385ec3ab719",
+    "request_route_correlations": (
+        "8499cf69cb36f55ca902f5d7ffa1c1ead16790fa5317976d32a8bdb7412e55d2"
+    ),
+    "thread_projection_routes": "6f7b09af02ed0a0fadde23f7ae21d109c6f51a6b6580ebf3bdb34abefc1c71f0",
+    "turn_reply_correlations": "704890148af16441e2cba877e3945bc533b0027e43b3d2488d0ce5a34cd70944",
+}
+_SQLITE_EXPLICIT_INDEX_SQL_DIGESTS = {
+    ("delivery_destinations_root", "delivery_submission_destinations"): (
+        "9a3f9b434a29d3210b1edda70c70fe77d98a5bf2f6e46a49f92c825c1eef86f3"
+    ),
+    ("request_route_correlations_request_ref", "request_route_correlations"): (
+        "b9c51440bec5296c822b874ab6d467e83f2f92c85c9e880c8327ea52bb62ce7e"
+    ),
+}
+_SQLITE_AUTOINDEXES = (
+    ("sqlite_autoindex_conversation_binding_generations_1", "conversation_binding_generations"),
+    ("sqlite_autoindex_conversation_bindings_1", "conversation_bindings"),
+    ("sqlite_autoindex_delivery_submission_destinations_1", "delivery_submission_destinations"),
+    ("sqlite_autoindex_delivery_submission_destinations_2", "delivery_submission_destinations"),
+    ("sqlite_autoindex_delivery_submissions_1", "delivery_submissions"),
+    ("sqlite_autoindex_gateway_effect_receipts_1", "gateway_effect_receipts"),
+    ("sqlite_autoindex_gateway_schema_metadata_1", "gateway_schema_metadata"),
+    ("sqlite_autoindex_gateway_workspace_identities_1", "gateway_workspace_identities"),
+    ("sqlite_autoindex_idempotency_records_1", "idempotency_records"),
+    ("sqlite_autoindex_request_route_correlations_1", "request_route_correlations"),
+    ("sqlite_autoindex_request_route_correlations_2", "request_route_correlations"),
+    ("sqlite_autoindex_thread_projection_routes_1", "thread_projection_routes"),
+    ("sqlite_autoindex_thread_projection_routes_2", "thread_projection_routes"),
+    ("sqlite_autoindex_turn_reply_correlations_1", "turn_reply_correlations"),
+    ("sqlite_autoindex_turn_reply_correlations_2", "turn_reply_correlations"),
+)
+_SQLITE_FENCED_TABLES = (
+    "conversation_bindings",
+    "conversation_binding_generations",
+    "idempotency_records",
+    "thread_projection_routes",
+    "turn_reply_correlations",
+    "request_route_correlations",
+    "delivery_submissions",
+    "delivery_submission_destinations",
+    "gateway_workspace_identities",
+    "gateway_effect_receipts",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,6 +258,17 @@ class _SQLiteBridgeInspection:
     table_count: int
     snapshot: _SQLiteRecoverySnapshot
     schema_and_values_allowlisted: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _SQLiteFileIdentity:
+    device: int
+    inode: int
+    mode: int
+    links: int
+    size: int
+    modified_ns: int
+    changed_ns: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -279,13 +353,74 @@ def _forbidden_byte_patterns(value: str) -> frozenset[bytes]:
     return frozenset(patterns)
 
 
-def _read_bounded_descriptor(path: Path) -> bytes:
+def _file_identity(file_stat: os.stat_result) -> _SQLiteFileIdentity:
+    return _SQLiteFileIdentity(
+        device=file_stat.st_dev,
+        inode=file_stat.st_ino,
+        mode=file_stat.st_mode,
+        links=file_stat.st_nlink,
+        size=file_stat.st_size,
+        modified_ns=file_stat.st_mtime_ns,
+        changed_ns=file_stat.st_ctime_ns,
+    )
+
+
+def _snapshot_sqlite_files(database_path: Path) -> tuple[tuple[Path, _SQLiteFileIdentity], ...]:
+    allowed_names = {
+        database_path.name,
+        f"{database_path.name}-journal",
+        f"{database_path.name}-shm",
+        f"{database_path.name}-wal",
+    }
+    entries: list[tuple[Path, _SQLiteFileIdentity]] = []
+    with os.scandir(database_path.parent) as directory:
+        for entry in directory:
+            if not entry.name.startswith(database_path.name):
+                continue
+            if entry.name not in allowed_names:
+                raise AssertionError("SQLite inspection found an unexpected sidecar name")
+            entry_stat = entry.stat(follow_symlinks=False)
+            if not stat.S_ISREG(entry_stat.st_mode):
+                raise AssertionError("SQLite inspection target is not a regular file")
+            entries.append((database_path.parent / entry.name, _file_identity(entry_stat)))
+    entries.sort(key=lambda item: item[0].name)
+    if not entries or entries[0][0] != database_path:
+        raise AssertionError("SQLite recovery database was not created")
+    if len(entries) > _SQLITE_INSPECTION_MAX_FILES:
+        raise AssertionError("SQLite recovery produced too many sidecar files")
+    return tuple(entries)
+
+
+def _semantic_snapshot_identity(
+    snapshot: tuple[tuple[Path, _SQLiteFileIdentity], ...],
+) -> tuple[tuple[str, int, int, int, int, int, int, int], ...]:
+    return tuple(
+        (
+            path.name,
+            identity.device,
+            identity.inode,
+            identity.mode,
+            identity.links,
+            identity.size,
+            0 if path.name.endswith("-shm") else identity.modified_ns,
+            0 if path.name.endswith("-shm") else identity.changed_ns,
+        )
+        for path, identity in snapshot
+    )
+
+
+def _read_bounded_descriptor(path: Path, *, expected: _SQLiteFileIdentity) -> bytes:
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(path, flags)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise AssertionError("SQLite inspection path changed before bounded read") from error
     try:
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode):
             raise AssertionError("SQLite inspection target is not a regular file")
+        if _file_identity(before) != expected:
+            raise AssertionError("SQLite inspection path identity changed before bounded read")
         if before.st_size > _SQLITE_INSPECTION_MAX_FILE_BYTES:
             raise AssertionError("SQLite bridge persistence exceeded the inspection bound")
         chunks: list[bytes] = []
@@ -300,22 +435,16 @@ def _read_bounded_descriptor(path: Path) -> bytes:
         after = os.fstat(descriptor)
         if len(persisted) > _SQLITE_INSPECTION_MAX_FILE_BYTES:
             raise AssertionError("SQLite bridge persistence exceeded the inspection bound")
-        before_identity = (
-            before.st_dev,
-            before.st_ino,
-            before.st_size,
-            before.st_mtime_ns,
-            before.st_ctime_ns,
-        )
-        after_identity = (
-            after.st_dev,
-            after.st_ino,
-            after.st_size,
-            after.st_mtime_ns,
-            after.st_ctime_ns,
-        )
-        if before_identity != after_identity or len(persisted) != after.st_size:
+        after_identity = _file_identity(after)
+        if expected != after_identity or len(persisted) != after.st_size:
             raise AssertionError("SQLite inspection target changed during bounded read")
+        try:
+            path_identity = _file_identity(os.stat(path, follow_symlinks=False))
+        except OSError as error:
+            message = "SQLite inspection path disappeared during bounded read"
+            raise AssertionError(message) from error
+        if path_identity != after_identity:
+            raise AssertionError("SQLite inspection path was replaced during bounded read")
         return persisted
     finally:
         os.close(descriptor)
@@ -326,18 +455,15 @@ def _inspect_sqlite_files(
     *,
     forbidden_values: tuple[str, ...],
 ) -> int:
-    """Inspect the bounded database file and every currently present sidecar."""
+    """Inspect a stable bounded database and sidecar entry set."""
 
-    database_files = tuple(
-        sorted(
-            path for path in database_path.parent.glob(f"{database_path.name}*") if path.is_file()
-        )
+    before = _snapshot_sqlite_files(database_path)
+    persisted_files = tuple(
+        _read_bounded_descriptor(path, expected=identity) for path, identity in before
     )
-    if database_path not in database_files:
-        raise AssertionError("SQLite recovery database was not created")
-    if len(database_files) > _SQLITE_INSPECTION_MAX_FILES:
-        raise AssertionError("SQLite recovery produced too many sidecar files")
-    persisted_files = tuple(_read_bounded_descriptor(path) for path in database_files)
+    after = _snapshot_sqlite_files(database_path)
+    if before != after:
+        raise AssertionError("SQLite sidecar set or identity changed during bounded inspection")
     persisted_combined = b"".join(persisted_files)
     for value in forbidden_values:
         for pattern in _forbidden_byte_patterns(value):
@@ -345,7 +471,7 @@ def _inspect_sqlite_files(
                 raise AssertionError("SQLite bridge persistence retained authority-owned data")
             if pattern in persisted_combined:
                 raise AssertionError("SQLite sidecars fragmented authority-owned data")
-    return len(database_files)
+    return len(before)
 
 
 def _validate_json_tree(value: object) -> tuple[str, ...]:
@@ -399,7 +525,7 @@ def _assembled_from_fragments(target: str, values: tuple[str, ...]) -> bool:
     initial_counts = tuple(candidate_counts[value] for value in candidates)
     explored_states = 0
 
-    @lru_cache(maxsize=None)
+    @cache
     def assemble(position: int, remaining: tuple[int, ...], parts: int) -> bool:
         nonlocal explored_states
         explored_states += 1
@@ -467,11 +593,72 @@ def _read_current_sqlite_recovery_snapshot(database_path: Path) -> _SQLiteRecove
         connection.close()
 
 
+def _sql_digest(sql: str) -> str:
+    normalized = " ".join(sql.split())
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _expected_sqlite_schema_objects() -> dict[_SQLiteSchemaObjectKey, str | None]:
+    expected: dict[_SQLiteSchemaObjectKey, str | None] = {
+        ("table", table, table): digest for table, digest in _SQLITE_TABLE_SQL_DIGESTS.items()
+    }
+    expected.update(
+        {
+            ("index", index, table): digest
+            for (index, table), digest in _SQLITE_EXPLICIT_INDEX_SQL_DIGESTS.items()
+        }
+    )
+    expected.update({("index", index, table): None for index, table in _SQLITE_AUTOINDEXES})
+    for table in _SQLITE_FENCED_TABLES:
+        for operation in ("INSERT", "UPDATE", "DELETE"):
+            trigger = f"imagent_runtime_fence_{table}_{operation.lower()}"
+            definition = f"""
+                CREATE TRIGGER {trigger}
+                BEFORE {operation} ON {table}
+                WHEN imagent_store_maintenance() = 0 AND NOT EXISTS (
+                    SELECT 1
+                    FROM gateway_namespace AS n
+                    JOIN gateway_runtime_lease AS l
+                      ON l.singleton = n.singleton
+                    WHERE n.singleton = 1
+                      AND n.gateway_id = imagent_runtime_gateway_id()
+                      AND l.owner_token = imagent_runtime_owner_token()
+                      AND l.epoch = imagent_runtime_epoch()
+                      AND l.expires_at >
+                          ((julianday('now') - 2440587.5) * 86400.0)
+                )
+                BEGIN
+                    SELECT RAISE(ABORT, 'imagent stale runtime fence');
+                END
+            """
+            expected[("trigger", trigger, table)] = _sql_digest(definition)
+    return expected
+
+
+_SQLITE_SCHEMA_OBJECTS = _expected_sqlite_schema_objects()
+
+
+def _validate_sqlite_schema_objects(connection: sqlite3.Connection) -> None:
+    actual: dict[_SQLiteSchemaObjectKey, str | None] = {}
+    for object_type, name, table, definition in connection.execute(
+        "SELECT type, name, tbl_name, sql FROM sqlite_schema ORDER BY type, name"
+    ):
+        key = (str(object_type), str(name), str(table))
+        if key in actual:
+            raise AssertionError("SQLite schema contains a duplicate object identity")
+        if definition is not None and not isinstance(definition, str):
+            raise AssertionError("SQLite schema definition is not text")
+        actual[key] = None if definition is None else _sql_digest(definition)
+    if actual != _SQLITE_SCHEMA_OBJECTS:
+        raise AssertionError("SQLite schema objects or definitions changed")
+
+
 def _validate_sqlite_schema_and_values(
     connection: sqlite3.Connection,
     *,
     forbidden_values: tuple[str, ...],
 ) -> tuple[tuple[str, ...], _SQLiteRecoverySnapshot]:
+    _validate_sqlite_schema_objects(connection)
     tables = tuple(
         str(row[0])
         for row in connection.execute(
@@ -585,25 +772,42 @@ def _inspect_sqlite_bridge_state(
     *,
     forbidden_values: tuple[str, ...],
 ) -> _SQLiteBridgeInspection:
-    """Inspect bounded bridge rows and every database sidecar after shutdown."""
+    """Inspect one stable WAL-aware bridge snapshot and its bounded files."""
 
-    database_file_count = _inspect_sqlite_files(
-        database_path,
-        forbidden_values=forbidden_values,
-    )
-
-    connection = sqlite3.connect(
-        f"file:{database_path}?mode=ro&immutable=1",
-        uri=True,
-    )
+    outer_before = _snapshot_sqlite_files(database_path)
+    outer_names = {path.name for path, _identity in outer_before}
+    wal_name = f"{database_path.name}-wal"
+    shm_name = f"{database_path.name}-shm"
+    if wal_name in outer_names and shm_name not in outer_names:
+        raise AssertionError("SQLite WAL inspection requires its stable shared-memory sidecar")
+    uri = f"file:{database_path}?mode=ro"
+    if wal_name not in outer_names:
+        uri = f"{uri}&immutable=1"
+    connection = sqlite3.connect(uri, uri=True)
     try:
+        connection.execute("PRAGMA query_only = ON")
+        connection.execute("BEGIN")
+        connection.execute("SELECT schema_version FROM pragma_schema_version").fetchone()
+        if _semantic_snapshot_identity(outer_before) != _semantic_snapshot_identity(
+            _snapshot_sqlite_files(database_path)
+        ):
+            raise AssertionError("SQLite files changed while establishing the read snapshot")
         if connection.execute("PRAGMA quick_check").fetchone() != ("ok",):
             raise AssertionError("SQLite recovery database failed its integrity check")
         tables, snapshot = _validate_sqlite_schema_and_values(
             connection,
             forbidden_values=forbidden_values,
         )
+        database_file_count = _inspect_sqlite_files(
+            database_path,
+            forbidden_values=forbidden_values,
+        )
+        if _semantic_snapshot_identity(outer_before) != _semantic_snapshot_identity(
+            _snapshot_sqlite_files(database_path)
+        ):
+            raise AssertionError("SQLite files changed across the WAL-aware inspection snapshot")
     finally:
+        connection.rollback()
         connection.close()
     return _SQLiteBridgeInspection(
         file_count=database_file_count,

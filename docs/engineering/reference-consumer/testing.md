@@ -27,14 +27,18 @@ entry point used by `python -m examples.reference_consumer.main` and proves:
   checkpoints advance from their captured stable item to the missed stable item,
   completed idempotency rows survive, and a duplicate prior stable Channel input
   causes neither another Application call nor another delivery;
-- read-only SQLite integrity, complete schema/column allowlisting, and bounded
-  type/cardinality/value-shape validation cover every bridge row, while race-bounded descriptor inspection
-  covers the main database and every present sidecar and rejects exact and
-  supported encoded/compressed forms of transcript, native payload, request-body,
-  media, artifact, credential, and workspace-path sentinels;
+- read-only SQLite integrity, exact `sqlite_schema` object/definition and column
+  allowlisting, and bounded type/cardinality/value-shape validation cover one
+  consistent WAL-aware snapshot and every bridge row, while race-bounded
+  descriptor inspection covers the main database and every present sidecar and
+  rejects exact and supported encoded/compressed forms of transcript, native
+  payload, request-body, media, artifact, credential, and workspace-path
+  sentinels;
 - adversarial acceptance tests inject UTF-16, hex, and compressed BLOBs,
-  fragmented TEXT rows, WAL-only sentinel evidence, and a file-growth race;
-  every case must fail closed;
+  fragmented TEXT rows, unexpected/changed schema objects, WAL-only schema and
+  BLOB mutations, sidecar-only sentinel evidence, sidecar appearance or
+  disappearance, path replacement, non-file sidecars, and file growth; every
+  case must fail closed;
 - public create-and-bind and observe results activate their committed route
   before any later inbound input, while retained surfaces reject after stop;
 - selected common, neutral read-only, and neutral effectful commands use one

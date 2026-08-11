@@ -656,7 +656,7 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
 
                 with self.assertRaisesRegex(
                     AssertionError,
-                    "authority-owned|unknown or missing tables",
+                    "authority-owned|schema objects or definitions",
                 ):
                     _inspect_sqlite_bridge_state(
                         database_path,
@@ -716,6 +716,92 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
                         forbidden_values=(marker,),
                     )
 
+    async def test_sqlite_inspection_rejects_extra_or_changed_schema_objects(self) -> None:
+        cases = ("index", "view", "trigger", "index_definition", "trigger_definition")
+        for case in cases:
+            with self.subTest(case=case), TemporaryDirectory() as cwd:
+                await run_reference_consumer(cwd)
+                database_path = Path(cwd) / "reference-gateway.sqlite3"
+                connection = sqlite3.connect(database_path)
+                try:
+                    if case == "index":
+                        connection.execute(
+                            "CREATE INDEX unexpected_index ON idempotency_records(status)"
+                        )
+                    elif case == "view":
+                        connection.execute(
+                            "CREATE VIEW unexpected_view AS SELECT status FROM idempotency_records"
+                        )
+                    elif case == "trigger":
+                        connection.execute(
+                            "CREATE TRIGGER unexpected_trigger AFTER UPDATE ON idempotency_records "
+                            "BEGIN SELECT 1; END"
+                        )
+                    elif case == "index_definition":
+                        connection.execute("DROP INDEX delivery_destinations_root")
+                        connection.execute(
+                            "CREATE INDEX delivery_destinations_root "
+                            "ON delivery_submission_destinations(state)"
+                        )
+                    else:
+                        trigger = "imagent_runtime_fence_idempotency_records_insert"
+                        connection.execute(f"DROP TRIGGER {trigger}")
+                        connection.execute(
+                            f"CREATE TRIGGER {trigger} BEFORE INSERT ON idempotency_records "
+                            "BEGIN SELECT 1; END"
+                        )
+                    connection.commit()
+                finally:
+                    connection.close()
+
+                with self.assertRaisesRegex(
+                    AssertionError,
+                    "schema objects or definitions",
+                ):
+                    _inspect_sqlite_bridge_state(
+                        database_path,
+                        forbidden_values=("not-present",),
+                    )
+
+    async def test_sqlite_inspection_includes_uncheckpointed_wal_schema_and_values(self) -> None:
+        for case in ("unexpected_table", "blob_value"):
+            with self.subTest(case=case), TemporaryDirectory() as cwd:
+                await run_reference_consumer(cwd)
+                database_path = Path(cwd) / "reference-gateway.sqlite3"
+                connection = sqlite3.connect(database_path)
+                try:
+                    connection.execute("PRAGMA journal_mode = WAL")
+                    connection.execute("PRAGMA wal_autocheckpoint = 0")
+                    connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                    if case == "unexpected_table":
+                        connection.execute("CREATE TABLE unexpected_wal_object(payload TEXT)")
+                        connection.execute(
+                            "INSERT INTO unexpected_wal_object(payload) VALUES ('benign')"
+                        )
+                    else:
+                        connection.create_function("imagent_store_maintenance", 0, lambda: 1)
+                        connection.create_function("imagent_runtime_gateway_id", 0, lambda: None)
+                        connection.create_function("imagent_runtime_owner_token", 0, lambda: None)
+                        connection.create_function("imagent_runtime_epoch", 0, lambda: None)
+                        connection.execute(
+                            "UPDATE idempotency_records SET owner_token = ? "
+                            "WHERE rowid = (SELECT MIN(rowid) FROM idempotency_records)",
+                            (sqlite3.Binary(b"benign-non-text-value"),),
+                        )
+                    connection.commit()
+                    self.assertGreater(Path(f"{database_path}-wal").stat().st_size, 0)
+
+                    with self.assertRaisesRegex(
+                        AssertionError,
+                        "schema objects or definitions|non-text value",
+                    ):
+                        _inspect_sqlite_bridge_state(
+                            database_path,
+                            forbidden_values=("not-present",),
+                        )
+                finally:
+                    connection.close()
+
     def test_sqlite_file_inspection_rejects_sidecar_only_encoded_state(self) -> None:
         marker = "sidecar-only-native-payload-marker"
         with TemporaryDirectory() as cwd:
@@ -763,6 +849,103 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
                 ),
                 self.assertRaisesRegex(AssertionError, "changed during bounded read"),
             ):
+                _inspect_sqlite_files(
+                    database_path,
+                    forbidden_values=("not-present",),
+                )
+
+    def test_sqlite_file_inspection_rejects_sidecar_appearance(self) -> None:
+        with TemporaryDirectory() as cwd:
+            database_path = Path(cwd) / "appearing.sqlite3"
+            database_path.write_bytes(b"SQLite format 3\x00")
+            sidecar_path = Path(f"{database_path}-wal")
+            original_open = os.open
+            created = False
+
+            def create_sidecar_before_open(path: os.PathLike[str] | str, flags: int) -> int:
+                nonlocal created
+                if not created:
+                    created = True
+                    sidecar_path.write_bytes(b"new-sidecar")
+                return original_open(path, flags)
+
+            with (
+                patch(
+                    "examples.reference_consumer.main.os.open",
+                    side_effect=create_sidecar_before_open,
+                ),
+                self.assertRaisesRegex(AssertionError, "sidecar set or identity changed"),
+            ):
+                _inspect_sqlite_files(
+                    database_path,
+                    forbidden_values=("not-present",),
+                )
+
+    def test_sqlite_file_inspection_rejects_sidecar_disappearance(self) -> None:
+        with TemporaryDirectory() as cwd:
+            database_path = Path(cwd) / "disappearing.sqlite3"
+            database_path.write_bytes(b"SQLite format 3\x00")
+            sidecar_path = Path(f"{database_path}-wal")
+            sidecar_path.write_bytes(b"existing-sidecar")
+            original_open = os.open
+            removed = False
+
+            def remove_sidecar_before_open(path: os.PathLike[str] | str, flags: int) -> int:
+                nonlocal removed
+                if not removed:
+                    removed = True
+                    sidecar_path.unlink()
+                return original_open(path, flags)
+
+            with (
+                patch(
+                    "examples.reference_consumer.main.os.open",
+                    side_effect=remove_sidecar_before_open,
+                ),
+                self.assertRaisesRegex(AssertionError, "path changed before bounded read"),
+            ):
+                _inspect_sqlite_files(
+                    database_path,
+                    forbidden_values=("not-present",),
+                )
+
+    def test_sqlite_file_inspection_rejects_path_replacement_after_final_stat(self) -> None:
+        marker = "replacement-native-payload-marker"
+        with TemporaryDirectory() as cwd:
+            database_path = Path(cwd) / "replaced.sqlite3"
+            database_path.write_bytes(b"SQLite format 3\x00")
+            replacement_path = Path(cwd) / "replacement"
+            original_fstat = os.fstat
+            calls = 0
+
+            def replace_after_final_stat(descriptor: int) -> os.stat_result:
+                nonlocal calls
+                result = original_fstat(descriptor)
+                calls += 1
+                if calls == 2:
+                    replacement_path.write_bytes(marker.encode())
+                    replacement_path.replace(database_path)
+                return result
+
+            with (
+                patch(
+                    "examples.reference_consumer.main.os.fstat",
+                    side_effect=replace_after_final_stat,
+                ),
+                self.assertRaisesRegex(AssertionError, "path was replaced"),
+            ):
+                _inspect_sqlite_files(
+                    database_path,
+                    forbidden_values=(marker,),
+                )
+
+    def test_sqlite_file_inspection_rejects_non_file_sidecar(self) -> None:
+        with TemporaryDirectory() as cwd:
+            database_path = Path(cwd) / "non-file.sqlite3"
+            database_path.write_bytes(b"SQLite format 3\x00")
+            Path(f"{database_path}-wal").mkdir()
+
+            with self.assertRaisesRegex(AssertionError, "not a regular file"):
                 _inspect_sqlite_files(
                     database_path,
                     forbidden_values=("not-present",),

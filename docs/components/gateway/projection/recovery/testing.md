@@ -61,6 +61,8 @@ public actions with its original generation. It must also compare the active
 destination checkpoint identities before shutdown and after recovery, retain
 completed idempotency evidence, and suppress a duplicate prior Channel input
 without another Application call or delivery. Direct SQLite
-schema/database/sidecar inspection must fail closed on unknown tables, columns,
-SQLite value types, row cardinalities, oversized or malformed values, and
-encoded or fragmented content/native-authority evidence.
+schema/database/sidecar inspection must use a WAL-aware read snapshot and fail
+closed on unknown or changed tables, indexes, triggers, views, columns, SQLite
+value types, row cardinalities, oversized or malformed values, and encoded or
+fragmented content/native-authority evidence. The bounded sidecar entry set and
+path identities must remain stable throughout descriptor inspection.

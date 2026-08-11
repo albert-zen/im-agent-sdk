@@ -324,9 +324,12 @@ first Gateway, Channel, and SQLite store objects, creates authoritative output
 while the Gateway is absent, constructs fresh objects over the same database,
 and proves binding/route/checkpoint/receipt reconstruction without duplicate
 Application input, delivery, or concurrent subscription. It inspects SQLite
-through a complete schema/column allowlist, bounded type/cardinality/value-shape
-validation, and bounded descriptor reads of database bytes and present sidecars. Encoded, compressed,
-fragmented, BLOB, unexpected-row, and file-growth counterexamples fail closed.
+through an exact `sqlite_schema` object/definition and column allowlist, a
+consistent WAL-aware read snapshot, bounded type/cardinality/value-shape
+validation, and stable bounded descriptor reads of database bytes and present
+sidecars. Encoded, compressed, fragmented, BLOB, unexpected-object/row,
+sidecar-appearance/disappearance, path-replacement, non-file-sidecar, and file-growth
+counterexamples fail closed.
 Public evidence additionally preserves binding generations, advances both
 captured destination checkpoints to the missed stable item, retains completed
 idempotency rows, and suppresses a duplicate prior input identity without an

@@ -67,14 +67,20 @@ the reconstructed completed idempotency record without another Application
 call or delivery.
 
 Once the second composition closes, the executable opens the database read-only
-and runs an integrity check. A complete current schema allowlist validates every
-table, column, declared SQLite type, deterministic row count, runtime value type,
-and bounded JSON tree; unknown or BLOB-bearing state fails closed. Bounded
-descriptor reads cover the database plus every present WAL, SHM, or journal
-sidecar and reject exact, UTF-16, base64, hex, and common compressed forms of
+and runs an integrity check over one consistent WAL-aware read transaction. A
+complete current schema allowlist validates every `sqlite_schema` object key and
+normalized table/index/trigger definition, column, declared SQLite type,
+deterministic row count, runtime value type, and bounded JSON tree; unknown,
+changed, view-bearing, or BLOB-bearing state fails closed. Bounded descriptor
+reads cover the database plus every present WAL, SHM, or journal sidecar and
+require stable entry names, regular-file kinds, device/inode identities, sizes,
+and timestamps before and after inspection. They reject exact, UTF-16, base64,
+hex, and common compressed forms of
 unique transcript, native-payload, request-body, media, artifact, credential,
 and workspace-path sentinels. Adversarial tests cover encoded BLOBs, fragmented
-TEXT rows, sidecar-only evidence, and file growth during inspection. This proves
+TEXT rows, WAL-only schema/value mutations, sidecar-only evidence, sidecar
+appearance or disappearance, path replacement, non-file entries, and file growth during
+inspection. This proves
 the persisted surface remains bridge state plus rebuildable projections; it
 does not make SQLite a transcript or Application-authority store.
 
