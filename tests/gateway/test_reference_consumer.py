@@ -47,7 +47,12 @@ from imagent.applications.operations import (
     ThreadHistoryRead,
 )
 from imagent.gateway import GatewayRepositories, ImAgentGateway
-from imagent.gateway.lifecycle import GatewayLifecycleFailure, _public_lifecycle_error
+from imagent.gateway.lifecycle import (
+    GatewayLifecycleFailure,
+    GatewayNotRunning,
+    GatewayStartupOverflow,
+    _public_lifecycle_error,
+)
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.gateway.persistence.sqlite_store import SQLiteGatewayStore
@@ -81,6 +86,18 @@ class _HostileShortLifecycleError(RuntimeError):
 
     def __repr__(self) -> str:
         return "REPR_SECRET_PAYLOAD"
+
+
+class _HostileNotRunning(GatewayNotRunning):
+    pass
+
+
+class _HostileOverflow(GatewayStartupOverflow):
+    pass
+
+
+class _HostileLifecycleFailure(GatewayLifecycleFailure):
+    pass
 
 
 class _CountingMemoryGatewayStore(MemoryGatewayStore):
@@ -1363,6 +1380,91 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn(secret, evidence)
             self.assertNotIn(secret.encode(), encoded)
         self.assertLessEqual(len(encoded), 2_048)
+
+    def test_lifecycle_sentinel_subtype_impostors_are_projected(self) -> None:
+        impostors = (
+            _HostileNotRunning("benign"),
+            _HostileOverflow(max_pending=1),
+            _HostileLifecycleFailure("Channel", RuntimeError("benign")),
+        )
+        secrets = (
+            "NOT_RUNNING_SUBTYPE_SECRET",
+            "OVERFLOW_SUBTYPE_SECRET",
+            "FAILURE_SUBTYPE_SECRET",
+        )
+
+        for raw, secret in zip(impostors, secrets, strict=True):
+            raw.subtype_secret = secret  # type: ignore[attr-defined]
+            public = _public_lifecycle_error(raw, "Channel")
+
+            self.assertIs(type(public), GatewayLifecycleFailure)
+            self.assertIsNot(public, raw)
+            self.assertNotIn("subtype_secret", vars(public))
+            encoded = pickle.dumps(public)
+            self.assertNotIn(secret, str(public))
+            self.assertNotIn(secret.encode(), encoded)
+            self.assertLessEqual(len(encoded), 2_048)
+
+        authoritative = (
+            GatewayNotRunning("not running"),
+            GatewayStartupOverflow(max_pending=1),
+            GatewayLifecycleFailure("Channel", RuntimeError("failed")),
+        )
+        for sentinel in authoritative:
+            self.assertIs(_public_lifecycle_error(sentinel, "Channel"), sentinel)
+
+    async def test_hostile_sentinel_subtypes_are_projected_on_start_and_stop(self) -> None:
+        class HostileStartupChannel(ReferenceChannel):
+            async def start(
+                self,
+                on_message: MessageHandler,
+                on_admission: InboundAdmissionHandler | None = None,
+            ) -> None:
+                await super().start(on_message, on_admission)
+                error = _HostileNotRunning("benign startup")
+                error.secret = "STARTUP_SUBTYPE_SECRET"  # type: ignore[attr-defined]
+                raise error
+
+        class HostileStopChannel(ReferenceChannel):
+            async def stop(self) -> None:
+                await super().stop()
+                error = _HostileOverflow(max_pending=1)
+                error.secret = "STOP_SUBTYPE_SECRET"  # type: ignore[attr-defined]
+                raise error
+
+        startup_channel = HostileStartupChannel("hostile-startup-subtype")
+        startup_application = ReferenceApplication("hostile-startup-application")
+        startup_gateway = ImAgentGateway(
+            channels=[startup_channel],
+            applications=[startup_application],
+            repositories=GatewayRepositories(bindings=InMemoryBindingRepository()),
+        )
+        with self.assertRaises(GatewayLifecycleFailure) as startup_raised:
+            await startup_gateway.start()
+
+        stop_channel = HostileStopChannel("hostile-stop-subtype")
+        stop_application = ReferenceApplication("hostile-stop-application")
+        stop_gateway = ImAgentGateway(
+            channels=[stop_channel],
+            applications=[stop_application],
+            repositories=GatewayRepositories(bindings=InMemoryBindingRepository()),
+        )
+        await stop_gateway.start()
+        with self.assertRaises(GatewayLifecycleFailure) as stop_raised:
+            await stop_gateway.stop()
+
+        for error, secret in (
+            (startup_raised.exception, "STARTUP_SUBTYPE_SECRET"),
+            (stop_raised.exception, "STOP_SUBTYPE_SECRET"),
+        ):
+            self.assertIs(type(error), GatewayLifecycleFailure)
+            self.assertNotIn("secret", vars(error))
+            self.assertNotIn(secret, str(error))
+            self.assertNotIn(secret.encode(), pickle.dumps(error))
+        self.assertFalse(startup_channel.started)
+        self.assertFalse(startup_application.started)
+        self.assertFalse(stop_channel.started)
+        self.assertFalse(stop_application.started)
 
     async def test_startup_claim_release_evidence_is_bounded_and_sanitized(self) -> None:
         channel = _StartupClaimReleaseFailureChannel()

@@ -65,7 +65,9 @@ The public object graph and its serialized form retain no raw owner exception;
 raw owner text never becomes public exception detail or serialized evidence.
 Projection is unconditional for ordinary exceptions even when their `str()` is
 short and benign; only cancellation/system exceptions and the typed lifecycle
-sentinels retain their exact objects.
+sentinels retain their exact objects. Sentinel authority is exact-type based;
+subclasses and other impostors are ordinary failures and receive a closed
+projection.
 Each owner is invoked exactly once;
 the wrapper does not retry the inner runtime teardown to manufacture success.
 A callback outside the live window fails explicitly or is released; it never

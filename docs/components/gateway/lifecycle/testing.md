@@ -41,7 +41,9 @@ Tests must prove:
   rollback failure; exception fields, cause/context graphs, and pickle
   serialization retain only the same bounded sanitized classification, even
   when a hostile raw exception has benign short text but secret-bearing
-  attributes, `repr`, nested causes, or contexts;
+  attributes, `repr`, nested causes, or contexts; subclasses of the bounded
+  lifecycle failure and typed sentinels are projected rather than inheriting
+  exact-object authority;
 - all SDK-owned Channels receive their exact admission handler through one
   two-argument start invocation; a legacy one-argument body runs zero times,
   and an internal two-argument `TypeError` runs once;

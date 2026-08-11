@@ -99,6 +99,7 @@ class GatewayStartupAdmissionTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(GatewayStartupOverflow) as raised:
             await gateway.start()
+        self.assertIs(type(raised.exception), GatewayStartupOverflow)
         self.assertEqual(raised.exception.max_pending, 2)
         self.assertFalse(channel.started)
         startup = gateway.diagnostics_snapshot().gateway.startup_queue
@@ -120,13 +121,14 @@ class GatewayStartupAdmissionTests(unittest.IsolatedAsyncioTestCase):
         starting = asyncio.create_task(gateway.start())
         await active_channel.stopping.wait()
         try:
-            with self.assertRaises(GatewayNotRunning):
+            with self.assertRaises(GatewayNotRunning) as not_running:
                 await active_channel.on_message(
                     _inbound(
                         ConversationRef("active-startup-channel", "conversation"),
                         "during-failed-start",
                     )
                 )
+            self.assertIs(type(not_running.exception), GatewayNotRunning)
             self.assertEqual(application._inputs, [])
         finally:
             active_channel.release_stop.set()

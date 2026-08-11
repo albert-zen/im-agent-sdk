@@ -80,9 +80,9 @@ def _public_lifecycle_error(
 ) -> BaseException:
     """Project lifecycle failures before they cross a public error boundary."""
 
-    if isinstance(error, GatewayLifecycleFailure):
+    if type(error) is GatewayLifecycleFailure:
         return error
-    if isinstance(error, (GatewayStartupOverflow, GatewayNotRunning)):
+    if type(error) in {GatewayStartupOverflow, GatewayNotRunning}:
         return error
     if isinstance(error, (CancelledError, KeyboardInterrupt, SystemExit)):
         return error
