@@ -57,5 +57,10 @@ whose authoritative history survives, and construct fresh objects on the same
 database. The second lifecycle restores one active worker for the stable
 Thread, delivers only output missed while absent, replays terminal action
 receipts before native work, and exposes the restored binding through scoped
-public actions. Direct SQLite schema/database/sidecar inspection must reject
-content and native-authority leakage.
+public actions with its original generation. It must also compare the active
+destination checkpoint identities before shutdown and after recovery, retain
+completed idempotency evidence, and suppress a duplicate prior Channel input
+without another Application call or delivery. Direct SQLite
+schema/database/sidecar inspection must fail closed on unknown tables, columns,
+SQLite value types, row cardinalities, oversized or malformed values, and
+encoded or fragmented content/native-authority evidence.

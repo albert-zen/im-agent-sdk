@@ -127,13 +127,21 @@ The default run performs this sequence:
     authoritative history.
 12. Construct fresh Gateway, Channel, registry, and SQLite store objects over
     the same database. Startup reconstructs both bindings, independent routes
-    and checkpoints, and terminal workflow receipts with one Thread worker.
+    and checkpoints, completed input/output idempotency records, and terminal
+    workflow receipts with one Thread worker. Public binding generations remain
+    unchanged across reconstruction and each active destination checkpoint
+    advances only from its prior stable item to the missed stable item.
 13. Reconcile the missed item once to A and B without older-item duplication or
     native-input redispatch, replay the stable Project/Thread workflow results
-    without another native call, then close every fresh runtime object.
+    without another native call, and resend a prior stable Channel input identity
+    without another Application call or delivery. Then close every fresh runtime
+    object.
 14. Inspect the database and every present SQLite sidecar read-only; fail if
-    transcript, native payload, request body, media, artifact, credential, or
-    workspace-path sentinels appear in SDK persistence.
+    the complete current table/column/type schema, bounded deterministic row
+    shape, bounded JSON values, or bridge-state invariants differ. Bounded
+    descriptor reads also reject exact, UTF-16, base64, hex, and common
+    compressed forms of transcript, native payload, request body, media,
+    artifact, credential, or workspace-path sentinels.
 
 The executable prints one bounded summary only after all assertions pass.
 

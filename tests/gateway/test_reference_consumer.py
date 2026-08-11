@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import os
 import pickle
+import sqlite3
 import unittest
+import zlib
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -19,7 +22,12 @@ from examples.reference_consumer.interaction import (
     ReferenceStatusService,
     build_command_registry,
 )
-from examples.reference_consumer.main import run_reference_consumer
+from examples.reference_consumer.main import (
+    _assembled_from_fragments,
+    _inspect_sqlite_bridge_state,
+    _inspect_sqlite_files,
+    run_reference_consumer,
+)
 from imagent import (
     Gateway,
     GatewayLimits,
@@ -607,11 +615,14 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(report.recovered_delivery_count, 2)
         self.assertTrue(report.reconstructed_bindings)
+        self.assertTrue(report.reconstructed_checkpoints)
+        self.assertTrue(report.reconstructed_idempotency)
         self.assertTrue(report.reconstructed_receipts)
+        self.assertTrue(report.duplicate_input_suppressed)
         self.assertFalse(report.recovery_redispatched_input)
         self.assertGreaterEqual(report.sqlite_files_inspected, 3)
-        self.assertGreaterEqual(report.sqlite_table_count, 12)
-        self.assertTrue(report.sqlite_leak_free)
+        self.assertEqual(report.sqlite_table_count, 13)
+        self.assertTrue(report.sqlite_bridge_state_allowlisted)
 
         self.assertEqual(report.diagnostics_schema_version, 8)
         self.assertLess(report.diagnostics_size, 4_096)
@@ -620,6 +631,142 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(report.active_workers_after_shutdown, 0)
         self.assertEqual(report.registry_active_after_shutdown, 0)
         self.assertEqual(report.owned_tasks_after_shutdown, 0)
+
+    def test_sqlite_inspection_rejects_encoded_and_fragmented_authority_state(self) -> None:
+        marker = "authority-owned-transcript-marker"
+        cases: tuple[tuple[str, tuple[object, ...]], ...] = (
+            ("utf16_blob", (sqlite3.Binary(marker.encode("utf-16-le")),)),
+            ("hex_blob", (sqlite3.Binary(marker.encode().hex().encode("ascii")),)),
+            ("compressed_blob", (sqlite3.Binary(zlib.compress(marker.encode())),)),
+            ("fragmented_text", (marker[:16], marker[16:])),
+        )
+        for name, payloads in cases:
+            with self.subTest(name=name), TemporaryDirectory() as cwd:
+                database_path = Path(cwd) / "adversarial.sqlite3"
+                connection = sqlite3.connect(database_path)
+                try:
+                    connection.execute("CREATE TABLE authority_leak (payload)")
+                    connection.executemany(
+                        "INSERT INTO authority_leak (payload) VALUES (?)",
+                        ((payload,) for payload in payloads),
+                    )
+                    connection.commit()
+                finally:
+                    connection.close()
+
+                with self.assertRaisesRegex(
+                    AssertionError,
+                    "authority-owned|unknown or missing tables",
+                ):
+                    _inspect_sqlite_bridge_state(
+                        database_path,
+                        forbidden_values=(marker,),
+                    )
+
+    def test_fragment_inspection_uses_each_persisted_value_at_most_once(self) -> None:
+        self.assertFalse(_assembled_from_fragments("abab", ("ab",)))
+        self.assertTrue(_assembled_from_fragments("abab", ("ab", "ab")))
+        self.assertTrue(_assembled_from_fragments("abcd", ("cd", "ab")))
+
+    async def test_sqlite_inspection_rejects_current_schema_blob_fragments_and_extra_rows(
+        self,
+    ) -> None:
+        marker = "fragmented-current-schema-marker"
+        for case in ("blob_type", "fragmented_rows", "extra_row"):
+            with self.subTest(case=case), TemporaryDirectory() as cwd:
+                await run_reference_consumer(cwd)
+                database_path = Path(cwd) / "reference-gateway.sqlite3"
+                connection = sqlite3.connect(database_path)
+                try:
+                    connection.create_function("imagent_store_maintenance", 0, lambda: 1)
+                    connection.create_function("imagent_runtime_gateway_id", 0, lambda: None)
+                    connection.create_function("imagent_runtime_owner_token", 0, lambda: None)
+                    connection.create_function("imagent_runtime_epoch", 0, lambda: None)
+                    if case == "blob_type":
+                        connection.execute(
+                            "UPDATE idempotency_records SET owner_token = ? "
+                            "WHERE rowid = (SELECT MIN(rowid) FROM idempotency_records)",
+                            (sqlite3.Binary(b"benign-non-text-value"),),
+                        )
+                    elif case == "fragmented_rows":
+                        connection.executemany(
+                            "UPDATE idempotency_records SET owner_token = ? WHERE rowid = ?",
+                            (
+                                (marker[:16], 1),
+                                (marker[16:], 2),
+                            ),
+                        )
+                    else:
+                        connection.execute(
+                            "INSERT INTO idempotency_records "
+                            "(scope, record_key, status, owner_token, updated_at) "
+                            "VALUES ('unexpected', 'extra-row', 'completed', NULL, ?)",
+                            (datetime.now(UTC).isoformat(),),
+                        )
+                    connection.commit()
+                finally:
+                    connection.close()
+
+                with self.assertRaisesRegex(
+                    AssertionError,
+                    "non-text value|fragmented authority-owned|row cardinality",
+                ):
+                    _inspect_sqlite_bridge_state(
+                        database_path,
+                        forbidden_values=(marker,),
+                    )
+
+    def test_sqlite_file_inspection_rejects_sidecar_only_encoded_state(self) -> None:
+        marker = "sidecar-only-native-payload-marker"
+        with TemporaryDirectory() as cwd:
+            database_path = Path(cwd) / "sidecar.sqlite3"
+            connection = sqlite3.connect(database_path)
+            try:
+                connection.execute("PRAGMA journal_mode = WAL")
+                connection.execute("CREATE TABLE benign (value TEXT)")
+                connection.commit()
+                connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                connection.execute(
+                    "INSERT INTO benign (value) VALUES (?)",
+                    (marker.encode().hex(),),
+                )
+                connection.commit()
+                self.assertTrue(Path(f"{database_path}-wal").is_file())
+                with self.assertRaisesRegex(AssertionError, "authority-owned"):
+                    _inspect_sqlite_files(
+                        database_path,
+                        forbidden_values=(marker,),
+                    )
+            finally:
+                connection.close()
+
+    def test_sqlite_file_inspection_rejects_growth_during_bounded_read(self) -> None:
+        with TemporaryDirectory() as cwd:
+            database_path = Path(cwd) / "growing.sqlite3"
+            database_path.write_bytes(b"SQLite format 3\x00")
+            original_read = os.read
+            mutated = False
+
+            def grow_after_read(descriptor: int, size: int) -> bytes:
+                nonlocal mutated
+                chunk = original_read(descriptor, size)
+                if not mutated:
+                    mutated = True
+                    with database_path.open("ab") as stream:
+                        stream.write(b"x")
+                return chunk
+
+            with (
+                patch(
+                    "examples.reference_consumer.main.os.read",
+                    side_effect=grow_after_read,
+                ),
+                self.assertRaisesRegex(AssertionError, "changed during bounded read"),
+            ):
+                _inspect_sqlite_files(
+                    database_path,
+                    forbidden_values=("not-present",),
+                )
 
     async def test_local_registry_is_frozen_and_rejects_duplicate_registration(self) -> None:
         consumer = build_reference_consumer()

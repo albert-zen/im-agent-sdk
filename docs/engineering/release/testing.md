@@ -66,7 +66,10 @@ shutdown invariants. That same installed executable also closes its first
 Gateway/store, creates fresh runtime objects over the same SQLite database,
 reconstructs bindings/routes/checkpoints/terminal receipts from bridge state,
 recovers one authoritative missed output without duplicate delivery or native
-redispatch, and inspects the database and all sidecars for authority-owned data.
+redispatch, preserves public binding generations and completed idempotency,
+suppresses a duplicate prior Channel identity, and validates the database and
+all sidecars through the complete schema/column allowlist, bounded value-shape
+validation, and encoded or fragmented authority-data counterexamples.
 The base case also proves, in the original transition-first clean process,
 that `imagent.diagnostics` preserves exact identity for the canonical
 Interaction, Channel, and Application diagnostics objects. It additionally

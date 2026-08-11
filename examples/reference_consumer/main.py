@@ -3,8 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import bz2
+import gzip
+import json
+import lzma
+import math
+import os
 import sqlite3
+import stat
+import zlib
+from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TypeVar
@@ -20,6 +32,169 @@ TRef = TypeVar("TRef", ProjectRef, ThreadRef)
 
 _SQLITE_INSPECTION_MAX_FILES = 8
 _SQLITE_INSPECTION_MAX_FILE_BYTES = 8 * 1024 * 1024
+_SQLITE_TEXT_VALUE_MAX_BYTES = 16 * 1024
+_SQLITE_JSON_MAX_DEPTH = 8
+_SQLITE_JSON_MAX_ITEMS = 256
+
+_SQLiteColumn = tuple[str, str, int, int]
+_SQLITE_SCHEMA: dict[str, tuple[_SQLiteColumn, ...]] = {
+    "conversation_binding_generations": (
+        ("channel_instance_id", "TEXT", 1, 1),
+        ("native_conversation_id", "TEXT", 1, 2),
+        ("generation", "INTEGER", 1, 0),
+    ),
+    "conversation_bindings": (
+        ("channel_instance_id", "TEXT", 1, 1),
+        ("native_conversation_id", "TEXT", 1, 2),
+        ("application_instance_id", "TEXT", 0, 0),
+        ("project_id", "TEXT", 0, 0),
+        ("thread_id", "TEXT", 0, 0),
+        ("generation", "INTEGER", 1, 0),
+        ("updated_at", "TEXT", 1, 0),
+    ),
+    "delivery_submission_destinations": (
+        ("root_submission_id", "TEXT", 1, 0),
+        ("destination_delivery_id", "TEXT", 1, 1),
+        ("channel_instance_id", "TEXT", 1, 0),
+        ("native_conversation_id", "TEXT", 1, 0),
+        ("application_instance_id", "TEXT", 1, 0),
+        ("project_id", "TEXT", 1, 0),
+        ("thread_id", "TEXT", 1, 0),
+        ("route_id", "TEXT", 1, 0),
+        ("route_updated_at", "TEXT", 0, 0),
+        ("reply_to_message_id", "TEXT", 0, 0),
+        ("state", "TEXT", 1, 0),
+        ("receipt_json", "TEXT", 0, 0),
+        ("error", "TEXT", 0, 0),
+        ("updated_at", "TEXT", 1, 0),
+    ),
+    "delivery_submissions": (
+        ("submission_id", "TEXT", 1, 1),
+        ("delivery_id", "TEXT", 1, 0),
+        ("origin", "TEXT", 1, 0),
+        ("principal_id", "TEXT", 1, 0),
+        ("target_fingerprint", "TEXT", 1, 0),
+        ("payload_fingerprint", "TEXT", 1, 0),
+        ("created_at", "TEXT", 1, 0),
+        ("updated_at", "TEXT", 1, 0),
+    ),
+    "gateway_effect_receipts": (
+        ("action_key", "TEXT", 1, 1),
+        ("gateway_id", "TEXT", 1, 0),
+        ("action_kind", "TEXT", 1, 0),
+        ("payload_fingerprint", "TEXT", 1, 0),
+        ("category", "TEXT", 1, 0),
+        ("phase", "TEXT", 1, 0),
+        ("native_phase_id", "TEXT", 0, 0),
+        ("binding_generation", "INTEGER", 0, 0),
+        ("outcome_json", "TEXT", 0, 0),
+        ("created_at", "TEXT", 1, 0),
+        ("updated_at", "TEXT", 1, 0),
+    ),
+    "gateway_namespace": (
+        ("singleton", "INTEGER", 1, 1),
+        ("gateway_id", "TEXT", 1, 0),
+    ),
+    "gateway_runtime_lease": (
+        ("singleton", "INTEGER", 1, 1),
+        ("owner_token", "TEXT", 1, 0),
+        ("epoch", "INTEGER", 1, 0),
+        ("expires_at", "REAL", 1, 0),
+    ),
+    "gateway_schema_metadata": (
+        ("metadata_key", "TEXT", 1, 1),
+        ("metadata_value", "TEXT", 1, 0),
+    ),
+    "gateway_workspace_identities": (
+        ("application_instance_id", "TEXT", 1, 1),
+        ("project_id", "TEXT", 1, 2),
+        ("root_fingerprint", "TEXT", 1, 0),
+    ),
+    "idempotency_records": (
+        ("scope", "TEXT", 1, 1),
+        ("record_key", "TEXT", 1, 2),
+        ("status", "TEXT", 1, 0),
+        ("owner_token", "TEXT", 0, 0),
+        ("updated_at", "TEXT", 1, 0),
+    ),
+    "request_route_correlations": (
+        ("correlation_id", "TEXT", 1, 1),
+        ("application_instance_id", "TEXT", 1, 0),
+        ("native_request_id", "TEXT", 1, 0),
+        ("project_id", "TEXT", 1, 0),
+        ("thread_id", "TEXT", 1, 0),
+        ("turn_id", "TEXT", 1, 0),
+        ("channel_instance_id", "TEXT", 1, 0),
+        ("native_conversation_id", "TEXT", 1, 0),
+        ("delivery_id", "TEXT", 1, 0),
+        ("response_shape_json", "TEXT", 1, 0),
+        ("state", "TEXT", 1, 0),
+        ("created_at", "TEXT", 1, 0),
+        ("updated_at", "TEXT", 1, 0),
+        ("expires_at", "TEXT", 0, 0),
+    ),
+    "thread_projection_routes": (
+        ("route_id", "TEXT", 1, 1),
+        ("application_instance_id", "TEXT", 1, 0),
+        ("project_id", "TEXT", 1, 0),
+        ("thread_id", "TEXT", 1, 0),
+        ("channel_instance_id", "TEXT", 1, 0),
+        ("native_conversation_id", "TEXT", 1, 0),
+        ("reply_to_message_id", "TEXT", 0, 0),
+        ("checkpoint_agent_item_id", "TEXT", 0, 0),
+        ("checkpointed_at", "TEXT", 0, 0),
+        ("updated_at", "TEXT", 1, 0),
+    ),
+    "turn_reply_correlations": (
+        ("correlation_id", "TEXT", 1, 1),
+        ("application_instance_id", "TEXT", 1, 0),
+        ("project_id", "TEXT", 1, 0),
+        ("thread_id", "TEXT", 1, 0),
+        ("turn_id", "TEXT", 1, 0),
+        ("client_message_id", "TEXT", 1, 0),
+        ("channel_instance_id", "TEXT", 1, 0),
+        ("native_conversation_id", "TEXT", 1, 0),
+        ("reply_to_message_id", "TEXT", 1, 0),
+        ("created_at", "TEXT", 1, 0),
+    ),
+}
+_SQLITE_FINAL_ROW_COUNTS = {
+    "conversation_binding_generations": 2,
+    "conversation_bindings": 2,
+    "delivery_submission_destinations": 14,
+    "delivery_submissions": 14,
+    "gateway_effect_receipts": 7,
+    "gateway_namespace": 1,
+    "gateway_runtime_lease": 1,
+    "gateway_schema_metadata": 1,
+    "gateway_workspace_identities": 0,
+    "idempotency_records": 22,
+    "request_route_correlations": 0,
+    "thread_projection_routes": 3,
+    "turn_reply_correlations": 2,
+}
+_SQLITE_JSON_COLUMNS = frozenset(
+    {
+        ("delivery_submission_destinations", "receipt_json"),
+        ("gateway_effect_receipts", "outcome_json"),
+        ("request_route_correlations", "response_shape_json"),
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _SQLiteRecoverySnapshot:
+    binding_generations: tuple[tuple[str, str, int], ...]
+    active_route_checkpoints: tuple[tuple[str, str, str | None], ...]
+    completed_idempotency: frozenset[tuple[str, str]]
+
+
+@dataclass(frozen=True, slots=True)
+class _SQLiteBridgeInspection:
+    file_count: int
+    table_count: int
+    snapshot: _SQLiteRecoverySnapshot
+    schema_and_values_allowlisted: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,11 +217,14 @@ class ReferenceReport:
     recovered_conversations: tuple[ConversationRef, ...]
     recovered_delivery_count: int
     reconstructed_bindings: bool
+    reconstructed_checkpoints: bool
+    reconstructed_idempotency: bool
     reconstructed_receipts: bool
+    duplicate_input_suppressed: bool
     recovery_redispatched_input: bool
     sqlite_files_inspected: int
     sqlite_table_count: int
-    sqlite_leak_free: bool
+    sqlite_bridge_state_allowlisted: bool
     diagnostics_schema_version: int
     diagnostics_size: int
     diagnostics_authoritative: bool
@@ -75,6 +253,74 @@ def _required_ref(result: object, expected: type[TRef]) -> TRef:
     return result.value.ref
 
 
+def _forbidden_byte_patterns(value: str) -> frozenset[bytes]:
+    raw = value.encode("utf-8")
+    payloads = {
+        raw,
+        value.encode("utf-16-le"),
+        value.encode("utf-16-be"),
+        zlib.compress(raw),
+        gzip.compress(raw, mtime=0),
+        bz2.compress(raw),
+        lzma.compress(raw),
+    }
+    patterns: set[bytes] = set()
+    for payload in payloads:
+        patterns.update(
+            {
+                payload,
+                base64.b64encode(payload),
+                base64.urlsafe_b64encode(payload),
+                base64.b85encode(payload),
+                payload.hex().encode("ascii"),
+                payload.hex().upper().encode("ascii"),
+            }
+        )
+    return frozenset(patterns)
+
+
+def _read_bounded_descriptor(path: Path) -> bytes:
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
+            raise AssertionError("SQLite inspection target is not a regular file")
+        if before.st_size > _SQLITE_INSPECTION_MAX_FILE_BYTES:
+            raise AssertionError("SQLite bridge persistence exceeded the inspection bound")
+        chunks: list[bytes] = []
+        remaining = _SQLITE_INSPECTION_MAX_FILE_BYTES + 1
+        while remaining > 0:
+            chunk = os.read(descriptor, min(64 * 1024, remaining))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        persisted = b"".join(chunks)
+        after = os.fstat(descriptor)
+        if len(persisted) > _SQLITE_INSPECTION_MAX_FILE_BYTES:
+            raise AssertionError("SQLite bridge persistence exceeded the inspection bound")
+        before_identity = (
+            before.st_dev,
+            before.st_ino,
+            before.st_size,
+            before.st_mtime_ns,
+            before.st_ctime_ns,
+        )
+        after_identity = (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+            after.st_ctime_ns,
+        )
+        if before_identity != after_identity or len(persisted) != after.st_size:
+            raise AssertionError("SQLite inspection target changed during bounded read")
+        return persisted
+    finally:
+        os.close(descriptor)
+
+
 def _inspect_sqlite_files(
     database_path: Path,
     *,
@@ -91,21 +337,254 @@ def _inspect_sqlite_files(
         raise AssertionError("SQLite recovery database was not created")
     if len(database_files) > _SQLITE_INSPECTION_MAX_FILES:
         raise AssertionError("SQLite recovery produced too many sidecar files")
-    for path in database_files:
-        if path.stat().st_size > _SQLITE_INSPECTION_MAX_FILE_BYTES:
-            raise AssertionError("SQLite bridge persistence exceeded the inspection bound")
-        persisted = path.read_bytes()
-        for value in forbidden_values:
-            if value.encode("utf-8") in persisted:
+    persisted_files = tuple(_read_bounded_descriptor(path) for path in database_files)
+    persisted_combined = b"".join(persisted_files)
+    for value in forbidden_values:
+        for pattern in _forbidden_byte_patterns(value):
+            if any(pattern in persisted for persisted in persisted_files):
                 raise AssertionError("SQLite bridge persistence retained authority-owned data")
+            if pattern in persisted_combined:
+                raise AssertionError("SQLite sidecars fragmented authority-owned data")
     return len(database_files)
+
+
+def _validate_json_tree(value: object) -> tuple[str, ...]:
+    text_values: list[str] = []
+    item_count = 0
+
+    def visit(current: object, depth: int) -> None:
+        nonlocal item_count
+        item_count += 1
+        if item_count > _SQLITE_JSON_MAX_ITEMS or depth > _SQLITE_JSON_MAX_DEPTH:
+            raise AssertionError("SQLite JSON value exceeded its structural bound")
+        if current is None or isinstance(current, bool):
+            return
+        if isinstance(current, str):
+            if len(current.encode("utf-8")) > _SQLITE_TEXT_VALUE_MAX_BYTES:
+                raise AssertionError("SQLite JSON text exceeded its value bound")
+            text_values.append(current)
+            return
+        if isinstance(current, int) and not isinstance(current, bool):
+            if not -(2**63) <= current <= 2**63 - 1:
+                raise AssertionError("SQLite JSON integer exceeded its value bound")
+            return
+        if isinstance(current, float):
+            if not math.isfinite(current):
+                raise AssertionError("SQLite JSON number must be finite")
+            return
+        if isinstance(current, list):
+            for item in current:
+                visit(item, depth + 1)
+            return
+        if isinstance(current, dict):
+            for key, item in current.items():
+                if not isinstance(key, str) or not key:
+                    raise AssertionError("SQLite JSON keys must be bounded text")
+                if len(key.encode("utf-8")) > _SQLITE_TEXT_VALUE_MAX_BYTES:
+                    raise AssertionError("SQLite JSON key exceeded its value bound")
+                text_values.append(key)
+                visit(item, depth + 1)
+            return
+        raise AssertionError("SQLite JSON contained an unsupported value type")
+
+    visit(value, 0)
+    return tuple(text_values)
+
+
+def _assembled_from_fragments(target: str, values: tuple[str, ...]) -> bool:
+    candidate_counts = Counter(
+        value for value in values if 0 < len(value) < len(target) and value in target
+    )
+    candidates = tuple(sorted(candidate_counts))
+    initial_counts = tuple(candidate_counts[value] for value in candidates)
+    explored_states = 0
+
+    @lru_cache(maxsize=None)
+    def assemble(position: int, remaining: tuple[int, ...], parts: int) -> bool:
+        nonlocal explored_states
+        explored_states += 1
+        if explored_states > 65_536:
+            raise AssertionError("SQLite fragment inspection exceeded its search bound")
+        if position == len(target):
+            return parts >= 2
+        for index, value in enumerate(candidates):
+            if remaining[index] and target.startswith(value, position):
+                next_remaining = list(remaining)
+                next_remaining[index] -= 1
+                if assemble(
+                    position + len(value),
+                    tuple(next_remaining),
+                    min(parts + 1, 2),
+                ):
+                    return True
+        return False
+
+    return assemble(0, initial_counts, 0)
+
+
+def _read_sqlite_recovery_snapshot(
+    connection: sqlite3.Connection,
+) -> _SQLiteRecoverySnapshot:
+    binding_generations = tuple(
+        (str(row[0]), str(row[1]), int(row[2]))
+        for row in connection.execute(
+            "SELECT channel_instance_id, native_conversation_id, generation "
+            "FROM conversation_bindings ORDER BY channel_instance_id, native_conversation_id"
+        )
+    )
+    active_route_checkpoints = tuple(
+        (str(row[0]), str(row[1]), None if row[2] is None else str(row[2]))
+        for row in connection.execute(
+            "SELECT r.channel_instance_id, r.native_conversation_id, "
+            "r.checkpoint_agent_item_id FROM thread_projection_routes AS r "
+            "JOIN conversation_bindings AS b "
+            "ON b.channel_instance_id = r.channel_instance_id "
+            "AND b.native_conversation_id = r.native_conversation_id "
+            "AND b.application_instance_id = r.application_instance_id "
+            "AND b.project_id = r.project_id AND b.thread_id = r.thread_id "
+            "ORDER BY r.channel_instance_id, r.native_conversation_id"
+        )
+    )
+    completed_idempotency = frozenset(
+        (str(row[0]), str(row[1]))
+        for row in connection.execute(
+            "SELECT scope, record_key FROM idempotency_records "
+            "WHERE status = 'completed' ORDER BY scope, record_key"
+        )
+    )
+    return _SQLiteRecoverySnapshot(
+        binding_generations=binding_generations,
+        active_route_checkpoints=active_route_checkpoints,
+        completed_idempotency=completed_idempotency,
+    )
+
+
+def _read_current_sqlite_recovery_snapshot(database_path: Path) -> _SQLiteRecoverySnapshot:
+    connection = sqlite3.connect(f"file:{database_path}?mode=ro", uri=True)
+    try:
+        return _read_sqlite_recovery_snapshot(connection)
+    finally:
+        connection.close()
+
+
+def _validate_sqlite_schema_and_values(
+    connection: sqlite3.Connection,
+    *,
+    forbidden_values: tuple[str, ...],
+) -> tuple[tuple[str, ...], _SQLiteRecoverySnapshot]:
+    tables = tuple(
+        str(row[0])
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master "
+            "WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        )
+    )
+    if tables != tuple(sorted(_SQLITE_SCHEMA)):
+        raise AssertionError("SQLite bridge schema contains unknown or missing tables")
+
+    all_text_values: list[str] = []
+    rows_by_table: dict[str, tuple[tuple[object, ...], ...]] = {}
+    for table in tables:
+        expected_columns = _SQLITE_SCHEMA[table]
+        actual_columns = tuple(
+            (str(row[1]), str(row[2]).upper(), int(row[3]), int(row[5]))
+            for row in connection.execute(f'PRAGMA table_info("{table}")')
+        )
+        if actual_columns != expected_columns:
+            raise AssertionError("SQLite bridge table columns or types changed")
+        rows = tuple(
+            tuple(row) for row in connection.execute(f'SELECT * FROM "{table}" ORDER BY rowid')
+        )
+        rows_by_table[table] = rows
+        if len(rows) != _SQLITE_FINAL_ROW_COUNTS[table]:
+            raise AssertionError("SQLite bridge row cardinality changed")
+        for row in rows:
+            for value, (column, declared_type, not_null, _primary_key) in zip(
+                row,
+                expected_columns,
+                strict=True,
+            ):
+                if value is None:
+                    if not_null:
+                        raise AssertionError("SQLite required bridge value is NULL")
+                    continue
+                if declared_type == "TEXT":
+                    if not isinstance(value, str):
+                        raise AssertionError("SQLite TEXT column retained a non-text value")
+                    if len(value.encode("utf-8")) > _SQLITE_TEXT_VALUE_MAX_BYTES:
+                        raise AssertionError("SQLite text value exceeded its bound")
+                    all_text_values.append(value)
+                    if column.endswith("_fingerprint"):
+                        prefix, separator, digest = value.rpartition(":")
+                        if not separator:
+                            prefix, digest = "", value
+                        if prefix not in {
+                            "",
+                            "imagent:delivery-payload:sha256",
+                            "imagent:delivery-target:sha256",
+                        } or (
+                            len(digest) != 64
+                            or digest != digest.lower()
+                            or any(character not in "0123456789abcdef" for character in digest)
+                        ):
+                            raise AssertionError("SQLite fingerprint value is malformed")
+                    if column.endswith("_at"):
+                        try:
+                            datetime.fromisoformat(value)
+                        except ValueError as error:
+                            raise AssertionError("SQLite timestamp value is malformed") from error
+                    if (table, column) in _SQLITE_JSON_COLUMNS:
+                        try:
+                            decoded = json.loads(value)
+                        except json.JSONDecodeError as error:
+                            raise AssertionError("SQLite JSON value is malformed") from error
+                        all_text_values.extend(_validate_json_tree(decoded))
+                elif declared_type == "INTEGER":
+                    if not isinstance(value, int) or isinstance(value, bool):
+                        raise AssertionError("SQLite INTEGER column retained another type")
+                    if not -(2**63) <= value <= 2**63 - 1:
+                        raise AssertionError("SQLite integer value exceeded its bound")
+                elif declared_type == "REAL":
+                    if not isinstance(value, float) or not math.isfinite(value):
+                        raise AssertionError("SQLite REAL column retained another type")
+                else:
+                    raise AssertionError("SQLite schema declared an unsupported type")
+
+    if rows_by_table["gateway_namespace"] != ((1, "reference"),):
+        raise AssertionError("SQLite Gateway namespace changed")
+    if rows_by_table["gateway_schema_metadata"] != (
+        ("delivery_receipt_detail_storage", "redacted-v2-physically-scrubbed"),
+    ):
+        raise AssertionError("SQLite schema metadata changed")
+    if {row[2] for row in rows_by_table["idempotency_records"]} != {"completed"}:
+        raise AssertionError("SQLite idempotency evidence is not terminal")
+    if {row[10] for row in rows_by_table["delivery_submission_destinations"]} != {"accepted"}:
+        raise AssertionError("SQLite delivery destination state changed")
+    if {row[2] for row in rows_by_table["delivery_submissions"]} != {"gateway_internal"}:
+        raise AssertionError("SQLite delivery origin changed")
+    if {row[5] for row in rows_by_table["gateway_effect_receipts"]} != {"terminal"}:
+        raise AssertionError("SQLite effect receipt is not terminal")
+
+    text_values = tuple(all_text_values)
+    for forbidden in forbidden_values:
+        text_patterns = tuple(
+            pattern.decode("ascii")
+            for pattern in _forbidden_byte_patterns(forbidden)
+            if all(byte < 128 for byte in pattern)
+        )
+        for pattern in (forbidden, *text_patterns):
+            if any(pattern in value for value in text_values):
+                raise AssertionError("SQLite bridge values retained authority-owned data")
+            if _assembled_from_fragments(pattern, text_values):
+                raise AssertionError("SQLite rows fragmented authority-owned data")
+    return tables, _read_sqlite_recovery_snapshot(connection)
 
 
 def _inspect_sqlite_bridge_state(
     database_path: Path,
     *,
     forbidden_values: tuple[str, ...],
-) -> tuple[int, int]:
+) -> _SQLiteBridgeInspection:
     """Inspect bounded bridge rows and every database sidecar after shutdown."""
 
     database_file_count = _inspect_sqlite_files(
@@ -120,49 +599,18 @@ def _inspect_sqlite_bridge_state(
     try:
         if connection.execute("PRAGMA quick_check").fetchone() != ("ok",):
             raise AssertionError("SQLite recovery database failed its integrity check")
-        tables = tuple(
-            row[0]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master "
-                "WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
-            )
+        tables, snapshot = _validate_sqlite_schema_and_values(
+            connection,
+            forbidden_values=forbidden_values,
         )
-        required_tables = {
-            "conversation_bindings",
-            "gateway_effect_receipts",
-            "idempotency_records",
-            "thread_projection_routes",
-        }
-        if not required_tables.issubset(tables):
-            raise AssertionError("SQLite bridge persistence is missing required projections")
-        if connection.execute("SELECT COUNT(*) FROM conversation_bindings").fetchone() != (2,):
-            raise AssertionError("SQLite binding reconstruction evidence is incomplete")
-        if connection.execute("SELECT COUNT(*) FROM thread_projection_routes").fetchone() != (3,):
-            raise AssertionError("SQLite route reconstruction evidence is incomplete")
-        if connection.execute(
-            "SELECT COUNT(*) FROM thread_projection_routes "
-            "WHERE checkpoint_agent_item_id IS NOT NULL"
-        ).fetchone() != (2,):
-            raise AssertionError("SQLite destination checkpoints were not reconstructed")
-        if connection.execute(
-            "SELECT COUNT(*) FROM thread_projection_routes AS r "
-            "JOIN conversation_bindings AS b "
-            "ON b.channel_instance_id = r.channel_instance_id "
-            "AND b.native_conversation_id = r.native_conversation_id "
-            "AND b.application_instance_id = r.application_instance_id "
-            "AND b.project_id = r.project_id AND b.thread_id = r.thread_id"
-        ).fetchone() != (2,):
-            raise AssertionError("SQLite active route authority was not reconstructed")
-        if (
-            connection.execute(
-                "SELECT COUNT(*) FROM gateway_effect_receipts WHERE phase = 'terminal'"
-            ).fetchone()[0]
-            < 5
-        ):
-            raise AssertionError("SQLite terminal receipt evidence is incomplete")
     finally:
         connection.close()
-    return database_file_count, len(tables)
+    return _SQLiteBridgeInspection(
+        file_count=database_file_count,
+        table_count=len(tables),
+        snapshot=snapshot,
+        schema_and_values_allowlisted=True,
+    )
 
 
 async def _ordinary_round_trip(
@@ -222,12 +670,17 @@ async def run_reference_consumer(reference_workspace: str) -> ReferenceReport:
     switched_new: tuple[OutboundMessage, ...] = ()
     switched_back: tuple[OutboundMessage, ...] = ()
     recovered: tuple[OutboundMessage, ...] = ()
+    binding_generations_before_restart: tuple[tuple[ConversationRef, int], ...] = ()
+    recovery_snapshot_before_restart: _SQLiteRecoverySnapshot | None = None
     reconstructed_bindings = False
+    reconstructed_checkpoints = False
+    reconstructed_idempotency = False
     reconstructed_receipts = False
+    duplicate_input_suppressed = False
     recovery_redispatched_input = True
     sqlite_files_inspected = 0
     sqlite_table_count = 0
-    sqlite_leak_free = False
+    sqlite_bridge_state_allowlisted = False
 
     async with gateway:
         actions_a = gateway.actions(
@@ -423,6 +876,28 @@ async def run_reference_consumer(reference_workspace: str) -> ReferenceReport:
             if secret in rendered_diagnostics:
                 raise AssertionError("Gateway diagnostics exposed scoped or content data")
 
+        binding_a_before_restart = await actions_a.get_binding()
+        binding_b_before_restart = await actions_b.get_binding()
+        if (
+            binding_a_before_restart is None
+            or binding_b_before_restart is None
+            or binding_a_before_restart.thread_ref != first_thread_ref
+            or binding_b_before_restart.thread_ref != first_thread_ref
+        ):
+            raise AssertionError("pre-restart public bindings are incomplete")
+        binding_generations_before_restart = (
+            (conversation_a.ref, binding_a_before_restart.generation),
+            (conversation_b.ref, binding_b_before_restart.generation),
+        )
+        recovery_snapshot_before_restart = _read_current_sqlite_recovery_snapshot(database_path)
+        if len(recovery_snapshot_before_restart.active_route_checkpoints) != 2 or any(
+            checkpoint is None
+            for _channel, _conversation, checkpoint in (
+                recovery_snapshot_before_restart.active_route_checkpoints
+            )
+        ):
+            raise AssertionError("pre-restart destination checkpoints are incomplete")
+
     persistence_markers = {
         "native_payload": "native-payload-must-not-persist",
         "request_snapshot": "request-body-must-not-persist",
@@ -441,7 +916,7 @@ async def run_reference_consumer(reference_workspace: str) -> ReferenceReport:
         "authoritative-output-while-gateway-stopped",
         *persistence_markers.values(),
     )
-    await application.receive_native_text(
+    missed_turn = await application.receive_native_text(
         first_thread_ref,
         client_message_id="reference:native:while-gateway-stopped",
         text="authoritative-output-while-gateway-stopped",
@@ -488,11 +963,14 @@ async def run_reference_consumer(reference_workspace: str) -> ReferenceReport:
 
         restored_a = await restarted_actions_a.get_binding()
         restored_b = await restarted_actions_b.get_binding()
+        expected_generations = dict(binding_generations_before_restart)
         reconstructed_bindings = bool(
             restored_a is not None
             and restored_b is not None
             and restored_a.thread_ref == first_thread_ref
             and restored_b.thread_ref == first_thread_ref
+            and restored_a.generation == expected_generations[restarted_conversation_a.ref]
+            and restored_b.generation == expected_generations[restarted_conversation_b.ref]
         )
         if not reconstructed_bindings:
             raise AssertionError("SQLite restart did not reconstruct both bindings")
@@ -528,6 +1006,64 @@ async def run_reference_consumer(reference_workspace: str) -> ReferenceReport:
         recovery_redispatched_input = application.input_dispatch_calls != dispatched_before_restart
         if recovery_redispatched_input:
             raise AssertionError("projection recovery redispatched authoritative native input")
+
+        if recovery_snapshot_before_restart is None:
+            raise AssertionError("pre-restart recovery snapshot was not captured")
+        recovery_snapshot_after_restart = _read_current_sqlite_recovery_snapshot(database_path)
+        checkpoints_before = {
+            (channel, conversation): checkpoint
+            for channel, conversation, checkpoint in (
+                recovery_snapshot_before_restart.active_route_checkpoints
+            )
+        }
+        checkpoints_after = {
+            (channel, conversation): checkpoint
+            for channel, conversation, checkpoint in (
+                recovery_snapshot_after_restart.active_route_checkpoints
+            )
+        }
+        expected_checkpoint = f"{missed_turn.turn_ref.turn_id}:assistant"
+        reconstructed_checkpoints = bool(
+            checkpoints_after.keys() == checkpoints_before.keys()
+            and all(checkpoint is not None for checkpoint in checkpoints_before.values())
+            and all(
+                checkpoints_after[key] == expected_checkpoint
+                and checkpoints_after[key] != checkpoints_before[key]
+                for key in checkpoints_before
+            )
+        )
+        if not reconstructed_checkpoints:
+            raise AssertionError("SQLite restart did not reconstruct destination checkpoints")
+
+        duplicate_idempotency_key = (
+            "inbound:reference-channel",
+            "conversation-a:reference:message:after-switch-back",
+        )
+        reconstructed_idempotency = bool(
+            duplicate_idempotency_key in recovery_snapshot_before_restart.completed_idempotency
+            and any(
+                scope.startswith("outbound:")
+                for scope, _key in recovery_snapshot_before_restart.completed_idempotency
+            )
+            and recovery_snapshot_before_restart.completed_idempotency
+            <= recovery_snapshot_after_restart.completed_idempotency
+        )
+        if not reconstructed_idempotency:
+            raise AssertionError("SQLite restart did not reconstruct completed idempotency")
+        sent_before_duplicate = len(restarted.channel.sent)
+        calls_before_duplicate = application.input_dispatch_calls
+        await restarted_conversation_a.receive_text(
+            message_id="reference:message:after-switch-back",
+            text="thread-one-after-switch-back",
+        )
+        await asyncio.sleep(0)
+        duplicate_input_suppressed = bool(
+            len(restarted.channel.sent) == sent_before_duplicate
+            and application.input_dispatch_calls == calls_before_duplicate
+        )
+        if not duplicate_input_suppressed:
+            raise AssertionError("reconstructed idempotency did not suppress duplicate input")
+
         sqlite_files_inspected = _inspect_sqlite_files(
             database_path,
             forbidden_values=forbidden_persistence_values,
@@ -544,12 +1080,21 @@ async def run_reference_consumer(reference_workspace: str) -> ReferenceReport:
         registry.diagnostic_facts().active_handler_count
         for registry in (consumer.registry, restarted.registry)
     )
-    closed_files_inspected, sqlite_table_count = _inspect_sqlite_bridge_state(
+    bridge_inspection = _inspect_sqlite_bridge_state(
         database_path,
         forbidden_values=forbidden_persistence_values,
     )
-    sqlite_files_inspected = max(sqlite_files_inspected, closed_files_inspected)
-    sqlite_leak_free = True
+    sqlite_files_inspected = max(sqlite_files_inspected, bridge_inspection.file_count)
+    sqlite_table_count = bridge_inspection.table_count
+    sqlite_bridge_state_allowlisted = bridge_inspection.schema_and_values_allowlisted
+    if (
+        recovery_snapshot_before_restart is None
+        or recovery_snapshot_before_restart.binding_generations
+        != bridge_inspection.snapshot.binding_generations
+        or not recovery_snapshot_before_restart.completed_idempotency
+        <= bridge_inspection.snapshot.completed_idempotency
+    ):
+        raise AssertionError("final SQLite recovery snapshot lost durable evidence")
     current = asyncio.current_task()
     owned_tasks = tuple(
         task
@@ -581,11 +1126,14 @@ async def run_reference_consumer(reference_workspace: str) -> ReferenceReport:
         recovered_conversations=_destinations(recovered),
         recovered_delivery_count=len(recovered),
         reconstructed_bindings=reconstructed_bindings,
+        reconstructed_checkpoints=reconstructed_checkpoints,
+        reconstructed_idempotency=reconstructed_idempotency,
         reconstructed_receipts=reconstructed_receipts,
+        duplicate_input_suppressed=duplicate_input_suppressed,
         recovery_redispatched_input=recovery_redispatched_input,
         sqlite_files_inspected=sqlite_files_inspected,
         sqlite_table_count=sqlite_table_count,
-        sqlite_leak_free=sqlite_leak_free,
+        sqlite_bridge_state_allowlisted=sqlite_bridge_state_allowlisted,
         diagnostics_schema_version=diagnostics_schema_version,
         diagnostics_size=diagnostics_size,
         diagnostics_authoritative=diagnostics_authoritative,

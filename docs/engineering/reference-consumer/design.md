@@ -60,15 +60,23 @@ Thread subscription for the new process lifetime reconciles the missed output
 to both destinations exactly once; it neither redelivers the prior checkpointed
 output nor redispatches native input. Replaying the stable Project and Thread
 workflow actions returns their original terminal results without another native
-create call.
+create call. Public binding generations match their pre-shutdown values, the
+two destination checkpoints advance from their captured prior item to the one
+missed item, and a duplicate prior Channel message identity is suppressed by
+the reconstructed completed idempotency record without another Application
+call or delivery.
 
-Once the second composition closes, the executable opens the database read-only,
-runs an integrity check, verifies the bounded bridge rows, and byte-inspects the
-database plus every present WAL, SHM, or journal sidecar. Unique transcript,
-native-payload, request-body, media, artifact, credential, and workspace-path
-sentinels must be absent. This inspection proves the persisted surface remains
-bridge state plus rebuildable projections; it does not make SQLite a transcript
-or Application-authority store.
+Once the second composition closes, the executable opens the database read-only
+and runs an integrity check. A complete current schema allowlist validates every
+table, column, declared SQLite type, deterministic row count, runtime value type,
+and bounded JSON tree; unknown or BLOB-bearing state fails closed. Bounded
+descriptor reads cover the database plus every present WAL, SHM, or journal
+sidecar and reject exact, UTF-16, base64, hex, and common compressed forms of
+unique transcript, native-payload, request-body, media, artifact, credential,
+and workspace-path sentinels. Adversarial tests cover encoded BLOBs, fragmented
+TEXT rows, sidecar-only evidence, and file growth during inspection. This proves
+the persisted surface remains bridge state plus rebuildable projections; it
+does not make SQLite a transcript or Application-authority store.
 
 Stable action, resource, message, event, and delivery identities drive every
 assertion. Output isolation is proved by exact destination sets across shared

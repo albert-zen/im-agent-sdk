@@ -324,9 +324,14 @@ first Gateway, Channel, and SQLite store objects, creates authoritative output
 while the Gateway is absent, constructs fresh objects over the same database,
 and proves binding/route/checkpoint/receipt reconstruction without duplicate
 Application input, delivery, or concurrent subscription. It inspects SQLite
-schema, database bytes, and present sidecars for transcript, native payload,
-request, media, artifact, credential, or workspace-path leakage. Only the
-Application object whose bounded authoritative history survives is reused.
+through a complete schema/column allowlist, bounded type/cardinality/value-shape
+validation, and bounded descriptor reads of database bytes and present sidecars. Encoded, compressed,
+fragmented, BLOB, unexpected-row, and file-growth counterexamples fail closed.
+Public evidence additionally preserves binding generations, advances both
+captured destination checkpoints to the missed stable item, retains completed
+idempotency rows, and suppresses a duplicate prior input identity without an
+Application call or delivery. Only the Application object whose bounded
+authoritative history survives is reused.
 
 ### G. Requests, media, artifacts, and proactive delivery
 
