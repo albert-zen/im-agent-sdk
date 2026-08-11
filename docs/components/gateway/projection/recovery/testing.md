@@ -48,3 +48,14 @@ and checkpoint integration evidence remains in
 The focused suite also proves that the Gateway projection facade re-exports
 the exact owner objects and that the historical `imagent.recovery` module is
 unavailable in a clean process.
+
+The canonical public restart acceptance additionally runs through
+`tests/gateway/test_reference_consumer.py` and the installed
+`examples.reference_consumer.main`. It must close and discard the original
+Gateway, Channel, and `SQLiteGatewayStore`, reuse only the example Application
+whose authoritative history survives, and construct fresh objects on the same
+database. The second lifecycle restores one active worker for the stable
+Thread, delivers only output missed while absent, replays terminal action
+receipts before native work, and exposes the restored binding through scoped
+public actions. Direct SQLite schema/database/sidecar inspection must reject
+content and native-authority leakage.

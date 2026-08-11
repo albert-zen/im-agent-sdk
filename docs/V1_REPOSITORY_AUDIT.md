@@ -1,6 +1,6 @@
 # V1 repository audit and transformation DAG
 
-Status: DAG blocks A–E implemented; blocks F–I remain transformation targets
+Status: DAG blocks A–F implemented; blocks G–I remain transformation targets
 
 This audit compares the repository with `V1_DESIGN.md`. Existing behavior is
 not retained merely because it has tests. Safety evidence is reused; conflicting
@@ -161,7 +161,8 @@ surface for explicit managed-CWD Project creation/selection, Thread
 creation/binding, D's policy-free ordinary-input dispatch, two-Conversation
 fan-out, switch and switch-back, and exact worker/delivery/shutdown evidence.
 It does not directly create scenario resources on the Application or compose a
-second runtime/store path. Fresh-object SQLite reconstruction remains block F.
+second runtime/store path. Block F extends that same consumer with a bounded
+fresh-object SQLite reconstruction phase rather than a replacement runtime.
 
 ### P1: authority documents conflict
 
@@ -298,15 +299,34 @@ resource replay, Conversation isolation in both switch directions, one
 subscription per Thread, exact non-duplicated delivery cardinality, immediate
 activation of action-created routes, bounded redacted diagnostics, lease-loss
 revocation including blocked startup, terminal replay under later worker-capacity
-drift, and zero owned work after shutdown. SQLite reconstruction remains block
-F.
+drift, and zero owned work after shutdown. Block F adds fresh-object SQLite
+reconstruction to this same executable, as recorded below.
 
 ### F. Projection and durable recovery
 
-Move the existing stable-ID, fan-out, checkpoint, correlation, suppression,
-gap, and recovery algorithms onto the uniform resource/store/action model.
-Add fresh-object SQLite restart evidence and inspect persisted state for
-authority leakage.
+Status: complete.
+
+The existing stable-ID fan-out, per-destination checkpoint/correlation/
+suppression, typed-gap, bounded-retry, and authoritative-recovery algorithms
+now run through the uniform Project-scoped resources, coherent leased store,
+and canonical public Gateway lifecycle. One stable Thread still has one
+Gateway-owned observation worker while independent destination routes retain
+their own checkpoint and failure boundary.
+
+Landed evidence includes replay-capable and live-first/no-replay ordering,
+bounded recent baseline and existing-checkpoint scans, explicit missing/
+expired/exhausted evidence, completed-idempotency checkpoint convergence,
+live-only/in-flight non-convergence, per-Thread infrastructure recovery,
+same-Thread acceptance-gap handling, pending-request snapshot honesty,
+generation-fenced lifecycle cancellation, and Memory/SQLite repository parity.
+The same installed public reference executable now closes and discards its
+first Gateway, Channel, and SQLite store objects, creates authoritative output
+while the Gateway is absent, constructs fresh objects over the same database,
+and proves binding/route/checkpoint/receipt reconstruction without duplicate
+Application input, delivery, or concurrent subscription. It inspects SQLite
+schema, database bytes, and present sidecars for transcript, native payload,
+request, media, artifact, credential, or workspace-path leakage. Only the
+Application object whose bounded authoritative history survives is reused.
 
 ### G. Requests, media, artifacts, and proactive delivery
 

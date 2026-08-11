@@ -104,7 +104,7 @@ the scenario pass.
 The default run performs this sequence:
 
 1. Construct one managed Application, one deterministic Channel, one
-   `MemoryGatewayStore`, one frozen registry containing selected common
+   `SQLiteGatewayStore`, one frozen registry containing selected common
    commands and one neutral product command, and one Gateway.
 2. Start Gateway through its async context manager.
 3. Conversation A discovers the Application and calls
@@ -120,7 +120,20 @@ The default run performs this sequence:
    output from Thread 2 reaches only A.
 9. A binds Thread 1 again. New Thread-1 output reaches A and B without a second
    Thread-1 worker or duplicate delivery of completed items.
-10. Read redacted diagnostics and stop Gateway from the owned lifecycle.
+10. Read redacted diagnostics and stop Gateway from the owned lifecycle,
+    closing the original Channel, registry work, lease/session, and store.
+11. Through the example Application's native ingress, complete one stable item
+    while the Gateway is absent. Retain only that Application and its bounded
+    authoritative history.
+12. Construct fresh Gateway, Channel, registry, and SQLite store objects over
+    the same database. Startup reconstructs both bindings, independent routes
+    and checkpoints, and terminal workflow receipts with one Thread worker.
+13. Reconcile the missed item once to A and B without older-item duplication or
+    native-input redispatch, replay the stable Project/Thread workflow results
+    without another native call, then close every fresh runtime object.
+14. Inspect the database and every present SQLite sidecar read-only; fail if
+    transcript, native payload, request body, media, artifact, credential, or
+    workspace-path sentinels appear in SDK persistence.
 
 The executable prints one bounded summary only after all assertions pass.
 
@@ -391,7 +404,7 @@ clean-wheel executions both pass.
 | ordinary Channel → Agent → Channel text | no direct fake mutation | D's policy-free binding/dispatch and authoritative stale-binding preflight execute through the public native-ingress round trip in DAG E |
 | multi-Conversation one-Thread fan-out | one worker, two destinations | public two-Conversation path and one-subscription counter implemented in DAG E |
 | foreground switch and switch-back | route authority in both directions, no duplicates | D-fenced scoped actions drive both directions and exact destination isolation in DAG E |
-| SQLite restart recovery | fresh Gateway/store objects, no SDK content truth | missing |
+| SQLite restart recovery | fresh Gateway/store objects, no SDK content truth | implemented in DAG F through the same installed public reference consumer: fresh Gateway/Channel/store objects restore binding, route, checkpoint, idempotency, and effect-receipt evidence from one SQLite database while only the authoritative Application survives; missed output reconciles once and database/sidecar inspection rejects content or native-authority leakage |
 | local common and product commands | read-only plus effectful typed service/action | implemented in DAG C focused registry/action evidence |
 | unsupported/stale/capacity/partial/unknown | typed consumer-visible outcomes | D adds exact typed/classified `missing_binding` and `stale_binding`, plus partial projection-activation failure; remaining vertical outcome coverage is incomplete |
 | request response routing | recipient correlation and native first-writer truth | B replay-before-preflight and C authorized scoped action implemented; final lifecycle/projection integration remains |

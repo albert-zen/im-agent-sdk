@@ -71,3 +71,10 @@ Current evidence: `tests/gateway/projection/test_observation.py`,
 proves exact finite projection-facade identity and that the historical
 observation runtime/value modules fail in a clean process. The target mirrored
 suite is `tests/gateway/projection/test_observation.py`.
+
+Fresh-object SQLite acceptance is not satisfied by stopping and restarting one
+runtime object. The public reference-consumer suite must prove that a newly
+constructed Gateway/store pair restores the durable route into exactly one new
+worker/subscription for that lifecycle, while the prior lifecycle has no
+active worker and the shared authoritative Application never has two active
+subscriptions for the stable Thread.

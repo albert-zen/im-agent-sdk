@@ -6,9 +6,10 @@ The normative v1 public architecture and executable acceptance contract are
 is now implemented as Application → Project/Workspace → Thread → Turn. Scoped
 consumer actions, the policy-free ordinary-input path, coherent store-backed
 public Gateway composition, and the executable reference consumer are
-implemented. Implicit onboarding and the remaining recovery,
-request/media/delivery, and final-deletion work remain transformation evidence
-until their later DAG blocks land.
+implemented. Projection and durable recovery are also integrated through that
+coherent public composition. Request/media/artifact/proactive-delivery and
+final-deletion work remain transformation evidence until their later DAG
+blocks land.
 
 ## System shape
 

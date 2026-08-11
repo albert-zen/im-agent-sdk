@@ -581,7 +581,7 @@ with tempfile.TemporaryDirectory() as reference_cwd:
 assert reference_run.returncode == 0, reference_run.stderr
 assert reference_run.stdout == (
     "reference consumer OK: projects=1 threads=2 conversations=2 "
-    "max_workers=1 diagnostics=bounded shutdown=true\n"
+    "max_workers=1 diagnostics=bounded sqlite_recovery=true shutdown=true\n"
 )
 assert reference_run.stderr == ""
 """

@@ -6,7 +6,8 @@ The reference consumer is the repository's one executable acceptance consumer
 for the public v1 SDK. It continuously proves that a clean-installed downstream
 composition can create explicit managed resources, bind and switch two IM
 Conversations, send ordinary input, observe authoritative output once, inspect
-bounded diagnostics, and shut down without owned work remaining.
+bounded diagnostics, reconstruct bridge projections from SQLite with fresh
+runtime objects, and shut down without owned work remaining.
 
 It is acceptance code, not a second Gateway, Agent runtime, transcript,
 repository implementation, product starter, or test-only bypass. Runtime
@@ -37,8 +38,8 @@ not call a fake resource mutation or native event emitter to make the flow pass.
 ## Canonical flow
 
 The entry point constructs one explicit managed-CWD Application, one Channel,
-one coherent `MemoryGatewayStore`, one frozen local command registry, and one
-`Gateway`. While the Gateway context is running it uses only scoped public
+one coherent `SQLiteGatewayStore`, one frozen local command registry, and one
+`Gateway`. While the first Gateway context is running it uses only scoped public
 actions and Channel ingress to perform the golden path. Conversation A first
 discovers and reads the Application through both public action factories, then
 creates its Project and Thread and completes a single-destination ordinary
@@ -48,12 +49,33 @@ ordinary-input resolver and dispatcher; the example supplies no alternate
 dispatch hook. The full scenario is defined in
 `docs/V1_EXECUTABLE_SPEC.md`.
 
+After the first Gateway closes its Channel, registry work, lease, session, and
+SQLite store, the example retains only the managed Application whose native
+Project, Thread, and authoritative bounded history survive independently of the
+SDK. Its explicit native ingress creates one completed output while the Gateway
+is absent. A fresh Channel, registry, SQLite store object, and Gateway then open
+the same database. Startup reconstructs both Conversation bindings, both active
+per-destination routes and checkpoints, and terminal workflow receipts. One new
+Thread subscription for the new process lifetime reconciles the missed output
+to both destinations exactly once; it neither redelivers the prior checkpointed
+output nor redispatches native input. Replaying the stable Project and Thread
+workflow actions returns their original terminal results without another native
+create call.
+
+Once the second composition closes, the executable opens the database read-only,
+runs an integrity check, verifies the bounded bridge rows, and byte-inspects the
+database plus every present WAL, SHM, or journal sidecar. Unique transcript,
+native-payload, request-body, media, artifact, credential, and workspace-path
+sentinels must be absent. This inspection proves the persisted surface remains
+bridge state plus rebuildable projections; it does not make SQLite a transcript
+or Application-authority store.
+
 Stable action, resource, message, event, and delivery identities drive every
 assertion. Output isolation is proved by exact destination sets across shared
 Thread, switch, and switch-back phases. At most one Application subscription is
-active for each stable Thread. The printed result contains only fixed labels,
-counts, and Booleans; it never emits content, CWDs, Conversation/Thread IDs,
-credentials, endpoints, or exception text.
+active for each stable Thread in each Gateway lifetime. The printed result
+contains only fixed labels, counts, and Booleans; it never emits content, CWDs,
+Conversation/Thread IDs, credentials, endpoints, or exception text.
 
 ## Bounds and lifecycle
 

@@ -600,7 +600,18 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(report.switched_back_conversations, (conversation_a, conversation_b))
 
         self.assertEqual(report.worker_max_active, (1, 1))
-        self.assertEqual(report.worker_subscription_calls, (1, 1))
+        self.assertEqual(report.worker_subscription_calls, (2, 1))
+        self.assertEqual(
+            report.recovered_conversations,
+            (conversation_a, conversation_b),
+        )
+        self.assertEqual(report.recovered_delivery_count, 2)
+        self.assertTrue(report.reconstructed_bindings)
+        self.assertTrue(report.reconstructed_receipts)
+        self.assertFalse(report.recovery_redispatched_input)
+        self.assertGreaterEqual(report.sqlite_files_inspected, 3)
+        self.assertGreaterEqual(report.sqlite_table_count, 12)
+        self.assertTrue(report.sqlite_leak_free)
 
         self.assertEqual(report.diagnostics_schema_version, 8)
         self.assertLess(report.diagnostics_size, 4_096)

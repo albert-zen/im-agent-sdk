@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -240,6 +240,9 @@ class ReferenceApplication:
         self._next_project = 1
         self._next_thread = 1
         self._next_turn = 1
+        self._project_creation_calls = 0
+        self._thread_creation_calls = 0
+        self._input_dispatch_calls = 0
         self._start_count = 0
         self._started = False
 
@@ -275,6 +278,18 @@ class ReferenceApplication:
     def max_events_per_thread(self) -> int:
         return self._max_events_per_thread
 
+    @property
+    def project_creation_calls(self) -> int:
+        return self._project_creation_calls
+
+    @property
+    def thread_creation_calls(self) -> int:
+        return self._thread_creation_calls
+
+    @property
+    def input_dispatch_calls(self) -> int:
+        return self._input_dispatch_calls
+
     async def start(self) -> None:
         if self._started:
             return
@@ -294,6 +309,7 @@ class ReferenceApplication:
         operation_id: str,
         display_name: str | None = None,
     ) -> ProjectSummary:
+        self._project_creation_calls += 1
         require_identifier(operation_id, "operation ID")
         canonical_root = _canonical_workspace_root(cwd)
         existing = self._project_creations.get(operation_id)
@@ -329,6 +345,7 @@ class ReferenceApplication:
         title: str | None = None,
         initial_context: tuple[Content, ...] = (),
     ) -> ThreadSummary:
+        self._thread_creation_calls += 1
         require_identifier(operation_id, "operation ID")
         if project_ref not in self._projects:
             raise ValueError("Thread belongs to an unknown managed Project")
@@ -387,6 +404,7 @@ class ReferenceApplication:
         before_dispatch: ApplicationInputDispatchHandler | None = None,
     ) -> AcceptedTurn:
         require_identifier(message.client_message_id, "client message ID")
+        self._input_dispatch_calls += 1
         if not isinstance(continuation, InputContinuationPreference):
             raise ValueError("unknown input continuation preference")
         current = self._threads[thread_ref]
@@ -417,6 +435,7 @@ class ReferenceApplication:
                 content=message.content,
                 created_at=started_at,
                 client_message_id=message.client_message_id,
+                metadata=dict(message.metadata),
             )
             response_text = self._input_text(message)
             agent_message = AgentMessage(
@@ -430,6 +449,7 @@ class ReferenceApplication:
                     ),
                 ),
                 created_at=_now(),
+                metadata=dict(message.metadata),
             )
             self._turn_history[thread_ref].append(
                 TurnHistoryEntry(
@@ -470,6 +490,26 @@ class ReferenceApplication:
             )
         finally:
             self._release_turn_and_events(thread_ref)
+
+    async def receive_native_text(
+        self,
+        thread_ref: ThreadRef,
+        *,
+        client_message_id: str,
+        text: str,
+        metadata: Mapping[str, object] | None = None,
+    ) -> AcceptedTurn:
+        """Accept native Application input outside the SDK Gateway path."""
+
+        require_identifier(client_message_id, "client message ID")
+        return await self.send_input(
+            thread_ref,
+            AgentInput(
+                client_message_id=client_message_id,
+                content=(TextContent(text, TextFormat.MARKDOWN),),
+                metadata={} if metadata is None else dict(metadata),
+            ),
+        )
 
     def subscribe_thread(
         self,

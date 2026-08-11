@@ -62,7 +62,11 @@ The same base environment executes the installed
 with no repository `PYTHONPATH`. The bounded success line is accepted only
 after the complete public-path scenario has asserted its managed resource
 identities, Conversation isolation, one-worker fan-out, diagnostics, and
-shutdown invariants.
+shutdown invariants. That same installed executable also closes its first
+Gateway/store, creates fresh runtime objects over the same SQLite database,
+reconstructs bindings/routes/checkpoints/terminal receipts from bridge state,
+recovers one authoritative missed output without duplicate delivery or native
+redispatch, and inspects the database and all sidecars for authority-owned data.
 The base case also proves, in the original transition-first clean process,
 that `imagent.diagnostics` preserves exact identity for the canonical
 Interaction, Channel, and Application diagnostics objects. It additionally

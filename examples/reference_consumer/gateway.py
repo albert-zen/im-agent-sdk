@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from imagent import (
     Gateway,
     GatewayLimits,
+    GatewayStore,
     MemoryGatewayStore,
     ProjectionPolicy,
 )
@@ -26,26 +27,35 @@ class ReferenceConsumer:
     gateway: Gateway
 
 
-def build_reference_consumer() -> ReferenceConsumer:
+def build_reference_consumer(
+    *,
+    application: ReferenceApplication | None = None,
+    channel: ReferenceChannel | None = None,
+    store: GatewayStore | None = None,
+) -> ReferenceConsumer:
     """Build one explicit graph without private SDK seams or global state."""
 
-    channel = ReferenceChannel(max_outbound_records=128)
-    application = ReferenceApplication(
-        max_projects=2,
-        max_threads=4,
-        max_turns_per_thread=8,
-        max_events_per_thread=64,
-    )
+    if channel is None:
+        channel = ReferenceChannel(max_outbound_records=128)
+    if application is None:
+        application = ReferenceApplication(
+            max_projects=2,
+            max_threads=4,
+            max_turns_per_thread=8,
+            max_events_per_thread=64,
+        )
+    if store is None:
+        store = MemoryGatewayStore(
+            max_effect_receipts=64,
+            max_idempotency_records=128,
+            max_delivery_submission_records=128,
+        )
     registry = build_command_registry(ReferenceStatusService())
     gateway = Gateway(
         gateway_id="reference",
         channels=[channel],
         applications=[application],
-        store=MemoryGatewayStore(
-            max_effect_receipts=64,
-            max_idempotency_records=128,
-            max_delivery_submission_records=128,
-        ),
+        store=store,
         controller=registry,
         projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
         limits=GatewayLimits(

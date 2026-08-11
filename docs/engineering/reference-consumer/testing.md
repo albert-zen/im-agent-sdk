@@ -15,6 +15,17 @@ entry point used by `python -m examples.reference_consumer.main` and proves:
 - switching one Conversation isolates both old- and new-Thread output, and
   switching back restores exactly two destinations without duplicate completed
   delivery;
+- closing the first Gateway and SQLite store, then constructing fresh Gateway,
+  Channel, registry, and store objects over the same database while reusing only
+  the authoritative Application, reconstructs bindings, per-destination routes,
+  checkpoints, and terminal workflow receipts;
+- one output completed through native Application ingress while the Gateway is
+  absent reaches both restored destinations exactly once, without older-output
+  duplication, native-input redispatch, or more than one active subscription for
+  the stable Thread;
+- read-only SQLite integrity, bridge-row, and raw-file inspection covers the
+  main database and every present sidecar and rejects transcript, native payload,
+  request-body, media, artifact, credential, and workspace-path sentinels;
 - public create-and-bind and observe results activate their committed route
   before any later inbound input, while retained surfaces reject after stop;
 - selected common, neutral read-only, and neutral effectful commands use one
