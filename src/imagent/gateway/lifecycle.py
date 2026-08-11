@@ -8,23 +8,72 @@ from unicodedata import category
 from .diagnostics import (
     _CLEANUP_DETAIL_MAX_CHARS,
     _CLEANUP_OWNER_MAX_CHARS,
+    _CLEANUP_SUMMARY_MAX_CHARS,
+    _CLEANUP_TYPE_MAX_CHARS,
     _bounded_cleanup_error_summary,
     _bounded_cleanup_text,
 )
 
 T = TypeVar("T")
 
+
 class GatewayLifecycleFailure(RuntimeError):
     """Bounded public projection of one lifecycle owner failure."""
 
     def __init__(self, owner: str, error: BaseException) -> None:
+        self._initialize_bounded(
+            owner,
+            type(error).__name__,
+            _bounded_cleanup_error_summary(owner, error),
+        )
+
+    def _initialize_bounded(
+        self,
+        owner: str,
+        original_type: str,
+        summary: str,
+    ) -> None:
         self.owner = _bounded_cleanup_text(owner, _CLEANUP_OWNER_MAX_CHARS)
-        self.original_error = error
-        self.original_type = type(error).__name__
-        summary = _bounded_cleanup_error_summary(owner, error)
-        super().__init__(f"Gateway lifecycle failure: {summary}")
-        self.__cause__ = error
+        self.original_type = _bounded_cleanup_text(
+            original_type,
+            _CLEANUP_TYPE_MAX_CHARS,
+        )
+        self.summary = _bounded_cleanup_text(summary, _CLEANUP_SUMMARY_MAX_CHARS)
+        super().__init__(f"Gateway lifecycle failure: {self.summary}")
+        self.__cause__ = RuntimeError(f"Gateway lifecycle source: {self.summary}")
+        self.__context__ = None
         self.__suppress_context__ = True
+
+    def __reduce__(self) -> tuple[object, tuple[object, ...]]:
+        notes = tuple(
+            _bounded_cleanup_text(str(note), _CLEANUP_SUMMARY_MAX_CHARS)
+            for note in getattr(self, "__notes__", ())
+        )
+        return (
+            _restore_gateway_lifecycle_failure,
+            (self.owner, self.original_type, self.summary, notes),
+        )
+
+
+def _restore_gateway_lifecycle_failure(
+    owner: str,
+    original_type: str,
+    summary: str,
+    notes: tuple[str, ...],
+) -> GatewayLifecycleFailure:
+    error = GatewayLifecycleFailure.__new__(GatewayLifecycleFailure)
+    error._initialize_bounded(owner, original_type, summary)
+    for note in notes:
+        error.add_note(_bounded_cleanup_text(note, _CLEANUP_SUMMARY_MAX_CHARS))
+    return error
+
+
+def _detach_public_lifecycle_context(error: BaseException) -> BaseException:
+    """Remove interpreter-attached raw context from one bounded public error."""
+
+    if isinstance(error, GatewayLifecycleFailure):
+        error.__context__ = None
+    return error
 
 
 def _public_lifecycle_error(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import pickle
 import unittest
 from collections.abc import Callable
 from dataclasses import replace
@@ -46,6 +47,7 @@ from imagent.applications.operations import (
     ThreadHistoryRead,
 )
 from imagent.gateway import GatewayRepositories, ImAgentGateway
+from imagent.gateway.lifecycle import GatewayLifecycleFailure
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.gateway.persistence.sqlite_store import SQLiteGatewayStore
@@ -1192,7 +1194,13 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("\x1b", evidence)
         self.assertNotIn("\u202e", evidence)
         self.assertIsInstance(error.__cause__, RuntimeError)
-        self.assertEqual(error.original_error, error.__cause__)  # type: ignore[attr-defined]
+        self.assertFalse(hasattr(error, "original_error"))
+        self.assertEqual(error.original_type, "RuntimeError")  # type: ignore[attr-defined]
+        self.assertLessEqual(len(str(error.__cause__)), 450)
+        self.assertIsNone(error.__context__)
+        encoded = pickle.dumps(error)
+        self.assertLessEqual(len(encoded), 2_048)
+        self.assertNotIn(b"x" * 193, encoded)
         self.assertFalse(channel.started)
         self.assertFalse(application.started)
         self.assertEqual(channel.stop_count, 1)
@@ -1221,7 +1229,13 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("\x1b", evidence)
         self.assertNotIn("\u202e", evidence)
         self.assertIsInstance(error.__cause__, RuntimeError)
-        self.assertEqual(error.original_error, error.__cause__)  # type: ignore[attr-defined]
+        self.assertFalse(hasattr(error, "original_error"))
+        self.assertEqual(error.original_type, "RuntimeError")  # type: ignore[attr-defined]
+        self.assertLessEqual(len(str(error.__cause__)), 450)
+        self.assertIsNone(error.__context__)
+        encoded = pickle.dumps(error)
+        self.assertLessEqual(len(encoded), 2_048)
+        self.assertNotIn(b"x" * 193, encoded)
         self.assertFalse(gateway.running)
         self.assertFalse(channel.started)
         self.assertFalse(application.started)
@@ -1255,13 +1269,52 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("\x1b", evidence)
         self.assertNotIn("\u202e", evidence)
         self.assertIsInstance(error.__cause__, RuntimeError)
-        self.assertEqual(error.original_error, error.__cause__)  # type: ignore[attr-defined]
+        self.assertFalse(hasattr(error, "original_error"))
+        self.assertEqual(error.original_type, "RuntimeError")  # type: ignore[attr-defined]
+        self.assertLessEqual(len(str(error.__cause__)), 450)
+        self.assertIsNone(error.__context__)
+        encoded = pickle.dumps(error)
+        self.assertLessEqual(len(encoded), 2_048)
+        self.assertNotIn(b"x" * 193, encoded)
         self.assertFalse(gateway.running)
         self.assertFalse(channel.started)
         self.assertFalse(application.started)
         self.assertEqual(channel.stop_count, 1)
         self.assertEqual(application.stop_count, 1)
         self.assertEqual(store.close_count, 1)
+
+    def test_lifecycle_failure_object_graph_and_pickle_are_bounded(self) -> None:
+        raw = RuntimeError(_UNSAFE_HUGE_CLEANUP_DETAIL)
+        public = GatewayLifecycleFailure("Gateway store", raw)
+
+        encoded = pickle.dumps(public)
+        restored = pickle.loads(encoded)
+        evidence = "\n".join(
+            (
+                str(public),
+                repr(public),
+                repr(vars(public)),
+                str(public.__cause__),
+                repr(vars(public.__cause__)),
+                str(restored),
+                repr(vars(restored)),
+                str(restored.__cause__),
+            )
+        )
+
+        self.assertLessEqual(len(str(public)), 450)
+        self.assertLessEqual(len(encoded), 2_048)
+        self.assertNotIn(b"x" * 193, encoded)
+        self.assertNotIn(b"SECRET", encoded)
+        self.assertNotIn("x" * 193, evidence)
+        self.assertNotIn("\x1b", evidence)
+        self.assertNotIn("\u202e", evidence)
+        self.assertFalse(hasattr(public, "original_error"))
+        self.assertFalse(hasattr(restored, "original_error"))
+        self.assertIsNot(public.__cause__, raw)
+        self.assertIsNone(public.__context__)
+        self.assertIsNone(restored.__context__)
+        self.assertEqual(restored.original_type, "RuntimeError")
 
     async def test_startup_claim_release_evidence_is_bounded_and_sanitized(self) -> None:
         channel = _StartupClaimReleaseFailureChannel()

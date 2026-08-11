@@ -38,7 +38,8 @@ Tests must prove:
   invoking an owner twice; million-character cleanup exceptions produce only
   fixed-size sanitized public exception messages, notes, and log evidence in
   both inner and public teardown, including a huge first startup/partial-
-  rollback failure;
+  rollback failure; exception fields, cause/context graphs, and pickle
+  serialization retain only the same bounded sanitized classification;
 - all SDK-owned Channels receive their exact admission handler through one
   two-argument start invocation; a legacy one-argument body runs zero times,
   and an internal two-argument `TypeError` runs once;

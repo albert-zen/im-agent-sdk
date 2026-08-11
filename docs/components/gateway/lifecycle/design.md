@@ -60,8 +60,9 @@ detail use one fixed-size summary for both inner teardown and the public
 wrapper; C0/C1 and Unicode format controls become visible placeholders, and
 cleanup logging emits that summary without an arbitrary traceback. The first
 cleanup failure itself is projected to a `GatewayLifecycleFailure` carrying a
-bounded public message and inspectable original cause; raw owner text never
-becomes the public exception detail.
+bounded public message, bounded original type, and bounded surrogate cause.
+The public object graph and its serialized form retain no raw owner exception;
+raw owner text never becomes public exception detail or serialized evidence.
 Each owner is invoked exactly once;
 the wrapper does not retry the inner runtime teardown to manufacture success.
 A callback outside the live window fails explicitly or is released; it never

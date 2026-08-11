@@ -25,7 +25,7 @@ from . import ImAgentGateway
 from .actions import ApplicationActions, ConversationActions
 from .composition import GatewayExtensions, GatewayLimits, GatewayRepositories
 from .diagnostics import DiagnosticsSnapshot, _bounded_cleanup_error_summary
-from .lifecycle import _public_lifecycle_error
+from .lifecycle import _detach_public_lifecycle_context, _public_lifecycle_error
 from .persistence.store import (
     GatewayStore,
     GatewayStoreSession,
@@ -179,6 +179,7 @@ class Gateway:
                     raise RuntimeError("Gateway lease renewal failed during startup") from (
                         self._lease_failure
                     )
+                _detach_public_lifecycle_context(error)
                 raise
             self._started = True
             self._startup_task = None

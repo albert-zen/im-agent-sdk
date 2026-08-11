@@ -98,8 +98,10 @@ from .input.failure_presentation import InboundFailurePhase as InboundFailurePha
 from .input.failure_presentation import InboundFailurePresentationRuntime, handle_claimed_inbound
 from .input.failure_presentation import InboundFailurePresenter as InboundFailurePresenter
 from .lifecycle import (
+    GatewayLifecycleFailure,
     GatewayNotRunning,
     GatewayStartupAdmission,
+    _detach_public_lifecycle_context,
     _public_lifecycle_error,
 )
 from .persistence import BindingConflict, InMemoryIdempotencyRepository
@@ -382,6 +384,7 @@ class ImAgentGateway:
         self._startup_admission.reset()
         started_applications: list[AgentApplicationAdapter] = []
         started_channels: list[ChannelAdapter] = []
+        startup_error: BaseException | None = None
         try:
             await self._projection_runtime.cleanup_stale_correlations()
             restart_open_requests = await self._projection_runtime.open_request_refs()
@@ -501,7 +504,11 @@ class ImAgentGateway:
                     f"Application {application.summary.ref.application_instance_id!r}",
                     application.stop,
                 )
-            raise error
+            startup_error = _detach_public_lifecycle_context(error)
+        if startup_error is not None:
+            if isinstance(startup_error, GatewayLifecycleFailure):
+                raise startup_error from startup_error.__cause__
+            raise startup_error
 
     async def stop(self) -> None:
         self._accepting_inbound = False
