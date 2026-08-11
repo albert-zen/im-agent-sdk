@@ -47,7 +47,7 @@ from imagent.applications.operations import (
     ThreadHistoryRead,
 )
 from imagent.gateway import GatewayRepositories, ImAgentGateway
-from imagent.gateway.lifecycle import GatewayLifecycleFailure
+from imagent.gateway.lifecycle import GatewayLifecycleFailure, _public_lifecycle_error
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.gateway.persistence.sqlite_store import SQLiteGatewayStore
@@ -67,6 +67,20 @@ from imagent.interaction.controllers import (
 from imagent.interaction.messages import ConversationRef, OutboundMessage, TextContent
 
 _UNSAFE_HUGE_CLEANUP_DETAIL = "secret\x1b[2J\nline\u202e" + ("x" * 1_000_000)
+
+
+class _HostileShortLifecycleError(RuntimeError):
+    def __init__(self) -> None:
+        super().__init__("raw-argument-secret")
+        self.secret = "SECRET_PAYLOAD"
+        self.nested = {"secret": "NESTED_SECRET_PAYLOAD"}
+        self.__cause__ = RuntimeError("CAUSE_SECRET_PAYLOAD")
+
+    def __str__(self) -> str:
+        return "ok"
+
+    def __repr__(self) -> str:
+        return "REPR_SECRET_PAYLOAD"
 
 
 class _CountingMemoryGatewayStore(MemoryGatewayStore):
@@ -1315,6 +1329,40 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(public.__context__)
         self.assertIsNone(restored.__context__)
         self.assertEqual(restored.original_type, "RuntimeError")
+
+    def test_short_hostile_lifecycle_error_is_always_projected(self) -> None:
+        raw = _HostileShortLifecycleError()
+        public = _public_lifecycle_error(raw, "Channel")
+
+        self.assertIsInstance(public, GatewayLifecycleFailure)
+        self.assertIsNot(public, raw)
+        self.assertFalse(hasattr(public, "secret"))
+        self.assertFalse(hasattr(public, "nested"))
+        self.assertIsNone(public.__context__)
+        self.assertIsNot(public.__cause__, raw.__cause__)
+        encoded = pickle.dumps(public)
+        restored = pickle.loads(encoded)
+        evidence = "\n".join(
+            (
+                str(public),
+                repr(public),
+                repr(vars(public)),
+                str(public.__cause__),
+                repr(vars(public.__cause__)),
+                str(restored),
+                repr(vars(restored)),
+            )
+        )
+        for secret in (
+            "SECRET_PAYLOAD",
+            "NESTED_SECRET_PAYLOAD",
+            "CAUSE_SECRET_PAYLOAD",
+            "REPR_SECRET_PAYLOAD",
+            "raw-argument-secret",
+        ):
+            self.assertNotIn(secret, evidence)
+            self.assertNotIn(secret.encode(), encoded)
+        self.assertLessEqual(len(encoded), 2_048)
 
     async def test_startup_claim_release_evidence_is_bounded_and_sanitized(self) -> None:
         channel = _StartupClaimReleaseFailureChannel()

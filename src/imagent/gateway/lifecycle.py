@@ -3,10 +3,8 @@ from __future__ import annotations
 from asyncio import CancelledError
 from collections import deque
 from typing import Generic, TypeVar
-from unicodedata import category
 
 from .diagnostics import (
-    _CLEANUP_DETAIL_MAX_CHARS,
     _CLEANUP_OWNER_MAX_CHARS,
     _CLEANUP_SUMMARY_MAX_CHARS,
     _CLEANUP_TYPE_MAX_CHARS,
@@ -87,14 +85,6 @@ def _public_lifecycle_error(
     if isinstance(error, (GatewayStartupOverflow, GatewayNotRunning)):
         return error
     if isinstance(error, (CancelledError, KeyboardInterrupt, SystemExit)):
-        return error
-    try:
-        detail = str(error)
-    except BaseException:
-        detail = "<unprintable>"
-    if len(detail) <= _CLEANUP_DETAIL_MAX_CHARS and not any(
-        category(character) in {"Cc", "Cf"} for character in detail
-    ):
         return error
     return GatewayLifecycleFailure(owner, error)
 

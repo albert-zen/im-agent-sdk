@@ -16,7 +16,7 @@ from imagent.gateway.admission import (
     InboundAdmissionService,
     start_channel_with_admission,
 )
-from imagent.gateway.lifecycle import GatewayNotRunning
+from imagent.gateway.lifecycle import GatewayLifecycleFailure, GatewayNotRunning
 from imagent.gateway.persistence import IdempotencyCapacityError, InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
@@ -198,8 +198,10 @@ class InboundAdmissionTests(unittest.IsolatedAsyncioTestCase):
         )
 
         for attempt in (1, 2):
-            with self.assertRaises(TypeError):
+            with self.assertRaises(GatewayLifecycleFailure) as raised:
                 await gateway.start()
+            self.assertEqual(raised.exception.original_type, "TypeError")
+            self.assertNotIn("original_error", vars(raised.exception))
 
             self.assertEqual(active.start_attempts, attempt)
             self.assertEqual(active.stop_attempts, attempt)
@@ -256,8 +258,11 @@ class InboundAdmissionTests(unittest.IsolatedAsyncioTestCase):
             ),
         )
 
-        with self.assertRaisesRegex(TypeError, "after modern startup effect"):
+        with self.assertRaises(GatewayLifecycleFailure) as raised:
             await gateway.start()
+        self.assertEqual(raised.exception.original_type, "TypeError")
+        self.assertIn("after modern startup effect", str(raised.exception))
+        self.assertNotIn("original_error", vars(raised.exception))
 
         self.assertEqual(active.start_attempts, 1)
         self.assertEqual(active.stop_attempts, 1)
