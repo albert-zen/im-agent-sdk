@@ -717,6 +717,69 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(RuntimeError, "escaped"):
                 ReferenceArtifactLedger(root, max_leases=2)
 
+    def test_consumer_artifact_ledger_load_rejects_symlink(self) -> None:
+        with TemporaryDirectory() as cwd:
+            root = Path(cwd) / "artifacts"
+            root.mkdir()
+            outside = Path(cwd) / "outside-ledger.json"
+            outside.write_text("{}", encoding="utf-8")
+            (root / "consumer-artifact-ledger.json").symlink_to(outside)
+
+            with self.assertRaisesRegex(RuntimeError, "trusted regular file"):
+                ReferenceArtifactLedger(root)
+
+    def test_consumer_artifact_ledger_load_rejects_path_replacement(self) -> None:
+        with TemporaryDirectory() as cwd:
+            root = Path(cwd) / "artifacts"
+            first = ReferenceArtifactLedger(root)
+            first.stage("retained", b"bytes", expected_destinations=1)
+            ledger_path = root / "consumer-artifact-ledger.json"
+            original_read = os.read
+            swapped = False
+
+            def replace_after_open(descriptor: int, size: int) -> bytes:
+                nonlocal swapped
+                if not swapped:
+                    replacement = root / "replacement.json"
+                    replacement.write_text("{}", encoding="utf-8")
+                    os.replace(replacement, ledger_path)
+                    swapped = True
+                return original_read(descriptor, size)
+
+            with (
+                patch("examples.reference_consumer.gateway.os.read", replace_after_open),
+                self.assertRaisesRegex(RuntimeError, "changed during startup"),
+            ):
+                ReferenceArtifactLedger(root)
+            self.assertTrue(swapped)
+
+    def test_consumer_artifact_ledger_load_rejects_growth(self) -> None:
+        with TemporaryDirectory() as cwd:
+            root = Path(cwd) / "artifacts"
+            first = ReferenceArtifactLedger(root)
+            first.stage("retained", b"bytes", expected_destinations=1)
+            ledger_path = root / "consumer-artifact-ledger.json"
+            original_read = os.read
+            grown = False
+
+            def grow_after_first_read(descriptor: int, size: int) -> bytes:
+                nonlocal grown
+                chunk = original_read(descriptor, size)
+                if not grown:
+                    with ledger_path.open("ab") as stream:
+                        stream.write(b" ")
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                    grown = True
+                return chunk
+
+            with (
+                patch("examples.reference_consumer.gateway.os.read", grow_after_first_read),
+                self.assertRaisesRegex(RuntimeError, "changed during startup"),
+            ):
+                ReferenceArtifactLedger(root)
+            self.assertTrue(grown)
+
     async def test_public_restart_marks_request_stale_without_authoritative_snapshot(
         self,
     ) -> None:

@@ -43,8 +43,11 @@ discriminated source, optional filename and declared byte size, and passive
 Metadata. Attachment locations never travel through Metadata.
 
 - `LocalPath` conveys a location, not authority. The accepting integration
-  resolves an absolute path against deployment-configured shared-root trust
-  and rejects missing trust, relative paths, and escape from that root.
+  acquires an absolute path through a descriptor-relative no-follow chain
+  beneath deployment-configured shared-root trust and rejects missing trust,
+  relative paths, symlinks, non-regular files, and escape from that root. The
+  acquired descriptor supplies both validation bytes and submitted bytes;
+  pathname resolution followed by a later pathname read is not sufficient.
 - `RemoteUrl` requires the accepting integration to enforce scheme, address,
   redirect, credential, byte-size, and media policy. Core provides no
   unrestricted downloader.
@@ -59,6 +62,11 @@ has the required facts. Declared size is not proof of byte identity. Public
 proactive `LocalPath` delivery additionally requires a lowercase SHA-256
 content identity, and the accepting Channel verifies the actual bytes before
 upload.
+
+Path-only native APIs cannot preserve this byte identity across their later
+open. An adapter may advertise `LocalPath` only when it can submit the acquired
+bytes (or a consumer-owned safely materialized representation); otherwise it
+fails explicitly before acquisition and native dispatch.
 
 ## Flow and dependency boundary
 

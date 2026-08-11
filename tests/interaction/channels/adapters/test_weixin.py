@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from imagent import __version__
 from imagent.interaction.channels.adapters.weixin import WeixinChannelAdapter
@@ -16,7 +19,7 @@ from imagent.interaction.channels.adapters.weixin_state import (
     WeixinTransportState,
 )
 from imagent.interaction.channels.ingress import ChannelAccessPolicy
-from imagent.interaction.channels.outbound_delivery import OutboundMessage
+from imagent.interaction.channels.outbound_delivery import OutboundArtifact, OutboundMessage
 
 
 def _raw_message(*, text: str = "inspect repo") -> dict[str, object]:
@@ -31,6 +34,64 @@ def _raw_message(*, text: str = "inspect repo") -> dict[str, object]:
 
 
 class WeixinChannelTests(unittest.IsolatedAsyncioTestCase):
+    async def test_native_upload_uses_descriptor_bound_bytes_after_swap(self) -> None:
+        class FakeTransport:
+            uploaded: bytes | None = None
+
+            async def send_artifact(self, **kwargs: object) -> None:
+                self.uploaded = kwargs["content"]  # type: ignore[assignment]
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "trusted"
+            root.mkdir()
+            source = root / "result.bin"
+            source.write_bytes(b"trusted")
+            outside = Path(directory) / "outside.bin"
+            outside.write_bytes(b"attacker")
+            adapter = WeixinChannelAdapter(
+                enabled=True,
+                middleware=object(),
+                state_dir=Path(directory) / "state",
+                outbound_media_dir=root,
+                access_policy=ChannelAccessPolicy.allow_all(),
+            )
+            transport = FakeTransport()
+            adapter._transport = transport
+            adapter._state.set_context_token("owner@im.wechat", "context-secret")
+            message = OutboundMessage(
+                channel_id="weixin",
+                conversation_id="user:owner@im.wechat",
+                message_type="file",
+                text="",
+                metadata={"delivery_id": "delivery-safe"},
+                artifacts=[
+                    OutboundArtifact(
+                        kind="file",
+                        local_path=str(source),
+                        content_type="application/octet-stream",
+                        filename="result.bin",
+                        size_bytes=7,
+                        sha256=hashlib.sha256(b"trusted").hexdigest(),
+                    )
+                ],
+            )
+            original_read = os.read
+            swapped = False
+
+            def replace_after_open(descriptor: int, size: int) -> bytes:
+                nonlocal swapped
+                if not swapped:
+                    source.unlink()
+                    source.symlink_to(outside)
+                    swapped = True
+                return original_read(descriptor, size)
+
+            with patch("imagent.interaction.media.os.read", replace_after_open):
+                await adapter.send_message(message)
+
+            self.assertTrue(swapped)
+            self.assertEqual(transport.uploaded, b"trusted")
+
     def test_protocol_identity_uses_the_sdk_package_version(self) -> None:
         self.assertEqual(BASE_INFO["channel_version"], __version__)
         self.assertEqual(BASE_INFO["bot_agent"], f"im-agent-sdk/{__version__}")

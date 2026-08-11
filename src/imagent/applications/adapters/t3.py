@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import inspect
 import logging
 import mimetypes
@@ -20,8 +21,9 @@ import httpx
 from ...interaction.media import (
     AttachmentContent,
     AttachmentSourceKind,
+    LocalPath,
     configure_shared_filesystem_root,
-    resolve_local_attachment,
+    read_local_attachment,
 )
 from ...interaction.messages import MessageRole, TextContent, TextFormat
 from ...interaction.operations import operation_error
@@ -1667,20 +1669,33 @@ def _encode_t3_attachments(
         media_type = attachment.media_type.strip().casefold()
         if not media_type.startswith("image/"):
             raise ValueError("T3 supports image attachments only")
-        path = resolve_local_attachment(
+        if not isinstance(attachment.source, LocalPath):
+            raise NotImplementedError(
+                f"T3 does not support attachment source {attachment.source.kind.value}"
+            )
+        if (
+            not isinstance(attachment.size_bytes, int)
+            or isinstance(attachment.size_bytes, bool)
+            or attachment.size_bytes < 0
+        ):
+            raise ValueError("T3 LocalPath image attachments require a declared integer size")
+        declared_digest = attachment.metadata.get("sha256")
+        if declared_digest is not None and (
+            not isinstance(declared_digest, str)
+            or len(declared_digest) != 64
+            or any(character not in "0123456789abcdef" for character in declared_digest)
+        ):
+            raise ValueError("T3 LocalPath sha256 metadata must be lowercase SHA-256")
+        data = read_local_attachment(
             attachment.source,
             shared_filesystem_root=shared_filesystem_root,
             consumer="T3",
+            expected_size=attachment.size_bytes,
+            max_bytes=10 * 1024 * 1024,
         )
-        try:
-            data = path.read_bytes()
-        except OSError as error:
-            raise ValueError("Unable to read the staged T3 image") from error
-        if len(data) > 10 * 1024 * 1024:
-            raise ValueError("Each T3 image must be at most 10 MiB")
-        if attachment.size_bytes is not None and len(data) != attachment.size_bytes:
-            raise ValueError("The staged T3 image size changed")
-        filename = attachment.filename or path.name or "image"
+        if declared_digest is not None and hashlib.sha256(data).hexdigest() != declared_digest:
+            raise ValueError("The staged T3 image digest changed")
+        filename = attachment.filename or Path(attachment.source.path).name or "image"
         if not Path(filename).suffix:
             filename += mimetypes.guess_extension(media_type) or ".img"
         result.append(

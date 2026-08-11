@@ -7,6 +7,7 @@ import itertools
 import json
 import os
 import re
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -178,11 +179,13 @@ class ReferenceArtifactLedger:
         return len(payload_paths)
 
     def _load(self) -> dict[str, dict[str, object]]:
-        if not self._ledger_path.exists():
+        encoded = self._read_ledger_bytes()
+        if encoded is None:
             return {}
-        if self._ledger_path.stat().st_size > self._MAX_LEDGER_BYTES:
-            raise RuntimeError("consumer artifact ledger exceeds its byte bound")
-        raw = json.loads(self._ledger_path.read_text(encoding="utf-8"))
+        try:
+            raw = json.loads(encoded.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise RuntimeError("consumer artifact ledger is malformed") from error
         if not isinstance(raw, dict) or len(raw) > self._max_leases:
             raise RuntimeError("consumer artifact ledger is malformed or over capacity")
         records: dict[str, dict[str, object]] = {}
@@ -221,6 +224,81 @@ class ReferenceArtifactLedger:
                 raise RuntimeError("consumer artifact ledger record is malformed")
             records[artifact_id] = dict(record)
         return records
+
+    def _read_ledger_bytes(self) -> bytes | None:
+        """Read the ledger through one pinned, bounded, no-follow descriptor."""
+
+        no_follow = getattr(os, "O_NOFOLLOW", None)
+        directory = getattr(os, "O_DIRECTORY", None)
+        if no_follow is None or directory is None:
+            raise RuntimeError("consumer artifact ledger cannot be opened safely")
+        root_descriptor = os.open(self._root, os.O_RDONLY | directory | no_follow)
+        ledger_descriptor: int | None = None
+        try:
+            opened_root = os.fstat(root_descriptor)
+            current_root = os.stat(self._root, follow_symlinks=False)
+            if not stat.S_ISDIR(current_root.st_mode) or (
+                opened_root.st_dev,
+                opened_root.st_ino,
+            ) != (current_root.st_dev, current_root.st_ino):
+                raise RuntimeError("consumer artifact ledger root changed during startup")
+            try:
+                ledger_descriptor = os.open(
+                    self._ledger_path.name,
+                    os.O_RDONLY | no_follow,
+                    dir_fd=root_descriptor,
+                )
+            except FileNotFoundError:
+                try:
+                    os.stat(
+                        self._ledger_path.name,
+                        dir_fd=root_descriptor,
+                        follow_symlinks=False,
+                    )
+                except FileNotFoundError:
+                    return None
+                raise RuntimeError("consumer artifact ledger changed during startup")
+            except OSError as error:
+                raise RuntimeError(
+                    "consumer artifact ledger is not a trusted regular file"
+                ) from error
+            before = os.fstat(ledger_descriptor)
+            if not stat.S_ISREG(before.st_mode):
+                raise RuntimeError("consumer artifact ledger is not a trusted regular file")
+            if before.st_size > self._MAX_LEDGER_BYTES:
+                raise RuntimeError("consumer artifact ledger exceeds its byte bound")
+            chunks: list[bytes] = []
+            remaining = self._MAX_LEDGER_BYTES + 1
+            while remaining:
+                chunk = os.read(ledger_descriptor, min(64 * 1024, remaining))
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            encoded = b"".join(chunks)
+            after = os.fstat(ledger_descriptor)
+            try:
+                current = os.stat(
+                    self._ledger_path.name,
+                    dir_fd=root_descriptor,
+                    follow_symlinks=False,
+                )
+            except FileNotFoundError as error:
+                raise RuntimeError("consumer artifact ledger changed during startup") from error
+            if (
+                len(encoded) > self._MAX_LEDGER_BYTES
+                or len(encoded) != before.st_size
+                or (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+                != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+                or (after.st_dev, after.st_ino) != (current.st_dev, current.st_ino)
+                or not stat.S_ISREG(current.st_mode)
+            ):
+                raise RuntimeError("consumer artifact ledger changed during startup")
+            return encoded
+        finally:
+            if ledger_descriptor is not None:
+                os.close(ledger_descriptor)
+            os.close(root_descriptor)
 
     def _remove(self, artifact_id: str, *, persist: bool = True) -> None:
         record = self._records.pop(artifact_id, None)

@@ -463,7 +463,7 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIsInstance(created, ApplicationOperationFailed)
 
-    async def test_local_image_uses_verified_connection_epoch(self) -> None:
+    async def test_path_only_local_image_is_rejected_before_native_start(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory, "image.png")
             path.write_bytes(b"png")
@@ -476,25 +476,27 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
                 shared_filesystem_root=directory,
             )
 
-            await adapter.send_input(
-                ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
-                AgentInput(
-                    client_message_id="message-image",
-                    content=(
-                        AttachmentContent(
-                            attachment_id="image-1",
-                            media_type="image/png",
-                            source=LocalPath(str(path)),
-                            filename="image.png",
-                            size_bytes=3,
+            with self.assertRaisesRegex(NotImplementedError, "path-only image input"):
+                await adapter.send_input(
+                    ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
+                    AgentInput(
+                        client_message_id="message-image",
+                        content=(
+                            AttachmentContent(
+                                attachment_id="image-1",
+                                media_type="image/png",
+                                source=LocalPath(str(path)),
+                                filename="image.png",
+                                size_bytes=3,
+                            ),
                         ),
                     ),
-                ),
-            )
+                )
 
-        self.assertEqual(client.started[0]["expected_local_image_epoch"], 17)
+        self.assertEqual(client.started, [])
+        self.assertEqual(adapter.summary.capabilities.attachment_sources, ())
 
-    async def test_local_image_steer_uses_verified_connection_epoch(self) -> None:
+    async def test_path_only_local_image_is_rejected_before_native_steer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory, "image.png")
             path.write_bytes(b"png")
@@ -512,27 +514,27 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
                 steer_active_turn=True,
             )
 
-            accepted = await adapter.send_input(
-                ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
-                AgentInput(
-                    client_message_id="message-steered-image",
-                    content=(
-                        AttachmentContent(
-                            attachment_id="image-1",
-                            media_type="image/png",
-                            source=LocalPath(str(path)),
-                            filename="image.png",
-                            size_bytes=3,
+            with self.assertRaisesRegex(NotImplementedError, "path-only image input"):
+                await adapter.send_input(
+                    ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
+                    AgentInput(
+                        client_message_id="message-steered-image",
+                        content=(
+                            AttachmentContent(
+                                attachment_id="image-1",
+                                media_type="image/png",
+                                source=LocalPath(str(path)),
+                                filename="image.png",
+                                size_bytes=3,
+                            ),
                         ),
                     ),
-                ),
-            )
+                )
 
         self.assertEqual(client.started, [])
-        self.assertEqual(client.steered[0]["expected_local_image_epoch"], 23)
-        self.assertEqual(accepted.turn_ref.turn_id, "turn-active")
+        self.assertEqual(client.steered, [])
 
-    async def test_local_image_requires_a_verified_connection_epoch(self) -> None:
+    async def test_path_only_rejection_precedes_connection_epoch_lookup(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory, "image.png")
             path.write_bytes(b"png")
@@ -545,7 +547,7 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
                 shared_filesystem_root=directory,
             )
 
-            with self.assertRaisesRegex(RuntimeError, "verified shared filesystem"):
+            with self.assertRaisesRegex(NotImplementedError, "path-only image input"):
                 await adapter.send_input(
                     ThreadRef(ProjectRef("codex-main", "workspace"), "thread-1"),
                     AgentInput(

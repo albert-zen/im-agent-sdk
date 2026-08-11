@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
 import subprocess
 import sys
 import tempfile
@@ -9,6 +10,7 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
+from unittest.mock import patch
 
 from imagent.interaction.channels import DeliveryItemStatus
 from imagent.interaction.channels.ingress import ChannelAccessPolicy
@@ -505,7 +507,7 @@ class ChannelArtifactDeliveryTests(unittest.IsolatedAsyncioTestCase):
             )
 
             resolved, content = await read_managed_artifact(artifact, root=root)
-            self.assertEqual(resolved, source.resolve())
+            self.assertEqual(resolved, source)
             self.assertEqual(content, b"safe")
 
             outside = Path(directory) / "outside.bin"
@@ -517,14 +519,14 @@ class ChannelArtifactDeliveryTests(unittest.IsolatedAsyncioTestCase):
                 )
             with self.assertRaisesRegex(PermanentArtifactDeliveryError, "no longer exists"):
                 await read_managed_artifact(
-                    _artifact(local_path=str(root / "missing.bin")),
+                    _artifact(local_path=str(root / "missing.bin"), sha256=digest),
                     root=root,
                 )
             directory_source = root / "directory.bin"
             directory_source.mkdir()
             with self.assertRaisesRegex(PermanentArtifactDeliveryError, "regular file"):
                 await read_managed_artifact(
-                    _artifact(local_path=str(directory_source)),
+                    _artifact(local_path=str(directory_source), sha256=digest),
                     root=root,
                 )
             with self.assertRaisesRegex(PermanentArtifactDeliveryError, "changed"):
@@ -537,6 +539,37 @@ class ChannelArtifactDeliveryTests(unittest.IsolatedAsyncioTestCase):
                     _artifact(local_path=str(source), size_bytes=4, sha256="0" * 64),
                     root=root,
                 )
+
+    async def test_native_acquisition_binds_bytes_before_path_replacement(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "trusted"
+            root.mkdir()
+            source = root / "result.bin"
+            source.write_bytes(b"trusted")
+            outside = Path(directory) / "outside.bin"
+            outside.write_bytes(b"attacker")
+            artifact = _artifact(
+                local_path=str(source),
+                size_bytes=7,
+                sha256=hashlib.sha256(b"trusted").hexdigest(),
+            )
+            original_read = os.read
+            swapped = False
+
+            def replace_after_open(descriptor: int, size: int) -> bytes:
+                nonlocal swapped
+                if not swapped:
+                    source.unlink()
+                    source.symlink_to(outside)
+                    swapped = True
+                return original_read(descriptor, size)
+
+            with patch("imagent.interaction.media.os.read", replace_after_open):
+                _source, content = await read_managed_artifact(artifact, root=root)
+
+            self.assertTrue(swapped)
+            self.assertTrue(source.is_symlink())
+            self.assertEqual(content, b"trusted")
 
 
 def _artifact(

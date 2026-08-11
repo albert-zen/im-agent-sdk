@@ -113,6 +113,13 @@ execution are defined by ADR 0010; native throttling and response mapping stay
 here. Bytes, root lifetime, product quota, ledger, startup sweep, and crash-safe
 cleanup remain caller/consumer-owned.
 
+Every SDK-owned native Channel acquires the final file through the shared
+descriptor-relative no-follow reader. Telegram, Feishu, Weixin, and QQ upload
+the returned bytes, so a pathname replacement after open cannot substitute
+different bytes at the native boundary. Declared scalar bounds and digest
+syntax fail before acquisition; size and digest are checked on those exact
+bytes before upload.
+
 Completed Agent messages are the default IM unit. Token-by-token native
 messages are not a common requirement.
 

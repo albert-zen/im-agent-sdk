@@ -149,12 +149,14 @@ Thread, event, history value, and request uses that ProjectRef. Reusing the ID
 with a changed root yields a changed typed fingerprint for the block-B Gateway
 startup check; intentional replacement uses a new ID.
 
-Local images also carry the connection epoch that proved shared-filesystem
-access. A reconnect between verification and dispatch therefore fails closed.
-App Server exposes no formal generic-file input item, so generic files are
-explicitly unsupported by default. A future downstream encoding/exposure
-policy must be explicit; the adapter does not invent a prompt template or
-silently disclose an absolute host path.
+The current App Server image input accepts only a pathname and opens it after
+SDK validation, so it cannot bind descriptor-acquired bytes to the native
+read. Codex and Zen therefore do not advertise attachment sources and reject
+path-only image input before acquisition or native dispatch. A future
+consumer-owned safe materialization or byte-taking native protocol must be
+explicit. App Server also exposes no formal generic-file input item; the
+adapter does not invent a prompt template or silently disclose an absolute
+host path.
 
 ## Current client ownership
 

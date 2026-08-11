@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import os
+import tempfile
 import time
 import unittest
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, cast
+from unittest.mock import patch
 
 from imagent.contracts import ConversationRef, InboundMessage, TextContent
 from imagent.interaction.channels.adapters.qq import QQ_TEXT_LIMIT, QQChannelAdapter
@@ -296,6 +302,76 @@ class QQChannelTests(unittest.IsolatedAsyncioTestCase):
             QQChannelAdapter._artifact_delivery_id(message, original),
             QQChannelAdapter._artifact_delivery_id(message, moved),
         )
+
+    async def test_native_upload_uses_descriptor_bound_bytes_after_swap(self) -> None:
+        class CapturingQQ(QQChannelAdapter):
+            upload_body: dict[str, object] | None = None
+
+            async def _post_json(self, **kwargs: object) -> dict[str, Any]:
+                self.upload_body = cast(dict[str, object], kwargs["body"])
+                return {"file_info": "uploaded"}
+
+            async def _post_message(self, **_kwargs: object) -> None:
+                return None
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "trusted"
+            root.mkdir()
+            source = root / "result.bin"
+            source.write_bytes(b"trusted")
+            outside = Path(directory) / "outside.bin"
+            outside.write_bytes(b"attacker")
+            adapter = CapturingQQ(
+                enabled=True,
+                app_id="app",
+                client_secret="secret",
+                middleware=object(),
+                http_client=cast(Any, object()),
+                outbound_media_dir=root,
+            )
+            artifact = OutboundArtifact(
+                kind="file",
+                local_path=str(source),
+                content_type="application/octet-stream",
+                filename="result.bin",
+                size_bytes=7,
+                sha256=hashlib.sha256(b"trusted").hexdigest(),
+                attachment_id="artifact-safe",
+            )
+            message = OutboundMessage(
+                channel_id="qq",
+                conversation_id="c2c:user",
+                message_type="file",
+                text="",
+                metadata={"delivery_id": "delivery-safe"},
+            )
+            original_read = os.read
+            swapped = False
+
+            def replace_after_open(descriptor: int, size: int) -> bytes:
+                nonlocal swapped
+                if not swapped:
+                    source.unlink()
+                    source.symlink_to(outside)
+                    swapped = True
+                return original_read(descriptor, size)
+
+            with patch("imagent.interaction.media.os.read", replace_after_open):
+                await adapter._send_artifact(
+                    message,
+                    artifact,
+                    token="token",
+                    message_path="/messages",
+                    sequence_key="safe",
+                    reply_to=None,
+                )
+
+            self.assertTrue(swapped)
+            assert adapter.upload_body is not None
+            self.assertEqual(
+                adapter.upload_body["file_data"],
+                base64.b64encode(b"trusted").decode("ascii"),
+            )
 
     def test_startup_validation_normalizes_and_rejects_unsafe_configuration(self) -> None:
         normalized = self._adapter(

@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+import os
+import tempfile
 import unittest
 import warnings
+from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from imagent.interaction.channels.adapters.feishu import (
     FEISHU_DOMAIN,
@@ -10,7 +15,7 @@ from imagent.interaction.channels.adapters.feishu import (
     FeishuChannelAdapter,
 )
 from imagent.interaction.channels.ingress import ChannelAccessPolicy
-from imagent.interaction.channels.outbound_delivery import OutboundMessage
+from imagent.interaction.channels.outbound_delivery import OutboundArtifact, OutboundMessage
 
 
 def _message(
@@ -106,6 +111,62 @@ class FeishuChannelTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(result.native_message_ids, ("om_1",))
+
+    async def test_native_upload_uses_descriptor_bound_bytes_after_swap(self) -> None:
+        class FakeSDK:
+            uploaded: bytes | None = None
+
+            async def send(self, _chat_id, outbound, _opts):
+                self.uploaded = outbound["file"]["source"]
+                return SimpleNamespace(success=True)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "trusted"
+            root.mkdir()
+            source = root / "result.bin"
+            source.write_bytes(b"trusted")
+            outside = Path(directory) / "outside.bin"
+            outside.write_bytes(b"attacker")
+            adapter = self._adapter(outbound_media_dir=root)
+            artifact = OutboundArtifact(
+                kind="file",
+                local_path=str(source),
+                content_type="application/octet-stream",
+                filename="result.bin",
+                size_bytes=7,
+                sha256=hashlib.sha256(b"trusted").hexdigest(),
+            )
+            message = OutboundMessage(
+                channel_id="feishu",
+                conversation_id="chat:chat-1",
+                message_type="file",
+                text="",
+                metadata={"delivery_id": "delivery-safe"},
+            )
+            original_read = os.read
+            swapped = False
+
+            def replace_after_open(descriptor: int, size: int) -> bytes:
+                nonlocal swapped
+                if not swapped:
+                    source.unlink()
+                    source.symlink_to(outside)
+                    swapped = True
+                return original_read(descriptor, size)
+
+            sdk = FakeSDK()
+            with patch("imagent.interaction.media.os.read", replace_after_open):
+                await adapter._send_artifact(
+                    sdk,
+                    chat_id="chat-1",
+                    artifact=artifact,
+                    message=message,
+                    reply_to="",
+                    reply_in_thread=False,
+                )
+
+            self.assertTrue(swapped)
+            self.assertEqual(sdk.uploaded, b"trusted")
 
 
 if __name__ == "__main__":

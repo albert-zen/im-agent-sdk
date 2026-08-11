@@ -311,7 +311,7 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
-    async def test_local_image_uses_shared_verified_connection_epoch(self) -> None:
+    async def test_path_only_local_image_is_rejected_before_native_start(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory, "image.png")
             path.write_bytes(b"png")
@@ -324,23 +324,25 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
                 shared_filesystem_root=directory,
             )
 
-            await adapter.send_input(
-                ThreadRef(ProjectRef("zen-main", "workspace"), "thread-1"),
-                AgentInput(
-                    client_message_id="message-zen-image",
-                    content=(
-                        AttachmentContent(
-                            attachment_id="image-1",
-                            media_type="image/png",
-                            source=LocalPath(str(path)),
-                            filename="image.png",
-                            size_bytes=3,
+            with self.assertRaisesRegex(NotImplementedError, "path-only image input"):
+                await adapter.send_input(
+                    ThreadRef(ProjectRef("zen-main", "workspace"), "thread-1"),
+                    AgentInput(
+                        client_message_id="message-zen-image",
+                        content=(
+                            AttachmentContent(
+                                attachment_id="image-1",
+                                media_type="image/png",
+                                source=LocalPath(str(path)),
+                                filename="image.png",
+                                size_bytes=3,
+                            ),
                         ),
                     ),
-                ),
-            )
+                )
 
-        self.assertEqual(client.started[0]["expected_local_image_epoch"], 29)
+        self.assertEqual(client.started, [])
+        self.assertEqual(adapter.summary.capabilities.attachment_sources, ())
 
     def test_zen_does_not_expose_codex_active_turn_policy(self) -> None:
         with self.assertRaisesRegex(TypeError, "steer_active_turn"):

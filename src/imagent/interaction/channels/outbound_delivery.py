@@ -7,7 +7,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
-from ..media import AttachmentContent, LocalPath
+from ..media import (
+    AttachmentContent,
+    LocalPath,
+    configure_shared_filesystem_root,
+    read_local_attachment,
+)
 from ..messages import (
     OutboundMessage as PublicOutboundMessage,
 )
@@ -34,6 +39,7 @@ _NATIVE_OWNED_METADATA_KEYS = frozenset(
         "reply_to_seen_at",
     }
 )
+MAX_NATIVE_ARTIFACT_BYTES = 64 * 1024 * 1024
 
 
 class _RouteContext(Protocol):
@@ -123,7 +129,11 @@ def _to_native_artifact(attachment: AttachmentContent) -> OutboundArtifact:
     source = attachment.source
     if not isinstance(source, LocalPath):
         raise ValueError("SDK-owned native Channels require outbound attachments to use LocalPath")
-    if attachment.size_bytes is None or attachment.size_bytes < 0:
+    if (
+        not isinstance(attachment.size_bytes, int)
+        or isinstance(attachment.size_bytes, bool)
+        or attachment.size_bytes < 0
+    ):
         raise ValueError("outbound LocalPath attachments require a non-negative size_bytes")
     path = Path(source.path)
     filename = str(attachment.filename or path.name).strip()
@@ -345,28 +355,35 @@ async def read_managed_artifact(
     *,
     root: str | Path,
 ) -> tuple[Path, bytes]:
-    """Read one verified artifact beneath a caller-managed trusted root."""
+    """Acquire one verified artifact through the caller-managed trusted root."""
 
+    if artifact.sha256 and (
+        len(artifact.sha256) != 64
+        or any(character not in "0123456789abcdef" for character in artifact.sha256)
+    ):
+        raise PermanentArtifactDeliveryError("artifact digest metadata is malformed")
     try:
-        managed_root = Path(root).resolve(strict=True)
-        source = Path(artifact.local_path).resolve(strict=True)
-        source.relative_to(managed_root)
-    except (OSError, ValueError) as exc:
-        raise PermanentArtifactDeliveryError(
-            "artifact is outside the trusted root or no longer exists"
-        ) from exc
-    if not source.is_file():
-        raise PermanentArtifactDeliveryError("artifact is no longer a regular file")
-    try:
-        content = await asyncio.to_thread(source.read_bytes)
-    except OSError as exc:
-        raise PermanentArtifactDeliveryError("artifact can no longer be read") from exc
-    if len(content) != artifact.size_bytes:
+        managed_root = configure_shared_filesystem_root(root)
+        content = await asyncio.to_thread(
+            read_local_attachment,
+            LocalPath(artifact.local_path),
+            shared_filesystem_root=managed_root,
+            consumer="native Channel",
+            expected_size=artifact.size_bytes,
+            max_bytes=MAX_NATIVE_ARTIFACT_BYTES,
+        )
+    except (NotImplementedError, ValueError) as exc:
+        detail = str(exc)
+        if "regular file" in detail:
+            message = "artifact is no longer a regular file"
+        elif "size" in detail or "byte bound" in detail:
+            message = "artifact changed after it was staged"
+        else:
+            message = "artifact is outside the trusted root or no longer exists"
+        raise PermanentArtifactDeliveryError(message) from exc
+    if artifact.sha256 and hashlib.sha256(content).hexdigest() != artifact.sha256:
         raise PermanentArtifactDeliveryError("artifact changed after it was staged")
-    digest = await asyncio.to_thread(hashlib.sha256, content)
-    if artifact.sha256 and digest.hexdigest() != artifact.sha256:
-        raise PermanentArtifactDeliveryError("artifact changed after it was staged")
-    return source, content
+    return Path(artifact.local_path), content
 
 
 def append_artifact_failures(message: OutboundMessage, failures: list[str]) -> None:

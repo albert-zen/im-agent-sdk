@@ -14,9 +14,7 @@ from typing import Protocol, cast
 from ....interaction.diagnostics import ConnectionDiagnosticFacts
 from ....interaction.media import (
     AttachmentContent,
-    AttachmentSourceKind,
     configure_shared_filesystem_root,
-    resolve_local_attachment,
 )
 from ....interaction.messages import MessageRole, TextContent, TextFormat
 from ....interaction.operations import operation_error
@@ -318,11 +316,7 @@ class _AppServerApplicationAdapter:
                 gap_detection=SupportLevel.UNSUPPORTED,
                 event_sequence_scope=EventSequenceScope.NONE,
             ),
-            attachment_sources=(
-                (AttachmentSourceKind.LOCAL_PATH,)
-                if self._shared_filesystem_root is not None
-                else ()
-            ),
+            attachment_sources=(),
         )
         self._summary = ApplicationSummary(
             ref=ApplicationRef(application_instance_id),
@@ -978,18 +972,13 @@ class _AppServerApplicationAdapter:
         attachments = tuple(part for part in message.content if isinstance(part, AttachmentContent))
         input_items: list[Mapping[str, object]] | None = None
         if attachments:
-            input_items = []
-            if text:
-                input_items.append({"type": "text", "text": text})
             for attachment in attachments:
                 if not attachment.media_type.casefold().startswith("image/"):
                     raise ValueError("Codex App Server supports image attachments only")
-                local_path = resolve_local_attachment(
-                    attachment.source,
-                    shared_filesystem_root=self._shared_filesystem_root,
-                    consumer="Codex App Server",
-                )
-                input_items.append({"type": "localImage", "path": str(local_path)})
+            raise NotImplementedError(
+                "Codex App Server path-only image input cannot safely bind acquired LocalPath "
+                "bytes to the later native read"
+            )
         elif not text:
             raise ValueError("Codex App Server input requires text or image")
         return _PreparedAppServerInput(

@@ -380,6 +380,15 @@ leases until an explicit retry reaches a terminal outcome. Ledger payload and
 JSON replacement are fsync-backed, and startup enumeration fails closed at a
 finite directory-entry bound before deleting any candidate.
 
+Pass-2 counterexamples wire the same descriptor-bound acquisition through the
+production Telegram, Feishu, Weixin, QQ, and T3 native submission paths. Each
+submits the bytes from the opened descriptor after a deterministic pathname
+swap; App Server advertises no attachment source and rejects its path-only
+image protocol before native dispatch because it cannot preserve descriptor
+identity. The reference consumer opens its ledger through one bounded,
+no-follow descriptor beneath a pinned root and rejects ledger-file symlinks,
+pathname replacement, and growth during startup.
+
 ### H. Lifecycle, diagnostics, adapters, and release surface
 
 Complete async context/run convenience, adapter conformance, bounded shutdown,

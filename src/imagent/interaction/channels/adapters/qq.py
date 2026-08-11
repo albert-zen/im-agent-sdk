@@ -26,6 +26,7 @@ from ..outbound_delivery import (
     append_artifact_failures,
     deliver_artifact_batch,
     delivered_artifact_message_ids,
+    read_managed_artifact,
     record_artifact_failure,
     split_text,
     stable_artifact_identity,
@@ -437,22 +438,15 @@ class QQChannelAdapter(BaseChannelAdapter):
         sequence_key: str,
         reply_to: str | None,
     ) -> None:
-        try:
-            source = Path(artifact.local_path).resolve(strict=True)
-            source.relative_to(self.outbound_media_dir)
-        except (OSError, ValueError) as exc:
-            raise QQPermanentArtifactError(
-                "artifact is outside the trusted root or no longer exists"
-            ) from exc
-        if not source.is_file() or source.stat().st_size != artifact.size_bytes:
-            raise QQPermanentArtifactError("artifact changed after it was staged")
         if artifact.kind == "file" and message.conversation_id.startswith("group:"):
             raise QQPermanentArtifactError("QQ group conversations do not support generic files")
-        content = await asyncio.to_thread(source.read_bytes)
-        if len(content) != artifact.size_bytes or (
-            artifact.sha256 and hashlib.sha256(content).hexdigest() != artifact.sha256
-        ):
-            raise QQPermanentArtifactError("artifact changed after it was staged")
+        try:
+            _source, content = await read_managed_artifact(
+                artifact,
+                root=self.outbound_media_dir,
+            )
+        except PermanentArtifactDeliveryError as exc:
+            raise QQPermanentArtifactError(str(exc)) from exc
         file_type = 1 if artifact.kind == "image" else 4
         upload_body: dict[str, Any] = {
             "file_type": file_type,

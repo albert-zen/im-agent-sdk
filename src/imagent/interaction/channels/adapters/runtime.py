@@ -18,6 +18,7 @@ from ..contract import (
 )
 from ..diagnostics import ChannelDiagnosticFacts
 from ..outbound_delivery import (
+    MAX_NATIVE_ARTIFACT_BYTES,
     NativeDeliveryResult,
 )
 from .diagnostics import NativeChannelDiagnosticSnapshot, NativeConnectionDiagnosticSnapshot
@@ -42,6 +43,7 @@ _CHANNEL_CAPABILITIES = {
         markdown=DeliverySupportLevel.NATIVE,
         attachments=DeliverySupportLevel.NATIVE,
         attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
+        max_attachment_size=MAX_NATIVE_ARTIFACT_BYTES,
         reply_references=DeliverySupportLevel.NATIVE,
         max_text_length=3_500,
     ),
@@ -49,6 +51,7 @@ _CHANNEL_CAPABILITIES = {
         markdown=DeliverySupportLevel.FALLBACK,
         attachments=DeliverySupportLevel.NATIVE,
         attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
+        max_attachment_size=MAX_NATIVE_ARTIFACT_BYTES,
         reply_references=DeliverySupportLevel.NATIVE,
         # Match the SDK-owned native adapter's defensive limit so one
         # planned segment remains one native send unit.
@@ -59,6 +62,7 @@ _CHANNEL_CAPABILITIES = {
         markdown=DeliverySupportLevel.FALLBACK,
         attachments=DeliverySupportLevel.NATIVE,
         attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
+        max_attachment_size=MAX_NATIVE_ARTIFACT_BYTES,
         reply_references=DeliverySupportLevel.NATIVE,
         max_text_length=3_500,
         native_threads_or_topics=DeliverySupportLevel.NATIVE,
@@ -67,6 +71,7 @@ _CHANNEL_CAPABILITIES = {
         markdown=DeliverySupportLevel.FALLBACK,
         attachments=DeliverySupportLevel.NATIVE,
         attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
+        max_attachment_size=MAX_NATIVE_ARTIFACT_BYTES,
         reply_references=DeliverySupportLevel.NATIVE,
         max_text_length=4_000,
     ),

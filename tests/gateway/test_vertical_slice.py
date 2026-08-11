@@ -1,18 +1,22 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import os
 import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import patch
 
 from imagent.applications import (
     CodexApplicationAdapter,
     T3ApplicationAdapter,
     ZenApplicationAdapter,
 )
+from imagent.applications.adapters.t3 import _encode_t3_attachments
 from imagent.applications.contract import AgentInput, ApplicationRef, ProjectRef, ThreadRef
 from imagent.applications.events import EventStreamOverflow
 from imagent.applications.operations import ActivateNativeThread, CreateThread, ThreadCreated
@@ -163,6 +167,41 @@ class YieldingNativeT3Client(NativeT3Client):
 
 
 class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
+    def test_t3_native_payload_uses_descriptor_bound_bytes_after_swap(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "image.png"
+            source.write_bytes(b"trusted")
+            outside = root / "outside.png"
+            outside.write_bytes(b"attacker")
+            attachment = AttachmentContent(
+                attachment_id="image-safe",
+                media_type="image/png",
+                source=LocalPath(str(source)),
+                filename="image.png",
+                size_bytes=7,
+                metadata={"sha256": hashlib.sha256(b"trusted").hexdigest()},
+            )
+            original_read = os.read
+            swapped = False
+
+            def replace_after_open(descriptor: int, size: int) -> bytes:
+                nonlocal swapped
+                if not swapped:
+                    source.unlink()
+                    source.symlink_to(outside)
+                    swapped = True
+                return original_read(descriptor, size)
+
+            with patch("imagent.interaction.media.os.read", replace_after_open):
+                encoded = _encode_t3_attachments(
+                    (attachment,),
+                    shared_filesystem_root=root.resolve(),
+                )
+
+            self.assertTrue(swapped)
+            self.assertEqual(encoded[0]["dataUrl"], "data:image/png;base64,dHJ1c3RlZA==")
+
     async def test_restart_duplicate_is_rejected_before_native_media_preparation(
         self,
     ) -> None:
@@ -273,7 +312,7 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(native_app.resumed_threads, ["codex-thread"])
 
-    async def test_image_messages_map_to_native_codex_and_t3_inputs(self) -> None:
+    async def test_image_bytes_map_to_t3_and_path_only_codex_rejects(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             image_path = Path(directory) / "image.png"
             image_path.write_bytes(b"png")
@@ -293,13 +332,14 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
                 cwd="/repo",
                 shared_filesystem_root=directory,
             )
-            await codex.send_input(
-                ThreadRef(ProjectRef("codex-main", "workspace"), "codex-thread"),
-                AgentInput(
-                    client_message_id="codex-image",
-                    content=(attachment,),
-                ),
-            )
+            with self.assertRaisesRegex(NotImplementedError, "path-only image input"):
+                await codex.send_input(
+                    ThreadRef(ProjectRef("codex-main", "workspace"), "codex-thread"),
+                    AgentInput(
+                        client_message_id="codex-image",
+                        content=(attachment,),
+                    ),
+                )
 
             t3_client = NativeT3Client()
             t3_project = ProjectRef("t3-main", "project-1")
@@ -329,11 +369,8 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
                 ),
             )
 
-        self.assertIn("localImage", codex_client.started_turns[0][1])
-        self.assertEqual(
-            codex.summary.capabilities.attachment_sources,
-            (AttachmentSourceKind.LOCAL_PATH,),
-        )
+        self.assertEqual(codex_client.started_turns, [])
+        self.assertEqual(codex.summary.capabilities.attachment_sources, ())
         self.assertEqual(
             t3.summary.capabilities.attachment_sources,
             (AttachmentSourceKind.LOCAL_PATH,),
@@ -360,12 +397,12 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             cwd="/repo",
         )
 
-        with self.assertRaisesRegex(ValueError, "shared_filesystem_root"):
+        with self.assertRaisesRegex(NotImplementedError, "path-only image input"):
             await codex.send_input(
                 ThreadRef(ProjectRef("codex-main", "workspace"), "codex-thread"),
                 AgentInput(client_message_id="local-untrusted", content=(local,)),
             )
-        with self.assertRaisesRegex(NotImplementedError, "remote_url"):
+        with self.assertRaisesRegex(NotImplementedError, "path-only image input"):
             await codex.send_input(
                 ThreadRef(ProjectRef("codex-main", "workspace"), "codex-thread"),
                 AgentInput(client_message_id="remote-unsupported", content=(remote,)),

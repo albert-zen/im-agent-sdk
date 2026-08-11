@@ -71,6 +71,11 @@ Codex artifact visibility, storage, or cleanup policy for Zen; a configured
 consumer must use the same bounded candidates, replay-safe association, and
 untrusted-locator rules.
 
+Like Codex, Zen does not advertise input attachment sources: the shared App
+Server `localImage` operation passes a pathname to a later native open and
+cannot bind descriptor-acquired bytes to that read. Image input therefore
+fails explicitly before filesystem acquisition or native dispatch.
+
 ## Product boundary
 
 Zen-specific provider, model, runtime mode, workspace UI, tools, approval
