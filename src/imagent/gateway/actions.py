@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 from collections.abc import Awaitable, Callable, Mapping
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from types import MappingProxyType
@@ -172,6 +173,17 @@ class _ActionRuntime(Protocol):
         lease: object,
         reconciled: bool | None,
     ) -> None: ...
+
+    async def abort_projection_route(
+        self,
+        lease: object,
+        route_absent: bool = False,
+    ) -> None: ...
+
+    def fence_projection_route_commit(
+        self,
+        lease: object,
+    ) -> AbstractAsyncContextManager[ActionError | None]: ...
 
     async def reconcile_projection_route(
         self,
@@ -1386,15 +1398,73 @@ class ConversationActions:
             validate_application_operation_result(native_operation, result)
             return _known_native_result(result, success_type)
 
-        outcome = await self._reconcile_projection_route(
-            await self._context.effects.execute_create_binding_workflow(
+        bootstrap_lease: object | None = None
+        bootstrap_aborted = False
+        reconciled_route = False
+
+        @asynccontextmanager
+        async def commit_fence(route_id: str):
+            nonlocal bootstrap_lease
+            lease_or_error = await self._context.runtime.begin_projection_route(route_id)
+            if isinstance(lease_or_error, ActionError):
+                yield lease_or_error
+                return
+            bootstrap_lease = lease_or_error
+            async with self._context.runtime.fence_projection_route_commit(
+                bootstrap_lease
+            ) as error:
+                yield error
+
+        try:
+            durable_outcome = await self._context.effects.execute_create_binding_workflow(
                 request,
                 invoke=invoke,
                 preflight=preflight,
                 reconcile=reconcile,
+                commit_fence=commit_fence,
             )
+            if not isinstance(durable_outcome, Succeeded):
+                if bootstrap_lease is not None:
+                    await self._abort_projection_route(
+                        bootstrap_lease,
+                        route_absent=(
+                            isinstance(durable_outcome, Partial)
+                            and durable_outcome.error.code is ActionErrorCode.STALE_BINDING
+                        ),
+                    )
+                    bootstrap_aborted = True
+                return _public_outcome(durable_outcome)
+            outcome = await self._reconcile_projection_route(
+                durable_outcome,
+                bootstrap_lease,
+            )
+            reconciled_route = isinstance(outcome, Succeeded)
+            return _public_outcome(outcome)
+        except BaseException:
+            if bootstrap_lease is not None and not bootstrap_aborted:
+                await self._abort_projection_route(bootstrap_lease)
+                bootstrap_aborted = True
+            raise
+        finally:
+            if bootstrap_lease is not None and not bootstrap_aborted:
+                self._context.runtime.complete_projection_route(
+                    bootstrap_lease,
+                    reconciled_route,
+                )
+
+    async def _abort_projection_route(
+        self,
+        lease: object,
+        *,
+        route_absent: bool = False,
+    ) -> None:
+        abort_task = asyncio.create_task(
+            self._context.runtime.abort_projection_route(lease, route_absent)
         )
-        return _public_outcome(outcome)
+        try:
+            await asyncio.shield(abort_task)
+        except asyncio.CancelledError:
+            await abort_task
 
     async def _reconcile_projection_route(
         self,
@@ -1446,11 +1516,17 @@ class ConversationActions:
                 return await self._reconcile_projection_route(replay)
             return Failed(bootstrap_lease_or_error)
         bootstrap_lease = bootstrap_lease_or_error
+        bootstrap_aborted = False
         reconciled: bool | None = None
         try:
             durable_outcome = await self._context.effects.execute_store_mutation(
                 request,
                 preflight=preflight,
+                commit_fence=(
+                    (lambda: self._context.runtime.fence_projection_route_commit(bootstrap_lease))
+                    if bootstrap_lease is not None
+                    else None
+                ),
             )
             if not isinstance(durable_outcome, Succeeded):
                 return durable_outcome
@@ -1461,8 +1537,13 @@ class ConversationActions:
             )
             reconciled = isinstance(outcome, Succeeded)
             return outcome
-        finally:
+        except BaseException:
             if bootstrap_lease is not None:
+                await self._abort_projection_route(bootstrap_lease)
+                bootstrap_aborted = True
+            raise
+        finally:
+            if bootstrap_lease is not None and not bootstrap_aborted:
                 self._context.runtime.complete_projection_route(
                     bootstrap_lease,
                     reconciled,

@@ -25,6 +25,11 @@
 - that injected action-route seam cannot report success after projection stop
   begins or after its worker exits during baseline, and terminal replay after
   lifecycle restart converges the existing durable result;
+- the injected commit-fence seam gives stop and a new route transaction one
+  winner without exposing the session: preflight-stop is no-write failed,
+  entered-commit-stop is post-durable partial, terminal replay is unchanged,
+  and real Memory/SQLite Controller graphs apply the same rule to a known
+  foreground workflow binding/route commit;
 - invalid finite capacities, including the default in-memory idempotency record
   bound, fail during construction before startup or I/O;
 - the positive active-Thread observation bound reaches the one projection

@@ -109,8 +109,10 @@ barrier before B can make the route visible. A durable non-success releases the
 barrier; a durable success releases it only after reconciliation succeeds. A
 failed activation therefore stays fenced until same-ID replay converges it. No
 second barrier or repository pre-read is introduced. A create-and-bind workflow
-creates a new native Thread before its atomic foreground route commit, then
-crosses the same reconciliation seam from B's returned reference.
+creates a new native Thread before its atomic foreground route commit. Once B
+knows that route ID, it enters the same composition-owned lifecycle fence and C
+retains the resulting opaque barrier generation through the same reconciliation
+seam.
 Route removal retires the exact closed generation and wakes its blocked
 delivery; a later same-ID route receives a new generation that an older lease
 cannot complete.
@@ -121,6 +123,23 @@ native effects. For a route-producing store action, C asks B for a terminal
 receipt before installing a process-local barrier: identical terminal success
 continues through current-state reconciliation, while changed payload remains
 conflict and only an absent receipt enters new-action lifecycle admission.
+After authoritative preflight, B enters the opaque action lease's
+composition-owned commit fence around its terminal store transaction. The
+action layer receives no store or receipt: it supplies only the fence context.
+Shutdown and commit therefore have one winner. If shutdown owns the fence,
+the new action is `Failed(stale_runtime)` with no terminal receipt, binding, or
+route; if commit owns it, shutdown waits for that transaction and later
+activation may honestly be `Partial(stale_runtime)`.
+For a foreground create-and-bind workflow, native creation and its
+`native_result_known` receipt necessarily precede route preparation. If
+shutdown then wins, the workflow remains `Partial(created, stale_runtime)` with
+no binding or route; restart resumes the known workflow and commits exactly
+once. If its terminal binding/route transaction wins, shutdown waits and any
+later activation failure is the same typed partial.
+A terminal `Partial(created, stale_binding)` workflow proves its attempted
+route is absent, so C marks that fact on the opaque abort seam and the projection
+owner retires the unused barrier generation. Ambiguous post-entry store failure
+does not make that claim and remains conservatively fenced.
 Projection shutdown before a pre-fenced store mutation returns
 closed `Failed(stale_runtime)` without writing the route; shutdown or worker
 termination after durable success returns the same closed `stale_runtime`

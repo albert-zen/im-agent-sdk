@@ -5,14 +5,20 @@ import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 import imagent
 import imagent.contracts as contracts_facade
 import imagent.gateway as gateway_facade
 import imagent.gateway.input as input_facade
 from imagent.applications.capabilities import ProjectMode
-from imagent.applications.contract import AgentApplicationAdapter, AgentInput, ProjectRef
-from imagent.applications.operations import GetProject, GetThread, GetThreadHistory
+from imagent.applications.contract import (
+    AgentApplicationAdapter,
+    AgentInput,
+    ProjectRef,
+    ThreadRef,
+)
+from imagent.applications.operations import CreateThread, GetProject, GetThread, GetThreadHistory
 from imagent.gateway import (
     GatewayExtensions,
     GatewayLimits,
@@ -25,7 +31,7 @@ from imagent.gateway.actions import ActionResult, ConversationActions
 from imagent.gateway.input import InboundFailurePhase
 from imagent.gateway.outcomes import Failed, Partial, Succeeded
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
-from imagent.gateway.persistence.effects import ActionErrorCode
+from imagent.gateway.persistence.effects import ActionError, ActionErrorCode, EffectPhase
 from imagent.gateway.persistence.memory import InMemoryProjectionRouteRepository
 from imagent.gateway.persistence.memory_store import MemoryGatewayStore
 from imagent.gateway.persistence.sqlite_store import SQLiteGatewayStore
@@ -33,7 +39,10 @@ from imagent.gateway.persistence.state_contracts import (
     ConversationBinding,
     ThreadProjectionRoute,
 )
-from imagent.gateway.routing.projection_routes import ProjectionPolicy
+from imagent.gateway.routing.projection_routes import (
+    ProjectionPolicy,
+    derive_projection_route_id,
+)
 from imagent.interaction.channels import DeliveryReceipt
 from imagent.interaction.controllers import (
     CommandExecutionSafety,
@@ -712,6 +721,474 @@ class PolicyFreeOrdinaryInputTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(gateway._projection_runtime._routes._action_locks, {})
         await session.close()
         await store.close()
+
+    async def test_new_route_commit_and_shutdown_have_one_coherent_winner(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            factories = (
+                ("memory", MemoryGatewayStore),
+                (
+                    "sqlite",
+                    lambda: SQLiteGatewayStore(Path(directory) / "route-commit.sqlite3"),
+                ),
+            )
+            for store_name, factory in factories:
+                with self.subTest(store=store_name):
+                    store = factory()
+                    session = await store.acquire_runtime(
+                        gateway_id=f"route-commit-{store_name}",
+                        owner_token="owner-1",
+                        lease_duration_seconds=30,
+                    )
+                    channel = FakeChannelAdapter()
+                    application = FakeAgentApplicationAdapter(project_mode=ProjectMode.MANAGED)
+                    preflight_thread = await application.create_thread(
+                        application.default_project_ref
+                    )
+                    commit_thread = await application.create_thread(application.default_project_ref)
+                    cancelled_thread = await application.create_thread(
+                        application.default_project_ref
+                    )
+                    conversation = ConversationRef(
+                        "fake-channel",
+                        f"route-commit-{store_name}",
+                    )
+                    captured_actions: list[ConversationActions] = []
+                    registry = CommandRegistry()
+
+                    @registry.command("capture", safety=CommandExecutionSafety.EFFECTFUL)
+                    async def capture_actions(
+                        invocation: CommandInvocation,
+                        actions: ConversationActions,
+                    ) -> CommandResult:
+                        del invocation
+                        captured_actions.append(actions)
+                        return CommandResult.text("captured")
+
+                    registry.freeze()
+                    gateway = ImAgentGateway(
+                        channels=[channel],
+                        applications=[application],
+                        repositories=GatewayRepositories(bindings=session),
+                        extensions=GatewayExtensions(controller=registry),
+                        projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+                    )
+                    await gateway.start()
+                    await channel.emit_message(
+                        _message(conversation, "capture-actions", "/capture")
+                    )
+                    actions = captured_actions[0]
+                    original_execute = application.execute
+                    active_preflight_gate: list[tuple[asyncio.Event, asyncio.Event] | None] = [None]
+
+                    async def gated_execute(operation):
+                        gate = active_preflight_gate[0]
+                        if gate is not None and isinstance(operation, GetProject):
+                            active_preflight_gate[0] = None
+                            entered, release = gate
+                            entered.set()
+                            await release.wait()
+                        return await original_execute(operation)
+
+                    application.execute = gated_execute
+
+                    preflight_entered = asyncio.Event()
+                    release_preflight = asyncio.Event()
+                    active_preflight_gate[0] = (
+                        preflight_entered,
+                        release_preflight,
+                    )
+                    preflight_action = asyncio.create_task(
+                        actions.observe_thread(
+                            preflight_thread.ref,
+                            action_id="stop-during-preflight",
+                        )
+                    )
+                    await preflight_entered.wait()
+                    self.assertEqual(await session.list_projection_routes(), ())
+                    await gateway.stop()
+                    self.assertEqual(await session.list_projection_routes(), ())
+                    release_preflight.set()
+                    rejected = await preflight_action
+                    self.assertEqual(
+                        rejected,
+                        Failed(ActionError(ActionErrorCode.STALE_RUNTIME)),
+                    )
+                    self.assertEqual(await session.list_projection_routes(), ())
+                    self.assertFalse(gateway._projection_runtime._action_route_commit_lock.locked())
+                    self.assertEqual(gateway._projection_runtime._routes._bootstrap, {})
+                    self.assertEqual(gateway._projection_runtime._routes._action_locks, {})
+
+                    await gateway.start()
+                    queued_preflight_entered = asyncio.Event()
+                    release_queued_preflight = asyncio.Event()
+                    active_preflight_gate[0] = (
+                        queued_preflight_entered,
+                        release_queued_preflight,
+                    )
+                    first_queued_action = asyncio.create_task(
+                        actions.observe_thread(
+                            preflight_thread.ref,
+                            action_id="queued-before-stop-1",
+                        )
+                    )
+                    await queued_preflight_entered.wait()
+                    second_queued_action = asyncio.create_task(
+                        actions.observe_thread(
+                            preflight_thread.ref,
+                            action_id="queued-before-stop-2",
+                        )
+                    )
+                    queued_route_id = derive_projection_route_id(
+                        preflight_thread.ref,
+                        conversation,
+                    )
+                    await _wait_until(
+                        lambda: (
+                            gateway._projection_runtime._routes._action_lock_waiters.get(
+                                queued_route_id,
+                                0,
+                            )
+                            == 1
+                        )
+                    )
+                    await gateway.stop()
+                    release_queued_preflight.set()
+                    queued_outcomes = await asyncio.gather(
+                        first_queued_action,
+                        second_queued_action,
+                    )
+                    self.assertEqual(
+                        queued_outcomes,
+                        [
+                            Failed(ActionError(ActionErrorCode.STALE_RUNTIME)),
+                            Failed(ActionError(ActionErrorCode.STALE_RUNTIME)),
+                        ],
+                    )
+                    self.assertEqual(await session.list_projection_routes(), ())
+                    self.assertEqual(gateway._projection_runtime._routes._bootstrap, {})
+                    self.assertEqual(gateway._projection_runtime._routes._locks, {})
+                    self.assertEqual(gateway._projection_runtime._routes._action_locks, {})
+                    self.assertEqual(
+                        gateway._projection_runtime._routes._action_lock_waiters,
+                        {},
+                    )
+
+                    await gateway.start()
+                    accepted = await actions.observe_thread(
+                        preflight_thread.ref,
+                        action_id="stop-during-preflight",
+                    )
+                    self.assertIsInstance(accepted, Succeeded)
+                    assert isinstance(accepted, Succeeded)
+                    routes = await session.list_projection_routes()
+                    self.assertEqual(
+                        {route.thread_ref for route in routes},
+                        {preflight_thread.ref},
+                    )
+                    await gateway.stop()
+                    terminal_replay = await actions.observe_thread(
+                        preflight_thread.ref,
+                        action_id="stop-during-preflight",
+                    )
+                    self.assertIsInstance(terminal_replay, Partial)
+                    assert isinstance(terminal_replay, Partial)
+                    self.assertEqual(terminal_replay.value, accepted.value)
+                    self.assertEqual(
+                        terminal_replay.error.code,
+                        ActionErrorCode.STALE_RUNTIME,
+                    )
+                    self.assertEqual(
+                        len(await session.list_projection_routes()),
+                        1,
+                    )
+
+                    await gateway.start()
+                    commit_entered = asyncio.Event()
+                    release_commit = asyncio.Event()
+                    original_commit = session.commit_store_mutation
+
+                    async def blocked_commit(request):
+                        commit_entered.set()
+                        await release_commit.wait()
+                        return await original_commit(request)
+
+                    with patch.object(
+                        session,
+                        "commit_store_mutation",
+                        new=blocked_commit,
+                    ):
+                        commit_action = asyncio.create_task(
+                            actions.observe_thread(
+                                commit_thread.ref,
+                                action_id="stop-after-commit-fence",
+                            )
+                        )
+                        await commit_entered.wait()
+                        stopping = asyncio.create_task(gateway.stop())
+                        await asyncio.sleep(0)
+                        self.assertFalse(stopping.done())
+                        self.assertTrue(
+                            gateway._projection_runtime._action_route_commit_lock.locked()
+                        )
+                        self.assertEqual(
+                            {route.thread_ref for route in await session.list_projection_routes()},
+                            {preflight_thread.ref},
+                        )
+                        release_commit.set()
+                        committed = await commit_action
+                        await stopping
+
+                    self.assertIsInstance(committed, Partial)
+                    assert isinstance(committed, Partial)
+                    self.assertEqual(committed.error.code, ActionErrorCode.STALE_RUNTIME)
+                    self.assertEqual(
+                        {route.thread_ref for route in await session.list_projection_routes()},
+                        {preflight_thread.ref, commit_thread.ref},
+                    )
+                    self.assertFalse(gateway._projection_runtime._action_route_commit_lock.locked())
+
+                    await gateway.start()
+                    cancel_entered = asyncio.Event()
+                    release_cancel = asyncio.Event()
+                    active_preflight_gate[0] = (cancel_entered, release_cancel)
+                    cancelled_action = asyncio.create_task(
+                        actions.observe_thread(
+                            cancelled_thread.ref,
+                            action_id="cancel-before-route-commit",
+                        )
+                    )
+                    await cancel_entered.wait()
+                    cancelled_action.cancel()
+                    release_cancel.set()
+                    with self.assertRaises(asyncio.CancelledError):
+                        await cancelled_action
+                    cancelled_route_id = derive_projection_route_id(
+                        cancelled_thread.ref,
+                        conversation,
+                    )
+                    self.assertNotIn(
+                        cancelled_thread.ref,
+                        {route.thread_ref for route in await session.list_projection_routes()},
+                    )
+                    self.assertNotIn(
+                        cancelled_route_id,
+                        gateway._projection_runtime._routes._bootstrap,
+                    )
+                    self.assertNotIn(
+                        cancelled_route_id,
+                        gateway._projection_runtime._routes._locks,
+                    )
+                    self.assertNotIn(
+                        cancelled_route_id,
+                        gateway._projection_runtime._routes._action_locks,
+                    )
+                    self.assertFalse(gateway._projection_runtime._action_route_commit_lock.locked())
+
+                    workflow_known = asyncio.Event()
+                    release_workflow_known = asyncio.Event()
+                    original_record_outcome = session.record_effect_outcome
+
+                    async def blocked_known_workflow(
+                        fingerprint,
+                        *,
+                        phase,
+                        outcome,
+                    ):
+                        if phase is EffectPhase.NATIVE_RESULT_KNOWN:
+                            workflow_known.set()
+                            await release_workflow_known.wait()
+                        return await original_record_outcome(
+                            fingerprint,
+                            phase=phase,
+                            outcome=outcome,
+                        )
+
+                    routes_before_workflow = await session.list_projection_routes()
+                    with patch.object(
+                        session,
+                        "record_effect_outcome",
+                        new=blocked_known_workflow,
+                    ):
+                        workflow_action = asyncio.create_task(
+                            actions.create_and_bind_thread(
+                                application.default_project_ref,
+                                action_id="workflow-stop-before-route-commit",
+                            )
+                        )
+                        await workflow_known.wait()
+                        await gateway.stop()
+                        self.assertEqual(
+                            await session.list_projection_routes(),
+                            routes_before_workflow,
+                        )
+                        self.assertIsNone(await session.get(conversation))
+                        release_workflow_known.set()
+                        workflow_rejected = await workflow_action
+
+                    self.assertIsInstance(workflow_rejected, Partial)
+                    assert isinstance(workflow_rejected, Partial)
+                    self.assertEqual(
+                        workflow_rejected.error.code,
+                        ActionErrorCode.STALE_RUNTIME,
+                    )
+                    self.assertEqual(
+                        await session.list_projection_routes(),
+                        routes_before_workflow,
+                    )
+                    self.assertIsNone(await session.get(conversation))
+                    self.assertEqual(gateway._projection_runtime._routes._bootstrap, {})
+                    self.assertEqual(gateway._projection_runtime._routes._action_locks, {})
+
+                    await gateway.start()
+                    workflow_replayed = await actions.create_and_bind_thread(
+                        application.default_project_ref,
+                        action_id="workflow-stop-before-route-commit",
+                    )
+                    self.assertIsInstance(workflow_replayed, Succeeded)
+                    assert isinstance(workflow_replayed, Succeeded)
+                    binding = await session.get(conversation)
+                    self.assertIsNotNone(binding)
+                    assert binding is not None
+                    self.assertEqual(binding.thread_ref, workflow_replayed.value.ref)
+                    self.assertIn(
+                        workflow_replayed.value.ref,
+                        {route.thread_ref for route in await session.list_projection_routes()},
+                    )
+
+                    workflow_commit_entered = asyncio.Event()
+                    release_workflow_commit = asyncio.Event()
+                    original_workflow_commit = session.commit_workflow_binding
+
+                    async def blocked_workflow_commit(
+                        fingerprint,
+                        *,
+                        binding_target,
+                        route,
+                    ):
+                        workflow_commit_entered.set()
+                        await release_workflow_commit.wait()
+                        return await original_workflow_commit(
+                            fingerprint,
+                            binding_target=binding_target,
+                            route=route,
+                        )
+
+                    with patch.object(
+                        session,
+                        "commit_workflow_binding",
+                        new=blocked_workflow_commit,
+                    ):
+                        workflow_commit_action = asyncio.create_task(
+                            actions.create_and_bind_thread(
+                                application.default_project_ref,
+                                action_id="workflow-commit-before-stop",
+                            )
+                        )
+                        await workflow_commit_entered.wait()
+                        workflow_stopping = asyncio.create_task(gateway.stop())
+                        await asyncio.sleep(0)
+                        self.assertFalse(workflow_stopping.done())
+                        release_workflow_commit.set()
+                        workflow_committed = await workflow_commit_action
+                        await workflow_stopping
+
+                    self.assertIsInstance(workflow_committed, Partial)
+                    assert isinstance(workflow_committed, Partial)
+                    self.assertEqual(
+                        workflow_committed.error.code,
+                        ActionErrorCode.STALE_RUNTIME,
+                    )
+                    self.assertIsInstance(workflow_committed.value.ref, ThreadRef)
+                    assert isinstance(workflow_committed.value.ref, ThreadRef)
+                    committed_binding = await session.get(conversation)
+                    self.assertIsNotNone(committed_binding)
+                    assert committed_binding is not None
+                    self.assertEqual(
+                        committed_binding.thread_ref,
+                        workflow_committed.value.ref,
+                    )
+                    self.assertIn(
+                        workflow_committed.value.ref,
+                        {route.thread_ref for route in await session.list_projection_routes()},
+                    )
+                    await gateway.start()
+
+                    workflow_create_entered = asyncio.Event()
+                    release_workflow_create = asyncio.Event()
+                    current_execute = application.execute
+
+                    async def blocked_workflow_create(operation):
+                        if isinstance(operation, CreateThread):
+                            workflow_create_entered.set()
+                            await release_workflow_create.wait()
+                        return await current_execute(operation)
+
+                    with patch.object(
+                        application,
+                        "execute",
+                        new=blocked_workflow_create,
+                    ):
+                        stale_workflow_action = asyncio.create_task(
+                            actions.create_and_bind_thread(
+                                application.default_project_ref,
+                                action_id="workflow-stale-binding",
+                            )
+                        )
+                        await workflow_create_entered.wait()
+                        selected = await actions.select_project(
+                            application.default_project_ref,
+                            action_id="advance-workflow-generation",
+                        )
+                        self.assertIsInstance(selected, Succeeded)
+                        release_workflow_create.set()
+                        stale_workflow = await stale_workflow_action
+
+                    self.assertIsInstance(stale_workflow, Partial)
+                    assert isinstance(stale_workflow, Partial)
+                    self.assertEqual(
+                        stale_workflow.error.code,
+                        ActionErrorCode.STALE_BINDING,
+                    )
+                    self.assertIsInstance(stale_workflow.value.ref, ThreadRef)
+                    assert isinstance(stale_workflow.value.ref, ThreadRef)
+                    stale_route_id = derive_projection_route_id(
+                        stale_workflow.value.ref,
+                        conversation,
+                    )
+                    self.assertNotIn(
+                        stale_workflow.value.ref,
+                        {route.thread_ref for route in await session.list_projection_routes()},
+                    )
+                    self.assertNotIn(
+                        stale_route_id,
+                        gateway._projection_runtime._routes._bootstrap,
+                    )
+                    self.assertNotIn(
+                        stale_route_id,
+                        gateway._projection_runtime._routes._action_bootstrap_retained,
+                    )
+                    self.assertNotIn(
+                        stale_route_id,
+                        gateway._projection_runtime._routes._action_locks,
+                    )
+                    stale_workflow_replay = await actions.create_and_bind_thread(
+                        application.default_project_ref,
+                        action_id="workflow-stale-binding",
+                    )
+                    self.assertEqual(stale_workflow_replay, stale_workflow)
+                    self.assertNotIn(
+                        stale_route_id,
+                        gateway._projection_runtime._routes._bootstrap,
+                    )
+                    self.assertNotIn(
+                        stale_route_id,
+                        gateway._projection_runtime._routes._action_locks,
+                    )
+                    await gateway.stop()
+                    await session.close()
+                    await store.close()
 
     async def test_two_conversations_keep_binding_route_and_dispatch_ancestry_isolated(
         self,

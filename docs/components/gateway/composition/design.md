@@ -32,6 +32,9 @@ dependencies. The output is one `ImAgentGateway` with no dependency lookup at
 runtime. Dependencies point to the public Interaction and Applications
 contracts and the specific Gateway admission, input, projection, presentation,
 delivery, persistence, and diagnostics leaves that consume the values.
+Coherent-session detection validates the complete structural capability so
+both built-in Memory and deliberately delegated SQLite sessions wire the same
+Controller/action graph; no session object crosses into a consumer surface.
 
 The formal public contracts are `GatewayRepositories`, `GatewayLimits`, and
 `GatewayExtensions`. Their single implementation lives in
@@ -73,7 +76,10 @@ current observation without giving C or the Controller a repository/runtime
 escape. The same typed seam rejects route activation outside the current
 projection lifecycle generation: pre-write rejection is closed failure and a
 durable route whose activation loses shutdown is closed partial, both without a
-second dispatch or recovery path. This focused integration does not expose the
+second dispatch or recovery path. It injects only an opaque async commit-fence
+context into B: B retains the atomic store call, while projection stop and the
+post-preflight transaction acquire the same process-local fence. Terminal
+receipt replay remains before fence admission. This focused integration does not expose the
 private session or turn
 `GatewayRepositories` into the v1 public store port; final `GatewayStore`
 acquisition and lifecycle ownership remain later DAG composition work.

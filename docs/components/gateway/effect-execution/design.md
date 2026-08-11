@@ -16,11 +16,12 @@ does not receive a store, repository, lease, receipt, or concrete adapter.
 B owns these operation-agnostic entry points:
 
 - `replay_store_mutation(StoreMutationRequest)`;
-- `execute_store_mutation(StoreMutationRequest, preflight=None)`;
+- `execute_store_mutation(StoreMutationRequest, preflight=None,
+  commit_fence=None)`;
 - `execute_native_mutation(NativeMutationRequest, invoke, preflight=None,
   reconcile=None)`;
 - `execute_create_binding_workflow(CreateBindingWorkflowRequest, invoke,
-  preflight=None, reconcile=None)`.
+  preflight=None, reconcile=None, commit_fence=None)`.
 
 The requests contain a validated `ActionFingerprint`, fixed action kind,
 minimal stable target/reference facts, and when applicable a complete binding/
@@ -56,6 +57,23 @@ changing binding or route state. The final commit of either the failure or the
 mutation checks the receipt again, so a concurrently committed terminal
 outcome wins. Cancellation before that commit leaves no reserved Gateway
 receipt or partial bridge mutation.
+
+The optional `StoreEffectCommitFence` is an async context factory yielding
+only `ActionError | None`. B enters it after terminal replay and preflight but
+immediately around either the receipt-only rejection commit or atomic store
+mutation. B still owns and invokes the store commit; the fence receives no
+session, request, receipt, or callback. D composition supplies it only for a
+pre-fenced route action so projection shutdown and that transaction cannot
+cross. A closed fence error returns `Failed` without committing anything.
+
+The optional `WorkflowEffectCommitFence` has the same authority-free result but
+accepts only B's derived stable route ID. B invokes it only after a foreground
+Thread workflow has a durable known native result and immediately around the
+atomic terminal binding/route transaction. A closed fence therefore returns
+`Partial(created, stale_runtime)` without binding or route mutation; terminal
+workflow replay bypasses it, and restart can resume the known result without
+another native call. Neither fence receives a session, receipt, or commit
+callback.
 
 ## Outcome algebra
 

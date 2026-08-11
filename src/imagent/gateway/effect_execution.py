@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from contextlib import AbstractAsyncContextManager
 from typing import Protocol, TypeAlias, runtime_checkable
 
 from ..applications.contract import ProjectRef, ThreadRef
@@ -47,6 +48,14 @@ NativeEffectReconciler: TypeAlias = Callable[
     Awaitable[KnownNativeOutcome | None],
 ]
 StoreEffectPreflight: TypeAlias = Callable[[], Awaitable[ActionError | None]]
+StoreEffectCommitFence: TypeAlias = Callable[
+    [],
+    AbstractAsyncContextManager[ActionError | None],
+]
+WorkflowEffectCommitFence: TypeAlias = Callable[
+    [str],
+    AbstractAsyncContextManager[ActionError | None],
+]
 
 
 @runtime_checkable
@@ -58,6 +67,7 @@ class GatewayEffectExecutor(Protocol):
         request: StoreMutationRequest,
         *,
         preflight: StoreEffectPreflight | None = None,
+        commit_fence: StoreEffectCommitFence | None = None,
     ) -> ActionOutcome: ...
 
     async def replay_store_mutation(
@@ -81,6 +91,7 @@ class GatewayEffectExecutor(Protocol):
         invoke: NativeEffectInvoker,
         preflight: NativeEffectPreflight | None = None,
         reconcile: NativeEffectReconciler | None = None,
+        commit_fence: WorkflowEffectCommitFence | None = None,
     ) -> ActionOutcome: ...
 
 
@@ -104,20 +115,34 @@ class StoreBackedGatewayEffectExecutor:
         request: StoreMutationRequest,
         *,
         preflight: StoreEffectPreflight | None = None,
+        commit_fence: StoreEffectCommitFence | None = None,
     ) -> ActionOutcome:
         validate_store_mutation_request(request)
-        if preflight is not None:
+        preflight_error: ActionError | None = None
+        if preflight is not None or commit_fence is not None:
             replay = await self._read_store_mutation_receipt(request.fingerprint)
             if replay is not None:
                 return replay
-            preflight_outcome = await self._run_store_preflight(
+        if preflight is not None:
+            preflight_result = await self._run_store_preflight(
                 request.fingerprint,
                 preflight,
             )
-            if preflight_outcome is not None:
-                return preflight_outcome
+            if preflight_result is not None and not isinstance(
+                preflight_result,
+                ActionError,
+            ):
+                return preflight_result
+            preflight_error = preflight_result
         try:
-            receipt = await self._session.commit_store_mutation(request)
+            if commit_fence is None:
+                receipt = await self._commit_store_result(request, preflight_error)
+            else:
+                async with commit_fence() as fence_error:
+                    if fence_error is not None:
+                        validate_action_error(fence_error)
+                        return Failed(fence_error)
+                    receipt = await self._commit_store_result(request, preflight_error)
         except asyncio.CancelledError:
             recovered = await self._recover_store_mutation_outcome(request.fingerprint)
             if recovered is not None:
@@ -173,11 +198,23 @@ class StoreBackedGatewayEffectExecutor:
             return Failed(ActionError(ActionErrorCode.STORE_FAILURE))
         return _required_outcome(receipt)
 
+    async def _commit_store_result(
+        self,
+        request: StoreMutationRequest,
+        preflight_error: ActionError | None,
+    ) -> EffectReceipt:
+        if preflight_error is None:
+            return await self._session.commit_store_mutation(request)
+        return await self._session.commit_store_preflight_failure(
+            request.fingerprint,
+            error=preflight_error,
+        )
+
     async def _run_store_preflight(
         self,
         fingerprint: ActionFingerprint,
         preflight: StoreEffectPreflight,
-    ) -> ActionOutcome | None:
+    ) -> ActionError | ActionOutcome | None:
         try:
             error = await preflight()
         except asyncio.CancelledError:
@@ -190,33 +227,7 @@ class StoreBackedGatewayEffectExecutor:
         if error is None:
             return None
         validate_action_error(error)
-        try:
-            receipt = await self._session.commit_store_preflight_failure(
-                fingerprint,
-                error=error,
-            )
-        except asyncio.CancelledError:
-            recovered = await self._recover_store_mutation_outcome(fingerprint)
-            if recovered is not None:
-                return recovered
-            raise
-        except EffectReceiptConflict:
-            return Failed(ActionError(ActionErrorCode.CONFLICT))
-        except EffectReceiptCapacityError:
-            return Failed(ActionError(ActionErrorCode.CAPACITY_EXHAUSTED))
-        except StaleRuntimeFence:
-            return Failed(ActionError(ActionErrorCode.STALE_RUNTIME))
-        except GatewayStoreError:
-            recovered = await self._recover_store_mutation_outcome(fingerprint)
-            if recovered is not None:
-                return recovered
-            return Failed(ActionError(ActionErrorCode.STORE_FAILURE))
-        except Exception:
-            recovered = await self._recover_store_mutation_outcome(fingerprint)
-            if recovered is not None:
-                return recovered
-            return Failed(ActionError(ActionErrorCode.STORE_FAILURE))
-        return _required_outcome(receipt)
+        return error
 
     async def execute_native_mutation(
         self,
@@ -313,6 +324,7 @@ class StoreBackedGatewayEffectExecutor:
         invoke: NativeEffectInvoker,
         preflight: NativeEffectPreflight | None = None,
         reconcile: NativeEffectReconciler | None = None,
+        commit_fence: WorkflowEffectCommitFence | None = None,
     ) -> ActionOutcome:
         validate_create_binding_workflow_request(request)
         phase_id = request.fingerprint.phase_id("native_create")
@@ -336,7 +348,11 @@ class StoreBackedGatewayEffectExecutor:
         if receipt.phase is EffectPhase.TERMINAL:
             return _required_outcome(receipt)
         if receipt.phase is EffectPhase.NATIVE_RESULT_KNOWN:
-            return await self._commit_known_workflow(request, receipt)
+            return await self._commit_known_workflow(
+                request,
+                receipt,
+                commit_fence=commit_fence,
+            )
         if receipt.phase is EffectPhase.NATIVE_SIDE_EFFECT_STARTED:
             known = await self._reconcile_native(
                 request.fingerprint,
@@ -354,7 +370,11 @@ class StoreBackedGatewayEffectExecutor:
                 return _unknown_outcome(ActionErrorCode.STORE_FAILURE)
             if receipt.phase is EffectPhase.TERMINAL:
                 return _required_outcome(receipt)
-            return await self._commit_known_workflow(request, receipt)
+            return await self._commit_known_workflow(
+                request,
+                receipt,
+                commit_fence=commit_fence,
+            )
         if receipt.phase is not EffectPhase.RESERVED:
             raise RuntimeError("workflow receipt has an invalid phase")
         preflight_outcome = await self._run_native_preflight(
@@ -372,6 +392,7 @@ class StoreBackedGatewayEffectExecutor:
                 invoke=invoke,
                 preflight=preflight,
                 reconcile=reconcile,
+                commit_fence=commit_fence,
             )
         try:
             known = await invoke(phase_id)
@@ -444,16 +465,28 @@ class StoreBackedGatewayEffectExecutor:
             if receipt is not None and receipt.phase is EffectPhase.TERMINAL:
                 return _required_outcome(receipt)
             if receipt is not None and receipt.phase is EffectPhase.NATIVE_RESULT_KNOWN:
-                return await self._commit_known_workflow(request, receipt)
+                return await self._commit_known_workflow(
+                    request,
+                    receipt,
+                    commit_fence=commit_fence,
+                )
             return Partial(known.value, ActionError(ActionErrorCode.STORE_FAILURE))
         except Exception:
             receipt = await _shielded_receipt_read(self._session, request.fingerprint)
             if receipt is not None and receipt.phase is EffectPhase.TERMINAL:
                 return _required_outcome(receipt)
             if receipt is not None and receipt.phase is EffectPhase.NATIVE_RESULT_KNOWN:
-                return await self._commit_known_workflow(request, receipt)
+                return await self._commit_known_workflow(
+                    request,
+                    receipt,
+                    commit_fence=commit_fence,
+                )
             return Partial(known.value, ActionError(ActionErrorCode.STORE_FAILURE))
-        return await self._commit_known_workflow(request, receipt)
+        return await self._commit_known_workflow(
+            request,
+            receipt,
+            commit_fence=commit_fence,
+        )
 
     async def _enter_native_fence(
         self,
@@ -632,6 +665,8 @@ class StoreBackedGatewayEffectExecutor:
         self,
         request: CreateBindingWorkflowRequest,
         receipt: EffectReceipt,
+        *,
+        commit_fence: WorkflowEffectCommitFence | None,
     ) -> ActionOutcome:
         if not isinstance(receipt.outcome, Succeeded):
             raise RuntimeError("known workflow phase has no created reference")
@@ -644,11 +679,22 @@ class StoreBackedGatewayEffectExecutor:
             )
         target, route = _workflow_binding_plan(request, receipt.outcome.value)
         try:
-            terminal = await self._session.commit_workflow_binding(
-                request.fingerprint,
-                binding_target=target,
-                route=route,
-            )
+            if route is None or commit_fence is None:
+                terminal = await self._session.commit_workflow_binding(
+                    request.fingerprint,
+                    binding_target=target,
+                    route=route,
+                )
+            else:
+                async with commit_fence(route.route_id) as fence_error:
+                    if fence_error is not None:
+                        validate_action_error(fence_error)
+                        return Partial(receipt.outcome.value, fence_error)
+                    terminal = await self._session.commit_workflow_binding(
+                        request.fingerprint,
+                        binding_target=target,
+                        route=route,
+                    )
         except asyncio.CancelledError:
             terminal = await _shielded_receipt_read(self._session, request.fingerprint)
             if terminal is not None and terminal.phase is EffectPhase.TERMINAL:
@@ -829,5 +875,7 @@ __all__ = [
     "NativeEffectPreflight",
     "NativeEffectReconciler",
     "StoreEffectPreflight",
+    "StoreEffectCommitFence",
+    "WorkflowEffectCommitFence",
     "StoreBackedGatewayEffectExecutor",
 ]

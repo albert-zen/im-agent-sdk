@@ -5,6 +5,7 @@ import inspect
 import tempfile
 import unittest
 from collections.abc import Callable, Mapping
+from contextlib import asynccontextmanager
 from dataclasses import FrozenInstanceError, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -92,6 +93,7 @@ class _Runtime:
         self.completed_route_ids: list[str] = []
         self.completed_route_statuses: list[bool | None] = []
         self.projection_route_leases: dict[object, str] = {}
+        self.projection_commit_entered: set[object] = set()
         self.projection_reconciliation_error: ActionError | None = None
         self.projection_reconciliation_entered: asyncio.Event | None = None
         self.projection_reconciliation_release: asyncio.Event | None = None
@@ -162,8 +164,28 @@ class _Runtime:
         reconciled: bool | None,
     ) -> None:
         route_id = self.projection_route_leases.pop(lease)
+        self.projection_commit_entered.discard(lease)
         self.completed_route_ids.append(route_id)
         self.completed_route_statuses.append(reconciled)
+
+    async def abort_projection_route(
+        self,
+        lease: object,
+        route_absent: bool = False,
+    ) -> None:
+        route_id = self.projection_route_leases.pop(lease)
+        self.completed_route_ids.append(route_id)
+        self.completed_route_statuses.append(
+            False if lease in self.projection_commit_entered and not route_absent else None
+        )
+        self.projection_commit_entered.discard(lease)
+
+    @asynccontextmanager
+    async def fence_projection_route_commit(self, lease: object):
+        if lease not in self.projection_route_leases:
+            raise AssertionError("projection commit received an unknown route lease")
+        self.projection_commit_entered.add(lease)
+        yield None
 
     async def authorize_request_response(
         self,
@@ -235,6 +257,7 @@ class _StrictEffects:
         request: StoreMutationRequest,
         *,
         preflight=None,
+        commit_fence=None,
     ) -> ActionOutcome:
         self.store_requests.append(request)
         if self.before_store is not None:
@@ -249,6 +272,14 @@ class _StrictEffects:
                 self.store_fingerprints[request.fingerprint.action_key] = request.fingerprint
                 self.store_outcomes[request.fingerprint.action_key] = outcome
                 return outcome
+        if commit_fence is not None:
+            async with commit_fence() as fence_error:
+                if fence_error is not None:
+                    return Failed(fence_error)
+                return self._commit_store_request(request)
+        return self._commit_store_request(request)
+
+    def _commit_store_request(self, request: StoreMutationRequest) -> ActionOutcome:
         plan = request.plan
         reference = None
         conversation_ref = plan.conversation_ref if plan.binding_clear is not None else None
@@ -309,6 +340,7 @@ class _StrictEffects:
         invoke,
         preflight=None,
         reconcile=None,
+        commit_fence=None,
     ) -> ActionOutcome:
         del reconcile
         self.workflow_requests.append(request)
@@ -327,6 +359,14 @@ class _StrictEffects:
             return OutcomeUnknown(ActionError(ActionErrorCode.NATIVE_OUTCOME_UNKNOWN))
         if self.partial_workflow:
             return Partial(created.value, ActionError(ActionErrorCode.STALE_BINDING))
+        if commit_fence is not None and request.foreground_route:
+            route_id = derive_projection_route_id(
+                created.value.reference,
+                request.conversation_ref,
+            )
+            async with commit_fence(route_id) as fence_error:
+                if fence_error is not None:
+                    return Partial(created.value, fence_error)
         return Succeeded(
             EffectValue(
                 reference=created.value.reference,

@@ -58,7 +58,12 @@ Landed evidence:
   generation leases serialize same-route action lifecycles, prevent stale
   completion from opening a newer fence, and retire blocked delivery when the
   route is removed; lifecycle generation and worker-liveness checks reject
-  activation racing/following shutdown and allow restart replay to converge;
+  activation racing/following shutdown, while one post-preflight commit fence
+  makes shutdown-before-write a no-mutation failure and lets an entered atomic
+  commit finish before shutdown; the same fence covers a foreground workflow's
+  terminal binding/route transaction after its native result is known, and
+  public Memory/SQLite composition proves restart convergence without another
+  native create;
   and
 - durable admission and unknown-outcome protection remain intact, including
   released pre-acceptance replay, terminal accepted replay, cancellation

@@ -67,7 +67,13 @@ contract methods and waits for bounded cleanup.
 
 Stopping or rolling back a Gateway also cancels and joins every active Thread
 observation worker. It first closes process-local action-route activation
-admission, so a concurrent or later scoped route action cannot report success
+admission while holding the same narrow commit fence used by new pre-fenced
+route actions. Authoritative preflight runs outside that fence. If stop enters
+first, a resumed action cannot write its terminal receipt or route; if the
+atomic store transaction entered first, stop waits for it before cancelling
+workers. A known foreground workflow enters the same fence around only its
+terminal binding/route transaction; a shutdown winner leaves its native result
+resumable but cannot gain a post-stop route. A concurrent or later scoped route action therefore cannot report success
 from a worker that shutdown has cancelled. In-flight bounded baseline work
 validates the same lifecycle generation and live worker at every authoritative
 delivery suspension; durable route success becomes typed partial and remains

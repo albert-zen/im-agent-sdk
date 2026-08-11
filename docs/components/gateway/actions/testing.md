@@ -39,6 +39,18 @@ Required evidence:
   success or worker termination during baseline returns typed
   `Partial(stale_runtime)`; restart replay converges without repeating
   the durable action and leaves no worker, capacity, barrier, or lock leak;
+- real coherent composition pauses authoritative preflight and the atomic
+  store commit on opposite sides of shutdown: the shutdown winner writes
+  nothing and returns failed, while the commit winner completes first and
+  returns partial after shutdown; cancellation before commit retires its exact
+  action generation;
+- the same public Memory/SQLite composition pauses a foreground Thread workflow
+  after native result persistence but before route preparation: shutdown writes
+  no binding/route, returns the created reference as partial, and restart
+  terminalizes and activates the one known workflow without another native call;
+- a concurrent binding-generation change makes the workflow terminal
+  `Partial(stale_binding)` with no route and retires its exact barrier/action
+  lock; same-ID terminal replay cannot recreate either map entry;
 - a terminal successful route action replays its original value while stopped
   as `Partial(stale_runtime)`, whereas a new action is the pre-write `Failed`
   case and changed payload remains conflict;

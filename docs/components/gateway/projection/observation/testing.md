@@ -32,6 +32,12 @@ Observation conformance must prove:
   racing stop, beginning after stop, or losing its worker between ensure and
   baseline cannot report success, leak worker/capacity/barrier/lock state, or
   open an incomplete route, while restart and terminal replay converge it;
+- stop and post-preflight route commit are deterministically ordered by the
+  lifecycle generation fence, and pre-entry cancellation retires its barrier,
+  action lock, and commit capacity without weakening post-entry fencing;
+- same-route action-lock waiters released by shutdown return typed stale
+  outcomes with empty waiter/lock maps, and a terminal stale-binding workflow's
+  explicit route-absent fact retires its post-entry generation;
 - stop during an actual multi-item Channel baseline is checked at every
   delivery/checkpoint suspension: the in-flight action returns typed partial,
   no later item crosses shutdown, and an unknown native outcome is not retried

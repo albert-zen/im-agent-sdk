@@ -112,7 +112,7 @@ from .persistence.state_contracts import (
     DeliverySubmissionState,
     validate_binding,
 )
-from .persistence.store import GatewayStoreSession
+from .persistence.store import GatewayStoreSession, _is_gateway_store_session
 from .presentation import (
     OutboundPresentationContext,
     OutboundPresentationRuntime,
@@ -318,6 +318,8 @@ class ImAgentGateway:
                 ),
                 begin_projection_route=self._projection_runtime.begin_action_route,
                 complete_projection_route=self._projection_runtime.complete_action_route,
+                abort_projection_route=self._projection_runtime.abort_action_route,
+                fence_projection_route_commit=(self._projection_runtime.fence_action_route_commit),
             )
         self._request_projection = self._projection_runtime.request_projection
         self._input_dispatch = InputDispatchRuntime(
@@ -1160,7 +1162,7 @@ def _coherent_store_session(
     repositories: GatewayRepositories,
 ) -> GatewayStoreSession | None:
     session = repositories.bindings
-    if not isinstance(session, GatewayStoreSession):
+    if not _is_gateway_store_session(session):
         return None
     for repository in (
         repositories.idempotency,

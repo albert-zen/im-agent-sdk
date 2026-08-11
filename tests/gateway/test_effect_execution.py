@@ -3,14 +3,17 @@ from __future__ import annotations
 import asyncio
 import tempfile
 import unittest
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, cast, get_type_hints
+from unittest.mock import patch
 
 from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef
 from imagent.gateway.effect_execution import (
     GatewayEffectExecutor,
     StoreBackedGatewayEffectExecutor,
+    StoreEffectCommitFence,
     StoreEffectPreflight,
 )
 from imagent.gateway.outcomes import (
@@ -38,11 +41,13 @@ from imagent.gateway.persistence.effects import (
 )
 from imagent.gateway.persistence.memory_store import MemoryGatewayStore
 from imagent.gateway.persistence.sqlite_store import SQLiteGatewayStore
+from imagent.gateway.persistence.state_contracts import ThreadProjectionRoute
 from imagent.gateway.persistence.store import (
     GatewayStore,
     GatewayStoreError,
     GatewayStoreSession,
 )
+from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.messages import ConversationRef
 from imagent.interaction.operations import ContractViolation
 
@@ -75,6 +80,10 @@ class GatewayEffectExecutionParityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             get_type_hints(GatewayEffectExecutor.execute_store_mutation)["preflight"],
             StoreEffectPreflight | None,
+        )
+        self.assertEqual(
+            get_type_hints(GatewayEffectExecutor.execute_store_mutation)["commit_fence"],
+            StoreEffectCommitFence | None,
         )
         self.assertEqual(
             {status.value for status in OutcomeStatus},
@@ -286,6 +295,152 @@ class GatewayEffectExecutionParityTests(unittest.IsolatedAsyncioTestCase):
                 receipt = await session.get_effect_receipt(rejected.fingerprint)
                 assert receipt is not None
                 self.assertIs(receipt.phase, EffectPhase.TERMINAL)
+                await session.release_runtime()
+                await store.close()
+
+    async def test_store_commit_fence_has_memory_sqlite_shutdown_parity(self) -> None:
+        for factory in self._factories():
+            store = factory()
+            with self.subTest(store=type(store).__name__):
+                session, executor = await self._executor(store)
+                lifecycle_lock = asyncio.Lock()
+                lifecycle_available = True
+                fence_entries = 0
+
+                @asynccontextmanager
+                async def commit_fence() -> AsyncIterator[ActionError | None]:
+                    nonlocal fence_entries
+                    fence_entries += 1
+                    async with lifecycle_lock:
+                        if not lifecycle_available:
+                            yield ActionError(ActionErrorCode.STALE_RUNTIME)
+                            return
+                        yield None
+
+                application_ref = ApplicationRef("application")
+                project_ref = ProjectRef(application_ref.application_instance_id, "project")
+
+                def route_request(name: str) -> tuple[StoreMutationRequest, ThreadRef]:
+                    conversation = ConversationRef("channel", name)
+                    thread_ref = ThreadRef(project_ref, name)
+                    route = ThreadProjectionRoute(
+                        route_id=derive_projection_route_id(thread_ref, conversation),
+                        thread_ref=thread_ref,
+                        conversation_ref=conversation,
+                    )
+                    return (
+                        StoreMutationRequest(
+                            _fingerprint(name, "conversation.observe", conversation),
+                            StoreMutationPlan(
+                                conversation_ref=conversation,
+                                route_upsert=route,
+                            ),
+                        ),
+                        thread_ref,
+                    )
+
+                stopped_request, stopped_thread = route_request("stop-before-commit")
+                preflight_entered = asyncio.Event()
+                release_preflight = asyncio.Event()
+
+                async def blocked_preflight():
+                    preflight_entered.set()
+                    await release_preflight.wait()
+
+                stopped_action = asyncio.create_task(
+                    executor.execute_store_mutation(
+                        stopped_request,
+                        preflight=blocked_preflight,
+                        commit_fence=commit_fence,
+                    )
+                )
+                await preflight_entered.wait()
+                async with lifecycle_lock:
+                    lifecycle_available = False
+                release_preflight.set()
+                stopped = await stopped_action
+                self.assertEqual(
+                    stopped,
+                    Failed(ActionError(ActionErrorCode.STALE_RUNTIME)),
+                )
+                self.assertFalse(
+                    any(
+                        route.thread_ref == stopped_thread
+                        for route in await session.list_projection_routes()
+                    )
+                )
+                self.assertIsNone(
+                    await session.get_store_mutation_receipt(stopped_request.fingerprint)
+                )
+
+                lifecycle_available = True
+                restarted = await executor.execute_store_mutation(
+                    stopped_request,
+                    commit_fence=commit_fence,
+                )
+                self.assertIsInstance(restarted, Succeeded)
+                lifecycle_available = False
+
+                async def forbidden_preflight():
+                    raise AssertionError("terminal replay must precede lifecycle preflight")
+
+                terminal_replay = await executor.execute_store_mutation(
+                    stopped_request,
+                    preflight=forbidden_preflight,
+                    commit_fence=commit_fence,
+                )
+                self.assertEqual(terminal_replay, restarted)
+                entries_before_plain_replay = fence_entries
+                plain_terminal_replay = await executor.execute_store_mutation(
+                    stopped_request,
+                    commit_fence=commit_fence,
+                )
+                self.assertEqual(plain_terminal_replay, restarted)
+                self.assertEqual(fence_entries, entries_before_plain_replay)
+
+                lifecycle_available = True
+                committed_request, committed_thread = route_request("commit-before-stop")
+                commit_entered = asyncio.Event()
+                release_commit = asyncio.Event()
+                original_commit = session.commit_store_mutation
+
+                async def blocked_commit(request):
+                    commit_entered.set()
+                    await release_commit.wait()
+                    return await original_commit(request)
+
+                async def stop_lifecycle() -> None:
+                    nonlocal lifecycle_available
+                    async with lifecycle_lock:
+                        lifecycle_available = False
+
+                with patch.object(
+                    session,
+                    "commit_store_mutation",
+                    new=blocked_commit,
+                ):
+                    committed_action = asyncio.create_task(
+                        executor.execute_store_mutation(
+                            committed_request,
+                            commit_fence=commit_fence,
+                        )
+                    )
+                    await commit_entered.wait()
+                    stopping = asyncio.create_task(stop_lifecycle())
+                    await asyncio.sleep(0)
+                    self.assertFalse(stopping.done())
+                    release_commit.set()
+                    committed = await committed_action
+                    await stopping
+
+                self.assertIsInstance(committed, Succeeded)
+                self.assertTrue(
+                    any(
+                        route.thread_ref == committed_thread
+                        for route in await session.list_projection_routes()
+                    )
+                )
+                self.assertFalse(lifecycle_lock.locked())
                 await session.release_runtime()
                 await store.close()
 

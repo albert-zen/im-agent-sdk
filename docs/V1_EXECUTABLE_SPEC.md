@@ -142,8 +142,12 @@ The same run proves:
   post-receipt cancellation/baseline failure cannot open an unreconciled route;
   same-route action generations serialize, stale completion cannot open a newer
   fence, route removal retires blocked delivery before same-ID re-add, and
-  shutdown/worker termination cannot produce false activation success while
-  lifecycle restart replay converges the durable route;
+  shutdown/worker termination cannot produce false activation success; one
+  lifecycle fence gives shutdown or the atomic route commit a deterministic
+  winner after authoritative preflight, and lifecycle restart replay converges
+  any durable route; public Memory and SQLite composition prove the same fence
+  prevents a known foreground Thread workflow from binding/routing after a
+  shutdown winner and resumes it without another native create;
 - duplicate registration and an unfrozen registry fail before Gateway accepts
   input; and
 - with no Controller, Slash-looking text is ordinary Agent input.

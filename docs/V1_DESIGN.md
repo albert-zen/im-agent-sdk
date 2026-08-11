@@ -484,8 +484,13 @@ not exposed through a Controller consumer surface.
 That lease is also scoped to one process-local projection lifecycle generation.
 Shutdown closes route activation before worker cancellation. Reconciliation
 must retain the same generation and a live worker through bounded baseline
-completion; otherwise the existing action outcome is explicit failure before a
-route write or partial after durable success. Restart and terminal replay
+completion. Shutdown and the post-preflight atomic route commit acquire one
+composition-owned lifecycle fence: a shutdown winner produces explicit failure
+with no receipt or route write, while a commit winner completes before shutdown
+and may become partial during activation. A foreground create-and-bind workflow
+enters the same fence after its native result is durably known: a shutdown
+winner preserves that created reference as partial but writes no binding/route,
+and restart resumes without another native call. Restart and terminal replay
 converge the same route without another mutation or dispatch path.
 
 Recoverable output must be reproducible from Application history. Live-only

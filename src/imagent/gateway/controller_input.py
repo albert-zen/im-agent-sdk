@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import datetime
 
 from ..applications.contract import AgentApplicationAdapter, ApplicationSummary
@@ -30,6 +31,8 @@ ProjectionRouteReconciler = Callable[[str | None, object | None], Awaitable[obje
 ProjectionRouteReconciliationValidator = Callable[[object], None]
 ProjectionRouteBootstrapBegin = Callable[[str], Awaitable[object]]
 ProjectionRouteBootstrapComplete = Callable[[object, bool | None], None]
+ProjectionRouteBootstrapAbort = Callable[[object, bool], Awaitable[None]]
+ProjectionRouteCommitFence = Callable[[object], AbstractAsyncContextManager[None]]
 
 
 class _ScopedControllerActionRuntime:
@@ -47,6 +50,8 @@ class _ScopedControllerActionRuntime:
         validate_projection_route: ProjectionRouteReconciliationValidator,
         begin_projection_route: ProjectionRouteBootstrapBegin,
         complete_projection_route: ProjectionRouteBootstrapComplete,
+        abort_projection_route: ProjectionRouteBootstrapAbort,
+        fence_projection_route_commit: ProjectionRouteCommitFence,
     ) -> None:
         self._gateway_id = gateway_id
         self._applications = applications
@@ -57,6 +62,8 @@ class _ScopedControllerActionRuntime:
         self._validate_projection_route = validate_projection_route
         self._begin_projection_route = begin_projection_route
         self._complete_projection_route = complete_projection_route
+        self._abort_projection_route = abort_projection_route
+        self._fence_projection_route_commit = fence_projection_route_commit
 
     def actions(
         self,
@@ -146,6 +153,24 @@ class _ScopedControllerActionRuntime:
         reconciled: bool | None,
     ) -> None:
         self._complete_projection_route(lease, reconciled)
+
+    async def abort_projection_route(
+        self,
+        lease: object,
+        route_absent: bool = False,
+    ) -> None:
+        await self._abort_projection_route(lease, route_absent)
+
+    @asynccontextmanager
+    async def fence_projection_route_commit(
+        self,
+        lease: object,
+    ) -> AsyncIterator[ActionError | None]:
+        try:
+            async with self._fence_projection_route_commit(lease):
+                yield None
+        except ProjectionRuntimeUnavailableError:
+            yield ActionError(ActionErrorCode.STALE_RUNTIME)
 
     async def authorize_request_response(
         self,

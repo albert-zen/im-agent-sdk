@@ -5,6 +5,9 @@ prove:
 
 - exact public `GatewayStore`, `MemoryGatewayStore`, and
   `SQLiteGatewayStore` identities and no public repository bundle;
+- real Controller composition accepts both built-in coherent sessions,
+  including SQLite's delegated focused repository methods, without exposing a
+  session or silently resolving Protocol stubs;
 - one namespace, exclusive acquisition, store-authored expiry, renewal,
   monotonic epochs, release, crash takeover, and stale owner/token/epoch/
   expired-current-lease rejection for every mutation family, plus parity when

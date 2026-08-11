@@ -73,6 +73,14 @@ and after its bounded baseline. Shutdown or worker termination therefore
 surfaces the existing typed `stale_runtime` activation failure instead of false
 success; a pre-write rejection changes no route, while a durable success
 remains fenced and can converge through terminal replay after restart.
+Each pre-fenced action lease also carries that generation into one global,
+process-local route-commit fence. Stop closes the generation under the same
+lock. The lease records whether B entered the commit boundary: cancellation
+before entry retires the exact barrier generation, while cancellation after
+entry conservatively retains it because the atomic store outcome may exist.
+A caller may additionally mark a terminal workflow outcome as proving the
+route absent; only that explicit fact retires a post-entry generation instead
+of retaining an ambiguity fence.
 An authoritative destination decision that is already sticky or becomes
 ambiguous during that action baseline is propagated to the action seam rather
 than swallowed as worker-local isolation; its barrier stays closed and the
@@ -90,6 +98,10 @@ Delivery rechecks the current barrier while holding the route lock, so a waiter
 that observed an older open generation cannot cross a newly closed one. These
 methods never grant store, route-authority, or runtime access to Controller
 consumers, and the opaque lease is not a public consumer surface.
+Shutdown reset may wake same-route action-lock waiters after their process-local
+accounting map is cleared; waiter completion treats that cleared entry as
+retired and lets lifecycle validation return the typed stale result rather than
+raising an internal lookup error.
 
 `message.completed` is a durable completed-item observation, not a Turn
 terminal event. Only explicit `turn.completed`, `turn.failed`, or

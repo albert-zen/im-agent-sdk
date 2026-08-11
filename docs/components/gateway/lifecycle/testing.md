@@ -38,6 +38,12 @@ Tests must prove:
   cannot outlive worker termination as false success, and leaves no task,
   bootstrap barrier, route/action lock, or capacity reservation; restart and
   terminal replay restore the one worker and same durable route;
+- stop during authoritative route preflight wins the shared commit boundary
+  and leaves no route/receipt, whereas stop queued behind an entered Memory or
+  SQLite transaction waits for commit and produces a post-durable partial;
+- stop after a foreground workflow's native result is known but before its
+  binding/route fence writes no route in both built-in stores; restart resumes
+  the same workflow without repeating native creation;
 - `GatewayStartupAdmission`, `GatewayStartupOverflow`, and
   `GatewayNotRunning` have one owner in `imagent.gateway.lifecycle`, while
   importing the removed `imagent.gateway_startup` module fails explicitly.

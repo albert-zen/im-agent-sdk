@@ -583,7 +583,7 @@ components:
     id: gateway.composition
     parent: gateway
     purpose: Assemble one immutable Gateway graph from explicit Applications, Channels, repositories, limits, extensions, and the D coherent-session Controller seam.
-    owns: [GatewayRepositories, GatewayLimits, GatewayExtensions, explicit dependency wiring, exact coherent-session detection, scoped-action executor wiring, projection action-route reconciliation callable wiring]
+    owns: [GatewayRepositories, GatewayLimits, GatewayExtensions, explicit dependency wiring, exact coherent-session detection, scoped-action executor wiring, projection action-route reconciliation and commit-fence callable wiring]
     does_not_own: [service lookup, product policy, native adapter internals]
     inputs: [configured typed dependencies]
     outputs: [ImAgentGateway composition]
@@ -627,7 +627,7 @@ components:
     id: gateway.lifecycle
     parent: gateway
     purpose: Start and stop the assembled graph with bounded FIFO startup admission and complete cleanup.
-    owns: [startup ordering, exact two-argument Channel start invocation, rollback, shutdown ordering, startup admission gate]
+    owns: [startup ordering, exact two-argument Channel start invocation, rollback, shutdown ordering including route-commit fence acquisition, startup admission gate]
     does_not_own: [Channel signature compatibility, native transport supervision internals, durable work queue]
     inputs: [composed Applications and two-argument Channels]
     outputs: [running/stopped Gateway state]
@@ -803,16 +803,16 @@ components:
     id: gateway.projection.observation
     parent: gateway.projection
     purpose: Maintain one bounded Application observation worker per active Thread and isolate bounded subscriber failures.
-    owns: [Thread worker lifecycle, active-Thread capacity, terminal runtime-entry cleanup, live fan-out consumption, bootstrap barrier, public action-route reconciliation seam, private per-route ordered delivery coordination]
+    owns: [Thread worker lifecycle, active-Thread capacity, terminal runtime-entry cleanup, live fan-out consumption, bootstrap barrier, action-route lifecycle commit fence, public action-route reconciliation seam, private per-route ordered delivery coordination]
     does_not_own: [native subscription producer, transcript, second event journal, dispatch native side-effect fence or acceptance-ordering gate/buffer, checkpoint decision/CAS]
-    inputs: [Application Thread subscription, successful or terminally replayed scoped-action route ID, optional opaque coordinator-owned barrier-generation lease for a pre-fenced action]
+    inputs: [Application Thread subscription, successful or terminally replayed scoped-action route ID, optional opaque coordinator-owned barrier-generation lease for a pre-fenced action and its post-preflight commit fence]
     outputs: [ordered normalized events for active routes, current-state worker/route reconciliation or explicit activation failure]
     public_contracts: [ThreadProjectionRuntime, ProjectionWorkerHealth]
     public_exports:
       current: [imagent.gateway.projection:ThreadProjectionRuntime, imagent.gateway.projection:ProjectionWorkerHealth]
       target: [imagent.gateway.projection:ThreadProjectionRuntime, imagent.gateway.projection:ProjectionWorkerHealth]
     dependencies: [interaction.messages, interaction.controllers.request-presentation, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, gateway.input.dispatch, gateway.routing.projection-routes, gateway.projection.checkpoints, gateway.projection.request-correlation, gateway.projection.recovery, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
-    state_recovery: Active-worker capacity, per-Thread runtime entries, lifecycle generation, and opaque generation-specific route-barrier leases are process-local; stop closes action-route activation before cancelling workers, successful reconciliation requires the same generation and a live worker through baseline completion, same-route action lifecycles serialize, removed routes retire blocked generations, an in-flight same-Thread admission retains its identity across task turnover, bounded queue and dispatch-owned acceptance-ordering gaps retain the worker slot while supervised resubscription reconciles authoritatively, and terminal workers release it once no admission lease remains without clearing the dispatch-owned gate.
+    state_recovery: Active-worker capacity, per-Thread runtime entries, lifecycle generation, commit fence, and opaque generation-specific route-barrier leases are process-local; stop and a new route's atomic commit have one fence winner before worker cancellation, successful reconciliation requires the same generation and a live worker through baseline completion, same-route action lifecycles serialize, removed routes retire blocked generations, an in-flight same-Thread admission retains its identity across task turnover, bounded queue and dispatch-owned acceptance-ordering gaps retain the worker slot while supervised resubscription reconciles authoritatively, and terminal workers release it once no admission lease remains without clearing the dispatch-owned gate.
     current_code: [src/imagent/gateway/__init__.py, src/imagent/gateway/projection/observation.py]
     target_code: [src/imagent/gateway/projection/observation.py]
     current_tests: [tests/gateway/projection/test_observation.py, tests/gateway/projection/test_hardening.py, tests/gateway/routing/test_projection_integration.py]
@@ -1067,16 +1067,16 @@ components:
     id: gateway.effect-execution
     parent: gateway
     purpose: Execute store, native, request-response, and create-binding effects through one typed durable seam.
-    owns: [GatewayEffectExecutor, lease-fenced terminal store-mutation replay read, native side-effect state machine, conservative reconciliation, workflow binding coordination]
+    owns: [GatewayEffectExecutor, lease-fenced terminal store-mutation replay read, optional route lifecycle commit-fence consumption for store mutations and foreground workflows, native side-effect state machine, conservative reconciliation, workflow binding coordination]
     does_not_own: [public action surfaces, product commands, authorization, stores, leases, adapter implementations]
-    inputs: [validated effect requests, optional terminal store-mutation replay read, and stable phase callbacks]
+    inputs: [validated effect requests, optional terminal store-mutation replay read, optional action-error-only store commit fence, optional stable-route-ID workflow commit fence, and stable phase callbacks]
     outputs: [closed action outcomes]
-    public_contracts: [GatewayEffectExecutor, NativeEffectInvoker, NativeEffectPreflight, NativeEffectReconciler, StoreEffectPreflight, StoreBackedGatewayEffectExecutor]
+    public_contracts: [GatewayEffectExecutor, NativeEffectInvoker, NativeEffectPreflight, NativeEffectReconciler, StoreEffectCommitFence, StoreEffectPreflight, StoreBackedGatewayEffectExecutor, WorkflowEffectCommitFence]
     public_exports:
-      current: [imagent.gateway.effect_execution:GatewayEffectExecutor, imagent.gateway.effect_execution:NativeEffectInvoker, imagent.gateway.effect_execution:NativeEffectPreflight, imagent.gateway.effect_execution:NativeEffectReconciler, imagent.gateway.effect_execution:StoreEffectPreflight, imagent.gateway.effect_execution:StoreBackedGatewayEffectExecutor]
-      target: [imagent.gateway.effect_execution:GatewayEffectExecutor, imagent.gateway.effect_execution:NativeEffectInvoker, imagent.gateway.effect_execution:NativeEffectPreflight, imagent.gateway.effect_execution:NativeEffectReconciler, imagent.gateway.effect_execution:StoreEffectPreflight, imagent.gateway.effect_execution:StoreBackedGatewayEffectExecutor]
+      current: [imagent.gateway.effect_execution:GatewayEffectExecutor, imagent.gateway.effect_execution:NativeEffectInvoker, imagent.gateway.effect_execution:NativeEffectPreflight, imagent.gateway.effect_execution:NativeEffectReconciler, imagent.gateway.effect_execution:StoreEffectCommitFence, imagent.gateway.effect_execution:StoreEffectPreflight, imagent.gateway.effect_execution:StoreBackedGatewayEffectExecutor, imagent.gateway.effect_execution:WorkflowEffectCommitFence]
+      target: [imagent.gateway.effect_execution:GatewayEffectExecutor, imagent.gateway.effect_execution:NativeEffectInvoker, imagent.gateway.effect_execution:NativeEffectPreflight, imagent.gateway.effect_execution:NativeEffectReconciler, imagent.gateway.effect_execution:StoreEffectCommitFence, imagent.gateway.effect_execution:StoreEffectPreflight, imagent.gateway.effect_execution:StoreBackedGatewayEffectExecutor, imagent.gateway.effect_execution:WorkflowEffectCommitFence]
     dependencies: [applications.application-contract, gateway.outcomes, gateway.routing.projection-routes, gateway.persistence.effects, gateway.persistence.state-contracts, gateway.persistence.gateway-store]
-    state_recovery: Durable phases prevent blind native retry and permit only evidenced reconciliation or binding-phase resume; the read-only terminal store-mutation seam preserves exact replay/conflict before process-local route admission.
+    state_recovery: Durable phases prevent blind native retry and permit only evidenced reconciliation or binding-phase resume; the read-only terminal store-mutation seam preserves exact replay/conflict before process-local route admission, and the optional process-local commit fences surround only B's terminal store or foreground-workflow transaction.
     current_code: [src/imagent/gateway/effect_execution.py]
     target_code: [src/imagent/gateway/effect_execution.py]
     current_tests: [tests/gateway/test_effect_execution.py]
@@ -1243,7 +1243,7 @@ components:
     id: gateway.persistence.gateway-store
     parent: gateway.persistence
     purpose: Expose one coherent public GatewayStore choice with fenced memory and SQLite durability domains and bounded effect receipts.
-    owns: [GatewayStore, MemoryGatewayStore, SQLiteGatewayStore, runtime lease and fence, workspace identity persistence, atomic Gateway and workflow transactions]
+    owns: [GatewayStore, MemoryGatewayStore, SQLiteGatewayStore, complete structural session detection including delegated built-ins, runtime lease and fence, workspace identity persistence, atomic Gateway and workflow transactions]
     does_not_own: [effect value contracts, public action ergonomics, product commands, adapter calls, Agent truth, transcript or content storage, generic orchestration]
     inputs: [stable namespace and owner identity, validated bridge mutations, minimal stable native results]
     outputs: [lease-bound internal session, durable effect receipts, atomic bridge-state outcomes]

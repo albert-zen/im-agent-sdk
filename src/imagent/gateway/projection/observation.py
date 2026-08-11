@@ -7,6 +7,7 @@ import json
 import logging
 import math
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -358,6 +359,7 @@ class ThreadProjectionRuntime:
         self._stopping = False
         self._action_routes_available = True
         self._lifecycle_generation = 0
+        self._action_route_commit_lock = asyncio.Lock()
 
     async def cleanup_stale_correlations(self) -> None:
         now = datetime.now(UTC)
@@ -406,9 +408,10 @@ class ThreadProjectionRuntime:
         )
 
     async def stop(self) -> None:
-        self._action_routes_available = False
-        self._lifecycle_generation += 1
-        self._stopping = True
+        async with self._action_route_commit_lock:
+            self._action_routes_available = False
+            self._lifecycle_generation += 1
+            self._stopping = True
         tasks = tuple(self._tasks.items())
         for _, task in tasks:
             task.cancel()
@@ -448,7 +451,22 @@ class ThreadProjectionRuntime:
         except ProjectionRuntimeUnavailableError:
             await self._routes.abort_action_bootstrap(lease)
             raise
+        lease.lifecycle_generation = lifecycle_generation
         return lease
+
+    @asynccontextmanager
+    async def fence_action_route_commit(self, lease: object) -> AsyncIterator[None]:
+        """Give a new route commit or shutdown exclusive lifecycle ownership."""
+
+        async with self._action_route_commit_lock:
+            if not isinstance(lease, _ActionRouteBootstrapLease):
+                raise TypeError("action route bootstrap lease is invalid")
+            if lease.lifecycle_generation is None:
+                raise RuntimeError("action route bootstrap lease has no lifecycle generation")
+            self._require_action_routes_available(lease.lifecycle_generation)
+            self._routes.validate_action_bootstrap(lease.route_id, lease)
+            lease.commit_entered = True
+            yield
 
     def complete_action_route(
         self,
@@ -458,6 +476,20 @@ class ThreadProjectionRuntime:
         """Complete one exact action holder without releasing another baseline."""
 
         self._routes.complete_action_bootstrap(lease, reconciled=reconciled)
+
+    async def abort_action_route(
+        self,
+        lease: object,
+        route_absent: bool = False,
+    ) -> None:
+        """Retire one pre-commit action generation after caller failure/cancellation."""
+
+        if not isinstance(lease, _ActionRouteBootstrapLease):
+            raise TypeError("action route bootstrap lease is invalid")
+        if lease.commit_entered and not route_absent:
+            self._routes.complete_action_bootstrap(lease, reconciled=False)
+            return
+        await self._routes.abort_action_bootstrap(lease)
 
     async def reconcile_action_route(
         self,
@@ -1255,6 +1287,8 @@ class _ActionRouteBootstrapLease:
     route_id: str
     barrier: asyncio.Event
     action_lock: asyncio.Lock
+    lifecycle_generation: int | None = None
+    commit_entered: bool = False
     completed: bool = False
 
 
@@ -1350,11 +1384,12 @@ class _ProjectionRouteCoordinator:
         try:
             await action_lock.acquire()
         finally:
-            waiters = self._action_lock_waiters[route_id] - 1
-            if waiters == 0:
-                self._action_lock_waiters.pop(route_id, None)
-            else:
-                self._action_lock_waiters[route_id] = waiters
+            waiters = self._action_lock_waiters.get(route_id)
+            if waiters is not None:
+                if waiters == 1:
+                    self._action_lock_waiters.pop(route_id, None)
+                else:
+                    self._action_lock_waiters[route_id] = waiters - 1
             if not action_lock.locked():
                 self._cleanup_action_lock(route_id, action_lock)
         lock = self._locks.setdefault(route_id, asyncio.Lock())

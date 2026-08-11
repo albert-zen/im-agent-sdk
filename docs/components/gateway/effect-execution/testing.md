@@ -22,6 +22,14 @@ The route-preparation replay seam proves an identical terminal value is read
 without mutation before process-local activation, changed payload remains a
 typed conflict, and absence remains `None`; stopped-runtime classification is
 then checked at the scoped-action composition boundary.
+Memory/SQLite parity also pauses on both sides of the optional commit fence:
+shutdown before entry yields typed stale failure with no receipt or route,
+while a transaction already inside completes before shutdown; terminal replay
+bypasses changed preflight/fence state and cancellation leaves no mutation.
+Public Memory/SQLite workflow coverage additionally proves a known native
+Thread result cannot commit its foreground binding/route after shutdown wins;
+restart resumes that exact result, while a transaction that already owns the
+fence completes before shutdown.
 
 The block-C seam is checked structurally: the protocol and requests expose no
 store, session, lease, repository, adapter, credential, `Any` context, product

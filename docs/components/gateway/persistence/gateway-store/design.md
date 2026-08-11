@@ -45,6 +45,12 @@ or affects zero rows; row triggers are an additional defense, not the sole
 fence. The session delegates only the exact focused protocol methods and never
 exposes its connection or private state.
 
+Coherent Gateway composition recognizes the complete structural session
+capability, including SQLite's deliberately delegated focused repository
+methods. Detection validates the lease plus every required callable; it does
+not rely on nominal Protocol inheritance that could shadow delegation with
+stub methods, and it exposes no session capability to Controllers.
+
 `GatewayStoreSession` is the focused internal runtime capability returned by
 lease acquisition. It carries no product actor, adapter, content, or
 authorization policy. Block C consumes only the effect-execution port and

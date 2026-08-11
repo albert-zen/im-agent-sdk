@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol, runtime_checkable
+from typing import Protocol, TypeGuard, runtime_checkable
 
 from ...applications.contract import WorkspaceIdentity
 from ...interaction.messages import ConversationRef
@@ -167,6 +167,61 @@ class GatewayStore(Protocol):
     ) -> GatewayStoreSession: ...
 
     async def close(self) -> None: ...
+
+
+_GATEWAY_STORE_SESSION_METHODS = (
+    "renew",
+    "release_runtime",
+    "check_workspace_identities",
+    "get_binding_generation",
+    "get_store_mutation_receipt",
+    "commit_store_preflight_failure",
+    "commit_store_mutation",
+    "reserve_effect",
+    "get_effect_receipt",
+    "mark_native_side_effect_started",
+    "record_effect_preflight_failure",
+    "record_effect_outcome",
+    "commit_workflow_binding",
+    "close",
+    "get",
+    "put",
+    "delete",
+    "list_projection_routes",
+    "put_projection_route",
+    "replace_thread_projection_routes",
+    "advance_projection_checkpoint",
+    "delete_projection_routes",
+    "get_turn_reply_correlation",
+    "list_turn_reply_correlations",
+    "put_turn_reply_correlation",
+    "delete_turn_reply_correlation",
+    "delete_turn_reply_correlations",
+    "claim",
+    "mark_side_effect_started",
+    "refresh",
+    "complete",
+    "release",
+    "list_request_correlations",
+    "put_request_correlation",
+    "transition_request_correlations",
+    "delete_request_correlations",
+    "get_delivery_submission",
+    "reserve_delivery_submission",
+    "update_delivery_destination",
+)
+
+
+def _is_gateway_store_session(value: object) -> TypeGuard[GatewayStoreSession]:
+    """Recognize structural sessions, including deliberately delegated built-ins."""
+
+    try:
+        lease = getattr(value, "lease")
+    except AttributeError:
+        return False
+    return isinstance(lease, RuntimeLease) and all(
+        callable(getattr(value, name, None)) for name in _GATEWAY_STORE_SESSION_METHODS
+    )
 
 
 def validate_runtime_lease(lease: RuntimeLease) -> None:
