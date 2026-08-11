@@ -9,7 +9,9 @@ from imagent import Gateway, MemoryGatewayStore
 from imagent.applications.capabilities import ProjectMode
 from imagent.contracts import ConversationRef, InboundMessage, TextContent
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway.delivery.coordination import DeliveryCoordinator
 from imagent.gateway.lifecycle import (
+    GatewayLifecycleFailure,
     GatewayNotRunning,
     GatewayStartupAdmission,
     GatewayStartupOverflow,
@@ -91,7 +93,7 @@ class PublicGatewayLifecycleMatrixTests(unittest.IsolatedAsyncioTestCase):
 
         notes = tuple(getattr(raised.exception, "__notes__", ()))
         self.assertTrue(any("run cleanup also failed" in note for note in notes))
-        with self.assertRaisesRegex(RuntimeError, "runtime failure"):
+        with self.assertRaises(GatewayLifecycleFailure):
             await asyncio.wait_for(gateway.wait_closed(), timeout=1.0)
 
     async def test_context_body_failure_stays_primary_when_cleanup_fails(self) -> None:
@@ -110,7 +112,7 @@ class PublicGatewayLifecycleMatrixTests(unittest.IsolatedAsyncioTestCase):
         notes = tuple(getattr(raised.exception, "__notes__", ()))
         self.assertTrue(any("context cleanup also failed" in note for note in notes))
         self.assertIsNone(raised.exception.__context__)
-        with self.assertRaisesRegex(RuntimeError, "runtime failure"):
+        with self.assertRaises(GatewayLifecycleFailure):
             await asyncio.wait_for(gateway.wait_closed(), timeout=1.0)
 
     async def test_concurrent_and_repeated_transitions_are_terminal(self) -> None:
@@ -142,6 +144,41 @@ class PublicGatewayLifecycleMatrixTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(channel.stop_cancelled)
         self.assertEqual(application.stop_count, 1)
 
+    async def test_cancellation_resistant_owner_cannot_extend_cleanup_deadline(self) -> None:
+        channel = _CancellationResistantStopChannel()
+        application = _CountingStopApplication()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            repositories=GatewayRepositories(bindings=InMemoryBindingRepository()),
+            limits=GatewayLimits(lifecycle_owner_timeout_seconds=0.01),
+        )
+        await gateway.start()
+
+        with self.assertRaises(GatewayLifecycleFailure):
+            await asyncio.wait_for(gateway.stop(), timeout=0.1)
+
+        self.assertTrue(channel.stop_cancelled)
+        self.assertEqual(application.stop_count, 1)
+        channel.release_stop.set()
+        await asyncio.sleep(0)
+
+    async def test_partial_delivery_owner_start_is_inside_rollback_boundary(self) -> None:
+        coordinator = _PartiallyStartingCoordinator()
+        gateway = ImAgentGateway(
+            channels=[FakeChannelAdapter("partial-coordinator-channel")],
+            applications=[FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)],
+            repositories=GatewayRepositories(bindings=InMemoryBindingRepository()),
+            delivery_coordinator=coordinator,
+        )
+
+        with self.assertRaises(GatewayLifecycleFailure) as raised:
+            await gateway.start()
+
+        self.assertNotIn("RAW_SECRET_COORDINATOR_START", str(raised.exception))
+        self.assertTrue(coordinator.start_attempted)
+        self.assertTrue(coordinator.closed_after_failure)
+
 
 class _FailingStopChannel(FakeChannelAdapter):
     async def stop(self) -> None:
@@ -160,6 +197,36 @@ class _BlockingStopChannel(FakeChannelAdapter):
         except asyncio.CancelledError:
             self.stop_cancelled = True
             raise
+
+
+class _CancellationResistantStopChannel(FakeChannelAdapter):
+    def __init__(self) -> None:
+        super().__init__("cancellation-resistant-stop-channel")
+        self.stop_cancelled = False
+        self.release_stop = asyncio.Event()
+
+    async def stop(self) -> None:
+        try:
+            await self.release_stop.wait()
+        except asyncio.CancelledError:
+            self.stop_cancelled = True
+            await self.release_stop.wait()
+
+
+class _PartiallyStartingCoordinator(DeliveryCoordinator):
+    def __init__(self) -> None:
+        super().__init__()
+        self.start_attempted = False
+        self.closed_after_failure = False
+
+    def start(self) -> None:
+        super().start()
+        self.start_attempted = True
+        raise RuntimeError("RAW_SECRET_COORDINATOR_START")
+
+    async def close(self) -> None:
+        self.closed_after_failure = True
+        await super().close()
 
 
 class _CountingStopApplication(FakeAgentApplicationAdapter):
@@ -265,8 +332,9 @@ class GatewayStartupAdmissionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(application._inputs, [])
         finally:
             active_channel.release_stop.set()
-        with self.assertRaisesRegex(RuntimeError, "simulated channel startup failure"):
+        with self.assertRaises(GatewayLifecycleFailure) as raised:
             await starting
+        self.assertNotIn("simulated channel startup failure", str(raised.exception))
         self.assertEqual(active_channel.start_attempts, 1)
         self.assertEqual(active_channel.stop_attempts, 1)
         self.assertEqual(failing_channel.start_attempts, 1)

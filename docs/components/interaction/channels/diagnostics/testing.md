@@ -7,7 +7,9 @@ The suite proves:
 - `ChannelDiagnosticFacts` and `ChannelDiagnosticsProvider` are defined only
   by `imagent.interaction.channels.diagnostics`;
 - Channel identity/kind is preserved, connection queue scope rejects
-  Application/Gateway queue names, and the value remains frozen and bounded;
+  Application/Gateway queue names, over-512-character identities and
+  non-exact nested facts fail before serialization, and the value remains
+  frozen and bounded;
 - `imagent.diagnostics` exposes the exact same objects by identity without a
   duplicate class or lazy `__getattr__`;
 - the canonical Channel module imports only Interaction and standard-library

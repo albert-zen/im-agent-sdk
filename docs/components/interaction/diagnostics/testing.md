@@ -7,6 +7,8 @@ The suite proves:
 - the five canonical objects are defined by
   `imagent.interaction.diagnostics` and preserve their exact frozen/slot
   shapes, signatures, fixed vocabularies, bounds, and validation behavior;
+- exact rejection above the 1,000,000 counter/capacity ceiling and of hostile
+  or over-cardinality connection queue shapes before serialization;
 - values remain redacted, bounded, immutable, and free of I/O, callbacks,
   aggregation, or native payloads;
 - `imagent.diagnostics` re-exports the exact moved objects by identity without

@@ -46,6 +46,11 @@ Feishu, and Weixin with disabled, side-effect-free native configuration, and
 for Codex, Zen, and T3 with deterministic native clients. Adapter-owned suites
 then supply the native input/event/history/request/media/diagnostic and
 cancellation evidence that cannot honestly be manufactured by the common kit.
+The H ledger executes the shared four-Channel native behavioral suite and each
+QQ, Telegram, Feishu, and Weixin owner suite, covering admission ordering,
+disabled/unsupported-before-I/O behavior, delivery receipts, media staging,
+cancellation/lifecycle recovery, and diagnostics rather than merely checking
+attributes.
 
 ## Adding an adapter or common assertion
 

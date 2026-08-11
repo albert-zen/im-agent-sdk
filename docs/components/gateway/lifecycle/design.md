@@ -56,9 +56,9 @@ A cleanup failure from any one owner is recorded against the primary failure
 and does not skip later owners. On rollback the startup failure remains primary;
 on normal stop the first cleanup failure is primary and later cleanup failures
 are attached as bounded exception notes. Owner, exception type, and sanitized
-detail use one fixed-size summary for both inner teardown and the public
-wrapper; C0/C1 and Unicode format controls become visible placeholders, and
-cleanup logging emits that summary without an arbitrary traceback. The first
+classification use one fixed-size summary for both inner teardown and the
+public wrapper; free-form exception text is never included, and cleanup logging
+emits that classification without an arbitrary traceback. The first
 cleanup failure itself is projected to a `GatewayLifecycleFailure` carrying a
 bounded public message, bounded original type, and bounded surrogate cause.
 The public object graph and its serialized form retain no raw owner exception;
@@ -106,7 +106,18 @@ Cancellation arriving during exit or `run()` cancellation cannot abandon the
 close transition: the caller observes cancellation only after the one owned
 cleanup task has joined. Each owner cleanup and the outer session/store cleanup
 uses the positive finite `GatewayLimits.lifecycle_owner_timeout_seconds`;
-timeout is one bounded cleanup failure and does not skip later owners.
+timeout is one bounded cleanup failure and does not skip later owners. The
+deadline is a hard supervisory bound: an owner that suppresses cancellation is
+detached with result consumption after its authority-facing callbacks have
+already been fenced, so it cannot block terminal state or later cleanup.
+Malformed acquired-session cleanup uses the same supervisor.
+
+Every error after store acquisition, including session validation, workspace
+identity checks, runtime construction/start, and lease renewal, is projected
+before storage or rethrow. Public causes, contexts, notes, and terminal error
+state retain only bounded owner/type classifications. Delivery coordinator and
+observer startup are inside the common rollback boundary, so a synchronous
+partial start is closed exactly once with the remaining owners.
 
 ## Bounds, state, and recovery
 

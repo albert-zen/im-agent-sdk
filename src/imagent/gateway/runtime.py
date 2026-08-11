@@ -27,8 +27,13 @@ from .composition import GatewayExtensions, GatewayLimits, GatewayRepositories
 from .delivery.coordination import DeliveryCoordinator
 from .delivery.proactive import DeliveryIntent, DeliveryTarget, ProactiveDeliveryResult
 from .delivery.proactive_authorization import DeliveryAuthorizer
-from .diagnostics import DiagnosticsSnapshot, _bounded_cleanup_error_summary
-from .lifecycle import _detach_public_lifecycle_context, _public_lifecycle_error
+from .diagnostics import DiagnosticsSnapshot, _bounded_lifecycle_error_summary
+from .lifecycle import (
+    _bounded_lifecycle_call,
+    _cancel_lifecycle_task,
+    _detach_public_lifecycle_context,
+    _public_lifecycle_error,
+)
 from .persistence.store import (
     GatewayStore,
     GatewayStoreSession,
@@ -138,7 +143,7 @@ class Gateway:
                 raise
             exc.add_note(
                 "Gateway context cleanup also failed: "
-                + _bounded_cleanup_error_summary("Gateway", cleanup_error)
+                + _bounded_lifecycle_error_summary("Gateway", cleanup_error)
             )
 
     async def start(self) -> None:
@@ -154,6 +159,7 @@ class Gateway:
             if startup_task is None:
                 raise RuntimeError("Gateway startup requires an asyncio Task owner")
             self._startup_task = startup_task
+            startup_error: BaseException | None = None
             try:
                 owner_token = uuid4().hex
                 candidate = await self._store.acquire_runtime(
@@ -161,6 +167,7 @@ class Gateway:
                     owner_token=owner_token,
                     lease_duration_seconds=_LEASE_DURATION_SECONDS,
                 )
+                session: GatewayStoreSession | None = None
                 try:
                     session = _validate_acquired_session(
                         candidate,
@@ -169,8 +176,21 @@ class Gateway:
                     )
                     self._validate_stable_composition()
                 except BaseException as validation_error:
-                    await _close_invalid_session_candidate(candidate, validation_error)
-                    raise
+                    public_error = _public_lifecycle_error(
+                        validation_error,
+                        "GatewayStore session validation",
+                    )
+                    public_error = await _close_invalid_session_candidate(
+                        candidate,
+                        public_error,
+                        timeout_seconds=self._limits.lifecycle_owner_timeout_seconds,
+                    )
+                    session_validation_error = _detach_public_lifecycle_context(public_error)
+                else:
+                    session_validation_error = None
+                if session_validation_error is not None:
+                    raise session_validation_error
+                assert session is not None
                 self._session = session
                 self._lease_stop = asyncio.Event()
                 self._lease_task = asyncio.create_task(
@@ -199,14 +219,17 @@ class Gateway:
                 if self._lease_failure is not None:
                     raise self._lease_failure
             except BaseException as error:
-                primary = self._lease_failure or error
-                await self._close_owned_resources(primary, from_lease_task=False)
-                if self._lease_failure is not None and error is not self._lease_failure:
-                    raise RuntimeError("Gateway lease renewal failed during startup") from (
-                        self._lease_failure
-                    )
-                _detach_public_lifecycle_context(error)
-                raise
+                primary = _public_lifecycle_error(
+                    self._lease_failure or error,
+                    "Gateway startup",
+                )
+                closed_error = await self._close_owned_resources(
+                    primary,
+                    from_lease_task=False,
+                )
+                startup_error = _detach_public_lifecycle_context(closed_error or primary)
+            if startup_error is not None:
+                raise startup_error from startup_error.__cause__
             self._started = True
             self._startup_task = None
 
@@ -243,7 +266,7 @@ class Gateway:
             except BaseException as cleanup_error:
                 primary.add_note(
                     "Gateway run cleanup also failed: "
-                    + _bounded_cleanup_error_summary("Gateway", cleanup_error)
+                    + _bounded_lifecycle_error_summary("Gateway", cleanup_error)
                 )
             raise
         else:
@@ -253,7 +276,8 @@ class Gateway:
         """Wait for explicit stop or lease-loss shutdown and surface runtime failure."""
         await self._closed_event.wait()
         if self._terminal_error is not None:
-            raise RuntimeError("Gateway closed after a runtime failure") from self._terminal_error
+            error = _detach_public_lifecycle_context(self._terminal_error)
+            raise error from error.__cause__
 
     def actions(
         self,
@@ -343,9 +367,10 @@ class Gateway:
         except asyncio.CancelledError:
             raise
         except BaseException as error:
-            self._lease_failure = error
+            public_error = _public_lifecycle_error(error, "Gateway lease renewal")
+            self._lease_failure = _detach_public_lifecycle_context(public_error)
             if self._started:
-                await self._close_owned_resources(error, from_lease_task=True)
+                await self._close_owned_resources(self._lease_failure, from_lease_task=True)
                 return
             startup_task = self._startup_task
             if startup_task is not None and not startup_task.done():
@@ -377,29 +402,25 @@ class Gateway:
             lease_task = self._lease_task
             current = asyncio.current_task()
             if lease_task is not None and lease_task is not current:
-                if not lease_task.done():
-                    lease_task.cancel()
-                try:
-                    await lease_task
-                except asyncio.CancelledError:
-                    pass
-                except BaseException as lease_error:
+                lease_error = await _cancel_lifecycle_task(
+                    cast(asyncio.Task[object], lease_task),
+                    timeout_seconds=self._limits.lifecycle_owner_timeout_seconds,
+                )
+                if lease_error is not None:
                     error = _append_cleanup_error(error, "Gateway lease renewal", lease_error)
             session = self._session
             if session is not None:
-                try:
-                    await asyncio.wait_for(
-                        session.close(),
-                        timeout=self._limits.lifecycle_owner_timeout_seconds,
-                    )
-                except BaseException as session_error:
-                    error = _append_cleanup_error(error, "Gateway session", session_error)
-            try:
-                await asyncio.wait_for(
-                    self._store.close(),
-                    timeout=self._limits.lifecycle_owner_timeout_seconds,
+                session_error = await _bounded_lifecycle_call(
+                    session.close,
+                    timeout_seconds=self._limits.lifecycle_owner_timeout_seconds,
                 )
-            except BaseException as store_error:
+                if session_error is not None:
+                    error = _append_cleanup_error(error, "Gateway session", session_error)
+            store_error = await _bounded_lifecycle_call(
+                self._store.close,
+                timeout_seconds=self._limits.lifecycle_owner_timeout_seconds,
+            )
+            if store_error is not None:
                 error = _append_cleanup_error(error, "Gateway store", store_error)
             self._runtime = None
             self._session = None
@@ -439,12 +460,12 @@ def _append_cleanup_error(
     if primary is None:
         primary = _public_lifecycle_error(cleanup_error, owner)
         primary.add_note(
-            f"Gateway cleanup failed: {_bounded_cleanup_error_summary(owner, cleanup_error)}"
+            f"Gateway cleanup failed: {_bounded_lifecycle_error_summary(owner, cleanup_error)}"
         )
         return primary
     primary = _public_lifecycle_error(primary, "Gateway lifecycle")
     primary.add_note(
-        f"Gateway cleanup also failed: {_bounded_cleanup_error_summary(owner, cleanup_error)}"
+        f"Gateway cleanup also failed: {_bounded_lifecycle_error_summary(owner, cleanup_error)}"
     )
     return primary
 
@@ -651,21 +672,26 @@ def _validate_acquired_session(
 async def _close_invalid_session_candidate(
     candidate: object,
     primary: BaseException,
-) -> None:
+    *,
+    timeout_seconds: float,
+) -> BaseException:
     close = getattr(candidate, "close", None)
     if not callable(close):
         primary.add_note("Malformed GatewayStoreSession exposed no callable close()")
-        return
-    try:
-        await cast(Callable[[], Awaitable[None]], close)()
-    except BaseException as cleanup_error:
+        return primary
+    cleanup_error = await _bounded_lifecycle_call(
+        cast(Callable[[], Awaitable[None]], close),
+        timeout_seconds=timeout_seconds,
+    )
+    if cleanup_error is not None:
         primary.add_note(
             "Gateway cleanup also failed: "
-            + _bounded_cleanup_error_summary(
+            + _bounded_lifecycle_error_summary(
                 "Malformed GatewayStoreSession",
                 cleanup_error,
             )
         )
+    return primary
 
 
 __all__ = ["Gateway"]

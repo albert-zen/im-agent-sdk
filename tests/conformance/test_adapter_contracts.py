@@ -115,6 +115,29 @@ class ChannelAdapterContractKitTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(facts.kind, adapter.kind)
 
 
+class ShippedChannelBehavioralLedgerTests(unittest.TestCase):
+    def test_shipped_channel_owner_suites_are_executable_conformance_evidence(self) -> None:
+        suites = (
+            "tests.interaction.channels.adapters.test_native_channels",
+            "tests.interaction.channels.adapters.test_qq",
+            "tests.interaction.channels.adapters.test_telegram",
+            "tests.interaction.channels.adapters.test_feishu",
+            "tests.interaction.channels.adapters.test_weixin",
+        )
+        completed = subprocess.run(
+            [sys.executable, "-m", "unittest", *suites],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(
+            completed.returncode,
+            0,
+            f"shipped Channel behavioral ledger failed:\n{completed.stdout}\n{completed.stderr}",
+        )
+        self.assertIn("Ran 51 tests", completed.stderr)
+
+
 class AgentApplicationContractKitTests(unittest.IsolatedAsyncioTestCase):
     async def test_fake_application_passes_all_project_modes(self) -> None:
         for mode in ProjectMode:

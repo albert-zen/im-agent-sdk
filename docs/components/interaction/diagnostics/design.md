@@ -17,10 +17,11 @@ The owner defines exactly:
 These values describe bounded process-local observations only. They contain
 no Thread, Conversation, request, route, native message, content, exception
 text, credential, endpoint, path, or attachment identity. They are frozen,
-slotted values with the existing fixed vocabularies, bounds, and validation
-messages. This issue changes physical ownership and import paths only; it does
-not change signatures, positional construction, validation behavior, schema
-versioning, aggregation, or recovery semantics.
+slotted values with fixed vocabularies and exact bounds. Queue capacity/depth,
+queue overflow, connection epoch, and reconnect count never exceed 1,000,000;
+connection queue tuples contain at most the three fixed scopes and exact typed
+facts. Constructor validation rejects over-bound values before serialization.
+This adds no aggregation, recovery semantics, or authority.
 
 ## Dependency direction
 

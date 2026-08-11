@@ -62,6 +62,14 @@ saturates every cumulative counter at 1,000,000. A raising record, invalid
 counter, oversized state/gap string, or hostile iterable fails closed to fixed
 degraded/`other` facts or the empty aggregate; provider data never widens the
 snapshot.
+Application and Channel registry reads use the same 4,096-entry bound. Identity,
+provider, nested-property, iterator, reconstruction, and sorting boundaries
+catch hostile `BaseException` values and either emit a fixed empty fact for a
+known safe registry identity or omit the unreadable entry. Every public queue,
+connection, hook, presentation, artifact, and projection counter is limited to
+1,000,000; configured diagnostic identities are limited to 512 characters.
+Typed provider facts are reconstructed into exact immutable contract objects
+before they enter a snapshot.
 
 `DiagnosticsSnapshot` remains schema version 8 and non-authoritative.
 `generated_at` is observation time only. Repeated reads do not mutate counters,

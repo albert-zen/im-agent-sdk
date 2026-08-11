@@ -15,6 +15,9 @@ Required Gateway coverage:
   exception text, or consumer-controlled strings in serialized facts;
 - hostile, raising, infinite, and over-bound projection providers with the
   exact 4,096-record and 1,000,000-counter saturation bounds;
+- hostile `BaseException` identity, provider, nested-property, iterator, and
+  sorting boundaries for Application/Channel registries, plus exact 512-character
+  identity and 1,000,000-counter rejection across every public fact family;
 - startup admission and I1/I2/O1/O2 facts with fixed failure vocabularies,
   bounded counters, cancellation-overrun/capacity relationships, and absent
   optional providers remaining absent;

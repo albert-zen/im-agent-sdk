@@ -397,15 +397,17 @@ The canonical `Gateway` now has one serialized terminal lifecycle for explicit
 start/stop, async context, `wait_closed()`, and async `run()`. Caller/exit
 cancellation joins the same close task; body failures remain primary; every
 runtime owner uses one configured finite cleanup timeout and later owners still
-run after failure. Fresh reconstruction, lease loss, startup overflow, late
+run after failure, even when a hostile owner suppresses cancellation. Every
+post-acquisition failure is projected without a raw exception graph, and all
+partial owner starts are inside rollback. Fresh reconstruction, lease loss, startup overflow, late
 callbacks, and concurrent transition races retain the D/F lifecycle and store
 fences.
 
 Diagnostics now bound direct projection aggregation to 4,096 records and
 saturate counters at 1,000,000 while hostile records/iterables collapse to
 fixed redacted facts. The reusable conformance ledger names all four shipped
-Channels and all three concrete Application adapters, with native-specific
-evidence remaining in their owner suites. The one finite lazy facade,
+Channels and all three concrete Application adapters; the Channel ledger also
+executes the shared behavioral suite plus every native owner suite. The one finite lazy facade,
 `__version__`, `py.typed`, wheel metadata/entry point, and exact public
 identities are exercised in clean processes. All six isolated install profiles
 run the same installed golden executable from a temporary CWD. Production

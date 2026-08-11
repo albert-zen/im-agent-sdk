@@ -38,6 +38,7 @@ from imagent.contracts import (
 )
 from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
 from imagent.gateway.input.dispatch import TurnAcceptanceBufferOverflow
+from imagent.gateway.lifecycle import GatewayLifecycleFailure
 from imagent.gateway.persistence import (
     ConversationBinding,
     InMemoryIdempotencyRepository,
@@ -2487,8 +2488,9 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             raise RuntimeError("reconciliation failed")
 
         gateway._projection_runtime.reconcile_pending_requests = fail_reconciliation
-        with self.assertRaisesRegex(RuntimeError, "reconciliation failed"):
+        with self.assertRaises(GatewayLifecycleFailure) as raised:
             await gateway.start()
+        self.assertNotIn("reconciliation failed", str(raised.exception))
         if channel.delivery_task is not None:
             await channel.delivery_task
 
@@ -2536,8 +2538,9 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         await channel.emit_message(_inbound(conversation, "rollback-message"))
         idempotency.finish_release.set()
 
-        with self.assertRaisesRegex(RuntimeError, "reconciliation failed"):
+        with self.assertRaises(GatewayLifecycleFailure) as raised:
             await start_task
+        self.assertNotIn("reconciliation failed", str(raised.exception))
 
     async def test_buffered_inbound_is_refenced_after_startup_wait(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -2578,8 +2581,9 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             )
             finish_reconciliation.set()
             try:
-                with self.assertRaisesRegex(RuntimeError, "not owned"):
+                with self.assertRaises(GatewayLifecycleFailure) as raised:
                     await start_task
+                self.assertNotIn("not owned", str(raised.exception))
                 self.assertEqual(channel.sent, [])
             finally:
                 if not start_task.done():

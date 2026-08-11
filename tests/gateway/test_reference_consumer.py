@@ -232,6 +232,34 @@ class _FailingRenewSession:
         raise RuntimeError("simulated lease renewal loss")
 
 
+class _WorkspaceIdentityFailureSession:
+    def __init__(self, delegate: GatewayStoreSession) -> None:
+        self._delegate = delegate
+
+    def __getattr__(self, name: str):
+        return getattr(self._delegate, name)
+
+    async def check_workspace_identities(self, identities) -> None:
+        del identities
+        raise RuntimeError("RAW_SECRET_AFTER_ACQUISITION")
+
+
+class _WorkspaceIdentityFailureStore(_CountingMemoryGatewayStore):
+    async def acquire_runtime(
+        self,
+        *,
+        gateway_id: str,
+        owner_token: str,
+        lease_duration_seconds: float,
+    ) -> Any:
+        session = await super().acquire_runtime(
+            gateway_id=gateway_id,
+            owner_token=owner_token,
+            lease_duration_seconds=lease_duration_seconds,
+        )
+        return cast(GatewayStoreSession, _WorkspaceIdentityFailureSession(session))
+
+
 class _FailingRenewMemoryGatewayStore:
     def __init__(self) -> None:
         self._delegate = _CountingMemoryGatewayStore()
@@ -323,6 +351,27 @@ class _MalformedSessionStore:
 
     async def close(self) -> None:
         self.close_count += 1
+
+
+class _CancellationResistantMalformedSession(_MalformedSession):
+    def __init__(self) -> None:
+        super().__init__()
+        self.cancelled = False
+        self.release = asyncio.Event()
+
+    async def close(self) -> None:
+        self.close_count += 1
+        try:
+            await self.release.wait()
+        except asyncio.CancelledError:
+            self.cancelled = True
+            await self.release.wait()
+
+
+class _CancellationResistantMalformedSessionStore(_MalformedSessionStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.session = _CancellationResistantMalformedSession()
 
 
 class _ProtocolStubSession(GatewayStoreSession):
@@ -1974,13 +2023,50 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
             "imagent.gateway.runtime.ImAgentGateway",
             side_effect=RuntimeError("simulated runtime construction failure"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "construction failure"):
+            with self.assertRaises(GatewayLifecycleFailure) as raised:
                 await gateway.start()
+        self.assertNotIn("construction failure", str(raised.exception))
+        evidence = repr(
+            (
+                raised.exception,
+                vars(raised.exception),
+                raised.exception.__cause__,
+                raised.exception.__context__,
+                gateway._terminal_error,
+            )
+        )
+        self.assertNotIn("simulated runtime construction failure", evidence)
+        self.assertIsNone(raised.exception.__context__)
         self.assertFalse(gateway.running)
         self.assertEqual(store.acquire_count, 1)
         self.assertEqual(store.close_count, 1)
         with self.assertRaisesRegex(RuntimeError, "cannot restart"):
             await gateway.start()
+
+    async def test_post_acquisition_workspace_failure_has_no_raw_exception_graph(self) -> None:
+        store = _WorkspaceIdentityFailureStore()
+        gateway = Gateway(
+            gateway_id="reference-workspace-failure",
+            channels=[ReferenceChannel()],
+            applications=[ReferenceApplication()],
+            store=store,
+        )
+
+        with self.assertRaises(GatewayLifecycleFailure) as raised:
+            await gateway.start()
+
+        evidence = repr(
+            (
+                raised.exception,
+                vars(raised.exception),
+                raised.exception.__cause__,
+                raised.exception.__context__,
+                gateway._terminal_error,
+            )
+        )
+        self.assertNotIn("RAW_SECRET_AFTER_ACQUISITION", evidence)
+        self.assertIsNone(raised.exception.__context__)
+        self.assertEqual(store.close_count, 1)
 
     async def test_partial_start_cleanup_continues_after_channel_stop_failure(self) -> None:
         first = _CleanupFailingChannel(
@@ -2001,10 +2087,9 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
             store=store,
         )
 
-        with self.assertRaisesRegex(
-            RuntimeError, "reference-cleanup-second start failed"
-        ) as caught:
+        with self.assertRaises(GatewayLifecycleFailure) as caught:
             await gateway.start()
+        self.assertNotIn("start failed", str(caught.exception))
 
         self.assertTrue(first.started)
         self.assertTrue(second.started)
@@ -2037,11 +2122,9 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
             store=store,
         )
 
-        with self.assertRaisesRegex(
-            RuntimeError,
-            "reference-application-second start failed",
-        ) as caught:
+        with self.assertRaises(GatewayLifecycleFailure) as caught:
             await gateway.start()
+        self.assertNotIn("start failed", str(caught.exception))
 
         self.assertFalse(first.started)
         self.assertFalse(second.started)
@@ -2049,7 +2132,10 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(second.stop_count, 1)
         self.assertEqual(store.close_count, 1)
         self.assertTrue(
-            any("application stop failed" in note for note in caught.exception.__notes__)
+            any(
+                "Application 'reference-application-second'" in note
+                for note in caught.exception.__notes__
+            )
         )
 
     async def test_normal_stop_continues_after_channel_controller_and_application_failures(
@@ -2078,8 +2164,9 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         )
         await gateway.start()
 
-        with self.assertRaisesRegex(RuntimeError, "reference-normal-cleanup stop failed") as caught:
+        with self.assertRaises(GatewayLifecycleFailure) as caught:
             await gateway.stop()
+        self.assertNotIn("stop failed", str(caught.exception))
 
         self.assertFalse(gateway.running)
         self.assertFalse(channel.started)
@@ -2108,10 +2195,7 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         await gateway.start()
 
         with self.assertLogs("imagent.gateway", level="ERROR") as logged:
-            with self.assertRaisesRegex(
-                RuntimeError,
-                "reference-bounded-cleanup stop failed",
-            ) as caught:
+            with self.assertRaises(GatewayLifecycleFailure) as caught:
                 await gateway.stop()
 
         self.assertFalse(channel.started)
@@ -2126,7 +2210,7 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("x" * 193, evidence)
         self.assertNotIn("\x1b", evidence)
         self.assertNotIn("\u202e", evidence)
-        self.assertIn("secret?[2J?line?", evidence)
+        self.assertNotIn("secret", evidence)
 
     async def test_inner_gateway_projects_first_cleanup_failure(self) -> None:
         channel = _CleanupFailingChannel(
@@ -2533,8 +2617,9 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
             applications=[ReferenceApplication()],
             store=cast(Any, store),
         )
-        with self.assertRaisesRegex(TypeError, "GatewayStoreSession"):
+        with self.assertRaises(GatewayLifecycleFailure) as raised:
             await gateway.start()
+        self.assertEqual(raised.exception.original_type, "TypeError")
         self.assertEqual(store.acquire_count, 1)
         self.assertEqual(store.session.close_count, 1)
         self.assertEqual(store.close_count, 1)
@@ -2549,8 +2634,9 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch("imagent.gateway.runtime.ImAgentGateway") as runtime_factory:
-            with self.assertRaisesRegex(TypeError, "GatewayStoreSession"):
+            with self.assertRaises(GatewayLifecycleFailure) as raised:
                 await gateway.start()
+        self.assertEqual(raised.exception.original_type, "TypeError")
 
         runtime_factory.assert_not_called()
         self.assertEqual(store.acquire_count, 1)
@@ -2558,6 +2644,25 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         assert store.session is not None
         self.assertEqual(store.session.close_count, 1)
         self.assertEqual(store.close_count, 1)
+
+    async def test_malformed_session_cleanup_has_a_hard_deadline(self) -> None:
+        store = _CancellationResistantMalformedSessionStore()
+        gateway = Gateway(
+            gateway_id="reference-resistant-malformed-session",
+            channels=[ReferenceChannel()],
+            applications=[ReferenceApplication()],
+            store=cast(Any, store),
+            limits=GatewayLimits(lifecycle_owner_timeout_seconds=0.01),
+        )
+
+        with self.assertRaises(GatewayLifecycleFailure):
+            await asyncio.wait_for(gateway.start(), timeout=0.1)
+
+        self.assertTrue(store.session.cancelled)
+        self.assertEqual(store.session.close_count, 1)
+        self.assertEqual(store.close_count, 1)
+        store.session.release.set()
+        await asyncio.sleep(0)
 
     async def test_valid_summary_capability_drift_fails_before_runtime_memory_and_sqlite(
         self,
@@ -2580,8 +2685,9 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
                     )
 
                     with patch("imagent.gateway.runtime.ImAgentGateway") as runtime_factory:
-                        with self.assertRaisesRegex(ValueError, "composition changed"):
+                        with self.assertRaises(GatewayLifecycleFailure) as raised:
                             await gateway.start()
+                    self.assertEqual(raised.exception.original_type, "ValueError")
 
                     runtime_factory.assert_not_called()
                     self.assertEqual(store.acquire_count, 1)
@@ -2593,7 +2699,7 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
             ({"owner_token": "another-owner"}, "owner token"),
             ({"epoch": cast(Any, 1.5)}, "positive integer"),
         )
-        for index, (changed_fields, message) in enumerate(cases):
+        for index, (changed_fields, _message) in enumerate(cases):
             with self.subTest(changed_fields=changed_fields):
                 store = _ChangedLeaseStore(changed_fields)
                 gateway = Gateway(
@@ -2606,8 +2712,12 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
                     ],
                     store=store,
                 )
-                with self.assertRaisesRegex(ValueError, message):
+                with self.assertRaises(GatewayLifecycleFailure) as raised:
                     await gateway.start()
+                self.assertEqual(
+                    raised.exception.original_type,
+                    "ValueError" if index < 2 else "ContractViolation",
+                )
                 self.assertEqual(store.acquire_count, 1)
                 self.assertIsNotNone(store.session)
                 assert store.session is not None
@@ -2694,8 +2804,20 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
             await gateway.start()
             store.allow_renew_failure()
             await asyncio.wait_for(store.renew_failed.wait(), timeout=1.0)
-            with self.assertRaisesRegex(RuntimeError, "runtime failure"):
+            with self.assertRaises(GatewayLifecycleFailure) as raised:
                 await asyncio.wait_for(gateway.wait_closed(), timeout=1.0)
+            self.assertNotIn("simulated lease renewal loss", str(raised.exception))
+            evidence = repr(
+                (
+                    raised.exception,
+                    vars(raised.exception),
+                    raised.exception.__cause__,
+                    raised.exception.__context__,
+                    gateway._terminal_error,
+                )
+            )
+            self.assertNotIn("simulated lease renewal loss", evidence)
+            self.assertIsNone(raised.exception.__context__)
 
         self.assertFalse(gateway.running)
         self.assertFalse(channel.started)
@@ -2718,7 +2840,7 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
             store.allow_renew_failure()
             await asyncio.wait_for(store.renew_failed.wait(), timeout=1.0)
             explicit_stop = asyncio.create_task(gateway.stop())
-            with self.assertRaisesRegex(RuntimeError, "runtime failure"):
+            with self.assertRaises(GatewayLifecycleFailure):
                 await asyncio.wait_for(gateway.wait_closed(), timeout=1.0)
             await asyncio.wait_for(explicit_stop, timeout=1.0)
 
@@ -2742,9 +2864,9 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
             startup = asyncio.create_task(gateway.start())
             await asyncio.wait_for(channel.start_blocked.wait(), timeout=1.0)
             await asyncio.wait_for(store.renew_failed.wait(), timeout=1.0)
-            with self.assertRaisesRegex(RuntimeError, "renewal failed during startup"):
+            with self.assertRaises(GatewayLifecycleFailure):
                 await asyncio.wait_for(startup, timeout=1.0)
-            with self.assertRaisesRegex(RuntimeError, "runtime failure"):
+            with self.assertRaises(GatewayLifecycleFailure):
                 await asyncio.wait_for(gateway.wait_closed(), timeout=1.0)
 
         self.assertFalse(gateway.running)

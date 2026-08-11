@@ -11,6 +11,9 @@ __all__ = [
     "ConnectionDiagnosticFacts",
 ]
 
+_DIAGNOSTIC_COUNTER_MAX = 1_000_000
+_DIAGNOSTIC_ID_MAX_CHARS = 512
+
 
 class ConnectionDiagnosticState(StrEnum):
     """Stable, transport-neutral connection lifecycle states."""
@@ -57,11 +60,11 @@ class QueueDiagnosticFacts:
             for item in (self.capacity, self.depth, self.overflow_count)
         ):
             raise TypeError("diagnostic queue counts must be integers")
-        if self.capacity < 1:
+        if self.capacity < 1 or self.capacity > _DIAGNOSTIC_COUNTER_MAX:
             raise ValueError("diagnostic queue capacity must be positive")
         if not 0 <= self.depth <= self.capacity:
             raise ValueError("diagnostic queue depth must be within capacity")
-        if self.overflow_count < 0:
+        if not 0 <= self.overflow_count <= _DIAGNOSTIC_COUNTER_MAX:
             raise ValueError("diagnostic queue overflow count must not be negative")
 
 
@@ -88,13 +91,21 @@ class ConnectionDiagnosticFacts:
             not isinstance(self.connection_epoch, int)
             or isinstance(self.connection_epoch, bool)
             or self.connection_epoch < 0
+            or self.connection_epoch > _DIAGNOSTIC_COUNTER_MAX
             or not isinstance(self.reconnect_count, int)
             or isinstance(self.reconnect_count, bool)
             or self.reconnect_count < 0
+            or self.reconnect_count > _DIAGNOSTIC_COUNTER_MAX
             or not isinstance(self.worker_running, bool)
             or not isinstance(self.worker_degraded, bool)
         ):
             raise TypeError("invalid diagnostic connection fact types")
+        if (
+            type(self.queues) is not tuple
+            or len(self.queues) > 3
+            or any(type(queue) is not QueueDiagnosticFacts for queue in self.queues)
+        ):
+            raise TypeError("diagnostic connection queues exceed the fixed bound")
         names = tuple(queue.name for queue in self.queues)
         if len(names) != len(set(names)):
             raise ValueError("diagnostic connection queue names must be unique")

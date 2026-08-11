@@ -16,8 +16,9 @@ presentation suites continue to prove the unchanged runtime behavior:
 - App Server mutable diagnostic state remains
   `imagent.applications.adapters.appserver.diagnostics.AppServerDiagnosticState`;
 - Codex, Zen, and T3 use the canonical Application diagnostic contracts;
-- live-presentation and artifact-materialization failure/fact bounds,
-  redaction, cancellation, capacity, and absence semantics remain unchanged;
+- live-presentation and artifact-materialization failure/fact redaction,
+  cancellation, capacity, absence, exact 512-character identity bounds, and
+  exact 1,000,000 counter ceilings;
   and
 - the transition facade contains no duplicate moved definitions or lazy
   resolver.

@@ -35,7 +35,10 @@ canonical values directly; Gateway may consume them through its aggregation
 path.
 
 The fixed failure vocabularies and dataclass constructor/validation behavior
-are part of the public contract. Absence remains meaningful: an adapter with
+are part of the public contract. Identity/kind are non-empty strings of at
+most 512 characters; every A1 presentation/artifact and shared connection
+counter is capped at 1,000,000, and nested facts require exact immutable public
+types. Absence remains meaningful: an adapter with
 no configured presenter or materializer returns `None` for that nested fact
 instead of fabricating configured capability.
 
@@ -51,8 +54,8 @@ Applications internals continue to import this canonical owner directly.
 The values are snapshots of process-lifetime counters. Application adapters
 retain mutable runtime state in their concrete adapter/runtime owners and
 publish a fresh immutable value on read. Presentation and materialization
-failure categories, bounds, cancellation-overrun counts, redaction, and
-absence semantics remain unchanged by this ownership move. Native history,
+failure categories, exact counter ceilings, cancellation-overrun counts,
+redaction, and absence semantics remain fixed. Native history,
 recovery, checkpoints, artifact trust, and cleanup remain outside this leaf.
 
 ## Authority

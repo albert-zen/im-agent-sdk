@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Protocol
+from typing import Protocol, TypeVar
 from unicodedata import category
 
 from ..applications.diagnostics import ApplicationDiagnosticFacts
 from ..interaction.channels.diagnostics import ChannelDiagnosticFacts
 from ..interaction.diagnostics import (
+    _DIAGNOSTIC_COUNTER_MAX,
+    _DIAGNOSTIC_ID_MAX_CHARS,
     ConnectionDiagnosticFacts,
     ConnectionDiagnosticState,
     DiagnosticFailureCode,
@@ -39,8 +41,8 @@ _CLEANUP_OWNER_MAX_CHARS = 96
 _CLEANUP_TYPE_MAX_CHARS = 64
 _CLEANUP_DETAIL_MAX_CHARS = 192
 _CLEANUP_SUMMARY_MAX_CHARS = 384
-_DIAGNOSTIC_COUNTER_MAX = 1_000_000
 _PROJECTION_DIAGNOSTIC_MAX_RECORDS = 4_096
+_DiagnosticItem = TypeVar("_DiagnosticItem")
 
 
 def _bounded_cleanup_error_summary(owner: str, error: BaseException) -> str:
@@ -54,6 +56,14 @@ def _bounded_cleanup_error_summary(owner: str, error: BaseException) -> str:
         detail = "<unprintable>"
     detail_summary = _bounded_cleanup_text(detail, _CLEANUP_DETAIL_MAX_CHARS)
     return f"{owner_summary}: {error_type}: {detail_summary}"[:_CLEANUP_SUMMARY_MAX_CHARS]
+
+
+def _bounded_lifecycle_error_summary(owner: str, error: BaseException) -> str:
+    """Return only a bounded owner/type lifecycle classification."""
+
+    owner_summary = _bounded_cleanup_text(owner, _CLEANUP_OWNER_MAX_CHARS)
+    error_type = _bounded_cleanup_text(type(error).__name__, _CLEANUP_TYPE_MAX_CHARS)
+    return f"{owner_summary}: {error_type}"[:_CLEANUP_SUMMARY_MAX_CHARS]
 
 
 def _bounded_cleanup_text(value: str, max_chars: int) -> str:
@@ -189,7 +199,10 @@ class InboundContentTransformerDiagnosticFacts:
             self.capacity_rejection_count,
         )
         if any(
-            not isinstance(count, int) or isinstance(count, bool) or count < 0 for count in counts
+            not isinstance(count, int)
+            or isinstance(count, bool)
+            or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX
+            for count in counts
         ):
             raise TypeError("inbound transformer diagnostic counts must be non-negative integers")
         if self.success_count + self.failure_count > self.invocation_count:
@@ -231,7 +244,10 @@ class InboundFailurePresenterDiagnosticFacts:
             self.capacity_rejection_count,
         )
         if any(
-            not isinstance(count, int) or isinstance(count, bool) or count < 0 for count in counts
+            not isinstance(count, int)
+            or isinstance(count, bool)
+            or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX
+            for count in counts
         ):
             raise TypeError("inbound presenter diagnostic counts must be non-negative integers")
         if self.success_count + self.failure_count > self.invocation_count:
@@ -275,7 +291,10 @@ class OutboundPresentationDiagnosticFacts:
             self.capacity_rejection_count,
         )
         if any(
-            not isinstance(count, int) or isinstance(count, bool) or count < 0 for count in counts
+            not isinstance(count, int)
+            or isinstance(count, bool)
+            or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX
+            for count in counts
         ):
             raise TypeError("outbound presentation diagnostic counts must be non-negative integers")
         if (
@@ -320,7 +339,10 @@ class DeliveryOutcomeObserverDiagnosticFacts:
             self.capacity_rejection_count,
         )
         if any(
-            not isinstance(count, int) or isinstance(count, bool) or count < 0 for count in counts
+            not isinstance(count, int)
+            or isinstance(count, bool)
+            or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX
+            for count in counts
         ):
             raise TypeError("delivery outcome diagnostic counts must be non-negative integers")
         if self.success_count + self.failure_count > self.notification_count:
@@ -350,6 +372,24 @@ class GatewayDiagnosticFacts:
     outbound_presentation: OutboundPresentationDiagnosticFacts | None = None
     delivery_outcome_observer: DeliveryOutcomeObserverDiagnosticFacts | None = None
 
+    def __post_init__(self) -> None:
+        optional_facts = (
+            (self.inbound_content_transformer, InboundContentTransformerDiagnosticFacts),
+            (self.inbound_failure_presenter, InboundFailurePresenterDiagnosticFacts),
+            (self.outbound_presentation, OutboundPresentationDiagnosticFacts),
+            (self.delivery_outcome_observer, DeliveryOutcomeObserverDiagnosticFacts),
+        )
+        if (
+            type(self.accepting_inbound) is not bool
+            or type(self.starting) is not bool
+            or type(self.startup_queue) is not QueueDiagnosticFacts
+            or any(
+                value is not None and type(value) is not expected
+                for value, expected in optional_facts
+            )
+        ):
+            raise TypeError("Gateway diagnostics must use the exact bounded fact shapes")
+
 
 @dataclass(frozen=True, slots=True)
 class DiagnosticsSnapshot:
@@ -362,6 +402,22 @@ class DiagnosticsSnapshot:
     schema_version: int = 8
     authoritative: bool = False
     channels: tuple[ChannelDiagnosticFacts, ...] = ()
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.applications) is not tuple
+            or len(self.applications) > _PROJECTION_DIAGNOSTIC_MAX_RECORDS
+            or any(type(facts) is not ApplicationDiagnosticFacts for facts in self.applications)
+            or type(self.channels) is not tuple
+            or len(self.channels) > _PROJECTION_DIAGNOSTIC_MAX_RECORDS
+            or any(type(facts) is not ChannelDiagnosticFacts for facts in self.channels)
+            or type(self.projections) is not ProjectionDiagnosticFacts
+            or type(self.gateway) is not GatewayDiagnosticFacts
+            or type(self.generated_at) is not datetime
+        ):
+            raise ValueError("diagnostics snapshot exceeds the fixed fact bounds")
+        if self.schema_version != 8 or self.authoritative is not False:
+            raise ValueError("diagnostics snapshot metadata is fixed and non-authoritative")
 
 
 class _ProjectionHealth(Protocol):
@@ -440,7 +496,7 @@ def summarize_projection_health(
                 materialized.append(next(iterator))
             except StopIteration:
                 break
-    except Exception:
+    except BaseException:
         # A hostile provider cannot widen diagnostics or leak its failure.
         materialized = []
     state_counts = {"running": 0, "retrying": 0, "stopped": 0}
@@ -454,15 +510,18 @@ def summarize_projection_health(
     for record in materialized:
         try:
             raw_state = record.state
-            state = raw_state if isinstance(raw_state, str) and len(raw_state) <= 16 else "stopped"
+            state_value = raw_state.value if isinstance(raw_state, StrEnum) else raw_state
+            state = (
+                state_value if type(state_value) is str and len(state_value) <= 16 else "stopped"
+            )
             last_subscription_error = record.last_subscription_error
             last_recovery_error = record.last_recovery_error
             last_delivery_error = record.last_delivery_error
-            interactive_degraded = bool(record.interactive_request_recovery_degraded)
+            interactive_degraded = record.interactive_request_recovery_degraded is True
             raw_gaps = tuple(
                 gap
                 for gap in (record.last_gap, record.last_event_gap)
-                if isinstance(gap, str) and len(gap) <= 128
+                if type(gap) is str and len(gap) <= 128
             )
             restart_count = _saturating_add(restart_count, record.restart_count)
             delivery_failure_count = _saturating_add(
@@ -471,7 +530,7 @@ def summarize_projection_health(
             event_overflow_count = _saturating_add(
                 event_overflow_count, record.event_overflow_count
             )
-        except Exception:
+        except BaseException:
             state = "stopped"
             last_subscription_error = True
             last_recovery_error = None
@@ -513,27 +572,35 @@ def collect_application_diagnostics(
     """Read optional providers while preserving configured registry identity."""
 
     collected: list[ApplicationDiagnosticFacts] = []
-    for application in applications:
+    for application in _bounded_diagnostic_items(applications):
+        try:
+            summary = application.summary
+            application_instance_id = _bounded_diagnostic_identity(
+                summary.ref.application_instance_id
+            )
+            kind = _bounded_diagnostic_identity(summary.kind)
+        except BaseException:
+            continue
         try:
             provider = getattr(application, "diagnostic_facts", None)
             facts = provider() if callable(provider) else None
-        except Exception:
-            facts = None
-        summary = application.summary
+            normalized = _coerce_application_facts(facts)
+        except BaseException:
+            normalized = None
         if (
-            isinstance(facts, ApplicationDiagnosticFacts)
-            and facts.application_instance_id == summary.ref.application_instance_id
-            and facts.kind == summary.kind
+            normalized is None
+            or normalized.application_instance_id != application_instance_id
+            or normalized.kind != kind
         ):
-            collected.append(facts)
-        else:
-            collected.append(
-                ApplicationDiagnosticFacts(
-                    application_instance_id=summary.ref.application_instance_id,
-                    kind=summary.kind,
-                )
+            normalized = ApplicationDiagnosticFacts(
+                application_instance_id=application_instance_id,
+                kind=kind,
             )
-    return tuple(sorted(collected, key=lambda facts: facts.application_instance_id))
+        collected.append(normalized)
+    try:
+        return tuple(sorted(collected, key=lambda facts: facts.application_instance_id))
+    except BaseException:
+        return ()
 
 
 def collect_channel_diagnostics(
@@ -542,18 +609,27 @@ def collect_channel_diagnostics(
     """Read optional providers while preserving configured Channel identity."""
 
     collected: list[ChannelDiagnosticFacts] = []
-    for channel in channels:
-        channel_instance_id = str(getattr(channel, "channel_instance_id", ""))
-        kind = str(getattr(channel, "kind", "unknown"))
+    for channel in _bounded_diagnostic_items(channels):
+        try:
+            channel_instance_id = _bounded_diagnostic_identity(
+                getattr(channel, "channel_instance_id")
+            )
+            kind = _bounded_diagnostic_identity(getattr(channel, "kind"))
+        except BaseException:
+            continue
         try:
             provider = getattr(channel, "diagnostic_facts", None)
             facts = provider() if callable(provider) else None
-        except Exception:
-            facts = None
-        try:
             provider_instance_id = getattr(facts, "channel_instance_id", None)
             provider_kind = getattr(facts, "kind", None)
-        except Exception:
+        except BaseException:
+            facts = None
+            provider_instance_id = None
+            provider_kind = None
+        try:
+            provider_instance_id = _bounded_diagnostic_identity(provider_instance_id)
+            provider_kind = _bounded_diagnostic_identity(provider_kind)
+        except BaseException:
             provider_instance_id = None
             provider_kind = None
         if (
@@ -566,13 +642,61 @@ def collect_channel_diagnostics(
             continue
         try:
             connection = _coerce_channel_connection(getattr(facts, "connection", None))
-        except Exception:
+        except BaseException:
             connection = None
         collected.append(ChannelDiagnosticFacts(channel_instance_id, kind, connection))
-    return tuple(sorted(collected, key=lambda facts: facts.channel_instance_id))
+    try:
+        return tuple(sorted(collected, key=lambda facts: facts.channel_instance_id))
+    except BaseException:
+        return ()
 
 
-def _coerce_channel_connection(value: object) -> ConnectionDiagnosticFacts | None:
+def _bounded_diagnostic_items(
+    values: Iterable[_DiagnosticItem],
+) -> tuple[_DiagnosticItem, ...]:
+    materialized: list[_DiagnosticItem] = []
+    try:
+        iterator = iter(values)
+        for _ in range(_PROJECTION_DIAGNOSTIC_MAX_RECORDS):
+            try:
+                materialized.append(next(iterator))
+            except StopIteration:
+                break
+    except BaseException:
+        return ()
+    return tuple(materialized)
+
+
+def _bounded_diagnostic_identity(value: object) -> str:
+    if type(value) is not str or not value or len(value) > _DIAGNOSTIC_ID_MAX_CHARS:
+        raise ValueError("diagnostic identity exceeds the fixed bound")
+    return value
+
+
+def _coerce_application_facts(value: object) -> ApplicationDiagnosticFacts | None:
+    if type(value) is not ApplicationDiagnosticFacts:
+        return None
+    connection = _coerce_channel_connection(value.connection, channel_scoped=False)
+    presentation = value.presentation
+    if presentation is not None:
+        presentation = replace(presentation)
+    artifact = value.artifact_materialization
+    if artifact is not None:
+        artifact = replace(artifact)
+    return ApplicationDiagnosticFacts(
+        application_instance_id=_bounded_diagnostic_identity(value.application_instance_id),
+        kind=_bounded_diagnostic_identity(value.kind),
+        connection=connection,
+        presentation=presentation,
+        artifact_materialization=artifact,
+    )
+
+
+def _coerce_channel_connection(
+    value: object,
+    *,
+    channel_scoped: bool = True,
+) -> ConnectionDiagnosticFacts | None:
     if value is None:
         return None
     state = ConnectionDiagnosticState(str(getattr(value, "state")))
@@ -596,7 +720,12 @@ def _coerce_channel_connection(value: object) -> ConnectionDiagnosticFacts | Non
     if not isinstance(raw_queues, tuple) or len(raw_queues) > 1:
         raise TypeError("invalid Channel diagnostic queue collection")
     queues = tuple(_coerce_channel_queue(queue) for queue in raw_queues)
-    if any(queue.name is not QueueDiagnosticName.CHANNEL_INBOUND for queue in queues):
+    allowed_queue_names = (
+        {QueueDiagnosticName.CHANNEL_INBOUND}
+        if channel_scoped
+        else {QueueDiagnosticName.NOTIFICATION, QueueDiagnosticName.SERVER_REQUEST}
+    )
+    if any(queue.name not in allowed_queue_names for queue in queues):
         raise ValueError("invalid Channel diagnostic queue scope")
     return ConnectionDiagnosticFacts(
         state=state,

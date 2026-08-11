@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 from asyncio import CancelledError
 from collections import deque
+from collections.abc import Awaitable, Callable
 from typing import Generic, TypeVar
 
 from .diagnostics import (
     _CLEANUP_OWNER_MAX_CHARS,
     _CLEANUP_SUMMARY_MAX_CHARS,
     _CLEANUP_TYPE_MAX_CHARS,
-    _bounded_cleanup_error_summary,
     _bounded_cleanup_text,
+    _bounded_lifecycle_error_summary,
 )
 
 T = TypeVar("T")
@@ -22,7 +24,7 @@ class GatewayLifecycleFailure(RuntimeError):
         self._initialize_bounded(
             owner,
             type(error).__name__,
-            _bounded_cleanup_error_summary(owner, error),
+            _bounded_lifecycle_error_summary(owner, error),
         )
 
     def _initialize_bounded(
@@ -87,6 +89,77 @@ def _public_lifecycle_error(
     if isinstance(error, (CancelledError, KeyboardInterrupt, SystemExit)):
         return error
     return GatewayLifecycleFailure(owner, error)
+
+
+async def _bounded_lifecycle_call(
+    call: Callable[[], Awaitable[None]],
+    *,
+    timeout_seconds: float,
+) -> BaseException | None:
+    """Invoke one owner once and stop waiting at the configured hard deadline."""
+
+    async def invoke() -> None:
+        await call()
+
+    task = asyncio.create_task(invoke())
+    try:
+        done, _ = await asyncio.wait((task,), timeout=timeout_seconds)
+    except CancelledError:
+        task.cancel()
+        done, _ = await asyncio.wait((task,), timeout=timeout_seconds)
+        if done:
+            _consume_lifecycle_task_result(task)
+        else:
+            _detach_lifecycle_task(task)
+        raise
+    if not done:
+        task.cancel()
+        _detach_lifecycle_task(task)
+        return TimeoutError()
+    try:
+        task.result()
+    except BaseException as error:
+        return error
+    return None
+
+
+async def _cancel_lifecycle_task(
+    task: asyncio.Task[object],
+    *,
+    timeout_seconds: float,
+) -> BaseException | None:
+    """Cancel and finitely join an already-owned lifecycle task."""
+
+    if not task.done():
+        task.cancel()
+    try:
+        done, _ = await asyncio.wait((task,), timeout=timeout_seconds)
+    except CancelledError:
+        _detach_lifecycle_task(task)
+        raise
+    if not done:
+        _detach_lifecycle_task(task)
+        return TimeoutError()
+    try:
+        task.result()
+    except CancelledError:
+        return None
+    except BaseException as error:
+        return error
+    return None
+
+
+def _detach_lifecycle_task(task: asyncio.Task[object]) -> None:
+    """Contain a cancellation-resistant owner without retaining its result."""
+
+    task.add_done_callback(_consume_lifecycle_task_result)
+
+
+def _consume_lifecycle_task_result(task: asyncio.Task[object]) -> None:
+    try:
+        task.result()
+    except BaseException:
+        pass
 
 
 class GatewayStartupOverflow(RuntimeError):

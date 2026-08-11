@@ -505,7 +505,7 @@ for name in (
             ("a-missing", "b-invalid", "c-mismatch", "d-descriptor", "e-provider", "z-valid"),
         )
         self.assertEqual(len(collected), len(applications))
-        self.assertIs(collected[-1], valid_facts)
+        self.assertEqual(collected[-1], valid_facts)
         for facts in collected[:-1]:
             self.assertIsNone(facts.connection)
             self.assertIsNone(facts.presentation)
@@ -513,6 +513,66 @@ for name in (
             serialized = json.dumps(asdict(facts), default=str)
             self.assertNotIn("native-secret", serialized)
             self.assertNotIn("native provider secret", serialized)
+
+    def test_hostile_base_exceptions_identities_and_counters_fail_closed(self) -> None:
+        class HostileBase(BaseException):
+            pass
+
+        class BadChannel:
+            @property
+            def channel_instance_id(self):
+                raise HostileBase("RAW_SECRET_CHANNEL_BASE")
+
+            kind = "qq"
+
+        class BadApplication:
+            @property
+            def summary(self):
+                raise HostileBase("RAW_SECRET_APP_BASE")
+
+        class BadIterable:
+            def __iter__(self):
+                raise HostileBase("RAW_SECRET_ITER_BASE")
+
+        class BadProjection:
+            @property
+            def state(self):
+                raise HostileBase("RAW_SECRET_RECORD_BASE")
+
+        self.assertEqual(collect_channel_diagnostics((BadChannel(),)), ())
+        self.assertEqual(
+            collect_application_diagnostics(
+                cast(tuple[_DiagnosticApplication, ...], (BadApplication(),))
+            ),
+            (),
+        )
+        self.assertEqual(
+            summarize_projection_health(cast(typing.Iterable[_ProjectionHealth], BadIterable())),
+            gateway_diagnostics.ProjectionDiagnosticFacts(),
+        )
+        projected = summarize_projection_health((cast(_ProjectionHealth, BadProjection()),))
+        self.assertEqual(projected.stopped_count, 1)
+        self.assertEqual(projected.recovery_gap_codes, ("other",))
+
+        for constructor in (
+            lambda: QueueDiagnosticFacts(
+                QueueDiagnosticName.NOTIFICATION,
+                capacity=10**10_000,
+                depth=0,
+            ),
+            lambda: ConnectionDiagnosticFacts(
+                state=ConnectionDiagnosticState.READY,
+                connection_epoch=10**10_000,
+                reconnect_count=0,
+                worker_running=True,
+                worker_degraded=False,
+            ),
+            lambda: gateway_diagnostics.InboundContentTransformerDiagnosticFacts(
+                invocation_count=10**10_000
+            ),
+        ):
+            with self.subTest(constructor=constructor), self.assertRaises((TypeError, ValueError)):
+                constructor()
 
     def test_application_and_channel_queue_scopes_remain_distinct(self) -> None:
         channel_queue = QueueDiagnosticFacts(

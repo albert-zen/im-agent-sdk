@@ -12,7 +12,11 @@ provider protocol. Its sole implementation owner is
 - `ChannelDiagnosticsProvider` is the optional structural
   `diagnostic_facts()` capability; absence, invalid output, provider failure,
   or identity mismatch remains an honest identity-only result at the
-  collecting runtime boundary.
+collecting runtime boundary.
+Configured identity and kind are exact non-empty strings of at most 512
+characters, and nested connection facts must use the exact immutable public
+shape. Gateway reconstruction catches hostile provider/property failures and
+never retains an untrusted provider object.
 
 The module imports only Interaction values, specifically the dependency-neutral
 diagnostic contracts from `imagent.interaction.diagnostics`, plus standard

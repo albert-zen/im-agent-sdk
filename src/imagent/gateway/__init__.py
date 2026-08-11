@@ -78,6 +78,7 @@ from .diagnostics import (
     DiagnosticsSnapshot,
     GatewayDiagnosticFacts,
     _bounded_cleanup_error_summary,
+    _bounded_lifecycle_error_summary,
     collect_application_diagnostics,
     collect_channel_diagnostics,
     new_diagnostics_snapshot,
@@ -101,6 +102,7 @@ from .lifecycle import (
     GatewayLifecycleFailure,
     GatewayNotRunning,
     GatewayStartupAdmission,
+    _bounded_lifecycle_call,
     _detach_public_lifecycle_context,
     _public_lifecycle_error,
 )
@@ -378,9 +380,6 @@ class ImAgentGateway:
             self._controller.validate_startup()
         if self._controller is not None and self._controller_action_runtime is None:
             raise RuntimeError("Controller composition requires one coherent GatewayStore session")
-        self._delivery_coordinator.start()
-        if self._delivery_outcome_observer_runtime is not None:
-            self._delivery_outcome_observer_runtime.start()
         self._starting = True
         self._accepting_inbound = True
         self._startup_admission.reset()
@@ -388,6 +387,9 @@ class ImAgentGateway:
         started_channels: list[ChannelAdapter] = []
         startup_error: BaseException | None = None
         try:
+            self._delivery_coordinator.start()
+            if self._delivery_outcome_observer_runtime is not None:
+                self._delivery_outcome_observer_runtime.start()
             await self._projection_runtime.cleanup_stale_correlations()
             restart_open_requests = await self._projection_runtime.open_request_refs()
             await self._projection_runtime.restore()
@@ -448,7 +450,7 @@ class ImAgentGateway:
                     error.add_note(
                         "Failed to release a pre-side-effect inbound claim during "
                         "Gateway startup rollback: "
-                        + _bounded_cleanup_error_summary(
+                        + _bounded_lifecycle_error_summary(
                             "inbound claim release",
                             release_error,
                         )
@@ -1332,10 +1334,12 @@ async def _cleanup_lifecycle_owner(
 ) -> BaseException | None:
     """Continue teardown after one owner fails while preserving the first error."""
 
-    try:
-        await asyncio.wait_for(cleanup(), timeout=timeout_seconds)
-    except BaseException as cleanup_error:
-        summary = _bounded_cleanup_error_summary(owner, cleanup_error)
+    cleanup_error = await _bounded_lifecycle_call(
+        cleanup,
+        timeout_seconds=timeout_seconds,
+    )
+    if cleanup_error is not None:
+        summary = _bounded_lifecycle_error_summary(owner, cleanup_error)
         if primary is None:
             primary = _public_lifecycle_error(cleanup_error, owner)
             primary.add_note(f"Gateway cleanup failed: {summary}")

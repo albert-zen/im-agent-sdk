@@ -261,7 +261,7 @@ class InboundAdmissionTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(GatewayLifecycleFailure) as raised:
             await gateway.start()
         self.assertEqual(raised.exception.original_type, "TypeError")
-        self.assertIn("after modern startup effect", str(raised.exception))
+        self.assertNotIn("after modern startup effect", str(raised.exception))
         self.assertNotIn("original_error", vars(raised.exception))
 
         self.assertEqual(active.start_attempts, 1)

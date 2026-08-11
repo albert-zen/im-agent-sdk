@@ -4,7 +4,12 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
-from ..interaction.diagnostics import ConnectionDiagnosticFacts, QueueDiagnosticName
+from ..interaction.diagnostics import (
+    _DIAGNOSTIC_COUNTER_MAX,
+    _DIAGNOSTIC_ID_MAX_CHARS,
+    ConnectionDiagnosticFacts,
+    QueueDiagnosticName,
+)
 
 __all__ = [
     "ApplicationPresentationFailureCode",
@@ -49,18 +54,30 @@ class ApplicationDiagnosticFacts:
     artifact_materialization: ApplicationArtifactMaterializationDiagnosticFacts | None = None
 
     def __post_init__(self) -> None:
+        if (
+            type(self.application_instance_id) is not str
+            or not self.application_instance_id
+            or len(self.application_instance_id) > _DIAGNOSTIC_ID_MAX_CHARS
+            or type(self.kind) is not str
+            or not self.kind
+            or len(self.kind) > _DIAGNOSTIC_ID_MAX_CHARS
+        ):
+            raise ValueError("Application diagnostic identity exceeds the fixed bound")
+        if self.connection is not None and type(self.connection) is not ConnectionDiagnosticFacts:
+            raise TypeError("Application diagnostics must use the exact connection fact shape")
         if self.connection is not None and any(
             queue.name is QueueDiagnosticName.CHANNEL_INBOUND for queue in self.connection.queues
         ):
             raise ValueError("Channel inbound queue is not Application-scoped")
-        if self.presentation is not None and not isinstance(
-            self.presentation,
-            ApplicationPresentationDiagnosticFacts,
+        if (
+            self.presentation is not None
+            and type(self.presentation) is not ApplicationPresentationDiagnosticFacts
         ):
             raise TypeError("application presentation diagnostics must use the typed fact shape")
-        if self.artifact_materialization is not None and not isinstance(
-            self.artifact_materialization,
-            ApplicationArtifactMaterializationDiagnosticFacts,
+        if (
+            self.artifact_materialization is not None
+            and type(self.artifact_materialization)
+            is not ApplicationArtifactMaterializationDiagnosticFacts
         ):
             raise TypeError("application artifact diagnostics must use the typed fact shape")
 
@@ -91,7 +108,10 @@ class ApplicationPresentationDiagnosticFacts:
             self.capacity_rejection_count,
         )
         if any(
-            not isinstance(count, int) or isinstance(count, bool) or count < 0 for count in counts
+            not isinstance(count, int)
+            or isinstance(count, bool)
+            or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX
+            for count in counts
         ):
             raise TypeError("application presentation counts must be non-negative integers")
         if self.success_count + self.omission_count + self.failure_count > self.invocation_count:
@@ -137,7 +157,10 @@ class ApplicationArtifactMaterializationDiagnosticFacts:
             self.live_duplicate_count,
         )
         if any(
-            not isinstance(count, int) or isinstance(count, bool) or count < 0 for count in counts
+            not isinstance(count, int)
+            or isinstance(count, bool)
+            or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX
+            for count in counts
         ):
             raise TypeError("application artifact counts must be non-negative integers")
         if self.success_count + self.omission_count + self.failure_count > self.invocation_count:
