@@ -117,8 +117,20 @@ cannot complete.
 If the durable outcome succeeded but process-local activation fails, C returns
 `Partial` with the same value and a closed activation error rather than false
 success; a later same-ID replay may converge activation without repeating B or
-native effects. A caller cancellation after terminal receipt is shielded and
-joined through the one reconciliation attempt; a repeated cancellation may
+native effects. For a route-producing store action, C asks B for a terminal
+receipt before installing a process-local barrier: identical terminal success
+continues through current-state reconciliation, while changed payload remains
+conflict and only an absent receipt enters new-action lifecycle admission.
+Projection shutdown before a pre-fenced store mutation returns
+closed `Failed(stale_runtime)` without writing the route; shutdown or worker
+termination after durable success returns the same closed `stale_runtime`
+`Partial`, retains safe
+fencing, and lets restart replay converge when delivery has no sticky unknown
+native outcome. If shutdown cancels an already-invoked Channel delivery, its
+in-flight claim is never retried; explicit replay remains `Partial` and keeps
+the baseline fence closed instead of falsely reporting activation success. A
+caller cancellation after terminal
+receipt is shielded and joined through the one reconciliation attempt; a repeated cancellation may
 propagate, but cannot open the incomplete route barrier. Otherwise `Succeeded`,
 `Failed`, `Partial`, and
 `OutcomeUnknown` are preserved exactly. The `.ref` field is reconstructed only

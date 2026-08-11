@@ -28,6 +28,14 @@ Observation conformance must prove:
   authority, activates and baselines a successful or terminally replayed route,
   ignores a replayed route removed by later intent, stops newly unauthorized
   workers, and surfaces capacity/activation failure instead of false success;
+- stop closes action-route admission before worker cancellation; reconciliation
+  racing stop, beginning after stop, or losing its worker between ensure and
+  baseline cannot report success, leak worker/capacity/barrier/lock state, or
+  open an incomplete route, while restart and terminal replay converge it;
+- stop during an actual multi-item Channel baseline is checked at every
+  delivery/checkpoint suspension: the in-flight action returns typed partial,
+  no later item crosses shutdown, and an unknown native outcome is not retried
+  or converted to false success on restart replay;
 - scoped observe/foreground-bind composition installs this owner's sole route
   barrier before durable visibility, releases it after successful baseline,
   retains it after baseline failure/cancellation, and releases it when later

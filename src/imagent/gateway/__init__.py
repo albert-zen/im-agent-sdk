@@ -313,6 +313,9 @@ class ImAgentGateway:
                 get_binding=self._binding_runtime.current,
                 effects=StoreBackedGatewayEffectExecutor(coherent_session),
                 reconcile_projection_route=self._projection_runtime.reconcile_action_route,
+                validate_projection_route=(
+                    self._projection_runtime.validate_action_route_reconciliation
+                ),
                 begin_projection_route=self._projection_runtime.begin_action_route,
                 complete_projection_route=self._projection_runtime.complete_action_route,
             )

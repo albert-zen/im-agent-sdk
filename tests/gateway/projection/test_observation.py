@@ -43,6 +43,7 @@ from imagent.gateway.projection import (
     ThreadProjectionRuntime as facade_thread_projection_runtime,
 )
 from imagent.gateway.projection.observation import (
+    ProjectionRuntimeUnavailableError,
     ProjectionWorkerCapacityError,
     ProjectionWorkerHealth,
     ProjectionWorkerState,
@@ -530,11 +531,17 @@ class GatewayThreadObservationCapacityTests(unittest.IsolatedAsyncioTestCase):
         )
         await runtime._projections.put_projection_route(route)
         failed_lease = await runtime.begin_action_route(route.route_id)
+        worker_release = asyncio.Event()
 
-        async def ensure_projection(_thread_ref: ThreadRef, **_kwargs: object) -> None:
-            return None
+        async def active_worker(
+            _thread_ref: ThreadRef,
+            ready: asyncio.Event,
+            **_kwargs: object,
+        ) -> None:
+            ready.set()
+            await worker_release.wait()
 
-        runtime._ensure_projection = ensure_projection  # type: ignore[method-assign]
+        runtime._project_thread = active_worker  # type: ignore[method-assign]
 
         with self.assertRaisesRegex(AssertionError, "unexpected Application operation"):
             await runtime.reconcile_action_route(route.route_id, failed_lease)
@@ -551,6 +558,184 @@ class GatewayThreadObservationCapacityTests(unittest.IsolatedAsyncioTestCase):
         await runtime.reconcile_action_route(route.route_id, replay_lease)
         runtime.complete_action_route(replay_lease, True)
         self.assertTrue(barrier.is_set())
+        worker_release.set()
+        await self._wait_for_worker_release(runtime, thread)
+
+    async def test_action_reconciliation_rejects_shutdown_and_restart_converges(self) -> None:
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        runtime = self._runtime(
+            max_active_threads=1,
+            applications={application.summary.ref.application_instance_id: application},
+        )
+        thread = ThreadRef(application.default_project_ref, "lifecycle-action-route")
+        conversation = ConversationRef("fake-channel", "lifecycle-action-route")
+        route = ThreadProjectionRoute(
+            route_id=derive_projection_route_id(thread, conversation),
+            thread_ref=thread,
+            conversation_ref=conversation,
+        )
+        await runtime._projections.put_projection_route(route)
+
+        await runtime.stop()
+        with self.assertRaisesRegex(
+            ProjectionRuntimeUnavailableError,
+            "not available for route reconciliation",
+        ):
+            await runtime.begin_action_route(route.route_id)
+        with self.assertRaisesRegex(
+            ProjectionRuntimeUnavailableError,
+            "not available for route reconciliation",
+        ):
+            await runtime.reconcile_action_route(route.route_id)
+        self.assertEqual(runtime._tasks, {})
+        self.assertEqual(runtime._pending_starts, {})
+        self.assertEqual(runtime._routes._bootstrap, {})
+        self.assertEqual(runtime._routes._locks, {})
+        self.assertEqual(runtime._routes._action_locks, {})
+
+        worker_release = asyncio.Event()
+
+        async def active_worker(
+            _thread_ref: ThreadRef,
+            ready: asyncio.Event,
+            **_kwargs: object,
+        ) -> None:
+            ready.set()
+            await worker_release.wait()
+
+        async def complete_baseline(*_args: object, **_kwargs: object) -> None:
+            runtime._routes.complete_bootstrap(route.route_id)
+
+        runtime._project_thread = active_worker  # type: ignore[method-assign]
+        runtime._recovery.reconcile_route = complete_baseline  # type: ignore[method-assign]
+        await runtime.restore()
+        runtime.mark_delivery_ready()
+        lease = await runtime.begin_action_route(route.route_id)
+        await runtime.reconcile_action_route(route.route_id, lease)
+        runtime.complete_action_route(lease, True)
+
+        self.assertTrue(runtime.has_observing_worker(thread))
+        self.assertTrue(runtime._routes._bootstrap[route.route_id].is_set())
+        worker_release.set()
+        await self._wait_for_worker_release(runtime, thread)
+
+    async def test_worker_exit_between_action_ensure_and_baseline_is_not_success(self) -> None:
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        runtime = self._runtime(
+            max_active_threads=1,
+            applications={application.summary.ref.application_instance_id: application},
+        )
+        thread = ThreadRef(application.default_project_ref, "terminal-action-worker")
+        conversation = ConversationRef("fake-channel", "terminal-action-worker")
+        route = ThreadProjectionRoute(
+            route_id=derive_projection_route_id(thread, conversation),
+            thread_ref=thread,
+            conversation_ref=conversation,
+        )
+        await runtime._projections.put_projection_route(route)
+        first_worker_exit = asyncio.Event()
+        replay_worker_release = asyncio.Event()
+        worker_calls = 0
+
+        async def controlled_worker(
+            _thread_ref: ThreadRef,
+            ready: asyncio.Event,
+            **_kwargs: object,
+        ) -> None:
+            nonlocal worker_calls
+            worker_calls += 1
+            ready.set()
+            if worker_calls == 1:
+                await first_worker_exit.wait()
+            else:
+                await replay_worker_release.wait()
+
+        baseline_calls = 0
+
+        async def controlled_baseline(*_args: object, **_kwargs: object) -> None:
+            nonlocal baseline_calls
+            baseline_calls += 1
+            if baseline_calls == 1:
+                first_worker_exit.set()
+                await self._wait_for_worker_release(runtime, thread)
+            runtime._routes.complete_bootstrap(route.route_id)
+
+        runtime._project_thread = controlled_worker  # type: ignore[method-assign]
+        runtime._recovery.reconcile_route = controlled_baseline  # type: ignore[method-assign]
+        failed_lease = await runtime.begin_action_route(route.route_id)
+
+        with self.assertRaisesRegex(
+            ProjectionRuntimeUnavailableError,
+            "worker is not active",
+        ):
+            await runtime.reconcile_action_route(route.route_id, failed_lease)
+        barrier = runtime._routes._bootstrap[route.route_id]
+        runtime.complete_action_route(failed_lease, False)
+        self.assertFalse(barrier.is_set())
+        self.assertEqual(runtime._pending_starts, {})
+
+        replay_lease = await runtime.begin_action_route(route.route_id)
+        await runtime.reconcile_action_route(route.route_id, replay_lease)
+        runtime.complete_action_route(replay_lease, True)
+        self.assertTrue(runtime.has_observing_worker(thread))
+        self.assertTrue(barrier.is_set())
+
+        replay_worker_release.set()
+        await self._wait_for_worker_release(runtime, thread)
+
+    async def test_stop_during_authoritative_action_read_retains_no_runtime_state(self) -> None:
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
+        native_thread = await application.create_thread(application.default_project_ref)
+        runtime = self._runtime(
+            max_active_threads=1,
+            applications={application.summary.ref.application_instance_id: application},
+        )
+        thread = native_thread.ref
+        conversation = ConversationRef("fake-channel", "stop-during-action-read")
+        route = ThreadProjectionRoute(
+            route_id=derive_projection_route_id(thread, conversation),
+            thread_ref=thread,
+            conversation_ref=conversation,
+        )
+        await runtime._projections.put_projection_route(route)
+        worker_release = asyncio.Event()
+
+        async def active_worker(
+            _thread_ref: ThreadRef,
+            ready: asyncio.Event,
+            **_kwargs: object,
+        ) -> None:
+            ready.set()
+            await worker_release.wait()
+
+        read_entered = asyncio.Event()
+        release_read = asyncio.Event()
+
+        async def paused_execute(operation: object) -> object:
+            read_entered.set()
+            await release_read.wait()
+            return await application.execute(operation)  # type: ignore[arg-type]
+
+        runtime._project_thread = active_worker  # type: ignore[method-assign]
+        runtime._recovery._execute_application = paused_execute  # type: ignore[assignment]
+        lease = await runtime.begin_action_route(route.route_id)
+        reconciliation = asyncio.create_task(runtime.reconcile_action_route(route.route_id, lease))
+        await read_entered.wait()
+
+        await runtime.stop()
+        release_read.set()
+        with self.assertRaisesRegex(
+            ProjectionRuntimeUnavailableError,
+            "not available for route reconciliation",
+        ):
+            await reconciliation
+        runtime.complete_action_route(lease, False)
+
+        self.assertEqual(runtime._tasks, {})
+        self.assertEqual(runtime._pending_starts, {})
+        self.assertEqual(runtime._routes._bootstrap, {})
+        self.assertEqual(runtime._routes._locks, {})
+        self.assertEqual(runtime._routes._action_locks, {})
 
     async def test_action_route_holders_cannot_release_another_baseline(self) -> None:
         runtime = self._runtime(max_active_threads=1)

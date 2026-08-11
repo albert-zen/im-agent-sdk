@@ -34,6 +34,10 @@ Tests must prove:
   remains ordered until its input owner completes rather than being cleared by
   worker cancellation, while the established restore boundary resets its
   process-local acceptance buffers before route recovery;
+- scoped route activation racing or following stop is a typed non-success,
+  cannot outlive worker termination as false success, and leaves no task,
+  bootstrap barrier, route/action lock, or capacity reservation; restart and
+  terminal replay restore the one worker and same durable route;
 - `GatewayStartupAdmission`, `GatewayStartupOverflow`, and
   `GatewayNotRunning` have one owner in `imagent.gateway.lifecycle`, while
   importing the removed `imagent.gateway_startup` module fails explicitly.

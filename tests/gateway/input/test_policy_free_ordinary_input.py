@@ -23,7 +23,7 @@ from imagent.gateway import (
 )
 from imagent.gateway.actions import ActionResult, ConversationActions
 from imagent.gateway.input import InboundFailurePhase
-from imagent.gateway.outcomes import Partial, Succeeded
+from imagent.gateway.outcomes import Failed, Partial, Succeeded
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.effects import ActionErrorCode
 from imagent.gateway.persistence.memory import InMemoryProjectionRouteRepository
@@ -34,6 +34,7 @@ from imagent.gateway.persistence.state_contracts import (
     ThreadProjectionRoute,
 )
 from imagent.gateway.routing.projection_routes import ProjectionPolicy
+from imagent.interaction.channels import DeliveryReceipt
 from imagent.interaction.controllers import (
     CommandExecutionSafety,
     CommandInvocation,
@@ -72,6 +73,21 @@ class _RecordingApplication(FakeAgentApplicationAdapter):
     async def execute(self, operation):
         self.operations.append(operation)
         return await super().execute(operation)
+
+
+class _BlockingChannel(FakeChannelAdapter):
+    def __init__(self) -> None:
+        super().__init__()
+        self.block_sends = False
+        self.send_entered = asyncio.Event()
+        self.send_attempts: list[OutboundMessage] = []
+
+    async def send(self, message: OutboundMessage) -> DeliveryReceipt:
+        self.send_attempts.append(message)
+        if self.block_sends:
+            self.send_entered.set()
+            await asyncio.Future()
+        return await super().send(message)
 
 
 class _StaticBindingRepository:
@@ -561,6 +577,139 @@ class PolicyFreeOrdinaryInputTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(gateway.get_projection_health(blocked_thread.ref))
         routes = await session.list_projection_routes()
         self.assertIn(blocked_thread.ref, {route.thread_ref for route in routes})
+        await session.close()
+        await store.close()
+
+    async def test_scoped_route_action_stop_race_is_partial_and_restart_replays(self) -> None:
+        store = MemoryGatewayStore()
+        session = await store.acquire_runtime(
+            gateway_id="registry-route-lifecycle-race",
+            owner_token="owner-1",
+            lease_duration_seconds=30,
+        )
+        channel = _BlockingChannel()
+        application = FakeAgentApplicationAdapter(project_mode=ProjectMode.MANAGED)
+        raced_thread = await application.create_thread(application.default_project_ref)
+        stopped_thread = await application.create_thread(application.default_project_ref)
+        conversation = ConversationRef("fake-channel", "lifecycle-command")
+        captured_actions: list[ConversationActions] = []
+        registry = CommandRegistry()
+
+        @registry.command("capture", safety=CommandExecutionSafety.EFFECTFUL)
+        async def capture_actions(
+            invocation: CommandInvocation,
+            actions: ConversationActions,
+        ) -> CommandResult:
+            del invocation
+            captured_actions.append(actions)
+            return CommandResult.text("captured")
+
+        registry.freeze()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            repositories=GatewayRepositories(bindings=session),
+            extensions=GatewayExtensions(controller=registry),
+            projection_policy=ProjectionPolicy.ALL_OBSERVERS,
+        )
+
+        await gateway.start()
+        await channel.emit_message(_message(conversation, "capture-actions", "/capture"))
+        self.assertEqual(len(captured_actions), 1)
+        actions = captured_actions[0]
+        terminal = await actions.observe_thread(
+            stopped_thread.ref,
+            action_id="terminal-before-stop",
+        )
+        self.assertIsInstance(terminal, Succeeded)
+        await application.send_input(
+            raced_thread.ref,
+            AgentInput(
+                client_message_id="baseline-before-stop",
+                content=(TextContent("seed authoritative baseline"),),
+            ),
+        )
+        sends_before_baseline = len(channel.send_attempts)
+        channel.block_sends = True
+        racing = asyncio.create_task(
+            actions.observe_thread(raced_thread.ref, action_id="route-during-stop")
+        )
+        await channel.send_entered.wait()
+        stopping = asyncio.create_task(gateway.stop())
+        await _wait_until(lambda: gateway._projection_runtime._stopping)
+        await stopping
+        raced = await racing
+
+        self.assertIsInstance(raced, Partial)
+        assert isinstance(raced, Partial)
+        self.assertEqual(raced.error.code, ActionErrorCode.STALE_RUNTIME)
+        self.assertIsNone(raced.error.operation_error_code)
+        self.assertEqual(len(channel.send_attempts), sends_before_baseline + 1)
+        self.assertEqual(
+            {route.thread_ref for route in await session.list_projection_routes()},
+            {raced_thread.ref, stopped_thread.ref},
+        )
+        self.assertFalse(gateway._projection_runtime.has_observing_worker(raced_thread.ref))
+
+        terminal_replay = await actions.observe_thread(
+            stopped_thread.ref,
+            action_id="terminal-before-stop",
+        )
+        self.assertIsInstance(terminal_replay, Partial)
+        assert isinstance(terminal, Succeeded)
+        assert isinstance(terminal_replay, Partial)
+        self.assertEqual(terminal_replay.value, terminal.value)
+        self.assertEqual(terminal_replay.error.code, ActionErrorCode.STALE_RUNTIME)
+
+        after_stop = await actions.observe_thread(
+            stopped_thread.ref,
+            action_id="route-after-stop",
+        )
+        self.assertIsInstance(after_stop, Failed)
+        assert isinstance(after_stop, Failed)
+        self.assertEqual(after_stop.error.code, ActionErrorCode.STALE_RUNTIME)
+        self.assertEqual(
+            {route.thread_ref for route in await session.list_projection_routes()},
+            {raced_thread.ref, stopped_thread.ref},
+        )
+        self.assertEqual(gateway._projection_runtime._tasks, {})
+        self.assertEqual(gateway._projection_runtime._pending_starts, {})
+        self.assertEqual(gateway._projection_runtime._routes._bootstrap, {})
+        self.assertEqual(gateway._projection_runtime._routes._locks, {})
+        self.assertEqual(gateway._projection_runtime._routes._action_locks, {})
+
+        channel.block_sends = False
+        await gateway.start()
+        try:
+            replayed = await actions.observe_thread(
+                raced_thread.ref,
+                action_id="route-during-stop",
+            )
+            self.assertIsInstance(replayed, Partial)
+            assert isinstance(replayed, Partial)
+            self.assertEqual(replayed.value, raced.value)
+            self.assertEqual(replayed.error.code, ActionErrorCode.NATIVE_REJECTED)
+            self.assertEqual(
+                replayed.error.operation_error_code,
+                OperationErrorCode.ADAPTER_FAILURE,
+            )
+            route_id = raced.value.route_id
+            self.assertIsNotNone(route_id)
+            assert route_id is not None
+            self.assertTrue(gateway._projection_runtime.has_observing_worker(raced_thread.ref))
+            self.assertIn(
+                route_id,
+                gateway._projection_runtime._routes._blocked_routes,
+            )
+            self.assertFalse(gateway._projection_runtime._routes._bootstrap[route_id].is_set())
+        finally:
+            await gateway.stop()
+
+        self.assertEqual(gateway._projection_runtime._tasks, {})
+        self.assertEqual(gateway._projection_runtime._pending_starts, {})
+        self.assertEqual(gateway._projection_runtime._routes._bootstrap, {})
+        self.assertEqual(gateway._projection_runtime._routes._locks, {})
+        self.assertEqual(gateway._projection_runtime._routes._action_locks, {})
         await session.close()
         await store.close()
 

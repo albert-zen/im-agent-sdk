@@ -64,6 +64,19 @@ failure propagates to the action adapter for typed partial classification;
 success is not reported merely because route persistence succeeded. Once a
 route barrier is installed, baseline failure or cancellation leaves it closed;
 only successful reconciliation or later explicit replay opens live delivery.
+Action-route admission is tied to one process-local projection lifecycle
+generation. Stop closes that admission before cancelling workers, and startup
+reopens it only after durable routes have rebuilt their workers and delivery is
+ready. Reconciliation
+validates the same generation and a live registered worker before, throughout,
+and after its bounded baseline. Shutdown or worker termination therefore
+surfaces the existing typed `stale_runtime` activation failure instead of false
+success; a pre-write rejection changes no route, while a durable success
+remains fenced and can converge through terminal replay after restart.
+An authoritative destination decision that is already sticky or becomes
+ambiguous during that action baseline is propagated to the action seam rather
+than swallowed as worker-local isolation; its barrier stays closed and the
+Channel effect is not retried.
 For scoped actions whose route ID is known before persistence,
 `begin_action_route`/`complete_action_route` expose that same coordinator barrier
 to composition so durable visibility cannot precede baseline fencing. Begin

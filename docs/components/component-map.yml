@@ -812,7 +812,7 @@ components:
       current: [imagent.gateway.projection:ThreadProjectionRuntime, imagent.gateway.projection:ProjectionWorkerHealth]
       target: [imagent.gateway.projection:ThreadProjectionRuntime, imagent.gateway.projection:ProjectionWorkerHealth]
     dependencies: [interaction.messages, interaction.controllers.request-presentation, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, gateway.input.dispatch, gateway.routing.projection-routes, gateway.projection.checkpoints, gateway.projection.request-correlation, gateway.projection.recovery, gateway.persistence.state-contracts, gateway.persistence.repository-contracts]
-    state_recovery: Active-worker capacity, per-Thread runtime entries, and opaque generation-specific route-barrier leases are process-local; same-route action lifecycles serialize, removed routes retire blocked generations, an in-flight same-Thread admission retains its identity across task turnover, bounded queue and dispatch-owned acceptance-ordering gaps retain the worker slot while supervised resubscription reconciles authoritatively, and terminal workers release it once no admission lease remains without clearing the dispatch-owned gate.
+    state_recovery: Active-worker capacity, per-Thread runtime entries, lifecycle generation, and opaque generation-specific route-barrier leases are process-local; stop closes action-route activation before cancelling workers, successful reconciliation requires the same generation and a live worker through baseline completion, same-route action lifecycles serialize, removed routes retire blocked generations, an in-flight same-Thread admission retains its identity across task turnover, bounded queue and dispatch-owned acceptance-ordering gaps retain the worker slot while supervised resubscription reconciles authoritatively, and terminal workers release it once no admission lease remains without clearing the dispatch-owned gate.
     current_code: [src/imagent/gateway/__init__.py, src/imagent/gateway/projection/observation.py]
     target_code: [src/imagent/gateway/projection/observation.py]
     current_tests: [tests/gateway/projection/test_observation.py, tests/gateway/projection/test_hardening.py, tests/gateway/routing/test_projection_integration.py]
@@ -1067,16 +1067,16 @@ components:
     id: gateway.effect-execution
     parent: gateway
     purpose: Execute store, native, request-response, and create-binding effects through one typed durable seam.
-    owns: [GatewayEffectExecutor, native side-effect state machine, conservative reconciliation, workflow binding coordination]
+    owns: [GatewayEffectExecutor, lease-fenced terminal store-mutation replay read, native side-effect state machine, conservative reconciliation, workflow binding coordination]
     does_not_own: [public action surfaces, product commands, authorization, stores, leases, adapter implementations]
-    inputs: [validated effect requests and stable phase callbacks]
+    inputs: [validated effect requests, optional terminal store-mutation replay read, and stable phase callbacks]
     outputs: [closed action outcomes]
     public_contracts: [GatewayEffectExecutor, NativeEffectInvoker, NativeEffectPreflight, NativeEffectReconciler, StoreEffectPreflight, StoreBackedGatewayEffectExecutor]
     public_exports:
       current: [imagent.gateway.effect_execution:GatewayEffectExecutor, imagent.gateway.effect_execution:NativeEffectInvoker, imagent.gateway.effect_execution:NativeEffectPreflight, imagent.gateway.effect_execution:NativeEffectReconciler, imagent.gateway.effect_execution:StoreEffectPreflight, imagent.gateway.effect_execution:StoreBackedGatewayEffectExecutor]
       target: [imagent.gateway.effect_execution:GatewayEffectExecutor, imagent.gateway.effect_execution:NativeEffectInvoker, imagent.gateway.effect_execution:NativeEffectPreflight, imagent.gateway.effect_execution:NativeEffectReconciler, imagent.gateway.effect_execution:StoreEffectPreflight, imagent.gateway.effect_execution:StoreBackedGatewayEffectExecutor]
     dependencies: [applications.application-contract, gateway.outcomes, gateway.routing.projection-routes, gateway.persistence.effects, gateway.persistence.state-contracts, gateway.persistence.gateway-store]
-    state_recovery: Durable phases prevent blind native retry and permit only evidenced reconciliation or binding-phase resume.
+    state_recovery: Durable phases prevent blind native retry and permit only evidenced reconciliation or binding-phase resume; the read-only terminal store-mutation seam preserves exact replay/conflict before process-local route admission.
     current_code: [src/imagent/gateway/effect_execution.py]
     target_code: [src/imagent/gateway/effect_execution.py]
     current_tests: [tests/gateway/test_effect_execution.py]

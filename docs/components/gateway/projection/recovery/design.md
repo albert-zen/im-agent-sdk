@@ -87,6 +87,13 @@ checkpoint-facing delivery call pending the accepted move, but it no longer
 selects history pages, stores recovery limits, classifies gaps, or supervises
 retries. Its catch boundary accepts only the typed destination decision; it
 never catches across correlation reads or checkpoint persistence.
+For scoped action reconciliation only, observation also supplies a synchronous
+process-local lifecycle validator to this private collaboration. Recovery
+checks it around every authoritative read, acceptance wait, and delivery
+suspension; it carries no repository or mutation authority. Lifecycle or worker
+loss propagates before recovery completes the bootstrap fence, allowing the
+action owner to classify durable success as partial and later replay the same
+route after restart.
 Recovery likewise invokes the canonical
 request-correlation owner's Thread-scoped pending-snapshot method through its
 typed call boundary; it receives only the degraded result and never reads or

@@ -66,7 +66,13 @@ instances remain their own lifecycle owners; Gateway only sequences their
 contract methods and waits for bounded cleanup.
 
 Stopping or rolling back a Gateway also cancels and joins every active Thread
-observation worker. Their worker-owned capacity slots and health facts are
+observation worker. It first closes process-local action-route activation
+admission, so a concurrent or later scoped route action cannot report success
+from a worker that shutdown has cancelled. In-flight bounded baseline work
+validates the same lifecycle generation and live worker at every authoritative
+delivery suspension; durable route success becomes typed partial and remains
+replayable after restart rather than opening a delivery gap. Worker-owned
+capacity slots and health facts are
 discarded; an active accepted-input fence retains its event lock and buffer
 until its final input owner resolves it, rather than authorizing replay early.
 The established `restore()` boundary then resets all process-local acceptance

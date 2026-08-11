@@ -57,7 +57,9 @@ Landed evidence:
   failure becomes a typed partial outcome instead of false success; opaque
   generation leases serialize same-route action lifecycles, prevent stale
   completion from opening a newer fence, and retire blocked delivery when the
-  route is removed; and
+  route is removed; lifecycle generation and worker-liveness checks reject
+  activation racing/following shutdown and allow restart replay to converge;
+  and
 - durable admission and unknown-outcome protection remain intact, including
   released pre-acceptance replay, terminal accepted replay, cancellation
   fences, prefer-active-Turn behavior, and Turn/reply correlation.

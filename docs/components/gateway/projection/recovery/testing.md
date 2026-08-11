@@ -12,6 +12,10 @@ Recovery conformance must prove:
   toward its own checkpoint without weakening other routes;
 - baseline/recovery completes before that route drains live events, and a
   failure keeps its bootstrap fence closed;
+- scoped-action recovery validates the same projection lifecycle and live
+  worker around authoritative suspension points; stop or worker loss cannot
+  complete its fence or report activation success, while ordinary worker
+  recovery remains on the unchanged bounded path;
 - completed idempotency can give the checkpoint owner bounded authoritative
   evidence to converge a lagging checkpoint, while `in_flight` or live-only
   output cannot;

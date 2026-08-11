@@ -138,6 +138,10 @@ class _Runtime:
             await self.projection_reconciliation_release.wait()
         return self.projection_reconciliation_error
 
+    def validate_projection_route(self, receipt: object) -> ActionError | None:
+        del receipt
+        return None
+
     def assert_projection_lease(
         self,
         lease: object,
@@ -202,7 +206,9 @@ class _Runtime:
 class _StrictEffects:
     def __init__(self) -> None:
         self.store_requests: list[StoreMutationRequest] = []
+        self.store_replay_requests: list[StoreMutationRequest] = []
         self.store_outcomes: dict[str, ActionOutcome] = {}
+        self.store_fingerprints: dict[str, object] = {}
         self.native_requests: list[NativeMutationRequest] = []
         self.workflow_requests: list[CreateBindingWorkflowRequest] = []
         self.partial_workflow = False
@@ -210,6 +216,19 @@ class _StrictEffects:
         self.before_native: Callable[[], None] | None = None
         self.before_store: Callable[[StoreMutationRequest], None] | None = None
         self.native_outcomes: dict[str, ActionOutcome] = {}
+
+    async def replay_store_mutation(
+        self,
+        request: StoreMutationRequest,
+    ) -> ActionOutcome | None:
+        self.store_replay_requests.append(request)
+        action_key = request.fingerprint.action_key
+        outcome = self.store_outcomes.get(action_key)
+        if outcome is None:
+            return None
+        if self.store_fingerprints.get(action_key) != request.fingerprint:
+            return Failed(ActionError(ActionErrorCode.CONFLICT))
+        return outcome
 
     async def execute_store_mutation(
         self,
@@ -227,6 +246,7 @@ class _StrictEffects:
             error = await preflight()
             if error is not None:
                 outcome: ActionOutcome = Failed(error)
+                self.store_fingerprints[request.fingerprint.action_key] = request.fingerprint
                 self.store_outcomes[request.fingerprint.action_key] = outcome
                 return outcome
         plan = request.plan
@@ -250,6 +270,7 @@ class _StrictEffects:
                 ),
             )
         )
+        self.store_fingerprints[request.fingerprint.action_key] = request.fingerprint
         self.store_outcomes[request.fingerprint.action_key] = outcome
         return outcome
 
@@ -565,14 +586,15 @@ class ScopedActionSurfaceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request.plan.route_upsert.thread_ref, thread)
         self.assertFalse(hasattr(request.plan, "expected_revision"))
 
-        await self.actions.bind_thread(
+        conflict = await self.actions.bind_thread(
             thread,
             expected_generation=10,
             action_id="bind-1",
         )
+        self.assertIsInstance(conflict, Failed)
         self.assertNotEqual(
-            self.effects.store_requests[-2].fingerprint.payload_fingerprint,
             self.effects.store_requests[-1].fingerprint.payload_fingerprint,
+            self.effects.store_replay_requests[-1].fingerprint.payload_fingerprint,
         )
 
         with self.assertRaises(ContractViolation):
@@ -581,7 +603,7 @@ class ScopedActionSurfaceTests(unittest.IsolatedAsyncioTestCase):
                 expected_generation=10,
                 action_id="",
             )
-        self.assertEqual(len(self.effects.store_requests), 2)
+        self.assertEqual(len(self.effects.store_requests), 1)
 
         non_foreground_effects = _StrictEffects()
         non_foreground = _new_conversation_actions(
@@ -930,7 +952,7 @@ class ScopedActionSurfaceTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(
             self.runtime.begun_route_ids,
-            [observed.value.route_id, observed.value.route_id],
+            [observed.value.route_id],
         )
         self.assertEqual(self.runtime.completed_route_ids, self.runtime.begun_route_ids)
         for request in self.effects.store_requests:
@@ -991,12 +1013,9 @@ class ScopedActionSurfaceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(replayed, Succeeded)
         self.assertEqual(
             self.runtime.completed_route_ids,
-            [
-                derive_projection_route_id(thread, self.conversation),
-                derive_projection_route_id(thread, self.conversation),
-            ],
+            [derive_projection_route_id(thread, self.conversation)],
         )
-        self.assertEqual(self.runtime.completed_route_statuses, [False, True])
+        self.assertEqual(self.runtime.completed_route_statuses, [False])
 
     async def test_post_receipt_cancellation_joins_projection_reconciliation(self) -> None:
         thread = await _seed_thread(self.runtime)

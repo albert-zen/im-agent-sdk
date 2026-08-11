@@ -18,6 +18,10 @@ Store-preflight parity tests prove Memory and SQLite check a lease-fenced
 terminal receipt first, run a new callback before any receipt or bridge-state
 write, atomically terminalize a closed rejection without mutation, and replay
 both success and rejection without consulting changed resource state.
+The route-preparation replay seam proves an identical terminal value is read
+without mutation before process-local activation, changed payload remains a
+typed conflict, and absence remains `None`; stopped-runtime classification is
+then checked at the scoped-action composition boundary.
 
 The block-C seam is checked structurally: the protocol and requests expose no
 store, session, lease, repository, adapter, credential, `Any` context, product

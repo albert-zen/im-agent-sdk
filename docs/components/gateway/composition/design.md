@@ -70,7 +70,11 @@ also injects the projection runtime's public action-route bootstrap and
 reconciliation methods as narrow callables into the private Controller action
 adapter. Successful and terminally replayed route/binding actions converge
 current observation without giving C or the Controller a repository/runtime
-escape. This focused integration does not expose the private session or turn
+escape. The same typed seam rejects route activation outside the current
+projection lifecycle generation: pre-write rejection is closed failure and a
+durable route whose activation loses shutdown is closed partial, both without a
+second dispatch or recovery path. This focused integration does not expose the
+private session or turn
 `GatewayRepositories` into the v1 public store port; final `GatewayStore`
 acquisition and lifecycle ownership remain later DAG composition work.
 

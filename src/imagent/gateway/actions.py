@@ -165,7 +165,7 @@ class _ActionRuntime(Protocol):
         conversation_ref: ConversationRef,
     ) -> ConversationBinding | None: ...
 
-    async def begin_projection_route(self, route_id: str) -> object: ...
+    async def begin_projection_route(self, route_id: str) -> object | ActionError: ...
 
     def complete_projection_route(
         self,
@@ -177,7 +177,9 @@ class _ActionRuntime(Protocol):
         self,
         route_id: str | None,
         action_lease: object | None,
-    ) -> ActionError | None: ...
+    ) -> object | ActionError | None: ...
+
+    def validate_projection_route(self, receipt: object) -> ActionError | None: ...
 
     async def authorize_request_response(
         self,
@@ -1408,14 +1410,18 @@ class ConversationActions:
             )
         )
         try:
-            error = await asyncio.shield(task)
+            reconciliation = await asyncio.shield(task)
         except asyncio.CancelledError:
             # The route mutation is already terminal.  Join the process-local
             # convergence attempt so a single caller cancellation cannot leave
             # a consumed command durably routed but inactive.
-            error = await task
-        if error is not None:
-            return Partial(outcome.value, error)
+            reconciliation = await task
+        if isinstance(reconciliation, ActionError):
+            return Partial(outcome.value, reconciliation)
+        if reconciliation is not None:
+            error = self._context.runtime.validate_projection_route(reconciliation)
+            if error is not None:
+                return Partial(outcome.value, error)
         return outcome
 
     async def _execute_store_mutation(
@@ -1425,11 +1431,21 @@ class ConversationActions:
         preflight: StoreEffectPreflight | None = None,
         bootstrap_route_id: str | None = None,
     ) -> ActionOutcome:
-        bootstrap_lease = (
+        if bootstrap_route_id is not None:
+            replay = await self._context.effects.replay_store_mutation(request)
+            if replay is not None:
+                return await self._reconcile_projection_route(replay)
+        bootstrap_lease_or_error = (
             await self._context.runtime.begin_projection_route(bootstrap_route_id)
             if bootstrap_route_id is not None
             else None
         )
+        if isinstance(bootstrap_lease_or_error, ActionError):
+            replay = await self._context.effects.replay_store_mutation(request)
+            if replay is not None:
+                return await self._reconcile_projection_route(replay)
+            return Failed(bootstrap_lease_or_error)
+        bootstrap_lease = bootstrap_lease_or_error
         reconciled: bool | None = None
         try:
             durable_outcome = await self._context.effects.execute_store_mutation(

@@ -97,6 +97,7 @@ _ReadAuthoritativeProjection = Callable[
     [ThreadProjectionRoute],
     Awaitable[AuthoritativeProjectionSlice],
 ]
+_ValidateLifecycle = Callable[[], None]
 
 
 class _DeliverAuthoritative(Protocol):
@@ -106,6 +107,7 @@ class _DeliverAuthoritative(Protocol):
         *,
         read_projection: _ReadAuthoritativeProjection,
         retain_barrier_on_failure: bool = False,
+        validate_lifecycle: _ValidateLifecycle | None = None,
     ) -> Awaitable[None]: ...
 
 
@@ -308,6 +310,7 @@ class _RecoverySupervisor:
         *,
         require_checkpoint: bool,
         retain_barrier_on_failure: bool = False,
+        validate_lifecycle: _ValidateLifecycle | None = None,
     ) -> None:
         async def read_projection(
             current: ThreadProjectionRoute,
@@ -335,6 +338,7 @@ class _RecoverySupervisor:
             route,
             read_projection=read_projection,
             retain_barrier_on_failure=retain_barrier_on_failure,
+            validate_lifecycle=validate_lifecycle,
         )
 
     def record_failure(

@@ -141,7 +141,9 @@ The same run proves:
   activation failure is a typed partial result rather than success, and
   post-receipt cancellation/baseline failure cannot open an unreconciled route;
   same-route action generations serialize, stale completion cannot open a newer
-  fence, and route removal retires blocked delivery before same-ID re-add;
+  fence, route removal retires blocked delivery before same-ID re-add, and
+  shutdown/worker termination cannot produce false activation success while
+  lifecycle restart replay converges the durable route;
 - duplicate registration and an unfrozen registry fail before Gateway accepts
   input; and
 - with no Controller, Slash-looking text is ordinary Agent input.

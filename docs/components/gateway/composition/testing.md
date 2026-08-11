@@ -22,6 +22,9 @@
   owner and C's effect executor, and the projection-owned route reconciliation
   callable converges successful/replayed action state, without escaping through
   `ConversationActions`;
+- that injected action-route seam cannot report success after projection stop
+  begins or after its worker exits during baseline, and terminal replay after
+  lifecycle restart converges the existing durable result;
 - invalid finite capacities, including the default in-memory idempotency record
   bound, fail during construction before startup or I/O;
 - the positive active-Thread observation bound reaches the one projection

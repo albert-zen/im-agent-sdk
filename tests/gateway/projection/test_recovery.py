@@ -483,8 +483,9 @@ def _recovery_supervisor(
         *,
         read_projection,
         retain_barrier_on_failure=False,
+        validate_lifecycle=None,
     ):
-        del route, read_projection, retain_barrier_on_failure
+        del route, read_projection, retain_barrier_on_failure, validate_lifecycle
         raise AssertionError("unexpected authoritative route delivery")
 
     async def wait_until_delivery_ready():

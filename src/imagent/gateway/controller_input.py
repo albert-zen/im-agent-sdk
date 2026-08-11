@@ -18,12 +18,16 @@ from .persistence.effects import (
     KnownNativeOutcome,
 )
 from .persistence.state_contracts import ConversationBinding
-from .projection.observation import ProjectionWorkerCapacityError
+from .projection.observation import (
+    ProjectionRuntimeUnavailableError,
+    ProjectionWorkerCapacityError,
+)
 
 ApplicationExecutor = Callable[[ApplicationOperation], Awaitable[ApplicationOperationResult]]
 BindingReader = Callable[[ConversationRef], Awaitable[ConversationBinding | None]]
 EffectFence = Callable[[], Awaitable[None]]
-ProjectionRouteReconciler = Callable[[str | None, object | None], Awaitable[None]]
+ProjectionRouteReconciler = Callable[[str | None, object | None], Awaitable[object | None]]
+ProjectionRouteReconciliationValidator = Callable[[object], None]
 ProjectionRouteBootstrapBegin = Callable[[str], Awaitable[object]]
 ProjectionRouteBootstrapComplete = Callable[[object, bool | None], None]
 
@@ -40,6 +44,7 @@ class _ScopedControllerActionRuntime:
         get_binding: BindingReader,
         effects: GatewayEffectExecutor,
         reconcile_projection_route: ProjectionRouteReconciler,
+        validate_projection_route: ProjectionRouteReconciliationValidator,
         begin_projection_route: ProjectionRouteBootstrapBegin,
         complete_projection_route: ProjectionRouteBootstrapComplete,
     ) -> None:
@@ -49,6 +54,7 @@ class _ScopedControllerActionRuntime:
         self._get_binding = get_binding
         self._effects = effects
         self._reconcile_projection_route = reconcile_projection_route
+        self._validate_projection_route = validate_projection_route
         self._begin_projection_route = begin_projection_route
         self._complete_projection_route = complete_projection_route
 
@@ -100,14 +106,27 @@ class _ScopedControllerActionRuntime:
         self,
         route_id: str | None,
         action_lease: object | None,
-    ) -> ActionError | None:
+    ) -> object | ActionError | None:
         try:
-            await self._reconcile_projection_route(route_id, action_lease)
+            return await self._reconcile_projection_route(route_id, action_lease)
         except ProjectionWorkerCapacityError:
             return ActionError(
                 ActionErrorCode.CAPACITY_EXHAUSTED,
                 OperationErrorCode.CAPACITY_EXHAUSTED,
             )
+        except ProjectionRuntimeUnavailableError:
+            return ActionError(ActionErrorCode.STALE_RUNTIME)
+        except Exception:
+            return ActionError(
+                ActionErrorCode.NATIVE_REJECTED,
+                OperationErrorCode.ADAPTER_FAILURE,
+            )
+
+    def validate_projection_route(self, receipt: object) -> ActionError | None:
+        try:
+            self._validate_projection_route(receipt)
+        except ProjectionRuntimeUnavailableError:
+            return ActionError(ActionErrorCode.STALE_RUNTIME)
         except Exception:
             return ActionError(
                 ActionErrorCode.NATIVE_REJECTED,
@@ -115,8 +134,11 @@ class _ScopedControllerActionRuntime:
             )
         return None
 
-    async def begin_projection_route(self, route_id: str) -> object:
-        return await self._begin_projection_route(route_id)
+    async def begin_projection_route(self, route_id: str) -> object | ActionError:
+        try:
+            return await self._begin_projection_route(route_id)
+        except ProjectionRuntimeUnavailableError:
+            return ActionError(ActionErrorCode.STALE_RUNTIME)
 
     def complete_projection_route(
         self,

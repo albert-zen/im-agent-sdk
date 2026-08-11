@@ -60,6 +60,11 @@ class GatewayEffectExecutor(Protocol):
         preflight: StoreEffectPreflight | None = None,
     ) -> ActionOutcome: ...
 
+    async def replay_store_mutation(
+        self,
+        request: StoreMutationRequest,
+    ) -> ActionOutcome | None: ...
+
     async def execute_native_mutation(
         self,
         request: NativeMutationRequest,
@@ -84,6 +89,15 @@ class StoreBackedGatewayEffectExecutor:
 
     def __init__(self, session: GatewayStoreSession) -> None:
         self._session = session
+
+    async def replay_store_mutation(
+        self,
+        request: StoreMutationRequest,
+    ) -> ActionOutcome | None:
+        """Read one terminal receipt before process-local route preparation."""
+
+        validate_store_mutation_request(request)
+        return await self._read_store_mutation_receipt(request.fingerprint)
 
     async def execute_store_mutation(
         self,

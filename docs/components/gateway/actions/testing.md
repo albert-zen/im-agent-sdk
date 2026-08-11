@@ -34,6 +34,17 @@ Required evidence:
 - overlapping same-route actions hold opaque generation-specific leases, so a
   failed, delayed, duplicate, or retired holder cannot release a successful
   replay's barrier or the action mutex for a re-added route;
+- projection shutdown before a route write returns typed
+  `Failed(stale_runtime)` with no route mutation, while stop racing a durable
+  success or worker termination during baseline returns typed
+  `Partial(stale_runtime)`; restart replay converges without repeating
+  the durable action and leaves no worker, capacity, barrier, or lock leak;
+- a terminal successful route action replays its original value while stopped
+  as `Partial(stale_runtime)`, whereas a new action is the pre-write `Failed`
+  case and changed payload remains conflict;
+- a Channel delivery cancelled by shutdown remains sticky in-flight: restart
+  does not resend it, action replay stays typed `Partial`, and the incomplete
+  baseline fence cannot open or report false success;
 - native/workflow preflight proves capability honesty before the native fence
   or callback, while a terminal receipt replays before changed capability or
   resource state is consulted;

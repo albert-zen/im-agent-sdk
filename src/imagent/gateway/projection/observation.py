@@ -173,8 +173,11 @@ async def deliver_projected_message(
     deliver_outbound: DeliverOutbound,
     checkpoint_authority: _ProjectionCheckpointAuthority,
     authoritative: bool,
+    validate_lifecycle: Callable[[], None] | None = None,
 ) -> ThreadProjectionRoute:
     """Make one ordered route decision without adding retry/backpressure."""
+    if validate_lifecycle is not None:
+        validate_lifecycle()
     agent_message = projected.message
     if projected.checkpoint:
         from .checkpoints import derive_projection_delivery_id
@@ -198,6 +201,8 @@ async def deliver_projected_message(
             route.thread_ref,
             projected.turn_id,
         )
+        if validate_lifecycle is not None:
+            validate_lifecycle()
         if correlation is not None and correlation.conversation_ref == route.conversation_ref:
             reply_to = correlation.reply_to_message_id
     claim = await deliver_outbound(
@@ -216,9 +221,11 @@ async def deliver_projected_message(
         ),
         projected.checkpoint,
     )
+    if validate_lifecycle is not None:
+        validate_lifecycle()
     if claim is IdempotencyClaimStatus.IN_FLIGHT:
         raise _DestinationDecisionError(f"delivery remains in flight: {delivery_id}")
-    return await checkpoint_authority.apply_delivery_outcome(
+    current = await checkpoint_authority.apply_delivery_outcome(
         route,
         agent_item_id=agent_message.agent_item_id,
         checkpointable=projected.checkpoint,
@@ -226,6 +233,9 @@ async def deliver_projected_message(
         authoritative=authoritative,
         delivery_id=delivery_id,
     )
+    if validate_lifecycle is not None:
+        validate_lifecycle()
+    return current
 
 
 ExecuteApplication = Callable[
@@ -236,6 +246,10 @@ ExecuteApplication = Callable[
 
 class ProjectionWorkerCapacityError(RuntimeError):
     """A distinct Thread worker cannot start within the configured active bound."""
+
+
+class ProjectionRuntimeUnavailableError(RuntimeError):
+    """Route activation cannot converge in the current projection lifecycle."""
 
 
 @dataclass(slots=True)
@@ -342,6 +356,8 @@ class ThreadProjectionRuntime:
             retry_max_seconds=subscription_retry_max_seconds,
         )
         self._stopping = False
+        self._action_routes_available = True
+        self._lifecycle_generation = 0
 
     async def cleanup_stale_correlations(self) -> None:
         now = datetime.now(UTC)
@@ -355,6 +371,7 @@ class ThreadProjectionRuntime:
         return self._request_projection
 
     async def restore(self) -> None:
+        self._action_routes_available = False
         self._stopping = False
         self._delivery_ready.clear()
         self._routes.reset()
@@ -374,6 +391,7 @@ class ThreadProjectionRuntime:
         """Release restored workers after producers are observed and Channels can send."""
 
         self._delivery_ready.set()
+        self._action_routes_available = True
 
     async def open_request_refs(self) -> frozenset[RequestRef]:
         return await self._request_projection.open_request_refs()
@@ -388,6 +406,8 @@ class ThreadProjectionRuntime:
         )
 
     async def stop(self) -> None:
+        self._action_routes_available = False
+        self._lifecycle_generation += 1
         self._stopping = True
         tasks = tuple(self._tasks.items())
         for _, task in tasks:
@@ -421,7 +441,14 @@ class ThreadProjectionRuntime:
     async def begin_action_route(self, route_id: str) -> object:
         """Install the sole bootstrap barrier before a scoped route write is visible."""
 
-        return await self._routes.begin_action_bootstrap(route_id)
+        lifecycle_generation = self._require_action_routes_available()
+        lease = await self._routes.begin_action_bootstrap(route_id)
+        try:
+            self._require_action_routes_available(lifecycle_generation)
+        except ProjectionRuntimeUnavailableError:
+            await self._routes.abort_action_bootstrap(lease)
+            raise
+        return lease
 
     def complete_action_route(
         self,
@@ -436,11 +463,16 @@ class ThreadProjectionRuntime:
         self,
         route_id: str | None,
         action_lease: object | None = None,
-    ) -> None:
+    ) -> object | None:
         """Converge live observation after one durable scoped Conversation action."""
 
+        lifecycle_generation = (
+            self._require_action_routes_available() if route_id is not None else None
+        )
         self._discard_finished_tasks()
         active_routes = await self._route_authority.active_persisted_routes()
+        if lifecycle_generation is not None:
+            self._require_action_routes_available(lifecycle_generation)
         active_threads = {route.thread_ref for route in active_routes}
         for thread_ref in tuple(self._tasks):
             if thread_ref not in active_threads:
@@ -448,12 +480,18 @@ class ThreadProjectionRuntime:
 
         if route_id is None:
             return
+        assert lifecycle_generation is not None
         route = next(
             (candidate for candidate in active_routes if candidate.route_id == route_id), None
         )
         if route is None:
             await self._routes.forget_route_ids((route_id,))
-            return
+            self._require_action_routes_available(lifecycle_generation)
+            return _ActionRouteReconciliationReceipt(
+                lifecycle_generation=lifecycle_generation,
+                thread_ref=None,
+                worker_task=None,
+            )
 
         reservation = self._reserve_projection_start(route.thread_ref)
         reconciled = False
@@ -461,17 +499,49 @@ class ThreadProjectionRuntime:
         try:
             if action_lease is None:
                 owned_action_lease = await self._routes.begin_action_bootstrap(route.route_id)
+                effective_action_lease = owned_action_lease
             else:
                 self._routes.validate_action_bootstrap(route.route_id, action_lease)
-            await self._routes.begin_bootstrap(route.route_id)
-            await self._ensure_projection(route.thread_ref)
-            await self._recovery.reconcile_route(
-                self._application(route.thread_ref.project_ref.application_instance_id),
-                route,
-                require_checkpoint=False,
-                retain_barrier_on_failure=True,
+                effective_action_lease = action_lease
+            await self._routes.begin_bootstrap(
+                route.route_id,
+                action_lease=effective_action_lease,
             )
+            self._require_action_routes_available(lifecycle_generation)
+            try:
+                await self._ensure_projection(route.thread_ref)
+            except asyncio.CancelledError:
+                if self._stopping:
+                    raise ProjectionRuntimeUnavailableError(
+                        "projection runtime is stopping"
+                    ) from None
+                raise
+            self._require_observing_worker(route.thread_ref)
+            try:
+                await self._recovery.reconcile_route(
+                    self._application(route.thread_ref.project_ref.application_instance_id),
+                    route,
+                    require_checkpoint=False,
+                    retain_barrier_on_failure=True,
+                    validate_lifecycle=lambda: self._validate_action_reconciliation(
+                        route.thread_ref,
+                        lifecycle_generation,
+                    ),
+                )
+            except asyncio.CancelledError:
+                if self._stopping:
+                    raise ProjectionRuntimeUnavailableError(
+                        "projection runtime is stopping"
+                    ) from None
+                raise
+            self._require_action_routes_available(lifecycle_generation)
+            worker_task = self._require_observing_worker(route.thread_ref)
             reconciled = True
+            return _ActionRouteReconciliationReceipt(
+                lifecycle_generation=lifecycle_generation,
+                thread_ref=route.thread_ref,
+                worker_task=worker_task,
+            )
         finally:
             if owned_action_lease is not None:
                 self._routes.complete_action_bootstrap(
@@ -479,6 +549,21 @@ class ThreadProjectionRuntime:
                     reconciled=reconciled,
                 )
             self._release_projection_start(route.thread_ref, reservation)
+
+    def validate_action_route_reconciliation(self, receipt: object) -> None:
+        """Validate success at the synchronous public action completion boundary."""
+
+        if not isinstance(receipt, _ActionRouteReconciliationReceipt):
+            raise TypeError("action route reconciliation receipt is invalid")
+        self._require_action_routes_available(receipt.lifecycle_generation)
+        if receipt.thread_ref is None:
+            return
+        if (
+            receipt.worker_task is None
+            or receipt.worker_task.done()
+            or self._tasks.get(receipt.thread_ref) is not receipt.worker_task
+        ):
+            raise ProjectionRuntimeUnavailableError("projection observation worker is not active")
 
     async def observe_thread(
         self,
@@ -739,6 +824,8 @@ class ThreadProjectionRuntime:
         reconcile_existing: bool = False,
         require_checkpoint: bool = True,
     ) -> None:
+        if self._stopping:
+            raise ProjectionRuntimeUnavailableError("projection runtime is stopping")
         reservation = self._reserve_projection_start(thread_ref)
         try:
             task = self._tasks.get(thread_ref)
@@ -766,6 +853,37 @@ class ThreadProjectionRuntime:
                 await task
         finally:
             self._release_projection_start(thread_ref, reservation)
+
+    def _require_action_routes_available(
+        self,
+        expected_generation: int | None = None,
+    ) -> int:
+        if (
+            self._stopping
+            or not self._action_routes_available
+            or (
+                expected_generation is not None
+                and expected_generation != self._lifecycle_generation
+            )
+        ):
+            raise ProjectionRuntimeUnavailableError(
+                "projection runtime is not available for route reconciliation"
+            )
+        return self._lifecycle_generation
+
+    def _require_observing_worker(self, thread_ref: ThreadRef) -> asyncio.Task[None]:
+        task = self._tasks.get(thread_ref)
+        if task is None or task.done():
+            raise ProjectionRuntimeUnavailableError("projection observation worker is not active")
+        return task
+
+    def _validate_action_reconciliation(
+        self,
+        thread_ref: ThreadRef,
+        lifecycle_generation: int,
+    ) -> None:
+        self._require_action_routes_available(lifecycle_generation)
+        self._require_observing_worker(thread_ref)
 
     def _finish_task(
         self,
@@ -1140,6 +1258,13 @@ class _ActionRouteBootstrapLease:
     completed: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class _ActionRouteReconciliationReceipt:
+    lifecycle_generation: int
+    thread_ref: ThreadRef | None
+    worker_task: asyncio.Task[None] | None
+
+
 class _ProjectionRouteCoordinator:
     """Serialize bootstrap, reconciliation, and delivery per destination route."""
 
@@ -1196,9 +1321,16 @@ class _ProjectionRouteCoordinator:
         self._locks.clear()
         self._blocked_routes.clear()
 
-    async def begin_bootstrap(self, route_id: str) -> None:
+    async def begin_bootstrap(
+        self,
+        route_id: str,
+        *,
+        action_lease: object | None = None,
+    ) -> None:
         lock = self._locks.setdefault(route_id, asyncio.Lock())
         async with lock:
+            if action_lease is not None:
+                self.validate_action_bootstrap(route_id, action_lease)
             current = self._bootstrap.get(route_id)
             if current is None or current.is_set():
                 self._bootstrap[route_id] = asyncio.Event()
@@ -1275,6 +1407,31 @@ class _ProjectionRouteCoordinator:
             self._complete_bootstrap_if_unowned(route_id)
         finally:
             lease.action_lock.release()
+            self._cleanup_action_lock(route_id, lease.action_lock)
+
+    async def abort_action_bootstrap(self, lease: object) -> None:
+        """Retire only the exact action generation invalidated by lifecycle change."""
+
+        if not isinstance(lease, _ActionRouteBootstrapLease):
+            raise TypeError("action route bootstrap lease is invalid")
+        self.complete_action_bootstrap(lease, reconciled=None)
+        route_id = lease.route_id
+        lock = self._locks.get(route_id)
+        if lock is None:
+            return
+        async with lock:
+            if self._bootstrap.get(route_id) is not lease.barrier:
+                return
+            if self._action_bootstrap_users.get(route_id):
+                return
+            lease.barrier.set()
+            self._bootstrap.pop(route_id, None)
+            self._bootstrap_pending.discard(route_id)
+            if self._action_bootstrap_retained.get(route_id) is lease.barrier:
+                self._action_bootstrap_retained.pop(route_id, None)
+            if self._locks.get(route_id) is lock:
+                self._locks.pop(route_id, None)
+            self._blocked_routes.discard(route_id)
             self._cleanup_action_lock(route_id, lease.action_lock)
 
     def validate_action_bootstrap(self, route_id: str, lease: object) -> None:
@@ -1390,8 +1547,11 @@ class _ProjectionRouteCoordinator:
             Awaitable[_AuthoritativeProjection],
         ],
         retain_barrier_on_failure: bool = False,
+        validate_lifecycle: Callable[[], None] | None = None,
     ) -> None:
         """Serialize one recovery-owned authoritative read and route delivery."""
+        if validate_lifecycle is not None:
+            validate_lifecycle()
         lock = self._locks.setdefault(route.route_id, asyncio.Lock())
         completed = False
         try:
@@ -1400,15 +1560,24 @@ class _ProjectionRouteCoordinator:
                     self._projections,
                     route.route_id,
                 )
+                if validate_lifecycle is not None:
+                    validate_lifecycle()
                 if current is None:
                     return
                 projection = await read_projection(current)
+                if validate_lifecycle is not None:
+                    validate_lifecycle()
                 await self._wait_for_acceptance(route.thread_ref)
+                if validate_lifecycle is not None:
+                    validate_lifecycle()
                 await self._deliver_messages(
                     current,
                     projection.messages,
                     authoritative=True,
+                    validate_lifecycle=validate_lifecycle,
                 )
+                if validate_lifecycle is not None:
+                    validate_lifecycle()
                 completed = True
         finally:
             if completed or not retain_barrier_on_failure:
@@ -1613,14 +1782,21 @@ class _ProjectionRouteCoordinator:
         messages: tuple[ProjectedAgentMessage, ...],
         *,
         authoritative: bool,
+        validate_lifecycle: Callable[[], None] | None = None,
     ) -> None:
         seen: set[str] = set()
         current = route
         for projected in messages:
+            if validate_lifecycle is not None:
+                validate_lifecycle()
             if projected.message.agent_item_id in seen:
                 continue
             seen.add(projected.message.agent_item_id)
             if route.route_id in self._blocked_routes:
+                if validate_lifecycle is not None:
+                    raise _DestinationDecisionError(
+                        f"projection route remains blocked: {route.route_id}"
+                    )
                 return
             try:
                 current = await deliver_projected_message(
@@ -1630,9 +1806,12 @@ class _ProjectionRouteCoordinator:
                     deliver_outbound=self._deliver_outbound,
                     checkpoint_authority=self._checkpoint_authority,
                     authoritative=authoritative,
+                    validate_lifecycle=validate_lifecycle,
                 )
             except _DestinationDecisionError as error:
                 self._block_route(current, error)
+                if validate_lifecycle is not None:
+                    raise
                 return
 
     def _block_route(

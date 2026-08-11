@@ -15,6 +15,7 @@ does not receive a store, repository, lease, receipt, or concrete adapter.
 
 B owns these operation-agnostic entry points:
 
+- `replay_store_mutation(StoreMutationRequest)`;
 - `execute_store_mutation(StoreMutationRequest, preflight=None)`;
 - `execute_native_mutation(NativeMutationRequest, invoke, preflight=None,
   reconcile=None)`;
@@ -37,6 +38,15 @@ precede a first native effect. B invokes it only while the durable receipt is
 fence. `None` authorizes; a closed `ActionError` commits a terminal failure
 without a native call. Terminal retries never re-run preflight, so later
 binding/request state cannot hide a committed result.
+
+The private replay entry reads the lease-fenced terminal store-mutation receipt
+for the complete fingerprint without reserving, mutating, or exposing the
+receipt. It returns the stored outcome for an identical action, typed conflict
+for changed payload, and `None` only when no terminal receipt exists. C uses
+this read before process-local projection-route admission so a terminal route
+success can still be presented as `Partial(value, stale_runtime)` while the
+projection runtime is stopped; a new action remains a pre-write
+`Failed(stale_runtime)`.
 
 The optional `StoreEffectPreflight` has the same closed callback shape but no
 native phase. B performs a lease-fenced terminal-receipt check before invoking
