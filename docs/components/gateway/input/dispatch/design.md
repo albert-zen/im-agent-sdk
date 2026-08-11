@@ -112,8 +112,8 @@ The exact public facade exports
 `imagent.gateway.input:derive_client_message_id`; the historical
 `imagent.contracts.validators` module and validator alias are physically
 absent. Implementation is
-`src/imagent/gateway/input/dispatch.py`. The Gateway root calls the typed
-dispatcher after its own routing work, and the observation runtime uses its
+`src/imagent/gateway/input/dispatch.py`. The private Gateway orchestration
+owner calls the typed dispatcher after routing work, and the observation runtime uses its
 typed acceptance-ordering gate to preserve event ordering. Neither relationship creates a
 second Conversation registry, Application subscription, runtime, transcript,
 outbox, spool, generic hook, service locator, global registry, or `Any`-typed

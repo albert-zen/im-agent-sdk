@@ -152,16 +152,19 @@ Reconstructing an equivalent composition must not create a
 second Application subscription, Channel admission path, transcript, Agent
 runtime, content spool, or outbox.
 
-## Current structure and remaining split
+## Current structure
 
 `src/imagent/gateway/runtime.py` hosts the lifecycle-owned canonical Gateway;
-`src/imagent/gateway/composition.py` solely owns its three immutable
-construction values. `src/imagent/gateway/controller_input.py` privately adapts
-the exact Application, binding, D effect-executor, projection-reconciliation,
-and route-commit-fence callbacks required by C for both public factories and
-the optional inbound Controller. `src/imagent/gateway/__init__.py` retains the
-single internal orchestration graph used by the canonical lifecycle; the
-reference consumer never imports it or any private composition seam.
+`src/imagent/gateway/composition.py` solely owns the two public immutable
+construction values and private runtime-dependency bundle.
+`src/imagent/gateway/controller_input.py` privately adapts the exact
+Application, binding, D effect-executor, projection-reconciliation, and
+route-commit-fence callbacks required by C for both public factories and the
+optional inbound Controller. `src/imagent/gateway/orchestration.py` is the sole
+private bridge-orchestration owner used by the canonical lifecycle.
+`src/imagent/gateway/__init__.py` is only the finite public lazy facade and
+contains no runtime graph; the reference consumer imports no private
+composition or orchestration seam.
 
 ## Authority
 

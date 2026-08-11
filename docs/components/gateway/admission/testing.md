@@ -21,8 +21,8 @@ Tests must cover:
 - a legacy one-argument start body is never entered, while an internal
   two-argument `TypeError` is invoked once and remains the primary failure;
 - dispatch-fenced state is never reclaimed or reauthorized;
-- clean-process exact `imagent.gateway` facade identity and removal of the
-  historical module.
+- clean-process absence from the finite `imagent.gateway` facade and removal
+  of the historical module, while focused-owner imports retain exact identity.
 
 Run:
 

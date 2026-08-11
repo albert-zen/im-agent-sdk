@@ -100,8 +100,9 @@ mutation remains in this leaf. The historical
 `imagent.contracts` facade and its `operations` module do not retain these moved
 request attributes; `imagent.contracts.validators` is physically absent. The
 closed Gateway operation aggregate
-imports the exact operation family from this owner and the Gateway root only
-adapts an owner rejection into the aggregate failure result; it does not own
+imports the exact operation family from this owner and private Gateway
+orchestration only adapts an owner rejection into the aggregate failure
+result; it does not own
 response validation, request locking, transitions, correlation persistence,
 or replay.
 

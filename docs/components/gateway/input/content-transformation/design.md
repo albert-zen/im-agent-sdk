@@ -28,12 +28,11 @@ client message ID, continuation, prefer-active-Turn policy, request/reply
 correlation, envelope metadata, or a persisted transformed copy. It exposes no
 raw native event or generic stage callback.
 
-The public seam lives at `imagent.gateway.input.InboundContentTransformer`.
-The formal `imagent.gateway.InboundContentTransformer` facade re-exports that
-exact object. Its implementation is
-`src/imagent/gateway/input/content_transformation.py`; orchestration remains in
-the Gateway package root and diagnostic facts are owned by
-`src/imagent/gateway/diagnostics.py`.
+The public seam lives at `imagent.gateway.input.InboundContentTransformer`;
+the finite `imagent.gateway` facade does not re-export it. Its implementation
+is `src/imagent/gateway/input/content_transformation.py`; private cross-owner
+sequencing lives in `src/imagent/gateway/orchestration.py`, and diagnostic
+facts are owned by `src/imagent/gateway/diagnostics.py`.
 
 ## Replay, failure, and capacity
 

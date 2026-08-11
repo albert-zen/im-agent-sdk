@@ -794,7 +794,7 @@ components:
     target_tests: [tests/gateway/input/test_content_transformation.py]
     authoritative_docs: [docs/components/gateway/input/content-transformation/design.md, docs/components/gateway/input/content-transformation/testing.md, docs/components/gateway/design.md, docs/components/gateway/testing.md]
     adrs: [docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [orchestration remains in the Gateway package root]
+    gaps: []
 
   gateway.input.dispatch:
     id: gateway.input.dispatch
@@ -816,7 +816,7 @@ components:
     target_tests: [tests/gateway/input/test_dispatch.py, tests/gateway/input/test_policy_free_ordinary_input.py]
     authoritative_docs: [docs/components/gateway/input/dispatch/design.md, docs/components/gateway/input/dispatch/testing.md, docs/components/gateway/design.md, docs/components/projections-and-recovery/design.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0013-bounded-application-event-admission.md]
-    gaps: [Gateway root retains the owned Conversation lock/Controller/I2 orchestration; projection worker lifecycle remains an explained separate move]
+    gaps: []
 
   gateway.input.failure-presentation:
     id: gateway.input.failure-presentation
@@ -838,7 +838,7 @@ components:
     target_tests: [tests/gateway/input/test_failure_presentation.py]
     authoritative_docs: [docs/components/gateway/input/failure-presentation/design.md, docs/components/gateway/input/failure-presentation/testing.md, docs/components/gateway/design.md, docs/components/persistence/design.md]
     adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
-    gaps: [Gateway orchestration remains in the package root]
+    gaps: []
 
   gateway.projection.observation:
     id: gateway.projection.observation

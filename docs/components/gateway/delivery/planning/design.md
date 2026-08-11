@@ -27,9 +27,9 @@ proactive route selection, content bytes, or a durable job/outbox.
 
 The implementation lives once at
 `src/imagent/gateway/delivery/planning.py`. The Gateway delivery package
-re-exports the exact planner values. The package root may retain a stable
-`delivery_planning` module attribute as an exact alias, but the historical
-internal module is not a second implementation or import path.
+re-exports the exact planner values. The finite Gateway package root does not
+retain a `delivery_planning` module alias, and the historical internal module
+is absent.
 
 ## Authority
 

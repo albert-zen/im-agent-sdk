@@ -27,13 +27,12 @@ This leaf has an intentional same-leaf physical split:
   an eager historical package facade safe to import from the passive state leaf.
 
 `proactive.py` intentionally does not import or re-export runtime
-classes/helpers. The finite `imagent.gateway.delivery` and `imagent.gateway`
-facades import runtime objects directly from `proactive_runtime`; proactive
-ingress imports `DeliveryRouteError` from that same owner. This keeps one
-runtime owner and avoids lazy or function-local reverse imports. Because
-Python initializes those package facades before a leaf import, importing the
-seam through its public path still initializes the current runtime facade; no
-lower component may therefore add a reverse compatibility import to this leaf.
+classes/helpers. The finite `imagent.gateway.delivery` facade imports runtime
+objects directly from `proactive_runtime`; the finite Gateway package root
+does not re-export them. Proactive ingress imports `DeliveryRouteError` from
+that same owner. This keeps one runtime owner and avoids lazy or function-local
+reverse imports; no lower component may add a reverse compatibility import to
+this leaf.
 This is an ownership-only move: route resolution, authorization, planning,
 coordination, submission identity, replay, receipt, capacity, cancellation,
 and failure semantics remain unchanged.

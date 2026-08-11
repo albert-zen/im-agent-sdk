@@ -64,8 +64,9 @@ The runtime predecessor also proves that `proactive_runtime.py` is the sole
 implementation owner of `ResolveThreadRoutes`, `DeliveryRouteError`,
 `ProactiveDeliveryService`, and its private orchestration helpers; the old
 `proactive.py` runtime definitions and attributes are absent. The formal
-`imagent.gateway.delivery` and `imagent.gateway` facades import those runtime
-objects directly and preserve exact object identity. Clean-process imports,
+`imagent.gateway.delivery` facade imports those runtime objects directly and
+preserves exact object identity, while the finite Gateway package root does
+not expose them. Clean-process imports,
 cycle-safe import orders, Protocol signatures, resolved `get_type_hints`, AST
 owner-set checks, and the existing behavior suite guard the mechanical nature
 of the split. The one-time migration review compared the moved definitions to

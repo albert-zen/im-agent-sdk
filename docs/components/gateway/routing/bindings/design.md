@@ -104,8 +104,9 @@ owns applying that returned fence fact to projection recovery.
 
 The contract values and validators live in
 `src/imagent/gateway/routing/bindings.py`, together with the private binding
-runtime and its typed transition facts. The Gateway package root composes that
-runtime but retains no binding repository/CAS or same-target implementation.
+runtime and its typed transition facts. The private
+`gateway.orchestration` owner composes that runtime but retains no binding
+repository/CAS or same-target implementation.
 This leaf does not own `GatewayOperationType`, the mixed `GatewayOperation`
 union, Gateway aggregate execution, Conversation locks, foreground route
 preparation, or recovery. Aggregate Gateway validators call the exact

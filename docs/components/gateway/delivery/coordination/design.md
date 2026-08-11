@@ -38,9 +38,9 @@ an accepted prefix cannot be hidden by a later failure.
 
 The implementation lives once at
 `src/imagent/gateway/delivery/coordination.py`. The Gateway delivery package
-re-exports the exact coordinator values. The package root may retain a stable
-`delivery_coordination` module attribute as an exact alias, but the historical
-internal module is not retained as an import path or implementation.
+re-exports the exact coordinator values. The finite Gateway package root does
+not retain a `delivery_coordination` module alias, and the historical internal
+module is absent.
 
 Coordinator selects `ConversationRef` as the destination key and owns FIFO
 lane policy. It consumes the dependency-neutral `KeyedLockRegistry` mechanics

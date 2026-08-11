@@ -25,11 +25,11 @@ arbitrary metadata, changed identity, and unsupported output fail before
 Channel effects. Valid output uses the common Coordinator and outbound
 idempotency path.
 
-Public I2 contracts are exposed by `imagent.gateway.input`; the established
-`imagent.gateway` facade re-exports the exact same objects. Implementation is
-`src/imagent/gateway/input/failure_presentation.py`, with Gateway orchestration
-in the package root and diagnostic facts owned by
-`src/imagent/gateway/diagnostics.py`.
+Public I2 contracts are exposed by `imagent.gateway.input`; the finite
+`imagent.gateway` facade does not re-export them. Implementation is
+`src/imagent/gateway/input/failure_presentation.py`, private cross-owner
+sequencing lives in `src/imagent/gateway/orchestration.py`, and diagnostic
+facts are owned by `src/imagent/gateway/diagnostics.py`.
 
 ## Claim and replay rules
 
