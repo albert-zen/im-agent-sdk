@@ -133,6 +133,11 @@ existing provider-facing rejection codes; filename normalization, byte/count
 limits, downloading, spool quota/lifetime, and process isolation remain in the
 Channel ingress implementation.
 
+On outbound public composition, the same finite source/media/count/size/group
+facts are planned before Channel execution. A configured consumer root and
+digest are then validated by the real Channel adapter before its native-send
+boundary; a `Message` grants neither filesystem nor network authority.
+
 ## Authority
 
 - [Vision](../../../VISION.md)

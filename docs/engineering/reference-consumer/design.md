@@ -66,6 +66,26 @@ missed item, and a duplicate prior Channel message identity is suppressed by
 the reconstructed completed idempotency record without another Application
 call or delivery.
 
+The same public flow owns Block G acceptance without becoming a second runtime.
+The Application emits an approval request through its native event stream to
+two Conversations; only a delivered recipient may invoke the scoped response,
+the Application's first resolution wins, terminal replay is idempotent, and an
+authoritative pending snapshot preserves a second request across restart.
+Focused public composition evidence separately proves that absent snapshot
+support makes restored routing evidence stale before native work.
+
+Proactive delivery injects a bounded principal-scoped authorizer and uses the
+canonical Gateway's one Coordinator/store. A consumer-owned private artifact
+ledger stages bounded bytes under a configured root, records leases outside the
+SDK, observes typed per-destination outcomes, releases cancellation/failure
+work, and sweeps recorded or partial crash leftovers at startup. Exact route
+snapshots remain pinned across a later binding change; accepted/unknown partial
+outcomes stay isolated and unknown is not resent on replay or SQLite restart.
+Unsupported sources plus hostile root/digest/count/size/media/grouping facts
+are rejected before the reference Channel's native-send counter. A live-only
+projected item leaves completion checkpoints unchanged, while recoverable live
+and history output share the same presentation signature.
+
 Once the second composition closes, the executable opens the database read-only
 and runs an integrity check over one consistent WAL-aware read transaction. A
 complete current schema allowlist validates every `sqlite_schema` object key and

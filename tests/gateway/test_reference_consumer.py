@@ -16,7 +16,7 @@ from typing import Any, cast
 from unittest.mock import patch
 
 from examples.reference_consumer.application import ReferenceApplication
-from examples.reference_consumer.gateway import build_reference_consumer
+from examples.reference_consumer.gateway import ReferenceArtifactLedger, build_reference_consumer
 from examples.reference_consumer.interaction import (
     ReferenceChannel,
     ReferenceStatusService,
@@ -29,6 +29,7 @@ from examples.reference_consumer.main import (
     run_reference_consumer,
 )
 from imagent import (
+    Failed,
     Gateway,
     GatewayLimits,
     MemoryGatewayStore,
@@ -54,7 +55,17 @@ from imagent.applications.operations import (
     ThreadCreated,
     ThreadHistoryRead,
 )
+from imagent.applications.requests import ApprovalResponse
 from imagent.gateway import GatewayRepositories, ImAgentGateway
+from imagent.gateway.delivery import (
+    ConversationDeliveryTarget,
+    DeliveryAuthorizationError,
+    DeliveryIntent,
+    DeliveryPrincipal,
+    DeliverySubmissionCapacityError,
+    DeliverySubmissionState,
+    ScopedDeliveryAuthorizer,
+)
 from imagent.gateway.lifecycle import (
     GatewayLifecycleFailure,
     GatewayNotRunning,
@@ -77,7 +88,9 @@ from imagent.interaction.controllers import (
     CommandRegistryFrozenError,
     CommandResult,
 )
+from imagent.interaction.media import AttachmentContent, LocalPath, RemoteUrl
 from imagent.interaction.messages import ConversationRef, OutboundMessage, TextContent
+from imagent.interaction.operations import OperationErrorCode
 
 _UNSAFE_HUGE_CLEANUP_DETAIL = "secret\x1b[2J\nline\u202e" + ("x" * 1_000_000)
 
@@ -608,7 +621,7 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(report.switched_back_conversations, (conversation_a, conversation_b))
 
         self.assertEqual(report.worker_max_active, (1, 1))
-        self.assertEqual(report.worker_subscription_calls, (2, 1))
+        self.assertEqual(report.worker_subscription_calls, (2, 2))
         self.assertEqual(
             report.recovered_conversations,
             (conversation_a, conversation_b),
@@ -623,6 +636,22 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreaterEqual(report.sqlite_files_inspected, 3)
         self.assertEqual(report.sqlite_table_count, 13)
         self.assertTrue(report.sqlite_bridge_state_allowlisted)
+        self.assertEqual(report.request_delivered_destinations, 2)
+        self.assertTrue(report.request_nonrecipient_rejected)
+        self.assertTrue(report.request_first_writer_won)
+        self.assertTrue(report.request_duplicate_rejected)
+        self.assertTrue(report.request_replay_idempotent)
+        self.assertTrue(report.request_restart_pending_recovered)
+        self.assertTrue(report.live_only_checkpoint_stable)
+        self.assertTrue(report.recoverable_presentation_parity)
+        self.assertEqual(report.proactive_destination_count, 2)
+        self.assertTrue(report.proactive_routes_pinned)
+        self.assertTrue(report.proactive_partial_isolated)
+        self.assertTrue(report.proactive_unknown_sticky)
+        self.assertTrue(report.proactive_restart_replayed)
+        self.assertTrue(report.media_preflight_side_effect_free)
+        self.assertTrue(report.artifact_startup_swept)
+        self.assertTrue(report.artifact_cleanup_complete)
 
         self.assertEqual(report.diagnostics_schema_version, 8)
         self.assertLess(report.diagnostics_size, 4_096)
@@ -631,6 +660,198 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(report.active_workers_after_shutdown, 0)
         self.assertEqual(report.registry_active_after_shutdown, 0)
         self.assertEqual(report.owned_tasks_after_shutdown, 0)
+
+    def test_consumer_artifact_ledger_recovers_and_sweeps_partial_startup(self) -> None:
+        with TemporaryDirectory() as cwd:
+            root = Path(cwd) / "artifacts"
+            first = ReferenceArtifactLedger(root, max_leases=2)
+            staged = first.stage(
+                "partial-startup",
+                b"consumer-owned-partial-bytes",
+                expected_destinations=2,
+            )
+            self.assertIsInstance(staged.source, LocalPath)
+            assert isinstance(staged.source, LocalPath)
+            staged_path = Path(staged.source.path)
+            self.assertTrue(staged_path.is_file())
+            partial_path = root / ("artifact-" + ("f" * 64) + ".part")
+            partial_path.write_bytes(b"partial-uncommitted-bytes")
+
+            restarted = ReferenceArtifactLedger(root, max_leases=2)
+            self.assertEqual(restarted.active_leases, 1)
+            self.assertEqual(restarted.sweep(), 2)
+            self.assertEqual(restarted.active_leases, 0)
+            self.assertFalse(staged_path.exists())
+            self.assertFalse(partial_path.exists())
+
+    def test_consumer_artifact_ledger_is_bounded_and_rejects_escaped_restart_path(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as cwd:
+            root = Path(cwd) / "artifacts"
+            ledger = ReferenceArtifactLedger(root, max_leases=1)
+            ledger.stage("first", b"one", expected_destinations=1)
+            with self.assertRaisesRegex(RuntimeError, "capacity"):
+                ledger.stage("second", b"two", expected_destinations=1)
+
+            ledger_path = root / "consumer-artifact-ledger.json"
+            ledger_path.write_text(
+                '{"escaped":{"path":"/tmp/not-consumer-owned","expected":1,'
+                '"observed":0,"sha256":"00","size":1}}',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(RuntimeError, "escaped"):
+                ReferenceArtifactLedger(root, max_leases=2)
+
+    async def test_public_restart_marks_request_stale_without_authoritative_snapshot(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as cwd:
+            database_path = Path(cwd) / "request-stale.sqlite3"
+            channel = ReferenceChannel()
+            application = ReferenceApplication(
+                pending_request_snapshot_support=SupportLevel.UNSUPPORTED,
+            )
+            conversation = channel.conversation("request-stale")
+            first = build_reference_consumer(
+                application=application,
+                channel=channel,
+                store=SQLiteGatewayStore(database_path),
+            )
+            async with first.gateway:
+                actions = first.gateway.actions(
+                    conversation.ref,
+                    actor=conversation.authenticated_actor,
+                )
+                project = await actions.create_and_select_project(
+                    application.ref,
+                    cwd=cwd,
+                    action_id="request-stale:project",
+                )
+                self.assertIsInstance(project, Succeeded)
+                assert isinstance(project, Succeeded)
+                self.assertIsInstance(project.value.ref, ProjectRef)
+                assert isinstance(project.value.ref, ProjectRef)
+                thread = await actions.create_and_bind_thread(
+                    project.value.ref,
+                    action_id="request-stale:thread",
+                )
+                self.assertIsInstance(thread, Succeeded)
+                assert isinstance(thread, Succeeded)
+                self.assertIsInstance(thread.value.ref, ThreadRef)
+                assert isinstance(thread.value.ref, ThreadRef)
+                after = len(channel.sent)
+                request = await application.receive_native_approval_request(
+                    thread.value.ref,
+                    prompt="Request that cannot be snapshotted",
+                )
+                async with asyncio.timeout(2.0):
+                    while len(channel.sent) == after:
+                        await asyncio.sleep(0)
+
+            native_calls = application.request_response_calls
+            restarted = build_reference_consumer(
+                application=application,
+                channel=channel,
+                store=SQLiteGatewayStore(database_path),
+            )
+            async with restarted.gateway:
+                actions = restarted.gateway.actions(
+                    conversation.ref,
+                    actor=conversation.authenticated_actor,
+                )
+                result = await actions.respond_request(
+                    request.request_ref,
+                    ApprovalResponse("approve"),
+                    action_id="request-stale:response",
+                )
+                self.assertIsInstance(result, Failed)
+                assert isinstance(result, Failed)
+                self.assertIs(
+                    result.error.operation_error_code,
+                    OperationErrorCode.REQUEST_STALE,
+                )
+                self.assertEqual(application.request_response_calls, native_calls)
+
+    async def test_public_memory_proactive_path_is_scoped_bounded_and_idempotent(
+        self,
+    ) -> None:
+        channel = ReferenceChannel()
+        conversation = channel.conversation("memory-proactive")
+        authorizer = ScopedDeliveryAuthorizer(max_principals=1)
+        credential = await authorizer.issue(
+            DeliveryPrincipal(
+                principal_id="memory-proactive-principal",
+                allowed_conversations=(conversation.ref,),
+            ),
+            credential="memory-proactive-credential",
+        )
+        consumer = build_reference_consumer(
+            channel=channel,
+            store=MemoryGatewayStore(max_delivery_submission_records=1),
+            delivery_authorizer=authorizer,
+        )
+        target = ConversationDeliveryTarget(conversation.ref)
+        first_intent = DeliveryIntent(
+            delivery_id="memory-proactive:first",
+            target=target,
+            content=(TextContent("memory proactive"),),
+            created_at=datetime.now(UTC),
+        )
+        async with consumer.gateway:
+            with self.assertRaises(DeliveryAuthorizationError):
+                await consumer.gateway.authorize_proactive_target(
+                    target,
+                    credential="invalid-credential",
+                )
+            await consumer.gateway.authorize_proactive_target(
+                target,
+                credential=credential,
+            )
+            first = await consumer.gateway.deliver_proactively(
+                first_intent,
+                credential=credential,
+            )
+            self.assertIs(first.state, DeliverySubmissionState.ACCEPTED)
+            native_calls = channel.native_send_calls
+            replay = await consumer.gateway.deliver_proactively(
+                first_intent,
+                credential=credential,
+            )
+            self.assertTrue(all(item.replayed for item in replay.destinations))
+            self.assertEqual(channel.native_send_calls, native_calls)
+
+            with self.assertRaises(DeliverySubmissionCapacityError):
+                await consumer.gateway.deliver_proactively(
+                    DeliveryIntent(
+                        delivery_id="memory-proactive:capacity",
+                        target=target,
+                        content=(TextContent("must not send"),),
+                        created_at=datetime.now(UTC),
+                    ),
+                    credential=credential,
+                )
+            self.assertEqual(channel.native_send_calls, native_calls)
+
+            unsupported = DeliveryIntent(
+                delivery_id="memory-proactive:unsupported",
+                target=target,
+                content=(
+                    AttachmentContent(
+                        "remote",
+                        "text/plain",
+                        RemoteUrl("https://example.invalid/not-acquired"),
+                        size_bytes=1,
+                    ),
+                ),
+                created_at=datetime.now(UTC),
+            )
+            with self.assertRaises(DeliverySubmissionCapacityError):
+                await consumer.gateway.deliver_proactively(
+                    unsupported,
+                    credential=credential,
+                )
+            self.assertEqual(channel.native_send_calls, native_calls)
 
     def test_sqlite_inspection_rejects_encoded_and_fragmented_authority_state(self) -> None:
         marker = "authority-owned-transcript-marker"

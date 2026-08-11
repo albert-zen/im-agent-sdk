@@ -1,5 +1,7 @@
 """Gateway delivery contracts and implementations."""
 
+from ..persistence.repository_contracts import DeliverySubmissionCapacityError
+from ..persistence.state_contracts import DeliverySubmissionState
 from .coordination import DeliveryCoordinator, DeliveryCoordinatorConfig, DeliveryHandle
 from .outcome_observation import (
     DeliveryOutcome,
@@ -24,6 +26,7 @@ from .proactive import (
     validate_delivery_intent,
 )
 from .proactive_authorization import (
+    DeliveryAuthorizationError,
     DeliveryAuthorizer,
     DeliveryPrincipal,
     ScopedDeliveryAuthorizer,
@@ -44,6 +47,7 @@ __all__ = [
     "DeliveryCoordinator",
     "DeliveryCoordinatorConfig",
     "DeliveryAuthorizer",
+    "DeliveryAuthorizationError",
     "DeliveryHandle",
     "DeliveryIntent",
     "DeliveryOutcome",
@@ -55,6 +59,8 @@ __all__ = [
     "DeliveryPlanningError",
     "DeliveryPrincipal",
     "DeliverySubmissionOrigin",
+    "DeliverySubmissionCapacityError",
+    "DeliverySubmissionState",
     "DeliveryTarget",
     "DeliveryTargetKind",
     "DestinationDeliveryResult",

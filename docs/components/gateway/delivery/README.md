@@ -34,3 +34,11 @@ client is owned by the Interaction [client-tools leaf](../../interaction/client-
 Delivery owns no local client argument/file encoding or response presentation,
 native encoding, durable job, content storage, route policy, or checkpoint
 authority.
+
+The typed delivery intent, target, per-destination result, and submission-state
+vocabulary are public from `imagent.gateway.delivery`. Canonical `Gateway`
+accepts the optional authorizer/Coordinator and delegates target preauthorization
+and submission to this existing owner over its one coherent store session.
+Thread-route records pin exact immutable destination snapshots at admission;
+later route changes cannot retarget replay, and an `unknown` native outcome is
+sticky rather than silently resent.

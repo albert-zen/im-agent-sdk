@@ -36,3 +36,6 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
 Also run every repository gate in `AGENTS.md`.
+
+Canonical public Memory acceptance additionally proves invalid credentials and
+exhausted principal/submission capacity before Channel work.

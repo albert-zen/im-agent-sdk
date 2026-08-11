@@ -336,6 +336,7 @@ class ImAgentGateway:
                 complete_projection_route=self._projection_runtime.complete_action_route,
                 abort_projection_route=self._projection_runtime.abort_action_route,
                 fence_projection_route_commit=(self._projection_runtime.fence_action_route_commit),
+                request_projection=self._projection_runtime.request_projection,
             )
         self._request_projection = self._projection_runtime.request_projection
         self._input_dispatch = InputDispatchRuntime(

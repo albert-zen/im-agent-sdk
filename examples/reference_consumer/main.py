@@ -15,18 +15,29 @@ import sqlite3
 import stat
 import zlib
 from collections import Counter
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from functools import cache
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TypeVar
 
-from imagent import ProjectionPolicy, SQLiteGatewayStore, Succeeded
+from imagent import Failed, ProjectionPolicy, SQLiteGatewayStore, Succeeded
 from imagent.applications.contract import ProjectRef, ThreadRef
+from imagent.applications.requests import ApprovalResponse
+from imagent.gateway.delivery import (
+    DeliveryIntent,
+    DeliveryPrincipal,
+    DeliverySubmissionState,
+    ScopedDeliveryAuthorizer,
+    ThreadRouteDeliveryTarget,
+)
+from imagent.interaction.channels import DeliveryReceiptStatus
+from imagent.interaction.media import AttachmentContent, AttachmentHandle, LocalPath, RemoteUrl
 from imagent.interaction.messages import ConversationRef, OutboundMessage, TextContent
+from imagent.interaction.operations import OperationErrorCode
 
-from .gateway import ReferenceConsumer, build_reference_consumer
+from .gateway import ReferenceArtifactLedger, ReferenceConsumer, build_reference_consumer
 from .interaction import ReferenceConversation
 
 TRef = TypeVar("TRef", ProjectRef, ThreadRef)
@@ -164,17 +175,17 @@ _SQLITE_SCHEMA: dict[str, tuple[_SQLiteColumn, ...]] = {
 _SQLITE_FINAL_ROW_COUNTS = {
     "conversation_binding_generations": 2,
     "conversation_bindings": 2,
-    "delivery_submission_destinations": 14,
-    "delivery_submissions": 14,
-    "gateway_effect_receipts": 7,
+    "delivery_submission_destinations": 39,
+    "delivery_submissions": 30,
+    "gateway_effect_receipts": 13,
     "gateway_namespace": 1,
     "gateway_runtime_lease": 1,
     "gateway_schema_metadata": 1,
     "gateway_workspace_identities": 0,
-    "idempotency_records": 22,
-    "request_route_correlations": 0,
-    "thread_projection_routes": 3,
-    "turn_reply_correlations": 2,
+    "idempotency_records": 29,
+    "request_route_correlations": 4,
+    "thread_projection_routes": 4,
+    "turn_reply_correlations": 1,
 }
 _SQLITE_JSON_COLUMNS = frozenset(
     {
@@ -306,6 +317,22 @@ class ReferenceReport:
     active_workers_after_shutdown: int
     registry_active_after_shutdown: int
     owned_tasks_after_shutdown: int
+    request_delivered_destinations: int
+    request_nonrecipient_rejected: bool
+    request_first_writer_won: bool
+    request_duplicate_rejected: bool
+    request_replay_idempotent: bool
+    request_restart_pending_recovered: bool
+    live_only_checkpoint_stable: bool
+    recoverable_presentation_parity: bool
+    proactive_destination_count: int
+    proactive_routes_pinned: bool
+    proactive_partial_isolated: bool
+    proactive_unknown_sticky: bool
+    proactive_restart_replayed: bool
+    media_preflight_side_effect_free: bool
+    artifact_startup_swept: bool
+    artifact_cleanup_complete: bool
 
 
 def _message_text(message: OutboundMessage) -> str:
@@ -684,7 +711,7 @@ def _validate_sqlite_schema_and_values(
         )
         rows_by_table[table] = rows
         if len(rows) != _SQLITE_FINAL_ROW_COUNTS[table]:
-            raise AssertionError("SQLite bridge row cardinality changed")
+            raise AssertionError(f"SQLite bridge row cardinality changed for {table}: {len(rows)}")
         for row in rows:
             for value, (column, declared_type, not_null, _primary_key) in zip(
                 row,
@@ -745,9 +772,16 @@ def _validate_sqlite_schema_and_values(
         raise AssertionError("SQLite schema metadata changed")
     if {row[2] for row in rows_by_table["idempotency_records"]} != {"completed"}:
         raise AssertionError("SQLite idempotency evidence is not terminal")
-    if {row[10] for row in rows_by_table["delivery_submission_destinations"]} != {"accepted"}:
+    if {row[10] for row in rows_by_table["delivery_submission_destinations"]} != {
+        "accepted",
+        "rejected",
+        "unknown",
+    }:
         raise AssertionError("SQLite delivery destination state changed")
-    if {row[2] for row in rows_by_table["delivery_submissions"]} != {"gateway_internal"}:
+    if {row[2] for row in rows_by_table["delivery_submissions"]} != {
+        "external",
+        "gateway_internal",
+    }:
         raise AssertionError("SQLite delivery origin changed")
     if {row[5] for row in rows_by_table["gateway_effect_receipts"]} != {"terminal"}:
         raise AssertionError("SQLite effect receipt is not terminal")
@@ -843,12 +877,49 @@ async def _ordinary_round_trip(
     return delivered
 
 
+async def _wait_for_messages(
+    consumer: ReferenceConsumer,
+    *,
+    after: int,
+    count: int,
+) -> tuple[OutboundMessage, ...]:
+    async with asyncio.timeout(2.0):
+        while len(consumer.channel.sent) < after + count:
+            await asyncio.sleep(0)
+    return consumer.channel.sent[after : after + count]
+
+
 async def run_reference_consumer(reference_workspace: str) -> ReferenceReport:
     """Run the same bounded public entry point used by source and wheel tests."""
 
     database_path = Path(reference_workspace) / "reference-gateway.sqlite3"
+    artifact_root = Path(reference_workspace) / "consumer-artifacts"
+    startup_ledger = ReferenceArtifactLedger(artifact_root, max_leases=8)
+    startup_ledger.stage(
+        "restart-orphan",
+        b"consumer-owned orphan",
+        expected_destinations=1,
+    )
+    artifact_ledger = ReferenceArtifactLedger(artifact_root, max_leases=8)
+    artifact_startup_swept = artifact_ledger.sweep() == 1
+    cancelled = artifact_ledger.stage(
+        "cancelled-before-submit",
+        b"cancelled consumer bytes",
+        expected_destinations=1,
+    )
+    artifact_ledger.abandon(cancelled.attachment_id)
+    failed = artifact_ledger.stage(
+        "failed-before-submit",
+        b"failed consumer bytes",
+        expected_destinations=1,
+    )
+    artifact_ledger.abandon(failed.attachment_id)
+    authorizer = ScopedDeliveryAuthorizer(max_principals=4)
     consumer = build_reference_consumer(
         store=SQLiteGatewayStore(database_path, max_effect_receipts=64),
+        delivery_authorizer=authorizer,
+        delivery_outcome_observer=artifact_ledger,
+        trusted_attachment_root=artifact_root,
     )
     gateway = consumer.gateway
     application = consumer.application
@@ -885,6 +956,21 @@ async def run_reference_consumer(reference_workspace: str) -> ReferenceReport:
     sqlite_files_inspected = 0
     sqlite_table_count = 0
     sqlite_bridge_state_allowlisted = False
+    request_delivered_destinations = 0
+    request_nonrecipient_rejected = False
+    request_first_writer_won = False
+    request_duplicate_rejected = False
+    request_replay_idempotent = False
+    request_restart_pending_recovered = False
+    live_only_checkpoint_stable = False
+    recoverable_presentation_parity = False
+    proactive_destination_count = 0
+    proactive_routes_pinned = False
+    proactive_partial_isolated = False
+    proactive_unknown_sticky = False
+    proactive_restart_replayed = False
+    media_preflight_side_effect_free = False
+    artifact_cleanup_complete = False
 
     async with gateway:
         actions_a = gateway.actions(
@@ -1054,6 +1140,308 @@ async def run_reference_consumer(reference_workspace: str) -> ReferenceReport:
         if _destinations(switched_back) != (conversation_a.ref, conversation_b.ref):
             raise AssertionError("switch-back did not restore the shared destinations")
 
+        conversation_c = consumer.channel.conversation(
+            "conversation-c",
+            authenticated_actor="reference-user-c",
+        )
+        actions_c = gateway.actions(
+            conversation_c.ref,
+            actor=conversation_c.authenticated_actor,
+        )
+        before_request = len(consumer.channel.sent)
+        request = await application.receive_native_approval_request(
+            first_thread_ref,
+            prompt="Approve the bounded reference operation?",
+        )
+        request_messages = await _wait_for_messages(
+            consumer,
+            after=before_request,
+            count=2,
+        )
+        request_delivered_destinations = len(set(_destinations(request_messages)))
+        if _destinations(request_messages) != (conversation_a.ref, conversation_b.ref):
+            raise AssertionError("interactive request did not reach both active Conversations")
+        for _ in range(8):
+            await asyncio.sleep(0)
+        calls_before_nonrecipient = application.request_response_calls
+        rejected_nonrecipient = await actions_c.respond_request(
+            request.request_ref,
+            ApprovalResponse("approve"),
+            action_id="reference:request:nonrecipient",
+        )
+        request_nonrecipient_rejected = bool(
+            isinstance(rejected_nonrecipient, Failed)
+            and rejected_nonrecipient.error.operation_error_code
+            is OperationErrorCode.UNAUTHORIZED_DESTINATION
+            and application.request_response_calls == calls_before_nonrecipient
+        )
+        if not request_nonrecipient_rejected:
+            raise AssertionError("a non-recipient reached native request response work")
+        accepted_response = await actions_a.respond_request(
+            request.request_ref,
+            ApprovalResponse("approve"),
+            action_id="reference:request:accepted",
+        )
+        request_first_writer_won = bool(
+            isinstance(accepted_response, Succeeded)
+            and accepted_response.value.ref == request.request_ref
+            and application.request_response_calls == calls_before_nonrecipient + 1
+        )
+        if not request_first_writer_won:
+            raise AssertionError("the Application did not retain first-writer request truth")
+        duplicate_response = await actions_b.respond_request(
+            request.request_ref,
+            ApprovalResponse("approve"),
+            action_id="reference:request:duplicate",
+        )
+        request_duplicate_rejected = bool(
+            isinstance(duplicate_response, Failed)
+            and duplicate_response.error.operation_error_code
+            in {OperationErrorCode.REQUEST_DUPLICATE, OperationErrorCode.REQUEST_RESOLVED}
+            and application.request_response_calls == calls_before_nonrecipient + 1
+        )
+        if not request_duplicate_rejected:
+            raise AssertionError("a duplicate request response reached native work")
+        replayed_response = await actions_a.respond_request(
+            request.request_ref,
+            ApprovalResponse("approve"),
+            action_id="reference:request:accepted",
+        )
+        request_replay_idempotent = bool(
+            isinstance(replayed_response, Succeeded)
+            and replayed_response.value.ref == request.request_ref
+            and application.request_response_calls == calls_before_nonrecipient + 1
+        )
+        if not request_replay_idempotent:
+            raise AssertionError("request response replay repeated native work")
+
+        checkpoint_before_live_only = _read_current_sqlite_recovery_snapshot(database_path)
+        live_only_after = len(consumer.channel.sent)
+        await application.receive_native_live_activity(
+            first_thread_ref,
+            text="reference live-only activity",
+        )
+        await _wait_for_messages(
+            consumer,
+            after=live_only_after,
+            count=2,
+        )
+        await asyncio.sleep(0)
+        checkpoint_after_live_only = _read_current_sqlite_recovery_snapshot(database_path)
+        live_only_checkpoint_stable = (
+            checkpoint_after_live_only.active_route_checkpoints
+            == checkpoint_before_live_only.active_route_checkpoints
+        )
+        if not live_only_checkpoint_stable:
+            raise AssertionError("live-only presentation advanced a completion checkpoint")
+
+        proactive_credential = await authorizer.issue(
+            DeliveryPrincipal(
+                principal_id="reference-proactive-principal",
+                allowed_threads=(first_thread_ref,),
+            ),
+            credential="reference-proactive-credential",
+        )
+        artifact = artifact_ledger.stage(
+            "reference-artifact",
+            b"consumer-owned artifact bytes",
+            expected_destinations=2,
+        )
+        proactive_intent = DeliveryIntent(
+            delivery_id="reference:proactive:artifact",
+            target=ThreadRouteDeliveryTarget(first_thread_ref),
+            content=(TextContent("reference proactive artifact"), artifact),
+            created_at=datetime.now(UTC),
+        )
+        proactive_result = await gateway.deliver_proactively(
+            proactive_intent,
+            credential=proactive_credential,
+        )
+        proactive_destination_count = len(proactive_result.destinations)
+        proactive_route_ids = tuple(
+            destination.route_id for destination in proactive_result.destinations
+        )
+        if (
+            proactive_result.state is not DeliverySubmissionState.ACCEPTED
+            or proactive_destination_count != 2
+        ):
+            destination_states = tuple(
+                destination.state.value for destination in proactive_result.destinations
+            )
+            destination_errors = tuple(
+                destination.error for destination in proactive_result.destinations
+            )
+            raise AssertionError(
+                "proactive artifact result mismatch: "
+                f"aggregate={proactive_result.state.value}, "
+                f"destinations={destination_states}, errors={destination_errors}"
+            )
+        async with asyncio.timeout(2.0):
+            while artifact_ledger.active_leases:
+                await asyncio.sleep(0)
+        artifact_cleanup_complete = artifact_ledger.active_leases == 0
+
+        binding_b_before_move = await actions_b.get_binding()
+        if binding_b_before_move is None:
+            raise AssertionError("Conversation B lost its binding before route pinning")
+        moved_b = await actions_b.bind_thread(
+            second_thread_ref,
+            action_id="reference:proactive:move-route",
+            expected_generation=binding_b_before_move.generation,
+        )
+        if not isinstance(moved_b, Succeeded):
+            raise AssertionError("Conversation B route could not move for pinning evidence")
+        sends_before_replay = consumer.channel.native_send_calls
+        replayed_proactive = await gateway.deliver_proactively(
+            proactive_intent,
+            credential=proactive_credential,
+        )
+        proactive_routes_pinned = bool(
+            replayed_proactive.state is DeliverySubmissionState.ACCEPTED
+            and len(replayed_proactive.destinations) == 2
+            and tuple(destination.route_id for destination in replayed_proactive.destinations)
+            == proactive_route_ids
+            and all(destination.replayed for destination in replayed_proactive.destinations)
+            and consumer.channel.native_send_calls == sends_before_replay
+        )
+        if not proactive_routes_pinned:
+            raise AssertionError(
+                "proactive replay followed a moved route or resent: "
+                f"state={replayed_proactive.state.value}, "
+                f"destinations={len(replayed_proactive.destinations)}, "
+                "replayed="
+                f"{tuple(item.replayed for item in replayed_proactive.destinations)}, "
+                f"send_calls={consumer.channel.native_send_calls}, before={sends_before_replay}"
+            )
+        rebound_b = await actions_b.bind_thread(
+            first_thread_ref,
+            action_id="reference:proactive:restore-route",
+            expected_generation=moved_b.value.binding_generation,
+        )
+        if not isinstance(rebound_b, Succeeded):
+            raise AssertionError("Conversation B route could not be restored")
+
+        consumer.channel.set_next_delivery_status(
+            conversation_b.ref,
+            DeliveryReceiptStatus.UNKNOWN,
+        )
+        unknown_intent = DeliveryIntent(
+            delivery_id="reference:proactive:partial-unknown",
+            target=ThreadRouteDeliveryTarget(first_thread_ref),
+            content=(TextContent("reference partial outcome"),),
+            created_at=datetime.now(UTC),
+        )
+        unknown_result = await gateway.deliver_proactively(
+            unknown_intent,
+            credential=proactive_credential,
+        )
+        destination_states = {item.state for item in unknown_result.destinations}
+        proactive_partial_isolated = destination_states == {
+            DeliverySubmissionState.ACCEPTED,
+            DeliverySubmissionState.UNKNOWN,
+        }
+        sends_before_unknown_replay = consumer.channel.native_send_calls
+        unknown_replay = await gateway.deliver_proactively(
+            unknown_intent,
+            credential=proactive_credential,
+        )
+        proactive_unknown_sticky = bool(
+            {item.state for item in unknown_replay.destinations} == destination_states
+            and consumer.channel.native_send_calls == sends_before_unknown_replay
+        )
+        if not proactive_partial_isolated or not proactive_unknown_sticky:
+            raise AssertionError("proactive partial/unknown outcome lost isolation or retried")
+
+        side_effects_before_hostile = consumer.channel.native_send_calls
+        digest_attachment = artifact_ledger.stage(
+            "digest-mismatch",
+            b"digest mismatch bytes",
+            expected_destinations=2,
+        )
+        hostile_content = (
+            AttachmentContent(
+                "remote-url",
+                "text/plain",
+                RemoteUrl("https://example.invalid/private"),
+                filename="remote.txt",
+                size_bytes=1,
+            ),
+            AttachmentContent(
+                "handle",
+                "text/plain",
+                AttachmentHandle("untrusted-handle"),
+                filename="handle.txt",
+                size_bytes=1,
+            ),
+            AttachmentContent(
+                "outside-root",
+                "text/plain",
+                LocalPath(str(database_path)),
+                filename="outside.txt",
+                size_bytes=database_path.stat().st_size,
+                metadata={"sha256": "0" * 64},
+            ),
+            replace(digest_attachment, metadata={"sha256": "0" * 64}),
+            AttachmentContent(
+                "unsupported-media",
+                "application/pdf",
+                LocalPath(str(database_path)),
+                filename="unsupported.pdf",
+                size_bytes=1,
+                metadata={"sha256": "0" * 64},
+            ),
+            AttachmentContent(
+                "group-limit",
+                "text/plain",
+                LocalPath(str(database_path)),
+                filename="group-limit.txt",
+                size_bytes=1_500,
+                metadata={"sha256": "0" * 64},
+            ),
+        )
+        hostile_results = []
+        for index, content in enumerate(hostile_content):
+            hostile_results.append(
+                await gateway.deliver_proactively(
+                    DeliveryIntent(
+                        delivery_id=f"reference:media:hostile:{index}",
+                        target=ThreadRouteDeliveryTarget(first_thread_ref),
+                        content=(content,),
+                        created_at=datetime.now(UTC),
+                    ),
+                    credential=proactive_credential,
+                )
+            )
+        oversized_count = tuple(
+            AttachmentContent(
+                f"count-{index}",
+                "text/plain",
+                LocalPath(str(database_path)),
+                filename=f"count-{index}.txt",
+                size_bytes=1,
+                metadata={"sha256": "0" * 64},
+            )
+            for index in range(3)
+        )
+        count_result = await gateway.deliver_proactively(
+            DeliveryIntent(
+                delivery_id="reference:media:count-limit",
+                target=ThreadRouteDeliveryTarget(first_thread_ref),
+                content=oversized_count,
+                created_at=datetime.now(UTC),
+            ),
+            credential=proactive_credential,
+        )
+        media_preflight_side_effect_free = (
+            consumer.channel.native_send_calls == side_effects_before_hostile
+            and all(
+                result.state is DeliverySubmissionState.REJECTED
+                for result in (*hostile_results, count_result)
+            )
+        )
+        if not media_preflight_side_effect_free:
+            raise AssertionError("hostile media crossed the native side-effect boundary")
+
         projects = await actions_a.list_projects(application.ref)
         threads = await actions_a.list_threads(project_ref)
         if not isinstance(projects, Succeeded) or not isinstance(threads, Succeeded):
@@ -1093,6 +1481,16 @@ async def run_reference_consumer(reference_workspace: str) -> ReferenceReport:
             (conversation_a.ref, binding_a_before_restart.generation),
             (conversation_b.ref, binding_b_before_restart.generation),
         )
+        before_restart_request = len(consumer.channel.sent)
+        restart_request = await application.receive_native_approval_request(
+            first_thread_ref,
+            prompt="Approve after authoritative pending-request recovery?",
+        )
+        await _wait_for_messages(
+            consumer,
+            after=before_restart_request,
+            count=2,
+        )
         recovery_snapshot_before_restart = _read_current_sqlite_recovery_snapshot(database_path)
         if len(recovery_snapshot_before_restart.active_route_checkpoints) != 2 or any(
             checkpoint is None
@@ -1117,13 +1515,20 @@ async def run_reference_consumer(reference_workspace: str) -> ReferenceReport:
         "old-thread-after-switch",
         "new-thread-after-switch",
         "thread-one-after-switch-back",
-        "authoritative-output-while-gateway-stopped",
+        "Approve the bounded reference operation?",
+        "Approve after authoritative pending-request recovery?",
+        "consumer-owned artifact bytes",
+        "reference-proactive-credential",
+        "reference proactive artifact",
+        "reference partial outcome",
+        "https://example.invalid/private",
+        str(artifact_root),
         *persistence_markers.values(),
     )
     missed_turn = await application.receive_native_text(
         first_thread_ref,
         client_message_id="reference:native:while-gateway-stopped",
-        text="authoritative-output-while-gateway-stopped",
+        text="shared-thread-turn",
         metadata=persistence_markers,
     )
     dispatched_before_restart = application.input_dispatch_calls
@@ -1135,6 +1540,9 @@ async def run_reference_consumer(reference_workspace: str) -> ReferenceReport:
     restarted = build_reference_consumer(
         application=application,
         store=SQLiteGatewayStore(database_path, max_effect_receipts=64),
+        delivery_authorizer=authorizer,
+        delivery_outcome_observer=artifact_ledger,
+        trusted_attachment_root=artifact_root,
     )
     restarted_conversation_a = restarted.channel.conversation(
         "conversation-a",
@@ -1154,7 +1562,7 @@ async def run_reference_consumer(reference_workspace: str) -> ReferenceReport:
             actor=restarted_conversation_b.authenticated_actor,
         )
         await restarted.channel.wait_for_text(
-            "Neutral response: authoritative-output-while-gateway-stopped",
+            "Neutral response: shared-thread-turn",
             count=2,
         )
         await asyncio.sleep(0)
@@ -1164,6 +1572,13 @@ async def run_reference_consumer(reference_workspace: str) -> ReferenceReport:
             restarted_conversation_b.ref,
         ):
             raise AssertionError("SQLite recovery duplicated or omitted authoritative output")
+        recoverable_presentation_parity = bool(
+            shared
+            and recovered
+            and all(message.content == shared[0].content for message in recovered)
+        )
+        if not recoverable_presentation_parity:
+            raise AssertionError("live and history recovery presentation diverged")
 
         restored_a = await restarted_actions_a.get_binding()
         restored_b = await restarted_actions_b.get_binding()
@@ -1207,9 +1622,44 @@ async def run_reference_consumer(reference_workspace: str) -> ReferenceReport:
         )
         if not reconstructed_receipts:
             raise AssertionError("SQLite restart did not replay terminal workflow receipts")
+        request_calls_before_restart_response = application.request_response_calls
+        restart_response = await restarted_actions_a.respond_request(
+            restart_request.request_ref,
+            ApprovalResponse("approve"),
+            action_id="reference:request:restart-pending",
+        )
+        request_restart_pending_recovered = bool(
+            isinstance(restart_response, Succeeded)
+            and application.request_response_calls == request_calls_before_restart_response + 1
+        )
+        if not request_restart_pending_recovered:
+            raise AssertionError("authoritative pending request was not recoverable after restart")
         recovery_redispatched_input = application.input_dispatch_calls != dispatched_before_restart
         if recovery_redispatched_input:
             raise AssertionError("projection recovery redispatched authoritative native input")
+
+        restarted_sends_before_proactive = restarted.channel.native_send_calls
+        restarted_proactive = await restarted.gateway.deliver_proactively(
+            proactive_intent,
+            credential=proactive_credential,
+        )
+        restarted_unknown = await restarted.gateway.deliver_proactively(
+            unknown_intent,
+            credential=proactive_credential,
+        )
+        proactive_restart_replayed = bool(
+            restarted_proactive.state is DeliverySubmissionState.ACCEPTED
+            and len(restarted_proactive.destinations) == 2
+            and all(item.replayed for item in restarted_proactive.destinations)
+            and {item.state for item in restarted_unknown.destinations}
+            == {
+                DeliverySubmissionState.ACCEPTED,
+                DeliverySubmissionState.UNKNOWN,
+            }
+            and restarted.channel.native_send_calls == restarted_sends_before_proactive
+        )
+        if not proactive_restart_replayed:
+            raise AssertionError("SQLite restart did not replay pinned proactive outcomes")
 
         if recovery_snapshot_before_restart is None:
             raise AssertionError("pre-restart recovery snapshot was not captured")
@@ -1351,6 +1801,22 @@ async def run_reference_consumer(reference_workspace: str) -> ReferenceReport:
         active_workers_after_shutdown=active_workers,
         registry_active_after_shutdown=registry_active,
         owned_tasks_after_shutdown=len(owned_tasks),
+        request_delivered_destinations=request_delivered_destinations,
+        request_nonrecipient_rejected=request_nonrecipient_rejected,
+        request_first_writer_won=request_first_writer_won,
+        request_duplicate_rejected=request_duplicate_rejected,
+        request_replay_idempotent=request_replay_idempotent,
+        request_restart_pending_recovered=request_restart_pending_recovered,
+        live_only_checkpoint_stable=live_only_checkpoint_stable,
+        recoverable_presentation_parity=recoverable_presentation_parity,
+        proactive_destination_count=proactive_destination_count,
+        proactive_routes_pinned=proactive_routes_pinned,
+        proactive_partial_isolated=proactive_partial_isolated,
+        proactive_unknown_sticky=proactive_unknown_sticky,
+        proactive_restart_replayed=proactive_restart_replayed,
+        media_preflight_side_effect_free=media_preflight_side_effect_free,
+        artifact_startup_swept=artifact_startup_swept,
+        artifact_cleanup_complete=artifact_cleanup_complete,
     )
 
 

@@ -338,10 +338,35 @@ authoritative history survives is reused.
 
 ### G. Requests, media, artifacts, and proactive delivery
 
-Reconnect existing safety implementations through the one public runtime and
-store. Preserve delivered-destination request authorization, typed trust,
-consumer-owned artifact bytes/cleanup, pinned proactive routes, and sticky
-unknown outcomes.
+Status: complete.
+
+The existing request-correlation, media-planning/trust, artifact-outcome, and
+proactive-delivery owners now run through the canonical public `Gateway`, its
+single coherent `GatewayStore` session, and the same delivery Coordinator.
+`ConversationActions.respond_request` authorizes against correlations created
+only after accepted request delivery, then uses B's durable native-effect
+fence; a non-recipient is rejected before Application work, native first-writer
+truth wins, and terminal action replay performs no second native operation.
+Startup reprojects only an Application's authoritative pending snapshot; when
+that capability is absent, pre-existing open evidence becomes explicitly
+stale.
+
+The source and clean-wheel reference executable now covers a request delivered
+to two Conversations, duplicate and restart behavior, exact proactive
+principal scope, immutable two-destination route snapshots across a later
+binding change, isolated accepted/unknown outcomes, sticky replay across fresh
+SQLite objects, and unsupported/trust/digest/count/size/media/grouping failures
+before the reference Channel's native-send boundary. Its injected,
+consumer-owned bounded artifact ledger covers cancellation/failure release,
+partial startup, restart sweep, per-destination outcome cleanup, and root
+confinement. Exact schema/value and bounded WAL/sidecar byte inspection rejects
+artifact bytes, paths, request/job content, credentials, and other
+authority-owned data in SDK persistence. Focused Memory evidence and the same
+SQLite executable retain one worker/subscription owner and D/F lifecycle,
+store-fence, checkpoint, and recovery invariants. The executable also compares
+the recoverable presentation signature on live and history-recovered output and
+proves that a delivered live-only item leaves both destination completion
+checkpoints unchanged.
 
 ### H. Lifecycle, diagnostics, adapters, and release surface
 

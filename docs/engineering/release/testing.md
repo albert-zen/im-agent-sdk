@@ -72,6 +72,12 @@ all sidecars through one consistent WAL-aware read snapshot, the exact
 `sqlite_schema` object/definition and column allowlist, bounded value-shape
 validation, stable descriptor path identities, and encoded or fragmented
 authority-data counterexamples.
+It additionally executes the complete Block G request, media, artifact,
+presentation, and proactive path: delivered-recipient first-writer response,
+pending-snapshot recovery, pinned routes, isolated sticky unknown, bounded
+consumer cleanup, hostile media rejection before native send, and exact
+database/WAL/sidecar exclusion of bytes, paths, credentials, and content/job
+bodies.
 The base case also proves, in the original transition-first clean process,
 that `imagent.diagnostics` preserves exact identity for the canonical
 Interaction, Channel, and Application diagnostics objects. It additionally

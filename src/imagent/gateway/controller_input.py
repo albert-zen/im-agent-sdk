@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 
 from ..applications.contract import AgentApplicationAdapter, ApplicationRef, ApplicationSummary
 from ..applications.operations import ApplicationOperation, ApplicationOperationResult
 from ..applications.requests import RequestRef, RequestResponse
 from ..interaction.messages import ConversationRef
-from ..interaction.operations import OperationErrorCode
+from ..interaction.operations import OperationErrorCode, _MappedOperationError, operation_error
 from .actions import (
     ApplicationActions,
     ConversationActions,
@@ -26,19 +26,27 @@ from .effect_execution import (
     StoreEffectPreflight,
     WorkflowEffectCommitFence,
 )
+from .outcomes import Failed, Succeeded
 from .persistence.effects import (
     ActionError,
     ActionErrorCode,
     ActionOutcome,
     CreateBindingWorkflowRequest,
+    EffectValue,
     KnownNativeOutcome,
     NativeMutationRequest,
+    StableReference,
     StoreMutationRequest,
 )
 from .persistence.state_contracts import ConversationBinding
 from .projection.observation import (
     ProjectionRuntimeUnavailableError,
     ProjectionWorkerCapacityError,
+)
+from .projection.request_correlation import (
+    InteractiveRequestProjection,
+    RequestResponseRouted,
+    RespondToRequest,
 )
 
 ApplicationExecutor = Callable[[ApplicationOperation], Awaitable[ApplicationOperationResult]]
@@ -139,6 +147,7 @@ class _ScopedControllerActionRuntime:
         complete_projection_route: ProjectionRouteBootstrapComplete,
         abort_projection_route: ProjectionRouteBootstrapAbort,
         fence_projection_route_commit: ProjectionRouteCommitFence,
+        request_projection: InteractiveRequestProjection,
     ) -> None:
         self._gateway_id = gateway_id
         self._applications = applications
@@ -152,6 +161,7 @@ class _ScopedControllerActionRuntime:
         self._complete_projection_route = complete_projection_route
         self._abort_projection_route = abort_projection_route
         self._fence_projection_route_commit = fence_projection_route_commit
+        self._request_projection = request_projection
 
     def actions(
         self,
@@ -292,8 +302,16 @@ class _ScopedControllerActionRuntime:
         response: RequestResponse,
     ) -> None:
         self._require_active()
-        del conversation_ref, request_ref, response
-        raise NotImplementedError("request-response action wiring belongs to DAG block G")
+        await self._request_projection.authorize_response(
+            RespondToRequest(
+                operation_id="imagent:request-response:preflight",
+                conversation_ref=conversation_ref,
+                actor="imagent:request-response:preflight",
+                request_ref=request_ref,
+                response=response,
+                created_at=datetime.now(UTC),
+            )
+        )
 
     async def invoke_request_response(
         self,
@@ -304,8 +322,24 @@ class _ScopedControllerActionRuntime:
         response: RequestResponse,
     ) -> KnownNativeOutcome:
         self._require_active()
-        del conversation_ref, operation_id, request_ref, response
-        raise NotImplementedError("request-response action wiring belongs to DAG block G")
+        operation = RespondToRequest(
+            operation_id=operation_id,
+            conversation_ref=conversation_ref,
+            actor="imagent:request-response",
+            request_ref=request_ref,
+            response=response,
+            created_at=datetime.now(UTC),
+        )
+        try:
+            result = await self._request_projection.route_response(
+                operation,
+                completed_at=datetime.now(UTC),
+            )
+        except _MappedOperationError as error:
+            return Failed(_request_action_error(error))
+        if not isinstance(result, RequestResponseRouted) or result.request_ref != request_ref:
+            raise RuntimeError("request response returned an incompatible result")
+        return Succeeded(EffectValue(reference=StableReference.from_value(request_ref)))
 
     async def reconcile_request_response(
         self,
@@ -317,8 +351,22 @@ class _ScopedControllerActionRuntime:
     ) -> KnownNativeOutcome | None:
         self._require_active()
         del conversation_ref, operation_id, request_ref, response
-        raise NotImplementedError("request-response action wiring belongs to DAG block G")
+        return None
 
     def _require_active(self) -> None:
         if not self._active:
             raise RuntimeError("Gateway scoped action runtime is not active")
+
+
+def _request_action_error(error: _MappedOperationError) -> ActionError:
+    projected = operation_error(error)
+    try:
+        operation_code = OperationErrorCode(projected.code)
+    except ValueError:
+        operation_code = OperationErrorCode.ADAPTER_FAILURE
+    action_code = {
+        OperationErrorCode.UNSUPPORTED: ActionErrorCode.UNSUPPORTED,
+        OperationErrorCode.CONFLICT: ActionErrorCode.CONFLICT,
+        OperationErrorCode.CAPACITY_EXHAUSTED: ActionErrorCode.CAPACITY_EXHAUSTED,
+    }.get(operation_code, ActionErrorCode.NATIVE_REJECTED)
+    return ActionError(action_code, operation_code)

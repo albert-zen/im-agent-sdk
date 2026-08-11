@@ -212,6 +212,7 @@ class ComponentMapTests(unittest.TestCase):
         self.assertEqual(
             composition["current_code"],
             [
+                "src/imagent/gateway/runtime.py",
                 "src/imagent/gateway/composition.py",
                 "src/imagent/gateway/controller_input.py",
                 "src/imagent/gateway/__init__.py",
@@ -309,6 +310,7 @@ class ComponentMapTests(unittest.TestCase):
         self.assertEqual(
             components["gateway.delivery.proactive-authorization"]["public_contracts"],
             [
+                "DeliveryAuthorizationError",
                 "DeliveryAuthorizer",
                 "DeliveryPrincipal",
                 "ScopedDeliveryAuthorizer",

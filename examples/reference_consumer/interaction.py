@@ -8,8 +8,10 @@ once these public contracts are supplied to the public Gateway.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 
 from imagent import ConversationActions
 from imagent.diagnostics import (
@@ -33,6 +35,13 @@ from imagent.interaction.controllers import (
     CommandRegistry,
     CommandResult,
     include_common_commands,
+)
+from imagent.interaction.media import (
+    AttachmentContent,
+    AttachmentGrouping,
+    AttachmentSourceKind,
+    configure_shared_filesystem_root,
+    resolve_local_attachment,
 )
 from imagent.interaction.messages import (
     ConversationRef,
@@ -92,6 +101,7 @@ class ReferenceChannel:
         channel_instance_id: str = "reference-channel",
         *,
         max_outbound_records: int = 256,
+        trusted_attachment_root: str | Path | None = None,
     ) -> None:
         if (
             not isinstance(max_outbound_records, int)
@@ -102,15 +112,25 @@ class ReferenceChannel:
         require_identifier(channel_instance_id, "Channel instance ID")
         self._channel_instance_id = channel_instance_id
         self._max_outbound_records = max_outbound_records
+        self._trusted_attachment_root = configure_shared_filesystem_root(trusted_attachment_root)
         self._capabilities = ChannelCapabilities(
             markdown=DeliverySupportLevel.NATIVE,
             reply_references=DeliverySupportLevel.NATIVE,
+            attachments=DeliverySupportLevel.NATIVE,
+            attachment_sources=(AttachmentSourceKind.LOCAL_PATH,),
+            attachment_media_types=("text/plain",),
+            attachment_grouping=AttachmentGrouping.NONE,
+            max_attachment_size=2_048,
+            max_attachment_count=2,
+            max_attachment_group_size=1_024,
         )
         self._on_message: MessageHandler | None = None
         self._on_admission: InboundAdmissionHandler | None = None
         self._started = False
         self._start_count = 0
         self._sent: list[OutboundMessage] = []
+        self._native_send_calls = 0
+        self._next_delivery_status: dict[ConversationRef, DeliveryReceiptStatus] = {}
         self._delivery_changed = asyncio.Condition()
 
     @property
@@ -132,6 +152,21 @@ class ReferenceChannel:
     @property
     def max_outbound_records(self) -> int:
         return self._max_outbound_records
+
+    @property
+    def native_send_calls(self) -> int:
+        return self._native_send_calls
+
+    def set_next_delivery_status(
+        self,
+        conversation_ref: ConversationRef,
+        status: DeliveryReceiptStatus,
+    ) -> None:
+        if conversation_ref.channel_instance_id != self.channel_instance_id:
+            raise ValueError("delivery status belongs to a different Channel")
+        if not isinstance(status, DeliveryReceiptStatus):
+            raise TypeError("status must be DeliveryReceiptStatus")
+        self._next_delivery_status[conversation_ref] = status
 
     def conversation(
         self,
@@ -195,15 +230,44 @@ class ReferenceChannel:
         )
         if message.conversation_ref.channel_instance_id != self.channel_instance_id:
             raise ValueError("outbound message belongs to a different Channel instance")
+        for content in message.content:
+            if not isinstance(content, AttachmentContent):
+                continue
+            try:
+                resolved = resolve_local_attachment(
+                    content.source,
+                    shared_filesystem_root=self._trusted_attachment_root,
+                    consumer="reference Channel",
+                )
+                payload = resolved.read_bytes()
+                if content.size_bytes != len(payload):
+                    raise ValueError("reference attachment declared size does not match bytes")
+                digest = content.metadata.get("sha256")
+                if not isinstance(digest, str) or hashlib.sha256(payload).hexdigest() != digest:
+                    raise ValueError("reference attachment digest does not match bytes")
+            except (OSError, ValueError):
+                return DeliveryReceipt(
+                    status=DeliveryReceiptStatus.REJECTED_BY_PLATFORM,
+                    detail="reference attachment failed trust, size, or digest validation",
+                )
+        self._native_send_calls += 1
         async with self._delivery_changed:
             if len(self._sent) >= self._max_outbound_records:
                 raise RuntimeError("reference Channel outbound-record capacity is exhausted")
             self._sent.append(message)
             delivery_number = len(self._sent)
             self._delivery_changed.notify_all()
+        status = self._next_delivery_status.pop(
+            message.conversation_ref,
+            DeliveryReceiptStatus.ACCEPTED_BY_PLATFORM,
+        )
         return DeliveryReceipt(
-            status=DeliveryReceiptStatus.ACCEPTED_BY_PLATFORM,
-            native_message_id=f"reference-delivery-{delivery_number}",
+            status=status,
+            native_message_id=(
+                f"reference-delivery-{delivery_number}"
+                if status is DeliveryReceiptStatus.ACCEPTED_BY_PLATFORM
+                else None
+            ),
         )
 
     async def wait_for_text(

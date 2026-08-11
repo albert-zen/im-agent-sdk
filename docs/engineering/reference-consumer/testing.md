@@ -27,6 +27,21 @@ entry point used by `python -m examples.reference_consumer.main` and proves:
   checkpoints advance from their captured stable item to the missed stable item,
   completed idempotency rows survive, and a duplicate prior stable Channel input
   causes neither another Application call nor another delivery;
+- one request reaches exactly two Conversations, a non-recipient fails before
+  Application work, native first-writer truth rejects the other recipient, and
+  same-ID plus pending-snapshot restart replay remain idempotent; absent snapshot
+  support is a typed stale failure;
+- exact proactive authorization, pinned multi-destination routes, Memory and
+  SQLite replay, isolated accepted/unknown results, sticky unknown, and finite
+  principal/submission capacity all use the canonical public Gateway;
+- supported artifact delivery and unsupported/hostile source, root, digest,
+  count, size, media, and grouping cases cross real public planning while no
+  rejected case increments the Channel native-send boundary;
+- the bounded consumer artifact ledger covers cancellation/failure release,
+  partial-file startup recovery, per-destination cleanup, restart sweep, root
+  confinement, and capacity exhaustion without SDK byte/path ownership;
+- recoverable live/history presentation has one signature and live-only output
+  does not advance either destination checkpoint;
 - read-only SQLite integrity, exact `sqlite_schema` object/definition and column
   allowlisting, and bounded type/cardinality/value-shape validation cover one
   consistent WAL-aware snapshot and every bridge row, while race-bounded

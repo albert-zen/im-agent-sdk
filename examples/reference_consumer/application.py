@@ -71,6 +71,8 @@ from imagent.applications.operations import (
     ProjectCreated,
     ProjectRead,
     ProjectsListed,
+    RequestResponded,
+    RespondRequest,
     ThreadCreated,
     ThreadHistoryRead,
     ThreadRead,
@@ -80,7 +82,18 @@ from imagent.applications.operations import (
     validate_application_operation,
     validate_application_operation_result,
 )
-from imagent.applications.requests import InteractiveRequest
+from imagent.applications.requests import (
+    ApprovalRequest,
+    ApprovalResponse,
+    InteractiveRequest,
+    RequestChoice,
+    RequestDuplicateError,
+    RequestRef,
+    RequestResolution,
+    RequestResolutionStatus,
+    derive_request_response_shape,
+    validate_request_response,
+)
 from imagent.diagnostics import (
     ApplicationDiagnosticFacts,
     ConnectionDiagnosticFacts,
@@ -171,7 +184,15 @@ class ReferenceApplication:
         max_threads: int = 8,
         max_turns_per_thread: int = 8,
         max_events_per_thread: int = 64,
+        pending_request_snapshot_support: SupportLevel = SupportLevel.NATIVE,
     ) -> None:
+        if pending_request_snapshot_support not in {
+            SupportLevel.NATIVE,
+            SupportLevel.UNSUPPORTED,
+        }:
+            raise ValueError(
+                "reference pending-request snapshot support must be native or unsupported"
+            )
         self._max_projects = _require_positive_int(max_projects, "max_projects")
         self._max_threads = _require_positive_int(max_threads, "max_threads")
         self._max_turns_per_thread = _require_positive_int(
@@ -200,7 +221,8 @@ class ReferenceApplication:
                 streaming=SupportLevel.NATIVE,
                 replay_from_cursor=SupportLevel.NATIVE,
                 interruption=SupportLevel.UNSUPPORTED,
-                interactive_requests=SupportLevel.UNSUPPORTED,
+                interactive_requests=SupportLevel.NATIVE,
+                pending_request_snapshot=pending_request_snapshot_support,
                 gap_detection=SupportLevel.NATIVE,
                 event_sequence_scope=EventSequenceScope.THREAD,
             ),
@@ -237,6 +259,14 @@ class ReferenceApplication:
             max_pending=_EVENT_BROADCASTER_MAX_PENDING
         )
         self._event_epoch = "reference-epoch-1"
+        self._pending_requests: dict[RequestRef, ApprovalRequest] = {}
+        self._resolved_requests: set[RequestRef] = set()
+        self._request_operations: dict[
+            str,
+            tuple[RequestRef, ApprovalResponse, RequestResponded],
+        ] = {}
+        self._request_response_calls = 0
+        self._next_request = 1
         self._next_project = 1
         self._next_thread = 1
         self._next_turn = 1
@@ -290,6 +320,10 @@ class ReferenceApplication:
     def input_dispatch_calls(self) -> int:
         return self._input_dispatch_calls
 
+    @property
+    def request_response_calls(self) -> int:
+        return self._request_response_calls
+
     async def start(self) -> None:
         if self._started:
             return
@@ -300,7 +334,82 @@ class ReferenceApplication:
         self._started = False
 
     async def list_pending_requests(self) -> tuple[InteractiveRequest, ...]:
-        return ()
+        if self.capabilities.runtime.pending_request_snapshot is not SupportLevel.NATIVE:
+            raise NotImplementedError("pending request snapshots are unsupported")
+        return tuple(self._pending_requests.values())
+
+    async def receive_native_approval_request(
+        self,
+        thread_ref: ThreadRef,
+        *,
+        prompt: str,
+    ) -> ApprovalRequest:
+        """Open one authoritative request on the existing native event stream."""
+
+        if thread_ref not in self._threads:
+            raise KeyError(thread_ref)
+        if not prompt or len(prompt) > 512:
+            raise ValueError("reference approval prompt must be bounded text")
+        if len(self._pending_requests) >= self._max_threads:
+            raise _CapacityExceeded("reference pending-request capacity is exhausted")
+        turn_id = f"reference-request-turn-{self._next_request}"
+        request_ref = RequestRef(
+            self.ref,
+            f"{self._event_epoch}:reference-request-{self._next_request}",
+        )
+        self._next_request += 1
+        request = ApprovalRequest(
+            request_ref=request_ref,
+            turn_ref=TurnRef(thread_ref, turn_id),
+            prompt=prompt,
+            choices=(
+                RequestChoice("approve", "Approve"),
+                RequestChoice("decline", "Decline"),
+            ),
+        )
+        self._pending_requests[request_ref] = request
+        self._threads[thread_ref] = replace(
+            self._threads[thread_ref],
+            status=ThreadStatus.RUNNING,
+            updated_at=_now(),
+        )
+        self._publish(
+            thread_ref,
+            AgentEventType.REQUEST_OPENED,
+            turn_id,
+            {},
+            request=request,
+        )
+        return request
+
+    async def receive_native_live_activity(
+        self,
+        thread_ref: ThreadRef,
+        *,
+        text: str,
+    ) -> AgentMessage:
+        """Publish non-recoverable live activity without changing transcript truth."""
+
+        if thread_ref not in self._threads:
+            raise KeyError(thread_ref)
+        if not text or len(text) > 512:
+            raise ValueError("reference live activity must be bounded text")
+        sequence_hint = self._sequences[thread_ref] + 1
+        message = AgentMessage(
+            agent_item_id=f"reference-live-only-{sequence_hint}",
+            thread_ref=thread_ref,
+            role=MessageRole.SYSTEM,
+            content=(TextContent(text, TextFormat.MARKDOWN),),
+            created_at=_now(),
+            metadata={"live_only": True},
+        )
+        self._publish(
+            thread_ref,
+            AgentEventType.MESSAGE_CREATED,
+            f"reference-live-only-turn-{sequence_hint}",
+            {"message": message},
+        )
+        return message
 
     async def create_project(
         self,
@@ -691,6 +800,53 @@ class ReferenceApplication:
             )
         if isinstance(operation, InterruptTurn):
             raise NotImplementedError("turn interruption is not part of the example")
+        if isinstance(operation, RespondRequest):
+            self._request_response_calls += 1
+            if not isinstance(operation.response, ApprovalResponse):
+                raise ValueError("reference request accepts an approval response")
+            existing = self._request_operations.get(operation.operation_id)
+            if existing is not None:
+                request_ref, response, result = existing
+                if (request_ref, response) != (operation.request_ref, operation.response):
+                    raise _IntentConflict(
+                        "request response operation ID was reused with different intent"
+                    )
+                return result
+            request = self._pending_requests.get(operation.request_ref)
+            if request is None:
+                raise RequestDuplicateError("reference request is already resolved")
+            if request.turn_ref != operation.turn_ref:
+                raise ValueError("request response belongs to a different Turn")
+            validate_request_response(
+                operation.response,
+                derive_request_response_shape(request),
+            )
+            self._pending_requests.pop(operation.request_ref)
+            self._resolved_requests.add(operation.request_ref)
+            result = RequestResponded(
+                operation_id=operation.operation_id,
+                completed_at=completed_at,
+                request_ref=operation.request_ref,
+            )
+            self._request_operations[operation.operation_id] = (
+                operation.request_ref,
+                operation.response,
+                result,
+            )
+            resolution = RequestResolution(
+                request_ref=operation.request_ref,
+                turn_ref=request.turn_ref,
+                status=RequestResolutionStatus.RESOLVED,
+                resolved_at=completed_at,
+            )
+            self._publish(
+                request.turn_ref.thread_ref,
+                AgentEventType.REQUEST_RESOLVED,
+                request.turn_ref.turn_id,
+                {},
+                request_resolution=resolution,
+            )
+            return result
         raise NotImplementedError(operation.type.value)
 
     def diagnostic_facts(self) -> ApplicationDiagnosticFacts:
@@ -752,6 +908,9 @@ class ReferenceApplication:
         event_type: AgentEventType,
         turn_id: str,
         data: dict[str, object],
+        *,
+        request: InteractiveRequest | None = None,
+        request_resolution: RequestResolution | None = None,
     ) -> None:
         if len(self._event_history[thread_ref]) >= self._max_events_per_thread:
             raise RuntimeError("reserved reference replay-event capacity was violated")
@@ -772,6 +931,8 @@ class ReferenceApplication:
             sequence=sequence,
             sequence_epoch=self._event_epoch,
             cursor=f"reference:{self._event_epoch}:{thread_ref.thread_id}:{sequence}",
+            request=request,
+            request_resolution=request_resolution,
         )
         history = self._event_history[thread_ref]
         history.append(event)

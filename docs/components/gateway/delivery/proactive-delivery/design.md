@@ -128,6 +128,12 @@ coordination, O2, client tools, and persistence in their accepted owners. The
 may consume passive state/helpers, but the state leaf never imports delivery
 orchestration.
 
+The canonical public `Gateway` delegates its target-authorization and delivery
+methods directly to this runtime over the one coherent store session and one
+Coordinator. No second ingress, subscription, worker, outbox, or retry owner is
+introduced. Public results expose the fixed submission-state vocabulary and
+typed authorization/capacity failures from their existing owners.
+
 ## Authority
 
 - [ADR 0009](../../../../decisions/0009-proactive-delivery-routing.md)

@@ -21,3 +21,7 @@ Focused tests mirror the owner at
 Proactive, projection, Coordinator, diagnostics, and artifact-lifetime suites
 continue proving that O2 cannot alter receipt, retry, checkpoint,
 idempotency, restart convergence, or cleanup ordering.
+
+The reference artifact ledger is the public consumer: accepted, rejected, and
+unknown destination notifications release only its own leases, while replay
+does not fabricate a second observation or cleanup attempt.

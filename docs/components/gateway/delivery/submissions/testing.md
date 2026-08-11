@@ -53,3 +53,7 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 
 Also run every repository gate in `AGENTS.md`, including component-map and
 AgentKit validation.
+
+The public reference consumer additionally inspects exact SQLite rows and
+database/WAL/sidecar bytes while replaying pinned accepted/unknown records; no
+content, artifact path/bytes, credential, or job body may appear.

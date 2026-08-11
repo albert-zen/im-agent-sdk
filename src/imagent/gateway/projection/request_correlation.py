@@ -48,6 +48,7 @@ from ...interaction.operations import (
     ContractError,
     ContractViolation,
     OperationErrorCode,
+    _MappedOperationError,
 )
 from ..concurrency import KeyedLockRegistry
 from ..persistence.repository_contracts import (
@@ -110,12 +111,16 @@ class RequestResponseRouted(_GatewayOperationSucceeded):
     )
 
 
-class _RequestResponseRejected(RuntimeError):
+class _RequestResponseRejected(_MappedOperationError):
     """Carry an exact owner-selected contract error to aggregate dispatch."""
 
     def __init__(self, error: ContractError) -> None:
         super().__init__(error.message)
         self.error = error
+        try:
+            self.operation_error_code = OperationErrorCode(error.code)
+        except ValueError:
+            self.operation_error_code = OperationErrorCode.ADAPTER_FAILURE
 
 
 def _validate_respond_operation(operation: RespondToRequest) -> None:
@@ -539,48 +544,19 @@ class InteractiveRequestProjection:
                 completed_at=completed_at,
             )
 
+    async def authorize_response(self, operation: RespondToRequest) -> None:
+        """Validate delivered-destination authority before a native effect fence."""
+
+        async with self._request_locks.hold(operation.request_ref):
+            await self._authorized_response_destination(operation)
+
     async def _respond_to_request(
         self,
         operation: RespondToRequest,
         *,
         completed_at: datetime,
     ) -> RequestResponseRouted:
-        correlations = await self._correlations.list_request_correlations(
-            request_ref=operation.request_ref
-        )
-        if not correlations:
-            raise RequestStaleError("request is unknown, expired, or no longer answerable")
-        destination = next(
-            (
-                correlation
-                for correlation in correlations
-                if correlation.conversation_ref == operation.conversation_ref
-            ),
-            None,
-        )
-        if destination is None:
-            raise _RequestResponseRejected(
-                ContractError(
-                    code=OperationErrorCode.UNAUTHORIZED_DESTINATION.value,
-                    message="this Conversation did not receive the request",
-                )
-            )
-        if destination.state is RequestRouteState.RESPONDED:
-            raise RequestDuplicateError("request already has a submitted response")
-        if destination.state is RequestRouteState.RESOLVED:
-            raise RequestResolvedError("request is already resolved")
-        if destination.state is RequestRouteState.STALE:
-            raise RequestStaleError("request response handle is stale")
-        now = datetime.now(UTC)
-        if destination.expires_at is not None and destination.expires_at <= now:
-            await self._transition_request_state(
-                operation.request_ref,
-                state=RequestRouteState.STALE,
-                expected_states=(RequestRouteState.OPEN,),
-                updated_at=now,
-            )
-            raise RequestStaleError("request has expired")
-        validate_request_response(operation.response, destination.response_shape)
+        destination = await self._authorized_response_destination(operation)
         application = self._application(
             operation.request_ref.application_ref.application_instance_id
         )
@@ -624,6 +600,48 @@ class InteractiveRequestProjection:
             request_ref=operation.request_ref,
             completed_at=completed_at,
         )
+
+    async def _authorized_response_destination(
+        self,
+        operation: RespondToRequest,
+    ) -> RequestRouteCorrelation:
+        correlations = await self._correlations.list_request_correlations(
+            request_ref=operation.request_ref
+        )
+        if not correlations:
+            raise RequestStaleError("request is unknown, expired, or no longer answerable")
+        destination = next(
+            (
+                correlation
+                for correlation in correlations
+                if correlation.conversation_ref == operation.conversation_ref
+            ),
+            None,
+        )
+        if destination is None:
+            raise _RequestResponseRejected(
+                ContractError(
+                    code=OperationErrorCode.UNAUTHORIZED_DESTINATION.value,
+                    message="this Conversation did not receive the request",
+                )
+            )
+        if destination.state is RequestRouteState.RESPONDED:
+            raise RequestDuplicateError("request already has a submitted response")
+        if destination.state is RequestRouteState.RESOLVED:
+            raise RequestResolvedError("request is already resolved")
+        if destination.state is RequestRouteState.STALE:
+            raise RequestStaleError("request response handle is stale")
+        now = datetime.now(UTC)
+        if destination.expires_at is not None and destination.expires_at <= now:
+            await self._transition_request_state(
+                operation.request_ref,
+                state=RequestRouteState.STALE,
+                expected_states=(RequestRouteState.OPEN,),
+                updated_at=now,
+            )
+            raise RequestStaleError("request has expired")
+        validate_request_response(operation.response, destination.response_shape)
+        return destination
 
     async def _converge_native_request_failure(
         self,

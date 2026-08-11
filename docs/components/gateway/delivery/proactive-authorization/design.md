@@ -59,6 +59,10 @@ Channel/Application state.
 state-contract splits are pending; no second implementation is retained. The
 Gateway authorizer is the only code that owns the reference registry and its
 fixed authorization failure.
+Canonical `Gateway.authorize_proactive_target()` exposes that check before
+caller-owned artifact acquisition, while `deliver_proactively()` repeats it at
+submission. Credentials remain process-local/downstream and never enter the
+coherent Gateway store.
 
 ## Authority
 

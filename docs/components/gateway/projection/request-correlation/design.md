@@ -111,6 +111,13 @@ storage only. SQLite schema and SQL mutation live only in
 `gateway/persistence/sqlite.py`, and row conversion remains in the pure
 row-mapping leaf.
 
+Canonical composition injects this owner's narrow authorization/routing seam
+into `ConversationActions.respond_request`. The action preflight proves actual
+accepted delivery to that Conversation before B's native fence; the request
+lock then preserves Application first-writer truth. Startup uses only native
+pending snapshots and marks pre-existing open evidence stale when that
+capability is absent.
+
 - [ADR 0007](../../../../decisions/0007-projection-lifecycle-and-delivery-boundaries.md)
 - [ADR 0008](../../../../decisions/0008-interactive-request-routing.md)
 - [ADR 0012](../../../../decisions/0012-input-continuation-and-reply-correlation.md)

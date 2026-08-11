@@ -57,3 +57,8 @@ with those components.
 Any schema or public-contract change also requires `validate_schemas.py`,
 component-map validation, affected native adapter tests, and the repository-
 wide checks in `AGENTS.md`.
+
+The installed reference executable covers a supported rooted `LocalPath` plus
+unsupported `RemoteUrl`/handle, escaped root, digest mismatch, count, size,
+media, and group-limit cases through canonical proactive delivery. Every
+rejected case leaves its native-send counter unchanged.

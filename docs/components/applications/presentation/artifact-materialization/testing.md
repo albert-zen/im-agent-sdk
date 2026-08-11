@@ -32,3 +32,7 @@ presentation facade without loading adapters; and `typing.get_type_hints`
 resolves the owner protocol/runtime annotations without a historical-module
 reference. The built base wheel repeats the facade identity and old-module
 absence checks.
+
+The public reference suite adds consumer-owned partial-file startup recovery,
+cancellation/failure release, per-destination completion cleanup, restart
+sweep, root confinement, capacity, and SDK database/sidecar non-persistence.

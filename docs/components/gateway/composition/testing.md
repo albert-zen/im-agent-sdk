@@ -15,6 +15,9 @@
 
 - canonical `Gateway` acquires one coherent store session, constructs the
   private fenced executor once, and exposes only scoped actions to consumers;
+- canonical `Gateway` exposes proactive authorization/delivery through that
+  same session and Coordinator, while public request responses use the same
+  scoped action executor and projection correlation owner;
 - successful scoped bind/observe/workflow routes activate the one projection
   worker immediately, before a later inbound message, without duplicate
   Application subscriptions;
@@ -68,7 +71,11 @@
 
 `tests/gateway/test_reference_consumer.py` is the canonical public composition
 acceptance. It uses the same entry point as the installed-wheel smoke and
-rejects private store/session/executor/repository imports from the example.
+rejects private store/session/executor/repository imports from the example. Its
+Block G path covers two-recipient request first-writer/restart semantics,
+no-snapshot staleness, media/trust bounds before native send, consumer-owned
+artifact cleanup, pinned proactive routes, isolated unknown, and byte-level
+SQLite/WAL/sidecar non-persistence.
 
 The target focused suite is `tests/gateway/test_composition.py`, with facade
 checks retained in `tests/gateway/test_package_root.py`. Until focused group

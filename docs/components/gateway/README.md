@@ -33,9 +33,9 @@ Channel transport, Agent transcript, or second runtime.
 - [projection](projection/README.md) — one Thread-scoped Application observer,
   per-route completion checkpoints, minimal request/reply correlation, and
   bounded authoritative recovery.
-- [delivery](delivery/README.md) — deterministic planning and the remaining
-  coordination/submission/proactive/outcome leaves as they move in focused
-  slices.
+- [delivery](delivery/README.md) — deterministic planning, bounded
+  coordination, durable submissions, scoped proactive delivery, and typed
+  post-outcome observation through the canonical runtime.
 - [presentation design](presentation/design.md) and
   [testing](presentation/testing.md) — O1 bounded per-destination projection
   presentation and suppression.

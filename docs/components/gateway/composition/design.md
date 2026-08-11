@@ -28,8 +28,11 @@ binding transition facts, and foreground projection-route preparation without
 becoming a second mutation owner.
 
 Inputs are explicitly configured Application and Channel instances plus one
-typed store, Controller, limit, and extension dependencies. The output is one
-`Gateway` with no dependency lookup at runtime. Dependencies point to the
+typed store, Controller, limit, extension dependencies, and optional typed
+proactive authorizer/Coordinator. The output is one `Gateway` with no dependency
+lookup at runtime. The authorizer and Coordinator are passed to the existing
+delivery owner; composition creates no second delivery runtime, worker, ingress,
+or store. Dependencies point to the
 public Interaction and Applications
 contracts and the specific Gateway admission, input, projection, presentation,
 delivery, persistence, and diagnostics leaves that consume the values.
@@ -115,6 +118,15 @@ receipt replay remains before fence admission. Canonical `Gateway` owns the
 public `GatewayStore` acquisition and deterministic release; the private
 session and `GatewayRepositories` never become consumer-facing construction
 ports.
+
+The same public object exposes proactive target authorization and delivery.
+Target authorization is callable before consumer-owned artifact acquisition;
+submission then uses the one coherent session's delivery-submission view,
+immutable route snapshots, and the same bounded Coordinator used by ordinary
+outbound work. `ConversationActions.respond_request` likewise receives only the
+projection owner's narrow delivered-destination authorization/routing seam and
+B's existing effect executor. Neither integration grants consumers repository
+or Application-subscription authority.
 
 `projection_max_active_threads` is passed only to the Thread observation
 runtime. It bounds distinct stable `ThreadRef` workers in one Gateway process:

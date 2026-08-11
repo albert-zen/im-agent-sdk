@@ -90,6 +90,13 @@ fingerprinting: at most 32 question IDs, at most 64 answers per question, and
 at most 4,096 characters per answer. C fingerprints a canonical digest of the
 bounded answer structure, while the durable effect request retains no raw
 answer text.
+The canonical composition injects the projection owner's narrow response seam:
+preflight proves that this exact Conversation received the request, while the
+native phase serializes on stable `RequestRef`, validates the persisted response
+shape, and delegates first-writer truth to Application `request.respond`.
+Terminal effect replay precedes reauthorization. A missing authoritative
+pending snapshot marks restored open evidence stale rather than manufacturing a
+request or retrying an unknown native effect.
 
 The action layer has no store/session/runtime-lease/repository authority and
 does not sequence persistence calls. Its opaque projection barrier-generation

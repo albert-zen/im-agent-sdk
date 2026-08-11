@@ -31,3 +31,6 @@ and `imagent.contracts` attributes. Durable SQLite, restart, generic recovery,
 and real Application/Gateway integration evidence remains in
 `tests/gateway/persistence/test_sqlite.py`, `tests/applications/adapters/appserver/test_gateway_request_integration.py`,
 `tests/gateway/test_operations_integration.py`, and `tests/gateway/projection/test_hardening.py`.
+The canonical public acceptance in `tests/gateway/test_reference_consumer.py`
+adds two-recipient first-writer, non-recipient preflight rejection, terminal
+replay, authoritative pending restart, and no-snapshot stale counterexamples.

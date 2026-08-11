@@ -65,6 +65,11 @@ the named artifact contracts alongside the live-activity contracts. The
 historical `appserver_artifacts.py` module is absent; this move adds no
 artifact storage or new Application API semantics.
 
+The Block G reference consumer composes these boundaries without moving
+ownership: its bounded artifact ledger owns paths, bytes, leases, cancellation,
+and startup sweep, and O2 supplies only typed attempt outcomes. The SDK store
+retains no artifact record, spool, cleanup job, or path.
+
 ## Authority
 
 - [Architecture](../../../../ARCHITECTURE.md)

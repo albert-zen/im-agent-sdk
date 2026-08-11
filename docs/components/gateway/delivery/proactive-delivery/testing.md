@@ -84,3 +84,8 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
 Also run every repository gate in `AGENTS.md`.
+
+`tests/gateway/test_reference_consumer.py` exercises the same canonical methods
+with exact principal scope, immutable route IDs across a later binding change,
+two-destination accepted/unknown isolation, sticky replay, SQLite restart, and
+Memory capacity parity.

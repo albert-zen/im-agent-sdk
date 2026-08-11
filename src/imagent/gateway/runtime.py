@@ -24,6 +24,9 @@ from ..interaction.operations import require_identifier
 from . import ImAgentGateway
 from .actions import ApplicationActions, ConversationActions
 from .composition import GatewayExtensions, GatewayLimits, GatewayRepositories
+from .delivery.coordination import DeliveryCoordinator
+from .delivery.proactive import DeliveryIntent, DeliveryTarget, ProactiveDeliveryResult
+from .delivery.proactive_authorization import DeliveryAuthorizer
 from .diagnostics import DiagnosticsSnapshot, _bounded_cleanup_error_summary
 from .lifecycle import _detach_public_lifecycle_context, _public_lifecycle_error
 from .persistence.store import (
@@ -52,6 +55,8 @@ class Gateway:
         projection_policy: ProjectionPolicy = ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
         limits: GatewayLimits = GatewayLimits(),
         extensions: GatewayExtensions = GatewayExtensions(),
+        delivery_authorizer: DeliveryAuthorizer | None = None,
+        delivery_coordinator: DeliveryCoordinator | None = None,
     ) -> None:
         require_identifier(gateway_id, "gateway_id")
         if not isinstance(limits, GatewayLimits):
@@ -68,6 +73,12 @@ class Gateway:
             summary.ref.application_instance_id for summary in application_summaries
         )
         _validate_store(store)
+        _validate_delivery_authorizer(delivery_authorizer)
+        if delivery_coordinator is not None and not isinstance(
+            delivery_coordinator,
+            DeliveryCoordinator,
+        ):
+            raise TypeError("delivery_coordinator must be DeliveryCoordinator")
         if controller is not None and extensions.controller is not None:
             raise ValueError("configure the Controller once through Gateway.controller")
         if not isinstance(projection_policy, ProjectionPolicy):
@@ -86,6 +97,8 @@ class Gateway:
         self._projection_policy = projection_policy
         self._limits = limits
         self._extensions = replace(extensions, controller=self._controller)
+        self._delivery_authorizer = delivery_authorizer
+        self._delivery_coordinator = delivery_coordinator
         self._session: GatewayStoreSession | None = None
         self._runtime: ImAgentGateway | None = None
         self._lease_stop: asyncio.Event | None = None
@@ -164,6 +177,8 @@ class Gateway:
                     repositories=GatewayRepositories(bindings=session),
                     limits=self._limits,
                     extensions=self._extensions,
+                    delivery_authorizer=self._delivery_authorizer,
+                    delivery_coordinator=self._delivery_coordinator,
                     projection_policy=self._projection_policy,
                 )
                 self._runtime = runtime
@@ -226,6 +241,32 @@ class Gateway:
 
     def diagnostics(self) -> DiagnosticsSnapshot:
         return self._require_runtime().diagnostics_snapshot()
+
+    async def authorize_proactive_target(
+        self,
+        target: DeliveryTarget,
+        *,
+        credential: str,
+    ) -> None:
+        """Authorize a target before caller-owned attachment acquisition."""
+
+        await self._require_runtime().authorize_proactive_target(
+            target,
+            credential=credential,
+        )
+
+    async def deliver_proactively(
+        self,
+        intent: DeliveryIntent,
+        *,
+        credential: str,
+    ) -> ProactiveDeliveryResult:
+        """Submit one authorized intent through the canonical delivery runtime."""
+
+        return await self._require_runtime().deliver_proactively(
+            intent,
+            credential=credential,
+        )
 
     def _require_runtime(self) -> ImAgentGateway:
         if not self._started or self._runtime is None:
@@ -508,6 +549,15 @@ def _validate_store(store: GatewayStore) -> None:
             getattr(store, method_name, None),
             f"GatewayStore {method_name}()",
         )
+
+
+def _validate_delivery_authorizer(authorizer: DeliveryAuthorizer | None) -> None:
+    if authorizer is None:
+        return
+    _require_async_callable(
+        getattr(authorizer, "authenticate", None),
+        "delivery authorizer authenticate()",
+    )
 
 
 def _require_async_callable(value: object, description: str) -> None:
