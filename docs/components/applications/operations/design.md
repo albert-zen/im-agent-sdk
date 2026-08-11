@@ -61,8 +61,8 @@ nested `TurnRef` and `AgentMessage` must belong to the requested Thread rather
 than merely the same Application, and neither result may contain more entries
 than the requested limit.
 
-The retiring repository-wired `ImAgentGateway.execute_application` executes
-only its historical operation subset. A `DeleteProject` submission is rejected
+The private repository-wired Gateway runtime executes only its operation
+subset. A `DeleteProject` submission is rejected
 as typed unsupported before adapter dispatch; managed deletion enters only
 through principal-scoped `ApplicationActions` and B's durable native fence.
 

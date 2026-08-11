@@ -120,7 +120,7 @@ class GatewayOperationFailed:
 
 
 if TYPE_CHECKING:
-    _LegacyGatewayOperation: TypeAlias = (
+    _RuntimeGatewayOperation: TypeAlias = (
         ListApplications
         | SelectApplication
         | BindConversationToProject
@@ -288,7 +288,7 @@ def _complete_gateway_union() -> None:
         globals().update({name: request_values[name] for name in request_names})
         globals()["GatewayOperation"] = operation_union
         globals()["GatewayOperationResult"] = result_union
-        globals()["_LegacyGatewayOperation"] = legacy_operation_union
+        globals()["_RuntimeGatewayOperation"] = legacy_operation_union
         _UNION_COMPLETED = True
     finally:
         _UNION_COMPLETING = False
@@ -441,7 +441,7 @@ def _validate_application_selection_result(
         raise ContractViolation("application.select returned an incompatible binding")
 
 
-class _GatewayOperationExecutor:
+class _GatewayOperationRuntime:
     """Validate and dispatch Gateway operations under bounded Conversation locks."""
 
     def __init__(
@@ -467,7 +467,7 @@ class _GatewayOperationExecutor:
     ) -> AbstractAsyncContextManager[None]:
         return self._conversation_locks.hold(conversation_ref)
 
-    async def execute(self, operation: _LegacyGatewayOperation) -> GatewayOperationResult:
+    async def execute(self, operation: _RuntimeGatewayOperation) -> GatewayOperationResult:
         try:
             async with self._conversation_locks.hold(operation.conversation_ref):
                 return await self.execute_locked(operation)
@@ -481,7 +481,7 @@ class _GatewayOperationExecutor:
 
     async def execute_locked(
         self,
-        operation: _LegacyGatewayOperation,
+        operation: _RuntimeGatewayOperation,
     ) -> GatewayOperationResult:
         try:
             validate_gateway_operation(operation)
@@ -501,7 +501,7 @@ class _GatewayOperationExecutor:
 
     async def _dispatch(
         self,
-        operation: _LegacyGatewayOperation,
+        operation: _RuntimeGatewayOperation,
     ) -> GatewayOperationResult:
         completed_at = datetime.now(UTC)
         if isinstance(operation, ListApplications):

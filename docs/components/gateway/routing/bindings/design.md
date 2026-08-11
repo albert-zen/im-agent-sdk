@@ -48,8 +48,8 @@ The public operation/result contracts are `BindConversationToProject`,
 Application, and clear Application leaves the Conversation unbound. The new
 clear precondition fields use `expected_generation` exclusively, with no
 revision alias, and accept only non-Boolean non-negative integers. Their focused implementation owner is
-`imagent.gateway.routing.bindings`; `imagent.gateway.routing` and the stable
-`imagent.contracts` facade re-export those exact objects. Their current and
+`imagent.gateway.routing.bindings`; `imagent.gateway.routing` re-exports those
+exact objects. Their current and
 target exports are recorded in the [component map](../../../component-map.yml).
 Repository interfaces and concrete in-memory implementations remain in
 Gateway persistence; the binding owner supplies the typed CAS calls and
@@ -71,10 +71,7 @@ binding generation, store-only action receipts, workflow CAS, and atomic
 receipt/foreground-route transaction required by ADR 0016 belong to block B;
 no local compatibility receipt or second persistence path is introduced here.
 
-`imagent.contracts` remains a finite exact public facade. Its runtime
-`__getattr__` handles only the declared Gateway operation, binding, validator,
-and delivery-facade names, while its `TYPE_CHECKING` branch imports the exact
-public symbols for static typing. The finite import-order bootstrap between
+The historical `imagent.contracts` module is absent. The finite import-order bootstrap between
 the binding and Gateway-operation leaves exists only to complete their one
 closed union; it is not a compatibility implementation, service locator,
 arbitrary module lookup, or second contract definition. Each resolved name is
@@ -113,6 +110,5 @@ This leaf does not own `GatewayOperationType`, the mixed `GatewayOperation`
 union, Gateway aggregate execution, Conversation locks, foreground route
 preparation, or recovery. Aggregate Gateway validators call the exact
 binding-owner validators, and composition calls the runtime's typed methods.
-No new routing behavior is introduced, and the stable `imagent.contracts`
-facade preserves public object identity. The retired `contracts.operations`
+No new routing behavior is introduced. The historical cross-layer contracts
 module is absent rather than retaining compatibility names.

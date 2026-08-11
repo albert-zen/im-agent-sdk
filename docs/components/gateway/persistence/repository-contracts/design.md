@@ -27,9 +27,8 @@ This leaf owns the complete repository Port and conflict family:
   `DeliverySubmissionConflict`, and `DeliverySubmissionCapacityError`.
 
 `BindingConflict` remains the existing conflict owner in this leaf. The
-historical `imagent.adapters` module is only an exact compatibility facade for
-the pre-existing names; it contains no second Protocol, enum, or exception
-definition. New `IdempotencyCapacityError` callers use the focused
+historical `imagent.adapters` module is absent. `IdempotencyCapacityError`
+callers use the focused
 `imagent.gateway.persistence` facade rather than expanding that retiring
 historical surface.
 
@@ -82,9 +81,8 @@ tests/gateway/persistence/test_repository_contracts.py
 ```
 
 The focused test module proves clean-process importability, exact
-`imagent.gateway.persistence` object identity, exact identity for the
-pre-existing `imagent.adapters` aliases, absence of new capacity aliases or
-moved definitions in that compatibility facade, Protocol signatures and
+`imagent.gateway.persistence` object identity, absence of the historical
+cross-layer facade, Protocol signatures and
 runtime `get_type_hints`, enum values, and conflict identity. Memory, SQLite,
 and reusable conformance tests continue to prove the behavior consumed by the
 Ports.

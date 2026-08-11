@@ -45,6 +45,7 @@ from imagent.applications.contract import (
     validate_application_summary,
     validate_project_summary,
 )
+from imagent.applications.diagnostics import ApplicationDiagnosticFacts
 from imagent.applications.events import (
     AgentEvent,
     AgentEventType,
@@ -94,11 +95,7 @@ from imagent.applications.requests import (
     derive_request_response_shape,
     validate_request_response,
 )
-from imagent.diagnostics import (
-    ApplicationDiagnosticFacts,
-    ConnectionDiagnosticFacts,
-    ConnectionDiagnosticState,
-)
+from imagent.interaction.diagnostics import ConnectionDiagnosticFacts, ConnectionDiagnosticState
 from imagent.interaction.messages import Content, MessageRole, TextContent, TextFormat
 from imagent.interaction.operations import (
     OperationErrorCode,

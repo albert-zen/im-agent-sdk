@@ -22,14 +22,12 @@ The reusable contract suite proves that a modern Channel accepts the admission
 callback through its lifecycle. Focused native/Gateway tests must additionally
 prove that durable admission happens before media preparation, a missing lease
 stops work without preventing a later reclaim attempt, preparation failure
-releases the lease, handoff transfers terminal ownership to Gateway, and the
-legacy message-only startup shape remains usable during migration. The modern
-shape accepts only message and admission callbacks; no Channel contract, fake,
+releases the lease, and handoff transfers terminal ownership to Gateway. A
+direct Channel use may omit admission; Gateway composition always supplies
+both message and admission callbacks. No Channel contract, fake,
 or native wrapper imports or stores `GatewayOperation`.
 The Interaction owner is the sole `ChannelAdapter` Protocol facade. Clean
-process checks prove the five retired Channel/admission names are absent from
-`imagent.adapters`; the module must not retain a second class definition or a
-lazy compatibility path.
+process checks prove the historical `imagent.adapters` module is absent.
 
 Startup-validation coverage checks structural capability detection, all four
 SDK native implementations, bounded explicit failures, configuration parity
@@ -49,8 +47,8 @@ mutation, and return a result matching the authorized disposition/policy.
 
 The focused Applications contract tests additionally prove that
 `imagent.applications` exposes the exact owner objects for
-`AgentApplicationAdapter` and `ApplicationInputDispatchHandler`, while
-`imagent.adapters` rejects both retired Application names. Cold-process import
+`AgentApplicationAdapter` and `ApplicationInputDispatchHandler`, while the
+historical `imagent.adapters` module is absent. Cold-process import
 order and runtime type-hint evidence must stay independent of concrete
 adapters and Gateway implementation.
 

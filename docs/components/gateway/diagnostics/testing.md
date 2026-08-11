@@ -30,10 +30,8 @@ Required Gateway coverage:
 - T3's absent long-lived connection and existing Application/Channel queue
   scope distinctions, including retention of App Server's two valid queues;
 - direct Gateway call-site imports from `imagent.gateway.diagnostics`, with
-  no runtime dependency from the Gateway owner back to `imagent.diagnostics`;
-- exact `__all__` ownership, no definitions or lazy resolver in the transition
-  facade, exact object identity through `imagent.gateway` and
-  `imagent.diagnostics`, and both canonical-first and facade-first imports;
+  the historical cross-layer diagnostics facade physically absent;
+- exact focused `__all__` ownership and negative package-root facade evidence;
 - `typing.get_type_hints`/signature evidence for Gateway snapshot and
   collection boundaries resolving to the canonical owner objects;
 - clean-wheel import-order and identity smoke coverage for the canonical

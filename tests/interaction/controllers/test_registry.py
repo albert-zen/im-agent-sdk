@@ -7,8 +7,10 @@ from datetime import UTC, datetime
 from typing import cast
 
 from imagent.applications.capabilities import ProjectMode
-from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
+from imagent.gateway import GatewayExtensions
 from imagent.gateway.actions import ConversationActions
+from imagent.gateway.composition import _GatewayRuntimeDependencies
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.interaction.controllers import (
@@ -515,11 +517,11 @@ def _gateway(
     channel: FakeChannelAdapter,
     controller: CommandRegistry,
     idempotency: InMemoryIdempotencyRepository,
-) -> ImAgentGateway:
-    return ImAgentGateway(
+) -> _GatewayRuntime:
+    return _GatewayRuntime(
         channels=[channel],
         applications=[FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)],
-        repositories=GatewayRepositories(
+        repositories=_GatewayRuntimeDependencies(
             bindings=InMemoryBindingRepository(),
             idempotency=idempotency,
         ),

@@ -57,7 +57,7 @@ from imagent.applications.operations import (
     ThreadHistoryRead,
 )
 from imagent.applications.requests import ApprovalResponse
-from imagent.gateway import GatewayRepositories, ImAgentGateway
+from imagent.gateway.composition import _GatewayRuntimeDependencies
 from imagent.gateway.delivery import (
     ConversationDeliveryTarget,
     DeliveryAuthorizationError,
@@ -73,6 +73,7 @@ from imagent.gateway.lifecycle import (
     GatewayStartupOverflow,
     _public_lifecycle_error,
 )
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.gateway.persistence.sqlite_store import SQLiteGatewayStore
@@ -2020,7 +2021,7 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch(
-            "imagent.gateway.runtime.ImAgentGateway",
+            "imagent.gateway.runtime._GatewayRuntime",
             side_effect=RuntimeError("simulated runtime construction failure"),
         ):
             with self.assertRaises(GatewayLifecycleFailure) as raised:
@@ -2219,10 +2220,10 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
             stop_error_detail=_UNSAFE_HUGE_CLEANUP_DETAIL,
         )
         application = _CleanupFailingApplication("reference-inner-application")
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(bindings=InMemoryBindingRepository()),
+            repositories=_GatewayRuntimeDependencies(bindings=InMemoryBindingRepository()),
         )
         await gateway.start()
 
@@ -2450,20 +2451,20 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
 
         startup_channel = HostileStartupChannel("hostile-startup-subtype")
         startup_application = ReferenceApplication("hostile-startup-application")
-        startup_gateway = ImAgentGateway(
+        startup_gateway = _GatewayRuntime(
             channels=[startup_channel],
             applications=[startup_application],
-            repositories=GatewayRepositories(bindings=InMemoryBindingRepository()),
+            repositories=_GatewayRuntimeDependencies(bindings=InMemoryBindingRepository()),
         )
         with self.assertRaises(GatewayLifecycleFailure) as startup_raised:
             await startup_gateway.start()
 
         stop_channel = HostileStopChannel("hostile-stop-subtype")
         stop_application = ReferenceApplication("hostile-stop-application")
-        stop_gateway = ImAgentGateway(
+        stop_gateway = _GatewayRuntime(
             channels=[stop_channel],
             applications=[stop_application],
-            repositories=GatewayRepositories(bindings=InMemoryBindingRepository()),
+            repositories=_GatewayRuntimeDependencies(bindings=InMemoryBindingRepository()),
         )
         await stop_gateway.start()
         with self.assertRaises(GatewayLifecycleFailure) as stop_raised:
@@ -2486,10 +2487,10 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         channel = _StartupClaimReleaseFailureChannel()
         application = _CleanupFailingApplication("reference-startup-claim-release-application")
         idempotency = _HugeReleaseIdempotencyRepository()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
                 idempotency=cast(Any, idempotency),
             ),
@@ -2634,7 +2635,7 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
             store=cast(Any, store),
         )
 
-        with patch("imagent.gateway.runtime.ImAgentGateway") as runtime_factory:
+        with patch("imagent.gateway.runtime._GatewayRuntime") as runtime_factory:
             with self.assertRaises(GatewayLifecycleFailure) as raised:
                 await gateway.start()
         self.assertEqual(raised.exception.original_type, "TypeError")
@@ -2685,7 +2686,7 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
                         store=cast(Any, store),
                     )
 
-                    with patch("imagent.gateway.runtime.ImAgentGateway") as runtime_factory:
+                    with patch("imagent.gateway.runtime._GatewayRuntime") as runtime_factory:
                         with self.assertRaises(GatewayLifecycleFailure) as raised:
                             await gateway.start()
                     self.assertEqual(raised.exception.original_type, "ValueError")
@@ -3060,8 +3061,8 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
             )
             with self.subTest(path=path.name):
                 self.assertFalse(any(name.startswith(forbidden) for name in imports))
-                self.assertNotIn("ImAgentGateway", path.read_text(encoding="utf-8"))
-                self.assertNotIn("GatewayRepositories", path.read_text(encoding="utf-8"))
+                self.assertNotIn("_GatewayRuntime", path.read_text(encoding="utf-8"))
+                self.assertNotIn("_GatewayRuntimeDependencies", path.read_text(encoding="utf-8"))
 
         self.assertTrue(build_command_registry(ReferenceStatusService()).frozen)
 

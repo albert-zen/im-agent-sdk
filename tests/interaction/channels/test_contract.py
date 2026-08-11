@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import importlib.util
 import inspect
 import subprocess
 import sys
 import unittest
 from typing import get_type_hints
 
-from imagent import adapters, contracts
 from imagent.applications.capabilities import SupportLevel
 from imagent.channels import (
     NativeTransportChannelAdapter,
@@ -43,7 +43,7 @@ class ChannelReceiptContractTests(unittest.TestCase):
     )
 
     def test_channel_lifecycle_has_no_gateway_operation_callback(self) -> None:
-        self.assertFalse(hasattr(adapters, "OperationHandler"))
+        self.assertIsNone(importlib.util.find_spec("imagent.adapters"))
         for owner in (channels.ChannelAdapter, NativeTransportChannelAdapter):
             with self.subTest(owner=owner.__name__):
                 parameters = inspect.signature(owner.start).parameters
@@ -99,19 +99,9 @@ class ChannelReceiptContractTests(unittest.TestCase):
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
-    def test_historical_facades_omit_only_retired_channel_names(self) -> None:
-        for name in self.RETIRED_ADAPTER_NAMES:
-            with self.subTest(name=name):
-                self.assertFalse(hasattr(adapters, name))
-                self.assertNotIn(name, getattr(adapters, "__all__", ()))
-        for name in self.RETIRED_CONTRACT_NAMES:
-            with self.subTest(name=name):
-                self.assertFalse(hasattr(contracts, name))
-                self.assertNotIn(name, contracts.__all__)
-
-        self.assertFalse(hasattr(adapters, "AgentApplicationAdapter"))
-        self.assertFalse(hasattr(contracts, "SupportLevel"))
-        self.assertFalse(hasattr(contracts, "DeliverySubmissionOrigin"))
+    def test_historical_facades_are_absent(self) -> None:
+        self.assertIsNone(importlib.util.find_spec("imagent.adapters"))
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts"))
 
     def test_historical_facade_imports_fail_in_clean_process(self) -> None:
         snippets = tuple(
@@ -131,7 +121,7 @@ class ChannelReceiptContractTests(unittest.TestCase):
                     text=True,
                 )
                 self.assertNotEqual(completed.returncode, 0)
-                self.assertIn("ImportError", completed.stderr)
+                self.assertIn("Error", completed.stderr)
 
     def test_native_adapter_facade_reexports_exact_runtime_objects(self) -> None:
         self.assertIs(

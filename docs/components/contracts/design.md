@@ -26,8 +26,7 @@ following cross-owner surface:
 - Conversation bindings, projection routes, and minimal Turn reply-correlation
   state;
 - the cross-owner language-neutral schema union and any validators that still
-  belong to other leaves; and
-- the deliberate finite `imagent.contracts` public facade.
+  belong to other leaves.
 
 Channel contract, admission, capability/profile, and delivery-receipt values
 are deliberately excluded from that historical facade. Their sole formal
@@ -71,15 +70,9 @@ capabilities require typed fields.
 ## Dependency direction
 
 Contracts import no Python runtime port, Gateway orchestration, Controller,
-persistence, or concrete adapter implementation. The finite
-`imagent.contracts` facade resolves exact Gateway operation and binding owners
-without implementing them. Its permanent finite
-`ConversationBinding` delegate resolves to the Gateway persistence-state owner.
-The scoped action surface imports that owner directly; the facade remains a
-finite exact object facade, not a compatibility model or an additional binding
-contract. [Python
-Ports](../ports/design.md) depend on contract types. Every other runtime
-component may depend on the public contract facade.
+persistence, or concrete adapter implementation. There is no cross-layer
+`imagent.contracts` Python facade; Python values are imported from their
+focused owners. [Python Ports](../ports/design.md) depend on contract types.
 
 ## Common-abstraction threshold
 

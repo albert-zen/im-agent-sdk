@@ -121,8 +121,8 @@ tests/interaction/test_media.py
 tests/interaction/test_media_staging.py
 ```
 
-The deliberate `imagent.contracts` public facade re-exports the exact media
-objects from this leaf. Repository runtime imports use the owning leaf, and
+The historical cross-layer `imagent.contracts` module is absent. Consumers and
+repository runtime import media objects from this owning leaf, and
 the obsolete `imagent.attachments` internal module is not retained. Inline
 artifact staging now has its pure bounded filesystem mechanics in
 `interaction.media`: a typed encoded-artifact value, decoded-byte validation,

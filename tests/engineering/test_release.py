@@ -89,6 +89,7 @@ class PackageIndependenceTests(unittest.TestCase):
         code = r"""
 import importlib
 import importlib.util
+import importlib.util
 import sys
 
 assert importlib.util.find_spec("imagent.cli") is None
@@ -153,19 +154,12 @@ assert not any(
         )
         code = r"""
 import importlib
+import importlib.util
 import sys
 import typing
 
 import imagent
 
-module_exports = {
-    "adapters": "imagent.adapters",
-    "contracts": "imagent.contracts",
-    "delivery_coordination": "imagent.gateway.delivery.coordination",
-    "delivery_planning": "imagent.gateway.delivery.planning",
-    "diagnostics": "imagent.diagnostics",
-    "events": "imagent.events",
-}
 value_exports = {
     "ActionResult": "imagent.gateway.actions",
     "ActionValue": "imagent.gateway.actions",
@@ -216,33 +210,29 @@ assert imagent.__all__ == [
     "ReadOutcome",
     "SQLiteGatewayStore",
     "Succeeded",
-    "adapters",
-    "contracts",
-    "delivery_coordination",
-    "delivery_planning",
-    "diagnostics",
-    "events",
     "include_common_commands",
 ]
+for retired in (
+    "imagent.adapters",
+    "imagent.contracts",
+    "imagent.delivery_coordination",
+    "imagent.delivery_planning",
+    "imagent.diagnostics",
+    "imagent.events",
+):
+    assert importlib.util.find_spec(retired) is None
 assert not hasattr(imagent, "projections")
 assert typing.get_type_hints(imagent.__getattr__) == {"name": str, "return": object}
-assert all(name not in imagent.__dict__ for name in (*module_exports, *value_exports))
+assert all(name not in imagent.__dict__ for name in value_exports)
 assert not any(
     name == "imagent.gateway" or name.startswith("imagent.gateway.")
     for name in sys.modules
 )
 assert not any(
     name in sys.modules
-    for name in ("websockets", "PIL", "Crypto", "lark_oapi", "lark")
+    for name in ("websockets", "PIL", "Crypto", "lark_channel")
 )
 assert not hasattr(imagent, "unsupported_root_export")
-
-for name, module_name in module_exports.items():
-    first = getattr(imagent, name)
-    owner = importlib.import_module(module_name)
-    assert first is owner
-    assert getattr(imagent, name) is owner
-    assert imagent.__dict__[name] is owner
 
 for name, module_name in value_exports.items():
     first = getattr(imagent, name)

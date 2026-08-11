@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import importlib.util
 import sys
 import unittest
 from datetime import UTC, datetime
 from typing import cast
 
-import imagent
 from imagent.gateway.delivery import (
     DeliveryPlanner,
     DeliveryPlanningError,
@@ -35,7 +35,7 @@ from imagent.interaction.messages import (
 
 class DeliveryPlanningFacadeTests(unittest.TestCase):
     def test_root_attribute_and_gateway_facade_use_exact_owner_objects(self) -> None:
-        self.assertIs(imagent.delivery_planning, planning_owner)
+        self.assertIsNone(importlib.util.find_spec("imagent.delivery_planning"))
         self.assertIs(DeliveryPlanner, planning_owner.DeliveryPlanner)
         self.assertIs(DeliveryPlanningError, planning_owner.DeliveryPlanningError)
         self.assertNotIn("imagent.delivery_planning", sys.modules)

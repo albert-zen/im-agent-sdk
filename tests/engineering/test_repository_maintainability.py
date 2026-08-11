@@ -49,12 +49,12 @@ class ComponentMapTests(unittest.TestCase):
         component_map["structural_status"]["formal_facades"] = [
             facade
             for facade in component_map["structural_status"]["formal_facades"]
-            if facade["path"] != "src/imagent/contracts/__init__.py"
+            if facade["path"] != "src/imagent/gateway/__init__.py"
         ]
 
         with self.assertRaisesRegex(
             ComponentMapError,
-            "(?s)forbidden internal component imports.*contracts/__init__.py",
+            "(?s)forbidden internal component imports.*gateway/__init__.py",
         ):
             validate_component_map(component_map)
 
@@ -93,27 +93,22 @@ class ComponentMapTests(unittest.TestCase):
         with self.assertRaisesRegex(ComponentMapError, "invalid formal facade declaration"):
             validate_component_map(component_map)
 
-    def test_gateway_diagnostics_map_tracks_both_facade_export_states(self) -> None:
+    def test_gateway_diagnostics_map_has_only_the_focused_owner_surface(self) -> None:
         component = load_component_map()["components"]["gateway.diagnostics"]
-        expected_gateway_facade_exports = {
-            "imagent.gateway:GatewayDiagnosticFacts",
-            "imagent.gateway:DiagnosticsSnapshot",
-            "imagent.gateway:summarize_projection_health",
-            "imagent.gateway:collect_application_diagnostics",
-            "imagent.gateway:collect_channel_diagnostics",
-            "imagent.gateway:new_diagnostics_snapshot",
-        }
 
         for state in ("current", "target"):
             self.assertTrue(
-                expected_gateway_facade_exports.issubset(set(component["public_exports"][state]))
+                all(
+                    export.startswith("imagent.gateway.diagnostics:")
+                    for export in component["public_exports"][state]
+                )
             )
 
         formal_facades = load_component_map()["structural_status"]["formal_facades"]
-        diagnostics_facade = next(
-            facade for facade in formal_facades if facade["path"] == "src/imagent/diagnostics.py"
+        self.assertNotIn(
+            "src/imagent/diagnostics.py",
+            {facade["path"] for facade in formal_facades},
         )
-        self.assertEqual(diagnostics_facade["owner"], "gateway.diagnostics")
 
     def test_facade_alias_preserves_imported_and_bound_symbol_names(self) -> None:
         node = ast.parse("from .model import Internal as Public").body[0]
@@ -204,7 +199,6 @@ class ComponentMapTests(unittest.TestCase):
                 "imagent:GatewayExtensions",
                 "imagent.gateway:GatewayLimits",
                 "imagent.gateway:GatewayExtensions",
-                "imagent.gateway.composition:GatewayRepositories",
                 "imagent.gateway.composition:GatewayLimits",
                 "imagent.gateway.composition:GatewayExtensions",
             ],
@@ -212,7 +206,6 @@ class ComponentMapTests(unittest.TestCase):
         self.assertEqual(
             composition["current_code"],
             [
-                "src/imagent/gateway/runtime.py",
                 "src/imagent/gateway/composition.py",
                 "src/imagent/gateway/controller_input.py",
                 "src/imagent/gateway/__init__.py",

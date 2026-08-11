@@ -9,7 +9,6 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import cast
 
-import imagent.contracts as contracts_facade
 from imagent.applications.capabilities import ProjectMode
 from imagent.applications.contract import (
     AcceptedTurn,
@@ -24,8 +23,9 @@ from imagent.applications.contract import (
     TurnReplyCorrelationPolicy,
 )
 from imagent.applications.events import AgentEvent, AgentEventType
-from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway import GatewayLimits
 from imagent.gateway.admission import inbound_idempotency_identity
+from imagent.gateway.composition import _GatewayRuntimeDependencies
 from imagent.gateway.input import derive_client_message_id
 from imagent.gateway.input.dispatch import (
     InputDispatchRejected,
@@ -34,6 +34,7 @@ from imagent.gateway.input.dispatch import (
     TurnAcceptanceBufferOverflow,
     TurnAcceptanceOrderingGate,
 )
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence import ConversationBinding, IdempotencyClaimStatus
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.interaction.messages import ConversationRef, InboundMessage, TextContent
@@ -336,10 +337,10 @@ class GatewayInputDispatchTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(bindings=bindings),
+            repositories=_GatewayRuntimeDependencies(bindings=bindings),
             limits=GatewayLimits(
                 subscription_retry_initial_seconds=0,
                 subscription_retry_max_seconds=0,
@@ -414,10 +415,10 @@ class GatewayInputDispatchTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(bindings=bindings),
+            repositories=_GatewayRuntimeDependencies(bindings=bindings),
             limits=GatewayLimits(
                 subscription_retry_initial_seconds=0,
                 subscription_retry_max_seconds=0,
@@ -469,10 +470,10 @@ class GatewayInputDispatchTests(unittest.IsolatedAsyncioTestCase):
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
         thread = await application.create_thread(application.default_project_ref)
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(bindings=InMemoryBindingRepository()),
+            repositories=_GatewayRuntimeDependencies(bindings=InMemoryBindingRepository()),
             limits=GatewayLimits(
                 subscription_retry_initial_seconds=0,
                 subscription_retry_max_seconds=0,
@@ -500,8 +501,7 @@ class GatewayInputDispatchTests(unittest.IsolatedAsyncioTestCase):
             derive_client_message_id.__module__,
             "imagent.gateway.input.dispatch",
         )
-        self.assertFalse(hasattr(contracts_facade, "derive_client_message_id"))
-        self.assertIsNone(importlib.util.find_spec("imagent.contracts.validators"))
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts"))
         completed = subprocess.run(
             [sys.executable, "-c", "import imagent.contracts.validators"],
             capture_output=True,

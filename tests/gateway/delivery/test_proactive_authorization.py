@@ -6,8 +6,6 @@ import inspect
 import unittest
 from typing import cast, get_type_hints
 
-import imagent.adapters as adapter_facade
-import imagent.contracts as contract_facade
 import imagent.gateway as gateway_facade
 import imagent.gateway.delivery as delivery_facade
 import imagent.gateway.persistence as historical_delivery_contracts
@@ -34,21 +32,17 @@ class ProactiveAuthorizationOwnershipTests(unittest.TestCase):
             delivery_facade.DeliveryAuthorizer,
             authorization_owner.DeliveryAuthorizer,
         )
-        self.assertIs(gateway_facade.DeliveryAuthorizer, authorization_owner.DeliveryAuthorizer)
-        self.assertIs(adapter_facade.DeliveryAuthorizer, authorization_owner.DeliveryAuthorizer)
+        self.assertFalse(hasattr(gateway_facade, "DeliveryAuthorizer"))
         self.assertIs(
             delivery_facade.DeliveryPrincipal,
             authorization_owner.DeliveryPrincipal,
         )
-        self.assertIs(contract_facade.DeliveryPrincipal, authorization_owner.DeliveryPrincipal)
         self.assertIs(
             delivery_facade.validate_delivery_principal,
             authorization_owner.validate_delivery_principal,
         )
-        self.assertIs(
-            contract_facade.validate_delivery_principal,
-            authorization_owner.validate_delivery_principal,
-        )
+        self.assertIsNone(importlib.util.find_spec("imagent.adapters"))
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts"))
         self.assertIs(
             delivery_facade.ScopedDeliveryAuthorizer,
             authorization_owner.ScopedDeliveryAuthorizer,
@@ -101,7 +95,7 @@ class ScopedDeliveryAuthorizerTests(unittest.IsolatedAsyncioTestCase):
         await authorizer.issue(principal, credential=registered)
         differently_scoped = authorization_owner.DeliveryPrincipal(
             "principal-b",
-            allowed_conversations=(contract_facade.ConversationRef("channel", "target"),),
+            allowed_conversations=(ConversationRef("channel", "target"),),
         )
         with self.assertRaisesRegex(ValueError, "^delivery credential already exists$"):
             await authorizer.issue(differently_scoped, credential=registered)

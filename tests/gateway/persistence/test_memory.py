@@ -9,7 +9,6 @@ from typing import cast
 
 import imagent.gateway.projection.observation as projection_semantics
 import imagent.gateway.projection.request_correlation as request_policy_owner
-from imagent.adapters import DeliverySubmissionCapacityError, DeliverySubmissionConflict
 from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef
 from imagent.gateway.delivery import DeliverySubmissionOrigin
 from imagent.gateway.delivery import proactive as proactive_owner
@@ -28,6 +27,10 @@ from imagent.gateway.persistence.memory import (
     InMemoryDeliverySubmissionRepository,
     InMemoryProjectionRouteRepository,
     InMemoryRequestCorrelationRepository,
+)
+from imagent.gateway.persistence.repository_contracts import (
+    DeliverySubmissionCapacityError,
+    DeliverySubmissionConflict,
 )
 from imagent.interaction.channels.contract import DeliveryReceipt, DeliveryReceiptStatus
 from imagent.interaction.messages import ConversationRef

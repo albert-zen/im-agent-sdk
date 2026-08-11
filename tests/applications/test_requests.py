@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import subprocess
 import sys
 import unittest
@@ -8,7 +9,6 @@ from importlib import import_module
 from typing import get_type_hints
 
 import imagent.applications as applications
-from imagent import contracts
 from imagent.applications import contract, requests
 from imagent.gateway.persistence import RequestRouteCorrelation
 from imagent.interaction.operations import (
@@ -80,9 +80,8 @@ class ApplicationRequestTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertTrue(hasattr(requests, name))
                 self.assertIn(name, requests.__all__)
-                self.assertFalse(hasattr(contracts, name))
-                self.assertNotIn(name, contracts.__all__)
                 self.assertNotIn(name, applications.__all__)
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts"))
 
     def test_historical_contract_modules_no_longer_define_request_contract(self) -> None:
         with self.assertRaises(ModuleNotFoundError):

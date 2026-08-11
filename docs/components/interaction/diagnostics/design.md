@@ -36,16 +36,11 @@ The native implementation at
 of native adapter state/collection helpers. It consumes these canonical
 contracts but does not redefine them.
 
-## Transition facade
+## Public ownership
 
-`imagent.diagnostics` remains an explicit stable transition facade after the
-Application and Gateway owner moves. It imports and re-exports the exact five
-canonical objects from this
-leaf and the exact Channel objects from
-`imagent.interaction.channels.diagnostics`; it contains no duplicate
-definitions for those moved objects and no lazy `__getattr__`. The Gateway
-fact types and aggregation are canonical in `imagent.gateway.diagnostics` and
-the facade is not a second Interaction owner.
+The historical cross-layer `imagent.diagnostics` module is absent. Consumers
+import these values from this leaf and import Application, Channel, or Gateway
+diagnostics from their respective focused owners.
 
 The accepted [ADR 0014](../../../decisions/0014-read-only-diagnostics-surface.md)
 and [ADR 0015](../../../decisions/0015-typed-extension-seams-and-composition.md)

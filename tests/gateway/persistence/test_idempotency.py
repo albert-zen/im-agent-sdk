@@ -4,7 +4,6 @@ import asyncio
 import unittest
 
 import imagent.gateway.persistence.sqlite as sqlite_owner
-from imagent.adapters import IdempotencyClaimStatus
 from imagent.gateway import persistence
 from imagent.gateway.persistence import (
     IdempotencyCapacityError,
@@ -13,6 +12,7 @@ from imagent.gateway.persistence import (
 from imagent.gateway.persistence.idempotency import (
     InMemoryIdempotencyRepository as LeafInMemoryIdempotencyRepository,
 )
+from imagent.gateway.persistence.repository_contracts import IdempotencyClaimStatus
 
 
 class InMemoryIdempotencyRepositoryTests(unittest.IsolatedAsyncioTestCase):

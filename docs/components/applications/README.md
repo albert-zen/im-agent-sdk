@@ -41,8 +41,7 @@ facade exposes the complete Application contract family as exact objects and
 resolves explicitly named concrete adapter/presentation exports without
 eagerly importing concrete adapters. Capabilities, operations, and requests
 remain available only from their canonical owner modules. The historical
-`imagent.adapters` module exports no Application names; it retains only the
-unrelated Gateway, proactive-authorization, and passive-state aliases.
+cross-layer `imagent.adapters` module is absent.
 
 ## Adapters
 
@@ -77,5 +76,5 @@ The exhaustive current/target code, tests, exports, dependency edges, and
 structural gaps are maintained in the [component map](../component-map.yml).
 The event implementation is only `src/imagent/applications/events.py`;
 `imagent.events`, `imagent.contracts`, and the package-root `events` module
-are stable explicit formal facades with exact owner identity. Internal tests
-use the owner path except for dedicated facade/clean-install assertions.
+are absent. Internal tests use the owner path; clean-install assertions prove
+that retired cross-layer paths cannot be imported.

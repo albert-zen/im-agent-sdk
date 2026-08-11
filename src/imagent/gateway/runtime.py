@@ -21,9 +21,8 @@ from ..interaction.channels.contract import ChannelAdapter, ChannelCapabilities
 from ..interaction.controllers.contract import ControllerLifecycle, InboundController
 from ..interaction.messages import ConversationRef
 from ..interaction.operations import require_identifier
-from . import ImAgentGateway
 from .actions import ApplicationActions, ConversationActions
-from .composition import GatewayExtensions, GatewayLimits, GatewayRepositories
+from .composition import GatewayExtensions, GatewayLimits, _GatewayRuntimeDependencies
 from .delivery.coordination import DeliveryCoordinator
 from .delivery.proactive import DeliveryIntent, DeliveryTarget, ProactiveDeliveryResult
 from .delivery.proactive_authorization import DeliveryAuthorizer
@@ -34,6 +33,7 @@ from .lifecycle import (
     _detach_public_lifecycle_context,
     _public_lifecycle_error,
 )
+from .orchestration import _GatewayRuntime
 from .persistence.store import (
     GatewayStore,
     GatewayStoreSession,
@@ -105,7 +105,7 @@ class Gateway:
         self._delivery_authorizer = delivery_authorizer
         self._delivery_coordinator = delivery_coordinator
         self._session: GatewayStoreSession | None = None
-        self._runtime: ImAgentGateway | None = None
+        self._runtime: _GatewayRuntime | None = None
         self._lease_stop: asyncio.Event | None = None
         self._lease_task: asyncio.Task[None] | None = None
         self._startup_task: asyncio.Task[object] | None = None
@@ -202,10 +202,10 @@ class Gateway:
                     for application in self._applications
                     if (identity := application.summary.workspace_identity) is not None
                 )
-                runtime = ImAgentGateway(
+                runtime = _GatewayRuntime(
                     channels=self._channels,
                     applications=self._applications,
-                    repositories=GatewayRepositories(bindings=session),
+                    repositories=_GatewayRuntimeDependencies(bindings=session),
                     limits=self._limits,
                     extensions=self._extensions,
                     delivery_authorizer=self._delivery_authorizer,
@@ -330,7 +330,7 @@ class Gateway:
             credential=credential,
         )
 
-    def _require_runtime(self) -> ImAgentGateway:
+    def _require_runtime(self) -> _GatewayRuntime:
         if not self._started or self._runtime is None:
             raise RuntimeError("Gateway actions require a running Gateway")
         return self._runtime

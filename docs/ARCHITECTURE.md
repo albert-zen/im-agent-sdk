@@ -8,8 +8,9 @@ consumer actions, the policy-free ordinary-input path, coherent store-backed
 public Gateway composition, and the executable reference consumer are
 implemented. Projection/durable recovery, request/media/artifact/proactive
 delivery, and lifecycle/diagnostics/adapter/release stabilization are also
-integrated through that coherent public composition. Final pre-v1 deletion
-remains transformation work for DAG I.
+integrated through that coherent public composition. DAG I has removed the
+remaining pre-v1 public facades and split the public Gateway facade, canonical
+runtime, and private bridge orchestration into explicit single owners.
 
 ## System shape
 
@@ -116,12 +117,11 @@ imports through the owners and public exports recorded by that map. Split
 candidates provide candidate owner pairings, never an automatic exemption;
 any cross-layer exception remains exact and explicit.
 
-Gateway composition values have one current owner:
-`imagent.gateway.composition`. The `imagent.gateway` package facade re-exports
-those exact objects while it still combines its public facade with
-`ImAgentGateway` runtime orchestration; that remaining package-root split is
-tracked explicitly in the component map and creates no duplicate composition
-implementation.
+Gateway composition values have one owner: `imagent.gateway.composition`.
+`imagent.gateway.runtime` owns the public `Gateway`, and the private
+`imagent.gateway.orchestration` leaf owns cross-owner bridge sequencing. The
+finite `imagent.gateway` package facade only resolves exact public owner values;
+it contains no runtime implementation or operation compatibility surface.
 
 ## Authority and persistence
 
@@ -359,10 +359,9 @@ contains no transcript or Turn truth.
   overflow or a failed ordered drain is an explicit per-Thread gap that enters
   authoritative recovery without reopening accepted input.
 - The Gateway startup-admission FIFO and its explicit overflow/not-running
-  failures are implemented by the `gateway.lifecycle` leaf. The
-  `ImAgentGateway.start()`/`stop()` orchestration remains at the
-  `imagent.gateway` package root as an explicit physical migration gap; its
-  ordering is unchanged.
+  failures are implemented by the `gateway.lifecycle` leaf. Public lifecycle
+  is owned by `gateway.runtime`; private cross-owner startup/stop ordering is
+  owned by `gateway.orchestration`.
 - native pending-request snapshots reconcile request events after a gap when
   supported; otherwise worker health truthfully retains an interactive-request
   recovery degradation instead of manufacturing request state.
@@ -411,8 +410,8 @@ IM admission. Attachments cannot grant shared-filesystem trust.
   model, ownership boundaries, public API, workflows, and durability rules.
 - [V1 executable specification](V1_EXECUTABLE_SPEC.md): normative acceptance
   behavior for the neutral reference consumer and every conforming adapter.
-- this document: the pre-v1 implementation map and evidence to reconcile; it
-  does not override either v1 authority when their shapes conflict.
+- this document: the implemented repository architecture and ownership map; it
+  does not override either normative v1 authority.
 - [accepted ADRs](decisions/README.md): reviewed cross-component decisions.
 - `components/<layer>/<leaf>/`: local design, testing, and focused supporting
   documents where needed.

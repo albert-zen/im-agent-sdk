@@ -6,7 +6,6 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import get_type_hints
 
-import imagent.contracts as contracts_facade
 import imagent.gateway.persistence as persistence_facade
 from imagent.applications.capabilities import (
     ApplicationCapabilities,
@@ -21,8 +20,8 @@ from imagent.applications.requests import (
     ApprovalResponseShape,
     RequestRef,
 )
-from imagent.contracts import ConversationBound
 from imagent.gateway.persistence import state_contracts as owner
+from imagent.gateway.routing.bindings import ConversationBound
 from imagent.interaction.channels import DeliveryReceipt, DeliveryReceiptStatus
 from imagent.interaction.messages import ConversationRef
 from imagent.interaction.operations import ContractViolation
@@ -76,24 +75,22 @@ class StateContractOwnershipTests(unittest.TestCase):
         for name in names:
             with self.subTest(name=name):
                 self.assertIs(getattr(persistence_facade, name), getattr(owner, name))
-        self.assertIs(contracts_facade.ConversationBinding, owner.ConversationBinding)
-        self.assertIn("ConversationBinding", contracts_facade.__all__)
-        for name in set(names) - {"ConversationBinding"}:
-            self.assertFalse(hasattr(contracts_facade, name))
-            self.assertNotIn(name, contracts_facade.__all__)
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts"))
         self.assertFalse(hasattr(persistence_facade, "DeliverySubmissionOrigin"))
         self.assertNotIn("DeliverySubmissionOrigin", persistence_facade.__all__)
         self.assertFalse(hasattr(persistence_facade, "ProjectionPolicy"))
         self.assertFalse(hasattr(owner, "ProjectionPolicy"))
 
     def test_retired_contract_modules_are_not_importable(self) -> None:
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts"))
         for name in (
             "imagent.contracts.model",
             "imagent.contracts.delivery",
             "imagent.contracts.request_validation",
         ):
             with self.subTest(name=name):
-                self.assertIsNone(importlib.util.find_spec(name))
+                with self.assertRaises(ModuleNotFoundError):
+                    importlib.util.find_spec(name)
 
     def test_binding_validation_preserves_project_capability_rules(self) -> None:
         conversation = ConversationRef("channel-1", "conversation-1")

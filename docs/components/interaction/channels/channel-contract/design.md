@@ -19,7 +19,7 @@ One stable `channel_instance_id` identifies one configured account/bot
 instance. `start` installs the completed inbound-message callback and an
 `InboundAdmissionHandler`. The admission parameter remains optional only so a
 Channel may still be used directly outside Gateway with its message callback;
-every `ImAgentGateway` composition supplies both arguments exactly once. A
+every public `Gateway` composition supplies both arguments exactly once. A
 one-argument implementation is not a Gateway-compatible Channel, and Gateway
 does not inspect signatures, reinterpret `TypeError`, or retry a message-only
 form. `stop` joins owned workers. `send` receives one logical or already

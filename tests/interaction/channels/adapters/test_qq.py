@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any, cast
 from unittest.mock import patch
 
-from imagent.contracts import ConversationRef, InboundMessage, TextContent
 from imagent.interaction.channels.adapters.qq import QQ_TEXT_LIMIT, QQChannelAdapter
 from imagent.interaction.channels.adapters.qq_quote import (
     QQ_QUOTE_ATTACHMENT_LIMIT,
@@ -26,6 +25,7 @@ from imagent.interaction.channels.adapters.qq_quote import (
 )
 from imagent.interaction.channels.outbound_delivery import OutboundArtifact, OutboundMessage
 from imagent.interaction.controllers.common import parse_slash_command
+from imagent.interaction.messages import ConversationRef, InboundMessage, TextContent
 
 
 class QQChannelTests(unittest.IsolatedAsyncioTestCase):

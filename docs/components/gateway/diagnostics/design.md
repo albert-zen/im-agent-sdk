@@ -30,19 +30,14 @@ Application provider contracts, Agent health truth, consumer exporters,
 callbacks, socket-path work, free-form errors, raw payloads, secrets, or a
 second provider/runtime/registry.
 
-## Stable public transition surface
+## Stable focused surface
 
-`imagent.diagnostics` is a finite, explicit transition facade. It imports and
-re-exports the exact objects from the canonical Interaction, Channel,
-Applications, and Gateway owners. It contains no duplicate definitions and no
-lazy `__getattr__` or dynamic lookup. The `imagent.gateway` package facade
-continues to expose its existing Gateway diagnostics names by exact identity.
-Import-order and `get_type_hints` identity evidence is maintained in
-`tests/gateway/test_diagnostics.py` and the clean-wheel smoke.
-
-The facade is a compatibility boundary only; Gateway internals import
-`imagent.gateway.diagnostics` directly, and lower Interaction/Application
-modules never import the top-level facade or Gateway.
+Gateway diagnostics are exported only by `imagent.gateway.diagnostics`.
+Interaction, Channel, and Applications diagnostics remain exported only by
+their focused owner modules. The historical cross-layer `imagent.diagnostics`
+module and package-root Gateway diagnostic aliases are physically absent.
+Identity, type-hint, negative-import, and clean-wheel evidence is maintained in
+`tests/gateway/test_diagnostics.py` and the installed golden smoke.
 
 ## Snapshot semantics
 

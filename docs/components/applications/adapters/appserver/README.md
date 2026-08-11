@@ -85,6 +85,6 @@ diagnostic facts and internal summaries now live at
 `src/imagent/applications/adapters/appserver/diagnostics.py`; common
 connection/queue values are owned by `src/imagent/interaction/diagnostics.py`,
 and Application diagnostic facts are owned by
-`src/imagent/applications/diagnostics.py`. The stable `imagent.diagnostics`
-module is an explicit exact transition facade for the Gateway values and
-Application re-exports. No aggregate package facade is introduced.
+`src/imagent/applications/diagnostics.py`. The historical cross-layer
+`imagent.diagnostics` module is absent. No aggregate package facade is
+introduced.

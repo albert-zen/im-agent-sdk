@@ -25,9 +25,8 @@ projection route values, policy, validation, identity, activation, and
 persistence have their focused owner at
 `src/imagent/gateway/routing/projection_routes.py`.
 The declared `imagent.gateway.routing` facade re-exports the exact owner
-objects. `imagent.contracts` retains only the aggregate, binding, and
-Interaction contracts it still owns or deliberately exposes; it does not
-retain the moved projection-route or request-response operation values. Binding repository
+objects. The historical cross-layer `imagent.contracts` module is absent.
+Binding repository
 mutation, optimistic compare-and-swap, and same-target convergence remain
 binding-owned; route policy and persistence remain projection-route-owned; and
 request response validation, transition fences, correlation persistence, and

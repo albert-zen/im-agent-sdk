@@ -14,10 +14,11 @@ Application; the SDK stores only the bridge bindings, projection routes,
 idempotency records, and rebuildable projection checkpoints supplied by its
 composition.
 
-The default run starts from an explicit caller-managed temporary CWD and a fresh
-in-memory Gateway store. It does not infer a default workspace, auto-create on
-first input, or claim crash-recovery evidence. Durable restart coverage belongs
-to the separate SQLite acceptance path in the v1 executable specification.
+The run starts from an explicit caller-managed temporary CWD, exercises the
+public Memory store path, then closes it and reconstructs fresh runtime objects
+over a SQLite store to prove restart recovery. It does not infer a default
+workspace or auto-create on first ordinary input; all Project/Thread creation
+uses scoped public actions.
 
 Read the guides in this order:
 
@@ -47,4 +48,5 @@ Its real test is
 That test executes the example through the public composition and checks
 explicit Project/Thread creation, ordinary input, two Conversations on one
 Thread, foreground switch and switch-back, one Application observer per
-Thread, bounded redacted diagnostics, and deterministic shutdown.
+Thread, bounded redacted diagnostics, SQLite restart reconstruction without
+duplicate native dispatch/delivery, and deterministic shutdown.

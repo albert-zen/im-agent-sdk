@@ -9,10 +9,10 @@ from dataclasses import replace
 from datetime import UTC, datetime
 
 import imagent.gateway as gateway_facade
-from imagent.adapters import IdempotencyClaimStatus
 from imagent.applications.contract import AgentInput, AgentMessage, ProjectRef, ThreadRef
-from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
-from imagent.gateway import presentation as presentation_owner
+from imagent.gateway import GatewayExtensions, GatewayLimits
+from imagent.gateway.composition import _GatewayRuntimeDependencies
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence import (
     ConversationBinding,
     InMemoryIdempotencyRepository,
@@ -22,6 +22,7 @@ from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,
 )
+from imagent.gateway.persistence.repository_contracts import IdempotencyClaimStatus
 from imagent.gateway.presentation import (
     OutboundPresentationCapacityError,
     OutboundPresentationContext,
@@ -105,18 +106,9 @@ class _CancellationOverrunPolicy:
 
 class OutboundPresentationOwnershipTests(unittest.TestCase):
     def test_gateway_facade_uses_exact_owner_and_old_module_is_absent(self) -> None:
-        self.assertIs(
-            gateway_facade.OutboundPresentationPolicy,
-            presentation_owner.OutboundPresentationPolicy,
-        )
-        self.assertIs(
-            gateway_facade.OutboundPresentationContext,
-            presentation_owner.OutboundPresentationContext,
-        )
-        self.assertIs(
-            gateway_facade.ProjectionPresentationOrigin,
-            presentation_owner.ProjectionPresentationOrigin,
-        )
+        self.assertFalse(hasattr(gateway_facade, "OutboundPresentationPolicy"))
+        self.assertFalse(hasattr(gateway_facade, "OutboundPresentationContext"))
+        self.assertFalse(hasattr(gateway_facade, "ProjectionPresentationOrigin"))
         self.assertIsNone(importlib.util.find_spec("imagent.outbound_presentation"))
 
     def test_owner_maps_checkpointability_without_transition_authority(self) -> None:
@@ -143,14 +135,14 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
         projections: InMemoryProjectionRouteRepository | None = None,
         idempotency: InMemoryIdempotencyRepository | None = None,
         limits: GatewayLimits | None = None,
-    ) -> tuple[ImAgentGateway, FakeChannelAdapter, InMemoryProjectionRouteRepository]:
+    ) -> tuple[_GatewayRuntime, FakeChannelAdapter, InMemoryProjectionRouteRepository]:
         configured_channel = channel or FakeChannelAdapter()
         configured_projections = projections or InMemoryProjectionRouteRepository()
         return (
-            ImAgentGateway(
+            _GatewayRuntime(
                 channels=[configured_channel],
                 applications=[FakeAgentApplicationAdapter()],
-                repositories=GatewayRepositories(
+                repositories=_GatewayRuntimeDependencies(
                     bindings=InMemoryBindingRepository(),
                     projections=configured_projections,
                     idempotency=idempotency,
@@ -347,10 +339,10 @@ class OutboundPresentationTests(unittest.IsolatedAsyncioTestCase):
         projections = InMemoryProjectionRouteRepository()
         await projections.put_projection_route(_route(thread.ref, conversation))
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),

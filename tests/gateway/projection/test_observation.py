@@ -18,14 +18,10 @@ from imagent.applications.contract import (
     ThreadRef,
 )
 from imagent.applications.operations import GetThreadHistory
-from imagent.contracts import (
-    BindConversationToThread,
-    ClearConversationThread,
-    ConversationBound,
-    GatewayOperationFailed,
-)
-from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway import GatewayLimits
+from imagent.gateway.composition import _GatewayRuntimeDependencies
 from imagent.gateway.input.dispatch import TurnAcceptanceOrderingGate
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence import (
     ConversationBinding,
     IdempotencyClaimStatus,
@@ -51,6 +47,14 @@ from imagent.gateway.projection.observation import (
 )
 from imagent.gateway.projection.recovery import ProjectedAgentMessage
 from imagent.gateway.routing import ObserveThread, ProjectionPolicy
+from imagent.gateway.routing.bindings import (
+    BindConversationToThread,
+    ClearConversationThread,
+    ConversationBound,
+)
+from imagent.gateway.routing.operations import (
+    GatewayOperationFailed,
+)
 from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.messages import (
     ConversationRef,
@@ -111,10 +115,10 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
                     thread_ref=thread.ref,
                 )
             )
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
             ),
             projection_policy=ProjectionPolicy.ALL_OBSERVERS,
@@ -160,10 +164,10 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
                     thread_ref=thread.ref,
                 )
             )
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
             ),
             projection_policy=ProjectionPolicy.ALL_OBSERVERS,
@@ -221,10 +225,10 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
                 thread_ref=thread_ref,
             )
         )
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
             ),
             limits=GatewayLimits(
@@ -286,10 +290,10 @@ class GatewayConcurrentTurnProjectionTests(unittest.IsolatedAsyncioTestCase):
                 thread_ref=thread.ref,
             )
         )
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
             ),
             limits=GatewayLimits(
@@ -334,10 +338,10 @@ class GatewayThreadObservationCapacityTests(unittest.IsolatedAsyncioTestCase):
         )
         channel = FakeChannelAdapter()
         projections = InMemoryProjectionRouteRepository()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
                 projections=projections,
             ),
@@ -390,10 +394,10 @@ class GatewayThreadObservationCapacityTests(unittest.IsolatedAsyncioTestCase):
         conversation = ConversationRef("fake-channel", "foreground-capacity")
         channel = FakeChannelAdapter()
         projections = InMemoryProjectionRouteRepository()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
                 projections=projections,
             ),

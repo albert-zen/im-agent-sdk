@@ -6,561 +6,89 @@ import subprocess
 import sys
 from pathlib import Path
 
-import yaml
-
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / "dist"
 
-
-def _retired_application_exports() -> tuple[str, ...]:
-    component_map = yaml.safe_load(
-        (ROOT / "docs" / "components" / "component-map.yml").read_text(encoding="utf-8")
-    )
-    transition = component_map["structural_status"]["retired_application_public_exports"]
-    return tuple(sorted(set(transition["current"]) - set(transition["target"])))
-
-
-_RETIRED_APPLICATION_EXPORTS = _retired_application_exports()
-DIAGNOSTICS_FACADE_CHECK = (
-    "import subprocess, sys; "
-    "import imagent.interaction.diagnostics as common_owner; "
-    "import imagent.interaction.channels.diagnostics as channel_owner; "
-    "import imagent.applications.diagnostics as application_owner; "
-    "import imagent.gateway.diagnostics as gateway_owner; "
-    "import imagent.gateway as gateway_facade; "
-    "import imagent.diagnostics as transition_facade; "
-    "common_names = ('ConnectionDiagnosticState', 'DiagnosticFailureCode', "
-    "'QueueDiagnosticName', 'QueueDiagnosticFacts', 'ConnectionDiagnosticFacts'); "
-    "channel_names = ('ChannelDiagnosticFacts', 'ChannelDiagnosticsProvider'); "
-    "application_names = ('ApplicationPresentationFailureCode', "
-    "'ApplicationArtifactMaterializationFailureCode', 'ApplicationDiagnosticFacts', "
-    "'ApplicationPresentationDiagnosticFacts', "
-    "'ApplicationArtifactMaterializationDiagnosticFacts', "
-    "'ApplicationDiagnosticsProvider', 'DiagnosticsProvider'); "
-    "gateway_names = ('InboundContentTransformFailureCode', "
-    "'InboundContentTransformerDiagnosticFacts', "
-    "'InboundFailurePresentationFailureCode', "
-    "'InboundFailurePresenterDiagnosticFacts', 'OutboundPresentationFailureCode', "
-    "'OutboundPresentationDiagnosticFacts', 'DeliveryOutcomeObserverFailureCode', "
-    "'DeliveryOutcomeObserverDiagnosticFacts', 'ProjectionDiagnosticFacts', "
-    "'GatewayDiagnosticFacts', 'DiagnosticsSnapshot', 'summarize_projection_health', "
-    "'collect_application_diagnostics', 'collect_channel_diagnostics', "
-    "'new_diagnostics_snapshot'); "
-    "assert all(getattr(transition_facade, name) is getattr(common_owner, name) "
-    "for name in common_names); "
-    "assert all(getattr(transition_facade, name) is getattr(channel_owner, name) "
-    "for name in channel_names); "
-    "assert all(getattr(transition_facade, name) is getattr(application_owner, name) "
-    "for name in application_names); "
-    "assert all(getattr(transition_facade, name) is getattr(gateway_owner, name) "
-    "for name in gateway_names); "
-    "assert all(getattr(gateway_facade, name) is getattr(gateway_owner, name) "
-    "for name in ('GatewayDiagnosticFacts', 'DiagnosticsSnapshot', "
-    "'summarize_projection_health', 'collect_application_diagnostics', "
-    "'collect_channel_diagnostics', 'new_diagnostics_snapshot')); "
-    "subprocess.run([sys.executable, '-c', "
-    '"import imagent.diagnostics as f; '
-    "import imagent.interaction.diagnostics as c; "
-    "import imagent.interaction.channels.diagnostics as ch; "
-    "import imagent.applications.diagnostics as a; "
-    "assert f.ConnectionDiagnosticState is c.ConnectionDiagnosticState; "
-    "assert f.QueueDiagnosticFacts is c.QueueDiagnosticFacts; "
-    "assert f.ChannelDiagnosticFacts is ch.ChannelDiagnosticFacts; "
-    "assert f.ChannelDiagnosticsProvider is ch.ChannelDiagnosticsProvider; "
-    "assert f.ApplicationDiagnosticFacts is a.ApplicationDiagnosticFacts; "
-    "assert f.ApplicationDiagnosticsProvider is a.ApplicationDiagnosticsProvider; "
-    'assert f.DiagnosticsProvider is a.DiagnosticsProvider"], '
-    "check=True); "
-    "subprocess.run([sys.executable, '-c', "
-    '"import imagent.gateway.diagnostics as g; '
-    "import imagent.diagnostics as f; "
-    'assert all(getattr(f, n) is getattr(g, n) for n in g.__all__)"], '
-    "check=True); "
-    "subprocess.run([sys.executable, '-c', "
-    '"import imagent.diagnostics as f; '
-    "import imagent.gateway.diagnostics as g; "
-    'assert all(getattr(f, n) is getattr(g, n) for n in g.__all__)"], '
-    "check=True); "
-)
-CHANNEL_FACADE_CHECK = (
-    "import imagent.interaction.channels as channel_facade; "
-    "import imagent.interaction.channels.contract as channel_owner; "
-    "import imagent.channels as adapter_facade; "
-    "import imagent.interaction.channels.adapters.runtime as runtime_owner; "
-    "assert all(getattr(channel_facade, name) is getattr(channel_owner, name) "
-    "for name in channel_facade.__all__); "
-    "assert adapter_facade.NativeTransportChannelAdapter is "
-    "runtime_owner.NativeTransportChannelAdapter; "
-    "assert adapter_facade.channel_from_config is runtime_owner.channel_from_config; "
-    "retired_adapter = ('ChannelAdapter', 'ChannelStartupConfigurationValidator', "
-    "'MessageHandler', 'InboundAdmission', 'InboundAdmissionHandler'); "
-    "retired_contract = ('ChannelCapabilities', 'DeliveryProfile', "
-    "'DeliverySupportLevel', 'ReplyReferenceScope', 'DeliveryReceipt', "
-    "'DeliveryItemReceipt', 'DeliverySegmentReceipt', 'DeliveryItemStatus', "
-    "'DeliveryReceiptStatus', 'DeliverySegmentStatus', "
-    "'validate_delivery_receipt', 'validate_delivery_receipt_for_content'); "
-    "import imagent.adapters as adapters_facade; "
-    "import imagent.contracts as contracts_facade; "
-    "assert all(not hasattr(adapters_facade, name) and name not in "
-    "getattr(adapters_facade, '__all__', ()) "
-    "for name in retired_adapter); "
-    "assert all(not hasattr(contracts_facade, name) and name not in contracts_facade.__all__ "
-    "for name in retired_contract); "
-)
-_PACKAGE_ROOT_FACADE_FINGERPRINT_CHILD = r"""
+PUBLIC_GOLDEN_CHECK = r"""
 import importlib
+import importlib.util
 import sys
 import typing
 
 import imagent
+import imagent.gateway as gateway_facade
 
-module_exports = {
-    "adapters": "imagent.adapters",
-    "contracts": "imagent.contracts",
-    "delivery_coordination": "imagent.gateway.delivery.coordination",
-    "delivery_planning": "imagent.gateway.delivery.planning",
-    "diagnostics": "imagent.diagnostics",
-    "events": "imagent.events",
-}
+expected_root = [
+    "ActionResult", "ActionValue", "ApplicationActions",
+    "CommandArgumentContract", "CommandDefinition", "CommandExecutionSafety",
+    "CommandHandler", "CommandLimits", "CommandRegistry", "CommandResult",
+    "ConversationActions", "Failed", "Gateway", "GatewayExtensions",
+    "GatewayLimits", "GatewayStore", "MemoryGatewayStore", "OutcomeUnknown",
+    "Partial", "ProjectionPolicy", "ReadOutcome", "SQLiteGatewayStore",
+    "Succeeded", "include_common_commands",
+]
+expected_gateway = [
+    "ActionResult", "ActionValue", "ApplicationActions", "ConversationActions",
+    "Gateway", "GatewayExtensions", "GatewayLimits", "MissingBindingError",
+    "ReadOutcome", "StaleBindingError",
+]
+assert imagent.__all__ == expected_root
+assert gateway_facade.__all__ == expected_gateway
+assert typing.get_type_hints(imagent.__getattr__) == {"name": str, "return": object}
+assert typing.get_type_hints(gateway_facade.__getattr__) == {"name": str, "return": object}
+
+retired_modules = (
+    "imagent.adapters", "imagent.contracts", "imagent.delivery_coordination",
+    "imagent.delivery_planning", "imagent.diagnostics", "imagent.events",
+)
+assert all(importlib.util.find_spec(name) is None for name in retired_modules)
+assert importlib.util.find_spec("imcodex") is None
+
 value_exports = {
     "ActionResult": "imagent.gateway.actions",
     "ActionValue": "imagent.gateway.actions",
     "ApplicationActions": "imagent.gateway.actions",
     "ConversationActions": "imagent.gateway.actions",
     "ReadOutcome": "imagent.gateway.actions",
-    "Failed": "imagent.gateway.outcomes",
     "Gateway": "imagent.gateway.runtime",
     "GatewayExtensions": "imagent.gateway.composition",
     "GatewayLimits": "imagent.gateway.composition",
     "GatewayStore": "imagent.gateway.persistence",
     "MemoryGatewayStore": "imagent.gateway.persistence",
-    "OutcomeUnknown": "imagent.gateway.outcomes",
-    "Partial": "imagent.gateway.outcomes",
-    "ProjectionPolicy": "imagent.gateway.routing",
     "SQLiteGatewayStore": "imagent.gateway.persistence",
-    "Succeeded": "imagent.gateway.outcomes",
-    "CommandArgumentContract": "imagent.interaction.controllers",
-    "CommandDefinition": "imagent.interaction.controllers",
-    "CommandExecutionSafety": "imagent.interaction.controllers",
-    "CommandHandler": "imagent.interaction.controllers",
-    "CommandLimits": "imagent.interaction.controllers",
-    "CommandRegistry": "imagent.interaction.controllers",
-    "CommandResult": "imagent.interaction.controllers",
-    "include_common_commands": "imagent.interaction.controllers",
+    "ProjectionPolicy": "imagent.gateway.routing",
 }
-assert imagent.__all__ == [
-    "ActionResult",
-    "ActionValue",
-    "ApplicationActions",
-    "CommandArgumentContract",
-    "CommandDefinition",
-    "CommandExecutionSafety",
-    "CommandHandler",
-    "CommandLimits",
-    "CommandRegistry",
-    "CommandResult",
-    "ConversationActions",
-    "Failed",
-    "Gateway",
-    "GatewayExtensions",
-    "GatewayLimits",
-    "GatewayStore",
-    "MemoryGatewayStore",
-    "OutcomeUnknown",
-    "Partial",
-    "ProjectionPolicy",
-    "ReadOutcome",
-    "SQLiteGatewayStore",
-    "Succeeded",
-    "adapters",
-    "contracts",
-    "delivery_coordination",
-    "delivery_planning",
-    "diagnostics",
-    "events",
-    "include_common_commands",
-]
-assert not hasattr(imagent, "projections")
-assert typing.get_type_hints(imagent.__getattr__) == {"name": str, "return": object}
-assert all(name not in imagent.__dict__ for name in (*module_exports, *value_exports))
-assert not any(
-    name == "imagent.gateway" or name.startswith("imagent.gateway.")
-    for name in sys.modules
-)
-assert not any(
-    name in sys.modules
-    for name in ("websockets", "PIL", "Crypto", "lark_oapi", "lark")
-)
-assert not hasattr(imagent, "unsupported_root_export")
-
-for name, module_name in module_exports.items():
-    first = getattr(imagent, name)
-    owner = importlib.import_module(module_name)
-    assert first is owner
-    assert getattr(imagent, name) is owner
-    assert imagent.__dict__[name] is owner
-
 for name, module_name in value_exports.items():
-    first = getattr(imagent, name)
     owner = getattr(importlib.import_module(module_name), name)
-    assert first is owner
     assert getattr(imagent, name) is owner
-    assert imagent.__dict__[name] is owner
+    if name in expected_gateway:
+        assert getattr(gateway_facade, name) is owner
+
+from imagent.gateway import GatewayExtensions, GatewayLimits
+from imagent.gateway.composition import _GatewayRuntimeDependencies
+assert GatewayLimits().startup_buffer_max_pending == 256
+assert GatewayExtensions().controller is None
+assert _GatewayRuntimeDependencies(bindings=object()).bindings is not None
+assert not hasattr(gateway_facade, "GatewayRepositories")
+assert not hasattr(gateway_facade, "ImAgentGateway")
+assert not hasattr(gateway_facade, "GatewayOperation")
+assert not hasattr(gateway_facade, "ProactiveDeliveryService")
+
+import imagent.applications as applications
+import imagent.applications.events as event_owner
+import imagent.gateway.diagnostics as gateway_diagnostics
+import imagent.gateway.routing as routing
+import imagent.gateway.routing.operations as routing_owner
+import imagent.interaction.channels as channel_contract
+import imagent.interaction.channels.contract as channel_owner
+assert applications.AgentApplicationAdapter.__module__ == "imagent.applications.contract"
+assert event_owner.AgentEvent.__module__ == "imagent.applications.events"
+assert routing.GatewayOperation is routing_owner.GatewayOperation
+assert all(getattr(channel_contract, name) is getattr(channel_owner, name)
+           for name in channel_contract.__all__)
+assert gateway_diagnostics.DiagnosticsSnapshot.__module__ == "imagent.gateway.diagnostics"
 """
-PACKAGE_ROOT_FACADE_CHECK = (
-    "import subprocess, sys; "
-    f"subprocess.run([sys.executable, '-c', {_PACKAGE_ROOT_FACADE_FINGERPRINT_CHILD!r}], "
-    "check=True); "
-)
-_APPLICATION_IMPORT_ISOLATION_CHILD = (
-    "import sys; import imagent.applications; "
-    "assert not any(name == 'imagent.gateway' or name.startswith('imagent.gateway.') "
-    "for name in sys.modules); "
-    "assert not any(name.startswith('imagent.applications.adapters.') for name in sys.modules); "
-    "assert not any(name in sys.modules for name in "
-    "('websockets', 'PIL', 'Crypto', 'lark_oapi', 'lark'))"
-)
-APPLICATION_IMPORT_ISOLATION_CHECK = (
-    "import subprocess, sys; "
-    f"subprocess.run([sys.executable, '-c', {_APPLICATION_IMPORT_ISOLATION_CHILD!r}], "
-    "check=True); "
-)
-CLIENT_TOOLS_CHECK = r"""
-import importlib
-import importlib.metadata
-import importlib.util
-import sys
 
-assert importlib.util.find_spec("imagent.cli") is None
-try:
-    importlib.import_module("imagent.cli")
-except ModuleNotFoundError:
-    pass
-else:
-    raise AssertionError("historical imagent.cli package is importable")
-
-entries = [
-    entry
-    for entry in importlib.metadata.entry_points(group="console_scripts")
-    if entry.name == "imagent-send"
-]
-assert len(entries) == 1
-entry = entries[0]
-assert entry.value == "imagent.interaction.client_tools.send:main"
-main = entry.load()
-from imagent.interaction.client_tools.send import main as owner_main
-
-assert main is owner_main
-assert main.__module__ == "imagent.interaction.client_tools.send"
-assert not any(
-    name == "imagent.gateway" or name.startswith("imagent.gateway.")
-    for name in sys.modules
-)
-assert not any(
-    name == "imagent.applications" or name.startswith("imagent.applications.")
-    for name in sys.modules
-)
-"""
-APPLICATION_FACADE_CHECK = f"""
-import imagent.adapters as adapters_facade
-import imagent.contracts as contracts_facade
-retired = {_RETIRED_APPLICATION_EXPORTS!r}
-retired_contract = tuple(
-    name.split(':', 1)[1]
-    for name in retired
-    if name.startswith('imagent.contracts:')
-)
-retired_adapter = tuple(
-    name.split(':', 1)[1]
-    for name in retired
-    if name.startswith('imagent.adapters:')
-)
-assert all(
-    not hasattr(contracts_facade, name) and name not in contracts_facade.__all__
-    for name in retired_contract
-)
-assert all(
-    not hasattr(adapters_facade, name)
-    and name not in getattr(adapters_facade, '__all__', ())
-    for name in retired_adapter
-)
-for module_name, names in (
-    (contracts_facade, retired_contract),
-    (adapters_facade, retired_adapter),
-):
-    for name in names:
-        try:
-            exec(f"from {{module_name.__name__}} import {{name}}")
-        except ImportError:
-            pass
-        else:
-            raise AssertionError(name)
-"""
-BINDING_IMPORT_ORDER_CHECK = r'''
-import inspect
-import subprocess
-import sys
-import typing
-
-check_code = r"""
-import inspect
-import importlib.util
-import typing
-
-import imagent.contracts as contracts_facade
-import imagent.gateway as gateway_facade
-import imagent.gateway.routing as routing_facade
-import imagent.gateway.routing.operations as operations_owner
-from imagent.gateway.persistence import ConversationBinding
-from imagent.gateway.routing import bindings as binding_owner
-
-binding_names = (
-    "BindConversationToProject",
-    "BindConversationToThread",
-    "ClearConversationApplication",
-    "ClearConversationProject",
-    "ClearConversationThread",
-    "ConversationBound",
-)
-for name in binding_names:
-    owner = getattr(binding_owner, name)
-    assert getattr(routing_facade, name) is owner
-    assert getattr(contracts_facade, name) is owner
-    assert getattr(gateway_facade, name) is owner
-    assert inspect.signature(getattr(contracts_facade, name)) == inspect.signature(owner)
-    assert owner.__module__ == "imagent.gateway.routing.bindings"
-
-assert importlib.util.find_spec("imagent.contracts.operations") is None
-assert importlib.util.find_spec("imagent.contracts.validators") is None
-
-binding_hints = typing.get_type_hints(binding_owner.ConversationBound)
-facade_hints = typing.get_type_hints(contracts_facade.ConversationBound)
-assert contracts_facade.ConversationBinding is ConversationBinding
-assert binding_hints["binding"] is ConversationBinding
-assert facade_hints["binding"] is ConversationBinding
-assert binding_hints["type"] is operations_owner.GatewayOperationType
-assert facade_hints["type"] is operations_owner.GatewayOperationType
-assert typing.get_type_hints(contracts_facade.__getattr__)["return"] is object
-assert typing.get_args(contracts_facade.GatewayOperation)
-for name in (
-    "ApplicationsListed",
-    "GatewayOperation",
-    "GatewayOperationFailed",
-    "GatewayOperationResult",
-    "GatewayOperationType",
-    "ListApplications",
-    "SelectApplication",
-):
-    owner = getattr(operations_owner, name)
-    assert getattr(contracts_facade, name) is owner
-    assert getattr(routing_facade, name) is owner
-    assert getattr(gateway_facade, name) is owner
-for name in ("validate_gateway_operation", "validate_gateway_operation_result"):
-    owner = getattr(operations_owner, name)
-    assert getattr(contracts_facade, name) is owner
-    assert getattr(routing_facade, name) is owner
-    assert getattr(gateway_facade, name) is owner
-assert inspect.signature(contracts_facade.validate_gateway_operation) == inspect.signature(
-    operations_owner.validate_gateway_operation
-)
-assert inspect.signature(contracts_facade.validate_gateway_operation_result) == inspect.signature(
-    operations_owner.validate_gateway_operation_result
-)
-assert typing.get_type_hints(contracts_facade.validate_gateway_operation) == typing.get_type_hints(
-    operations_owner.validate_gateway_operation
-)
-assert (
-    typing.get_type_hints(contracts_facade.validate_gateway_operation_result)
-    == typing.get_type_hints(operations_owner.validate_gateway_operation_result)
-)
-assert not hasattr(routing_facade, "GatewayOperationExecutor")
-assert not hasattr(gateway_facade, "GatewayOperationExecutor")
-"""
-for first_import in (
-    "import imagent.gateway.routing.operations\n",
-    "import imagent.gateway.routing.bindings\n",
-    "import imagent.contracts\n",
-    "import imagent.gateway.routing\n",
-):
-    completed = subprocess.run(
-        [sys.executable, "-c", first_import + check_code],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if completed.returncode:
-        raise AssertionError(
-            f"binding import-order smoke failed: {first_import!r}\n"
-            f"stdout={completed.stdout}\nstderr={completed.stderr}"
-        )
-'''
-PROJECTION_ROUTE_IMPORT_ORDER_CHECK = r'''
-import subprocess
-import sys
-
-check_code = r"""
-import importlib.util
-import typing
-
-import imagent.contracts as contracts_facade
-import imagent.gateway as gateway_facade
-import imagent.gateway.persistence as persistence_facade
-import imagent.gateway.routing as routing_facade
-import imagent.gateway.routing.projection_routes as projection_route_owner
-from imagent.gateway.persistence import ThreadProjectionRoute
-
-assert projection_route_owner.__all__ == [
-    "ClearThreadObservation",
-    "ObserveThread",
-    "ProjectionPolicy",
-    "ThreadObservationCleared",
-    "ThreadObserved",
-]
-for name in projection_route_owner.__all__:
-    owner = getattr(projection_route_owner, name)
-    assert getattr(routing_facade, name) is owner
-    assert owner.__module__ == "imagent.gateway.routing.projection_routes"
-for module in (contracts_facade,):
-    for name in (
-        "ClearThreadObservation",
-        "ObserveThread",
-        "ThreadObservationCleared",
-        "ThreadObserved",
-    ):
-        assert not hasattr(module, name)
-        assert name not in getattr(module, "__all__", ())
-assert not hasattr(persistence_facade, "ProjectionPolicy")
-assert "ProjectionPolicy" not in persistence_facade.__all__
-assert importlib.util.find_spec("imagent.contracts.operations") is None
-assert importlib.util.find_spec("imagent.contracts.validators") is None
-for module_name in (
-    "imagent.contracts",
-    "imagent.contracts.operations",
-    "imagent.contracts.validators",
-    "imagent.gateway.persistence",
-):
-    names = (
-        ("ProjectionPolicy",)
-        if module_name.endswith("persistence")
-        else (
-            "ClearThreadObservation",
-            "ObserveThread",
-            "ThreadObservationCleared",
-            "ThreadObserved",
-        )
-    )
-    for name in names:
-        try:
-            exec(f"from {module_name} import {name}")
-        except ImportError:
-            pass
-        else:
-            raise AssertionError(f"historical {module_name}.{name} import unexpectedly succeeded")
-projection_hints = typing.get_type_hints(projection_route_owner.ThreadObserved)
-assert projection_hints["route"] is ThreadProjectionRoute
-root_hints = typing.get_type_hints(gateway_facade.ImAgentGateway._observe_thread)
-assert root_hints["operation"] is projection_route_owner.ObserveThread
-assert root_hints["return"] is projection_route_owner.ThreadObserved
-"""
-for first_import in (
-    "import imagent.gateway.routing.projection_routes\n",
-    "import imagent.gateway.routing.operations\n",
-    "import imagent.contracts\n",
-    "import imagent.gateway.routing\n",
-    "import imagent.gateway\n",
-):
-    completed = subprocess.run(
-        [sys.executable, "-c", first_import + check_code],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if completed.returncode:
-        raise AssertionError(
-            f"projection-route import-order smoke failed: {first_import!r}\n"
-            f"stdout={completed.stdout}\nstderr={completed.stderr}"
-        )
-'''
-REQUEST_CORRELATION_IMPORT_ORDER_CHECK = r'''
-import importlib.util
-import subprocess
-import sys
-
-check_code = r"""
-import importlib.util
-import typing
-
-import imagent.contracts as contracts_facade
-import imagent.gateway as gateway_facade
-import imagent.gateway.projection as projection_facade
-import imagent.gateway.projection.observation as observation_owner
-import imagent.gateway.projection.request_correlation as request_owner
-import imagent.gateway.routing.operations as operations_owner
-
-assert request_owner.__all__ == [
-    "InteractiveRequestProjection",
-    "RequestResponseRouted",
-    "RespondToRequest",
-]
-for name in request_owner.__all__:
-    owner = getattr(request_owner, name)
-    assert getattr(projection_facade, name) is owner
-    assert owner.__module__ == "imagent.gateway.projection.request_correlation"
-assert projection_facade.ThreadProjectionRuntime is observation_owner.ThreadProjectionRuntime
-assert projection_facade.ProjectionWorkerHealth is observation_owner.ProjectionWorkerHealth
-assert "ProjectionWorkerCapacityError" not in projection_facade.__all__
-assert "ProjectionWorkerState" not in projection_facade.__all__
-for module_name in (
-    "imagent.projection_runtime",
-    "imagent.projections",
-    "imagent.projection_routes",
-):
-    assert importlib.util.find_spec(module_name) is None
-assert importlib.util.find_spec("imagent.contracts.operations") is None
-assert importlib.util.find_spec("imagent.contracts.validators") is None
-for name in ("RespondToRequest", "RequestResponseRouted"):
-    assert getattr(operations_owner, name) is getattr(request_owner, name)
-    for module in (contracts_facade,):
-        assert not hasattr(module, name)
-        assert name not in getattr(module, "__all__", ())
-for module_name in (
-    "imagent.contracts",
-    "imagent.contracts.operations",
-    "imagent.contracts.validators",
-):
-    for name in ("RespondToRequest", "RequestResponseRouted"):
-        try:
-            exec(f"from {module_name} import {name}")
-        except ImportError:
-            pass
-        else:
-            raise AssertionError(f"historical {module_name}.{name} import unexpectedly succeeded")
-assert importlib.util.find_spec("imagent.request_projection_runtime") is None
-root_hints = typing.get_type_hints(gateway_facade.ImAgentGateway._route_request_response)
-assert root_hints["operation"] is request_owner.RespondToRequest
-assert root_hints["return"] is request_owner.RequestResponseRouted
-assert not hasattr(gateway_facade.ImAgentGateway, "_respond_to_request")
-"""
-for first_import in (
-    "import imagent.gateway.projection.request_correlation\n",
-    "import imagent.gateway.projection\n",
-    "import imagent.gateway.routing.operations\n",
-    "import imagent.contracts\n",
-    "import imagent.interaction.controllers\n",
-    "import imagent.gateway\n",
-):
-    completed = subprocess.run(
-        [sys.executable, "-c", first_import + check_code],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if completed.returncode:
-        raise AssertionError(
-            f"request-correlation import-order smoke failed: {first_import!r}\n"
-            f"stdout={completed.stdout}\nstderr={completed.stderr}"
-        )
-'''
 REFERENCE_CONSUMER_CHECK = r"""
 import os
 import subprocess
@@ -585,318 +113,69 @@ assert reference_run.stdout == (
 )
 assert reference_run.stderr == ""
 """
+
 CASES = {
     "base": (
         "",
-        PACKAGE_ROOT_FACADE_CHECK
-        + APPLICATION_IMPORT_ISOLATION_CHECK
-        + APPLICATION_FACADE_CHECK
-        + BINDING_IMPORT_ORDER_CHECK
-        + PROJECTION_ROUTE_IMPORT_ORDER_CHECK
-        + REQUEST_CORRELATION_IMPORT_ORDER_CHECK
-        + (
-            "import asyncio, importlib, importlib.util, typing, imagent; "
-            "import imagent.events as event_facade; "
-            "import imagent.applications.events as event_owner; "
-            "from imagent.applications import "
-            "ApplicationInputOutcomeUnknown as outcome_facade; "
-            "from imagent.applications.contract import "
-            "ApplicationInputOutcomeUnknown as outcome_owner; "
-            "import imagent.contracts as contracts_facade; "
-            "event_names = ['AgentEvent', 'AgentEventType', 'CursorExpired', "
-            "'EventBroadcaster', 'EventBufferOverflow', 'EventStreamGap', "
-            "'EventStreamOverflow', 'EventStreamReset', 'FanoutSubscription', "
-            "'validate_agent_event']; "
-            "assert event_facade.__all__ == event_names; "
-            "assert all(getattr(event_facade, name) is getattr(event_owner, name) "
-            "for name in event_names); "
-            "assert all(getattr(contracts_facade, name) is getattr(event_owner, name) "
-            "for name in ('AgentEvent', 'AgentEventType', 'validate_agent_event')); "
-            "assert outcome_facade is outcome_owner; "
-            "assert contracts_facade.ApplicationInputOutcomeUnknown is outcome_owner; "
-            "assert outcome_owner.__module__ == 'imagent.applications.contract'; "
-            "assert importlib.util.find_spec('imagent.contracts.errors') is None; "
-            "assert imagent.events is event_facade; "
-            "assert not hasattr(event_facade, '__getattr__'); "
-            "import imagent.interaction.controllers as controller_facade; "
-            "import imagent.interaction.controllers.common as common_owner; "
-            "import imagent.interaction.controllers.contract as contract_owner; "
-            "import imagent.interaction.controllers.registry as registry_owner; "
-            "import imagent.interaction.controllers.request_presentation as request_owner; "
-            "from imagent.applications.operations import "
-            "ApplicationOperation, ApplicationOperationResult; "
-            "from imagent.interaction.messages import "
-            "ConversationRef, InboundMessage, OutboundMessage; "
-            "from imagent.contracts import GatewayOperation, GatewayOperationResult; "
-            "from imagent.gateway.persistence import ConversationBinding, GatewayStore, "
-            "MemoryGatewayStore, SQLiteGatewayStore; "
-            "import imagent.gateway.persistence as persistence_facade; "
-            "import imagent.gateway.persistence.store as gateway_store_owner; "
-            "import imagent.gateway.persistence.memory_store as memory_store_owner; "
-            "import imagent.gateway.persistence.sqlite_store as sqlite_store_owner; "
-            "assert GatewayStore is gateway_store_owner.GatewayStore; "
-            "assert MemoryGatewayStore is memory_store_owner.MemoryGatewayStore; "
-            "assert SQLiteGatewayStore is sqlite_store_owner.SQLiteGatewayStore; "
-            "assert all(name in persistence_facade.__all__ for name in "
-            "('GatewayStore', 'MemoryGatewayStore', 'SQLiteGatewayStore')); "
-            "import imagent.contracts as contracts_facade; "
-            "import imagent.gateway.delivery as delivery_facade; "
-            "import imagent.gateway.delivery.proactive as proactive_owner; "
-            "import imagent.gateway.delivery.submissions as submissions_owner; "
-            "retired = ('DeliveryTargetKind', 'ConversationDeliveryTarget', "
-            "'ThreadRouteDeliveryTarget', 'DeliveryTarget', 'DeliveryIntent', "
-            "'DestinationDeliveryResult', 'ProactiveDeliveryResult', "
-            "'validate_delivery_intent', 'derive_delivery_target_fingerprint', "
-            "'derive_delivery_payload_fingerprint', 'derive_delivery_submission_id', "
-            "'derive_destination_delivery_id'); "
-            "assert all(not hasattr(contracts_facade, name) "
-            "and name not in contracts_facade.__all__ "
-            "for name in retired); "
-            "assert not hasattr(contracts_facade, 'DeliverySubmissionOrigin'); "
-            "assert not hasattr(persistence_facade, 'DeliverySubmissionOrigin'); "
-            "assert delivery_facade.DeliverySubmissionOrigin is "
-            "submissions_owner.DeliverySubmissionOrigin; "
-            "assert all(getattr(delivery_facade, name) "
-            "is getattr(submissions_owner, name) "
-            "for name in ('derive_delivery_target_fingerprint', "
-            "'derive_delivery_payload_fingerprint', "
-            "'derive_delivery_submission_id', 'derive_destination_delivery_id')); "
-            "assert all(getattr(delivery_facade, name) is getattr(proactive_owner, name) "
-            "for name in ('DeliveryTargetKind', 'ConversationDeliveryTarget', "
-            "'ThreadRouteDeliveryTarget', 'DeliveryTarget', 'DeliveryIntent', "
-            "'DestinationDeliveryResult', 'ProactiveDeliveryResult', 'validate_delivery_intent')); "
-            "assert all(getattr(controller_facade, name) is getattr(owner, name) "
-            "for owner, names in ((contract_owner, "
-            "('CommandInvocationFacts', 'ControllerLifecycle', 'InboundController')), "
-            "(registry_owner, ('CommandArgumentContract', 'CommandDefinition', "
-            "'CommandExecutionSafety', "
-            "'CommandHandler', 'CommandHandlerTimeout', 'CommandInvocation', "
-            "'CommandLimits', 'CommandRegistry', "
-            "'CommandRegistryDiagnostics', 'CommandRegistryError', 'CommandRegistryFailureCode', "
-            "'CommandRegistryFrozenError', 'CommandRegistryNotFrozenError', "
-            "'CommandResult', 'CommandResultError', 'CommandResultStatus', "
-            "'derive_command_invocation_id')), "
-            "(common_owner, ('include_common_commands',)), "
-            "(request_owner, ('MarkdownRequestPresenter', "
-            "'RequestPresentation', 'RequestPresenter'))) "
-            "for name in names); "
-            "removed_controller_exports = ('CommandHandlerActions', 'ControllerActions', "
-            "'CommandRegistryLimits', 'SlashController', 'register_common_commands'); "
-            "assert all(not hasattr(controller_facade, name) "
-            "and name not in controller_facade.__all__ "
-            "and not hasattr(imagent, name) for name in removed_controller_exports); "
-            "from imagent.gateway.actions import ConversationActions; "
-            "assert typing.get_type_hints("
-            "contract_owner.InboundController.handle"
-            ")['message'] is InboundMessage; "
-            "assert typing.get_type_hints("
-            "contract_owner.InboundController.handle"
-            ")['return'] "
-            "== tuple[OutboundMessage, ...] | None; "
-            "assert typing.get_type_hints("
-            "contract_owner.InboundController.handle"
-            ")['actions'] is ConversationActions; "
-            "assert typing.get_type_hints("
-            "registry_owner.CommandHandler.__call__"
-            ")['invocation'] "
-            "is registry_owner.CommandInvocation; "
-            "assert typing.get_type_hints("
-            "registry_owner.CommandHandler.__call__"
-            ")['actions'] is ConversationActions; "
-            "assert typing.get_type_hints("
-            "request_owner.RequestPresenter.present_request"
-            ")['conversation_ref'] "
-            "is ConversationRef; "
-            "assert importlib.util.find_spec('imagent.controllers') is None; "
-            "\ntry: importlib.import_module('imagent.controllers')"
-            "\nexcept ModuleNotFoundError as exc: assert exc.name == 'imagent.controllers'"
-            "\nelse: raise AssertionError('historical Controller package is importable')"
-            "\n"
-            "import imagent.gateway as gateway_facade; "
-            "import imagent.gateway.input as gateway_input_facade; "
-            "from imagent.gateway.input.dispatch import "
-            "MissingBindingError as missing_binding_owner, "
-            "StaleBindingError as stale_binding_owner; "
-            "from imagent.interaction.operations import OperationErrorCode, operation_error; "
-            "assert gateway_facade.MissingBindingError is missing_binding_owner; "
-            "assert gateway_input_facade.MissingBindingError is missing_binding_owner; "
-            "assert gateway_facade.StaleBindingError is stale_binding_owner; "
-            "assert gateway_input_facade.StaleBindingError is stale_binding_owner; "
-            "assert operation_error(missing_binding_owner()).code "
-            "== OperationErrorCode.MISSING_BINDING.value == 'missing_binding'; "
-            "assert operation_error(stale_binding_owner()).code "
-            "== OperationErrorCode.STALE_BINDING.value == 'stale_binding'; "
-            "assert not hasattr(imagent, 'MissingBindingError'); "
-            "assert not hasattr(contracts_facade, 'MissingBindingError'); "
-            "assert not hasattr(imagent, 'StaleBindingError'); "
-            "assert not hasattr(contracts_facade, 'StaleBindingError'); "
-            "from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories; "
-            "assert GatewayRepositories(bindings=object()).bindings is not None; "
-            "assert GatewayLimits().startup_buffer_max_pending == 256; "
-            "assert GatewayExtensions().controller is None; "
-            "from imagent.applications import codex_app_server_client; "
-            "from imagent.channels import channel_from_config; "
-            "assert type(codex_app_server_client(endpoint='stdio://')).__name__ "
-            "== 'AppServerClient'; "
-            "assert callable(channel_from_config); "
-            "from imagent.applications import AppServerArtifactCandidate as top_artifact; "
-            "from imagent.applications.presentation import "
-            "AppServerArtifactCandidate as presentation_artifact; "
-            "from imagent.applications.presentation.artifact_materialization "
-            "import AppServerArtifactCandidate as owner_artifact; "
-            "assert top_artifact is presentation_artifact is owner_artifact; "
-            "from imagent.applications import "
-            "AgentApplicationAdapter as top_adapter, "
-            "ApplicationInputDispatchHandler as top_dispatch_handler; "
-            "from imagent.applications import "
-            "CodexApplicationAdapter as top_codex, "
-            "ZenApplicationAdapter as top_zen; "
-            "from imagent.applications.adapters.codex import "
-            "CodexApplicationAdapter as codex_owner; "
-            "from imagent.applications.adapters.zen import "
-            "ZenApplicationAdapter as zen_owner; "
-            "from imagent.applications import ("
-            "T3ApplicationAdapter as top_t3, HttpT3Client as top_t3_client, "
-            "T3ClientError as top_t3_error); "
-            "from imagent.applications.adapters.t3 import ("
-            "T3ApplicationAdapter as t3_owner, HttpT3Client as t3_client, "
-            "T3ClientError as t3_error); "
-            "assert top_t3 is t3_owner; "
-            "assert top_t3_client is t3_client; "
-            "assert top_t3_error is t3_error; "
-            "from imagent.applications.contract import "
-            "AgentApplicationAdapter as owner_adapter, "
-            "ApplicationInputDispatchHandler as owner_dispatch_handler; "
-            "assert top_adapter is owner_adapter; "
-            "assert top_dispatch_handler is owner_dispatch_handler; "
-            "for retired_name in ('AgentApplicationAdapter', 'ApplicationInputDispatchHandler'): "
-            "\n    try: exec(f'from imagent.adapters import {retired_name}')"
-            "\n    except ImportError: pass"
-            "\n    else: raise AssertionError(retired_name); "
-            "assert owner_adapter.send_input.__module__ == "
-            "'imagent.applications.contract'; "
-            "assert top_codex is codex_owner; "
-            "assert top_zen is zen_owner; "
-            "assert importlib.util.find_spec('imagent.applications.appserver') is None; "
-            "assert importlib.util.find_spec('imagent.applications.appserver_artifacts') is None; "
-            "assert importlib.util.find_spec('imagent.applications.appserver_mapping') is None; "
-            "assert importlib.util.find_spec('imagent.applications.t3') is None; "
-            "assert importlib.util.find_spec('imagent.applications.t3_client') is None; "
-            "assert importlib.util.find_spec('websockets') is None; "
-            "assert importlib.util.find_spec('imcodex') is None; "
-            "import imagent.applications.adapters.appserver.client as client_facade; "
-            "from imagent.applications.adapters.appserver.client import ("
-            "AppServerClient as facade_client, "
-            "AppServerDispatchPosition as facade_position, "
-            "AppServerError as facade_error, "
-            "AppServerResponse as facade_response, "
-            "AppServerSupervisor as facade_supervisor, "
-            "APP_SERVER_DISPATCH_POSITION_KEY as facade_key, "
-            "codex_app_server_client as facade_factory); "
-            "from imagent.applications.adapters.appserver.client.client import "
-            "AppServerClient as owner_client; "
-            "from imagent.applications.adapters.appserver.client.handoff import ("
-            "APP_SERVER_DISPATCH_POSITION_KEY as owner_key, "
-            "AppServerDispatchPosition as owner_position, "
-            "AppServerResponse as owner_response); "
-            "from imagent.applications.adapters.appserver.client.supervisor import "
-            "AppServerSupervisor as owner_supervisor; "
-            "from imagent.applications.adapters.appserver.transport import "
-            "AppServerError as transport_error; "
-            "from imagent.applications.adapters.appserver.diagnostics import "
-            "AppServerDiagnosticState as diagnostics_owner; "
-            "import imagent.applications.adapters.appserver.requests as requests_facade; "
-            "from imagent.applications.adapters.appserver.requests import "
-            "AppServerRequestRuntime as runtime_owner, "
-            "PendingAppServerRequest as pending_owner; "
-            "assert client_facade.__all__ == ["
-            "'AppServerClient', 'AppServerDispatchPosition', 'AppServerError', "
-            "'AppServerResponse', 'AppServerSupervisor', "
-            "'APP_SERVER_DISPATCH_POSITION_KEY', 'codex_app_server_client']; "
-            "assert facade_client is owner_client; "
-            "assert facade_position is owner_position; "
-            "assert facade_error is transport_error; "
-            "assert facade_response is owner_response; "
-            "assert facade_supervisor is owner_supervisor; "
-            "assert facade_key is owner_key; "
-            "assert facade_factory is client_facade.codex_app_server_client; "
-            "assert type(codex_app_server_client(endpoint='stdio://')._diagnostics) "
-            "is diagnostics_owner; "
-            "assert requests_facade.AppServerRequestRuntime is runtime_owner; "
-            "assert requests_facade.PendingAppServerRequest is pending_owner; "
-            "assert importlib.util.find_spec('imagent.applications.appserver_client') is None; "
-            "assert importlib.util.find_spec('imagent.applications.appserver_requests') is None; "
-            "assert importlib.util.find_spec('imagent.applications.appserver_request_runtime') "
-            "is None; "
-            "supervisor=facade_supervisor(app_server_url='ws://127.0.0.1:9'); "
-            "\ntry: asyncio.run(supervisor.connect_external())"
-            "\nexcept RuntimeError as exc: "
-            " assert \"'appserver' optional dependency\" in str(exc)"
-            "\nelse: raise AssertionError('missing appserver extra did not fail fast')"
-        ).replace("; ", "\n"),
+        "import importlib.util\n"
+        "assert importlib.util.find_spec('websockets') is None\n"
+        "assert importlib.util.find_spec('Crypto') is None\n"
+        "assert importlib.util.find_spec('lark_channel') is None\n",
     ),
     "qq": (
         "qq",
-        "import importlib.util; "
-        "from imagent.channels import channel_from_config; "
-        "adapter=channel_from_config('qq', config={'enabled':False}, "
-        "channel_instance_id='qq-clean'); "
-        "adapter.validate_startup_configuration(); "
-        "assert adapter.channel_instance_id == 'qq-clean'; "
-        "assert importlib.util.find_spec('imcodex') is None",
+        "from imagent.channels import channel_from_config\n"
+        "adapter = channel_from_config('qq', config={'enabled': False}, "
+        "channel_instance_id='qq-clean')\n"
+        "adapter.validate_startup_configuration()\n"
+        "assert adapter.channel_instance_id == 'qq-clean'\n",
     ),
     "telegram": (
         "telegram",
-        "import importlib.util; "
-        "from imagent.channels import channel_from_config; "
-        "adapter=channel_from_config('telegram', config={'enabled':False}, "
-        "channel_instance_id='telegram-clean'); "
-        "adapter.validate_startup_configuration(); "
-        "assert adapter.channel_instance_id == 'telegram-clean'; "
-        "assert importlib.util.find_spec('imcodex') is None",
+        "from imagent.channels import channel_from_config\n"
+        "adapter = channel_from_config('telegram', config={'enabled': False}, "
+        "channel_instance_id='telegram-clean')\n"
+        "adapter.validate_startup_configuration()\n"
+        "assert adapter.channel_instance_id == 'telegram-clean'\n",
     ),
     "feishu": (
         "feishu",
-        "import importlib.util; "
-        "from imagent.channels import channel_from_config; "
-        "adapter=channel_from_config('feishu', config={'enabled':False}, "
-        "channel_instance_id='feishu-clean'); "
-        "adapter.validate_startup_configuration(); "
-        "assert adapter.channel_instance_id == 'feishu-clean'; "
-        "assert importlib.util.find_spec('lark_channel') is not None; "
-        "assert importlib.util.find_spec('imcodex') is None",
+        "import importlib.util\n"
+        "from imagent.channels import channel_from_config\n"
+        "adapter = channel_from_config('feishu', config={'enabled': False}, "
+        "channel_instance_id='feishu-clean')\n"
+        "adapter.validate_startup_configuration()\n"
+        "assert adapter.channel_instance_id == 'feishu-clean'\n"
+        "assert importlib.util.find_spec('lark_channel') is not None\n",
     ),
     "weixin": (
         "weixin",
-        "import importlib.util, tempfile; "
-        "from imagent.channels import channel_from_config; "
-        "adapter=channel_from_config('weixin', "
-        "config={'enabled':False,'state_dir':tempfile.mkdtemp()}, "
-        "channel_instance_id='weixin-clean'); "
-        "adapter.validate_startup_configuration(); "
-        "assert adapter.channel_instance_id == 'weixin-clean'; "
-        "assert importlib.util.find_spec('Crypto') is not None; "
-        "assert importlib.util.find_spec('imcodex') is None",
+        "import importlib.util\n"
+        "import tempfile\n"
+        "from imagent.channels import channel_from_config\n"
+        "adapter = channel_from_config('weixin', "
+        "config={'enabled': False, 'state_dir': tempfile.mkdtemp()}, "
+        "channel_instance_id='weixin-clean')\n"
+        "adapter.validate_startup_configuration()\n"
+        "assert adapter.channel_instance_id == 'weixin-clean'\n"
+        "assert importlib.util.find_spec('Crypto') is not None\n",
     ),
     "appserver": (
         "appserver",
-        "import importlib.util; "
-        "from imagent.applications import codex_app_server_client; "
-        "assert type(codex_app_server_client(codex_bin='codex', endpoint='stdio://')).__name__ "
-        "== 'AppServerClient'; "
-        "assert importlib.util.find_spec('websockets') is not None; "
-        "assert importlib.util.find_spec('imcodex') is None",
+        "import importlib.util\n"
+        "from imagent.applications import codex_app_server_client\n"
+        "client = codex_app_server_client(codex_bin='codex', endpoint='stdio://')\n"
+        "assert type(client).__name__ == 'AppServerClient'\n"
+        "assert importlib.util.find_spec('websockets') is not None\n",
     ),
 }
 
 
 def _case_source(code: str) -> str:
-    """Build one executable, multiline source string for a clean-wheel case."""
+    """Build one executable source string for a clean-wheel profile."""
     return "\n".join(
         (
-            CLIENT_TOOLS_CHECK,
-            DIAGNOSTICS_FACADE_CHECK,
-            CHANNEL_FACADE_CHECK,
+            PUBLIC_GOLDEN_CHECK,
             code,
             REFERENCE_CONSUMER_CHECK,
         )

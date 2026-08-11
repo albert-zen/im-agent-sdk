@@ -10,8 +10,7 @@ The suite proves:
   Application/Gateway queue names, over-512-character identities and
   non-exact nested facts fail before serialization, and the value remains
   frozen and bounded;
-- `imagent.diagnostics` exposes the exact same objects by identity without a
-  duplicate class or lazy `__getattr__`;
+- the historical `imagent.diagnostics` module is absent;
 - the canonical Channel module imports only Interaction and standard-library
   modules, never Applications or Gateway; and
 - native adapter diagnostics remain a distinct owner while importing the

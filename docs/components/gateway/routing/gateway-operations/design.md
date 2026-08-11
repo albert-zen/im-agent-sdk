@@ -15,21 +15,21 @@ This leaf owns:
   `GatewayOperationFailed`;
 - aggregate field, discriminant, identity, and postcondition validation;
 - validation for every closed variant and finite per-Conversation execution
-  serialization for the quarantined pre-v1 executor subset;
+  serialization for the private bridge-runtime dispatch subset;
 - delegation to the binding, projection-route, and request-correlation owners
   through explicit typed methods or ports. `ApplicationOperation` remains a
   separate closed contract and is not a Gateway aggregate variant.
 
-The composition implementation is the private `_GatewayOperationExecutor`.
+The composition implementation is the private `_GatewayOperationRuntime`.
 It is not an accepted public contract and is not re-exported by
 `imagent.gateway.routing` or the Gateway package facade. Its constructor is
-used only by the retiring `ImAgentGateway` root with the private, statically
-typed delegate port. That root and executor accept only the seven historical
-variants for which the loose repository composition already has an owner
-delegate. The C-owned clear-project, clear-application, and clear-observation
+used only by private `gateway.orchestration` through a statically typed
+delegate port. It accepts only the seven
+runtime variants for which it has an explicit owner delegate. The C-owned
+clear-project, clear-application, and clear-observation
 variants remain members of the public closed operation contract for validation
 and schema identity, but execute only through `ConversationActions` mapped to
-B's coherent effect executor. The legacy path never reports them as accepted
+B's coherent effect executor. The private runtime path never reports them as accepted
 and never implements a competing repository sequence.
 
 It does not own slash syntax, product commands, permissions, presentation,
@@ -113,22 +113,12 @@ operation context, policy callback, retry authority, or durable identity.
 ## Physical owner and import boundary
 
 The canonical implementation is
-`src/imagent/gateway/routing/operations.py`. The Gateway package root composes
-that owner and retains only broader admission, input, presentation, delivery,
-diagnostics, and lifecycle orchestration. Application operation variants stay
+`src/imagent/gateway/routing/operations.py`. Private
+`gateway.orchestration` composes that owner; the Gateway package root contains
+no operation or orchestration implementation. Application operation variants stay
 in `src/imagent/applications/operations.py`.
 
-`imagent.contracts` and `imagent.gateway.routing` remain finite exact public
-facades. Their import-order bootstrap may resolve a partially initialized
+`imagent.gateway.routing` is the finite exact public facade. Its import-order bootstrap may resolve a partially initialized
 binding leaf so the closed Gateway union is completed once both exact owners
-are loaded. The retained `imagent.gateway` package root has a separate finite
-lazy Gateway-operation resolver for exactly `ApplicationsListed`,
-`GatewayOperation`, `GatewayOperationFailed`, `GatewayOperationResult`,
-`GatewayOperationType`, `ListApplications`, `SelectApplication`,
-`validate_gateway_operation`, and `validate_gateway_operation_result`. It
-obtains each exact object from `imagent.gateway.routing.operations` only on
-access and caches that object on the root, so every supported import order
-preserves exact identity, signatures, and runtime annotations. This keeps the
-root's aggregate exports out of package initialization until the closed owner
-aggregate has completed. The resolver is not a compatibility implementation,
-service locator, or second operation definition; unknown names fail explicitly.
+are loaded. The historical cross-layer contracts facade and package-root
+Gateway operation aliases are absent.

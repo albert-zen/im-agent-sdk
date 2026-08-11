@@ -18,9 +18,9 @@ process-local restart reset.
 
 The ownership assertions require `DeliveryAuthorizer`, `DeliveryPrincipal`,
 and `validate_delivery_principal` to have the Gateway authorization module as
-their implementation owner. The `imagent.gateway.delivery`,
-`imagent.adapters`, and `imagent.contracts` names must remain the same objects
-as that owner; compatibility does not permit a second definition.
+their implementation owner. `imagent.gateway.delivery` exposes those exact
+objects, while the historical `imagent.adapters` and `imagent.contracts`
+modules are absent.
 
 The proactive-delivery and ingress suites continue to prove that
 authentication precedes route resolution/media work, denied scope causes no

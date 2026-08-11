@@ -7,8 +7,8 @@ import unittest
 from datetime import UTC, datetime
 
 from imagent.applications.contract import AgentMessage, ProjectRef, ThreadRef
-from imagent.contracts import DeliveryPrincipal
-from imagent.gateway import GatewayExtensions, GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway import GatewayExtensions, GatewayLimits
+from imagent.gateway.composition import _GatewayRuntimeDependencies
 from imagent.gateway.delivery import (
     DeliveryCoordinator,
     DeliveryCoordinatorConfig,
@@ -23,7 +23,9 @@ from imagent.gateway.delivery.outcome_observation import (
     DeliveryOutcomeObserverRuntime,
 )
 from imagent.gateway.delivery.proactive import ConversationDeliveryTarget, DeliveryIntent
+from imagent.gateway.delivery.proactive_authorization import DeliveryPrincipal
 from imagent.gateway.diagnostics import DeliveryOutcomeObserverFailureCode
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence import InMemoryIdempotencyRepository, ThreadProjectionRoute
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
@@ -155,11 +157,11 @@ class DeliveryOutcomeObserverTests(unittest.IsolatedAsyncioTestCase):
         coordinator: DeliveryCoordinator | None = None,
         limits: GatewayLimits | None = None,
         submissions: InMemoryDeliverySubmissionRepository | None = None,
-    ) -> ImAgentGateway:
-        return ImAgentGateway(
+    ) -> _GatewayRuntime:
+        return _GatewayRuntime(
             channels=[channel or _ReceiptChannel()],
             applications=[FakeAgentApplicationAdapter()],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
                 delivery_submissions=submissions,
             ),
@@ -621,10 +623,10 @@ class DeliveryOutcomeObserverTests(unittest.IsolatedAsyncioTestCase):
         observer = _Observer()
         projections = InMemoryProjectionRouteRepository()
         idempotency = InMemoryIdempotencyRepository()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[_ReceiptChannel()],
             applications=[FakeAgentApplicationAdapter()],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
                 projections=projections,
                 idempotency=idempotency,
@@ -702,10 +704,10 @@ class DeliveryOutcomeObserverTests(unittest.IsolatedAsyncioTestCase):
                 del message, context
                 return None
 
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[_ReceiptChannel()],
             applications=[FakeAgentApplicationAdapter()],
-            repositories=GatewayRepositories(bindings=InMemoryBindingRepository()),
+            repositories=_GatewayRuntimeDependencies(bindings=InMemoryBindingRepository()),
             extensions=GatewayExtensions(
                 outbound_presentation=Suppress(),
                 delivery_outcome_observer=observer,

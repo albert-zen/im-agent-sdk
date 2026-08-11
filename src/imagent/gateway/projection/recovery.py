@@ -30,7 +30,7 @@ from ...applications.operations import (
     GetTurnCatchup,
     ThreadHistoryRead,
     TurnCatchupRead,
-    _LegacyApplicationOperation,
+    _RuntimeApplicationOperation,
 )
 from ...applications.requests import InteractiveRequest
 from ...interaction.messages import ConversationRef
@@ -73,7 +73,7 @@ class AuthoritativeProjectionSlice:
 
 
 ExecuteApplication = Callable[
-    [_LegacyApplicationOperation],
+    [_RuntimeApplicationOperation],
     Awaitable[ApplicationOperationResult],
 ]
 

@@ -5,7 +5,9 @@ import unittest
 from datetime import UTC, datetime
 
 from imagent.applications.capabilities import ProjectMode
-from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
+from imagent.gateway import GatewayExtensions
+from imagent.gateway.composition import _GatewayRuntimeDependencies
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.gateway.routing.bindings import ConversationBinding
 from imagent.interaction.controllers.common import parse_slash_command
@@ -32,10 +34,10 @@ class OptionalControllerTests(unittest.IsolatedAsyncioTestCase):
                 thread_ref=thread.ref,
             )
         )
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
             ),
         )
@@ -58,10 +60,10 @@ class OptionalControllerTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         channel = FakeChannelAdapter()
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
             ),
             extensions=GatewayExtensions(

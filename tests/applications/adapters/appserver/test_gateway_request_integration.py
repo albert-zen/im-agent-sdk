@@ -11,7 +11,9 @@ from imagent.applications.adapters.appserver.requests import (
 )
 from imagent.applications.contract import ProjectRef, ThreadRef
 from imagent.applications.requests import ApprovalResponse
-from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
+from imagent.gateway import GatewayExtensions
+from imagent.gateway.composition import _GatewayRuntimeDependencies
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,
@@ -92,10 +94,10 @@ class AppServerGatewayRequestIntegrationTests(unittest.IsolatedAsyncioTestCase):
         )
         channel = FakeChannelAdapter("zen-channel")
         correlations = InMemoryRequestCorrelationRepository()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[adapter],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
                 projections=InMemoryProjectionRouteRepository(),
                 request_correlations=correlations,

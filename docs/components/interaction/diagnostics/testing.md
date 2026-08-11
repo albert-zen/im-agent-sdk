@@ -11,8 +11,7 @@ The suite proves:
   or over-cardinality connection queue shapes before serialization;
 - values remain redacted, bounded, immutable, and free of I/O, callbacks,
   aggregation, or native payloads;
-- `imagent.diagnostics` re-exports the exact moved objects by identity without
-  a duplicate definition or lazy attribute resolver;
+- the historical `imagent.diagnostics` module is absent;
 - an AST/import subprocess check proves the canonical Interaction module
   imports neither `imagent.applications` nor `imagent.gateway`; and
 - the dependency-neutral owner remains importable from a base installation.

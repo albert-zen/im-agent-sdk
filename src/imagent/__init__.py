@@ -1,4 +1,4 @@
-"""Reference contracts and test kit for IM Agent SDK."""
+"""Finite public facade for the IM Agent SDK v1 bridge."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 __version__ = "0.1.0a1"
 
 if TYPE_CHECKING:
-    from . import adapters, contracts, diagnostics, events
     from .gateway.actions import (
         ActionResult,
         ActionValue,
@@ -17,8 +16,6 @@ if TYPE_CHECKING:
         ReadOutcome,
     )
     from .gateway.composition import GatewayExtensions, GatewayLimits
-    from .gateway.delivery import coordination as delivery_coordination
-    from .gateway.delivery import planning as delivery_planning
     from .gateway.outcomes import Failed, OutcomeUnknown, Partial, Succeeded
     from .gateway.persistence import GatewayStore, MemoryGatewayStore, SQLiteGatewayStore
     from .gateway.routing import ProjectionPolicy
@@ -58,12 +55,6 @@ __all__ = [
     "ReadOutcome",
     "SQLiteGatewayStore",
     "Succeeded",
-    "adapters",
-    "contracts",
-    "delivery_coordination",
-    "delivery_planning",
-    "diagnostics",
-    "events",
     "include_common_commands",
 ]
 
@@ -102,28 +93,8 @@ def __getattr__(name: str) -> object:
         module = import_module(".gateway.persistence", __name__)
     elif name == "ProjectionPolicy":
         module = import_module(".gateway.routing", __name__)
-    elif name == "adapters":
-        module = import_module(".adapters", __name__)
-    elif name == "contracts":
-        module = import_module(".contracts", __name__)
-    elif name == "delivery_coordination":
-        module = import_module(".gateway.delivery.coordination", __name__)
-    elif name == "delivery_planning":
-        module = import_module(".gateway.delivery.planning", __name__)
-    elif name == "diagnostics":
-        module = import_module(".diagnostics", __name__)
-    elif name == "events":
-        module = import_module(".events", __name__)
     else:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    value_exports = (
-        _ACTION_EXPORTS
-        | _COMMAND_EXPORTS
-        | _COMPOSITION_EXPORTS
-        | _OUTCOME_EXPORTS
-        | _STORE_EXPORTS
-        | {"Gateway", "ProjectionPolicy"}
-    )
-    value = getattr(module, name) if name in value_exports else module
+    value = getattr(module, name)
     globals()[name] = value
     return value

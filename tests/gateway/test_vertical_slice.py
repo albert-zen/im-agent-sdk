@@ -21,14 +21,15 @@ from imagent.applications.contract import AgentInput, ApplicationRef, ProjectRef
 from imagent.applications.events import EventStreamOverflow
 from imagent.applications.operations import ActivateNativeThread, CreateThread, ThreadCreated
 from imagent.channels import NativeTransportChannelAdapter
-from imagent.contracts import (
-    BindConversationToThread,
-    ConversationBound,
-)
-from imagent.gateway import GatewayRepositories, ImAgentGateway
+from imagent.gateway.composition import _GatewayRuntimeDependencies
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence import ConversationBinding
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
+from imagent.gateway.routing.bindings import (
+    BindConversationToThread,
+    ConversationBound,
+)
 from imagent.interaction.channels.adapters.qq import QQChannelAdapter
 from imagent.interaction.channels.outbound_delivery import NativeDeliveryResult
 from imagent.interaction.media import AttachmentContent, AttachmentSourceKind, LocalPath, RemoteUrl
@@ -231,10 +232,10 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
                 ),
             )
             recovered = SQLiteGatewayState(path)
-            gateway = ImAgentGateway(
+            gateway = _GatewayRuntime(
                 channels=[channel],
                 applications=[],
-                repositories=GatewayRepositories(
+                repositories=_GatewayRuntimeDependencies(
                     bindings=recovered,
                     idempotency=recovered,
                 ),
@@ -280,10 +281,10 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
             workspace_id="workspace",
             cwd="/repo",
         )
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
             ),
         )
@@ -511,10 +512,10 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
                 thread_ref=created.thread.ref,
             )
         )
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
             ),
         )
@@ -625,10 +626,10 @@ class GatewayVerticalSliceTests(unittest.IsolatedAsyncioTestCase):
                 thread_ref=created.thread.ref,
             )
         )
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
             ),
         )

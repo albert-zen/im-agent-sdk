@@ -11,8 +11,8 @@ from unittest.mock import patch
 
 from imagent.applications.capabilities import ProjectMode
 from imagent.applications.contract import ProjectRef, ThreadRef
-from imagent.contracts import DeliveryPrincipal
-from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway import GatewayLimits
+from imagent.gateway.composition import _GatewayRuntimeDependencies
 from imagent.gateway.delivery import (
     DeliveryIntent,
     DeliverySubmissionOrigin,
@@ -21,10 +21,12 @@ from imagent.gateway.delivery import (
     ProactiveDeliveryResult,
     ScopedDeliveryAuthorizer,
 )
+from imagent.gateway.delivery.proactive_authorization import DeliveryPrincipal
 from imagent.gateway.delivery.proactive_ingress import (
     ProactiveDeliveryJsonHandler as OwnerProactiveDeliveryJsonHandler,
 )
 from imagent.gateway.delivery.submissions import derive_delivery_submission_id
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence import (
     DeliverySubmissionState,
     ThreadProjectionRoute,
@@ -200,8 +202,8 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
         channel: _ReadingChannel,
         *,
         submissions: InMemoryDeliverySubmissionRepository | None = None,
-    ) -> ImAgentGateway:
-        return ImAgentGateway(
+    ) -> _GatewayRuntime:
+        return _GatewayRuntime(
             channels=[channel],
             applications=[
                 FakeAgentApplicationAdapter(
@@ -209,7 +211,7 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
                     project_mode=ProjectMode.FLAT,
                 )
             ],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
                 projections=self.routes,
                 delivery_submissions=submissions,
@@ -538,7 +540,7 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
         await gateway.stop()
 
     async def test_capacity_exhaustion_is_a_bounded_service_response(self) -> None:
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[self.channel],
             applications=[
                 FakeAgentApplicationAdapter(
@@ -546,7 +548,7 @@ class DeliveryIngressTests(unittest.IsolatedAsyncioTestCase):
                     project_mode=ProjectMode.FLAT,
                 )
             ],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
                 projections=self.routes,
             ),

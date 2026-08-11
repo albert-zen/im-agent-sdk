@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import importlib.util
 import unittest
 from datetime import UTC, datetime
 from importlib import import_module
 from typing import get_args, get_type_hints
 
 import imagent.applications as applications
-from imagent import contracts
 from imagent.applications import contract, operations, requests
 from imagent.interaction.media import AttachmentContent, AttachmentHandle
 from imagent.interaction.messages import Content, MessageRole, TextContent, TextFormat
@@ -67,9 +67,8 @@ class ApplicationOperationTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertTrue(hasattr(operations, name))
                 self.assertIn(name, operations.__all__)
-                self.assertFalse(hasattr(contracts, name))
-                self.assertNotIn(name, contracts.__all__)
                 self.assertNotIn(name, applications.__all__)
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts"))
 
     def test_historical_contract_modules_no_longer_define_application_operations(self) -> None:
         with self.assertRaises(ModuleNotFoundError):
@@ -84,7 +83,7 @@ class ApplicationOperationTests(unittest.TestCase):
         self.assertEqual(hints["response"], requests.RequestResponse)
         self.assertNotIn(
             operations.DeleteProject,
-            get_args(operations._LegacyApplicationOperation),
+            get_args(operations._RuntimeApplicationOperation),
         )
 
     def test_project_creation_is_bounded_and_result_scope_is_application_owned(self) -> None:

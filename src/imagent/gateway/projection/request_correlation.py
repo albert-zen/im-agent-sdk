@@ -26,7 +26,7 @@ from ...applications.operations import (
     ApplicationOperationResult,
     RequestResponded,
     RespondRequest,
-    _LegacyApplicationOperation,
+    _RuntimeApplicationOperation,
 )
 from ...applications.requests import (
     InteractiveRequest,
@@ -87,7 +87,7 @@ DeliverRequestOutbound = Callable[
     Awaitable[IdempotencyClaimStatus],
 ]
 ExecuteApplication = Callable[
-    [_LegacyApplicationOperation],
+    [_RuntimeApplicationOperation],
     Awaitable[ApplicationOperationResult],
 ]
 

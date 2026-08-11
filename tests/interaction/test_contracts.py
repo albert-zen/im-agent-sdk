@@ -56,13 +56,6 @@ from imagent.applications.requests import (
     validate_request_response,
     validate_request_response_shape,
 )
-from imagent.contracts import (
-    BindConversationToThread,
-    ConversationBound,
-    GatewayOperationType,
-    validate_gateway_operation,
-    validate_gateway_operation_result,
-)
 from imagent.gateway.input import derive_client_message_id
 from imagent.gateway.persistence import (
     ConversationBinding,
@@ -71,6 +64,12 @@ from imagent.gateway.persistence import (
     validate_binding,
     validate_projection_route,
     validate_turn_reply_correlation,
+)
+from imagent.gateway.routing.bindings import BindConversationToThread, ConversationBound
+from imagent.gateway.routing.operations import (
+    GatewayOperationType,
+    validate_gateway_operation,
+    validate_gateway_operation_result,
 )
 from imagent.interaction.channels import (
     ChannelCapabilities,

@@ -34,9 +34,8 @@ shared connection/queue vocabulary. Native reads remain synchronous,
 side-effect-free, bounded, and free of consumer work on a provider socket
 callback.
 
-The `imagent.diagnostics` transition facade re-exports the exact Channel,
-Application, and Gateway objects from their canonical owners. This is an
-explicit compatibility surface, not a second implementation.
+The historical cross-layer `imagent.diagnostics` module is absent. Channel,
+Application, and Gateway diagnostics are imported from their canonical owners.
 
 ADR 0014 governs redaction, absence, provider failure, fixed failure codes,
 and bounded queue semantics. ADR 0015 does not turn this capability into a

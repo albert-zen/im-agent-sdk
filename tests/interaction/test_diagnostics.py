@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import inspect
 import unittest
 from dataclasses import FrozenInstanceError
@@ -8,7 +9,6 @@ from importlib.util import resolve_name
 from pathlib import Path
 from typing import cast
 
-import imagent.diagnostics as transition_facade
 from imagent.interaction.diagnostics import (
     ConnectionDiagnosticFacts,
     ConnectionDiagnosticState,
@@ -50,36 +50,15 @@ def _resolved_import_targets(path: Path) -> tuple[str, ...]:
 
 
 class InteractionDiagnosticsOwnershipTests(unittest.TestCase):
-    def test_owner_exports_are_explicit_and_facade_objects_are_identical(self) -> None:
+    def test_owner_exports_are_explicit_and_transition_facade_is_absent(self) -> None:
         import imagent.interaction.diagnostics as owner
 
         self.assertEqual(list(owner.__all__), list(MOVED_NAMES))
         for name in MOVED_NAMES:
             with self.subTest(name=name):
                 value = getattr(owner, name)
-                self.assertIs(getattr(transition_facade, name), value)
                 self.assertEqual(value.__module__, "imagent.interaction.diagnostics")
-
-    def test_facade_has_no_duplicate_moved_definitions_or_lazy_lookup(self) -> None:
-        path = ROOT / "src/imagent/diagnostics.py"
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        defined_classes = {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
-        defined_functions = {
-            node.name
-            for node in tree.body
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        }
-        self.assertFalse(defined_classes.intersection(MOVED_NAMES))
-        self.assertNotIn("__getattr__", defined_functions)
-
-        imported = {
-            alias.name
-            for node in tree.body
-            if isinstance(node, ast.ImportFrom)
-            and node.module in {"interaction.diagnostics", "interaction.channels.diagnostics"}
-            for alias in node.names
-        }
-        self.assertTrue(set(MOVED_NAMES).issubset(imported))
+        self.assertIsNone(importlib.util.find_spec("imagent.diagnostics"))
 
     def test_validation_messages_and_immutability_remain_unchanged(self) -> None:
         with self.assertRaisesRegex(ValueError, "fixed vocabulary"):
@@ -94,14 +73,8 @@ class InteractionDiagnosticsOwnershipTests(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             setattr(facts, "depth", 2)
 
-        self.assertEqual(
-            inspect.signature(QueueDiagnosticFacts),
-            inspect.signature(transition_facade.QueueDiagnosticFacts),
-        )
-        self.assertEqual(
-            inspect.signature(ConnectionDiagnosticFacts),
-            inspect.signature(transition_facade.ConnectionDiagnosticFacts),
-        )
+        self.assertIsNotNone(inspect.signature(QueueDiagnosticFacts))
+        self.assertIsNotNone(inspect.signature(ConnectionDiagnosticFacts))
         self.assertEqual(
             ConnectionDiagnosticState.READY.value,
             "ready",
@@ -153,7 +126,7 @@ class InteractionDiagnosticsOwnershipTests(unittest.TestCase):
             "src/imagent/applications/adapters/appserver/_base.py": {
                 "imagent.interaction.diagnostics",
             },
-            "src/imagent/gateway/__init__.py": {"imagent.interaction.diagnostics"},
+            "src/imagent/gateway/orchestration.py": {"imagent.interaction.diagnostics"},
         }
         for relative, required_targets in expected.items():
             path = ROOT / relative
@@ -161,8 +134,7 @@ class InteractionDiagnosticsOwnershipTests(unittest.TestCase):
                 targets = set(_resolved_import_targets(path))
                 self.assertTrue(required_targets.issubset(targets))
                 source = path.read_text(encoding="utf-8")
-                if relative != "src/imagent/gateway/__init__.py":
-                    self.assertNotIn("imagent.diagnostics", source)
+                self.assertNotIn("imagent.diagnostics", source)
 
 
 if __name__ == "__main__":

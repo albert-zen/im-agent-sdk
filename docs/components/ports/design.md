@@ -2,12 +2,10 @@
 
 ## Purpose
 
-`src/imagent/adapters.py` is the remaining compatibility facade for Gateway
-Python runtime seams whose implementations now live under their owning
-Gateway component. It re-exports exact objects while callers migrate, but it
-does not retain a second implementation. The Applications Protocol and
-pre-dispatch callback live under `applications.application-contract` and are
-not exported by this historical module.
+Python runtime seams live under their owning Interaction, Applications, or
+Gateway components. The historical cross-layer `src/imagent/adapters.py`
+facade is absent. The Applications Protocol and pre-dispatch callback live
+under `applications.application-contract`.
 
 ## Ownership
 
@@ -22,24 +20,18 @@ The Applications contract owner owns:
   whose acceptance result cannot be proven and therefore cannot be retried
   automatically.
 
-The remaining Ports surface owns no runtime seam. It exposes only historical
-exact-object aliases for Gateway contracts that have already reached their
-component owners; the Application and Channel/admission aliases were retired
-after their owning facades became authoritative.
+This cross-owner Ports component owns no runtime seam. It records the focused
+owners and their dependency constraints.
 
 Gateway's `gateway.persistence.repository-contracts` leaf owns the complete
 Gateway repository Port/conflict family: binding, projection-route,
 idempotency, request-correlation, and delivery-submission Protocols, plus
 their claim, checkpoint, route, correlation, submission, and explicit capacity
-conflicts. `adapters.py` keeps only its pre-existing exact compatibility
-aliases for callers that still use the historical Ports surface; new capacity
-outcomes are exposed from `imagent.gateway.persistence` without expanding the
-retiring facade.
+conflicts. Capacity outcomes are exposed from
+`imagent.gateway.persistence`.
 
 The Gateway `gateway.delivery.proactive-authorization` leaf owns the
 `DeliveryAuthorizer` Port, `DeliveryPrincipal`, and principal validation.
-`adapters.py` keeps only an exact compatibility re-export for callers that
-still use the historical Ports surface.
 
 Interaction's Channel contract owns `ChannelAdapter`, `MessageHandler`, the
 optional structural `ChannelStartupConfigurationValidator`, and the opaque
@@ -60,10 +52,9 @@ It does not own:
 ## Dependency direction
 
 Each extracted seam imports only lower-layer contracts owned by its component.
-The remaining Ports surface imports Contracts and may import an owning leaf
-solely for an exact compatibility re-export. Gateway, persistence
-implementations, recovery, test kits, and concrete integrations depend on the
-owning component where dependency-safe; Contracts never depend on Ports.
+Gateway, persistence implementations, recovery, test kits, and concrete
+integrations depend on the owning component where dependency-safe; Contracts
+never depend on a cross-layer Ports facade.
 
 Adding a method requires a real caller and at least one implementation. A
 native-specific method stays on a concrete adapter until at least two
@@ -104,11 +95,9 @@ against an expected opaque Agent item ID; implementations never infer ordering
 from that ID. Correlation bulk deletion requires at least one explicit
 selector.
 
-`BindingConflict` and the complete repository Port/conflict family now live in
-the Gateway repository-contract owner and are no longer defined beside the
-process-local implementations. The historical Ports module exposes exact
-compatibility aliases only; it does not retain a second Protocol, enum, or
-exception implementation.
+`BindingConflict` and the complete repository Port/conflict family live in the
+Gateway repository-contract owner and are not defined beside the process-local
+implementations. The historical cross-layer Ports module is absent.
 
 `DeliveryAuthorizer.authenticate`, now owned by Gateway's proactive
 authorization leaf, converts an opaque untrusted credential into a trusted

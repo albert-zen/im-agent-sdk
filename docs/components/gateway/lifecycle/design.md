@@ -15,9 +15,9 @@ ordering and rollback, not native transport supervision or durable work.
 This leaf owns the `GatewayStartupAdmission` FIFO and the
 `GatewayStartupOverflow` and `GatewayNotRunning` failures, implemented in
 `src/imagent/gateway/lifecycle.py`. Canonical `Gateway.start()`,
-`Gateway.stop()`, and its async context own the store lease and delegate runtime
-ordering to the existing orchestration. `ImAgentGateway.start()` and
-`ImAgentGateway.stop()` remain physically at the package root during migration.
+`Gateway.stop()`, and its async context are owned by `gateway.runtime`; they own
+the store lease and delegate cross-owner ordering to the private
+`gateway.orchestration` runtime.
 This leaf does not own
 Application/Channel internal reconnect loops, projection recovery policy,
 idempotency state, Controller product behavior, or a durable queue.
@@ -163,11 +163,9 @@ registry or durable capacity state survives lifecycle reset.
 The canonical public lifecycle contract is `Gateway`, with explicit
 `start()`/`stop()`, `wait_closed()`, async `run()`, and a preferred async
 context. Startup
-helper and lease-session types remain internal.
-`src/imagent/gateway/runtime.py` owns the canonical wrapper;
-`ImAgentGateway.start()` and `ImAgentGateway.stop()` remain in the package root
-as an explicitly recorded physical migration gap and are not compatibility
-aliases for `Gateway`.
+helper and lease-session types remain internal. `src/imagent/gateway/runtime.py`
+owns the canonical wrapper, `src/imagent/gateway/orchestration.py` owns private
+bridge ordering, and the package root is only a finite public facade.
 
 Dependencies are `gateway.composition`, `gateway.admission`, and
 `gateway.projection.observation`, plus the lifecycle contracts of configured

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import sys
 import unittest
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from unittest.mock import patch
 
-import imagent
 from imagent.gateway.delivery import (
     DeliveryCoordinator,
     DeliveryCoordinatorConfig,
@@ -39,7 +39,7 @@ from imagent.interaction.messages import (
 
 class DeliveryCoordinationFacadeTests(unittest.TestCase):
     def test_root_attribute_and_gateway_facade_use_exact_owner_objects(self) -> None:
-        self.assertIs(imagent.delivery_coordination, coordination_owner)
+        self.assertIsNone(importlib.util.find_spec("imagent.delivery_coordination"))
         self.assertIs(DeliveryCoordinator, coordination_owner.DeliveryCoordinator)
         self.assertIs(
             DeliveryCoordinatorConfig,

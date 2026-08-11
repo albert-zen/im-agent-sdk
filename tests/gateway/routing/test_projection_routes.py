@@ -10,12 +10,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import ForwardRef, get_type_hints
 
-import imagent.contracts as contracts_facade
-import imagent.gateway as gateway_facade
 import imagent.gateway.persistence as persistence_facade
 import imagent.gateway.routing as routing_facade
 import imagent.gateway.routing.projection_routes as owner
 from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence import ConversationBinding, ThreadProjectionRoute
 from imagent.gateway.persistence import state_contracts as state_contract_owner
 from imagent.gateway.persistence.memory import (
@@ -32,12 +31,11 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     import importlib.util
     import typing
 
-    import imagent.contracts as contracts_facade
-    import imagent.gateway as gateway_facade
     import imagent.gateway.persistence as persistence_facade
     import imagent.gateway.routing as routing_facade
     import imagent.gateway.routing.projection_routes as owner
     from imagent.gateway.persistence import ThreadProjectionRoute
+    from imagent.gateway.orchestration import _GatewayRuntime
 
     for name in (
         "ClearThreadObservation",
@@ -48,28 +46,12 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     ):
         assert getattr(routing_facade, name) is getattr(owner, name)
         assert getattr(owner, name).__module__ == "imagent.gateway.routing.projection_routes"
-    for module in (contracts_facade,):
-        for name in (
-            "ClearThreadObservation",
-            "ObserveThread",
-            "ThreadObservationCleared",
-            "ThreadObserved",
-        ):
-            assert not hasattr(module, name)
-            assert name not in getattr(module, "__all__", ())
     assert not hasattr(persistence_facade, "ProjectionPolicy")
     assert "ProjectionPolicy" not in persistence_facade.__all__
-    assert importlib.util.find_spec("imagent.contracts.operations") is None
-    assert importlib.util.find_spec("imagent.contracts.validators") is None
-    try:
-        from imagent.contracts import ObserveThread
-    except ImportError:
-        pass
-    else:
-        raise AssertionError("historical ObserveThread import unexpectedly succeeded")
+    assert importlib.util.find_spec("imagent.contracts") is None
     hints = typing.get_type_hints(owner.ThreadObserved)
     assert hints["route"] is ThreadProjectionRoute
-    root_hints = typing.get_type_hints(gateway_facade.ImAgentGateway._observe_thread)
+    root_hints = typing.get_type_hints(_GatewayRuntime._observe_thread)
     assert root_hints["operation"] is owner.ObserveThread
     assert root_hints["return"] is owner.ThreadObserved
     """
@@ -99,18 +81,7 @@ class ProjectionRouteContractOwnershipTests(unittest.TestCase):
                 value = getattr(owner, name)
                 self.assertIs(getattr(routing_facade, name), value)
                 self.assertEqual(value.__module__, owner.__name__)
-        for module in (contracts_facade,):
-            for name in (
-                "ClearThreadObservation",
-                "ObserveThread",
-                "ThreadObservationCleared",
-                "ThreadObserved",
-            ):
-                with self.subTest(module=module.__name__, name=name):
-                    self.assertFalse(hasattr(module, name))
-                    self.assertNotIn(name, getattr(module, "__all__", ()))
-        self.assertIsNone(importlib.util.find_spec("imagent.contracts.operations"))
-        self.assertIsNone(importlib.util.find_spec("imagent.contracts.validators"))
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts"))
         self.assertFalse(hasattr(persistence_facade, "ProjectionPolicy"))
         self.assertFalse(hasattr(state_contract_owner, "ProjectionPolicy"))
         self.assertNotIn("ProjectionPolicy", persistence_facade.__all__)
@@ -137,7 +108,7 @@ class ProjectionRouteContractOwnershipTests(unittest.TestCase):
             ThreadProjectionRoute,
         )
         self.assertNotIsInstance(owner.ThreadObserved.__annotations__["route"], ForwardRef)
-        root_hints = get_type_hints(gateway_facade.ImAgentGateway._observe_thread)
+        root_hints = get_type_hints(_GatewayRuntime._observe_thread)
         self.assertIs(root_hints["operation"], owner.ObserveThread)
         self.assertIs(root_hints["return"], owner.ThreadObserved)
 

@@ -14,11 +14,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from imagent import ConversationActions
-from imagent.diagnostics import (
-    ChannelDiagnosticFacts,
-    ConnectionDiagnosticFacts,
-    ConnectionDiagnosticState,
-)
 from imagent.interaction.channels import (
     ChannelCapabilities,
     DeliveryReceipt,
@@ -27,6 +22,7 @@ from imagent.interaction.channels import (
     InboundAdmissionHandler,
     MessageHandler,
 )
+from imagent.interaction.channels.diagnostics import ChannelDiagnosticFacts
 from imagent.interaction.controllers import (
     CommandDefinition,
     CommandExecutionSafety,
@@ -36,6 +32,7 @@ from imagent.interaction.controllers import (
     CommandResult,
     include_common_commands,
 )
+from imagent.interaction.diagnostics import ConnectionDiagnosticFacts, ConnectionDiagnosticState
 from imagent.interaction.media import (
     AttachmentContent,
     AttachmentGrouping,

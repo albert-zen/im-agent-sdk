@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import inspect
 import os
 import subprocess
@@ -12,11 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast, get_type_hints
 
-import yaml
-
-import imagent.adapters as compatibility
 import imagent.applications as facade
-from imagent import contracts
 from imagent.applications import contract as owner
 from imagent.applications.contract import (
     AcceptedTurn,
@@ -76,20 +73,6 @@ def _summary_getter() -> Callable[..., object]:
     return cast(Callable[..., object], getter)
 
 
-def _retired_application_exports() -> tuple[str, ...]:
-    repository_root = Path(__file__).resolve().parents[2]
-    component_map = yaml.safe_load(
-        (repository_root / "docs" / "components" / "component-map.yml").read_text(encoding="utf-8")
-    )
-    transition = component_map["structural_status"]["retired_application_public_exports"]
-    current = set(transition["current"])
-    target = set(transition["target"])
-    retired = tuple(sorted(current - target))
-    if not retired:
-        raise AssertionError("component map must lock retired Application exports")
-    return retired
-
-
 class ApplicationContractOwnershipTests(unittest.TestCase):
     def test_unknown_input_outcome_has_one_exact_owner_and_signature(self) -> None:
         owner_object = owner.ApplicationInputOutcomeUnknown
@@ -97,7 +80,6 @@ class ApplicationContractOwnershipTests(unittest.TestCase):
         error = owner_object("input outcome is unknown", cause)
 
         self.assertIs(owner_object, getattr(facade, "ApplicationInputOutcomeUnknown"))
-        self.assertIs(owner_object, getattr(contracts, "ApplicationInputOutcomeUnknown"))
         self.assertIs(RuntimeError, owner_object.__bases__[0])
         self.assertEqual(owner_object.__module__, "imagent.applications.contract")
         self.assertEqual(str(error), "input outcome is unknown")
@@ -108,15 +90,13 @@ class ApplicationContractOwnershipTests(unittest.TestCase):
             "(message: 'str', cause: 'BaseException') -> 'None'",
         )
         with self.assertRaises(ModuleNotFoundError):
-            __import__("imagent.contracts.errors")
+            __import__("imagent.contracts")
 
     def test_complete_application_model_family_has_one_owner_and_exact_aliases(self) -> None:
         for name in _APPLICATION_MODEL_FAMILY:
             with self.subTest(name=name):
                 owner_object = getattr(owner, name)
                 self.assertIs(getattr(facade, name), owner_object)
-                self.assertFalse(hasattr(contracts, name))
-                self.assertNotIn(name, contracts.__all__)
                 self.assertEqual(owner_object.__module__, "imagent.applications.contract")
                 self.assertIn(name, owner.__all__)
                 self.assertIn(name, facade.__all__)
@@ -263,7 +243,7 @@ class ApplicationContractOwnershipTests(unittest.TestCase):
             with self.subTest(name=name):
                 owner_object = getattr(owner, name)
                 self.assertIs(getattr(facade, name), owner_object)
-                self.assertFalse(hasattr(compatibility, name))
+                self.assertIsNone(importlib.util.find_spec("imagent.adapters"))
                 self.assertIn(name, facade.__all__)
 
         self.assertEqual(
@@ -274,20 +254,7 @@ class ApplicationContractOwnershipTests(unittest.TestCase):
     def test_compatibility_module_has_no_application_implementations(self) -> None:
         repository_root = Path(__file__).resolve().parents[2]
         adapters_path = repository_root / "src" / "imagent" / "adapters.py"
-        module = ast.parse(adapters_path.read_text(encoding="utf-8"))
-
-        class_names = {node.name for node in ast.walk(module) if isinstance(node, ast.ClassDef)}
-        assigned_names = {
-            target.id
-            for node in ast.walk(module)
-            if isinstance(node, (ast.Assign, ast.AnnAssign))
-            for target in (node.targets if isinstance(node, ast.Assign) else (node.target,))
-            if isinstance(target, ast.Name)
-        }
-        self.assertNotIn("AgentApplicationAdapter", class_names)
-        self.assertNotIn("ApplicationInputDispatchHandler", class_names)
-        self.assertNotIn("AgentApplicationAdapter", assigned_names)
-        self.assertNotIn("ApplicationInputDispatchHandler", assigned_names)
+        self.assertFalse(adapters_path.exists())
 
     def test_protocol_signatures_and_defaults_are_unchanged(self) -> None:
         expected_signatures = {
@@ -381,9 +348,8 @@ assert 'imagent.applications.adapters.zen' not in sys.modules
 assert 'imagent.applications.adapters.appserver.client' not in sys.modules
 assert 'imagent.applications.adapters.t3' not in sys.modules
 
+import importlib.util
 import imagent.applications.contract
-import imagent.contracts
-import imagent.adapters
 
 assert not {
     name for name in sys.modules if name == 'imagent.gateway' or name.startswith('imagent.gateway.')
@@ -392,12 +358,8 @@ assert 'imagent.applications.adapters.codex' not in sys.modules
 assert 'imagent.applications.adapters.zen' not in sys.modules
 assert 'imagent.applications.adapters.appserver.client' not in sys.modules
 assert 'imagent.applications.adapters.t3' not in sys.modules
-assert not hasattr(imagent.adapters, 'AgentApplicationAdapter')
-assert not hasattr(imagent.adapters, 'ApplicationInputDispatchHandler')
-assert not hasattr(imagent.contracts, 'ApplicationRef')
-assert not hasattr(imagent.contracts, 'ApplicationCapabilities')
-assert not hasattr(imagent.contracts, 'ApplicationOperation')
-assert not hasattr(imagent.contracts, 'RequestRef')
+assert importlib.util.find_spec('imagent.adapters') is None
+assert importlib.util.find_spec('imagent.contracts') is None
 
 from imagent.applications.contract import AgentApplicationAdapter, ApplicationInputDispatchHandler
 assert applications.AgentApplicationAdapter is AgentApplicationAdapter
@@ -416,58 +378,19 @@ assert 'imagent.applications.t3_client' not in sys.modules
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_retired_application_imports_fail_in_clean_import_orders(self) -> None:
-        retired_exports = _retired_application_exports()
-        retired_contract_names = tuple(
-            sorted(
-                reference.partition(":")[2]
-                for reference in retired_exports
-                if reference.startswith("imagent.contracts:")
-            )
-        )
-        retired_adapter_names = tuple(
-            sorted(
-                reference.partition(":")[2]
-                for reference in retired_exports
-                if reference.startswith("imagent.adapters:")
-            )
-        )
-        self.assertEqual(
-            set(retired_adapter_names),
-            {"AgentApplicationAdapter", "ApplicationInputDispatchHandler"},
-        )
-        for name in retired_contract_names:
-            with self.subTest(facade="contracts", name=name):
-                self.assertFalse(hasattr(contracts, name))
-                self.assertNotIn(name, contracts.__all__)
-        for name in retired_adapter_names:
-            with self.subTest(facade="adapters", name=name):
-                self.assertFalse(hasattr(compatibility, name))
-                self.assertNotIn(name, getattr(compatibility, "__all__", ()))
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts"))
+        self.assertIsNone(importlib.util.find_spec("imagent.adapters"))
         orders = (
-            "import imagent.applications.contract; import imagent.contracts; "
-            "import imagent.adapters",
-            "import imagent.adapters; import imagent.applications.requests; "
-            "import imagent.contracts",
-            "import imagent.contracts; import imagent.applications.operations; "
-            "import imagent.adapters",
+            "import imagent.applications.contract",
+            "import imagent.applications.requests",
+            "import imagent.applications.operations",
         )
         for order in orders:
             code = f"""
 {order}
-for name in {retired_contract_names!r}:
-    try:
-        exec(f'from imagent.contracts import {{name}}')
-    except ImportError:
-        pass
-    else:
-        raise AssertionError(name)
-for name in {retired_adapter_names!r}:
-    try:
-        exec(f'from imagent.adapters import {{name}}')
-    except ImportError:
-        pass
-    else:
-        raise AssertionError(name)
+import importlib.util
+assert importlib.util.find_spec('imagent.contracts') is None
+assert importlib.util.find_spec('imagent.adapters') is None
 """
             with self.subTest(order=order):
                 completed = subprocess.run(

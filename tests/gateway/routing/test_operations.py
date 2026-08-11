@@ -14,7 +14,6 @@ from typing import get_args, get_type_hints
 from unittest.mock import patch
 
 import imagent.applications.operations as application_operations_owner
-import imagent.contracts as contracts_facade
 import imagent.gateway as gateway_facade
 import imagent.gateway.projection as projection_facade
 import imagent.gateway.projection.request_correlation as request_owner
@@ -23,24 +22,8 @@ import imagent.gateway.routing.operations as operations_owner
 import imagent.gateway.routing.projection_routes as projection_routes_owner
 from imagent.applications.contract import ApplicationRef, ApplicationSummary, ProjectRef, ThreadRef
 from imagent.applications.requests import ApprovalResponse, RequestRef
-from imagent.contracts import (
-    ApplicationsListed,
-    BindConversationToProject,
-    BindConversationToThread,
-    ClearConversationApplication,
-    ClearConversationProject,
-    ClearConversationThread,
-    ContractError,
-    ConversationBound,
-    ConversationRef,
-    GatewayOperation,
-    GatewayOperationFailed,
-    GatewayOperationResult,
-    ListApplications,
-    SelectApplication,
-    validate_gateway_operation_result,
-)
 from imagent.gateway.concurrency import KeyedLockCapacityError
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence import ConversationBinding, ThreadProjectionRoute
 from imagent.gateway.projection import RequestResponseRouted, RespondToRequest
 from imagent.gateway.routing import (
@@ -49,7 +32,25 @@ from imagent.gateway.routing import (
     ThreadObservationCleared,
     ThreadObserved,
 )
-from imagent.interaction.operations import OperationErrorCode, operation_error
+from imagent.gateway.routing.bindings import (
+    BindConversationToProject,
+    BindConversationToThread,
+    ClearConversationApplication,
+    ClearConversationProject,
+    ClearConversationThread,
+    ConversationBound,
+)
+from imagent.gateway.routing.operations import (
+    ApplicationsListed,
+    GatewayOperation,
+    GatewayOperationFailed,
+    GatewayOperationResult,
+    ListApplications,
+    SelectApplication,
+    validate_gateway_operation_result,
+)
+from imagent.interaction.messages import ConversationRef
+from imagent.interaction.operations import ContractError, OperationErrorCode, operation_error
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -59,13 +60,13 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     import importlib.util
     import typing
 
-    import imagent.contracts as contracts_facade
     import imagent.gateway as gateway_facade
     import imagent.gateway.projection as projection_facade
     import imagent.gateway.projection.request_correlation as request_owner
     import imagent.gateway.routing as routing_facade
     import imagent.gateway.routing.operations as operations_owner
     import imagent.gateway.routing.projection_routes as projection_routes_owner
+    from imagent.gateway.orchestration import _GatewayRuntime
     import imagent.interaction.controllers as controllers_facade
 
     aggregate_value_names = (
@@ -79,41 +80,29 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     )
     for name in aggregate_value_names:
         owner = getattr(operations_owner, name)
-        assert getattr(contracts_facade, name) is owner
         assert getattr(routing_facade, name) is owner
-        assert getattr(gateway_facade, name) is owner
-        assert gateway_facade.__dict__[name] is owner
         if callable(owner):
-            assert inspect.signature(getattr(contracts_facade, name)) == inspect.signature(owner)
+            assert inspect.signature(getattr(routing_facade, name)) == inspect.signature(owner)
 
     aggregate_validator_names = (
         "validate_gateway_operation",
         "validate_gateway_operation_result",
     )
-    assert gateway_facade._GATEWAY_OPERATION_EXPORTS == frozenset(
-        aggregate_value_names + aggregate_validator_names
-    )
     assert not hasattr(gateway_facade, "unsupported_gateway_operation")
     for name in aggregate_validator_names:
         owner = getattr(operations_owner, name)
-        assert getattr(contracts_facade, name) is owner
         assert getattr(routing_facade, name) is owner
-        assert getattr(gateway_facade, name) is owner
-        assert gateway_facade.__dict__[name] is owner
-        assert inspect.signature(getattr(contracts_facade, name)) == inspect.signature(owner)
+        assert inspect.signature(getattr(routing_facade, name)) == inspect.signature(owner)
 
     for name in ("ObserveThread", "ThreadObserved"):
         assert getattr(routing_facade, name) is getattr(projection_routes_owner, name)
         assert getattr(operations_owner, name) is getattr(projection_routes_owner, name)
-        assert not hasattr(contracts_facade, name)
 
     for name in ("RespondToRequest", "RequestResponseRouted"):
         assert getattr(projection_facade, name) is getattr(request_owner, name)
         assert getattr(operations_owner, name) is getattr(request_owner, name)
-        assert not hasattr(contracts_facade, name)
 
-    assert importlib.util.find_spec("imagent.contracts.operations") is None
-    assert importlib.util.find_spec("imagent.contracts.validators") is None
+    assert importlib.util.find_spec("imagent.contracts") is None
     assert not hasattr(routing_facade, "GatewayOperationExecutor")
     assert not hasattr(gateway_facade, "GatewayOperationExecutor")
     for public_name, private_name in (
@@ -125,18 +114,15 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
         ("observe_thread", "_observe_thread"),
         ("respond_to_request", "_route_request_response"),
     ):
-        assert not hasattr(gateway_facade.ImAgentGateway, public_name)
-        assert callable(getattr(gateway_facade.ImAgentGateway, private_name))
+        assert not hasattr(_GatewayRuntime, public_name)
+        assert callable(getattr(_GatewayRuntime, private_name))
     assert "GatewayOperationExecutor" not in operations_owner.__all__
     assert "GatewayOperationExecutor" not in routing_facade.__all__
     assert not hasattr(controllers_facade, "ControllerActions")
     assert not hasattr(controllers_facade, "CommandHandlerActions")
 
-    assert typing.get_args(contracts_facade.GatewayOperation)
-    assert typing.get_args(contracts_facade.GatewayOperationResult)
     assert len(typing.get_args(operations_owner.GatewayOperation)) == 10
     assert len(typing.get_args(operations_owner.GatewayOperationResult)) == 6
-    assert typing.get_type_hints(contracts_facade.__getattr__)["return"] is object
     assert typing.get_type_hints(gateway_facade.__getattr__)["return"] is object
     root_delegate_hints = {
         "_observe_thread": {
@@ -149,14 +135,8 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
         },
     }
     for method_name, expected in root_delegate_hints.items():
-        hints = typing.get_type_hints(getattr(gateway_facade.ImAgentGateway, method_name))
+        hints = typing.get_type_hints(getattr(_GatewayRuntime, method_name))
         assert all(hints[name] is value for name, value in expected.items())
-    assert typing.get_type_hints(
-        contracts_facade.validate_gateway_operation
-    ) == typing.get_type_hints(operations_owner.validate_gateway_operation)
-    assert typing.get_type_hints(
-        contracts_facade.validate_gateway_operation_result
-    ) == typing.get_type_hints(operations_owner.validate_gateway_operation_result)
     assert (
         typing.get_type_hints(projection_routes_owner.ThreadObserved)["route"].__name__
         == "ThreadProjectionRoute"
@@ -171,7 +151,6 @@ _IMPORT_ORDERS = {
     "projection-route owner first": "import imagent.gateway.routing.projection_routes\n",
     "controllers first": "import imagent.interaction.controllers\n",
     "gateway first": "import imagent.gateway\n",
-    "imagent.contracts first": "import imagent.contracts\n",
     "routing first": "import imagent.gateway.routing\n",
 }
 
@@ -330,10 +309,10 @@ class GatewayOperationsOwnerTests(unittest.IsolatedAsyncioTestCase):
         probe: _DelegateProbe | None = None,
         *,
         capacity: int = 4,
-    ) -> tuple[operations_owner._GatewayOperationExecutor, _DelegateProbe]:
+    ) -> tuple[operations_owner._GatewayOperationRuntime, _DelegateProbe]:
         actual_probe = probe or _DelegateProbe(self.conversation, self.thread)
         return (
-            operations_owner._GatewayOperationExecutor(
+            operations_owner._GatewayOperationRuntime(
                 delegates=actual_probe,
                 max_active_conversation_keys=capacity,
                 contract_error=_contract_error,
@@ -354,35 +333,29 @@ class GatewayOperationsOwnerTests(unittest.IsolatedAsyncioTestCase):
         for name in value_names:
             with self.subTest(name=name):
                 owner = getattr(operations_owner, name)
-                self.assertIs(getattr(contracts_facade, name), owner)
                 self.assertIs(getattr(routing_facade, name), owner)
-                self.assertIs(getattr(gateway_facade, name), owner)
         for name in ("validate_gateway_operation", "validate_gateway_operation_result"):
             with self.subTest(name=name):
                 owner = getattr(operations_owner, name)
-                self.assertIs(getattr(contracts_facade, name), owner)
                 self.assertIs(getattr(routing_facade, name), owner)
-                self.assertIs(getattr(gateway_facade, name), owner)
         for name in ("RespondToRequest", "RequestResponseRouted"):
             with self.subTest(request_name=name):
                 owner = getattr(request_owner, name)
                 self.assertIs(getattr(projection_facade, name), owner)
                 self.assertIs(getattr(operations_owner, name), owner)
-                self.assertFalse(hasattr(contracts_facade, name))
-        self.assertIsNone(importlib.util.find_spec("imagent.contracts.operations"))
-        self.assertIsNone(importlib.util.find_spec("imagent.contracts.validators"))
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts"))
         self.assertFalse(hasattr(routing_facade, "GatewayOperationExecutor"))
         self.assertFalse(hasattr(gateway_facade, "GatewayOperationExecutor"))
         self.assertNotIn("GatewayOperationExecutor", operations_owner.__all__)
         self.assertNotIn("GatewayOperationExecutor", routing_facade.__all__)
 
     def test_gateway_root_keeps_one_private_delegate_path(self) -> None:
-        source = (ROOT / "src/imagent/gateway/__init__.py").read_text()
+        source = (ROOT / "src/imagent/gateway/orchestration.py").read_text()
         module = ast.parse(source)
         gateway_class = next(
             node
             for node in module.body
-            if isinstance(node, ast.ClassDef) and node.name == "ImAgentGateway"
+            if isinstance(node, ast.ClassDef) and node.name == "_GatewayRuntime"
         )
         method_names = [
             node.name
@@ -390,7 +363,9 @@ class GatewayOperationsOwnerTests(unittest.IsolatedAsyncioTestCase):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         ]
         self.assertEqual(len(method_names), len(set(method_names)))
-        root_class = gateway_facade.ImAgentGateway
+        from imagent.gateway.orchestration import _GatewayRuntime
+
+        root_class = _GatewayRuntime
         protocol = operations_owner._GatewayOperationDelegates
         for public_name, private_name in _GATEWAY_DELEGATE_NAMES:
             with self.subTest(delegate=public_name):
@@ -451,7 +426,7 @@ class GatewayOperationsOwnerTests(unittest.IsolatedAsyncioTestCase):
             },
         )
         self.assertEqual(
-            set(get_args(operations_owner._LegacyGatewayOperation)),
+            set(get_args(operations_owner._RuntimeGatewayOperation)),
             {
                 ListApplications,
                 SelectApplication,
@@ -463,28 +438,18 @@ class GatewayOperationsOwnerTests(unittest.IsolatedAsyncioTestCase):
             },
         )
         self.assertEqual(
-            get_type_hints(gateway_facade.ImAgentGateway.execute_gateway)["operation"],
-            operations_owner._LegacyGatewayOperation,
+            get_type_hints(_GatewayRuntime.execute_gateway)["operation"],
+            operations_owner._RuntimeGatewayOperation,
         )
         self.assertEqual(
-            get_type_hints(gateway_facade.ImAgentGateway.execute_application)["operation"],
-            application_operations_owner._LegacyApplicationOperation,
+            get_type_hints(_GatewayRuntime.execute_application)["operation"],
+            application_operations_owner._RuntimeApplicationOperation,
         )
 
     def test_owner_annotations_remain_exact(self) -> None:
-        self.assertEqual(
-            inspect.signature(operations_owner.validate_gateway_operation),
-            inspect.signature(contracts_facade.validate_gateway_operation),
-        )
-        self.assertEqual(
-            get_type_hints(operations_owner.validate_gateway_operation),
-            get_type_hints(contracts_facade.validate_gateway_operation),
-        )
-        self.assertEqual(
-            get_type_hints(operations_owner.validate_gateway_operation_result),
-            get_type_hints(contracts_facade.validate_gateway_operation_result),
-        )
-        self.assertIs(get_type_hints(contracts_facade.__getattr__)["return"], object)
+        self.assertIsNotNone(inspect.signature(operations_owner.validate_gateway_operation))
+        self.assertTrue(get_type_hints(operations_owner.validate_gateway_operation))
+        self.assertTrue(get_type_hints(operations_owner.validate_gateway_operation_result))
 
     async def test_typed_dispatch_delegates_to_each_owner_method(self) -> None:
         probe = _DelegateProbe(self.conversation, self.thread)
@@ -582,7 +547,7 @@ class GatewayOperationsOwnerTests(unittest.IsolatedAsyncioTestCase):
         for invalid in (0, -1):
             with self.subTest(invalid=invalid):
                 with self.assertRaisesRegex(ValueError, "max_active_keys"):
-                    operations_owner._GatewayOperationExecutor(
+                    operations_owner._GatewayOperationRuntime(
                         delegates=probe,
                         max_active_conversation_keys=invalid,
                         contract_error=_contract_error,

@@ -222,7 +222,7 @@ ApplicationOperation: TypeAlias = (
     | RespondRequest
 )
 
-_LegacyApplicationOperation: TypeAlias = (
+_RuntimeApplicationOperation: TypeAlias = (
     ListProjects
     | GetProject
     | CreateProject

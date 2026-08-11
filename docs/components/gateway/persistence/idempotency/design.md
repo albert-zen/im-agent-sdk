@@ -63,8 +63,8 @@ just to admit a new identity could reauthorize a native or Channel side effect.
 The implementation has no eviction, timed cleanup, tombstone replacement,
 background worker, spool, or outbox.
 
-`ImAgentGateway` passes `GatewayLimits.idempotency_max_records` only when it
-constructs this default repository. An explicitly supplied repository remains
+The private Gateway runtime passes `GatewayLimits.idempotency_max_records` only
+when it constructs this default repository. An explicitly supplied repository remains
 the deployment's own configuration and is not wrapped or reconfigured. Restart
 still discards the complete process-local map, while SQLite keeps its separate
 durable retention and stale-lease semantics unchanged.

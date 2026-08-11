@@ -33,7 +33,7 @@
   loss cancels even blocked startup and closes live admission/adapters, and
   retained action surfaces reject work after shutdown;
 - each public composition symbol has one exact implementation identity;
-- repositories, limits, and extensions are immutable and typed;
+- the private runtime dependency bundle, limits, and extensions are immutable and typed;
 - missing optional dependencies preserve documented defaults and missing
   extensions preserve behavior exactly;
 - Controller composition rejects loose or mixed repositories before input,

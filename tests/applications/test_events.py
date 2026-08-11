@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import unittest
 from contextlib import suppress
 from datetime import UTC, datetime
@@ -8,9 +9,6 @@ from subprocess import run
 from sys import executable
 from typing import get_type_hints
 
-import imagent
-from imagent import contracts
-from imagent import events as legacy_events
 from imagent.applications import capabilities, events
 from imagent.applications.contract import AgentMessage, ProjectRef, ThreadRef, TurnRef
 from imagent.applications.requests import InteractiveRequest, RequestResolution
@@ -63,30 +61,11 @@ class ApplicationEventTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_event_facades_preserve_exact_nominal_identities(self) -> None:
-        self.assertIs(contracts.AgentEvent, events.AgentEvent)
-        self.assertIs(contracts.AgentEventType, events.AgentEventType)
-        self.assertIs(contracts.validate_agent_event, events.validate_agent_event)
-        self.assertIs(imagent.events, legacy_events)
-        self.assertEqual(
-            legacy_events.__all__,
-            [
-                "AgentEvent",
-                "AgentEventType",
-                "CursorExpired",
-                "EventBroadcaster",
-                "EventBufferOverflow",
-                "EventStreamGap",
-                "EventStreamOverflow",
-                "EventStreamReset",
-                "FanoutSubscription",
-                "validate_agent_event",
-            ],
-        )
-        self.assertNotIn("__getattr__", legacy_events.__dict__)
-        for name in legacy_events.__all__:
-            with self.subTest(name=name):
-                self.assertIs(getattr(legacy_events, name), getattr(events, name))
+    def test_event_owner_has_the_finite_public_surface(self) -> None:
+        self.assertIsNone(importlib.util.find_spec("imagent.events"))
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts"))
+        self.assertEqual(events.AgentEvent.__module__, events.__name__)
+        self.assertEqual(events.AgentEventType.__module__, events.__name__)
         self.assertFalse(hasattr(events, "AgentMessage"))
 
     def test_canonical_event_data_consumes_the_application_agent_message(self) -> None:

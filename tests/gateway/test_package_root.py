@@ -5,41 +5,20 @@ import inspect
 import unittest
 from importlib import import_module
 from pathlib import Path
-from subprocess import run
-from sys import executable
 from typing import get_type_hints
 
 import imagent.gateway as gateway_package
 from imagent import Gateway as RootGateway
 from imagent.gateway import (
-    ClaimedInbound,
     Gateway,
     GatewayExtensions,
     GatewayLimits,
-    GatewayRepositories,
-    ImAgentGateway,
-    InboundAdmissionService,
-    InboundFailurePhase,
-    InboundFailurePresenter,
-)
-from imagent.gateway.admission import ClaimedInbound as AdmissionClaimedInbound
-from imagent.gateway.admission import (
-    InboundAdmissionService as AdmissionInboundAdmissionService,
 )
 from imagent.gateway.composition import (
     GatewayExtensions as CompositionGatewayExtensions,
 )
 from imagent.gateway.composition import GatewayLimits as CompositionGatewayLimits
-from imagent.gateway.composition import (
-    GatewayRepositories as CompositionGatewayRepositories,
-)
-from imagent.gateway.input import InboundContentTransformer as InputInboundContentTransformer
-from imagent.gateway.input import (
-    InboundFailurePhase as InputInboundFailurePhase,
-)
-from imagent.gateway.input import (
-    InboundFailurePresenter as InputInboundFailurePresenter,
-)
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.interaction.controllers import InboundController, RequestPresenter
 
 
@@ -50,7 +29,7 @@ class GatewayPackageRootTests(unittest.TestCase):
         self.assertIs(Gateway, RuntimeGateway)
         self.assertIs(RootGateway, RuntimeGateway)
         self.assertEqual(Gateway.__module__, "imagent.gateway.runtime")
-        self.assertFalse(issubclass(Gateway, ImAgentGateway))
+        self.assertFalse(issubclass(Gateway, _GatewayRuntime))
         parameters = inspect.signature(Gateway).parameters
         self.assertNotIn("repositories", parameters)
         self.assertNotIn("effect_executor", parameters)
@@ -64,15 +43,41 @@ class GatewayPackageRootTests(unittest.TestCase):
         module_path = Path(gateway_package.__file__).resolve()
         self.assertEqual(module_path.name, "__init__.py")
         self.assertEqual(module_path.parent.name, "gateway")
-        self.assertEqual(ImAgentGateway.__module__, "imagent.gateway")
+        self.assertEqual(_GatewayRuntime.__module__, "imagent.gateway.orchestration")
+
+    def test_package_facade_is_finite_and_omits_internal_runtime_seams(self) -> None:
+        self.assertEqual(
+            gateway_package.__all__,
+            [
+                "ActionResult",
+                "ActionValue",
+                "ApplicationActions",
+                "ConversationActions",
+                "Gateway",
+                "GatewayExtensions",
+                "GatewayLimits",
+                "MissingBindingError",
+                "ReadOutcome",
+                "StaleBindingError",
+            ],
+        )
+        for name in (
+            "ClaimedInbound",
+            "InboundAdmissionService",
+            "InboundContentTransformer",
+            "InboundFailurePhase",
+            "InboundFailurePresenter",
+            "_GatewayRuntime",
+            "_GatewayRuntimeDependencies",
+        ):
+            with self.subTest(name=name):
+                self.assertFalse(hasattr(gateway_package, name))
 
     def test_composition_exports_preserve_exact_object_identity(self) -> None:
         self.assertIs(GatewayExtensions, CompositionGatewayExtensions)
         self.assertIs(GatewayLimits, CompositionGatewayLimits)
-        self.assertIs(GatewayRepositories, CompositionGatewayRepositories)
         self.assertEqual(GatewayExtensions.__module__, "imagent.gateway.composition")
         self.assertEqual(GatewayLimits.__module__, "imagent.gateway.composition")
-        self.assertEqual(GatewayRepositories.__module__, "imagent.gateway.composition")
 
     def test_composition_runtime_type_hints_resolve_canonical_controller_contracts(self) -> None:
         hints = get_type_hints(GatewayExtensions)
@@ -89,41 +94,9 @@ class GatewayPackageRootTests(unittest.TestCase):
         with self.assertRaises(ModuleNotFoundError):
             importlib.import_module("imagent.gateway_composition")
 
-    def test_admission_exports_preserve_exact_object_identity(self) -> None:
-        self.assertIs(ClaimedInbound, AdmissionClaimedInbound)
-        self.assertIs(InboundAdmissionService, AdmissionInboundAdmissionService)
-        self.assertEqual(ClaimedInbound.__module__, "imagent.gateway.admission")
-        self.assertEqual(InboundAdmissionService.__module__, "imagent.gateway.admission")
-
-    def test_historical_admission_module_is_not_importable_in_a_clean_process(self) -> None:
-        result = run(
-            [
-                executable,
-                "-c",
-                "from imagent.gateway import ClaimedInbound; "
-                "from imagent.gateway.admission import ClaimedInbound as target; "
-                "assert ClaimedInbound is target; "
-                "import imagent.inbound_admission",
-            ],
-            capture_output=True,
-            text=True,
-        )
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("ModuleNotFoundError", result.stderr)
-        self.assertIn("imagent.inbound_admission", result.stderr)
-
-    def test_inbound_content_transformer_facades_preserve_exact_object_identity(self) -> None:
-        self.assertIs(gateway_package.InboundContentTransformer, InputInboundContentTransformer)
-
-    def test_historical_inbound_content_module_is_absent(self) -> None:
+    def test_historical_gateway_modules_are_absent(self) -> None:
+        self.assertIsNone(importlib.util.find_spec("imagent.inbound_admission"))
         self.assertIsNone(importlib.util.find_spec("imagent.inbound_content"))
-
-    def test_inbound_failure_exports_preserve_exact_object_identity(self) -> None:
-        self.assertIs(InboundFailurePhase, InputInboundFailurePhase)
-        self.assertIs(InboundFailurePresenter, InputInboundFailurePresenter)
-
-    def test_historical_inbound_failure_module_is_absent(self) -> None:
         with self.assertRaises(ModuleNotFoundError):
             import_module("imagent.inbound_failures")
 

@@ -42,11 +42,11 @@ types. Absence remains meaningful: an adapter with
 no configured presenter or materializer returns `None` for that nested fact
 instead of fabricating configured capability.
 
-## Transition surface
+## Focused surface
 
-`imagent.diagnostics` is now a truthful finite transition facade. It re-exports
-these exact Application objects and the canonical Gateway objects by identity,
-while retaining no diagnostic definitions or lazy compatibility implementation.
+The historical cross-layer `imagent.diagnostics` module is absent. Applications
+diagnostics are imported from this focused owner; Gateway diagnostics are
+imported from their separate focused owner.
 Applications internals continue to import this canonical owner directly.
 
 ## State and recovery

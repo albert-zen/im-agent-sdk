@@ -179,5 +179,5 @@ class DiagnosticsProvider(Protocol):
 
 
 # The owner-qualified name is canonical for Applications; the historical name
-# remains an exact alias so the transition facade preserves its public object.
+# remains an exact alias so focused owners share one public object.
 ApplicationDiagnosticsProvider = DiagnosticsProvider

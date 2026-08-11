@@ -6,7 +6,6 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from imagent.adapters import DeliverySubmissionConflict
 from imagent.applications.contract import ProjectRef, ThreadRef
 from imagent.gateway.delivery import DeliverySubmissionOrigin
 from imagent.gateway.persistence import (
@@ -16,6 +15,7 @@ from imagent.gateway.persistence import (
     DestinationDeliveryRecord,
 )
 from imagent.gateway.persistence.memory import InMemoryDeliverySubmissionRepository
+from imagent.gateway.persistence.repository_contracts import DeliverySubmissionConflict
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.interaction.channels import DeliveryReceipt, DeliveryReceiptStatus
 from imagent.interaction.messages import ConversationRef

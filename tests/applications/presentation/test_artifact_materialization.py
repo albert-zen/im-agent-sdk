@@ -44,7 +44,9 @@ from imagent.applications.presentation.artifact_materialization import (
     AppServerArtifactMaterializationRuntime,
     appserver_completed_item_facts,
 )
-from imagent.gateway import GatewayExtensions, GatewayRepositories, ImAgentGateway
+from imagent.gateway import GatewayExtensions
+from imagent.gateway.composition import _GatewayRuntimeDependencies
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.interaction.channels import ChannelCapabilities, DeliverySupportLevel
 from imagent.interaction.media import AttachmentContent, AttachmentSourceKind, LocalPath
@@ -617,10 +619,10 @@ class AppServerArtifactMaterializationTests(unittest.IsolatedAsyncioTestCase):
             max_attachment_size=1_024,
         )
         observer = _LeaseReleaseObserver()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[FakeAgentApplicationAdapter()],
-            repositories=GatewayRepositories(bindings=InMemoryBindingRepository()),
+            repositories=_GatewayRuntimeDependencies(bindings=InMemoryBindingRepository()),
             extensions=GatewayExtensions(delivery_outcome_observer=observer),
         )
         outbound = OutboundMessage(

@@ -48,17 +48,16 @@ private effect executor for scoped consumer actions. Consumers obtain
 `ConversationActions` and `ApplicationActions` from the running Gateway and
 cannot access the store session, repositories, lease, or executor.
 
-`GatewayRepositories` remains only on the retiring `ImAgentGateway` constructor
-during the v1 physical migration. `Gateway` is a distinct canonical class, not
-an alias or compatibility wrapper exposed by the example.
+The historical public repository bundle and `ImAgentGateway` constructor are
+absent. `Gateway` is the sole public composition and lifecycle class.
 
 ## Internal composition groups
 
-Retiring internal construction groups only owner-scoped dependencies that otherwise
+Internal construction groups only owner-scoped dependencies that otherwise
 grow together:
 
-- immutable `GatewayRepositories` holds bindings, idempotency, projection
-  routes, request correlations, and delivery submissions;
+- private `_GatewayRuntimeDependencies` carries the one coherent lease-bound
+  session into the private bridge runtime and is not public construction;
 - immutable `GatewayLimits` holds every bounded capacity, recovery page/item
   limit, retry delay, and correlation retention value, including the positive
   finite in-memory idempotency and delivery-submission record bounds plus the
@@ -492,15 +491,14 @@ that never receives native requests therefore incurs no prompt or SDK policy.
 
 ## Package placement
 
-The stable `imagent.gateway` public surface is the target package at
-`src/imagent/gateway/__init__.py`. The initial package-establishment slice
-moved the existing `ImAgentGateway` implementation there unchanged. The
-Gateway operation slice composes `gateway.routing.operations` for typed
-dispatch and bounded Conversation serialization, while
+The stable `imagent.gateway` public surface is the finite facade at
+`src/imagent/gateway/__init__.py`. `gateway.runtime` owns the canonical public
+`Gateway`, while `gateway.orchestration` owns the private bridge runtime and
+cross-owner sequencing. The Gateway operation slice composes
+`gateway.routing.operations` for typed dispatch and bounded Conversation serialization, while
 `gateway.routing.projection_routes` owns canonical route values, policy,
-identity, and persistence mechanics. The package initializer remains
-explicit composition/orchestration, not a facade over a second operation
-implementation. Public constructors, exported object identity, defaults,
+identity, and persistence mechanics. The package initializer contains no
+orchestration or aggregate operation facade. Public constructors, exported object identity, defaults,
 ordering, claims, checkpoints, and shutdown semantics do not change merely
 because the operation owner moved.
 

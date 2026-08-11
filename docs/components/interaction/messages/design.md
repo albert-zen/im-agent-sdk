@@ -103,9 +103,9 @@ history/live parity are authoritative. The schema remains intentionally split:
 Interaction owns content/media definitions while Applications owns the
 Agent-item definition that composes them.
 
-The deliberate `imagent.contracts` public facade re-exports exact owner
-objects throughout. Repository runtime imports use the extracted foundation,
-and no phase changes schema meaning or retains a second implementation.
+The historical cross-layer `imagent.contracts` module is absent. Consumers and
+repository runtime import this focused owner (or a focused package facade), and
+no phase changes schema meaning or retains a second implementation.
 
 ## Authority
 

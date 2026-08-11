@@ -3,8 +3,7 @@
 Focused evidence lives in `tests/applications/test_diagnostics.py`. It proves
 that the canonical module has an explicit finite `__all__`, owns every
 Application diagnostic class and enum exactly once, preserves constructor
-signatures and validation messages, and is identical through the
-`imagent.diagnostics` transition re-export. The owner-qualified
+signatures and validation messages. The owner-qualified
 `ApplicationDiagnosticsProvider` and historical `DiagnosticsProvider` names
 are one exact Protocol object, not two provider contracts.
 
@@ -20,8 +19,7 @@ presentation suites continue to prove the unchanged runtime behavior:
   cancellation, capacity, absence, exact 512-character identity bounds, and
   exact 1,000,000 counter ceilings;
   and
-- the transition facade contains no duplicate moved definitions or lazy
-  resolver.
+- the historical cross-layer `imagent.diagnostics` module is absent.
 
 Run the focused owner and affected adapter/presentation suites together:
 

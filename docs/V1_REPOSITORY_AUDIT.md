@@ -1,6 +1,6 @@
 # V1 repository audit and transformation DAG
 
-Status: DAG blocks A–H implemented; block I remains the SDK transformation target
+Status: DAG blocks A–I implemented; block J is the downstream transformation target
 
 This audit compares the repository with `V1_DESIGN.md`. Existing behavior is
 not retained merely because it has tests. Safety evidence is reused; conflicting
@@ -121,12 +121,12 @@ and currently unsupported managed adapters return a typed `unsupported`
 failure. Durable effect receipts, crash fencing, and workflow outcomes remain
 block B work.
 
-### P1: persistence is exposed as repository wiring
+### Resolved in B/E/I: persistence is exposed as one coherent store
 
-The retiring runtime still constructs `GatewayRepositories` with several optional
-repositories. Defaults can silently mix durable and process-local state. There
-is no transaction boundary for hierarchical binding plus foreground route
-preparation or for workflow phase receipts.
+The public `Gateway` accepts one coherent `GatewayStore`; the private runtime
+dependency bundle is constructed only from its lease-bound session. The old
+public repository bundle and mixed durable/process-local construction paths are
+physically absent.
 
 Required transformation:
 
@@ -419,12 +419,23 @@ checklist and troubleshooting now cover limits, trust roots, store path,
 workspace identity, lease/recovery, shutdown, diagnostics, and explicit
 unsupported behavior without product policy.
 
-### I. Delete pre-v1 architecture and final review
+### Resolved in I: delete pre-v1 architecture and converge the public wheel
 
-Delete Project-less branches, implicit onboarding, old facades, duplicate
-docs/examples, compatibility shims, orphan tests, and multi-owner code. Run
-full gates, clean-wheel executable specification, strong clean-context review,
-fix findings, and review the fixes again.
+The Project-less and implicit-onboarding branches were already removed by A/D.
+I deletes the remaining cross-layer `imagent.adapters`, `imagent.contracts`,
+`imagent.diagnostics`, and `imagent.events` facades; removes top-level delivery
+module aliases and the public repository bundle; and moves the sole surviving
+bridge orchestration owner out of `imagent.gateway.__init__` into the private
+`gateway.orchestration` leaf. The Gateway package root is now a finite lazy
+facade over only `Gateway`, construction values, scoped actions/read outcomes,
+and typed binding failures.
+
+The component map now assigns `gateway.runtime`, `gateway.orchestration`,
+composition, and lifecycle to separate single owners. Focused Interaction,
+Applications, routing, persistence, delivery, and diagnostics modules retain
+the A–H contracts, while import tests prove the deleted facade modules are
+physically absent. One installed public golden executable and the same restart
+scenario run in all six isolated wheel profiles.
 
 ### J. Downstream experimental rewrites
 

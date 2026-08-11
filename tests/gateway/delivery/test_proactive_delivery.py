@@ -8,19 +8,13 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
-import imagent.contracts as contract_facade
 import imagent.gateway as gateway_facade
 import imagent.gateway.delivery as delivery_facade
 import imagent.gateway.persistence as delivery_contracts
-from imagent.adapters import (
-    DeliverySubmissionCapacityError,
-    DeliverySubmissionConflict,
-    IdempotencyClaimStatus,
-)
 from imagent.applications.capabilities import ProjectMode
 from imagent.applications.contract import ProjectRef, ThreadRef
-from imagent.contracts import DeliveryPrincipal
-from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway import GatewayLimits
+from imagent.gateway.composition import _GatewayRuntimeDependencies
 from imagent.gateway.delivery import (
     DeliveryCoordinator,
     DeliveryCoordinatorConfig,
@@ -35,9 +29,13 @@ from imagent.gateway.delivery.proactive import (
     DeliveryIntent,
     ThreadRouteDeliveryTarget,
 )
-from imagent.gateway.delivery.proactive_authorization import DeliveryAuthorizationError
+from imagent.gateway.delivery.proactive_authorization import (
+    DeliveryAuthorizationError,
+    DeliveryPrincipal,
+)
 from imagent.gateway.delivery.proactive_runtime import DeliveryRouteError
 from imagent.gateway.delivery.submissions import derive_delivery_submission_id
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence import (
     MAX_DELIVERY_SUBMISSION_DESTINATIONS,
     DeliveryReservation,
@@ -48,6 +46,11 @@ from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryDeliverySubmissionRepository,
     InMemoryProjectionRouteRepository,
+)
+from imagent.gateway.persistence.repository_contracts import (
+    DeliverySubmissionCapacityError,
+    DeliverySubmissionConflict,
+    IdempotencyClaimStatus,
 )
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.gateway.routing import ProjectionPolicy
@@ -91,16 +94,12 @@ class ProactiveDeliveryOwnershipTests(unittest.TestCase):
                 owner = getattr(proactive_owner, name)
                 self.assertIs(getattr(delivery_facade, name), owner)
                 self.assertFalse(hasattr(delivery_contracts, name))
-                self.assertNotIn(name, contract_facade.__all__)
-                self.assertFalse(hasattr(contract_facade, name))
+                self.assertIsNone(importlib.util.find_spec("imagent.contracts"))
         self.assertIs(
             delivery_facade.ProactiveDeliveryService,
             runtime_owner.ProactiveDeliveryService,
         )
-        self.assertIs(
-            gateway_facade.ProactiveDeliveryService,
-            runtime_owner.ProactiveDeliveryService,
-        )
+        self.assertFalse(hasattr(gateway_facade, "ProactiveDeliveryService"))
         self.assertFalse(hasattr(proactive_owner, "ProactiveDeliveryService"))
         self.assertFalse(hasattr(proactive_owner, "DeliveryRouteError"))
         self.assertFalse(hasattr(proactive_owner, "authorize_delivery_target"))
@@ -248,8 +247,8 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
         submissions=None,
         coordinator: DeliveryCoordinator | None = None,
         limits: GatewayLimits = GatewayLimits(),
-    ) -> ImAgentGateway:
-        return ImAgentGateway(
+    ) -> _GatewayRuntime:
+        return _GatewayRuntime(
             channels=[self.channel_a, self.channel_b],
             applications=[
                 FakeAgentApplicationAdapter(
@@ -257,7 +256,7 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
                     project_mode=ProjectMode.FLAT,
                 )
             ],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=self.bindings,
                 projections=self.projections,
                 delivery_submissions=submissions or self.submissions,
@@ -604,7 +603,7 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         await self.put_route(self.conversation_a, route_id="route-a")
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[self.channel_a, self.channel_b],
             applications=[
                 FakeAgentApplicationAdapter(
@@ -612,7 +611,7 @@ class ProactiveDeliveryTests(unittest.IsolatedAsyncioTestCase):
                     project_mode=ProjectMode.FLAT,
                 )
             ],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=self.bindings,
                 projections=self.projections,
             ),

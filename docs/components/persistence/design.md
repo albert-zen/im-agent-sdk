@@ -81,9 +81,8 @@ single connection/lock/transaction boundary. The historical mixed-owner
 callers migrated to those owners.
 
 The complete Gateway repository Port/conflict family also belongs to the
-repository-contract leaf. `imagent.adapters` remains only an exact
-compatibility facade for those names; its historical Channel/admission names
-are no longer exported. Repository implementations import the owner directly;
+repository-contract leaf. The historical `imagent.adapters` module is absent.
+Repository implementations and consumers import the focused owner directly;
 no second Protocol, enum, or conflict type is retained.
 
 The process-local projection-route repository likewise belongs to Gateway

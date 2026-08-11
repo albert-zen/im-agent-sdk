@@ -4,9 +4,8 @@ Repository-contract tests and implementation conformance must prove:
 
 - the owner module is importable in a clean process and every moved name has
   one implementation owner;
-- `imagent.gateway.persistence` exposes each exact owner object, while
-  `imagent.adapters` preserves exact identity only for its pre-existing
-  compatibility aliases and does not grow a new idempotency-capacity alias;
+- `imagent.gateway.persistence` exposes each exact owner object, while the
+  historical `imagent.adapters` module is absent;
 - moved Protocol method signatures, annotations, defaults, and runtime
   `typing.get_type_hints` remain exact;
 - enum values and every conflict/capacity exception preserve identity and

@@ -1,15 +1,12 @@
 from __future__ import annotations
 
+import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
 
-from imagent import contracts as contracts_facade
 from imagent.interaction.media import (
-    AttachmentContent,
-    AttachmentGrouping,
     AttachmentHandle,
-    AttachmentSource,
     AttachmentSourceKind,
     InvalidGenericFileError,
     LocalPath,
@@ -50,19 +47,8 @@ class InteractionMediaTests(unittest.TestCase):
                 with self.assertRaises(InvalidGenericFileError):
                     detect_generic_file("notes.txt", content)
 
-    def test_contract_facade_reexports_exact_media_objects(self) -> None:
-        expected = {
-            "AttachmentContent": AttachmentContent,
-            "AttachmentGrouping": AttachmentGrouping,
-            "AttachmentHandle": AttachmentHandle,
-            "AttachmentSource": AttachmentSource,
-            "AttachmentSourceKind": AttachmentSourceKind,
-            "LocalPath": LocalPath,
-            "RemoteUrl": RemoteUrl,
-        }
-        for name, owner_object in expected.items():
-            with self.subTest(name=name):
-                self.assertIs(getattr(contracts_facade, name), owner_object)
+    def test_historical_cross_layer_contract_facade_is_absent(self) -> None:
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts"))
 
     def test_attachment_sources_keep_stable_discriminants(self) -> None:
         sources = (

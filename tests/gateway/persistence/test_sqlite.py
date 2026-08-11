@@ -7,11 +7,6 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from imagent.adapters import (
-    IdempotencyClaimStatus,
-    RequestCorrelationConflict,
-    TurnReplyCorrelationConflict,
-)
 from imagent.applications.capabilities import ProjectMode
 from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef, TurnRef
 from imagent.applications.requests import ApprovalResponseShape, RequestRef
@@ -32,6 +27,11 @@ from imagent.gateway.persistence import (
 from imagent.gateway.persistence.memory import (
     InMemoryProjectionRouteRepository,
     InMemoryRequestCorrelationRepository,
+)
+from imagent.gateway.persistence.repository_contracts import (
+    IdempotencyClaimStatus,
+    RequestCorrelationConflict,
+    TurnReplyCorrelationConflict,
 )
 from imagent.gateway.persistence.sqlite import (
     SQLiteGatewayState,

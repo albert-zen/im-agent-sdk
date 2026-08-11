@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import ast
+import importlib.util
 import inspect
 import os
 import subprocess
@@ -11,7 +11,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import get_type_hints
 
-import imagent.adapters as adapters_facade
 import imagent.gateway.persistence as persistence_facade
 from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef, TurnRef
 from imagent.applications.requests import ApprovalResponseShape, RequestRef
@@ -350,18 +349,11 @@ class RepositoryContractOwnershipTests(unittest.TestCase):
                 value = getattr(owner, name)
                 self.assertEqual(value.__module__, owner.__name__)
                 self.assertIs(getattr(persistence_facade, name), value)
-                if name in _ADAPTER_FACADE_NAMES:
-                    self.assertIs(getattr(adapters_facade, name), value)
-                else:
-                    self.assertFalse(hasattr(adapters_facade, name))
+        self.assertIsNone(importlib.util.find_spec("imagent.adapters"))
 
     def test_adapters_has_no_repository_contract_class_definitions(self) -> None:
         repository_root = Path(__file__).resolve().parents[3]
-        adapters_path = repository_root / "src" / "imagent" / "adapters.py"
-        module = ast.parse(adapters_path.read_text(encoding="utf-8"))
-        class_names = {node.name for node in ast.walk(module) if isinstance(node, ast.ClassDef)}
-
-        self.assertTrue(class_names.isdisjoint(_MOVED_NAMES))
+        self.assertFalse((repository_root / "src" / "imagent" / "adapters.py").exists())
 
     def test_repository_protocol_signatures_are_unchanged(self) -> None:
         for (protocol_name, method_name), expected in _METHOD_SIGNATURES.items():
@@ -388,7 +380,7 @@ class RepositoryContractOwnershipTests(unittest.TestCase):
         code = """
 import typing
 
-import imagent.adapters as adapters
+import importlib.util
 import imagent.gateway.persistence as persistence
 from imagent.applications.requests import RequestRef
 from imagent.gateway.persistence import repository_contracts as owner
@@ -407,8 +399,7 @@ names = (
     "DeliverySubmissionConflict",
     "DeliverySubmissionCapacityError",
 )
-assert all(getattr(adapters, name) is getattr(owner, name) for name in names)
-assert not hasattr(adapters, "IdempotencyCapacityError")
+assert importlib.util.find_spec("imagent.adapters") is None
 assert persistence.IdempotencyCapacityError is owner.IdempotencyCapacityError
 assert typing.get_type_hints(
     owner.RequestCorrelationRepository.transition_request_correlations,

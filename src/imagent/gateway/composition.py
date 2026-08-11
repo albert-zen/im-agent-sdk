@@ -19,7 +19,7 @@ from .presentation import OutboundPresentationPolicy
 
 
 @dataclass(frozen=True, slots=True)
-class GatewayRepositories:
+class _GatewayRuntimeDependencies:
     """Bridge-state repositories grouped by persistence ownership."""
 
     bindings: BindingRepository

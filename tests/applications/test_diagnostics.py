@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import inspect
 import os
 import subprocess
@@ -12,7 +13,6 @@ from pathlib import Path
 from typing import cast, get_type_hints
 
 import imagent.applications.diagnostics as application_owner
-import imagent.diagnostics as transition_facade
 from imagent.applications.adapters.appserver._base import _AppServerApplicationAdapter
 from imagent.applications.adapters.t3 import T3ApplicationAdapter
 from imagent.applications.diagnostics import (
@@ -71,45 +71,23 @@ def _resolved_import_targets(path: Path) -> tuple[str, ...]:
 
 
 class ApplicationDiagnosticsOwnershipTests(unittest.TestCase):
-    def test_owner_exports_and_transition_objects_are_identical(self) -> None:
+    def test_owner_exports_are_finite_and_transition_facade_is_absent(self) -> None:
         self.assertEqual(list(application_owner.__all__), list(MOVED_NAMES))
         for name in MOVED_NAMES:
             with self.subTest(name=name):
                 owner_value = getattr(application_owner, name)
-                self.assertIs(getattr(transition_facade, name), owner_value)
                 self.assertEqual(owner_value.__module__, application_owner.__name__)
+        self.assertIsNone(importlib.util.find_spec("imagent.diagnostics"))
         self.assertIs(ApplicationDiagnosticsProvider, DiagnosticsProvider)
         self.assertIs(
             application_owner.ApplicationDiagnosticsProvider,
             application_owner.DiagnosticsProvider,
         )
 
-    def test_transition_has_no_duplicate_definitions_or_lazy_lookup(self) -> None:
-        path = ROOT / "src/imagent/diagnostics.py"
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        defined_classes = {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
-        defined_functions = {
-            node.name
-            for node in tree.body
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        }
-        self.assertTrue(defined_classes.isdisjoint(MOVED_NAMES))
-        self.assertNotIn("__getattr__", defined_functions)
-        imported = {
-            alias.name
-            for node in tree.body
-            if isinstance(node, ast.ImportFrom) and node.module == "applications.diagnostics"
-            for alias in node.names
-        }
-        self.assertTrue(set(MOVED_NAMES).issubset(imported))
-
     def test_signatures_validation_and_immutability_are_unchanged(self) -> None:
         for name in MOVED_NAMES:
             with self.subTest(name=name):
-                self.assertEqual(
-                    inspect.signature(getattr(application_owner, name)),
-                    inspect.signature(getattr(transition_facade, name)),
-                )
+                self.assertIsNotNone(inspect.signature(getattr(application_owner, name)))
 
         with self.assertRaisesRegex(ValueError, "fixed vocabulary"):
             ApplicationPresentationDiagnosticFacts(
@@ -181,25 +159,15 @@ class ApplicationDiagnosticsOwnershipTests(unittest.TestCase):
                 self.assertIn("imagent.applications.diagnostics", _resolved_import_targets(path))
                 self.assertNotIn("imagent.diagnostics", path.read_text(encoding="utf-8"))
 
-    def test_both_public_import_orders_preserve_identity(self) -> None:
+    def test_clean_owner_import_does_not_restore_transition_facade(self) -> None:
         source = (
-            "import imagent.applications.diagnostics as owner; "
-            "import imagent.diagnostics as transition; "
-            "assert transition.ApplicationDiagnosticFacts is owner.ApplicationDiagnosticFacts; "
-            "assert transition.DiagnosticsProvider is owner.DiagnosticsProvider"
-        )
-        reverse = (
-            "import imagent.diagnostics as transition; "
-            "import imagent.applications.diagnostics as owner; "
-            "assert transition.ApplicationPresentationFailureCode "
-            "is owner.ApplicationPresentationFailureCode; "
-            "assert transition.ApplicationArtifactMaterializationDiagnosticFacts "
-            "is owner.ApplicationArtifactMaterializationDiagnosticFacts"
+            "import importlib.util; "
+            "import imagent.applications.diagnostics; "
+            "assert importlib.util.find_spec('imagent.diagnostics') is None"
         )
         environment = dict(os.environ)
         environment["PYTHONPATH"] = str(ROOT / "src")
-        for code in (source, reverse):
-            subprocess.run([sys.executable, "-c", code], cwd=ROOT, env=environment, check=True)
+        subprocess.run([sys.executable, "-c", source], cwd=ROOT, env=environment, check=True)
 
     def test_application_scope_rejects_channel_queue(self) -> None:
         channel_queue = QueueDiagnosticFacts(QueueDiagnosticName.CHANNEL_INBOUND, 1, 0)

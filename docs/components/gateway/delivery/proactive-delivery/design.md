@@ -120,8 +120,8 @@ Coordinator consumers.
 `imagent.gateway.delivery` is the finite target facade for the service and
 JSON handler plus typed intent/target/result vocabulary. The historical
 `imagent.delivery_ingress` implementation path is removed rather than retained
-as a compatibility module. The `imagent.contracts` facade no longer exports
-the eight proactive vocabulary/validator names; callers use
+as a compatibility module. The historical `imagent.contracts` module is
+absent; callers use
 `imagent.gateway.delivery` (or its `proactive` owner seam) instead. This is a
 removal, not a reverse compatibility alias. The old
 `imagent.proactive_delivery` implementation path is removed.

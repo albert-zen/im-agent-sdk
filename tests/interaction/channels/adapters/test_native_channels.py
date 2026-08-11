@@ -10,14 +10,6 @@ from typing import Any, cast
 from unittest.mock import patch
 
 from imagent.channels import NativeTransportChannelAdapter, channel_from_config
-from imagent.contracts import (
-    AttachmentContent,
-    ConversationRef,
-    LocalPath,
-    OutboundMessage,
-    RemoteUrl,
-    TextContent,
-)
 from imagent.interaction.channels import (
     ChannelStartupConfigurationValidator,
     DeliveryItemStatus,
@@ -55,6 +47,12 @@ from imagent.interaction.diagnostics import (
     ConnectionDiagnosticFacts,
     ConnectionDiagnosticState,
     QueueDiagnosticName,
+)
+from imagent.interaction.media import AttachmentContent, LocalPath, RemoteUrl
+from imagent.interaction.messages import (
+    ConversationRef,
+    OutboundMessage,
+    TextContent,
 )
 from imagent.testing import verify_channel_adapter
 

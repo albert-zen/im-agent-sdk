@@ -18,18 +18,17 @@ from imagent.applications.contract import (
 from imagent.gateway import (
     GatewayExtensions,
     GatewayLimits,
-    GatewayRepositories,
-    ImAgentGateway,
-    InboundContentTransformer,
 )
+from imagent.gateway.composition import _GatewayRuntimeDependencies
 from imagent.gateway.diagnostics import InboundContentTransformFailureCode
-from imagent.gateway.input import derive_client_message_id
+from imagent.gateway.input import InboundContentTransformer, derive_client_message_id
 from imagent.gateway.input.content_transformation import (
     InboundContentTransformationCapacityError,
     InboundContentTransformationError,
     InboundContentTransformationTimeout,
     transform_inbound_content,
 )
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.gateway.persistence.state_contracts import ConversationBinding
@@ -471,7 +470,7 @@ class InboundContentTransformerTests(unittest.IsolatedAsyncioTestCase):
         limits: GatewayLimits = GatewayLimits(),
         bindings: InMemoryBindingRepository | None = None,
         idempotency: InMemoryIdempotencyRepository | None = None,
-    ) -> tuple[ImAgentGateway, FakeChannelAdapter, _RecordingApplication]:
+    ) -> tuple[_GatewayRuntime, FakeChannelAdapter, _RecordingApplication]:
         channel = FakeChannelAdapter("fake-channel")
         application = _RecordingApplication()
         binding_repository = bindings or InMemoryBindingRepository()
@@ -485,10 +484,10 @@ class InboundContentTransformerTests(unittest.IsolatedAsyncioTestCase):
                 generation=1,
                 updated_at=datetime.now(UTC),
             )
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=binding_repository,
                 idempotency=idempotency,
             ),

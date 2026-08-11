@@ -1,22 +1,19 @@
 from __future__ import annotations
 
+import importlib.util
 import unittest
 from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime
 from typing import cast, get_args
 
-from imagent import contracts as contracts_facade
 from imagent.interaction.media import AttachmentContent, LocalPath
 from imagent.interaction.messages import (
     Content,
     ConversationRef,
     InboundMessage,
-    MessageRole,
-    Metadata,
     OutboundMessage,
     TextContent,
     TextFormat,
-    TextLengthUnit,
 )
 
 
@@ -25,21 +22,8 @@ class InteractionMessageFoundationTests(unittest.TestCase):
         self.assertEqual(TextFormat.PLAIN.value, "plain")
         self.assertEqual(TextFormat.MARKDOWN.value, "markdown")
 
-    def test_contract_facade_reexports_exact_message_objects(self) -> None:
-        expected = {
-            "Content": Content,
-            "ConversationRef": ConversationRef,
-            "InboundMessage": InboundMessage,
-            "MessageRole": MessageRole,
-            "Metadata": Metadata,
-            "OutboundMessage": OutboundMessage,
-            "TextContent": TextContent,
-            "TextFormat": TextFormat,
-            "TextLengthUnit": TextLengthUnit,
-        }
-        for name, owner_object in expected.items():
-            with self.subTest(name=name):
-                self.assertIs(getattr(contracts_facade, name), owner_object)
+    def test_historical_cross_layer_contract_facade_is_absent(self) -> None:
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts"))
 
     def test_content_union_is_closed_ordered_text_and_attachment(self) -> None:
         self.assertEqual(get_args(Content), (TextContent, AttachmentContent))

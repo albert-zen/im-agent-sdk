@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import inspect
 import unittest
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 
-import imagent.diagnostics as transition_facade
 from imagent.interaction.channels.diagnostics import (
     ChannelDiagnosticFacts,
 )
@@ -21,16 +21,13 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 class ChannelDiagnosticsOwnershipTests(unittest.TestCase):
-    def test_owner_exports_and_transition_facade_preserve_identity(self) -> None:
+    def test_owner_exports_and_transition_facade_is_absent(self) -> None:
         import imagent.interaction.channels.diagnostics as owner
 
         self.assertEqual(
             list(owner.__all__), ["ChannelDiagnosticFacts", "ChannelDiagnosticsProvider"]
         )
-        self.assertIs(transition_facade.ChannelDiagnosticFacts, owner.ChannelDiagnosticFacts)
-        self.assertIs(
-            transition_facade.ChannelDiagnosticsProvider, owner.ChannelDiagnosticsProvider
-        )
+        self.assertIsNone(importlib.util.find_spec("imagent.diagnostics"))
         self.assertEqual(owner.ChannelDiagnosticFacts.__module__, owner.__name__)
         self.assertEqual(owner.ChannelDiagnosticsProvider.__module__, owner.__name__)
 
@@ -72,10 +69,7 @@ class ChannelDiagnosticsOwnershipTests(unittest.TestCase):
                     ),
                 ),
             )
-        self.assertEqual(
-            inspect.signature(ChannelDiagnosticFacts),
-            inspect.signature(transition_facade.ChannelDiagnosticFacts),
-        )
+        self.assertIsNotNone(inspect.signature(ChannelDiagnosticFacts))
 
     def test_canonical_channel_module_imports_only_parent_interaction_contracts(self) -> None:
         path = ROOT / "src/imagent/interaction/channels/diagnostics.py"

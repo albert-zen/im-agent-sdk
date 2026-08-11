@@ -41,8 +41,7 @@ Channel transport, Agent transcript, or second runtime.
   presentation and suppression.
 - [diagnostics design](diagnostics/design.md) and
   [testing](diagnostics/testing.md) — Gateway-owned I1/I2/O1/O2,
-  projection/startup aggregation, bounded provider normalization, and the
-  exact stable transition facade.
+  projection/startup aggregation and bounded provider normalization.
 - [persistence](persistence/README.md) — bridge-state contracts and repository
   implementations, including the coherent public
   [Gateway store](persistence/gateway-store/design.md), process-local

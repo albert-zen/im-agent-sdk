@@ -7,8 +7,8 @@ from datetime import UTC, datetime
 
 from imagent import Gateway, MemoryGatewayStore
 from imagent.applications.capabilities import ProjectMode
-from imagent.contracts import ConversationRef, InboundMessage, TextContent
-from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway import GatewayLimits
+from imagent.gateway.composition import _GatewayRuntimeDependencies
 from imagent.gateway.delivery.coordination import DeliveryCoordinator
 from imagent.gateway.lifecycle import (
     GatewayLifecycleFailure,
@@ -16,7 +16,9 @@ from imagent.gateway.lifecycle import (
     GatewayStartupAdmission,
     GatewayStartupOverflow,
 )
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
+from imagent.interaction.messages import ConversationRef, InboundMessage, TextContent
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 
@@ -130,10 +132,10 @@ class PublicGatewayLifecycleMatrixTests(unittest.IsolatedAsyncioTestCase):
     async def test_owner_timeout_continues_cleanup_through_later_owners(self) -> None:
         channel = _BlockingStopChannel()
         application = _CountingStopApplication()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(bindings=InMemoryBindingRepository()),
+            repositories=_GatewayRuntimeDependencies(bindings=InMemoryBindingRepository()),
             limits=GatewayLimits(lifecycle_owner_timeout_seconds=0.01),
         )
         await gateway.start()
@@ -147,10 +149,10 @@ class PublicGatewayLifecycleMatrixTests(unittest.IsolatedAsyncioTestCase):
     async def test_cancellation_resistant_owner_cannot_extend_cleanup_deadline(self) -> None:
         channel = _CancellationResistantStopChannel()
         application = _CountingStopApplication()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(bindings=InMemoryBindingRepository()),
+            repositories=_GatewayRuntimeDependencies(bindings=InMemoryBindingRepository()),
             limits=GatewayLimits(lifecycle_owner_timeout_seconds=0.01),
         )
         await gateway.start()
@@ -166,10 +168,10 @@ class PublicGatewayLifecycleMatrixTests(unittest.IsolatedAsyncioTestCase):
     async def test_repeated_cancellation_cannot_abort_later_owner_cleanup(self) -> None:
         channel = _CancellationResistantStopChannel()
         application = _CountingStopApplication()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(bindings=InMemoryBindingRepository()),
+            repositories=_GatewayRuntimeDependencies(bindings=InMemoryBindingRepository()),
             limits=GatewayLimits(lifecycle_owner_timeout_seconds=0.02),
         )
         await gateway.start()
@@ -219,10 +221,10 @@ class PublicGatewayLifecycleMatrixTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_partial_delivery_owner_start_is_inside_rollback_boundary(self) -> None:
         coordinator = _PartiallyStartingCoordinator()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[FakeChannelAdapter("partial-coordinator-channel")],
             applications=[FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)],
-            repositories=GatewayRepositories(bindings=InMemoryBindingRepository()),
+            repositories=_GatewayRuntimeDependencies(bindings=InMemoryBindingRepository()),
             delivery_coordinator=coordinator,
         )
 
@@ -309,10 +311,10 @@ class GatewayStartupAdmissionTests(unittest.IsolatedAsyncioTestCase):
                 _inbound(conversation, "second"),
             )
         )
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
             ),
             limits=GatewayLimits(
@@ -345,10 +347,10 @@ class GatewayStartupAdmissionTests(unittest.IsolatedAsyncioTestCase):
         channel = _StartupEntriesChannel(
             tuple(_inbound(conversation, f"message-{index}") for index in range(3))
         )
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
             ),
             limits=GatewayLimits(
@@ -370,10 +372,10 @@ class GatewayStartupAdmissionTests(unittest.IsolatedAsyncioTestCase):
         active_channel = _BlockingStopStartupChannel()
         failing_channel = _FailingStartupChannel()
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[active_channel, failing_channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
             ),
         )

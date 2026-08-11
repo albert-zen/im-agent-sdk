@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import inspect
 import json
 import subprocess
@@ -14,14 +15,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
-import imagent.diagnostics as transition_facade
 import imagent.gateway as gateway_facade
 import imagent.gateway.diagnostics as gateway_diagnostics
 from imagent.applications.adapters.t3 import T3ApplicationAdapter
 from imagent.applications.capabilities import ProjectMode
 from imagent.applications.contract import ProjectRef, ThreadRef
 from imagent.applications.diagnostics import ApplicationDiagnosticFacts
-from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway import GatewayLimits
+from imagent.gateway.composition import _GatewayRuntimeDependencies
 from imagent.gateway.diagnostics import (
     DiagnosticsSnapshot,
     _DiagnosticApplication,
@@ -30,6 +31,7 @@ from imagent.gateway.diagnostics import (
     collect_channel_diagnostics,
     summarize_projection_health,
 )
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.gateway.projection.observation import ProjectionWorkerHealth, ProjectionWorkerState
 from imagent.interaction.channels.diagnostics import ChannelDiagnosticFacts
@@ -56,15 +58,9 @@ class _UnusedT3Client:
 
 
 class DiagnosticsSurfaceTests(unittest.TestCase):
-    def test_gateway_owner_and_transition_facade_export_exact_objects(self) -> None:
+    def test_gateway_owner_is_finite_and_old_facades_are_absent(self) -> None:
         self.assertEqual(len(gateway_diagnostics.__all__), len(set(gateway_diagnostics.__all__)))
-        self.assertNotIn("__getattr__", transition_facade.__dict__)
-        for name in gateway_diagnostics.__all__:
-            self.assertIs(
-                getattr(transition_facade, name),
-                getattr(gateway_diagnostics, name),
-                name,
-            )
+        self.assertIsNone(importlib.util.find_spec("imagent.diagnostics"))
         gateway_facade_names = (
             "GatewayDiagnosticFacts",
             "DiagnosticsSnapshot",
@@ -74,17 +70,7 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
             "new_diagnostics_snapshot",
         )
         for name in gateway_facade_names:
-            self.assertIs(getattr(gateway_facade, name), getattr(gateway_diagnostics, name))
-
-        transition_tree = ast.parse(
-            (Path(__file__).parents[2] / "src/imagent/diagnostics.py").read_text(encoding="utf-8")
-        )
-        definitions = tuple(
-            node.name
-            for node in transition_tree.body
-            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
-        )
-        self.assertEqual(definitions, ())
+            self.assertFalse(hasattr(gateway_facade, name))
 
     def test_gateway_owner_and_call_sites_have_no_top_facade_or_higher_import(self) -> None:
         root = Path(__file__).parents[2]
@@ -116,7 +102,7 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
         )
 
         call_sites = {
-            "src/imagent/gateway/__init__.py": "from .diagnostics import",
+            "src/imagent/gateway/orchestration.py": "from .diagnostics import",
             "src/imagent/gateway/presentation.py": "from .diagnostics import",
             "src/imagent/gateway/input/content_transformation.py": "from ..diagnostics import",
             "src/imagent/gateway/input/failure_presentation.py": "from ..diagnostics import",
@@ -128,25 +114,14 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
             self.assertIn(expected_import, source, relative_path)
 
     def test_gateway_owner_import_order_and_runtime_hints_preserve_identity(self) -> None:
-        check_suffix = """
-for name in owner.__all__:
-    assert getattr(facade, name) is getattr(owner, name)
-for name in (
-    'GatewayDiagnosticFacts', 'DiagnosticsSnapshot',
-    'summarize_projection_health', 'collect_application_diagnostics',
-    'collect_channel_diagnostics', 'new_diagnostics_snapshot',
-):
-    assert getattr(gateway_facade, name) is getattr(owner, name)
-"""
-        for imports in (
+        imports = (
+            "import importlib.util\n"
             "import imagent.gateway.diagnostics as owner\n"
-            "import imagent.diagnostics as facade\n"
-            "import imagent.gateway as gateway_facade\n",
-            "import imagent.diagnostics as facade\n"
-            "import imagent.gateway.diagnostics as owner\n"
-            "import imagent.gateway as gateway_facade\n",
-        ):
-            subprocess.run([sys.executable, "-c", imports + check_suffix], check=True)
+            "import imagent.gateway as gateway_facade\n"
+            "assert importlib.util.find_spec('imagent.diagnostics') is None\n"
+            "assert all(not hasattr(gateway_facade, name) for name in owner.__all__)\n"
+        )
+        subprocess.run([sys.executable, "-c", imports], check=True)
 
         snapshot_hints = typing.get_type_hints(gateway_diagnostics.DiagnosticsSnapshot)
         self.assertIs(
@@ -183,13 +158,10 @@ for name in (
             ChannelDiagnosticFacts,
         )
         self.assertIs(
-            typing.get_type_hints(ImAgentGateway.diagnostics_snapshot)["return"],
+            typing.get_type_hints(_GatewayRuntime.diagnostics_snapshot)["return"],
             gateway_diagnostics.DiagnosticsSnapshot,
         )
-        self.assertEqual(
-            inspect.signature(transition_facade.new_diagnostics_snapshot),
-            inspect.signature(gateway_diagnostics.new_diagnostics_snapshot),
-        )
+        self.assertIsNotNone(inspect.signature(gateway_diagnostics.new_diagnostics_snapshot))
 
     def test_queue_fact_vocabulary_and_bounds_are_enforced(self) -> None:
         with self.assertRaisesRegex(ValueError, "fixed vocabulary"):
@@ -339,10 +311,10 @@ for name in (
             application_instance_id="fake-agent",
             project_mode=ProjectMode.FLAT,
         )
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
             ),
             limits=GatewayLimits(

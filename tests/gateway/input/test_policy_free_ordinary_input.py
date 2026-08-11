@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import tempfile
 import unittest
 from datetime import UTC, datetime
@@ -8,7 +9,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import imagent
-import imagent.contracts as contracts_facade
 import imagent.gateway as gateway_facade
 import imagent.gateway.input as input_facade
 from imagent.applications.capabilities import ProjectMode
@@ -22,13 +22,13 @@ from imagent.applications.operations import CreateThread, GetProject, GetThread,
 from imagent.gateway import (
     GatewayExtensions,
     GatewayLimits,
-    GatewayRepositories,
-    ImAgentGateway,
     MissingBindingError,
     StaleBindingError,
 )
 from imagent.gateway.actions import ActionResult, ConversationActions
+from imagent.gateway.composition import _GatewayRuntimeDependencies
 from imagent.gateway.input import InboundFailurePhase
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.outcomes import Failed, Partial, Succeeded
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.effects import ActionError, ActionErrorCode, EffectPhase
@@ -210,10 +210,10 @@ class PolicyFreeOrdinaryInputTests(unittest.IsolatedAsyncioTestCase):
                         )
                     )
                 transformer = _RecordingTransformer()
-                gateway = ImAgentGateway(
+                gateway = _GatewayRuntime(
                     channels=[channel],
                     applications=[application],
-                    repositories=GatewayRepositories(bindings=session),
+                    repositories=_GatewayRuntimeDependencies(bindings=session),
                     extensions=GatewayExtensions(
                         inbound_content_transformer=transformer,
                     ),
@@ -264,10 +264,10 @@ class PolicyFreeOrdinaryInputTests(unittest.IsolatedAsyncioTestCase):
         channel = FakeChannelAdapter()
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.MANAGED)
         presenter = _RecordingFailurePresenter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(bindings=session),
+            repositories=_GatewayRuntimeDependencies(bindings=session),
             extensions=GatewayExtensions(inbound_failure_presenter=presenter),
         )
         conversation = ConversationRef("fake-channel", "conversation-1")
@@ -330,10 +330,10 @@ class PolicyFreeOrdinaryInputTests(unittest.IsolatedAsyncioTestCase):
                             [] if stale_kind == "application" else [application]
                         )
                         transformer = _RecordingTransformer()
-                        gateway = ImAgentGateway(
+                        gateway = _GatewayRuntime(
                             channels=[channel],
                             applications=configured_applications,
-                            repositories=GatewayRepositories(bindings=session),
+                            repositories=_GatewayRuntimeDependencies(bindings=session),
                             extensions=GatewayExtensions(
                                 controller=(
                                     common_command_registry() if store_kind == "memory" else None
@@ -385,10 +385,10 @@ class PolicyFreeOrdinaryInputTests(unittest.IsolatedAsyncioTestCase):
             lease_duration_seconds=30,
         )
         with self.assertRaisesRegex(ValueError, "cannot be mixed"):
-            ImAgentGateway(
+            _GatewayRuntime(
                 channels=[],
                 applications=[],
-                repositories=GatewayRepositories(
+                repositories=_GatewayRuntimeDependencies(
                     bindings=session,
                     idempotency=InMemoryIdempotencyRepository(),
                 ),
@@ -408,10 +408,10 @@ class PolicyFreeOrdinaryInputTests(unittest.IsolatedAsyncioTestCase):
         channel = FakeChannelAdapter()
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.MANAGED)
         controller = _ExplicitOnboardingController(application)
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(bindings=session),
+            repositories=_GatewayRuntimeDependencies(bindings=session),
             extensions=GatewayExtensions(controller=controller),
             projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
         )
@@ -462,10 +462,10 @@ class PolicyFreeOrdinaryInputTests(unittest.IsolatedAsyncioTestCase):
                 project_ref=application.default_project_ref,
             )
         )
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(bindings=session),
+            repositories=_GatewayRuntimeDependencies(bindings=session),
             extensions=GatewayExtensions(controller=common_command_registry()),
             projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
         )
@@ -548,10 +548,10 @@ class PolicyFreeOrdinaryInputTests(unittest.IsolatedAsyncioTestCase):
             return CommandResult.text(type(outcome).__name__)
 
         registry.freeze()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(bindings=session),
+            repositories=_GatewayRuntimeDependencies(bindings=session),
             limits=GatewayLimits(projection_max_active_threads=1),
             extensions=GatewayExtensions(controller=registry),
             projection_policy=ProjectionPolicy.ALL_OBSERVERS,
@@ -614,10 +614,10 @@ class PolicyFreeOrdinaryInputTests(unittest.IsolatedAsyncioTestCase):
             return CommandResult.text("captured")
 
         registry.freeze()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(bindings=session),
+            repositories=_GatewayRuntimeDependencies(bindings=session),
             extensions=GatewayExtensions(controller=registry),
             projection_policy=ProjectionPolicy.ALL_OBSERVERS,
         )
@@ -767,10 +767,10 @@ class PolicyFreeOrdinaryInputTests(unittest.IsolatedAsyncioTestCase):
                         return CommandResult.text("captured")
 
                     registry.freeze()
-                    gateway = ImAgentGateway(
+                    gateway = _GatewayRuntime(
                         channels=[channel],
                         applications=[application],
-                        repositories=GatewayRepositories(bindings=session),
+                        repositories=_GatewayRuntimeDependencies(bindings=session),
                         extensions=GatewayExtensions(controller=registry),
                         projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
                     )
@@ -1202,10 +1202,10 @@ class PolicyFreeOrdinaryInputTests(unittest.IsolatedAsyncioTestCase):
         channel = FakeChannelAdapter()
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.MANAGED)
         controller = _ExplicitOnboardingController(application)
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(bindings=session),
+            repositories=_GatewayRuntimeDependencies(bindings=session),
             extensions=GatewayExtensions(controller=controller),
             projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
         )
@@ -1270,10 +1270,10 @@ class PolicyFreeOrdinaryInputTests(unittest.IsolatedAsyncioTestCase):
         bindings = _StaticBindingRepository(stored)
         routes = InMemoryProjectionRouteRepository()
         transformer = _RecordingTransformer()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application_a, application_b],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 idempotency=InMemoryIdempotencyRepository(),
                 projections=routes,
@@ -1310,10 +1310,10 @@ class PolicyFreeOrdinaryInputTests(unittest.IsolatedAsyncioTestCase):
         )
         bindings = _StaticBindingRepository(stored)
         routes = InMemoryProjectionRouteRepository()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 idempotency=InMemoryIdempotencyRepository(),
                 projections=routes,
@@ -1336,7 +1336,7 @@ class PolicyFreeOrdinaryInputTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(MissingBindingError, input_facade.MissingBindingError)
         self.assertIs(MissingBindingError, gateway_facade.MissingBindingError)
         self.assertFalse(hasattr(imagent, "MissingBindingError"))
-        self.assertFalse(hasattr(contracts_facade, "MissingBindingError"))
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts"))
         self.assertEqual(
             operation_error(MissingBindingError()).code,
             OperationErrorCode.MISSING_BINDING.value,
@@ -1344,7 +1344,6 @@ class PolicyFreeOrdinaryInputTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(StaleBindingError, input_facade.StaleBindingError)
         self.assertIs(StaleBindingError, gateway_facade.StaleBindingError)
         self.assertFalse(hasattr(imagent, "StaleBindingError"))
-        self.assertFalse(hasattr(contracts_facade, "StaleBindingError"))
         self.assertEqual(
             operation_error(StaleBindingError()).code,
             OperationErrorCode.STALE_BINDING.value,

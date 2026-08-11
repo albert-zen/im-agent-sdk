@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import unittest
 from dataclasses import fields, replace
 from subprocess import run
@@ -7,7 +8,6 @@ from sys import executable
 from typing import Any, cast
 
 import imagent.applications as applications
-from imagent import contracts
 from imagent.applications import capabilities
 from imagent.interaction.media import AttachmentSourceKind
 from imagent.interaction.operations import ContractViolation
@@ -79,9 +79,8 @@ class ApplicationCapabilitiesTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertTrue(hasattr(capabilities, name))
                 self.assertIn(name, capabilities.__all__)
-                self.assertFalse(hasattr(contracts, name))
-                self.assertNotIn(name, contracts.__all__)
                 self.assertNotIn(name, applications.__all__)
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts"))
 
     def test_accepts_all_project_modes(self) -> None:
         for mode in capabilities.ProjectMode:

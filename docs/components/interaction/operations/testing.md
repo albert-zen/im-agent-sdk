@@ -22,9 +22,9 @@ Tests for `interaction.operations` must prove:
   success fields;
 - common helpers remain stateless and do not create a claim, operation log,
   service locator, or generic mutable context.
-- direct `imagent.interaction.operations` exports and the deliberate
-  `imagent.contracts` facade are the same Python objects, while repository
-  runtime code imports the owning leaf directly;
+- repository runtime code imports the owning
+  `imagent.interaction.operations` leaf directly, while the historical
+  cross-layer `imagent.contracts` module is absent;
 - Applications-owned request exceptions preserve their existing stable error
   codes through a one-way dependency and cannot make Interaction import an
   Application or request implementation.

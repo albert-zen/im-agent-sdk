@@ -9,19 +9,20 @@ from typing import cast
 from unittest.mock import patch
 
 from imagent.applications.capabilities import ProjectMode
-from imagent.contracts import ConversationRef, InboundMessage, TextContent
-from imagent.gateway import GatewayRepositories, ImAgentGateway
 from imagent.gateway.admission import (
     ClaimedInbound,
     InboundAdmissionService,
     start_channel_with_admission,
 )
+from imagent.gateway.composition import _GatewayRuntimeDependencies
 from imagent.gateway.lifecycle import GatewayLifecycleFailure, GatewayNotRunning
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence import IdempotencyCapacityError, InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.interaction.channels import ChannelAdapter
 from imagent.interaction.channels.adapters import channel_from_config
+from imagent.interaction.messages import ConversationRef, InboundMessage, TextContent
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 
@@ -189,10 +190,10 @@ class InboundAdmissionTests(unittest.IsolatedAsyncioTestCase):
         active = _CountingChannel("active-channel")
         legacy = LegacyChannel()
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[active, cast(ChannelAdapter, legacy)],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
             ),
         )
@@ -250,10 +251,10 @@ class InboundAdmissionTests(unittest.IsolatedAsyncioTestCase):
         active = _CountingChannel("active-channel")
         channel = FailingModernChannel()
         application = FakeAgentApplicationAdapter(project_mode=ProjectMode.FLAT)
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[active, cast(ChannelAdapter, channel)],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
             ),
         )

@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any, cast
 
 import imagent.applications as applications
-from imagent.adapters import IdempotencyClaimStatus
 from imagent.applications import (
     ApplicationPresentationCancelled,
     ApplicationPresentationCapacityError,
@@ -39,6 +38,7 @@ from imagent.applications.presentation import (
 )
 from imagent.gateway.persistence import ThreadProjectionRoute
 from imagent.gateway.persistence.memory import InMemoryProjectionRouteRepository
+from imagent.gateway.persistence.repository_contracts import IdempotencyClaimStatus
 from imagent.gateway.projection.checkpoints import _ProjectionCheckpointAuthority
 from imagent.gateway.projection.observation import (
     deliver_projected_message,

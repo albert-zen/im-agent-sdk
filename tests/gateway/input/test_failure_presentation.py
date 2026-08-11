@@ -8,7 +8,6 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
-from imagent.adapters import IdempotencyClaimStatus
 from imagent.applications.contract import (
     AcceptedTurn,
     ApplicationInputOutcomeUnknown,
@@ -19,12 +18,11 @@ from imagent.applications.contract import (
 from imagent.gateway import (
     GatewayExtensions,
     GatewayLimits,
-    GatewayRepositories,
-    ImAgentGateway,
-    InboundFailurePhase,
 )
 from imagent.gateway.admission import ClaimedInbound
+from imagent.gateway.composition import _GatewayRuntimeDependencies
 from imagent.gateway.diagnostics import InboundFailurePresentationFailureCode
+from imagent.gateway.input import InboundFailurePhase
 from imagent.gateway.input.dispatch import InputPostAcceptanceError
 from imagent.gateway.input.failure_presentation import (
     InboundFailurePresentation,
@@ -34,8 +32,10 @@ from imagent.gateway.input.failure_presentation import (
     InboundFailurePresentationTimeout,
     handle_claimed_inbound,
 )
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence import InMemoryIdempotencyRepository
 from imagent.gateway.persistence.memory import InMemoryBindingRepository
+from imagent.gateway.persistence.repository_contracts import IdempotencyClaimStatus
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.interaction.media import AttachmentContent, LocalPath
 from imagent.interaction.messages import (
@@ -494,10 +494,10 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
         channel = FakeChannelAdapter("fake-channel")
         presenter = _RecordingPresenter()
         idempotency = InMemoryIdempotencyRepository()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
                 idempotency=idempotency,
             ),

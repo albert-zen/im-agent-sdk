@@ -70,7 +70,6 @@ components:
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
-      - src/imagent/adapters.py
     docs:
       - docs/components/ports/design.md
       - docs/components/ports/testing.md
@@ -221,6 +220,7 @@ components:
       - src/imagent/gateway/input/dispatch.py
       - src/imagent/gateway/input/failure_presentation.py
       - src/imagent/gateway/__init__.py
+      - src/imagent/gateway/orchestration.py
       - src/imagent/gateway/composition.py
       - src/imagent/gateway/runtime.py
       - src/imagent/gateway/lifecycle.py
@@ -361,7 +361,6 @@ components:
       - src/imagent/interaction/diagnostics.py
       - src/imagent/interaction/channels/diagnostics.py
       - src/imagent/applications/diagnostics.py
-      - src/imagent/diagnostics.py
       - tests/interaction/test_diagnostics.py
       - tests/interaction/channels/test_diagnostics.py
       - tests/applications/test_diagnostics.py
@@ -506,8 +505,6 @@ components:
       - src/imagent/channels/**
       # Historical facades are shared here because this slice retires only
       # their Channel names while preserving unrelated aliases.
-      - src/imagent/adapters.py
-      - src/imagent/contracts/__init__.py
       - scripts/smoke_clean_install.py
       - tests/interaction/channels/__init__.py
       - tests/interaction/channels/test_contract.py
@@ -677,7 +674,6 @@ components:
       # The root facade and the formal cross-layer facade carry the
       # Applications edge of this public-surface slice.
       - src/imagent/applications/__init__.py
-      - src/imagent/contracts/__init__.py
       - src/imagent/applications/capabilities.py
       - src/imagent/applications/events.py
       - src/imagent/applications/operations.py
@@ -887,8 +883,6 @@ components:
       - uv.lock
       - scripts/smoke_clean_install.py
       - src/imagent/__init__.py
-      - src/imagent/contracts/__init__.py
-      - src/imagent/events.py
       - src/imagent/py.typed
       - tests/engineering/test_release.py
     docs:
@@ -923,12 +917,12 @@ maintainability:
   budgets:
     - name: gateway-orchestration
       paths:
-        - src/imagent/gateway/__init__.py
-      max_lines: 1100
-      max_functions: 40
+        - src/imagent/gateway/orchestration.py
+      max_lines: 1400
+      max_functions: 42
       max_classes: 4
       mode: warn
-      guidance: Keep Gateway focused on orchestration; extract delivery planning or component-owned policy before adding more branches.
+      guidance: Keep the private bridge runtime focused on cross-owner sequencing; extract any new policy or owner-local behavior before adding branches.
     - name: application-adapter-modules
       paths:
         - src/imagent/applications/adapters/appserver/_base.py

@@ -12,26 +12,26 @@ from pathlib import Path
 from typing import get_args
 from unittest.mock import patch
 
-import imagent.contracts as contracts_facade
-import imagent.gateway as gateway_facade
 import imagent.gateway.routing as routing_facade
 from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef
-from imagent.contracts import (
-    ApplicationsListed,
+from imagent.gateway.persistence import BindingConflict, ConversationBinding
+from imagent.gateway.persistence.memory import InMemoryBindingRepository
+from imagent.gateway.routing import bindings as binding_owner
+from imagent.gateway.routing.bindings import (
     BindConversationToProject,
     BindConversationToThread,
     ClearConversationApplication,
     ClearConversationProject,
     ClearConversationThread,
     ConversationBound,
+)
+from imagent.gateway.routing.operations import (
+    ApplicationsListed,
     GatewayOperation,
     GatewayOperationType,
     validate_gateway_operation,
     validate_gateway_operation_result,
 )
-from imagent.gateway.persistence import BindingConflict, ConversationBinding
-from imagent.gateway.persistence.memory import InMemoryBindingRepository
-from imagent.gateway.routing import bindings as binding_owner
 from imagent.interaction.messages import ConversationRef
 from imagent.interaction.operations import ContractViolation
 
@@ -41,8 +41,6 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     import importlib.util
     import typing
 
-    import imagent.contracts as contracts_facade
-    import imagent.gateway as gateway_facade
     import imagent.gateway.routing as routing_facade
     import imagent.gateway.routing.operations as operations_owner
     from imagent.gateway.persistence import ConversationBinding
@@ -59,43 +57,19 @@ _IMPORT_ORDER_ASSERTIONS = textwrap.dedent(
     for name in binding_names:
         owner = getattr(binding_owner, name)
         assert getattr(routing_facade, name) is owner
-        assert getattr(contracts_facade, name) is owner
-        assert getattr(gateway_facade, name) is owner
-        assert inspect.signature(getattr(contracts_facade, name)) == inspect.signature(owner)
+        assert inspect.signature(getattr(routing_facade, name)) == inspect.signature(owner)
         assert owner.__module__ == "imagent.gateway.routing.bindings"
-    assert importlib.util.find_spec("imagent.contracts.operations") is None
-    assert importlib.util.find_spec("imagent.contracts.validators") is None
+    assert importlib.util.find_spec("imagent.contracts") is None
 
     binding_hints = typing.get_type_hints(binding_owner.ConversationBound)
-    facade_hints = typing.get_type_hints(contracts_facade.ConversationBound)
     assert binding_hints["binding"] is ConversationBinding
-    assert facade_hints["binding"] is ConversationBinding
     assert binding_hints["type"] is operations_owner.GatewayOperationType
-    assert facade_hints["type"] is operations_owner.GatewayOperationType
-    assert typing.get_type_hints(contracts_facade.__getattr__)["return"] is object
-    assert typing.get_args(contracts_facade.GatewayOperation)
-    assert inspect.signature(contracts_facade.validate_gateway_operation) == inspect.signature(
-        operations_owner.validate_gateway_operation
-    )
-    assert (
-        inspect.signature(contracts_facade.validate_gateway_operation_result)
-        == inspect.signature(operations_owner.validate_gateway_operation_result)
-    )
-    assert (
-        typing.get_type_hints(contracts_facade.validate_gateway_operation)
-        == typing.get_type_hints(operations_owner.validate_gateway_operation)
-    )
-    assert (
-        typing.get_type_hints(contracts_facade.validate_gateway_operation_result)
-        == typing.get_type_hints(operations_owner.validate_gateway_operation_result)
-    )
     """
 ).strip()
 
 _IMPORT_ORDERS = {
     "canonical owner first": "import imagent.gateway.routing.operations\n",
     "binding owner first": "import imagent.gateway.routing.bindings\n",
-    "contracts facade first": "import imagent.contracts\n",
     "routing facade first": "import imagent.gateway.routing\n",
 }
 ROOT = Path(__file__).resolve().parents[3]
@@ -164,11 +138,8 @@ class BindingOwnerTests(unittest.TestCase):
             with self.subTest(name=name):
                 owner = getattr(binding_owner, name)
                 self.assertIs(getattr(routing_facade, name), owner)
-                self.assertIs(getattr(contracts_facade, name), owner)
-                self.assertIs(getattr(gateway_facade, name), owner)
                 self.assertEqual(owner.__module__, "imagent.gateway.routing.bindings")
-        self.assertIsNone(importlib.util.find_spec("imagent.contracts.operations"))
-        self.assertIsNone(importlib.util.find_spec("imagent.contracts.validators"))
+        self.assertIsNone(importlib.util.find_spec("imagent.contracts"))
 
     def test_clean_process_import_orders_preserve_identity_signatures_and_hints(self) -> None:
         environment = os.environ.copy()

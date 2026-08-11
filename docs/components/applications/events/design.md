@@ -44,16 +44,9 @@ request-resolved events use that same ancestry. Message-created and
 message-completed events carry one typed `AgentMessage` whose Thread equals the
 event Thread.
 
-The sole implementation owner is `imagent.applications.events`, in
-`src/imagent/applications/events.py`. The stable formal facades are explicit
-re-exports only: `imagent.events` exposes the complete event surface,
-`imagent.contracts` exposes its documented `AgentEvent`, `AgentEventType`, and
-`validate_agent_event` aliases, and the package root exposes the `events`
-facade module. Each facade imports the exact owner objects eagerly and keeps
-the same signatures; no facade defines a duplicate, uses lazy `__getattr__`,
-or remains a current/target implementation owner. Ordinary internal imports
-use `imagent.applications.events`; facade imports are reserved for identity
-and clean-install evidence.
+The sole implementation and import owner is `imagent.applications.events`, in
+`src/imagent/applications/events.py`. The historical `imagent.events`,
+`imagent.contracts`, and package-root `events` facades are absent.
 
 ## State, recovery, and structure
 

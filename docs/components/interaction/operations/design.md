@@ -105,8 +105,8 @@ src/imagent/interaction/operations.py
 tests/interaction/test_operations.py
 ```
 
-The deliberate `imagent.contracts` public facade re-exports the exact target
-objects; internal runtime imports use the owning leaf. Concrete operation
+The historical cross-layer `imagent.contracts` module is absent; public and
+internal runtime imports use the owning leaf. Concrete operation
 variants remain in their current files until their owning layer moves. No
 parallel implementation or indefinite internal compatibility path remains.
 

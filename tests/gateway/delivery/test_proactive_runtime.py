@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import inspect
 import os
 import subprocess
@@ -9,7 +10,6 @@ import unittest
 from pathlib import Path
 from typing import get_type_hints
 
-import imagent.contracts as contract_facade
 import imagent.gateway as gateway_facade
 import imagent.gateway.delivery as delivery_facade
 import imagent.gateway.persistence as persistence_facade
@@ -98,16 +98,12 @@ class ProactiveRuntimeOwnershipTests(unittest.TestCase):
             delivery_facade.ProactiveDeliveryService,
             runtime_owner.ProactiveDeliveryService,
         )
-        self.assertIs(
-            gateway_facade.ProactiveDeliveryService,
-            runtime_owner.ProactiveDeliveryService,
-        )
+        self.assertFalse(hasattr(gateway_facade, "ProactiveDeliveryService"))
         for name in CONTRACT_NAMES:
             with self.subTest(contract=name):
                 self.assertFalse(hasattr(state_owner, name))
                 self.assertIs(getattr(delivery_facade, name), getattr(contract_seam, name))
-                self.assertNotIn(name, contract_facade.__all__)
-                self.assertFalse(hasattr(contract_facade, name))
+                self.assertIsNone(importlib.util.find_spec("imagent.contracts"))
         self.assertIs(
             delivery_facade.DeliverySubmissionOrigin,
             state_owner.DeliverySubmissionOrigin,
@@ -171,21 +167,20 @@ class ProactiveRuntimeOwnershipTests(unittest.TestCase):
             "import imagent.gateway.delivery.proactive_runtime as runtime\n"
             "import imagent.gateway.delivery as delivery\n"
             "import imagent.gateway as gateway\n"
-            "import imagent.contracts as contracts\n"
+            "import importlib.util\n"
             "removed = ('DeliveryTargetKind', 'ConversationDeliveryTarget',\n"
             "'ThreadRouteDeliveryTarget', 'DeliveryTarget', 'DeliveryIntent',\n"
             "'DestinationDeliveryResult', 'ProactiveDeliveryResult',\n"
             "'validate_delivery_intent', 'derive_delivery_target_fingerprint',\n"
             "'derive_delivery_payload_fingerprint', 'derive_delivery_submission_id',\n"
             "'derive_destination_delivery_id')\n"
-            "assert all(not hasattr(contracts, name) and name not in contracts.__all__\n"
-            "for name in removed)\n"
+            "assert importlib.util.find_spec('imagent.contracts') is None\n"
             "from imagent.gateway.delivery import DeliverySubmissionOrigin\n"
             "assert DeliverySubmissionOrigin.EXTERNAL.value == 'external'\n"
             "assert not hasattr(seam, 'ProactiveDeliveryService')\n"
             "assert not hasattr(seam, 'DeliveryRouteError')\n"
             "assert delivery.ProactiveDeliveryService is runtime.ProactiveDeliveryService\n"
-            "assert gateway.ProactiveDeliveryService is runtime.ProactiveDeliveryService\n"
+            "assert not hasattr(gateway, 'ProactiveDeliveryService')\n"
         )
         completed = subprocess.run(
             [sys.executable, "-c", scripts],

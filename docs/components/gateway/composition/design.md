@@ -13,17 +13,16 @@ It is a wiring boundary, not a service locator or a fourth business layer.
 
 ## Ownership
 
-This leaf owns the immutable `GatewayRepositories`, `GatewayLimits`, and
-`GatewayExtensions` construction values and the wiring that passes each value
+This leaf owns the immutable `GatewayLimits` and `GatewayExtensions`
+construction values, the private `_GatewayRuntimeDependencies` bundle, and the wiring that passes each value
 to its documented owner or read-only consumer. It does not own product
 commands, native adapter internals, repository implementations, Channel access
 policy, Application execution truth, or a generic pipeline/hook registry.
 
-The configured binding repository is constructor-injected into the sole
-mutating `gateway.routing.bindings` runtime. Projection-route policy receives
-the same repository only as the read authority needed to test foreground
-binding equality; `ImAgentGateway` itself does not retain or call the binding
-repository. Composition still sequences Application Project/Thread truth,
+The coherent store session is injected into the sole mutating
+`gateway.routing.bindings` runtime. Projection-route policy receives the same
+session only as the read authority needed to test foreground binding equality.
+Private orchestration still sequences Application Project/Thread truth,
 binding transition facts, and foreground projection-route preparation without
 becoming a second mutation owner.
 
@@ -63,8 +62,8 @@ the lifecycle-bound fenced `GatewayEffectExecutor` protocol. Composition
 uses D's one exact action bootstrap lease and narrow commit fence before a new
 route becomes visible, then reconciles the terminal store/workflow result
 through the one SDK projection runtime rather than a consumer subscription. The
-session, lease, concrete executor, repository views, and retiring
-`GatewayRepositories` bundle never cross the canonical consumer surface.
+session, lease, concrete executor, repository views, and private runtime
+dependency bundle never cross the canonical consumer surface.
 Terminal replay remains authoritative: replay precedes lifecycle admission and
 current worker capacity or inactive-route state cannot rewrite a stored
 result. For new work, authoritative preflight remains outside the commit fence;
@@ -116,7 +115,7 @@ context into B: B retains the atomic store call, while projection stop and the
 post-preflight transaction acquire the same process-local fence. Terminal
 receipt replay remains before fence admission. Canonical `Gateway` owns the
 public `GatewayStore` acquisition and deterministic release; the private
-session and `GatewayRepositories` never become consumer-facing construction
+session and `_GatewayRuntimeDependencies` never become consumer-facing construction
 ports.
 
 The same public object exposes proactive target authorization and delivery.

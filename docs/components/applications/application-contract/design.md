@@ -48,19 +48,13 @@ The owner contracts/exports are the complete family listed below, plus
 Turn/workspace validators.
 
 The finite `imagent.applications` facade exposes those exact objects. The
-deliberate `imagent.contracts` facade retains the exact compatibility alias for
-`ApplicationInputOutcomeUnknown`, but it contains no second implementation and
-does not expose the other Application contract family, capability, operation,
-or request names. Capabilities, operations, and requests are owner-only
+historical cross-layer `imagent.contracts` module is absent. Capabilities,
+operations, and requests are owner-only
 surfaces in their respective Applications modules. The root facade does not
 eagerly import concrete adapters; explicit named concrete exports remain a
 finite facade behavior.
-The historical `imagent.contracts.errors` module is retired after this move
-and is not an internal compatibility path. The historical `imagent.adapters`
-surface no longer exports the Application adapter Protocol or callback. It
-retains only unrelated Gateway aliases owned elsewhere; its historical
-Channel/admission names were retired when the Interaction Channel facade
-became authoritative.
+The historical `imagent.contracts` and `imagent.adapters` modules are absent;
+their imports fail in clean processes regardless of owner import order.
 
 ## Dependency, state, and recovery boundary
 
@@ -95,14 +89,12 @@ behavior when a native Application supports only a started Turn.
 The owner implementation is `src/imagent/applications/contract.py` with
 focused ownership evidence in `tests/applications/test_contract.py`. Shared
 JSON Schemas remain cross-owner language-neutral documents; their Python
-reference values are not duplicated in the retired contracts model module or
-Interaction. `imagent.contracts` re-exports the exact owner object only for
-`ApplicationInputOutcomeUnknown`, while `imagent.applications` directly
-exposes the complete contract family. Its finite named lazy facade is limited
+reference values are not duplicated in a contracts model module or
+Interaction. `imagent.applications` directly exposes the complete contract
+family. Its finite named lazy facade is limited
 to explicit concrete adapter/presentation exports and cannot hide ownership or
 solve an import cycle. Capabilities, operations, and requests are not
-package-root exports. `src/imagent/adapters.py` retains only unrelated Gateway
-aliases; the Application Protocol and callback are no longer available there.
+package-root exports. `src/imagent/adapters.py` is absent.
 The conformance suite remains affected evidence for all concrete adapters.
 
 ## Authority

@@ -26,10 +26,9 @@ the Project/Thread/Turn summaries and statuses, input/history values, and
 the workspace identity/fingerprint values, and their validators are
 [`applications.application-contract`](../applications/application-contract/design.md).
 The complete Application contract family is exposed by that owner and the
-finite `imagent.applications` facade. `imagent.contracts` retains only the
-exact `ApplicationInputOutcomeUnknown` alias from this Applications block;
-capability, operation, request, and all other Application model names are not
-compatibility exports.
+finite `imagent.applications` facade. The historical cross-layer
+`imagent.contracts` module is absent; capability, operation, request, and all
+other Application model names remain with their focused owners.
 
 The full organization model is:
 

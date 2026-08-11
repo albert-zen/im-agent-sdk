@@ -7,20 +7,17 @@ language-neutral schemas and exact public facade identity aligned.
 
 The focused contract suite also proves that `ApplicationInputOutcomeUnknown`
 has one exact class owner in `imagent.applications.contract`, is exposed by
-the finite `imagent.applications` facade and the explicit `imagent.contracts`
-facade as the same object, inherits directly from `RuntimeError`, preserves
-the `(message, cause)` constructor and `.cause`, and leaves
-`imagent.contracts.errors` absent after the historical implementation is
-retired.
+the finite `imagent.applications` facade as the same object, inherits directly
+from `RuntimeError`, and preserves the `(message, cause)` constructor and
+`.cause`. The historical `imagent.contracts` package is absent.
 
 The focused ownership tests assert that every contract-family member is one
 exact object across `imagent.applications` and
-`imagent.applications.contract`. They assert that only
-`ApplicationInputOutcomeUnknown` is present in `imagent.contracts`, and that
-the retired Application names fail in clean subprocesses after each relevant
-import order. `AgentApplicationAdapter` and
+`imagent.applications.contract`. They assert that the retired cross-layer
+modules fail in clean subprocesses after each relevant import order.
+`AgentApplicationAdapter` and
 `ApplicationInputDispatchHandler` remain exact between the owner and the root
-Applications facade, but are absent from `imagent.adapters`. Contract imports
+Applications facade. Contract imports
 do not initialize a concrete adapter or Gateway implementation, and the
 finite root facade does not eagerly load concrete adapters.
 Runtime `typing.get_type_hints` preserves the model fields and the native

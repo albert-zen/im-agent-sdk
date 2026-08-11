@@ -9,7 +9,6 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from imagent.adapters import IdempotencyClaimStatus
 from imagent.applications.capabilities import ProjectMode, SupportLevel
 from imagent.applications.contract import (
     AcceptedTurn,
@@ -31,14 +30,11 @@ from imagent.applications.operations import (
     GetThreadHistory,
     ThreadHistoryRead,
 )
-from imagent.contracts import (
-    BindConversationToThread,
-    ConversationBound,
-    GatewayOperationFailed,
-)
-from imagent.gateway import GatewayLimits, GatewayRepositories, ImAgentGateway
+from imagent.gateway import GatewayLimits
+from imagent.gateway.composition import _GatewayRuntimeDependencies
 from imagent.gateway.input.dispatch import TurnAcceptanceBufferOverflow
 from imagent.gateway.lifecycle import GatewayLifecycleFailure
+from imagent.gateway.orchestration import _GatewayRuntime
 from imagent.gateway.persistence import (
     ConversationBinding,
     InMemoryIdempotencyRepository,
@@ -49,6 +45,7 @@ from imagent.gateway.persistence.memory import (
     InMemoryBindingRepository,
     InMemoryProjectionRouteRepository,
 )
+from imagent.gateway.persistence.repository_contracts import IdempotencyClaimStatus
 from imagent.gateway.persistence.sqlite import SQLiteGatewayState
 from imagent.gateway.presentation import OutboundPresentationContext
 from imagent.gateway.projection import derive_projection_delivery_id
@@ -61,6 +58,10 @@ from imagent.gateway.projection.request_correlation import (
     derive_turn_reply_correlation_id,
 )
 from imagent.gateway.routing import ObserveThread, ProjectionPolicy
+from imagent.gateway.routing.bindings import BindConversationToThread, ConversationBound
+from imagent.gateway.routing.operations import (
+    GatewayOperationFailed,
+)
 from imagent.gateway.routing.projection_routes import derive_projection_route_id
 from imagent.interaction.channels import DeliveryReceipt, DeliveryReceiptStatus
 from imagent.interaction.messages import (
@@ -73,7 +74,7 @@ from imagent.interaction.messages import (
 from imagent.testing import FakeAgentApplicationAdapter, FakeChannelAdapter
 
 
-class CapturingOutboundGateway(ImAgentGateway):
+class CapturingOutboundGateway(_GatewayRuntime):
     logical_outbound: list[OutboundMessage]
 
     async def _deliver_outbound(
@@ -145,7 +146,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         gateway = CapturingOutboundGateway(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
                 projections=projections,
             ),
@@ -217,7 +218,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         gateway = CapturingOutboundGateway(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
                 projections=projections,
             ),
@@ -274,7 +275,7 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         gateway = CapturingOutboundGateway(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
                 projections=projections,
             ),
@@ -342,10 +343,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             await projections.put_projection_route(_route(thread.ref, conversation))
         good = FakeChannelAdapter("good-channel")
         bad = RetryableChannelAdapter("bad-channel")
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[good, bad],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -407,10 +408,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             await projections.put_projection_route(_route(thread.ref, conversation))
         good = FakeChannelAdapter("good-channel")
         bad = RetryableChannelAdapter("bad-channel")
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[good, bad],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -466,10 +467,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             )
             await projections.put_projection_route(route)
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -541,10 +542,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         thread = await application.create_thread(application.default_project_ref)
         first = ConversationRef("fake-channel", "first")
         second = ConversationRef("fake-channel", "second")
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
             ),
             projection_policy=ProjectionPolicy.ALL_OBSERVERS,
@@ -575,10 +576,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             )
         conversation = ConversationRef("fake-channel", "conversation")
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
             ),
             limits=GatewayLimits(
@@ -602,10 +603,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         )
         conversation = ConversationRef("fake-channel", "conversation")
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
             ),
             limits=GatewayLimits(
@@ -643,10 +644,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         )
         conversation = ConversationRef("fake-channel", "conversation")
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
             ),
         )
@@ -686,10 +687,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         second = ConversationRef("fake-channel", "second")
         channel = FakeChannelAdapter()
         projections = YieldingProjectionRepository()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
                 projections=projections,
             ),
@@ -729,10 +730,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         conversation = ConversationRef("fake-channel", "conversation")
         channel = FakeChannelAdapter()
         projections = FailingRefreshRepository()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
                 projections=projections,
             ),
@@ -775,10 +776,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         channel = FakeChannelAdapter()
         projections = FailingTurnCorrelationRepository()
         idempotency = InMemoryIdempotencyRepository()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 idempotency=idempotency,
                 projections=projections,
@@ -817,10 +818,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         )
         channel = FakeChannelAdapter()
         idempotency = InMemoryIdempotencyRepository()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 idempotency=idempotency,
             ),
@@ -870,10 +871,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         )
         channel = FakeChannelAdapter()
         idempotency = InMemoryIdempotencyRepository()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 idempotency=idempotency,
             ),
@@ -936,10 +937,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         )
         channel = FakeChannelAdapter()
         idempotency = InMemoryIdempotencyRepository()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 idempotency=idempotency,
             ),
@@ -978,10 +979,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         )
         channel = FakeChannelAdapter()
         idempotency = InMemoryIdempotencyRepository()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 idempotency=idempotency,
             ),
@@ -1018,10 +1019,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=FailingTurnCorrelationRepository(),
             ),
@@ -1063,10 +1064,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
             channel = FakeChannelAdapter()
-            gateway = ImAgentGateway(
+            gateway = _GatewayRuntime(
                 channels=[channel],
                 applications=[application],
-                repositories=GatewayRepositories(
+                repositories=_GatewayRuntimeDependencies(
                     bindings=state,
                     idempotency=state,
                     projections=state,
@@ -1110,10 +1111,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             )
         channel = FakeChannelAdapter()
         projections = InMemoryProjectionRouteRepository()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -1170,10 +1171,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             )
         projections = InMemoryProjectionRouteRepository()
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -1222,10 +1223,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                     )
                 )
             first_channel = FakeChannelAdapter()
-            first_gateway = ImAgentGateway(
+            first_gateway = _GatewayRuntime(
                 channels=[first_channel],
                 applications=[application],
-                repositories=GatewayRepositories(
+                repositories=_GatewayRuntimeDependencies(
                     bindings=initial,
                     idempotency=initial,
                     projections=initial,
@@ -1241,10 +1242,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
             recovered = SQLiteGatewayState(path)
             second_channel = FakeChannelAdapter()
-            second_gateway = ImAgentGateway(
+            second_gateway = _GatewayRuntime(
                 channels=[second_channel],
                 applications=[application],
-                repositories=GatewayRepositories(
+                repositories=_GatewayRuntimeDependencies(
                     bindings=recovered,
                     idempotency=recovered,
                     projections=recovered,
@@ -1279,10 +1280,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=InMemoryProjectionRouteRepository(),
             ),
@@ -1314,10 +1315,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             )
         projections = InMemoryProjectionRouteRepository()
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -1377,10 +1378,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             )
         projections = InMemoryProjectionRouteRepository()
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -1426,10 +1427,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         for thread in (thread_a, thread_b):
             await projections.put_projection_route(_route(thread.ref, conversation))
 
-        first_gateway = ImAgentGateway(
+        first_gateway = _GatewayRuntime(
             channels=[FakeChannelAdapter()],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -1449,10 +1450,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await first_gateway.stop()
 
-        second_gateway = ImAgentGateway(
+        second_gateway = _GatewayRuntime(
             channels=[FakeChannelAdapter()],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -1509,10 +1510,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
             ),
         )
@@ -1565,10 +1566,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         for conversation in (first, second):
             await projections.put_projection_route(_route(thread.ref, conversation))
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -1652,10 +1653,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             checkpointed_at=datetime.now(UTC),
         )
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -1714,10 +1715,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             checkpointed_at=datetime.now(UTC),
         )
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -1790,10 +1791,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             )
             await idempotency.complete("outbound:fake-channel", delivery_id)
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 idempotency=idempotency,
                 projections=projections,
@@ -1836,10 +1837,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
 
             recovered = SQLiteGatewayState(path, stale_claim_after_seconds=0)
             channel = FakeChannelAdapter()
-            gateway = ImAgentGateway(
+            gateway = _GatewayRuntime(
                 channels=[channel],
                 applications=[],
-                repositories=GatewayRepositories(
+                repositories=_GatewayRuntimeDependencies(
                     bindings=recovered,
                     idempotency=recovered,
                     projections=recovered,
@@ -1868,10 +1869,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             )
             first = FailingOutboundCompleteOnceSQLiteState(path)
             channel = FakeChannelAdapter()
-            first_gateway = ImAgentGateway(
+            first_gateway = _GatewayRuntime(
                 channels=[channel],
                 applications=[],
-                repositories=GatewayRepositories(
+                repositories=_GatewayRuntimeDependencies(
                     bindings=first,
                     idempotency=first,
                     projections=first,
@@ -1887,10 +1888,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                 await first.close()
 
             recovered = SQLiteGatewayState(path, stale_claim_after_seconds=0)
-            recovered_gateway = ImAgentGateway(
+            recovered_gateway = _GatewayRuntime(
                 channels=[channel],
                 applications=[],
-                repositories=GatewayRepositories(
+                repositories=_GatewayRuntimeDependencies(
                     bindings=recovered,
                     idempotency=recovered,
                     projections=recovered,
@@ -1945,10 +1946,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             first_message.agent_item_id,
         )
         await idempotency.claim("outbound:fake-channel", delivery_id)
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[FakeChannelAdapter()],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 idempotency=idempotency,
                 projections=projections,
@@ -1984,10 +1985,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                     created_at=created_at,
                 )
             )
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[],
             applications=[],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
                 projections=projections,
             ),
@@ -2019,10 +2020,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -2083,10 +2084,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                 created_at=datetime.now(UTC),
             )
         )
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[FakeChannelAdapter()],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -2122,10 +2123,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         )
         await projections.put_projection_route(_route(thread.ref, conversation))
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -2184,10 +2185,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         await projections.put_projection_route(_route(thread.ref, conversation))
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[FakeChannelAdapter()],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -2230,10 +2231,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         await projections.put_projection_route(_route(thread.ref, conversation))
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[FakeChannelAdapter()],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -2274,10 +2275,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         await projections.put_projection_route(_route(thread.ref, conversation))
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[FakeChannelAdapter()],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -2321,10 +2322,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         )
         await projections.put_projection_route(_route(thread.ref, conversation))
         channel = FakeChannelAdapter()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -2366,10 +2367,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         route = await projections.put_projection_route(_route(thread.ref, conversation))
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[FakeChannelAdapter()],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -2398,10 +2399,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         conversation = ConversationRef("fake-channel", "conversation")
         projections = InMemoryProjectionRouteRepository()
         await projections.put_projection_route(_route(thread, conversation))
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[],
             applications=[],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
                 projections=projections,
             ),
@@ -2445,10 +2446,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                 thread_ref=thread.ref,
             )
         )
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
             ),
         )
@@ -2474,10 +2475,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         message = _inbound(conversation, "startup-message")
         channel = EagerInboundChannel(message)
         idempotency = InMemoryIdempotencyRepository()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
                 idempotency=idempotency,
             ),
@@ -2519,10 +2520,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
         conversation = ConversationRef("eager-channel", "conversation")
         channel = EagerInboundChannel(_inbound(conversation, "startup-message"))
         idempotency = BlockingReleaseRepository()
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[channel],
             applications=[],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=InMemoryBindingRepository(),
                 idempotency=idempotency,
             ),
@@ -2550,10 +2551,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
                 Path(directory) / "gateway.sqlite3",
                 stale_claim_after_seconds=0,
             )
-            gateway = ImAgentGateway(
+            gateway = _GatewayRuntime(
                 channels=[channel],
                 applications=[],
-                repositories=GatewayRepositories(
+                repositories=_GatewayRuntimeDependencies(
                     bindings=InMemoryBindingRepository(),
                     idempotency=idempotency,
                 ),
@@ -2609,10 +2610,10 @@ class ProjectionHardeningTests(unittest.IsolatedAsyncioTestCase):
             await projections.put_projection_route(_route(thread.ref, conversation))
         good = FakeChannelAdapter("good-channel")
         bad = FailingChannelAdapter("bad-channel")
-        gateway = ImAgentGateway(
+        gateway = _GatewayRuntime(
             channels=[good, bad],
             applications=[application],
-            repositories=GatewayRepositories(
+            repositories=_GatewayRuntimeDependencies(
                 bindings=bindings,
                 projections=projections,
             ),
@@ -3217,7 +3218,7 @@ def _message_text(message: OutboundMessage) -> str:
 
 
 def _health_state_is(
-    gateway: ImAgentGateway,
+    gateway: _GatewayRuntime,
     thread_ref: ThreadRef,
     state: ProjectionWorkerState,
 ) -> bool:
@@ -3226,7 +3227,7 @@ def _health_state_is(
 
 
 def _delivery_failure_count(
-    gateway: ImAgentGateway,
+    gateway: _GatewayRuntime,
     thread_ref: ThreadRef,
 ) -> int:
     health = gateway.get_projection_health(thread_ref)
