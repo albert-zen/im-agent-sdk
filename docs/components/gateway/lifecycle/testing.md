@@ -55,13 +55,19 @@ Tests must prove:
 - a blocked owner, session, or store cleanup reaches the configured finite
   lifecycle timeout, later owners are still attempted exactly once, and the
   public failure remains bounded and sanitized; a cancellation-resistant owner
-  cannot extend that deadline, and malformed acquired-session cleanup uses the
-  same bound;
+  cannot extend that deadline, repeated cancellation cannot interrupt the
+  supervisor's detach decision or skip later owners, and malformed
+  acquired-session cleanup uses the same bound;
+- synchronous scoped-action deactivation failure is projected, later runtime,
+  lease, session, and store owners still close, and terminal repeated stop does
+  not reuse a failed partial close;
 - post-acquisition workspace/session/runtime failures and lease-renewal loss
   retain no raw exception object or free-form text in message, cause, context,
   notes, terminal state, representation, or serialization;
 - coordinator/observer partial synchronous startup is inside rollback and is
   closed once before startup returns;
+- rejected-claim release failure adds only bounded owner/type evidence to the
+  exact startup-overflow sentinel, including through exception serialization;
 - all SDK-owned Channels receive their exact admission handler through one
   two-argument start invocation; a legacy one-argument body runs zero times,
   and an internal two-argument `TypeError` runs once;

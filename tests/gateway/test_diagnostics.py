@@ -270,9 +270,9 @@ for name in (
     ) -> None:
         record = SimpleNamespace(
             state="running",
-            restart_count=10**100,
-            delivery_failure_count=10**100,
-            event_overflow_count=10**100,
+            restart_count=750_000,
+            delivery_failure_count=750_000,
+            event_overflow_count=750_000,
             last_subscription_error=None,
             last_recovery_error=None,
             last_delivery_error=None,
@@ -298,6 +298,30 @@ for name in (
         self.assertEqual(hostile.degraded_count, 1)
         self.assertEqual(hostile.recovery_gap_codes, ("other",))
         self.assertNotIn("native-thread-secret", repr(hostile))
+
+        class SecretInt(int):
+            def __repr__(self) -> str:
+                return "NATIVE_SECRET_REPR"
+
+        malformed_records = (
+            SimpleNamespace(**{**vars(record), "state": "unknown"}),
+            SimpleNamespace(**{**vars(record), "state": "x" * 129}),
+            SimpleNamespace(**{**vars(record), "last_gap": "x" * 129}),
+            SimpleNamespace(**{**vars(record), "restart_count": -1}),
+            SimpleNamespace(**{**vars(record), "restart_count": True}),
+            SimpleNamespace(**{**vars(record), "restart_count": SecretInt(1)}),
+            SimpleNamespace(**{**vars(record), "restart_count": 1_000_001}),
+        )
+        for malformed in malformed_records:
+            with self.subTest(malformed=type(malformed.restart_count)):
+                facts = summarize_projection_health((cast(_ProjectionHealth, malformed),))
+                self.assertEqual(facts.worker_count, 1)
+                self.assertEqual(facts.stopped_count, 1)
+                self.assertEqual(facts.degraded_count, 1)
+                self.assertEqual(facts.recovery_gap_count, 1)
+                self.assertEqual(facts.recovery_gap_codes, ("other",))
+                self.assertEqual(facts.restart_count, 0)
+                self.assertNotIn("NATIVE_SECRET_REPR", repr(facts))
 
         class HostileIterable:
             def __iter__(self):
@@ -554,6 +578,10 @@ for name in (
         self.assertEqual(projected.stopped_count, 1)
         self.assertEqual(projected.recovery_gap_codes, ("other",))
 
+        class SecretInt(int):
+            def __repr__(self) -> str:
+                return "NATIVE_SECRET_REPR"
+
         for constructor in (
             lambda: QueueDiagnosticFacts(
                 QueueDiagnosticName.NOTIFICATION,
@@ -570,9 +598,56 @@ for name in (
             lambda: gateway_diagnostics.InboundContentTransformerDiagnosticFacts(
                 invocation_count=10**10_000
             ),
+            lambda: QueueDiagnosticFacts(
+                QueueDiagnosticName.NOTIFICATION,
+                capacity=SecretInt(1),
+                depth=0,
+            ),
+            lambda: ConnectionDiagnosticFacts(
+                state=ConnectionDiagnosticState.READY,
+                connection_epoch=SecretInt(1),
+                reconnect_count=0,
+                worker_running=True,
+                worker_degraded=False,
+            ),
+            lambda: gateway_diagnostics.InboundContentTransformerDiagnosticFacts(
+                invocation_count=SecretInt(1)
+            ),
         ):
             with self.subTest(constructor=constructor), self.assertRaises((TypeError, ValueError)):
                 constructor()
+
+        hostile_queue = QueueDiagnosticFacts(
+            QueueDiagnosticName.NOTIFICATION,
+            capacity=1,
+            depth=0,
+        )
+        object.__setattr__(hostile_queue, "depth", SecretInt(0))
+        hostile_connection = ConnectionDiagnosticFacts(
+            state=ConnectionDiagnosticState.READY,
+            connection_epoch=1,
+            reconnect_count=0,
+            worker_running=True,
+            worker_degraded=False,
+            queues=(hostile_queue,),
+        )
+        hostile_facts = ApplicationDiagnosticFacts(
+            "app",
+            "appserver",
+            connection=hostile_connection,
+        )
+        application = SimpleNamespace(
+            summary=SimpleNamespace(
+                ref=SimpleNamespace(application_instance_id="app"),
+                kind="appserver",
+            ),
+            diagnostic_facts=lambda: hostile_facts,
+        )
+        collected = collect_application_diagnostics(
+            cast(tuple[_DiagnosticApplication, ...], (application,))
+        )
+        self.assertIsNone(collected[0].connection)
+        self.assertNotIn("NATIVE_SECRET_REPR", repr(collected))
 
     def test_application_and_channel_queue_scopes_remain_distinct(self) -> None:
         channel_queue = QueueDiagnosticFacts(
@@ -605,6 +680,35 @@ for name in (
                 "qq",
                 ConnectionDiagnosticFacts(**connection, queues=(application_queue,)),
             )
+
+        server_request_queue = QueueDiagnosticFacts(
+            QueueDiagnosticName.SERVER_REQUEST,
+            capacity=2,
+            depth=1,
+        )
+        app_connection = ConnectionDiagnosticFacts(
+            **connection,
+            queues=(application_queue, server_request_queue),
+        )
+        app_facts = ApplicationDiagnosticFacts("app", "appserver", app_connection)
+        application = SimpleNamespace(
+            summary=SimpleNamespace(
+                ref=SimpleNamespace(application_instance_id="app"),
+                kind="appserver",
+            ),
+            diagnostic_facts=lambda: app_facts,
+        )
+        collected = collect_application_diagnostics(
+            cast(tuple[_DiagnosticApplication, ...], (application,))
+        )
+        collected_connection = collected[0].connection
+        self.assertIsNotNone(collected_connection)
+        assert collected_connection is not None
+        self.assertEqual(collected_connection, app_connection)
+        self.assertEqual(
+            collected_connection.queues,
+            (application_queue, server_request_queue),
+        )
 
     def test_channel_diagnostics_are_sorted_and_reads_do_not_mutate_provider(self) -> None:
         reads = 0

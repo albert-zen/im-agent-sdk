@@ -77,7 +77,6 @@ from .delivery.proactive_runtime import ProactiveDeliveryService
 from .diagnostics import (
     DiagnosticsSnapshot,
     GatewayDiagnosticFacts,
-    _bounded_cleanup_error_summary,
     _bounded_lifecycle_error_summary,
     collect_application_diagnostics,
     collect_channel_diagnostics,
@@ -1057,7 +1056,7 @@ class ImAgentGateway:
                     error.add_note(
                         "Failed to release an inbound claim rejected by bounded "
                         "startup admission: "
-                        + _bounded_cleanup_error_summary(
+                        + _bounded_lifecycle_error_summary(
                             "inbound claim release",
                             release_error,
                         )

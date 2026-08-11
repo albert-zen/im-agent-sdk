@@ -2504,6 +2504,7 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("x" * 193, evidence)
         self.assertNotIn("\x1b", evidence)
         self.assertNotIn("\u202e", evidence)
+        self.assertNotIn(_UNSAFE_HUGE_CLEANUP_DETAIL.encode(), pickle.dumps(error))
         self.assertTrue(any("inbound claim release" in note for note in error.__notes__))
         self.assertEqual(idempotency.release_count, 1)
         self.assertFalse(channel.started)

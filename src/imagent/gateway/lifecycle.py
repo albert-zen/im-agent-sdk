@@ -102,25 +102,21 @@ async def _bounded_lifecycle_call(
         await call()
 
     task = asyncio.create_task(invoke())
-    try:
-        done, _ = await asyncio.wait((task,), timeout=timeout_seconds)
-    except CancelledError:
-        task.cancel()
-        done, _ = await asyncio.wait((task,), timeout=timeout_seconds)
-        if done:
-            _consume_lifecycle_task_result(task)
-        else:
-            _detach_lifecycle_task(task)
-        raise
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    done, caller_cancellation = await _wait_lifecycle_task(
+        task,
+        deadline=deadline,
+        cancel_target_on_caller=True,
+    )
     if not done:
         task.cancel()
         _detach_lifecycle_task(task)
-        return TimeoutError()
+        return caller_cancellation or TimeoutError()
     try:
         task.result()
     except BaseException as error:
-        return error
-    return None
+        return caller_cancellation or error
+    return caller_cancellation
 
 
 async def _cancel_lifecycle_task(
@@ -132,21 +128,52 @@ async def _cancel_lifecycle_task(
 
     if not task.done():
         task.cancel()
-    try:
-        done, _ = await asyncio.wait((task,), timeout=timeout_seconds)
-    except CancelledError:
-        _detach_lifecycle_task(task)
-        raise
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    done, caller_cancellation = await _wait_lifecycle_task(
+        task,
+        deadline=deadline,
+        cancel_target_on_caller=False,
+    )
     if not done:
         _detach_lifecycle_task(task)
-        return TimeoutError()
+        return caller_cancellation or TimeoutError()
     try:
         task.result()
     except CancelledError:
-        return None
+        return caller_cancellation
     except BaseException as error:
-        return error
-    return None
+        return caller_cancellation or error
+    return caller_cancellation
+
+
+async def _wait_lifecycle_task(
+    task: asyncio.Task[object],
+    *,
+    deadline: float,
+    cancel_target_on_caller: bool,
+) -> tuple[bool, CancelledError | None]:
+    """Wait to one absolute deadline while recording every caller cancellation."""
+
+    caller_cancellation: CancelledError | None = None
+    target_cancelled = False
+    while not task.done():
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            break
+        try:
+            done, _ = await asyncio.wait((task,), timeout=remaining)
+            if done:
+                break
+        except CancelledError as error:
+            if caller_cancellation is None:
+                caller_cancellation = error
+            current = asyncio.current_task()
+            if current is not None:
+                current.uncancel()
+            if cancel_target_on_caller and not target_cancelled and not task.done():
+                task.cancel()
+                target_cancelled = True
+    return task.done(), caller_cancellation
 
 
 def _detach_lifecycle_task(task: asyncio.Task[object]) -> None:

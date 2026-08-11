@@ -158,10 +158,64 @@ class PublicGatewayLifecycleMatrixTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(GatewayLifecycleFailure):
             await asyncio.wait_for(gateway.stop(), timeout=0.1)
 
-        self.assertTrue(channel.stop_cancelled)
+        self.assertTrue(channel.stop_cancelled.is_set())
         self.assertEqual(application.stop_count, 1)
         channel.release_stop.set()
         await asyncio.sleep(0)
+
+    async def test_repeated_cancellation_cannot_abort_later_owner_cleanup(self) -> None:
+        channel = _CancellationResistantStopChannel()
+        application = _CountingStopApplication()
+        gateway = ImAgentGateway(
+            channels=[channel],
+            applications=[application],
+            repositories=GatewayRepositories(bindings=InMemoryBindingRepository()),
+            limits=GatewayLimits(lifecycle_owner_timeout_seconds=0.02),
+        )
+        await gateway.start()
+
+        stopping = asyncio.create_task(gateway.stop())
+        await channel.stop_started.wait()
+        stopping.cancel()
+        await channel.stop_cancelled.wait()
+        stopping.cancel()
+
+        with self.assertRaises(asyncio.CancelledError):
+            await asyncio.wait_for(stopping, timeout=0.2)
+
+        self.assertEqual(application.stop_count, 1)
+        channel.release_stop.set()
+        await asyncio.wait_for(channel.stop_finished.wait(), timeout=0.2)
+
+    async def test_scoped_action_fence_failure_is_projected_and_cleanup_continues(self) -> None:
+        gateway, channel, _ = _public_gateway("fence-failure")
+        await gateway.start()
+        runtime = gateway._runtime  # type: ignore[reportPrivateUsage]
+        self.assertIsNotNone(runtime)
+
+        def fail_deactivation() -> None:
+            raise RuntimeError("DEACTIVATE_SECRET")
+
+        runtime._deactivate_scoped_actions = fail_deactivation  # type: ignore[union-attr,method-assign,reportPrivateUsage]
+
+        with self.assertRaises(GatewayLifecycleFailure) as raised:
+            await gateway.stop()
+
+        evidence = "\n".join(
+            (
+                str(raised.exception),
+                repr(raised.exception),
+                repr(raised.exception.__cause__),
+                repr(raised.exception.__context__),
+                *getattr(raised.exception, "__notes__", ()),
+            )
+        )
+        self.assertNotIn("DEACTIVATE_SECRET", evidence)
+        self.assertFalse(channel.started)
+        self.assertIsNone(gateway._runtime)  # type: ignore[reportPrivateUsage]
+        self.assertIsNone(gateway._session)  # type: ignore[reportPrivateUsage]
+        self.assertTrue(gateway._store._closed)  # type: ignore[reportPrivateUsage]
+        await gateway.stop()
 
     async def test_partial_delivery_owner_start_is_inside_rollback_boundary(self) -> None:
         coordinator = _PartiallyStartingCoordinator()
@@ -202,15 +256,20 @@ class _BlockingStopChannel(FakeChannelAdapter):
 class _CancellationResistantStopChannel(FakeChannelAdapter):
     def __init__(self) -> None:
         super().__init__("cancellation-resistant-stop-channel")
-        self.stop_cancelled = False
+        self.stop_started = asyncio.Event()
+        self.stop_cancelled = asyncio.Event()
+        self.stop_finished = asyncio.Event()
         self.release_stop = asyncio.Event()
 
     async def stop(self) -> None:
+        self.stop_started.set()
         try:
             await self.release_stop.wait()
         except asyncio.CancelledError:
-            self.stop_cancelled = True
+            self.stop_cancelled.set()
             await self.release_stop.wait()
+        finally:
+            self.stop_finished.set()
 
 
 class _PartiallyStartingCoordinator(DeliveryCoordinator):

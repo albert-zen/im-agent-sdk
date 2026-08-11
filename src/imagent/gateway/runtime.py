@@ -389,7 +389,14 @@ class Gateway:
             self._started = False
             runtime = self._runtime
             if runtime is not None:
-                runtime._deactivate_scoped_actions()
+                try:
+                    runtime._deactivate_scoped_actions()
+                except BaseException as deactivation_error:
+                    error = _append_cleanup_error(
+                        error,
+                        "Gateway scoped-action fence",
+                        deactivation_error,
+                    )
             if runtime is not None and self._runtime_started:
                 try:
                     await runtime.stop()

@@ -55,10 +55,7 @@ class QueueDiagnosticFacts:
     def __post_init__(self) -> None:
         if not isinstance(self.name, QueueDiagnosticName):
             raise ValueError("diagnostic queue name must use the fixed vocabulary")
-        if any(
-            not isinstance(item, int) or isinstance(item, bool)
-            for item in (self.capacity, self.depth, self.overflow_count)
-        ):
+        if any(type(item) is not int for item in (self.capacity, self.depth, self.overflow_count)):
             raise TypeError("diagnostic queue counts must be integers")
         if self.capacity < 1 or self.capacity > _DIAGNOSTIC_COUNTER_MAX:
             raise ValueError("diagnostic queue capacity must be positive")
@@ -88,12 +85,10 @@ class ConnectionDiagnosticFacts:
         ):
             raise ValueError("diagnostic failure code must use the fixed vocabulary")
         if (
-            not isinstance(self.connection_epoch, int)
-            or isinstance(self.connection_epoch, bool)
+            type(self.connection_epoch) is not int
             or self.connection_epoch < 0
             or self.connection_epoch > _DIAGNOSTIC_COUNTER_MAX
-            or not isinstance(self.reconnect_count, int)
-            or isinstance(self.reconnect_count, bool)
+            or type(self.reconnect_count) is not int
             or self.reconnect_count < 0
             or self.reconnect_count > _DIAGNOSTIC_COUNTER_MAX
             or not isinstance(self.worker_running, bool)

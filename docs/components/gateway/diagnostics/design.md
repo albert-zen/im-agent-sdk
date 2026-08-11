@@ -69,7 +69,11 @@ known safe registry identity or omit the unreadable entry. Every public queue,
 connection, hook, presentation, artifact, and projection counter is limited to
 1,000,000; configured diagnostic identities are limited to 512 characters.
 Typed provider facts are reconstructed into exact immutable contract objects
-before they enter a snapshot.
+before they enter a snapshot. Numeric values must be exact built-in `int`
+instances, so hostile integer subclasses cannot retain custom representation or
+serialized state. Application-scoped connections may report both bounded App
+Server queues (`notification` and `server_request`); Channel connections remain
+limited to their one inbound queue.
 
 `DiagnosticsSnapshot` remains schema version 8 and non-authoritative.
 `generated_at` is observation time only. Repeated reads do not mutate counters,

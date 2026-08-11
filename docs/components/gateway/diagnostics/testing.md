@@ -14,7 +14,10 @@ Required Gateway coverage:
 - projection/recovery aggregation with fixed gap codes and no native IDs,
   exception text, or consumer-controlled strings in serialized facts;
 - hostile, raising, infinite, and over-bound projection providers with the
-  exact 4,096-record and 1,000,000-counter saturation bounds;
+  exact 4,096-record and 1,000,000-counter saturation bounds; unknown or
+  oversized states/gaps and invalid, boolean, subclassed, negative, or
+  oversized counters become fixed degraded/`other` evidence rather than a
+  healthy-looking record;
 - hostile `BaseException` identity, provider, nested-property, iterator, and
   sorting boundaries for Application/Channel registries, plus exact 512-character
   identity and 1,000,000-counter rejection across every public fact family;
@@ -23,9 +26,9 @@ Required Gateway coverage:
   optional providers remaining absent;
 - application and Channel provider collection that preserves configured
   identity, sorts deterministically, validates queue scope, and fails closed
-  without leaking provider/native values;
+  without leaking provider/native values, including hostile integer subclasses;
 - T3's absent long-lived connection and existing Application/Channel queue
-  scope distinctions;
+  scope distinctions, including retention of App Server's two valid queues;
 - direct Gateway call-site imports from `imagent.gateway.diagnostics`, with
   no runtime dependency from the Gateway owner back to `imagent.diagnostics`;
 - exact `__all__` ownership, no definitions or lazy resolver in the transition

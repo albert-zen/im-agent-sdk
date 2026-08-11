@@ -364,6 +364,13 @@ two Gateways in one store namespace proves exclusive lease acquisition,
 monotonic fencing, crash expiry, and rejection of a mutation carrying an old
 owner token, old epoch, or expired lease.
 
+The owner deadline is monotonic and remains hard through repeated caller
+cancellation; synchronous shutdown fences are classified without skipping later
+owners. Admission rollback records owner/type-only cleanup evidence. Diagnostic
+normalization rejects hostile numeric subclasses, maps every malformed
+projection record to fixed degraded/`other` facts, and preserves both bounded
+Application queues where the adapter contract advertises them.
+
 A takeover test pauses owner A after `native_side_effect_started`, expires its
 lease using store-authoritative time, and starts owner B. A negative native
 lookup or temporary `not_found` leaves B sticky unknown; B does not retry. When

@@ -148,10 +148,7 @@ class ProjectionDiagnosticFacts:
             self.recovery_gap_count,
         )
         if any(
-            not isinstance(count, int)
-            or isinstance(count, bool)
-            or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX
-            for count in counts
+            type(count) is not int or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX for count in counts
         ):
             raise ValueError("projection diagnostic counts exceed the fixed bound")
         if self.worker_count > _PROJECTION_DIAGNOSTIC_MAX_RECORDS:
@@ -199,10 +196,7 @@ class InboundContentTransformerDiagnosticFacts:
             self.capacity_rejection_count,
         )
         if any(
-            not isinstance(count, int)
-            or isinstance(count, bool)
-            or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX
-            for count in counts
+            type(count) is not int or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX for count in counts
         ):
             raise TypeError("inbound transformer diagnostic counts must be non-negative integers")
         if self.success_count + self.failure_count > self.invocation_count:
@@ -244,10 +238,7 @@ class InboundFailurePresenterDiagnosticFacts:
             self.capacity_rejection_count,
         )
         if any(
-            not isinstance(count, int)
-            or isinstance(count, bool)
-            or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX
-            for count in counts
+            type(count) is not int or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX for count in counts
         ):
             raise TypeError("inbound presenter diagnostic counts must be non-negative integers")
         if self.success_count + self.failure_count > self.invocation_count:
@@ -291,10 +282,7 @@ class OutboundPresentationDiagnosticFacts:
             self.capacity_rejection_count,
         )
         if any(
-            not isinstance(count, int)
-            or isinstance(count, bool)
-            or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX
-            for count in counts
+            type(count) is not int or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX for count in counts
         ):
             raise TypeError("outbound presentation diagnostic counts must be non-negative integers")
         if (
@@ -339,10 +327,7 @@ class DeliveryOutcomeObserverDiagnosticFacts:
             self.capacity_rejection_count,
         )
         if any(
-            not isinstance(count, int)
-            or isinstance(count, bool)
-            or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX
-            for count in counts
+            type(count) is not int or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX for count in counts
         ):
             raise TypeError("delivery outcome diagnostic counts must be non-negative integers")
         if self.success_count + self.failure_count > self.notification_count:
@@ -511,25 +496,48 @@ def summarize_projection_health(
         try:
             raw_state = record.state
             state_value = raw_state.value if isinstance(raw_state, StrEnum) else raw_state
-            state = (
-                state_value if type(state_value) is str and len(state_value) <= 16 else "stopped"
-            )
+            if type(state_value) is not str or state_value not in state_counts:
+                raise ValueError("invalid projection diagnostic state")
+            state = state_value
             last_subscription_error = record.last_subscription_error
             last_recovery_error = record.last_recovery_error
             last_delivery_error = record.last_delivery_error
-            interactive_degraded = record.interactive_request_recovery_degraded is True
-            raw_gaps = tuple(
-                gap
-                for gap in (record.last_gap, record.last_event_gap)
-                if type(gap) is str and len(gap) <= 128
+            errors = (
+                last_subscription_error,
+                last_recovery_error,
+                last_delivery_error,
             )
-            restart_count = _saturating_add(restart_count, record.restart_count)
+            if any(
+                error is not None and (type(error) is not str or len(error) > 128)
+                for error in errors
+            ):
+                raise ValueError("invalid projection diagnostic failure fact")
+            interactive_value = record.interactive_request_recovery_degraded
+            if type(interactive_value) is not bool:
+                raise ValueError("invalid projection diagnostic recovery fact")
+            interactive_degraded = interactive_value
+            gap_values = (record.last_gap, record.last_event_gap)
+            if any(
+                gap is not None and (type(gap) is not str or len(gap) > 128) for gap in gap_values
+            ):
+                raise ValueError("invalid projection diagnostic gap")
+            raw_gaps = tuple(gap for gap in gap_values if gap is not None)
+            counters = (
+                record.restart_count,
+                record.delivery_failure_count,
+                record.event_overflow_count,
+            )
+            if any(
+                type(counter) is not int or not 0 <= counter <= _DIAGNOSTIC_COUNTER_MAX
+                for counter in counters
+            ):
+                raise ValueError("invalid projection diagnostic counter")
+            restart_count = _saturating_add(restart_count, counters[0])
             delivery_failure_count = _saturating_add(
-                delivery_failure_count, record.delivery_failure_count
+                delivery_failure_count,
+                counters[1],
             )
-            event_overflow_count = _saturating_add(
-                event_overflow_count, record.event_overflow_count
-            )
+            event_overflow_count = _saturating_add(event_overflow_count, counters[2])
         except BaseException:
             state = "stopped"
             last_subscription_error = True
@@ -706,18 +714,17 @@ def _coerce_channel_connection(
     worker_running = getattr(value, "worker_running")
     worker_degraded = getattr(value, "worker_degraded")
     if (
-        not isinstance(connection_epoch, int)
-        or isinstance(connection_epoch, bool)
+        type(connection_epoch) is not int
         or connection_epoch < 0
-        or not isinstance(reconnect_count, int)
-        or isinstance(reconnect_count, bool)
+        or type(reconnect_count) is not int
         or reconnect_count < 0
         or not isinstance(worker_running, bool)
         or not isinstance(worker_degraded, bool)
     ):
         raise TypeError("invalid Channel diagnostic fact types")
     raw_queues = getattr(value, "queues", ())
-    if not isinstance(raw_queues, tuple) or len(raw_queues) > 1:
+    max_queues = 1 if channel_scoped else 2
+    if type(raw_queues) is not tuple or len(raw_queues) > max_queues:
         raise TypeError("invalid Channel diagnostic queue collection")
     queues = tuple(_coerce_channel_queue(queue) for queue in raw_queues)
     allowed_queue_names = (
@@ -742,10 +749,7 @@ def _coerce_channel_queue(value: object) -> QueueDiagnosticFacts:
     capacity = getattr(value, "capacity")
     depth = getattr(value, "depth")
     overflow_count = getattr(value, "overflow_count")
-    if any(
-        not isinstance(item, int) or isinstance(item, bool)
-        for item in (capacity, depth, overflow_count)
-    ):
+    if any(type(item) is not int for item in (capacity, depth, overflow_count)):
         raise TypeError("invalid Channel diagnostic queue fact types")
     return QueueDiagnosticFacts(
         name=QueueDiagnosticName(str(getattr(value, "name"))),
@@ -779,6 +783,6 @@ def _bounded_gap_code(value: str) -> str:
 
 
 def _saturating_add(total: int, value: object) -> int:
-    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+    if type(value) is not int or value < 0:
         return total
     return min(_DIAGNOSTIC_COUNTER_MAX, total + value)

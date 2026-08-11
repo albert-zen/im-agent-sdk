@@ -110,7 +110,12 @@ timeout is one bounded cleanup failure and does not skip later owners. The
 deadline is a hard supervisory bound: an owner that suppresses cancellation is
 detached with result consumption after its authority-facing callbacks have
 already been fenced, so it cannot block terminal state or later cleanup.
-Malformed acquired-session cleanup uses the same supervisor.
+The supervisor retains one monotonic absolute deadline across every repeated
+caller cancellation, records cancellation as the primary public outcome, and
+finishes the current detach/join decision before later owners run. Malformed
+acquired-session cleanup uses the same supervisor. Synchronous shutdown fences,
+including scoped-action deactivation, are classified as cleanup owners too: a
+failure cannot escape raw or skip runtime, lease, session, or store cleanup.
 
 Every error after store acquisition, including session validation, workspace
 identity checks, runtime construction/start, and lease renewal, is projected
@@ -118,6 +123,8 @@ before storage or rethrow. Public causes, contexts, notes, and terminal error
 state retain only bounded owner/type classifications. Delivery coordinator and
 observer startup are inside the common rollback boundary, so a synchronous
 partial start is closed exactly once with the remaining owners.
+Admission and partial-start rollback notes use the same owner/type-only
+classifier; cleanup exception text is never copied into a typed sentinel.
 
 ## Bounds, state, and recovery
 

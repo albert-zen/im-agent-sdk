@@ -108,10 +108,7 @@ class ApplicationPresentationDiagnosticFacts:
             self.capacity_rejection_count,
         )
         if any(
-            not isinstance(count, int)
-            or isinstance(count, bool)
-            or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX
-            for count in counts
+            type(count) is not int or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX for count in counts
         ):
             raise TypeError("application presentation counts must be non-negative integers")
         if self.success_count + self.omission_count + self.failure_count > self.invocation_count:
@@ -157,10 +154,7 @@ class ApplicationArtifactMaterializationDiagnosticFacts:
             self.live_duplicate_count,
         )
         if any(
-            not isinstance(count, int)
-            or isinstance(count, bool)
-            or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX
-            for count in counts
+            type(count) is not int or not 0 <= count <= _DIAGNOSTIC_COUNTER_MAX for count in counts
         ):
             raise TypeError("application artifact counts must be non-negative integers")
         if self.success_count + self.omission_count + self.failure_count > self.invocation_count:
