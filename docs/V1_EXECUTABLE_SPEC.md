@@ -303,6 +303,12 @@ Focused tests enter only through Channel ingress and prove:
 - Controller-unconsumed input preserves envelope identity through any content
   transformation;
 - observation is established before native dispatch;
+- a native Thread that is valid immediately after creation but has no history
+  resource yet can bind in the foreground and accept its first ordinary input;
+  its adapter supplies only the exact empty pre-input baseline and does not
+  request turn-bearing continuation state before that input, then retires
+  that evidence at the native dispatch fence so the first live output is
+  delivered once and later observation uses normal authoritative history;
 - `prefer_active_turn` produces truthful `started` or `steered` acceptance;
 - known pre-dispatch failure, unknown dispatch outcome, and post-acceptance
   failure retain their distinct claim states; and
@@ -329,6 +335,14 @@ path.
 
 Gap, cursor expiry, missing checkpoint, queue overflow, and Channel failure
 have explicit health/result assertions and finite bounds.
+
+The App Server counterexample additionally proves that create plus foreground
+bind preserves subscribe-before-baseline when `thread/turns/list` is invalid
+until first input. Exact bounded adapter create evidence permits only an empty
+checkpoint-free baseline. Non-created Threads, evidence eviction or adapter
+reconstruction, checkpointed routes, restart recovery after the first dispatch
+fence, and every unrelated history failure remain strict. Memory and SQLite
+public Gateway compositions exercise the same route and lifecycle behavior.
 
 ## Request, media, and artifact path
 

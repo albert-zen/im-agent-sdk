@@ -248,6 +248,16 @@ Replay, gap detection, and sequence scope are separate capabilities. When the
 native endpoint lacks replay or restart-safe sequence, fields are omitted and
 Gateway recovers from authoritative history/catch-up.
 
+The App Server create counterexample has one narrower adapter-owned state: a
+scope-valid Thread can exist before its native turn-history resource. The
+shared adapter retains a finite typed exact-create record and returns empty
+history/catch-up only until first native-input dispatch or a scoped
+turn-bearing event. Thread-only creation/status notifications are not turn
+materialization evidence. The same record selects no active Turn for the first
+input without a turn-bearing read, while ordinary scope validation still runs.
+No error matching, Gateway Application-kind branch, persisted Agent
+truth, or weakening of ordinary/checkpointed history recovery is permitted.
+
 ## Attachments and requests
 
 Adapters accept only declared typed sources and apply the

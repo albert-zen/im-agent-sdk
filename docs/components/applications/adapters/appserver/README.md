@@ -54,6 +54,23 @@ page, while native creation validates the returned Thread before exposing it.
 This check does not claim native Project management or introduce persisted
 workspace truth.
 
+App Server may expose a newly created, scope-valid Thread before its native
+turn-history resource exists. The shared adapter retains a finite typed set of
+exact Thread creations. While one of those Threads has produced neither a
+turn-bearing native event nor crossed its first native-input dispatch fence, history and
+catch-up return an empty typed baseline without calling the native turn-list
+method. This is not error recovery: no provider error is inspected or
+swallowed. Thread-only creation/status notifications do not prove history
+materialization. The dispatch fence or any scoped turn-bearing event retires the evidence;
+bounded eviction or adapter reconstruction also removes the exception and
+therefore restores strict native history behavior. Checkpointed and all other
+Threads always use the ordinary history path.
+
+Codex's first-input continuation choice consumes the same exact evidence as a
+no-active-Turn fact, so it does not request an unavailable turn-bearing Thread
+read before materialization. The shared ordinary scope read still validates
+the native Thread before dispatch.
+
 No leaf owns Gateway request correlation, IM delivery, persistence, product
 approval/command policy, raw native event exposure, durable spool/outbox,
 checkpoint/replay state, or a second subscription. A missing authoritative

@@ -132,6 +132,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
         if (
             self._steer_active_turn
             and continuation is InputContinuationPreference.PREFER_ACTIVE_TURN
+            and not self._has_created_pre_input_evidence(thread_ref)
         ):
             active_turn_id = await self._read_active_turn_id(thread_ref)
         if active_turn_id is None:
@@ -155,6 +156,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
                     expected_turn_ref=TurnRef(thread_ref, active_turn_id),
                 )
             )
+        self._retire_created_pre_input(thread_ref)
         result = await self._steer_input(
             steer_client,
             thread_id=thread_ref.thread_id,

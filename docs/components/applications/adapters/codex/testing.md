@@ -31,6 +31,15 @@ opening, response writeback, and resolution publication.
 Transient notification verification failure produces an explicit recovery gap,
 and request publication/cache maintenance cannot turn an already successful
 native response into a local failure through a second scope read.
+The suite also proves a just-created scope-valid Thread returns an empty
+pre-input history/catch-up baseline without calling a rejecting native turn
+list; first input also skips the unavailable turn-bearing active-Turn probe
+while retaining the ordinary scope read. Foreground public Gateway binding then accepts first input and delivers
+its first output once. The first dispatch fence or turn-bearing native event
+retires that bounded evidence, while a thread-only creation/status notification
+does not. Non-created Threads, bounded evidence eviction,
+adapter reconstruction, checkpointed recovery, and unrelated native history
+failures remain explicit.
 
 ## Target evidence and verification
 

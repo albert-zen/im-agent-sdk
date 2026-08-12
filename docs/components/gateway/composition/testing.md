@@ -21,6 +21,11 @@
 - successful scoped bind/observe/workflow routes activate the one projection
   worker immediately, before a later inbound message, without duplicate
   Application subscriptions;
+- primitive create-then-bind and create-and-bind both accept the first input
+  for an App Server Thread whose native history is not materialized yet,
+  including when its turn-bearing continuation read is unavailable while the
+  ordinary Thread scope read succeeds;
+  preserving the sole bootstrap barrier and one worker in Memory and SQLite;
 - terminal success replay remains exact under later binding and worker-capacity
   drift, and a new direct/workflow route has a bootstrap barrier before commit;
 - a one-slot create-and-bind workflow transfers capacity from the previous

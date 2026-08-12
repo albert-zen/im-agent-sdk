@@ -37,6 +37,7 @@ from imagent import (
     ProjectionPolicy,
     Succeeded,
 )
+from imagent.applications import CodexApplicationAdapter
 from imagent.applications.capabilities import SupportLevel
 from imagent.applications.contract import (
     AgentInput,
@@ -184,6 +185,129 @@ class _CountingSQLiteGatewayStore(SQLiteGatewayStore):
     async def close(self) -> None:
         self.close_count += 1
         await super().close()
+
+
+class _UnmaterializedCodexClient:
+    """App Server double whose turn-list resource appears only after first input."""
+
+    def __init__(self) -> None:
+        self.notification_handlers: list[Callable[[dict[str, object]], Any]] = []
+        self.threads: dict[str, list[dict[str, object]]] = {}
+        self.turn_list_calls: list[str] = []
+        self.start_turn_calls: list[str] = []
+        self._next_thread = 0
+        self._next_turn = 0
+
+    def add_notification_handler(self, handler: Callable[[dict[str, object]], Any]) -> None:
+        self.notification_handlers.append(handler)
+
+    async def list_threads(self, **params: object) -> dict[str, object]:
+        del params
+        return {
+            "data": [
+                {"id": thread_id, "cwd": "/repo", "status": {"type": "idle"}}
+                for thread_id in self.threads
+            ]
+        }
+
+    async def start_thread(self, **params: object) -> dict[str, object]:
+        self._next_thread += 1
+        thread_id = f"native-thread-{self._next_thread}"
+        self.threads[thread_id] = []
+        return {"thread": {"id": thread_id, "cwd": params["cwd"]}}
+
+    async def read_thread(
+        self,
+        thread_id: str,
+        *,
+        include_turns: bool = False,
+    ) -> dict[str, object]:
+        turns = self.threads[thread_id]
+        return {
+            "thread": {
+                "id": thread_id,
+                "cwd": "/repo",
+                "status": {"type": "idle"},
+                "turns": list(turns) if include_turns else None,
+            }
+        }
+
+    async def list_thread_turns(
+        self,
+        thread_id: str,
+        **params: object,
+    ) -> dict[str, object]:
+        del params
+        self.turn_list_calls.append(thread_id)
+        turns = self.threads[thread_id]
+        if not turns:
+            raise RuntimeError("thread history is not materialized")
+        return {"data": list(reversed(turns))}
+
+    async def start_turn(
+        self,
+        thread_id: str,
+        text: str | None = None,
+        **kwargs: object,
+    ) -> dict[str, object]:
+        del kwargs
+        self.start_turn_calls.append(thread_id)
+        turn_id = await self.emit_output(
+            thread_id,
+            f"Codex response: {text or ''}",
+            notify=True,
+        )
+        return {"turn": {"id": turn_id}}
+
+    async def resume_thread(self, **params: object) -> dict[str, object]:
+        thread_id = str(params["threadId"])
+        return await self.read_thread(thread_id, include_turns=False)
+
+    async def interrupt_turn(
+        self,
+        thread_id: str,
+        turn_id: str,
+    ) -> dict[str, object]:
+        del thread_id, turn_id
+        return {}
+
+    async def emit_output(
+        self,
+        thread_id: str,
+        text: str,
+        *,
+        notify: bool,
+    ) -> str:
+        self._next_turn += 1
+        turn_id = f"native-turn-{self._next_turn}"
+        item_id = f"native-item-{self._next_turn}"
+        item = {
+            "id": item_id,
+            "type": "agentMessage",
+            "phase": "final_answer",
+            "text": text,
+        }
+        self.threads[thread_id].append(
+            {
+                "id": turn_id,
+                "status": "completed",
+                "items": [item],
+            }
+        )
+        if notify:
+            notification: dict[str, object] = {
+                "method": "item/completed",
+                "params": {
+                    "threadId": thread_id,
+                    "turnId": turn_id,
+                    "item": item,
+                },
+            }
+            for handler in tuple(self.notification_handlers):
+                result = handler(notification)
+                if asyncio.iscoroutine(result):
+                    await result
+        return turn_id
 
 
 class _HugeCloseFailureStore(_CountingMemoryGatewayStore):
@@ -1715,6 +1839,236 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
                 )
                 self.assertEqual(len(delivered), 1)
                 self.assertEqual(application.subscription_calls(thread_ref), 1)
+
+    async def test_public_codex_new_thread_accepts_first_input_with_memory_sqlite_parity(
+        self,
+    ) -> None:
+        for store_kind in ("memory", "sqlite"):
+            for workflow_kind in ("primitive", "workflow"):
+                with self.subTest(store=store_kind, workflow=workflow_kind):
+                    client = _UnmaterializedCodexClient()
+                    application = CodexApplicationAdapter(
+                        application_instance_id=f"codex-{store_kind}-{workflow_kind}",
+                        client=client,
+                        workspace_id="workspace",
+                        cwd="/repo",
+                    )
+                    channel = ReferenceChannel(
+                        channel_instance_id=f"channel-{store_kind}-{workflow_kind}"
+                    )
+                    conversation = channel.conversation("new-thread")
+                    with TemporaryDirectory() as directory:
+                        store = (
+                            MemoryGatewayStore()
+                            if store_kind == "memory"
+                            else SQLiteGatewayStore(Path(directory, "gateway.sqlite3"))
+                        )
+                        gateway = Gateway(
+                            gateway_id=f"new-thread-{store_kind}-{workflow_kind}",
+                            channels=[channel],
+                            applications=[application],
+                            store=store,
+                            projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+                        )
+                        async with gateway:
+                            actions = gateway.actions(
+                                conversation.ref,
+                                actor=conversation.authenticated_actor,
+                            )
+                            project_ref = application.summary.workspace_identity
+                            self.assertIsNotNone(project_ref)
+                            assert project_ref is not None
+                            if workflow_kind == "primitive":
+                                created = await actions.create_thread(
+                                    project_ref.project_ref,
+                                    action_id=f"{store_kind}:primitive:create",
+                                )
+                                self.assertIsInstance(created, Succeeded)
+                                assert isinstance(created, Succeeded)
+                                thread_ref = created.value.ref
+                                self.assertIsInstance(thread_ref, ThreadRef)
+                                assert isinstance(thread_ref, ThreadRef)
+                                bound = await actions.bind_thread(
+                                    thread_ref,
+                                    action_id=f"{store_kind}:primitive:bind",
+                                )
+                                self.assertIsInstance(bound, Succeeded)
+                            else:
+                                bound = await actions.create_and_bind_thread(
+                                    project_ref.project_ref,
+                                    action_id=f"{store_kind}:workflow:create-bind",
+                                )
+                                self.assertIsInstance(bound, Succeeded)
+                                assert isinstance(bound, Succeeded)
+                                thread_ref = bound.value.ref
+                                self.assertIsInstance(thread_ref, ThreadRef)
+                                assert isinstance(thread_ref, ThreadRef)
+
+                            self.assertEqual(client.turn_list_calls, [])
+                            await conversation.receive_text(
+                                message_id=f"{store_kind}:{workflow_kind}:first-input",
+                                text="first input",
+                            )
+                            delivered = await conversation.wait_for_text(
+                                "Codex response: first input"
+                            )
+                            self.assertEqual(len(delivered), 1)
+                            self.assertEqual(client.start_turn_calls, [thread_ref.thread_id])
+                            self.assertEqual(client.turn_list_calls, [])
+
+                            await actions.read_history(thread_ref, limit=3, page=1)
+                            self.assertEqual(client.turn_list_calls, [thread_ref.thread_id])
+
+    async def test_public_codex_first_output_restart_recovery_is_strict_and_not_duplicated(
+        self,
+    ) -> None:
+        client = _UnmaterializedCodexClient()
+        application = CodexApplicationAdapter(
+            application_instance_id="codex-restart-new-thread",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        channel = ReferenceChannel(channel_instance_id="codex-restart-channel")
+        conversation = channel.conversation("new-thread")
+        with TemporaryDirectory() as directory:
+            database = Path(directory, "gateway.sqlite3")
+            gateway = Gateway(
+                gateway_id="codex-new-thread-restart",
+                channels=[channel],
+                applications=[application],
+                store=SQLiteGatewayStore(database),
+                projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+            )
+            async with gateway:
+                actions = gateway.actions(
+                    conversation.ref,
+                    actor=conversation.authenticated_actor,
+                )
+                identity = application.summary.workspace_identity
+                self.assertIsNotNone(identity)
+                assert identity is not None
+                created = await actions.create_and_bind_thread(
+                    identity.project_ref,
+                    action_id="codex-restart:create-bind",
+                )
+                self.assertIsInstance(created, Succeeded)
+                assert isinstance(created, Succeeded)
+                thread_ref = created.value.ref
+                self.assertIsInstance(thread_ref, ThreadRef)
+                assert isinstance(thread_ref, ThreadRef)
+                await conversation.receive_text(
+                    message_id="codex-restart:first-input",
+                    text="first input",
+                )
+                self.assertEqual(
+                    len(await conversation.wait_for_text("Codex response: first input")),
+                    1,
+                )
+
+            await client.emit_output(
+                thread_ref.thread_id,
+                "Codex response: missed while stopped",
+                notify=False,
+            )
+            restarted_channel = ReferenceChannel(channel_instance_id="codex-restart-channel")
+            restarted_conversation = restarted_channel.conversation("new-thread")
+            restarted = Gateway(
+                gateway_id="codex-new-thread-restart",
+                channels=[restarted_channel],
+                applications=[application],
+                store=SQLiteGatewayStore(database),
+                projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+            )
+            async with restarted:
+                recovered = await restarted_conversation.wait_for_text(
+                    "Codex response: missed while stopped"
+                )
+                self.assertEqual(len(recovered), 1)
+                sent_text = tuple(
+                    content.text
+                    for message in restarted_channel.sent
+                    for content in message.content
+                    if isinstance(content, TextContent)
+                )
+                self.assertNotIn("Codex response: first input", sent_text)
+                self.assertEqual(
+                    sent_text.count("Codex response: missed while stopped"),
+                    1,
+                )
+                self.assertGreaterEqual(
+                    client.turn_list_calls.count(thread_ref.thread_id),
+                    1,
+                )
+
+    async def test_public_codex_pre_input_restart_replays_without_second_create(self) -> None:
+        client = _UnmaterializedCodexClient()
+        application = CodexApplicationAdapter(
+            application_instance_id="codex-pre-input-restart",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        channel = ReferenceChannel(channel_instance_id="codex-pre-input-channel")
+        conversation = channel.conversation("new-thread")
+        with TemporaryDirectory() as directory:
+            database = Path(directory, "gateway.sqlite3")
+            gateway = Gateway(
+                gateway_id="codex-pre-input-restart",
+                channels=[channel],
+                applications=[application],
+                store=SQLiteGatewayStore(database),
+                projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+            )
+            async with gateway:
+                actions = gateway.actions(
+                    conversation.ref,
+                    actor=conversation.authenticated_actor,
+                )
+                identity = application.summary.workspace_identity
+                self.assertIsNotNone(identity)
+                assert identity is not None
+                created = await actions.create_and_bind_thread(
+                    identity.project_ref,
+                    action_id="codex-pre-input-restart:create-bind",
+                )
+                self.assertIsInstance(created, Succeeded)
+                assert isinstance(created, Succeeded)
+                thread_ref = created.value.ref
+                self.assertIsInstance(thread_ref, ThreadRef)
+                assert isinstance(thread_ref, ThreadRef)
+                self.assertEqual(client.turn_list_calls, [])
+
+            restarted_channel = ReferenceChannel(channel_instance_id="codex-pre-input-channel")
+            restarted_conversation = restarted_channel.conversation("new-thread")
+            restarted = Gateway(
+                gateway_id="codex-pre-input-restart",
+                channels=[restarted_channel],
+                applications=[application],
+                store=SQLiteGatewayStore(database),
+                projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+            )
+            async with restarted:
+                restarted_actions = restarted.actions(
+                    restarted_conversation.ref,
+                    actor=restarted_conversation.authenticated_actor,
+                )
+                replayed = await restarted_actions.create_and_bind_thread(
+                    identity.project_ref,
+                    action_id="codex-pre-input-restart:create-bind",
+                )
+                self.assertEqual(replayed, created)
+                self.assertEqual(len(client.threads), 1)
+                self.assertEqual(client.turn_list_calls, [])
+                await restarted_conversation.receive_text(
+                    message_id="codex-pre-input-restart:first-input",
+                    text="first after restart",
+                )
+                delivered = await restarted_conversation.wait_for_text(
+                    "Codex response: first after restart"
+                )
+                self.assertEqual(len(delivered), 1)
+                self.assertEqual(client.start_turn_calls, [thread_ref.thread_id])
 
     async def test_scoped_workflow_hands_one_worker_slot_to_the_new_thread(self) -> None:
         channel = ReferenceChannel()

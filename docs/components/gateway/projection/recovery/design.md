@@ -37,6 +37,14 @@ unavailable history, or an unsupported recovery capability remain explicit
 gap/degraded facts; none licenses a complete archive scan or a claim that
 output was fully recovered.
 
+The only empty-history exception is positive typed evidence supplied by a
+concrete adapter for an exact Thread it just created and has not yet dispatched
+into or observed. Such a checkpoint-free route returns an empty authoritative
+history/catch-up value while retaining subscribe-before-history and baseline-
+before-live ordering. Recovery never derives this exception from an error,
+missing checkpoint, Application kind, or route text. Once the adapter retires
+that evidence—or cannot reconstruct it—ordinary strict history applies.
+
 ## Failure domains and request honesty
 
 Subscription and recovery failures are per-Thread worker infrastructure facts

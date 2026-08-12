@@ -10,6 +10,13 @@ Recovery conformance must prove:
   unbounded archive read;
 - a new route gets only a bounded baseline, while an existing route reconciles
   toward its own checkpoint without weakening other routes;
+- exact adapter-owned newly-created/pre-input evidence may produce an empty
+  checkpoint-free baseline without a native history call; its first dispatch
+  or turn-bearing event retires that evidence while a thread-only status event
+  does not, and first input avoids only the unavailable turn-bearing
+  continuation read while retaining ordinary Thread scope validation;
+  non-new, reconstructed, ambiguous, and
+  checkpointed history failures stay explicit;
 - baseline/recovery completes before that route drains live events, and a
   failure keeps its bootstrap fence closed;
 - scoped-action recovery validates the same projection lifecycle and live

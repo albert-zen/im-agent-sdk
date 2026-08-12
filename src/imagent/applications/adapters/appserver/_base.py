@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
 from typing import Protocol, cast
@@ -187,6 +188,12 @@ _ARTIFACT_OBSERVATION_ERRORS = (
     ApplicationArtifactMaterializationFailed,
 )
 
+_NEW_THREAD_BASELINE_MAX_ENTRIES = 256
+
+
+class _ThreadBaselineEvidence(StrEnum):
+    CREATED_PRE_INPUT = "created_pre_input"
+
 
 class _NativeThreadScopeError(ValueError):
     pass
@@ -277,6 +284,7 @@ class _AppServerApplicationAdapter:
             else None
         )
         self._seen_live_artifact_identities: dict[tuple[str, str, str], None] = {}
+        self._thread_baseline_evidence: dict[ThreadRef, _ThreadBaselineEvidence] = {}
         self._client.add_notification_handler(self._handle_notification)
         self._request_runtime = AppServerRequestRuntime(
             project_ref=self._workspace_project.ref,
@@ -486,6 +494,17 @@ class _AppServerApplicationAdapter:
         if isinstance(operation, GetTurnCatchup):
             thread_ref = operation.thread_ref
             await self._require_native_thread_scope(thread_ref)
+            if self._has_created_pre_input_evidence(thread_ref):
+                return TurnCatchupRead(
+                    operation_id=operation.operation_id,
+                    completed_at=completed_at,
+                    catchup=TurnCatchup(
+                        thread_ref=thread_ref,
+                        turn_ref=None,
+                        status=TurnStatus.IDLE,
+                        messages=(),
+                    ),
+                )
             turns, _has_older = await self._read_turn_page(
                 thread_ref,
                 limit=1,
@@ -525,6 +544,18 @@ class _AppServerApplicationAdapter:
         if isinstance(operation, GetThreadHistory):
             thread_ref = operation.thread_ref
             await self._require_native_thread_scope(thread_ref)
+            if self._has_created_pre_input_evidence(thread_ref):
+                return ThreadHistoryRead(
+                    operation_id=operation.operation_id,
+                    completed_at=completed_at,
+                    history=ThreadHistory(
+                        thread_ref=thread_ref,
+                        turns=(),
+                        page=operation.page,
+                        has_older=False,
+                        metadata={"native_application": self._summary.kind},
+                    ),
+                )
             turns, has_older = await self._read_turn_page(
                 thread_ref,
                 limit=operation.limit,
@@ -591,7 +622,9 @@ class _AppServerApplicationAdapter:
         # configured default or a caller-owned per-call profile.
         native_options = deepcopy(dict(options))
         result = await self._client.start_thread(cwd=self._cwd, **native_options)
-        return self._thread_summary(_native_object(result, "thread"))
+        thread = self._thread_summary(_native_object(result, "thread"))
+        self._remember_created_pre_input(thread.ref)
+        return thread
 
     async def _read_turn_page(
         self,
@@ -939,6 +972,7 @@ class _AppServerApplicationAdapter:
                     expected_turn_ref=None,
                 )
             )
+        self._retire_created_pre_input(thread_ref)
         result = await self._start_input(
             thread_id=thread_ref.thread_id,
             prepared=prepared,
@@ -1063,10 +1097,13 @@ class _AppServerApplicationAdapter:
             event = _normalize_appserver_message(notification)
             if event.thread_id is not None:
                 try:
-                    await self._require_native_thread_scope(self._thread_ref(event.thread_id))
+                    thread_ref = self._thread_ref(event.thread_id)
+                    await self._require_native_thread_scope(thread_ref)
                 except Exception:
                     self._fail_native_mapping_observation()
                     return
+                if event.turn_id is not None:
+                    self._retire_created_pre_input(thread_ref)
             await self._handle_mapped_notification(event)
         except (_AppServerMappingError, _NativeThreadScopeError):
             self._fail_native_mapping_observation()
@@ -1279,6 +1316,20 @@ class _AppServerApplicationAdapter:
             project_ref=self._workspace_project.ref,
             thread_id=thread_id,
         )
+
+    def _remember_created_pre_input(self, thread_ref: ThreadRef) -> None:
+        self._thread_baseline_evidence[thread_ref] = _ThreadBaselineEvidence.CREATED_PRE_INPUT
+        while len(self._thread_baseline_evidence) > _NEW_THREAD_BASELINE_MAX_ENTRIES:
+            self._thread_baseline_evidence.pop(next(iter(self._thread_baseline_evidence)))
+
+    def _has_created_pre_input_evidence(self, thread_ref: ThreadRef) -> bool:
+        return (
+            self._thread_baseline_evidence.get(thread_ref)
+            is _ThreadBaselineEvidence.CREATED_PRE_INPUT
+        )
+
+    def _retire_created_pre_input(self, thread_ref: ThreadRef) -> None:
+        self._thread_baseline_evidence.pop(thread_ref, None)
 
     def _require_own_thread(self, thread_ref: ThreadRef) -> None:
         self._require_workspace_project(thread_ref.project_ref)

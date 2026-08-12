@@ -474,6 +474,22 @@ time. Live subscriptions are established before bounded history reconciliation.
 New routes use a bounded baseline; existing routes reconcile toward their
 checkpoint under strict limits.
 
+Some native Applications expose a successfully created Thread before they
+materialize any history resource. A concrete adapter may retain bounded,
+process-local typed evidence that this exact Thread was created by that adapter
+and has not yet crossed a native-input dispatch fence or produced typed native
+turn evidence. For only that state, a new checkpoint-free route's authoritative read
+may return an empty history/catch-up baseline without invoking a nonexistent
+native history resource. A concrete adapter's first-input continuation check
+may likewise use the same evidence as an exact no-active-Turn result while its
+ordinary non-turn-bearing scope read remains required. Subscription still
+precedes that empty baseline, and
+the route barrier still opens only after the baseline completes. The first
+dispatch fence or turn-bearing native Thread event retires the evidence before later
+recovery; missing, evicted, or reconstructed evidence falls back to normal
+strict history. Existing routes, checkpointed recovery, ambiguous history
+failures, and provider errors are never downgraded by text matching.
+
 Scoped actions that make routes visible use the projection owner's opaque,
 generation-specific barrier lease. Same-route action lifecycles serialize;
 completion can affect only the generation it began, delivery rechecks the

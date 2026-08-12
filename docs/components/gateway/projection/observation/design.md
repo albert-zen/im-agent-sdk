@@ -51,6 +51,14 @@ into a hidden replay queue. The bootstrap barrier orders bounded baseline
 reconciliation before this route drains live observations, while the live data
 remains only in the existing bounded Application subscriber queue.
 
+An adapter-authoritative empty pre-input baseline remains a baseline: the
+worker is registered and subscribed first, and the route barrier opens only
+after the typed empty history/catch-up read completes. Observation does not
+infer this state from a missing checkpoint or provider failure. Only the
+concrete adapter's bounded exact-create evidence may produce it, and later
+live output follows the same route lock, idempotency, delivery, and checkpoint
+path as every other completed item.
+
 `ThreadProjectionRuntime.reconcile_action_route(route_id)` is the explicit
 composition seam after a scoped Conversation action has durably changed
 binding/route state or replayed its terminal success. It reads current active

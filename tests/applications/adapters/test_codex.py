@@ -41,13 +41,16 @@ from imagent.applications.operations import (
     GetProject,
     GetThread,
     GetThreadHistory,
+    GetTurnCatchup,
     InterruptTurn,
     ListProjects,
     ListThreads,
     ProjectRead,
     ProjectsListed,
     ThreadCreated,
+    ThreadHistoryRead,
     ThreadsListed,
+    TurnCatchupRead,
 )
 from imagent.interaction.media import AttachmentContent, LocalPath
 from imagent.interaction.messages import TextContent
@@ -74,6 +77,7 @@ class _InputClient:
         self.steered: list[dict[str, object]] = []
         self.resumed: list[str] = []
         self.interrupted: list[tuple[str, str]] = []
+        self.turn_list_calls: list[str] = []
 
     def add_notification_handler(self, handler) -> None:
         self.notification_handlers.append(handler)
@@ -90,7 +94,8 @@ class _InputClient:
         thread_id: str,
         **params: object,
     ) -> dict[str, object]:
-        del thread_id, params
+        del params
+        self.turn_list_calls.append(thread_id)
         return {"data": []}
 
     async def start_thread(self, **params: object) -> dict[str, object]:
@@ -405,6 +410,279 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsInstance(result, ThreadCreated)
         self.assertEqual(client.created_threads, [{"cwd": "/repo"}])
+
+    async def test_created_pre_input_thread_has_exact_empty_baseline_until_dispatch(
+        self,
+    ) -> None:
+        class RejectingUnmaterializedHistoryClient(_InputClient):
+            def __init__(self) -> None:
+                super().__init__()
+                self.materialized = False
+
+            async def list_thread_turns(
+                self,
+                thread_id: str,
+                **params: object,
+            ) -> dict[str, object]:
+                self.turn_list_calls.append(thread_id)
+                del params
+                if not self.materialized:
+                    raise RuntimeError("native history resource is absent")
+                return {"data": []}
+
+            async def read_thread(
+                self,
+                thread_id: str,
+                *,
+                include_turns: bool = False,
+            ) -> dict[str, object]:
+                if include_turns and not self.materialized:
+                    raise RuntimeError("native turn-bearing read is absent")
+                return await super().read_thread(thread_id, include_turns=include_turns)
+
+            async def start_turn(
+                self,
+                thread_id: str,
+                text: str | None = None,
+                **kwargs: object,
+            ) -> dict[str, object]:
+                self.materialized = True
+                return await super().start_turn(thread_id, text, **kwargs)
+
+        client = RejectingUnmaterializedHistoryClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        project_ref = ProjectRef("codex-main", "workspace")
+        created = await adapter.execute(
+            CreateThread(
+                operation_id="create-pre-input-thread",
+                application_ref=adapter.summary.ref,
+                project_ref=project_ref,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(created, ThreadCreated)
+        assert isinstance(created, ThreadCreated)
+        thread_ref = created.thread.ref
+
+        for handler in tuple(client.notification_handlers):
+            handled = handler(
+                {
+                    "method": "thread/status/changed",
+                    "params": {"threadId": thread_ref.thread_id, "status": "idle"},
+                }
+            )
+            if inspect.isawaitable(handled):
+                await handled
+
+        history = await adapter.execute(
+            GetThreadHistory(
+                operation_id="empty-pre-input-history",
+                application_ref=adapter.summary.ref,
+                thread_ref=thread_ref,
+                limit=3,
+                page=1,
+                created_at=datetime.now(UTC),
+            )
+        )
+        catchup = await adapter.execute(
+            GetTurnCatchup(
+                operation_id="empty-pre-input-catchup",
+                application_ref=adapter.summary.ref,
+                thread_ref=thread_ref,
+                limit=3,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(history, ThreadHistoryRead)
+        self.assertIsInstance(catchup, TurnCatchupRead)
+        assert isinstance(history, ThreadHistoryRead)
+        assert isinstance(catchup, TurnCatchupRead)
+        self.assertEqual(history.history.turns, ())
+        self.assertEqual(catchup.catchup.messages, ())
+        self.assertEqual(client.turn_list_calls, [])
+
+        await adapter.send_input(
+            thread_ref,
+            AgentInput(
+                client_message_id="materialize-thread",
+                content=(TextContent("first input"),),
+            ),
+        )
+        strict_history = await adapter.execute(
+            GetThreadHistory(
+                operation_id="strict-post-dispatch-history",
+                application_ref=adapter.summary.ref,
+                thread_ref=thread_ref,
+                limit=3,
+                page=1,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(strict_history, ThreadHistoryRead)
+        self.assertEqual(client.turn_list_calls, [thread_ref.thread_id])
+        self.assertNotIn((thread_ref.thread_id, True), client.read_calls)
+
+    async def test_non_created_or_reconstructed_thread_history_failure_is_strict(self) -> None:
+        class RejectingHistoryClient(_InputClient):
+            async def list_thread_turns(
+                self,
+                thread_id: str,
+                **params: object,
+            ) -> dict[str, object]:
+                self.turn_list_calls.append(thread_id)
+                del params
+                raise RuntimeError("ambiguous native history failure")
+
+        client = RejectingHistoryClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        created = await adapter.execute(
+            CreateThread(
+                operation_id="create-before-reconstruction",
+                application_ref=adapter.summary.ref,
+                project_ref=ProjectRef("codex-main", "workspace"),
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(created, ThreadCreated)
+        assert isinstance(created, ThreadCreated)
+        reconstructed = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        for operation_id, thread_ref in (
+            (
+                "strict-existing-history",
+                ThreadRef(ProjectRef("codex-main", "workspace"), "native-existing"),
+            ),
+            ("strict-reconstructed-history", created.thread.ref),
+        ):
+            with self.subTest(operation_id=operation_id):
+                result = await reconstructed.execute(
+                    GetThreadHistory(
+                        operation_id=operation_id,
+                        application_ref=reconstructed.summary.ref,
+                        thread_ref=thread_ref,
+                        limit=3,
+                        page=1,
+                        created_at=datetime.now(UTC),
+                    )
+                )
+                self.assertIsInstance(result, ApplicationOperationFailed)
+        self.assertEqual(
+            client.turn_list_calls,
+            ["native-existing", created.thread.ref.thread_id],
+        )
+
+    async def test_created_pre_input_evidence_is_finite_and_evicts_to_strict_history(
+        self,
+    ) -> None:
+        class ManyThreadClient(_InputClient):
+            def __init__(self) -> None:
+                super().__init__()
+                self.next_thread = 0
+
+            async def start_thread(self, **params: object) -> dict[str, object]:
+                self.next_thread += 1
+                return {
+                    "thread": {
+                        "id": f"thread-{self.next_thread}",
+                        "cwd": params["cwd"],
+                    }
+                }
+
+            async def list_thread_turns(
+                self,
+                thread_id: str,
+                **params: object,
+            ) -> dict[str, object]:
+                self.turn_list_calls.append(thread_id)
+                del params
+                raise RuntimeError("history must remain strict after evidence eviction")
+
+        client = ManyThreadClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        created_refs: list[ThreadRef] = []
+        for index in range(257):
+            created = await adapter.execute(
+                CreateThread(
+                    operation_id=f"bounded-create-{index}",
+                    application_ref=adapter.summary.ref,
+                    project_ref=ProjectRef("codex-main", "workspace"),
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(created, ThreadCreated)
+            assert isinstance(created, ThreadCreated)
+            created_refs.append(created.thread.ref)
+
+        evicted = await adapter.execute(
+            GetThreadHistory(
+                operation_id="evicted-created-history",
+                application_ref=adapter.summary.ref,
+                thread_ref=created_refs[0],
+                limit=3,
+                page=1,
+                created_at=datetime.now(UTC),
+            )
+        )
+        retained = await adapter.execute(
+            GetThreadHistory(
+                operation_id="retained-created-history",
+                application_ref=adapter.summary.ref,
+                thread_ref=created_refs[-1],
+                limit=3,
+                page=1,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(evicted, ApplicationOperationFailed)
+        self.assertIsInstance(retained, ThreadHistoryRead)
+        self.assertEqual(client.turn_list_calls, [created_refs[0].thread_id])
+
+        for handler in tuple(client.notification_handlers):
+            handled = handler(
+                {
+                    "method": "turn/started",
+                    "params": {
+                        "threadId": created_refs[-1].thread_id,
+                        "turnId": "native-turn",
+                    },
+                }
+            )
+            if inspect.isawaitable(handled):
+                await handled
+        after_turn_evidence = await adapter.execute(
+            GetThreadHistory(
+                operation_id="turn-evidence-retires-created-history",
+                application_ref=adapter.summary.ref,
+                thread_ref=created_refs[-1],
+                limit=3,
+                page=1,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(after_turn_evidence, ApplicationOperationFailed)
+        self.assertEqual(
+            client.turn_list_calls,
+            [created_refs[0].thread_id, created_refs[-1].thread_id],
+        )
 
     async def test_thread_create_and_list_require_native_cwd_evidence(self) -> None:
         class ScopedListingClient(_InputClient):
