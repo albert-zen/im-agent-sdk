@@ -309,6 +309,16 @@ Focused tests enter only through Channel ingress and prove:
   request turn-bearing continuation state before that input, then retires
   that evidence at the native dispatch fence so the first live output is
   delivered once and later observation uses normal authoritative history;
+- new-Thread evidence is bound to the current native connection epoch, stable
+  native session identity, and finite revisions authorized only by create or
+  allowlisted non-Turn initialization facts; stop, reset, foreign activity or
+  a non-authorized revision change,
+  same-ID recreation, or session change restores strict history and active-
+  Turn discovery;
+- an allowlisted Turn event racing a valid in-flight empty baseline retires
+  later eligibility but does not invalidate that captured baseline; the live
+  event drains once after the bootstrap barrier, while hostile thread/unknown
+  methods carrying an extraneous Turn ID do not retire evidence;
 - `prefer_active_turn` produces truthful `started` or `steered` acceptance;
 - known pre-dispatch failure, unknown dispatch outcome, and post-acceptance
   failure retain their distinct claim states; and
@@ -339,9 +349,11 @@ have explicit health/result assertions and finite bounds.
 The App Server counterexample additionally proves that create plus foreground
 bind preserves subscribe-before-baseline when `thread/turns/list` is invalid
 until first input. Exact bounded adapter create evidence permits only an empty
-checkpoint-free baseline. Non-created Threads, evidence eviction or adapter
-reconstruction, checkpointed routes, restart recovery after the first dispatch
-fence, and every unrelated history failure remain strict. Memory and SQLite
+checkpoint-free baseline. Non-created Threads, stop/restart, native epoch,
+session, or non-authorized revision change, same-ID reuse, evidence eviction
+or adapter reconstruction,
+checkpointed routes, restart recovery after the first dispatch fence, and
+every unrelated history failure remain strict. Memory and SQLite
 public Gateway compositions exercise the same route and lifecycle behavior.
 
 ## Request, media, and artifact path

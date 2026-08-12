@@ -340,14 +340,19 @@ Final downstream Codex acceptance added the native empty-Thread
 counterexample: App Server can return a valid created Thread before
 `thread/turns/list` exists. The shared App Server adapter now retains bounded
 typed create evidence and returns an empty checkpoint-free history/catch-up
-baseline only until that Thread's first native-input dispatch fence or typed
-turn-bearing native event. Thread-only creation/status notifications do not
-retire it, and Codex skips only the unavailable turn-bearing continuation read
+baseline only while the native connection epoch, stable session identity, and
+one finite create/initialization-authorized native revision still match, until
+that Thread's first native-input dispatch fence or
+allowlisted typed turn-bearing native event. Stop/reset, foreign activity, or
+same-ID recreation restores strict recovery. Thread-only/unknown notifications
+with extraneous Turn IDs do not retire it, and Codex skips only the unavailable
+turn-bearing continuation read
 before first input while retaining ordinary Thread scope validation. Gateway
 therefore keeps subscribe-before-baseline and delivers the
 first live output once, while non-created routes, checkpoints, evidence loss,
 restart after dispatch, and unrelated history failures retain F's strict
-recovery behavior. The SDK persists no new Agent truth.
+recovery behavior. An allowlisted event racing a captured empty baseline queues
+behind that baseline and drains once. The SDK persists no new Agent truth.
 
 ### G. Requests, media, artifacts, and proactive delivery
 

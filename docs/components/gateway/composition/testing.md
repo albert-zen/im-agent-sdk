@@ -26,6 +26,9 @@
   including when its turn-bearing continuation read is unavailable while the
   ordinary Thread scope read succeeds;
   preserving the sole bootstrap barrier and one worker in Memory and SQLite;
+- a Turn event racing the exact empty baseline remains behind the bootstrap
+  barrier and is delivered once, while pre-input Gateway stop followed by
+  foreign output restores strict authoritative recovery;
 - terminal success replay remains exact under later binding and worker-capacity
   drift, and a new direct/workflow route has a bootstrap barrier before commit;
 - a one-slot create-and-bind workflow transfers capacity from the previous

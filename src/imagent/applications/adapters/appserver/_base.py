@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import inspect
 import uuid
@@ -7,7 +8,6 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
 from typing import Protocol, cast
@@ -190,9 +190,30 @@ _ARTIFACT_OBSERVATION_ERRORS = (
 
 _NEW_THREAD_BASELINE_MAX_ENTRIES = 256
 
-
-class _ThreadBaselineEvidence(StrEnum):
-    CREATED_PRE_INPUT = "created_pre_input"
+_TURN_MATERIALIZATION_NOTIFICATION_METHODS = frozenset(
+    {
+        "command/exec/outputDelta",
+        "item/agentMessage/delta",
+        "item/commandExecution/outputDelta",
+        "item/completed",
+        "item/fileChange/outputDelta",
+        "item/mcpToolCall/progress",
+        "item/reasoning/summaryPartAdded",
+        "item/reasoning/summaryTextDelta",
+        "item/reasoning/textDelta",
+        "item/started",
+        "turn/completed",
+        "turn/diff/updated",
+        "turn/plan/updated",
+        "turn/started",
+    }
+)
+_PRE_INPUT_REVISION_REFRESH_NOTIFICATION_METHODS = frozenset(
+    {
+        "mcpServer/startupStatus/updated",
+    }
+)
+_PRE_INPUT_AUTHORIZED_REVISIONS_MAX = 8
 
 
 class _NativeThreadScopeError(ValueError):
@@ -203,6 +224,15 @@ class _NativeThreadScopeError(ValueError):
 class _PreparedAppServerInput:
     text: str
     input_items: tuple[Mapping[str, object], ...] | None
+
+
+@dataclass(slots=True)
+class _CreatedPreInputEvidence:
+    connection_epoch: int
+    native_session_id: str
+    native_revisions: tuple[tuple[int, int, int], ...]
+    validation_lock: asyncio.Lock
+    retired_by_turn_event: bool = False
 
 
 class AppServerClient(Protocol):
@@ -284,7 +314,7 @@ class _AppServerApplicationAdapter:
             else None
         )
         self._seen_live_artifact_identities: dict[tuple[str, str, str], None] = {}
-        self._thread_baseline_evidence: dict[ThreadRef, _ThreadBaselineEvidence] = {}
+        self._thread_baseline_evidence: dict[ThreadRef, _CreatedPreInputEvidence] = {}
         self._client.add_notification_handler(self._handle_notification)
         self._request_runtime = AppServerRequestRuntime(
             project_ref=self._workspace_project.ref,
@@ -293,6 +323,7 @@ class _AppServerApplicationAdapter:
             publish_event=self._events.publish,
             require_thread_scope=self._require_native_thread_scope,
             fail_observation=self._fail_native_mapping_observation,
+            observe_turn_evidence=self._observe_request_turn_evidence,
         )
         add_reset_handler = getattr(self._client, "add_connection_reset_handler", None)
         if callable(add_reset_handler):
@@ -371,6 +402,7 @@ class _AppServerApplicationAdapter:
                 await result
 
     async def stop(self) -> None:
+        self._thread_baseline_evidence.clear()
         try:
             close = getattr(self._client, "close", None)
             if callable(close):
@@ -493,8 +525,11 @@ class _AppServerApplicationAdapter:
             )
         if isinstance(operation, GetTurnCatchup):
             thread_ref = operation.thread_ref
-            await self._require_native_thread_scope(thread_ref)
-            if self._has_created_pre_input_evidence(thread_ref):
+            _thread, exact_empty_baseline = await self._read_created_pre_input_scope(
+                thread_ref,
+                allow_retired_snapshot=True,
+            )
+            if exact_empty_baseline:
                 return TurnCatchupRead(
                     operation_id=operation.operation_id,
                     completed_at=completed_at,
@@ -543,8 +578,11 @@ class _AppServerApplicationAdapter:
             )
         if isinstance(operation, GetThreadHistory):
             thread_ref = operation.thread_ref
-            await self._require_native_thread_scope(thread_ref)
-            if self._has_created_pre_input_evidence(thread_ref):
+            _thread, exact_empty_baseline = await self._read_created_pre_input_scope(
+                thread_ref,
+                allow_retired_snapshot=True,
+            )
+            if exact_empty_baseline:
                 return ThreadHistoryRead(
                     operation_id=operation.operation_id,
                     completed_at=completed_at,
@@ -622,8 +660,9 @@ class _AppServerApplicationAdapter:
         # configured default or a caller-owned per-call profile.
         native_options = deepcopy(dict(options))
         result = await self._client.start_thread(cwd=self._cwd, **native_options)
-        thread = self._thread_summary(_native_object(result, "thread"))
-        self._remember_created_pre_input(thread.ref)
+        native_thread = _native_object(result, "thread")
+        thread = self._thread_summary(native_thread)
+        self._remember_created_pre_input(thread.ref, native_thread)
         return thread
 
     async def _read_turn_page(
@@ -957,8 +996,11 @@ class _AppServerApplicationAdapter:
         message: AgentInput,
         prepared: _PreparedAppServerInput,
         before_dispatch: Callable[[ApplicationInputDispatch], Awaitable[None]] | None,
+        *,
+        verified_native_scope: Mapping[str, object] | None = None,
     ) -> AcceptedTurn:
-        await self._require_native_thread_scope(thread_ref)
+        if verified_native_scope is None:
+            await self._require_native_thread_scope(thread_ref)
         expected_local_image_epoch = (
             await self._verified_local_image_epoch() if prepared.input_items is not None else None
         )
@@ -1077,6 +1119,7 @@ class _AppServerApplicationAdapter:
 
     async def _handle_event_connection_reset(self, connection_epoch: int) -> None:
         del connection_epoch
+        self._thread_baseline_evidence.clear()
         self._events.fail_all(EventStreamReset, discard_pending=False)
 
     def _fail_artifact_observation(self, thread_id: str) -> None:
@@ -1092,18 +1135,38 @@ class _AppServerApplicationAdapter:
             discard_pending=False,
         )
 
+    def _observe_request_turn_evidence(self, thread_ref: ThreadRef) -> None:
+        self._retire_created_pre_input(thread_ref, turn_event=True)
+
     async def _handle_notification(self, notification: dict) -> None:
         try:
             event = _normalize_appserver_message(notification)
             if event.thread_id is not None:
+                thread_ref = self._thread_ref(event.thread_id)
+                if event.method == "thread/started":
+                    self._retire_recreated_thread_started(thread_ref, event)
+                if self._is_turn_materialization_notification(event):
+                    self._retire_created_pre_input(thread_ref, turn_event=True)
                 try:
-                    thread_ref = self._thread_ref(event.thread_id)
-                    await self._require_native_thread_scope(thread_ref)
+                    evidence = (
+                        self._created_pre_input_evidence(thread_ref)
+                        if self._is_pre_input_revision_refresh_notification(event)
+                        else None
+                    )
+                    if evidence is not None:
+                        async with evidence.validation_lock:
+                            native_thread = await self._require_native_thread_scope(thread_ref)
+                            self._refresh_created_pre_input_revision(
+                                thread_ref,
+                                native_thread,
+                            )
+                    else:
+                        native_thread = await self._require_native_thread_scope(thread_ref)
                 except Exception:
                     self._fail_native_mapping_observation()
                     return
-                if event.turn_id is not None:
-                    self._retire_created_pre_input(thread_ref)
+                if evidence is None and self._is_pre_input_revision_refresh_notification(event):
+                    self._refresh_created_pre_input_revision(thread_ref, native_thread)
             await self._handle_mapped_notification(event)
         except (_AppServerMappingError, _NativeThreadScopeError):
             self._fail_native_mapping_observation()
@@ -1317,19 +1380,181 @@ class _AppServerApplicationAdapter:
             thread_id=thread_id,
         )
 
-    def _remember_created_pre_input(self, thread_ref: ThreadRef) -> None:
-        self._thread_baseline_evidence[thread_ref] = _ThreadBaselineEvidence.CREATED_PRE_INPUT
+    def _remember_created_pre_input(
+        self,
+        thread_ref: ThreadRef,
+        native_thread: Mapping[str, object],
+    ) -> None:
+        connection_epoch = self._current_connection_epoch()
+        native_session_id = self._native_pre_input_session_id(native_thread)
+        native_revision = self._native_pre_input_revision(native_thread)
+        if connection_epoch is None or native_session_id is None or native_revision is None:
+            self._thread_baseline_evidence.pop(thread_ref, None)
+            return
+        self._thread_baseline_evidence[thread_ref] = _CreatedPreInputEvidence(
+            connection_epoch=connection_epoch,
+            native_session_id=native_session_id,
+            native_revisions=(native_revision,),
+            validation_lock=asyncio.Lock(),
+        )
         while len(self._thread_baseline_evidence) > _NEW_THREAD_BASELINE_MAX_ENTRIES:
             self._thread_baseline_evidence.pop(next(iter(self._thread_baseline_evidence)))
 
-    def _has_created_pre_input_evidence(self, thread_ref: ThreadRef) -> bool:
-        return (
-            self._thread_baseline_evidence.get(thread_ref)
-            is _ThreadBaselineEvidence.CREATED_PRE_INPUT
+    def _created_pre_input_evidence(
+        self,
+        thread_ref: ThreadRef,
+    ) -> _CreatedPreInputEvidence | None:
+        evidence = self._thread_baseline_evidence.get(thread_ref)
+        if evidence is None:
+            return None
+        if self._current_connection_epoch() != evidence.connection_epoch:
+            self._retire_created_pre_input(thread_ref, expected=evidence)
+            return None
+        return evidence
+
+    def _matches_created_pre_input_evidence(
+        self,
+        thread_ref: ThreadRef,
+        evidence: _CreatedPreInputEvidence | None,
+        native_thread: Mapping[str, object],
+        *,
+        allow_retired_snapshot: bool = False,
+    ) -> bool:
+        if evidence is None:
+            return False
+        current = self._thread_baseline_evidence.get(thread_ref)
+        identity_matches = (
+            self._native_pre_input_session_id(native_thread) == evidence.native_session_id
+        )
+        revision_matches = (
+            self._native_pre_input_revision(native_thread) in evidence.native_revisions
+        )
+        retired_during_baseline = (
+            allow_retired_snapshot and current is None and evidence.retired_by_turn_event
+        )
+        matches = (
+            self._current_connection_epoch() == evidence.connection_epoch
+            and identity_matches
+            and (retired_during_baseline or (current is evidence and revision_matches))
+        )
+        if not matches:
+            self._retire_created_pre_input(thread_ref, expected=evidence)
+        return matches
+
+    async def _read_created_pre_input_scope(
+        self,
+        thread_ref: ThreadRef,
+        *,
+        allow_retired_snapshot: bool = False,
+    ) -> tuple[Mapping[str, object], bool]:
+        evidence = self._created_pre_input_evidence(thread_ref)
+        if evidence is None:
+            return await self._require_native_thread_scope(thread_ref), False
+        async with evidence.validation_lock:
+            native_thread = await self._require_native_thread_scope(thread_ref)
+            return native_thread, self._matches_created_pre_input_evidence(
+                thread_ref,
+                evidence,
+                native_thread,
+                allow_retired_snapshot=allow_retired_snapshot,
+            )
+
+    def _current_connection_epoch(self) -> int | None:
+        value = getattr(self._client, "connection_epoch", None)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            return None
+        return value
+
+    @staticmethod
+    def _native_pre_input_session_id(
+        native_thread: Mapping[str, object],
+    ) -> str | None:
+        try:
+            session_id = _optional_string(native_thread.get("sessionId"))
+        except _AppServerMappingError:
+            return None
+        return session_id
+
+    @staticmethod
+    def _native_pre_input_revision(
+        native_thread: Mapping[str, object],
+    ) -> tuple[int, int, int] | None:
+        created_at = native_thread.get("createdAt")
+        updated_at = native_thread.get("updatedAt")
+        recency_at = native_thread.get("recencyAt")
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) or value < 0
+            for value in (created_at, updated_at, recency_at)
+        ):
+            return None
+        return cast(int, created_at), cast(int, updated_at), cast(int, recency_at)
+
+    def _refresh_created_pre_input_revision(
+        self,
+        thread_ref: ThreadRef,
+        native_thread: Mapping[str, object],
+    ) -> None:
+        evidence = self._thread_baseline_evidence.get(thread_ref)
+        if (
+            evidence is None
+            or self._current_connection_epoch() != evidence.connection_epoch
+            or self._native_pre_input_session_id(native_thread) != evidence.native_session_id
+        ):
+            return
+        revision = self._native_pre_input_revision(native_thread)
+        if revision is None or revision in evidence.native_revisions:
+            return
+        evidence.native_revisions = (
+            *evidence.native_revisions[-(_PRE_INPUT_AUTHORIZED_REVISIONS_MAX - 1) :],
+            revision,
         )
 
-    def _retire_created_pre_input(self, thread_ref: ThreadRef) -> None:
-        self._thread_baseline_evidence.pop(thread_ref, None)
+    def _retire_recreated_thread_started(
+        self,
+        thread_ref: ThreadRef,
+        event: _AppServerEvent,
+    ) -> None:
+        evidence = self._thread_baseline_evidence.get(thread_ref)
+        if evidence is None:
+            return
+        started_thread = event.payload.get("thread")
+        if not isinstance(started_thread, Mapping):
+            self._retire_created_pre_input(thread_ref, expected=evidence)
+            return
+        session_matches = (
+            self._native_pre_input_session_id(started_thread) == evidence.native_session_id
+        )
+        revision_matches = (
+            self._native_pre_input_revision(started_thread) in evidence.native_revisions
+        )
+        if not session_matches or not revision_matches:
+            self._retire_created_pre_input(thread_ref, expected=evidence)
+
+    @staticmethod
+    def _is_turn_materialization_notification(event: _AppServerEvent) -> bool:
+        return (
+            event.turn_id is not None and event.method in _TURN_MATERIALIZATION_NOTIFICATION_METHODS
+        )
+
+    @staticmethod
+    def _is_pre_input_revision_refresh_notification(event: _AppServerEvent) -> bool:
+        return (
+            event.turn_id is None
+            and event.method in _PRE_INPUT_REVISION_REFRESH_NOTIFICATION_METHODS
+        )
+
+    def _retire_created_pre_input(
+        self,
+        thread_ref: ThreadRef,
+        *,
+        expected: _CreatedPreInputEvidence | None = None,
+        turn_event: bool = False,
+    ) -> None:
+        current = self._thread_baseline_evidence.get(thread_ref)
+        if expected is None or current is expected:
+            if current is not None and turn_event:
+                current.retired_by_turn_event = True
+            self._thread_baseline_evidence.pop(thread_ref, None)
 
     def _require_own_thread(self, thread_ref: ThreadRef) -> None:
         self._require_workspace_project(thread_ref.project_ref)

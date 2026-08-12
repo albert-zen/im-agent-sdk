@@ -36,10 +36,14 @@ pre-input history/catch-up baseline without calling a rejecting native turn
 list; first input also skips the unavailable turn-bearing active-Turn probe
 while retaining the ordinary scope read. Foreground public Gateway binding then accepts first input and delivers
 its first output once. The first dispatch fence or turn-bearing native event
-retires that bounded evidence, while a thread-only creation/status notification
-does not. Non-created Threads, bounded evidence eviction,
-adapter reconstruction, checkpointed recovery, and unrelated native history
-failures remain explicit.
+retires that bounded evidence only for an allowlisted Turn-materialization
+method, while thread-only/unknown notifications with extraneous Turn IDs do
+not. The suite injects a live Turn event during the scope read and proves the
+captured empty baseline completes before that output drains exactly once; it
+also proves retirement precedes a failing event scope read. Stop/reset, native
+epoch, session, or non-authorized revision change, foreign activity, same-ID recreation,
+non-created Threads, bounded evidence eviction, adapter reconstruction,
+checkpointed recovery, and unrelated native history failures remain explicit.
 
 ## Target evidence and verification
 

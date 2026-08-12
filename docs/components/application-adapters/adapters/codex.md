@@ -100,12 +100,16 @@ remains degraded for possibly missed transient requests.
 
 A successful App Server Thread create may precede native turn-history
 materialization. The shared adapter retains a bounded typed record of that
-exact create and, only before the first native-input dispatch fence or scoped
+exact create, its connection epoch, stable native session identity, and finite
+native revisions authorized by create or allowlisted non-Turn initialization
+facts and, only before the first native-input dispatch fence or allowlisted
 turn-bearing native event, returns empty history/catch-up without calling
 `thread/turns/list`. This keeps subscribe-before-baseline and lets first input
 materialize the Thread without an `includeTurns` continuation probe; the
-ordinary scope read remains required. Evidence loss, reconstruction, all non-created
-Threads, and every later recovery use strict native history; provider error
+ordinary scope read remains required. Stop/reset, epoch/session/non-authorized
+revision change,
+same-ID recreation, evidence loss, reconstruction, all non-created Threads,
+and every later recovery use strict native history; provider error
 text is never treated as empty evidence.
 
 Interactive requests use the locally installed Codex App Server generated

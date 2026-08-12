@@ -16,10 +16,13 @@ Every adapter should prove:
   adapter-owned `cwd` or pass colliding snake/camel-case native fields;
 - exact bounded App Server create evidence supplies an empty pre-input
   history/catch-up baseline without a native turn-list call, then first
-  dispatch/turn-bearing native event retires it while a thread-only
-  creation/status notification does not; the first input avoids an unavailable
+  dispatch/allowlisted turn-bearing native event retires it while a thread-only
+  or unknown notification with an extraneous Turn ID does not; a racing event
+  cannot invalidate the captured empty baseline, and scope-read failure still
+  leaves later history strict; the first input avoids an unavailable
   turn-bearing continuation read but still validates Thread scope; non-created,
-  evicted, reconstructed, and
+  stopped/reset, epoch/session/non-authorized-revision-changed,
+  same-ID-recreated, evicted, reconstructed, and
   later history failures remain strict;
 - concrete per-call App Server creation can select a native profile without
   mutating the configured default or widening the common `CreateThread`;

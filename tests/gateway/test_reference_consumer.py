@@ -191,9 +191,12 @@ class _UnmaterializedCodexClient:
     """App Server double whose turn-list resource appears only after first input."""
 
     def __init__(self) -> None:
+        self.connection_epoch = 1
         self.notification_handlers: list[Callable[[dict[str, object]], Any]] = []
         self.threads: dict[str, list[dict[str, object]]] = {}
+        self.thread_versions: dict[str, int] = {}
         self.turn_list_calls: list[str] = []
+        self.read_thread_calls: list[tuple[str, bool]] = []
         self.start_turn_calls: list[str] = []
         self._next_thread = 0
         self._next_turn = 0
@@ -214,7 +217,8 @@ class _UnmaterializedCodexClient:
         self._next_thread += 1
         thread_id = f"native-thread-{self._next_thread}"
         self.threads[thread_id] = []
-        return {"thread": {"id": thread_id, "cwd": params["cwd"]}}
+        self.thread_versions[thread_id] = 1
+        return {"thread": self._thread(thread_id, include_turns=True, cwd=str(params["cwd"]))}
 
     async def read_thread(
         self,
@@ -222,14 +226,28 @@ class _UnmaterializedCodexClient:
         *,
         include_turns: bool = False,
     ) -> dict[str, object]:
+        self.read_thread_calls.append((thread_id, include_turns))
+        return {"thread": self._thread(thread_id, include_turns=include_turns)}
+
+    def _thread(
+        self,
+        thread_id: str,
+        *,
+        include_turns: bool,
+        cwd: str = "/repo",
+    ) -> dict[str, object]:
         turns = self.threads[thread_id]
+        version = self.thread_versions[thread_id]
+        running = any(turn.get("status") == "inProgress" for turn in turns)
         return {
-            "thread": {
-                "id": thread_id,
-                "cwd": "/repo",
-                "status": {"type": "idle"},
-                "turns": list(turns) if include_turns else None,
-            }
+            "id": thread_id,
+            "cwd": cwd,
+            "sessionId": f"session-{thread_id}",
+            "createdAt": 1,
+            "updatedAt": version,
+            "recencyAt": version,
+            "status": {"type": "active" if running else "idle"},
+            "turns": list(turns) if include_turns else None,
         }
 
     async def list_thread_turns(
@@ -279,6 +297,7 @@ class _UnmaterializedCodexClient:
         notify: bool,
     ) -> str:
         self._next_turn += 1
+        self.thread_versions[thread_id] += 1
         turn_id = f"native-turn-{self._next_turn}"
         item_id = f"native-item-{self._next_turn}"
         item = {
@@ -2001,7 +2020,7 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
                     1,
                 )
 
-    async def test_public_codex_pre_input_restart_replays_without_second_create(self) -> None:
+    async def test_public_codex_pre_input_restart_recovers_foreign_output_strictly(self) -> None:
         client = _UnmaterializedCodexClient()
         application = CodexApplicationAdapter(
             application_instance_id="codex-pre-input-restart",
@@ -2039,6 +2058,11 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
                 assert isinstance(thread_ref, ThreadRef)
                 self.assertEqual(client.turn_list_calls, [])
 
+            await client.emit_output(
+                thread_ref.thread_id,
+                "Codex response: foreign session output",
+                notify=False,
+            )
             restarted_channel = ReferenceChannel(channel_instance_id="codex-pre-input-channel")
             restarted_conversation = restarted_channel.conversation("new-thread")
             restarted = Gateway(
@@ -2049,6 +2073,10 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
                 projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
             )
             async with restarted:
+                recovered = await restarted_conversation.wait_for_text(
+                    "Codex response: foreign session output"
+                )
+                self.assertEqual(len(recovered), 1)
                 restarted_actions = restarted.actions(
                     restarted_conversation.ref,
                     actor=restarted_conversation.authenticated_actor,
@@ -2059,16 +2087,89 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
                 )
                 self.assertEqual(replayed, created)
                 self.assertEqual(len(client.threads), 1)
-                self.assertEqual(client.turn_list_calls, [])
-                await restarted_conversation.receive_text(
-                    message_id="codex-pre-input-restart:first-input",
-                    text="first after restart",
+                self.assertGreaterEqual(
+                    client.turn_list_calls.count(thread_ref.thread_id),
+                    1,
                 )
-                delivered = await restarted_conversation.wait_for_text(
-                    "Codex response: first after restart"
+
+    async def test_public_codex_turn_event_during_empty_baseline_drains_live_once(
+        self,
+    ) -> None:
+        class RacingClient(_UnmaterializedCodexClient):
+            def __init__(self) -> None:
+                super().__init__()
+                self.inject_on_read = False
+                self.injected = False
+
+            async def read_thread(
+                self,
+                thread_id: str,
+                *,
+                include_turns: bool = False,
+            ) -> dict[str, object]:
+                result = await super().read_thread(
+                    thread_id,
+                    include_turns=include_turns,
                 )
-                self.assertEqual(len(delivered), 1)
-                self.assertEqual(client.start_turn_calls, [thread_ref.thread_id])
+                if self.inject_on_read and not self.injected and not include_turns:
+                    self.injected = True
+                    await self.emit_output(
+                        thread_id,
+                        "Codex response: raced baseline",
+                        notify=True,
+                    )
+                return result
+
+        client = RacingClient()
+        application = CodexApplicationAdapter(
+            application_instance_id="codex-racing-baseline",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        channel = ReferenceChannel(channel_instance_id="codex-racing-channel")
+        conversation = channel.conversation("racing-baseline")
+        gateway = Gateway(
+            gateway_id="codex-racing-baseline",
+            channels=[channel],
+            applications=[application],
+            store=MemoryGatewayStore(),
+            projection_policy=ProjectionPolicy.FOREGROUND_ONLY,
+        )
+        async with gateway:
+            actions = gateway.actions(
+                conversation.ref,
+                actor=conversation.authenticated_actor,
+            )
+            identity = application.summary.workspace_identity
+            self.assertIsNotNone(identity)
+            assert identity is not None
+            created = await actions.create_thread(
+                identity.project_ref,
+                action_id="codex-racing:create",
+            )
+            self.assertIsInstance(created, Succeeded)
+            assert isinstance(created, Succeeded)
+            thread_ref = created.value.ref
+            self.assertIsInstance(thread_ref, ThreadRef)
+            assert isinstance(thread_ref, ThreadRef)
+            client.inject_on_read = True
+            bound = await actions.bind_thread(
+                thread_ref,
+                action_id="codex-racing:bind",
+            )
+            self.assertIsInstance(bound, Succeeded)
+            delivered = await conversation.wait_for_text("Codex response: raced baseline")
+            self.assertEqual(len(delivered), 1)
+            self.assertTrue(client.turn_list_calls)
+            self.assertEqual(set(client.turn_list_calls), {thread_ref.thread_id})
+            sent_text = tuple(
+                content.text
+                for message in channel.sent
+                for content in message.content
+                if isinstance(content, TextContent)
+            )
+            self.assertEqual(sent_text.count("Codex response: raced baseline"), 1)
 
     async def test_scoped_workflow_hands_one_worker_slot_to_the_new_thread(self) -> None:
         channel = ReferenceChannel()

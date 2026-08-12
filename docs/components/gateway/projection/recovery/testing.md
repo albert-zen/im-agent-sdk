@@ -12,8 +12,11 @@ Recovery conformance must prove:
   toward its own checkpoint without weakening other routes;
 - exact adapter-owned newly-created/pre-input evidence may produce an empty
   checkpoint-free baseline without a native history call; its first dispatch
-  or turn-bearing event retires that evidence while a thread-only status event
-  does not, and first input avoids only the unavailable turn-bearing
+  or allowlisted turn-bearing event retires that evidence while a thread-only
+  or unknown event with an extraneous Turn ID does not; stop/reset, native
+  epoch/session/non-authorized revision change, same-ID recreation, and foreign activity restore
+  strict recovery; a racing event does not invalidate the captured baseline
+  and remains queued behind it; first input avoids only the unavailable turn-bearing
   continuation read while retaining ordinary Thread scope validation;
   non-new, reconstructed, ambiguous, and
   checkpointed history failures stay explicit;

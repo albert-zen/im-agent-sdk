@@ -67,16 +67,21 @@ recovery authority. App Server queue reset or presentation failure becomes an
 explicit observation gap, not silent continuation or a second subscriber.
 
 Codex App Server can return a valid new Thread before `thread/turns/list`
-exists. The shared App Server owner records the exact successful create in one
+exists. The shared App Server owner records the exact successful create,
+native connection epoch, stable session identity, and finite revisions
+authorized by create or allowlisted non-Turn initialization facts in one
 bounded typed process-local evidence set. Before that Thread's first native
-input dispatch fence or scoped turn-bearing native event, history/catch-up returns an empty
+input dispatch fence or allowlisted scoped turn-bearing native event,
+history/catch-up returns an empty
 typed baseline without issuing the invalid native list call. This preserves
 Gateway subscribe-before-baseline and lets the first input materialize the
 Thread. The same evidence suppresses only the unavailable turn-bearing active-
 Turn probe for that first input; the ordinary Thread scope read still runs.
-The evidence is retired before native dispatch and on any turn-bearing
-native event; thread-only creation/status notifications are not materialization
-evidence. Eviction, adapter reconstruction, non-created Threads, and every later
+The evidence is retired before native dispatch and on allowlisted turn-bearing
+native events; thread-only or unknown notifications with extraneous Turn IDs
+are not materialization evidence. Stop/reset, epoch, session or non-authorized
+revision change, same-ID recreation, eviction, adapter reconstruction,
+non-created Threads, and every later
 or checkpointed recovery use strict native history. Neither native error text
 nor Codex-specific Gateway policy participates.
 

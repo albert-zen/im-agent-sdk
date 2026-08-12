@@ -56,13 +56,19 @@ workspace truth.
 
 App Server may expose a newly created, scope-valid Thread before its native
 turn-history resource exists. The shared adapter retains a finite typed set of
-exact Thread creations. While one of those Threads has produced neither a
-turn-bearing native event nor crossed its first native-input dispatch fence, history and
+exact Thread creations, bound to the native connection epoch, stable session
+identity, and a finite set of revisions authorized by create or allowlisted
+non-Turn initialization notifications.
+While one of those Threads has
+produced neither an allowlisted turn-bearing native event nor crossed its first native-input dispatch fence, history and
 catch-up return an empty typed baseline without calling the native turn-list
 method. This is not error recovery: no provider error is inspected or
-swallowed. Thread-only creation/status notifications do not prove history
-materialization. The dispatch fence or any scoped turn-bearing event retires the evidence;
-bounded eviction or adapter reconstruction also removes the exception and
+swallowed. Thread-only or unknown notifications do not prove history
+materialization merely by carrying a Turn ID. The dispatch fence or an
+allowlisted scoped turn-bearing event retires the evidence; stop, connection
+reset/epoch change, native session or non-authorized revision change, same-ID
+recreation, bounded
+eviction, or adapter reconstruction also removes the exception and
 therefore restores strict native history behavior. Checkpointed and all other
 Threads always use the ordinary history path.
 
@@ -70,6 +76,18 @@ Codex's first-input continuation choice consumes the same exact evidence as a
 no-active-Turn fact, so it does not request an unavailable turn-bearing Thread
 read before materialization. The shared ordinary scope read still validates
 the native Thread before dispatch.
+
+History/catch-up captures eligible evidence before its scope read. If an
+allowlisted Turn event arrives during that read, it retires future eligibility
+but the captured baseline completes empty; subscription already exists, so the
+live event remains queued behind the barrier. A turn-bearing event retires
+evidence before its scope verification, so even a failed verification cannot
+re-enable a synthetic empty result.
+
+Evidence-validation reads and allowlisted non-Turn initialization revision
+refreshes serialize only on that exact bounded evidence record. This prevents
+benign initialization from racing a baseline or first-input scope read without
+serializing native Turn-event retirement.
 
 No leaf owns Gateway request correlation, IM delivery, persistence, product
 approval/command policy, raw native event exposure, durable spool/outbox,

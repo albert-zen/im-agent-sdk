@@ -57,7 +57,10 @@ after the typed empty history/catch-up read completes. Observation does not
 infer this state from a missing checkpoint or provider failure. Only the
 concrete adapter's bounded exact-create evidence may produce it, and later
 live output follows the same route lock, idempotency, delivery, and checkpoint
-path as every other completed item.
+path as every other completed item. If a Turn event arrives during the
+evidence-validating scope read, that read's captured baseline may complete
+empty while future reads are strict; the already-subscribed event remains in
+the bounded Application queue until the barrier opens.
 
 `ThreadProjectionRuntime.reconcile_action_route(route_id)` is the explicit
 composition seam after a scoped Conversation action has durably changed

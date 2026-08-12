@@ -250,10 +250,14 @@ Gateway recovers from authoritative history/catch-up.
 
 The App Server create counterexample has one narrower adapter-owned state: a
 scope-valid Thread can exist before its native turn-history resource. The
-shared adapter retains a finite typed exact-create record and returns empty
-history/catch-up only until first native-input dispatch or a scoped
-turn-bearing event. Thread-only creation/status notifications are not turn
-materialization evidence. The same record selects no active Turn for the first
+shared adapter retains a finite typed exact-create record with native
+connection epoch, stable session identity, and finite revisions authorized by
+create or allowlisted non-Turn initialization facts, and returns empty
+history/catch-up only until first native-input dispatch or an allowlisted
+turn-bearing event. Stop/reset or session/non-authorized revision change
+invalidates it. Thread-only,
+unknown, or forward-compatible notifications are not Turn materialization
+evidence merely because they carry a Turn ID. The same record selects no active Turn for the first
 input without a turn-bearing read, while ordinary scope validation still runs.
 No error matching, Gateway Application-kind branch, persisted Agent
 truth, or weakening of ordinary/checkpointed history recovery is permitted.

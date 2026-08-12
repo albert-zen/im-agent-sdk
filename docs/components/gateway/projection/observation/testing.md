@@ -27,7 +27,8 @@ Observation conformance must prove:
 - an adapter-authoritative empty baseline for an exact newly created
   pre-input Thread still subscribes before baseline, opens no live-before-
   baseline window, and delivers/checkpoints the first live output exactly
-  once; non-new and checkpointed routes remain strict;
+  once, including when that Turn event arrives during the empty baseline's
+  scope read; non-new and checkpointed routes remain strict;
 - the public action-route reconciliation method reads current route/binding
   authority, activates and baselines a successful or terminally replayed route,
   ignores a replayed route removed by later intent, stops newly unauthorized

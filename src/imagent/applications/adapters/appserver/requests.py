@@ -535,6 +535,7 @@ ServerRequestMapper = Callable[
 PublishEvent = Callable[[str, AgentEvent], None]
 RequireThreadScope = Callable[[ThreadRef], Awaitable[object]]
 FailObservation = Callable[[], None]
+ObserveTurnEvidence = Callable[[ThreadRef], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -555,6 +556,7 @@ class AppServerRequestRuntime:
         publish_event: PublishEvent,
         require_thread_scope: RequireThreadScope,
         fail_observation: FailObservation,
+        observe_turn_evidence: ObserveTurnEvidence,
     ) -> None:
         self._project_ref = project_ref
         self._application_ref = ApplicationRef(project_ref.application_instance_id)
@@ -563,6 +565,7 @@ class AppServerRequestRuntime:
         self._publish_event = publish_event
         self._require_thread_scope = require_thread_scope
         self._fail_observation = fail_observation
+        self._observe_turn_evidence = observe_turn_evidence
         self._pending: dict[RequestRef, PendingAppServerRequest] = {}
         self._outcomes: OrderedDict[
             RequestRef,
@@ -671,6 +674,17 @@ class AppServerRequestRuntime:
             raise RuntimeError("native interactive requests are not configured")
         try:
             event = normalize_appserver_message(message)
+            if (
+                event.method in SUPPORTED_SERVER_REQUEST_METHODS
+                and event.thread_id is not None
+                and event.turn_id is not None
+            ):
+                self._observe_turn_evidence(
+                    ThreadRef(
+                        project_ref=self._project_ref,
+                        thread_id=event.thread_id,
+                    )
+                )
             pending = mapper(self._project_ref, event)
         except UnsupportedAppServerRequest as error:
             await self._reject(message, error, code=-32601)

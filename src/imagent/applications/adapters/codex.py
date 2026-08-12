@@ -129,18 +129,29 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
         if not isinstance(continuation, InputContinuationPreference):
             raise ValueError("unknown input continuation preference")
         active_turn_id = None
+        verified_native_scope: Mapping[str, object] | None = None
         if (
             self._steer_active_turn
             and continuation is InputContinuationPreference.PREFER_ACTIVE_TURN
-            and not self._has_created_pre_input_evidence(thread_ref)
         ):
-            active_turn_id = await self._read_active_turn_id(thread_ref)
+            evidence = self._created_pre_input_evidence(thread_ref)
+            if evidence is not None:
+                native_thread, exact_pre_input = await self._read_created_pre_input_scope(
+                    thread_ref
+                )
+                if exact_pre_input:
+                    verified_native_scope = native_thread
+                else:
+                    active_turn_id = await self._read_active_turn_id(thread_ref)
+            else:
+                active_turn_id = await self._read_active_turn_id(thread_ref)
         if active_turn_id is None:
             return await self._start_prepared_input(
                 thread_ref,
                 message,
                 prepared,
                 before_dispatch,
+                verified_native_scope=verified_native_scope,
             )
         expected_local_image_epoch = (
             await self._verified_local_image_epoch() if prepared.input_items is not None else None

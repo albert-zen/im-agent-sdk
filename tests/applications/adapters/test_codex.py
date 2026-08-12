@@ -66,6 +66,7 @@ class _InputClient:
         local_image_epoch: int | None = 7,
         workspace_cwd: str | None = "/repo",
     ) -> None:
+        self.connection_epoch = 1
         self.active_turn_id = active_turn_id
         self.local_image_epoch = local_image_epoch
         self.workspace_cwd = workspace_cwd
@@ -100,7 +101,16 @@ class _InputClient:
 
     async def start_thread(self, **params: object) -> dict[str, object]:
         self.created_threads.append(deepcopy(dict(params)))
-        return {"thread": {"id": "thread-created", "cwd": params["cwd"]}}
+        return {
+            "thread": {
+                "id": "thread-created",
+                "cwd": params["cwd"],
+                "sessionId": "session-thread-created",
+                "createdAt": 1,
+                "updatedAt": 1,
+                "recencyAt": 1,
+            }
+        }
 
     async def resume_thread(self, **params: object) -> dict[str, object]:
         self.resumed.append(str(params["threadId"]))
@@ -131,6 +141,10 @@ class _InputClient:
             "thread": {
                 "id": thread_id,
                 "cwd": self.workspace_cwd,
+                "sessionId": f"session-{thread_id}",
+                "createdAt": 1,
+                "updatedAt": 1,
+                "recencyAt": 1,
                 "status": {"type": "active" if turns else "idle"},
                 "turns": turns if include_turns else None,
             }
@@ -527,6 +541,373 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.turn_list_calls, [thread_ref.thread_id])
         self.assertNotIn((thread_ref.thread_id, True), client.read_calls)
 
+    async def test_created_pre_input_evidence_is_session_and_identity_scoped(self) -> None:
+        client = _InputClient(active_turn_id="external-running")
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        created = await adapter.execute(
+            CreateThread(
+                operation_id="create-session-scoped-thread",
+                application_ref=adapter.summary.ref,
+                project_ref=ProjectRef("codex-main", "workspace"),
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(created, ThreadCreated)
+        assert isinstance(created, ThreadCreated)
+        thread_ref = created.thread.ref
+
+        client.connection_epoch = 2
+        await adapter.send_input(
+            thread_ref,
+            AgentInput(
+                client_message_id="strict-after-session-change",
+                content=(TextContent("external state must be read"),),
+            ),
+        )
+        self.assertEqual(client.read_calls, [(thread_ref.thread_id, True)])
+        self.assertEqual(
+            client.steered,
+            [
+                {
+                    "thread_id": thread_ref.thread_id,
+                    "turn_id": "external-running",
+                    "text": "external state must be read",
+                }
+            ],
+        )
+        self.assertEqual(client.started, [])
+
+        foreign_client = _InputClient()
+        foreign = CodexApplicationAdapter(
+            application_instance_id="codex-foreign",
+            client=foreign_client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        foreign_created = await foreign.execute(
+            CreateThread(
+                operation_id="create-before-foreign-turn",
+                application_ref=foreign.summary.ref,
+                project_ref=ProjectRef("codex-foreign", "workspace"),
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(foreign_created, ThreadCreated)
+        assert isinstance(foreign_created, ThreadCreated)
+        foreign_original_read = foreign_client.read_thread
+
+        async def externally_updated_read(
+            thread_id: str,
+            *,
+            include_turns: bool = False,
+        ) -> dict[str, object]:
+            result = await foreign_original_read(thread_id, include_turns=include_turns)
+            native_thread = result["thread"]
+            assert isinstance(native_thread, dict)
+            native_thread["updatedAt"] = 2
+            native_thread["recencyAt"] = 2
+            return result
+
+        foreign_client.read_thread = externally_updated_read  # type: ignore[method-assign]
+        foreign_history = await foreign.execute(
+            GetThreadHistory(
+                operation_id="strict-after-unobserved-foreign-turn",
+                application_ref=foreign.summary.ref,
+                thread_ref=foreign_created.thread.ref,
+                limit=3,
+                page=1,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(foreign_history, ThreadHistoryRead)
+        self.assertEqual(
+            foreign_client.turn_list_calls,
+            [foreign_created.thread.ref.thread_id],
+        )
+
+        foreign_active_client = _InputClient(active_turn_id="foreign-active-turn")
+        foreign_active = CodexApplicationAdapter(
+            application_instance_id="codex-foreign-active",
+            client=foreign_active_client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        foreign_active_created = await foreign_active.execute(
+            CreateThread(
+                operation_id="create-before-foreign-active-turn",
+                application_ref=foreign_active.summary.ref,
+                project_ref=ProjectRef("codex-foreign-active", "workspace"),
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(foreign_active_created, ThreadCreated)
+        assert isinstance(foreign_active_created, ThreadCreated)
+        foreign_active_original_read = foreign_active_client.read_thread
+
+        async def externally_active_read(
+            thread_id: str,
+            *,
+            include_turns: bool = False,
+        ) -> dict[str, object]:
+            result = await foreign_active_original_read(
+                thread_id,
+                include_turns=include_turns,
+            )
+            native_thread = result["thread"]
+            assert isinstance(native_thread, dict)
+            native_thread["updatedAt"] = 2
+            native_thread["recencyAt"] = 2
+            return result
+
+        foreign_active_client.read_thread = (  # type: ignore[method-assign]
+            externally_active_read
+        )
+        await foreign_active.send_input(
+            foreign_active_created.thread.ref,
+            AgentInput(
+                client_message_id="strict-foreign-active-input",
+                content=(TextContent("steer foreign active turn"),),
+            ),
+        )
+        self.assertIn(
+            (foreign_active_created.thread.ref.thread_id, True),
+            foreign_active_client.read_calls,
+        )
+        self.assertEqual(
+            foreign_active_client.steered[0]["turn_id"],
+            "foreign-active-turn",
+        )
+        self.assertEqual(foreign_active_client.started, [])
+
+        recreated_client = _InputClient()
+        recreated = CodexApplicationAdapter(
+            application_instance_id="codex-recreated",
+            client=recreated_client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        recreated_result = await recreated.execute(
+            CreateThread(
+                operation_id="create-before-same-id-reuse",
+                application_ref=recreated.summary.ref,
+                project_ref=ProjectRef("codex-recreated", "workspace"),
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(recreated_result, ThreadCreated)
+        assert isinstance(recreated_result, ThreadCreated)
+
+        original_read = recreated_client.read_thread
+
+        async def same_id_recreated_read(
+            thread_id: str,
+            *,
+            include_turns: bool = False,
+        ) -> dict[str, object]:
+            result = await original_read(thread_id, include_turns=include_turns)
+            native_thread = result["thread"]
+            assert isinstance(native_thread, dict)
+            native_thread["sessionId"] = "replacement-session"
+            native_thread["createdAt"] = 2
+            native_thread["updatedAt"] = 2
+            native_thread["recencyAt"] = 2
+            return result
+
+        recreated_client.read_thread = same_id_recreated_read  # type: ignore[method-assign]
+        history = await recreated.execute(
+            GetThreadHistory(
+                operation_id="strict-after-same-id-reuse",
+                application_ref=recreated.summary.ref,
+                thread_ref=recreated_result.thread.ref,
+                limit=3,
+                page=1,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(history, ThreadHistoryRead)
+        self.assertEqual(
+            recreated_client.turn_list_calls,
+            [recreated_result.thread.ref.thread_id],
+        )
+
+    async def test_inflight_empty_baseline_survives_allowlisted_turn_event_race(self) -> None:
+        client = _InputClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        created = await adapter.execute(
+            CreateThread(
+                operation_id="create-racing-baseline-thread",
+                application_ref=adapter.summary.ref,
+                project_ref=ProjectRef("codex-main", "workspace"),
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(created, ThreadCreated)
+        assert isinstance(created, ThreadCreated)
+        thread_ref = created.thread.ref
+        original_read = client.read_thread
+        injected = False
+
+        async def racing_read(
+            thread_id: str,
+            *,
+            include_turns: bool = False,
+        ) -> dict[str, object]:
+            nonlocal injected
+            result = await original_read(thread_id, include_turns=include_turns)
+            if not injected and not include_turns:
+                injected = True
+                for handler in tuple(client.notification_handlers):
+                    handled = handler(
+                        {
+                            "method": "item/completed",
+                            "params": {
+                                "threadId": thread_id,
+                                "turnId": "racing-turn",
+                                "item": {
+                                    "id": "racing-item",
+                                    "type": "agentMessage",
+                                    "text": "racing output",
+                                },
+                            },
+                        }
+                    )
+                    if inspect.isawaitable(handled):
+                        await handled
+            return result
+
+        client.read_thread = racing_read  # type: ignore[method-assign]
+        events = adapter.subscribe_thread(thread_ref)
+        history = await adapter.execute(
+            GetThreadHistory(
+                operation_id="racing-empty-baseline",
+                application_ref=adapter.summary.ref,
+                thread_ref=thread_ref,
+                limit=3,
+                page=1,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(history, ThreadHistoryRead)
+        assert isinstance(history, ThreadHistoryRead)
+        self.assertEqual(history.history.turns, ())
+        self.assertEqual(client.turn_list_calls, [])
+        event = await anext(events)
+        self.assertEqual(event.type, AgentEventType.MESSAGE_COMPLETED)
+        strict = await adapter.execute(
+            GetThreadHistory(
+                operation_id="strict-after-racing-event",
+                application_ref=adapter.summary.ref,
+                thread_ref=thread_ref,
+                limit=3,
+                page=1,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(strict, ThreadHistoryRead)
+        self.assertEqual(client.turn_list_calls, [thread_ref.thread_id])
+
+    async def test_only_allowlisted_turn_events_retire_and_scope_failure_stays_strict(
+        self,
+    ) -> None:
+        client = _InputClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        created = await adapter.execute(
+            CreateThread(
+                operation_id="create-hostile-event-thread",
+                application_ref=adapter.summary.ref,
+                project_ref=ProjectRef("codex-main", "workspace"),
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(created, ThreadCreated)
+        assert isinstance(created, ThreadCreated)
+        thread_ref = created.thread.ref
+        for notification in (
+            {
+                "method": "thread/status/changed",
+                "params": {
+                    "threadId": thread_ref.thread_id,
+                    "turnId": "hostile-status-turn",
+                    "status": "idle",
+                },
+            },
+            {
+                "method": "vendor/unknown",
+                "params": {
+                    "threadId": thread_ref.thread_id,
+                    "turnId": "hostile-unknown-turn",
+                },
+            },
+        ):
+            for handler in tuple(client.notification_handlers):
+                handled = handler(notification)
+                if inspect.isawaitable(handled):
+                    await handled
+        retained = await adapter.execute(
+            GetThreadHistory(
+                operation_id="hostile-events-do-not-retire",
+                application_ref=adapter.summary.ref,
+                thread_ref=thread_ref,
+                limit=3,
+                page=1,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(retained, ThreadHistoryRead)
+        self.assertEqual(client.turn_list_calls, [])
+
+        original_read = client.read_thread
+
+        async def failing_scope_read(
+            thread_id: str,
+            *,
+            include_turns: bool = False,
+        ) -> dict[str, object]:
+            del thread_id, include_turns
+            raise RuntimeError("scope unavailable")
+
+        client.read_thread = failing_scope_read  # type: ignore[method-assign]
+        for handler in tuple(client.notification_handlers):
+            handled = handler(
+                {
+                    "method": "turn/started",
+                    "params": {
+                        "threadId": thread_ref.thread_id,
+                        "turnId": "turn-before-scope-failure",
+                    },
+                }
+            )
+            if inspect.isawaitable(handled):
+                await handled
+        client.read_thread = original_read  # type: ignore[method-assign]
+        strict = await adapter.execute(
+            GetThreadHistory(
+                operation_id="strict-after-scope-failed-turn-event",
+                application_ref=adapter.summary.ref,
+                thread_ref=thread_ref,
+                limit=3,
+                page=1,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(strict, ThreadHistoryRead)
+        self.assertEqual(client.turn_list_calls, [thread_ref.thread_id])
+
     async def test_non_created_or_reconstructed_thread_history_failure_is_strict(self) -> None:
         class RejectingHistoryClient(_InputClient):
             async def list_thread_turns(
@@ -599,6 +980,10 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
                     "thread": {
                         "id": f"thread-{self.next_thread}",
                         "cwd": params["cwd"],
+                        "sessionId": f"session-thread-{self.next_thread}",
+                        "createdAt": 1,
+                        "updatedAt": 1,
+                        "recencyAt": 1,
                     }
                 }
 

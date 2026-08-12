@@ -39,11 +39,18 @@ output was fully recovered.
 
 The only empty-history exception is positive typed evidence supplied by a
 concrete adapter for an exact Thread it just created and has not yet dispatched
-into or observed. Such a checkpoint-free route returns an empty authoritative
+into or observed in the same proven native connection epoch, stable session
+identity, and finite create/initialization-authorized revision. Such a
+checkpoint-free route returns an empty authoritative
 history/catch-up value while retaining subscribe-before-history and baseline-
 before-live ordering. Recovery never derives this exception from an error,
 missing checkpoint, Application kind, or route text. Once the adapter retires
-that evidence—or cannot reconstruct it—ordinary strict history applies.
+that evidence—or stop/reset, session/non-authorized revision change, same-ID
+recreation, eviction, or
+reconstruction invalidates it—ordinary strict history applies. A valid
+baseline snapshot captured before a racing allowlisted Turn event may finish
+empty because the live event is already queued behind its barrier; later
+recovery is strict.
 
 ## Failure domains and request honesty
 
