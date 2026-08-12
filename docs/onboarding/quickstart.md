@@ -1,18 +1,16 @@
-# Quickstart: one inbound → Agent → outbound round trip
+# Quickstart: one inbound -> Agent -> outbound round trip
 
-This 10–20 minute quickstart runs one production-shaped SDK composition: a
-Channel admits an inbound message, a bound Agent Application accepts it, and
-the Application's authoritative event is projected back through the Channel.
-It uses only public SDK imports.
+This 10-20 minute path runs the SDK's one packaged neutral consumer. It admits
+ordinary Channel input, explicitly creates and binds an Application Project
+and Thread, dispatches the input to the Application, and projects the
+authoritative response back through the Channel. The executable imports only
+public SDK surfaces and needs no product credentials or native service.
 
-The local Channel and echo Application make the path runnable without product
-credentials. They are seams to replace, not hidden runtimes: the Application
-owns Project, Thread, Turn, and transcript truth; the SDK owns only IM bridge
-state and rebuildable projections.
+## 1. Download and verify v0.1.0a1
 
-## 1. Create an environment and install the release
-
-Python 3.13 or newer is required. From a checkout of this repository:
+Python 3.13 or newer and the GitHub CLI are required. The repository is
+private, so first confirm that `gh auth status` shows an account with
+repository read access. Then, from an empty working directory:
 
 ```powershell
 py -3.13 -m venv .venv
@@ -24,68 +22,67 @@ if ($actual -ne $expected) { throw 'GitHub Release wheel checksum mismatch' }
 .venv\Scripts\python -m pip install .quickstart-download/im_agent_sdk-0.1.0a1-py3-none-any.whl
 ```
 
-The repository is private, so `gh auth status` must show an authenticated
-GitHub CLI session with repository read access. On macOS or Linux, use
-`mkdir -p .quickstart-download`, `sha256sum -c .quickstart-download/SHA256SUMS`,
-and `.venv/bin/python` for the equivalent lines. This deliberately downloads the
-immutable [GitHub Release](https://github.com/albert-zen/im-agent-sdk/releases/tag/v0.1.0a1)
-asset, then installs it by a repository-relative path—not from PyPI or an
-absolute machine-local wheel.
+On macOS or Linux, use `.venv/bin/python` and verify the downloaded files from
+their directory:
 
-## 2. Run the vertical
+```sh
+python3.13 -m venv .venv
+mkdir -p .quickstart-download
+gh release download v0.1.0a1 --repo albert-zen/im-agent-sdk --pattern '*.whl' --pattern SHA256SUMS --dir .quickstart-download
+(cd .quickstart-download && sha256sum -c SHA256SUMS)
+.venv/bin/python -m pip install .quickstart-download/im_agent_sdk-0.1.0a1-py3-none-any.whl
+```
 
-Choose both ownership locations explicitly. `workspace` is execution context
-owned by the demo Application; `state` contains the SDK-owned SQLite bridge
-database.
+These commands install the authenticated, checksummed
+[GitHub Release](https://github.com/albert-zen/im-agent-sdk/releases/tag/v0.1.0a1),
+not PyPI or an absolute machine-local wheel.
+
+## 2. Run the installed vertical
+
+Stay in that working directory and run:
 
 ```powershell
-New-Item -ItemType Directory -Force workspace, state | Out-Null
-.venv\Scripts\python -m examples.quickstart.main --workspace workspace --state-dir state
+.venv\Scripts\python -m examples.reference_consumer.main
 ```
 
-macOS/Linux users can run the equivalent `mkdir -p workspace state` and use
-`.venv/bin/python`. The result is:
+On macOS or Linux, use `.venv/bin/python`. A successful run prints exactly one
+bounded line:
 
 ```text
-Echo: hello from IM
-bridge state: <your checkout>/state/bridge.sqlite3
-Agent transcript/state owner: LocalEchoApplication (process-local demo)
+reference consumer OK: projects=1 threads=2 conversations=2 max_workers=1 diagnostics=bounded sqlite_recovery=true shutdown=true
 ```
 
-The executable composition is
-[`examples/quickstart/main.py`](../../examples/quickstart/main.py); its two
-small public-port implementations are in
-[`examples/quickstart/adapters.py`](../../examples/quickstart/adapters.py).
-The important choices are visible in that code:
+This is the packaged release artifact, executed outside the SDK checkout with
+no repository `PYTHONPATH`. It constructs one explicit managed-CWD
+Application, Channel, frozen local command registry, `SQLiteGatewayStore`, and
+`Gateway`. The Gateway async context owns startup, admission, observation,
+lease renewal, and joined shutdown.
 
-- `SQLiteGatewayStore` is constructed by the consumer and passed to exactly
-  one `Gateway` namespace. It stores bindings, routes, checkpoints, and
-  idempotency/effect receipts—not messages or Agent execution truth.
-- `async with gateway` owns startup, lease renewal, admission, observation,
-  and joined shutdown. There is no second runtime.
-- `create_and_select_project` and `create_and_bind_thread` explicitly establish
-  the hierarchical binding before ordinary input. An unbound message would
-  fail; Gateway never chooses a workspace or creates resources implicitly.
-- `ProjectionPolicy.FOREGROUND_ONLY` makes the current Thread binding the
-  output authority for this Conversation. Binding, native activation, and
-  other observation policies remain separate concepts.
+The consumer uses scoped `create_and_select_project` and
+`create_and_bind_thread` actions before sending ordinary input. Gateway never
+chooses a workspace or creates resources implicitly. Its
+`foreground_only` binding is output authority for the current Conversation;
+binding, native activation, and other observation policies remain separate.
 
-The demo Application is intentionally process-local. The completed SQLite
-database remains inspectable, but rerunning with it and a fresh demo
-Application fails explicitly because the SDK did not persist the Application's
-resources or transcript. A production Application adapter reconnects to its
-own durable native authority; it does not move that truth into Gateway.
+The SQLite store contains only bridge bindings, routes, checkpoints,
+idempotency, and minimal effect receipts. The Application remains authoritative
+for Projects, Threads, Turns, requests, execution, and transcript. The run
+closes its first object graph and reconstructs fresh Gateway, Channel, and store
+objects to prove that bridge projections recover without turning SQLite into a
+second Agent history.
 
-## 3. Replace the local seams
+## 3. Replace the neutral seams
 
-Keep the composition root and replace `LocalChannel` with a real authenticated
-Channel adapter and `LocalEchoApplication` with a native Agent Application
-adapter. Supply credentials, access rules, workspace selection, product
-commands, failure presentation, and operational policy in your consumer.
+In a product, replace the deterministic Channel and Application with native
+adapters while keeping the same explicit composition and ownership. Your
+consumer supplies credentials, IM access policy, workspace selection, product
+commands, failure presentation, and operational policy.
 
-For the complete contracts and restart/fan-out/request/media evidence, follow
-the [reference consumer](README.md), especially the focused
+The canonical implementation is
+[`examples/reference_consumer`](../../examples/reference_consumer/). For the
+details needed during replacement, continue with the focused
 [Applications](applications.md), [Interaction](interaction.md),
 [Gateway](gateway.md), and [production checklist](production-checklist.md)
-guides. Runtime ownership remains authoritative in the
-[v1 design](../V1_DESIGN.md) and [architecture](../ARCHITECTURE.md).
+guides rather than copying the acceptance consumer. Runtime ownership remains
+authoritative in the [v1 design](../V1_DESIGN.md) and
+[architecture](../ARCHITECTURE.md).
