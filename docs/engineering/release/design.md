@@ -15,7 +15,8 @@ This leaf owns:
 - the stable package/version facade and `py.typed` marker;
 - optional dependency extras and their import boundary;
 - wheel assembly and clean-install verification; and
-- release-facing documentation for the installable artifact.
+- GitHub tag/release assembly, immutable asset evidence, and release-facing
+  documentation for the installable artifact.
 
 It does not own Interaction, Gateway, or Applications behavior, compatibility
 implementations, a native runtime, a second package facade, or product
@@ -78,6 +79,21 @@ loads neither Gateway nor concrete optional dependencies.
 
 The package version is build metadata, not runtime state. A release candidate
 must be validated from the repository's locked dependency graph and an
-isolated wheel installation. Publishing, external announcements, and
-consumer migration are approval and coordination activities outside this
-engineering slice; they cannot be inferred from a passing local build.
+isolated wheel installation.
+
+The approved alpha publication boundary is the one GitHub prerelease
+`v0.1.0a1`, whose package version is exactly `0.1.0a1` and whose commit is
+reachable from `main`. The
+release attaches exactly one universal wheel plus `SHA256SUMS`; its notes fix
+the full source commit, package version, wheel filename, digest, and stable
+asset URL. The repository-owned tag workflow refuses to overwrite an existing
+release and never publishes to PyPI or another package registry. The build
+backend and its transitive graph are pinned with hashes in
+`build-constraints.txt`; both CI and release assembly require those hashes.
+Their initial dependency sync skips installing the local project, and later
+repository commands run without automatic synchronization, so no unconstrained
+local PEP 517 backend executes before the constrained wheel build.
+
+Creating the tag remains the explicit publishing approval. A passing build or
+pull request cannot infer that approval, publish a future version, announce a
+release, modify a downstream repository, or approve consumer migration.

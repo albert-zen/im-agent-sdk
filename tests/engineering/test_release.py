@@ -3,9 +3,15 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
 import tomllib
 import unittest
+import zipfile
 from pathlib import Path
+
+import yaml
+
+from scripts.prepare_github_release import prepare_release
 
 ROOT = Path(__file__).resolve().parents[2]
 DEPENDENCY_BOUNDARY_PATHS = (
@@ -142,6 +148,161 @@ assert not any(
         self.assertIn("REFERENCE_CONSUMER_CHECK,", smoke_source)
         self.assertIn("for name, (extra, code) in CASES.items():", smoke_source)
         self.assertNotIn("+ REFERENCE_CONSUMER_CHECK\n        + (", smoke_source)
+
+    def test_github_release_workflow_is_tag_fenced_and_registry_free(self) -> None:
+        workflow_text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        workflow = yaml.load(workflow_text, Loader=yaml.BaseLoader)
+        self.assertEqual(workflow["on"]["push"]["tags"], ["v0.1.0a1"])
+        self.assertEqual(workflow["permissions"], {"contents": "write"})
+        steps = workflow["jobs"]["release"]["steps"]
+        used_actions = [step["uses"] for step in steps if "uses" in step]
+        self.assertEqual(
+            used_actions,
+            [
+                "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+                "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065",
+                "astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e",
+            ],
+        )
+        self.assertEqual(steps[0]["with"]["persist-credentials"], "false")
+        commands = "\n".join(step.get("run", "") for step in steps)
+        for fragment in (
+            'git merge-base --is-ancestor "$GITHUB_SHA" origin/main',
+            'gh release view "$GITHUB_REF_NAME"',
+            "scripts/prepare_github_release.py",
+            "--build-constraint build-constraints.txt --require-hashes",
+            "--locked --no-install-project",
+            "dist/SHA256SUMS",
+            "--verify-tag",
+            "--prerelease",
+        ):
+            self.assertIn(fragment, commands)
+        uv_run_lines = [line.strip() for line in commands.splitlines() if "uv run" in line]
+        self.assertTrue(uv_run_lines)
+        self.assertTrue(all("uv run --no-sync" in line for line in uv_run_lines))
+        self.assertNotIn("pypi", commands.casefold())
+        self.assertNotIn("uv publish", commands.casefold())
+        self.assertNotIn("twine", commands.casefold())
+
+    def test_build_backend_graph_is_exact_and_hash_constrained(self) -> None:
+        metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        self.assertEqual(metadata["build-system"]["requires"], ["hatchling==1.32.0"])
+        constraints = (ROOT / "build-constraints.txt").read_text(encoding="utf-8")
+        for requirement in (
+            "hatchling==1.32.0",
+            "packaging==26.3",
+            "pathspec==1.1.1",
+            "pluggy==1.6.0",
+            "tomlkit==0.15.1",
+            "trove-classifiers==2026.6.1.19",
+        ):
+            self.assertIn(requirement, constraints)
+        self.assertEqual(constraints.count("--hash=sha256:"), 12)
+        for workflow_name in ("ci.yml", "release.yml"):
+            workflow = yaml.load(
+                (ROOT / ".github" / "workflows" / workflow_name).read_text(encoding="utf-8"),
+                Loader=yaml.BaseLoader,
+            )
+            steps = workflow["jobs"][next(iter(workflow["jobs"]))]["steps"]
+            commands = "\n".join(step.get("run", "") for step in steps)
+            self.assertIn("--locked --no-install-project", commands)
+            self.assertIn("--build-constraint build-constraints.txt --require-hashes", commands)
+            uv_run_lines = [line.strip() for line in commands.splitlines() if "uv run" in line]
+            self.assertTrue(uv_run_lines)
+            self.assertTrue(all("uv run --no-sync" in line for line in uv_run_lines))
+
+    def test_release_evidence_binds_wheel_version_commit_and_checksum(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wheel = root / "im_agent_sdk-0.1.0a1-py3-none-any.whl"
+            with zipfile.ZipFile(wheel, "w") as archive:
+                archive.writestr(
+                    "im_agent_sdk-0.1.0a1.dist-info/METADATA",
+                    "Metadata-Version: 2.4\nName: im-agent-sdk\nVersion: 0.1.0a1\n",
+                )
+                archive.writestr("imagent/py.typed", "")
+                archive.writestr("examples/reference_consumer/main.py", "")
+
+            checksum, notes = prepare_release(
+                wheel=wheel,
+                tag="v0.1.0a1",
+                source_commit="a" * 40,
+                repository="albert-zen/im-agent-sdk",
+                output_directory=root / "release",
+            )
+
+            digest = checksum.read_text(encoding="ascii").split()[0]
+            self.assertEqual(len(digest), 64)
+            notes_text = notes.read_text(encoding="utf-8")
+            self.assertIn("`" + ("a" * 40) + "`", notes_text)
+            self.assertIn(f"SHA-256: `{digest}`", notes_text)
+            self.assertIn(
+                "/releases/download/v0.1.0a1/im_agent_sdk-0.1.0a1-py3-none-any.whl",
+                notes_text,
+            )
+            self.assertIn("not published to PyPI", notes_text)
+
+            with self.assertRaisesRegex(ValueError, "does not match package version tag"):
+                prepare_release(
+                    wheel=wheel,
+                    tag="v0.1.0a2",
+                    source_commit="a" * 40,
+                    repository="albert-zen/im-agent-sdk",
+                    output_directory=root / "wrong-tag",
+                )
+
+            invalid_cases = (
+                ("bad commit", wheel, "v0.1.0a1", "A" * 40, "albert-zen/im-agent-sdk"),
+                ("bad repository", wheel, "v0.1.0a1", "a" * 40, "im-agent-sdk"),
+                (
+                    "bad filename",
+                    root / "renamed.whl",
+                    "v0.1.0a1",
+                    "a" * 40,
+                    "albert-zen/im-agent-sdk",
+                ),
+            )
+            (root / "renamed.whl").write_bytes(wheel.read_bytes())
+            for label, invalid_wheel, tag, commit, repository in invalid_cases:
+                with self.subTest(label=label), self.assertRaises(ValueError):
+                    prepare_release(
+                        wheel=invalid_wheel,
+                        tag=tag,
+                        source_commit=commit,
+                        repository=repository,
+                        output_directory=root / label.replace(" ", "-"),
+                    )
+
+            invalid_metadata_wheel = root / "im_agent_sdk-0.1.0a1-py3-none-any.whl"
+            for label, metadata_text, members in (
+                (
+                    "bad metadata name",
+                    "Metadata-Version: 2.4\nName: other\nVersion: 0.1.0a1\n",
+                    ("imagent/py.typed", "examples/reference_consumer/main.py"),
+                ),
+                (
+                    "bad metadata version",
+                    "Metadata-Version: 2.4\nName: im-agent-sdk\nVersion: 0.1.0a2\n",
+                    ("imagent/py.typed", "examples/reference_consumer/main.py"),
+                ),
+                (
+                    "missing member",
+                    "Metadata-Version: 2.4\nName: im-agent-sdk\nVersion: 0.1.0a1\n",
+                    ("imagent/py.typed",),
+                ),
+            ):
+                with zipfile.ZipFile(invalid_metadata_wheel, "w") as archive:
+                    archive.writestr("im_agent_sdk-0.1.0a1.dist-info/METADATA", metadata_text)
+                    for member in members:
+                        archive.writestr(member, "")
+                with self.subTest(label=label), self.assertRaises(ValueError):
+                    prepare_release(
+                        wheel=invalid_metadata_wheel,
+                        tag="v0.1.0a1",
+                        source_commit="a" * 40,
+                        repository="albert-zen/im-agent-sdk",
+                        output_directory=root / label.replace(" ", "-"),
+                    )
 
     def test_top_level_facade_is_finite_lazy_and_exact_in_a_clean_process(self) -> None:
         environment = os.environ.copy()

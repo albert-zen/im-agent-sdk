@@ -879,8 +879,11 @@ components:
       - docs/V1_EXECUTABLE_SPEC.md
       - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - README.md
+      - .github/workflows/release.yml
+      - build-constraints.txt
       - pyproject.toml
       - uv.lock
+      - scripts/prepare_github_release.py
       - scripts/smoke_clean_install.py
       - src/imagent/__init__.py
       - src/imagent/py.typed
