@@ -120,6 +120,17 @@ supported server request, and same-ID replacement invalidate the plan before
 native mutation. Retirement is generation-specific, so an older plan cannot
 remove newer evidence for a reused Thread ID.
 
+A delayed `thread/started` handler can execute after the create response has
+installed evidence. The notification payload—even when partial—is not
+replacement authority. On the matching connection epoch, Codex locks the
+captured generation and performs an authoritative `thread/read` without
+Turns. Exact continuity preserves the marker; the first event may authorize
+the bounded all-equal creation/update/recency clock revision family after current
+Thread/workspace, session, stable native identity, epoch, and evidence identity
+continuity is proved. A non-creation revision drift and read failure
+retire the captured marker, while a stale epoch or concurrent same-ID successor
+cannot be deleted or refreshed by the older event.
+
 Interactive requests use the locally installed Codex App Server generated
 schema and SDK-owned transport tests as the wire authority. The common mapping
 supports command/file approval choices, structured tool user input, and

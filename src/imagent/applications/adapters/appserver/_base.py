@@ -230,8 +230,10 @@ class _PreparedAppServerInput:
 class _CreatedPreInputEvidence:
     connection_epoch: int
     native_session_id: str
+    native_identity: tuple[str | None, str | None, str | None]
     native_revisions: tuple[tuple[int, int, int], ...]
     validation_lock: asyncio.Lock
+    create_started_reconciled: bool = False
     retired_by_turn_event: bool = False
 
 
@@ -1159,11 +1161,17 @@ class _AppServerApplicationAdapter:
             event = _normalize_appserver_message(notification)
             if event.thread_id is not None:
                 thread_ref = self._thread_ref(event.thread_id)
-                if event.method == "thread/started":
-                    self._retire_recreated_thread_started(thread_ref, event)
+                verified_native_thread = None
                 if self._is_turn_materialization_notification(event):
                     self._retire_created_pre_input(thread_ref, turn_event=True)
                 try:
+                    if event.method == "thread/started":
+                        verified_native_thread = (
+                            await self._reconcile_thread_started_pre_input_evidence(
+                                thread_ref,
+                                event,
+                            )
+                        )
                     evidence = (
                         self._created_pre_input_evidence(thread_ref)
                         if self._is_pre_input_revision_refresh_notification(event)
@@ -1176,6 +1184,8 @@ class _AppServerApplicationAdapter:
                                 thread_ref,
                                 native_thread,
                             )
+                    elif verified_native_thread is not None:
+                        native_thread = verified_native_thread
                     else:
                         native_thread = await self._require_native_thread_scope(thread_ref)
                 except Exception:
@@ -1403,13 +1413,20 @@ class _AppServerApplicationAdapter:
     ) -> None:
         connection_epoch = self._current_connection_epoch()
         native_session_id = self._native_pre_input_session_id(native_thread)
+        native_identity = self._native_pre_input_identity(native_thread)
         native_revision = self._native_pre_input_revision(native_thread)
-        if connection_epoch is None or native_session_id is None or native_revision is None:
+        if (
+            connection_epoch is None
+            or native_session_id is None
+            or native_identity is None
+            or native_revision is None
+        ):
             self._thread_baseline_evidence.pop(thread_ref, None)
             return
         self._thread_baseline_evidence[thread_ref] = _CreatedPreInputEvidence(
             connection_epoch=connection_epoch,
             native_session_id=native_session_id,
+            native_identity=native_identity,
             native_revisions=(native_revision,),
             validation_lock=asyncio.Lock(),
         )
@@ -1435,15 +1452,28 @@ class _AppServerApplicationAdapter:
         native_thread: Mapping[str, object],
         *,
         allow_retired_snapshot: bool = False,
+        retire_on_mismatch: bool = True,
     ) -> bool:
         if evidence is None:
             return False
         current = self._thread_baseline_evidence.get(thread_ref)
         identity_matches = (
             self._native_pre_input_session_id(native_thread) == evidence.native_session_id
+            and self._native_pre_input_identity(native_thread) == evidence.native_identity
         )
         revision_matches = (
             self._native_pre_input_revision(native_thread) in evidence.native_revisions
+        )
+        native_revision = self._native_pre_input_revision(native_thread)
+        creation_clock_matches = (
+            evidence.create_started_reconciled
+            and identity_matches
+            and native_revision is not None
+            and self._is_native_pre_input_creation_revision(native_revision)
+            and any(
+                self._is_native_pre_input_creation_revision(revision)
+                for revision in evidence.native_revisions
+            )
         )
         retired_during_baseline = (
             allow_retired_snapshot and current is None and evidence.retired_by_turn_event
@@ -1451,9 +1481,18 @@ class _AppServerApplicationAdapter:
         matches = (
             self._current_connection_epoch() == evidence.connection_epoch
             and identity_matches
-            and (retired_during_baseline or (current is evidence and revision_matches))
+            and (
+                retired_during_baseline
+                or (current is evidence and (revision_matches or creation_clock_matches))
+            )
         )
-        if not matches:
+        if matches and creation_clock_matches and not revision_matches:
+            assert native_revision is not None
+            evidence.native_revisions = (
+                *evidence.native_revisions[-(_PRE_INPUT_AUTHORIZED_REVISIONS_MAX - 1) :],
+                native_revision,
+            )
+        if not matches and retire_on_mismatch:
             self._retire_created_pre_input(thread_ref, expected=evidence)
         return matches
 
@@ -1521,6 +1560,25 @@ class _AppServerApplicationAdapter:
             return None
         return cast(int, created_at), cast(int, updated_at), cast(int, recency_at)
 
+    @staticmethod
+    def _native_pre_input_identity(
+        native_thread: Mapping[str, object],
+    ) -> tuple[str | None, str | None, str | None] | None:
+        try:
+            return (
+                _optional_string(native_thread.get("path")),
+                _optional_string(native_thread.get("forkedFromId")),
+                _optional_string(native_thread.get("parentThreadId")),
+            )
+        except _AppServerMappingError:
+            return None
+
+    @staticmethod
+    def _is_native_pre_input_creation_revision(
+        revision: tuple[int, int, int],
+    ) -> bool:
+        return revision[0] == revision[1] == revision[2]
+
     def _refresh_created_pre_input_revision(
         self,
         thread_ref: ThreadRef,
@@ -1541,26 +1599,59 @@ class _AppServerApplicationAdapter:
             revision,
         )
 
-    def _retire_recreated_thread_started(
+    async def _reconcile_thread_started_pre_input_evidence(
         self,
         thread_ref: ThreadRef,
         event: _AppServerEvent,
-    ) -> None:
-        evidence = self._thread_baseline_evidence.get(thread_ref)
+    ) -> Mapping[str, object] | None:
+        evidence = self._created_pre_input_evidence(thread_ref)
         if evidence is None:
-            return
-        started_thread = event.payload.get("thread")
-        if not isinstance(started_thread, Mapping):
-            self._retire_created_pre_input(thread_ref, expected=evidence)
-            return
-        session_matches = (
-            self._native_pre_input_session_id(started_thread) == evidence.native_session_id
-        )
-        revision_matches = (
-            self._native_pre_input_revision(started_thread) in evidence.native_revisions
-        )
-        if not session_matches or not revision_matches:
-            self._retire_created_pre_input(thread_ref, expected=evidence)
+            return None
+        if (
+            event.connection_epoch is not None
+            and event.connection_epoch != evidence.connection_epoch
+        ):
+            return None
+        async with evidence.validation_lock:
+            if self._thread_baseline_evidence.get(thread_ref) is not evidence:
+                return None
+            try:
+                native_thread = await self._require_native_thread_scope(thread_ref)
+            except BaseException:
+                self._retire_created_pre_input(thread_ref, expected=evidence)
+                raise
+            current_revision = self._native_pre_input_revision(native_thread)
+            exact_match = self._matches_created_pre_input_evidence(
+                thread_ref,
+                evidence,
+                native_thread,
+                retire_on_mismatch=False,
+            )
+            if not exact_match:
+                refresh_matches = (
+                    not evidence.create_started_reconciled
+                    and self._thread_baseline_evidence.get(thread_ref) is evidence
+                    and self._current_connection_epoch() == evidence.connection_epoch
+                    and self._native_pre_input_session_id(native_thread)
+                    == evidence.native_session_id
+                    and self._native_pre_input_identity(native_thread) == evidence.native_identity
+                    and current_revision is not None
+                    and self._is_native_pre_input_creation_revision(current_revision)
+                    and any(
+                        self._is_native_pre_input_creation_revision(revision)
+                        for revision in evidence.native_revisions
+                    )
+                )
+                if not refresh_matches:
+                    self._retire_created_pre_input(thread_ref, expected=evidence)
+                    return None
+                assert current_revision is not None
+                evidence.native_revisions = (
+                    *evidence.native_revisions[-(_PRE_INPUT_AUTHORIZED_REVISIONS_MAX - 1) :],
+                    current_revision,
+                )
+            evidence.create_started_reconciled = True
+            return native_thread
 
     @staticmethod
     def _is_turn_materialization_notification(event: _AppServerEvent) -> bool:

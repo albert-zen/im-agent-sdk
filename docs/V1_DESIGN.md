@@ -506,6 +506,23 @@ only after the barrier opens. Existing routes, checkpointed recovery,
 ambiguous history
 failures, and provider errors are never downgraded by text matching.
 
+A queued `thread/started` lifecycle notification may run after the create
+response installed this evidence. Its payload is not identity authority: a
+partial payload cannot prove same-ID recreation, and a stale full payload
+cannot revoke a newer generation. For a matching notification epoch, the
+adapter serializes on the captured evidence generation and performs an
+authoritative non-turn-bearing Thread scope read. Exact identity/revision
+continuity preserves the generation. Codex may normalize an unmaterialized
+Thread's equal create/update/recency clock once as the create lifecycle settles;
+only that generation's first `thread/started` may authorize this bounded
+all-equal creation-clock revision family after exact Thread/workspace, native
+session, stable native identity, current epoch, and evidence-object continuity
+are proved by the read. The finite authorized-revision window advances only
+within that family. A non-creation revision, read failure, or proven identity
+drift retires only the captured generation; reset and
+successor installation remain ABA-safe. This lifecycle validation does not
+authorize a history fallback, an `includeTurns` probe, or native mutation.
+
 Scoped actions that make routes visible use the projection owner's opaque,
 generation-specific barrier lease. Same-route action lifecycles serialize;
 completion can affect only the generation it began, delivery rechecks the

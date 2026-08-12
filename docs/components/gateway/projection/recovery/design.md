@@ -52,6 +52,16 @@ baseline snapshot captured before a racing allowlisted Turn event may finish
 empty because the live event is already queued behind its barrier; later
 recovery is strict.
 
+An asynchronous `thread/started` notification does not itself change this
+recovery mode. The concrete adapter must reconcile its captured evidence under
+the generation lock with a current no-turn native scope read. A partial event
+payload cannot revoke exact-create evidence. Codex's first lifecycle event may
+authorize the bounded all-equal creation-clock revision family after stable
+native identity continuity is proved; a non-creation revision, epoch,
+Thread/workspace, session, or generation drift (or read failure) restores
+strict history. Stale notification epochs and old handlers cannot revoke
+successor evidence.
+
 ## Failure domains and request honesty
 
 Subscription and recovery failures are per-Thread worker infrastructure facts

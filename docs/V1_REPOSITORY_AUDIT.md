@@ -352,7 +352,14 @@ first-input plan carries the exact create-evidence generation and revalidates
 its connection/session/revision/identity after the asynchronous dispatch fence;
 reset, a supported turn-bearing notification/request, or same-ID replacement
 therefore stops before native mutation, and generation-specific retirement
-cannot erase successor evidence. Gateway
+cannot erase successor evidence. Delayed `thread/started` processing no longer
+interprets partial notification payloads as replacement proof: the handler
+locks the captured evidence generation and uses a current no-turn scope read.
+Only the first `thread/started` can authorize the bounded all-equal creation-
+clock revision family after exact stable native identity continuity; non-
+creation drift and failure retire that captured generation, while stale-
+epoch delivery and concurrent same-ID successor installation cannot erase
+newer evidence. Gateway
 therefore keeps subscribe-before-baseline and delivers the
 first live output once, while non-created routes, checkpoints, evidence loss,
 restart after dispatch, and unrelated history failures retain F's strict

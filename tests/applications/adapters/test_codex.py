@@ -769,6 +769,524 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
             [recreated_result.thread.ref.thread_id],
         )
 
+    async def test_delayed_partial_thread_started_preserves_exact_pre_input_evidence(
+        self,
+    ) -> None:
+        client = _InputClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        created = await adapter.execute(
+            CreateThread(
+                operation_id="create-before-delayed-thread-started",
+                application_ref=adapter.summary.ref,
+                project_ref=ProjectRef("codex-main", "workspace"),
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(created, ThreadCreated)
+        assert isinstance(created, ThreadCreated)
+        thread_ref = created.thread.ref
+        original_read = client.read_thread
+        lifecycle_revision = 1
+
+        async def lifecycle_revision_read(
+            thread_id: str,
+            *,
+            include_turns: bool = False,
+        ) -> dict[str, object]:
+            nonlocal lifecycle_revision
+            lifecycle_revision += 1
+            result = await original_read(thread_id, include_turns=include_turns)
+            native_thread = result["thread"]
+            assert isinstance(native_thread, dict)
+            native_thread["createdAt"] = lifecycle_revision
+            native_thread["updatedAt"] = lifecycle_revision
+            native_thread["recencyAt"] = lifecycle_revision
+            return result
+
+        client.read_thread = lifecycle_revision_read  # type: ignore[method-assign]
+
+        for handler in tuple(client.notification_handlers):
+            handled = handler(
+                {
+                    "method": "thread/started",
+                    "_connection_epoch": client.connection_epoch,
+                    "params": {"thread": {"id": thread_ref.thread_id}},
+                }
+            )
+            if inspect.isawaitable(handled):
+                await handled
+
+        history = await adapter.execute(
+            GetThreadHistory(
+                operation_id="empty-after-delayed-thread-started",
+                application_ref=adapter.summary.ref,
+                thread_ref=thread_ref,
+                limit=3,
+                page=1,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(history, ThreadHistoryRead)
+        assert isinstance(history, ThreadHistoryRead)
+        self.assertEqual(history.history.turns, ())
+        accepted = await adapter.send_input(
+            thread_ref,
+            AgentInput(
+                client_message_id="first-input-after-delayed-thread-started",
+                content=(TextContent("materialize once"),),
+            ),
+        )
+
+        self.assertEqual(accepted.turn_ref.turn_id, "turn-started")
+        self.assertEqual(client.turn_list_calls, [])
+        self.assertEqual(client.started[0]["thread_id"], thread_ref.thread_id)
+        self.assertNotIn((thread_ref.thread_id, True), client.read_calls)
+
+    async def test_partial_thread_started_uses_scope_to_reject_foreign_session(
+        self,
+    ) -> None:
+        client = _InputClient(active_turn_id="replacement-turn")
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        created = await adapter.execute(
+            CreateThread(
+                operation_id="create-before-foreign-thread-started",
+                application_ref=adapter.summary.ref,
+                project_ref=ProjectRef("codex-main", "workspace"),
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(created, ThreadCreated)
+        assert isinstance(created, ThreadCreated)
+        thread_ref = created.thread.ref
+        original_read = client.read_thread
+
+        async def foreign_session_read(
+            thread_id: str,
+            *,
+            include_turns: bool = False,
+        ) -> dict[str, object]:
+            result = await original_read(thread_id, include_turns=include_turns)
+            native_thread = result["thread"]
+            assert isinstance(native_thread, dict)
+            native_thread["sessionId"] = "foreign-session"
+            native_thread["createdAt"] = 2
+            native_thread["updatedAt"] = 2
+            native_thread["recencyAt"] = 2
+            return result
+
+        client.read_thread = foreign_session_read  # type: ignore[method-assign]
+        for handler in tuple(client.notification_handlers):
+            handled = handler(
+                {
+                    "method": "thread/started",
+                    "_connection_epoch": client.connection_epoch,
+                    "params": {"thread": {"id": thread_ref.thread_id}},
+                }
+            )
+            if inspect.isawaitable(handled):
+                await handled
+        client.read_thread = original_read  # type: ignore[method-assign]
+
+        accepted = await adapter.send_input(
+            thread_ref,
+            AgentInput(
+                client_message_id="strict-input-after-foreign-session",
+                content=(TextContent("continue replacement"),),
+            ),
+        )
+
+        self.assertEqual(accepted.turn_ref.turn_id, "replacement-turn")
+        self.assertIn((thread_ref.thread_id, True), client.read_calls)
+        self.assertEqual(client.started, [])
+        self.assertEqual(len(client.steered), 1)
+
+    async def test_partial_thread_started_rejects_non_authorized_revision(self) -> None:
+        client = _InputClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        created = await adapter.execute(
+            CreateThread(
+                operation_id="create-before-revision-drift",
+                application_ref=adapter.summary.ref,
+                project_ref=ProjectRef("codex-main", "workspace"),
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(created, ThreadCreated)
+        assert isinstance(created, ThreadCreated)
+        original_read = client.read_thread
+
+        async def revision_drift_read(
+            thread_id: str,
+            *,
+            include_turns: bool = False,
+        ) -> dict[str, object]:
+            result = await original_read(thread_id, include_turns=include_turns)
+            native_thread = result["thread"]
+            assert isinstance(native_thread, dict)
+            native_thread["updatedAt"] = 2
+            native_thread["recencyAt"] = 2
+            return result
+
+        client.read_thread = revision_drift_read  # type: ignore[method-assign]
+        for handler in tuple(client.notification_handlers):
+            handled = handler(
+                {
+                    "method": "thread/started",
+                    "_connection_epoch": client.connection_epoch,
+                    "params": {"thread": {"id": created.thread.ref.thread_id}},
+                }
+            )
+            if inspect.isawaitable(handled):
+                await handled
+        client.read_thread = original_read  # type: ignore[method-assign]
+
+        history = await adapter.execute(
+            GetThreadHistory(
+                operation_id="strict-after-thread-started-revision-drift",
+                application_ref=adapter.summary.ref,
+                thread_ref=created.thread.ref,
+                limit=3,
+                page=1,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(history, ThreadHistoryRead)
+        self.assertEqual(client.turn_list_calls, [created.thread.ref.thread_id])
+
+    async def test_partial_thread_started_rejects_same_session_native_identity_drift(
+        self,
+    ) -> None:
+        client = _InputClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        created = await adapter.execute(
+            CreateThread(
+                operation_id="create-before-native-identity-drift",
+                application_ref=adapter.summary.ref,
+                project_ref=ProjectRef("codex-main", "workspace"),
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(created, ThreadCreated)
+        assert isinstance(created, ThreadCreated)
+        original_read = client.read_thread
+
+        async def recreated_identity_read(
+            thread_id: str,
+            *,
+            include_turns: bool = False,
+        ) -> dict[str, object]:
+            result = await original_read(thread_id, include_turns=include_turns)
+            native_thread = result["thread"]
+            assert isinstance(native_thread, dict)
+            native_thread["path"] = "/native/recreated-same-id.jsonl"
+            native_thread["createdAt"] = 2
+            native_thread["updatedAt"] = 2
+            native_thread["recencyAt"] = 2
+            return result
+
+        client.read_thread = recreated_identity_read  # type: ignore[method-assign]
+        for handler in tuple(client.notification_handlers):
+            handled = handler(
+                {
+                    "method": "thread/started",
+                    "_connection_epoch": client.connection_epoch,
+                    "params": {"thread": {"id": created.thread.ref.thread_id}},
+                }
+            )
+            if inspect.isawaitable(handled):
+                await handled
+        client.read_thread = original_read  # type: ignore[method-assign]
+
+        history = await adapter.execute(
+            GetThreadHistory(
+                operation_id="strict-after-native-identity-drift",
+                application_ref=adapter.summary.ref,
+                thread_ref=created.thread.ref,
+                limit=3,
+                page=1,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(history, ThreadHistoryRead)
+        self.assertEqual(client.turn_list_calls, [created.thread.ref.thread_id])
+
+    async def test_partial_thread_started_reset_race_retires_captured_generation(
+        self,
+    ) -> None:
+        client = _InputClient(active_turn_id="post-reset-turn")
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        created = await adapter.execute(
+            CreateThread(
+                operation_id="create-before-thread-started-reset",
+                application_ref=adapter.summary.ref,
+                project_ref=ProjectRef("codex-main", "workspace"),
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(created, ThreadCreated)
+        assert isinstance(created, ThreadCreated)
+        thread_ref = created.thread.ref
+        original_read = client.read_thread
+        read_started = asyncio.Event()
+        release_read = asyncio.Event()
+        held_once = False
+
+        async def reset_racing_read(
+            thread_id: str,
+            *,
+            include_turns: bool = False,
+        ) -> dict[str, object]:
+            nonlocal held_once
+            if not held_once and not include_turns:
+                held_once = True
+                read_started.set()
+                await release_read.wait()
+            return await original_read(thread_id, include_turns=include_turns)
+
+        client.read_thread = reset_racing_read  # type: ignore[method-assign]
+        notification_task = asyncio.create_task(
+            adapter._handle_notification(
+                {
+                    "method": "thread/started",
+                    "_connection_epoch": client.connection_epoch,
+                    "params": {"thread": {"id": thread_ref.thread_id}},
+                }
+            )
+        )
+        await read_started.wait()
+        client.connection_epoch = 2
+        await adapter._handle_event_connection_reset(1)
+        release_read.set()
+        await notification_task
+
+        await adapter.send_input(
+            thread_ref,
+            AgentInput(
+                client_message_id="strict-input-after-thread-started-reset",
+                content=(TextContent("continue post-reset Turn"),),
+            ),
+        )
+
+        self.assertIn((thread_ref.thread_id, True), client.read_calls)
+        self.assertEqual(client.started, [])
+        self.assertEqual(client.steered[0]["turn_id"], "post-reset-turn")
+
+    async def test_delayed_thread_started_cannot_retire_same_id_successor(
+        self,
+    ) -> None:
+        client = _InputClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        project_ref = ProjectRef("codex-main", "workspace")
+        created = await adapter.execute(
+            CreateThread(
+                operation_id="create-before-delayed-successor-race",
+                application_ref=adapter.summary.ref,
+                project_ref=project_ref,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(created, ThreadCreated)
+        assert isinstance(created, ThreadCreated)
+        thread_ref = created.thread.ref
+        original_read = client.read_thread
+        read_started = asyncio.Event()
+        release_read = asyncio.Event()
+        held_once = False
+
+        async def successor_racing_read(
+            thread_id: str,
+            *,
+            include_turns: bool = False,
+        ) -> dict[str, object]:
+            nonlocal held_once
+            if not held_once and not include_turns:
+                held_once = True
+                read_started.set()
+                await release_read.wait()
+            return await original_read(thread_id, include_turns=include_turns)
+
+        client.read_thread = successor_racing_read  # type: ignore[method-assign]
+        notification_task = asyncio.create_task(
+            adapter._handle_notification(
+                {
+                    "method": "thread/started",
+                    "_connection_epoch": client.connection_epoch,
+                    "params": {"thread": {"id": thread_ref.thread_id}},
+                }
+            )
+        )
+        await read_started.wait()
+        successor = await adapter.execute(
+            CreateThread(
+                operation_id="same-id-successor-during-delayed-notification",
+                application_ref=adapter.summary.ref,
+                project_ref=project_ref,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(successor, ThreadCreated)
+        release_read.set()
+        await notification_task
+
+        history = await adapter.execute(
+            GetThreadHistory(
+                operation_id="successor-empty-after-delayed-notification",
+                application_ref=adapter.summary.ref,
+                thread_ref=thread_ref,
+                limit=3,
+                page=1,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(history, ThreadHistoryRead)
+        assert isinstance(history, ThreadHistoryRead)
+        self.assertEqual(history.history.turns, ())
+        self.assertEqual(client.turn_list_calls, [])
+
+    async def test_stale_epoch_thread_started_cannot_retire_post_reset_successor(
+        self,
+    ) -> None:
+        client = _InputClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        project_ref = ProjectRef("codex-main", "workspace")
+        original = await adapter.execute(
+            CreateThread(
+                operation_id="create-before-stale-epoch-notification",
+                application_ref=adapter.summary.ref,
+                project_ref=project_ref,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(original, ThreadCreated)
+        assert isinstance(original, ThreadCreated)
+        client.connection_epoch = 2
+        await adapter._handle_event_connection_reset(1)
+        successor = await adapter.execute(
+            CreateThread(
+                operation_id="same-id-successor-after-reset",
+                application_ref=adapter.summary.ref,
+                project_ref=project_ref,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(successor, ThreadCreated)
+        assert isinstance(successor, ThreadCreated)
+
+        for handler in tuple(client.notification_handlers):
+            handled = handler(
+                {
+                    "method": "thread/started",
+                    "_connection_epoch": 1,
+                    "params": {"thread": {"id": original.thread.ref.thread_id}},
+                }
+            )
+            if inspect.isawaitable(handled):
+                await handled
+
+        history = await adapter.execute(
+            GetThreadHistory(
+                operation_id="post-reset-successor-remains-exact",
+                application_ref=adapter.summary.ref,
+                thread_ref=successor.thread.ref,
+                limit=3,
+                page=1,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(history, ThreadHistoryRead)
+        assert isinstance(history, ThreadHistoryRead)
+        self.assertEqual(history.history.turns, ())
+        self.assertEqual(client.turn_list_calls, [])
+
+    async def test_partial_thread_started_scope_failure_retires_evidence(self) -> None:
+        client = _InputClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        created = await adapter.execute(
+            CreateThread(
+                operation_id="create-before-thread-started-scope-failure",
+                application_ref=adapter.summary.ref,
+                project_ref=ProjectRef("codex-main", "workspace"),
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(created, ThreadCreated)
+        assert isinstance(created, ThreadCreated)
+        original_read = client.read_thread
+
+        async def fail_scope_read(
+            thread_id: str,
+            *,
+            include_turns: bool = False,
+        ) -> dict[str, object]:
+            del thread_id, include_turns
+            raise RuntimeError("scope unavailable during delayed notification")
+
+        client.read_thread = fail_scope_read  # type: ignore[method-assign]
+        for handler in tuple(client.notification_handlers):
+            handled = handler(
+                {
+                    "method": "thread/started",
+                    "_connection_epoch": client.connection_epoch,
+                    "params": {"thread": {"id": created.thread.ref.thread_id}},
+                }
+            )
+            if inspect.isawaitable(handled):
+                await handled
+        client.read_thread = original_read  # type: ignore[method-assign]
+
+        history = await adapter.execute(
+            GetThreadHistory(
+                operation_id="strict-after-thread-started-scope-failure",
+                application_ref=adapter.summary.ref,
+                thread_ref=created.thread.ref,
+                limit=3,
+                page=1,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(history, ThreadHistoryRead)
+        self.assertEqual(client.turn_list_calls, [created.thread.ref.thread_id])
+
     async def test_created_pre_input_dispatch_revalidates_after_connection_reset(self) -> None:
         client = _InputClient()
         adapter = CodexApplicationAdapter(

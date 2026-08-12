@@ -270,6 +270,17 @@ replacement cannot cause an older plan to delete newer same-ID evidence. The
 Gateway's already-entered durable dispatch/claim fence keeps its existing
 conservative failure classification; this adapter validation does not weaken
 commit fencing or authorize retry.
+
+`thread/started` is a lifecycle prompt to reconcile this evidence, not payload
+authority. Because its task can run after the create response records the
+generation, the adapter acquires that generation's validation lock and reads
+the authoritative Thread without Turns. Exact revision continuity preserves
+it. Codex's first matching event may instead authorize the bounded all-equal
+creation/update/recency clock revision family when current epoch,
+Thread/workspace, stable session, stable native identity, and evidence-object
+identity still match. Partial payload fields are never matched as absence; a
+non-creation revision, stale epoch, read failure, or proven foreign/
+recreated identity cannot revoke or refresh a successor.
 No error matching, Gateway Application-kind branch, persisted Agent
 truth, or weakening of ordinary/checkpointed history recovery is permitted.
 

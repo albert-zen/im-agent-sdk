@@ -49,6 +49,13 @@ notification, a supported turn-bearing server request, and same-ID replacement
 inside the asynchronous pre-dispatch hook. Every case must prevent native
 start, and the replacement case must prove identity-specific retirement leaves
 the newer generation usable for its own exact empty baseline.
+The lifecycle-notification matrix separately delays a minimal
+`thread/started` until after create evidence is installed and proves the
+locked no-turn scope read can authorize the bounded all-equal creation-clock
+revision family and preserve first input. A non-creation revision
+change, foreign session/native identity, scope failure, and reset during that
+read restore strict behavior; concurrent same-ID installation and a stale
+prior-epoch notification cannot delete or refresh the successor generation.
 
 ## Target evidence and verification
 

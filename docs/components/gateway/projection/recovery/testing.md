@@ -21,6 +21,12 @@ Recovery conformance must prove:
   its exact evidence generation is revalidated after the dispatch fence, so a
   reset/reconnect, allowlisted Turn notification/request, or same-ID
   replacement prevents native start and cannot retire successor evidence;
+  a delayed partial `thread/started` preserves the empty baseline only after a
+  locked authoritative no-turn scope read and may authorize the bounded all-
+  equal creation-clock revision family, while non-creation revision,
+  foreign session/native identity, scope failure, and reset restore strict
+  recovery, and stale epochs and concurrent same-ID successors remain
+  generation-safe;
   non-new, reconstructed, ambiguous, and
   checkpointed history failures stay explicit;
 - baseline/recovery completes before that route drains live events, and a

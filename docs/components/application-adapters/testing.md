@@ -29,6 +29,12 @@ Every adapter should prove:
   notification, a supported turn-bearing server request, and same-ID
   replacement all prevent native start, and ABA-safe retirement leaves newer
   same-ID evidence usable;
+- a delayed partial `thread/started` after evidence installation performs one
+  locked no-turn scope reconciliation and may authorize the bounded all-equal
+  creation-clock revision family, while non-creation drift, foreign
+  session/native identity, reset during the read, and scope failure restore
+  strict behavior, and concurrent or post-reset same-ID successors survive
+  stale-generation/epoch events;
 - concrete per-call App Server creation can select a native profile without
   mutating the configured default or widening the common `CreateThread`;
 - Thread lookup independent from native activation;

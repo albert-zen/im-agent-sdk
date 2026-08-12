@@ -322,6 +322,14 @@ Focused tests enter only through Channel ingress and prove:
   a non-authorized revision change,
   same-ID recreation, or session change restores strict history and active-
   Turn discovery;
+- a delayed partial `thread/started` notification after create-evidence
+  installation cannot retire that evidence from its payload; the create
+  generation lock plus a no-turn authoritative scope read may authorize one
+  bounded all-equal creation-clock revision family only after the first
+  lifecycle event proves exact native identity continuity, while a
+  non-creation revision change, scope failure, reset, foreign drift,
+  and real same-ID recreation retire only the captured generation and a stale
+  prior-epoch event cannot erase its successor;
 - an allowlisted Turn event racing a valid in-flight empty baseline retires
   later eligibility but does not invalidate that captured baseline; the live
   event drains once after the bootstrap barrier, while hostile thread/unknown

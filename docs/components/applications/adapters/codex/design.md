@@ -97,6 +97,19 @@ dispatch retirement names the expected object, so a stale plan cannot erase a
 new same-ID generation. This does not authorize fallback start, retargeting, or
 automatic retry, and it leaves Gateway's durable commit fence conservative.
 
+Native notification dispatch is asynchronous with the create response, so a
+queued `thread/started` may observe evidence that did not exist when the event
+was admitted. Its partial or complete payload is not used as replacement
+proof. For the evidence's connection epoch, the handler serializes on the exact
+generation lock and reads the current native Thread without Turns. Exact
+revision continuity preserves the generation. Because Codex can advance an
+unmaterialized Thread's equal create/update/recency clock as creation settles,
+the first event may authorize the bounded all-equal creation-clock revision
+family after Thread/workspace, session, stable native identity, epoch, and
+generation continuity are proved. Non-creation revision drift, read
+failure, stale prior-epoch delivery, and an older handler racing a same-ID
+successor remain strict and cannot retire or refresh the successor.
+
 ## Current, target, and structural gap
 
 Current code is `src/imagent/applications/adapters/codex.py` plus the explicitly
