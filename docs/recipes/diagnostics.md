@@ -51,8 +51,9 @@ and [ADR 0014](../decisions/0014-read-only-diagnostics-surface.md).
   degraded/`other` evidence.
 - Queue overflow, reconnect, presentation/materialization, I1/I2/O1/O2, and
   lifecycle failures appear only as fixed enums and bounded counters.
-- Calling `diagnostics()` outside a running Gateway raises the public lifecycle
-  error; construct/start a fresh Gateway rather than retaining a stopped one.
+- Calling `diagnostics()` outside a running Gateway raises the bare
+  `RuntimeError("Gateway actions require a running Gateway")`; construct/start
+  a fresh Gateway rather than retaining a stopped one.
 
 Never branch on provider error text. It is intentionally excluded and may
 change without becoming a public contract.

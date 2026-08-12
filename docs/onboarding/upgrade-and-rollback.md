@@ -62,16 +62,33 @@ Record both the annotated tag object and its peeled commit independently from
 the wheel. The unpeeled ref identifies the tag object, not the source commit:
 
 ```sh
+# Remote repository evidence (requires GitHub repository read access).
 git ls-remote --tags https://github.com/albert-zen/im-agent-sdk.git \
   refs/tags/v0.1.0a1 'refs/tags/v0.1.0a1^{}'
+
+# Local checkout evidence after fetching the exact tag.
+git fetch --no-tags https://github.com/albert-zen/im-agent-sdk.git \
+  'refs/tags/v0.1.0a1:refs/tags/v0.1.0a1'
+test "$(git rev-parse 'refs/tags/v0.1.0a1')" = \
+  '82bab131ad292f4e5e036704c3a9e26de074d18d'
+test "$(git rev-parse 'refs/tags/v0.1.0a1^{}')" = \
+  'a72b24a2558c8b2aa48b05214588da4fc1a434db'
 ```
 
-Require both exact object/ref pairs before installation:
+Require the remote command to return both exact object/ref pairs:
 
 ```text
 82bab131ad292f4e5e036704c3a9e26de074d18d refs/tags/v0.1.0a1
 a72b24a2558c8b2aa48b05214588da4fc1a434db refs/tags/v0.1.0a1^{}
 ```
+
+The two local assertions verify the same hashes in role order: first the
+annotated tag object `82bab131ad292f4e5e036704c3a9e26de074d18d`, then the
+peeled source commit `a72b24a2558c8b2aa48b05214588da4fc1a434db`. Keep the
+peeled ref single-quoted so shells do not interpret its punctuation. If the
+local tag already exists, first verify it rather than force-moving it; use a
+disposable checkout for provenance verification when its identity is
+uncertain.
 
 Then run this inside the target environment with `WHEEL_PATH` set to the exact
 downloaded wheel path. It checks package metadata, runtime facade, the local

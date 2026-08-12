@@ -90,9 +90,24 @@ class OperationalDocumentationTests(unittest.TestCase):
         self.assertIn("v0.1.0a1", text)
         self.assertIn(f"| Annotated tag object | `{tag_object}` |", text)
         self.assertIn(f"| Peeled tag commit | `{peeled_commit}` |", text)
-        self.assertIn("'refs/tags/v0.1.0a1^{}'", text)
+        remote_command = (
+            "git ls-remote --tags https://github.com/albert-zen/im-agent-sdk.git \\\n"
+            "  refs/tags/v0.1.0a1 'refs/tags/v0.1.0a1^{}'"
+        )
+        local_tag_command = f"test \"$(git rev-parse 'refs/tags/v0.1.0a1')\" = \\\n  '{tag_object}'"
+        local_peeled_command = (
+            f"test \"$(git rev-parse 'refs/tags/v0.1.0a1^{{}}')\" = \\\n  '{peeled_commit}'"
+        )
+        self.assertIn(remote_command, text)
+        self.assertIn(local_tag_command, text)
+        self.assertIn(local_peeled_command, text)
         self.assertIn(f"{tag_object} refs/tags/v0.1.0a1", text)
         self.assertIn(f"{peeled_commit} refs/tags/v0.1.0a1^{{}}", text)
+        self.assertRegex(
+            text,
+            rf"role order:\s+first the\s+annotated tag object `{tag_object}`, then the\s+"
+            rf"peeled source commit\s+`{peeled_commit}`",
+        )
         self.assertIn(expected_hash, text)
         self.assertIn("direct_url.json", text)
         self.assertIn("github.com/albert-zen/im-agent-sdk/releases/download/", text)
@@ -103,6 +118,14 @@ class OperationalDocumentationTests(unittest.TestCase):
         self.assertRegex(text, r"does not claim that the package is published\s+on PyPI")
         self.assertIsNone(re.search(r"pip install\s+im-agent-sdk(?:\s|$)", text))
         self.assertNotIn('pip install "im-agent-sdk @ https://github.com/', text)
+
+    def test_diagnostics_recipe_names_the_actual_stopped_gateway_failure(self) -> None:
+        text = (ROOT / "docs" / "recipes" / "diagnostics.md").read_text(encoding="utf-8")
+        self.assertIn(
+            '`RuntimeError("Gateway actions require a running Gateway")`',
+            text,
+        )
+        self.assertNotIn("raises the public lifecycle error", text)
 
 
 if __name__ == "__main__":
