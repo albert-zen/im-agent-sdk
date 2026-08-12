@@ -579,6 +579,61 @@ class DocumentationLinkTests(unittest.TestCase):
         migrations = ROOT / "docs" / "migrations"
         self.assertFalse(any(candidate.is_file() for candidate in migrations.rglob("*")))
 
+        channel_design = (
+            ROOT / "docs" / "components" / "interaction" / "channels" / "adapters" / "design.md"
+        ).read_text(encoding="utf-8")
+        channel_testing = (
+            ROOT / "docs" / "components" / "interaction" / "channels" / "adapters" / "testing.md"
+        ).read_text(encoding="utf-8")
+        for rule in (
+            "authenticated native",
+            "inbound path supplies a provider snapshot",
+            "ordinary `TextFormat.PLAIN` content",
+            "Metadata\nis ignored for this feature",
+            "unsupported group-file failures remain explicit",
+            "Bot API descriptions may surface only without",
+            "strict transport security",
+            "bounded inbound buffering",
+        ):
+            with self.subTest(rule=rule):
+                self.assertIn(rule, channel_design)
+        for coverage in (
+            "authenticated-native-only quote provenance",
+            "token-safe Bot API descriptions",
+            "strict transport-security construction",
+        ):
+            with self.subTest(coverage=coverage):
+                self.assertIn(coverage, channel_testing)
+
+        reuse = (ROOT / "docs" / "REUSE.md").read_text(encoding="utf-8")
+        for source_test in (
+            "test_appserver_stdio.py",
+            "test_appserver_target.py",
+            "test_channel_foundations.py",
+            "test_channel_files.py",
+            "test_channels.py",
+            "test_channel_telegram.py",
+            "test_channel_feishu.py",
+            "test_channel_weixin.py",
+            "test_channel_weixin_ilink.py",
+            "test_qq_media.py",
+        ):
+            with self.subTest(source_test=source_test):
+                self.assertIn(f"`{source_test}`", reuse)
+
+        release_design = (ROOT / "docs" / "engineering" / "release" / "design.md").read_text(
+            encoding="utf-8"
+        )
+        for release_rule in (
+            "`appserver` adds WebSocket support",
+            "`qq`, `telegram`, `feishu`, and `weixin`",
+            "`channels` is the union",
+            "no `imcodex` package",
+            "not connect to a network",
+        ):
+            with self.subTest(release_rule=release_rule):
+                self.assertIn(release_rule, release_design)
+
     def test_markdown_inventory_includes_engineering_tree(self) -> None:
         files = set(markdown_files())
         expected = {

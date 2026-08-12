@@ -66,12 +66,17 @@ normalizer, admission transaction, or outbound receipt helper.
 
 Provider-focused suites additionally prove:
 
-- QQ direct/group targeting, bounded quote parsing and anti-forgery,
-  passive-to-proactive fallback, media staging, queue facts, and lazy facade;
+- QQ direct/group targeting, authenticated-native-only quote provenance,
+  bounded parsing, plain-text emission, shared-model exclusion, forged-label
+  and Metadata non-authority, passive-to-proactive fallback, explicit
+  authentication/reconnect/upload/reply-window/unsupported-group-file
+  failures, media staging, queue facts, and lazy facade;
 - Telegram private/group/forum routing, mention/reply targeting, private token
-  files, corrupt-offset failure, and credential-free diagnostics;
+  files, corrupt-offset failure, token-safe Bot API descriptions, and
+  credential-free diagnostics;
 - Feishu/Lark named-domain restriction, topic identity, bounded resource
-  staging, SDK queue overflow/reconnect, and redaction; and
+  staging, strict transport-security construction, bounded inbound buffering,
+  SDK queue overflow/reconnect, and redaction; and
 - Weixin direct-user-only support, official-origin enforcement, protected
   credential state, context/cursor ownership, and explicit unsupported group
   and bot input.

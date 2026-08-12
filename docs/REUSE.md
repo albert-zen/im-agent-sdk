@@ -171,13 +171,20 @@ dependencies, neutral caller-provided or `.imagent` state paths, standard
 logging and explicit adapter errors, and translation only at Channel or
 Application boundaries. Product commands and Agent state were not copied.
 
-Transfer evidence came from focused App Server target/stdio tests, common
-Channel/access/media tests, and QQ, Telegram, Feishu, Weixin/iLink, and QQ
-media suites. Tests were retained only where behavior belongs to the SDK
-boundary; product CLI, HTTP API, registry, webhook composition, and
-configuration tests were excluded. Base imports remain independent of native
-extras, and provider/App Server extras are verified through clean-install
-construction without the consumer package.
+Transfer evidence was selected from these exact pinned-source tests:
+
+- App Server: `test_appserver_stdio.py` and `test_appserver_target.py`;
+- common Channel/access/media: `test_channel_foundations.py`,
+  `test_channel_files.py`, and focused middleware admission cases; and
+- native transports: `test_channels.py`, `test_channel_telegram.py`,
+  `test_channel_feishu.py`, `test_channel_weixin.py`,
+  `test_channel_weixin_ilink.py`, and `test_qq_media.py`.
+
+Tests were adapted to SDK Ports and retained only where behavior belongs to
+the transferred boundary. Product CLI, HTTP API, registry, webhook
+composition, and IMCodex configuration tests were excluded. Base imports
+remain independent of native extras, and provider/App Server extras are
+verified through clean-install construction without the consumer package.
 
 ## Zen and T3 proof sources
 

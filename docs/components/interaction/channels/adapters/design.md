@@ -104,10 +104,22 @@ native reply window cannot be proven.
 QQ quote snapshots are bounded adapter-specific untrusted input. Parsing
 accepts only QQ evidence and bounds reference IDs, text, attachment counts,
 filenames, voice transcripts, and rendered text. Raw envelopes, URLs, bytes,
-and nested quote history are excluded. The descriptive quote block grants no
-message, delivery, idempotency, binding, reply-target, request, or approval
-authority and does not create a common quote contract or metadata key.
-Enabled instances require normalized credentials and an HTTP(S) API endpoint.
+and nested quote history are excluded. The adapter appends a labelled
+untrusted block after the current text before the common native boundary emits
+ordinary `TextFormat.PLAIN` content. The parsed shape never enters shared
+native models or runtime code and does not create a common quote contract,
+capability, or Metadata key.
+
+The descriptive quote block grants no message, delivery, idempotency, binding,
+reply-target, request, or approval authority. Only the authenticated native
+inbound path supplies a provider snapshot. A caller may mimic the label only
+as ordinary untrusted text; it cannot forge a trusted snapshot, and Metadata
+is ignored for this feature.
+
+Enabled instances require normalized `app_id` and `client_secret` values and
+an HTTP(S) API endpoint. Authentication, reconnect, upload, reply-window, and
+unsupported group-file failures remain explicit. Media is staged inside the
+Channel-owned bounded spool before crossing the attachment source boundary.
 Diagnostics expose only bounded lifecycle/worker facts and the fixed-capacity
 inbound queue depth/overflow count, never credentials, endpoint, identities,
 media paths, or exception text.
@@ -120,8 +132,9 @@ transfer. Private chats, groups, and forum topics remain distinct routes;
 polling offsets are Channel reconnect state, not Agent cursors. Group input is
 admitted only after native mention/reply targeting. Enabled instances require
 a direct token or private token file and a credential-free HTTP(S) endpoint;
-corrupt offsets fail closed. Diagnostics expose bounded polling lifecycle facts
-without tokens, offsets, endpoints, native identities, or exception text.
+corrupt offsets fail closed. Bot API descriptions may surface only without
+leaking tokens. Diagnostics expose bounded polling lifecycle facts without
+tokens, offsets, endpoints, native identities, or exception text.
 
 ### Feishu/Lark
 
@@ -129,11 +142,12 @@ Feishu/Lark owns App credentials, the official SDK connection, named domain
 selection, native chat/topic identity, mention targeting, resource transfer,
 and reconnect health. Direct chats and topics remain distinct Conversations;
 private resource references become content only through the bounded Channel
-spool. Only the named Feishu and Lark domains are accepted, credentials are
-required, and subscription, reconnect, token, resource, overflow, and delivery
-failures remain explicit. Diagnostics expose bounded lifecycle/worker and
-inbound queue facts without credentials, endpoints, identities, resource
-keys, paths, SDK snapshots, or exception text.
+spool. The optional native SDK is constructed with strict transport security
+and bounded inbound buffering. Only the named Feishu and Lark domains are
+accepted, credentials are required, and subscription, reconnect, token,
+resource, overflow, and delivery failures remain explicit. Diagnostics expose
+bounded lifecycle/worker and inbound queue facts without credentials,
+endpoints, identities, resource keys, paths, SDK snapshots, or exception text.
 
 ### Weixin iLink
 
