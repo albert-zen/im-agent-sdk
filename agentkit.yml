@@ -697,16 +697,24 @@ components:
       - examples/reference_consumer/**
       - tests/gateway/test_reference_consumer.py
       - tests/engineering/test_quickstart.py
+      - tests/engineering/test_operational_docs.py
     docs:
       - docs/engineering/reference-consumer/design.md
       - docs/engineering/reference-consumer/testing.md
       - docs/onboarding/README.md
       - docs/onboarding/quickstart.md
+      - docs/onboarding/capability-matrix.md
       - docs/onboarding/applications.md
       - docs/onboarding/gateway.md
       - docs/onboarding/interaction.md
       - docs/onboarding/production-checklist.md
       - docs/onboarding/troubleshooting.md
+      - docs/recipes/bindings.md
+      - docs/recipes/restart-and-replay.md
+      - docs/recipes/interactive-requests.md
+      - docs/recipes/media-and-artifacts.md
+      - docs/recipes/proactive-delivery.md
+      - docs/recipes/diagnostics.md
     required_docs:
       - design
       - testing
@@ -857,6 +865,7 @@ components:
       - docs/engineering/release/testing.md
       - README.md
       - docs/REUSE.md
+      - docs/onboarding/upgrade-and-rollback.md
     required_docs:
       - design
       - testing

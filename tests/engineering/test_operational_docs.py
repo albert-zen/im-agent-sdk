@@ -25,6 +25,25 @@ REQUIRED_RECIPE_SECTIONS = (
 
 
 class OperationalDocumentationTests(unittest.TestCase):
+    def test_canonical_onboarding_navigation_reaches_every_operational_guide(self) -> None:
+        onboarding = (ROOT / "docs" / "onboarding" / "README.md").read_text(encoding="utf-8")
+        for link in (
+            "[Capability ownership matrix](capability-matrix.md)",
+            "[Upgrade and rollback](upgrade-and-rollback.md)",
+            "[Bindings](../recipes/bindings.md)",
+            "[Restart and replay](../recipes/restart-and-replay.md)",
+            "[Interactive requests](../recipes/interactive-requests.md)",
+            "[Media and artifacts](../recipes/media-and-artifacts.md)",
+            "[Proactive delivery](../recipes/proactive-delivery.md)",
+            "[Diagnostics](../recipes/diagnostics.md)",
+        ):
+            with self.subTest(link=link):
+                self.assertIn(link, onboarding)
+
+        matrix = (ROOT / "docs" / "onboarding" / "capability-matrix.md").read_text(encoding="utf-8")
+        self.assertNotIn("components/application-adapters/", matrix)
+        self.assertIn("components/applications/adapters/README.md", matrix)
+
     def test_python_snippets_are_syntactically_executable(self) -> None:
         documents = [ROOT / "docs" / "recipes" / filename for filename in RECIPES]
         documents.extend(

@@ -1692,9 +1692,9 @@ components:
     state_recovery: The example retains only bounded process-local deterministic adapter truth; every run starts fresh and shutdown closes all owned tasks, subscriptions, and store resources.
     current_code: [examples/reference_consumer/*.py]
     target_code: [examples/reference_consumer/*.py]
-    current_tests: [tests/gateway/test_reference_consumer.py, tests/engineering/test_quickstart.py]
-    target_tests: [tests/gateway/test_reference_consumer.py, tests/engineering/test_quickstart.py]
-    authoritative_docs: [docs/engineering/reference-consumer/design.md, docs/engineering/reference-consumer/testing.md, docs/onboarding/quickstart.md]
+    current_tests: [tests/gateway/test_reference_consumer.py, tests/engineering/test_quickstart.py, tests/engineering/test_operational_docs.py]
+    target_tests: [tests/gateway/test_reference_consumer.py, tests/engineering/test_quickstart.py, tests/engineering/test_operational_docs.py]
+    authoritative_docs: [docs/engineering/reference-consumer/design.md, docs/engineering/reference-consumer/testing.md, docs/onboarding/README.md, docs/onboarding/quickstart.md, docs/onboarding/capability-matrix.md, docs/onboarding/applications.md, docs/onboarding/gateway.md, docs/onboarding/interaction.md, docs/onboarding/production-checklist.md, docs/onboarding/troubleshooting.md, docs/recipes/bindings.md, docs/recipes/restart-and-replay.md, docs/recipes/interactive-requests.md, docs/recipes/media-and-artifacts.md, docs/recipes/proactive-delivery.md, docs/recipes/diagnostics.md]
     adrs: [docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
 
@@ -1804,7 +1804,7 @@ components:
     target_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/py.typed]
     current_tests: [tests/engineering/test_release.py]
     target_tests: [tests/engineering/test_release.py]
-    authoritative_docs: [docs/engineering/release/design.md, docs/engineering/release/testing.md, README.md, docs/REUSE.md]
+    authoritative_docs: [docs/engineering/release/design.md, docs/engineering/release/testing.md, README.md, docs/REUSE.md, docs/onboarding/upgrade-and-rollback.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md]
     gaps: []
 

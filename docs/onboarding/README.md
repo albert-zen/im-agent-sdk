@@ -43,6 +43,23 @@ Read the guides in this order:
    safely.
 6. [Troubleshooting](troubleshooting.md) — inspect routing, recovery, and
    shutdown failures.
+7. [Capability ownership matrix](capability-matrix.md) — confirm whether a
+   behavior is common, adapter-specific, deliberately unsupported, or owned by
+   the downstream consumer.
+8. [Upgrade and rollback](upgrade-and-rollback.md) — verify the exact GitHub
+   release provenance and preserve bridge-store compatibility.
+
+## Operational runbooks
+
+Use these focused recipes after the quickstart. They link back to the canonical
+component authority and executable evidence rather than restating design:
+
+- [Bindings](../recipes/bindings.md)
+- [Restart and replay](../recipes/restart-and-replay.md)
+- [Interactive requests](../recipes/interactive-requests.md)
+- [Media and artifacts](../recipes/media-and-artifacts.md)
+- [Proactive delivery](../recipes/proactive-delivery.md)
+- [Diagnostics](../recipes/diagnostics.md)
 
 The [Quickstart](quickstart.md) contains the authenticated GitHub Release
 download/checksum commands and the canonical installed command,

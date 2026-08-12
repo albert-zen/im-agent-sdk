@@ -202,6 +202,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/gateway/test_vertical_slice.py": {"gateway"},
             "tests/gateway/test_reference_consumer.py": {"reference-consumer"},
             "tests/engineering/test_quickstart.py": {"reference-consumer"},
+            "tests/engineering/test_operational_docs.py": {"reference-consumer"},
             "tests/gateway/routing/__init__.py": {"gateway"},
             "tests/gateway/input/test_content_transformation.py": {"gateway"},
             "tests/gateway/input/test_dispatch.py": {"gateway"},
