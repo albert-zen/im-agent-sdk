@@ -19,7 +19,8 @@ The exact released packet is:
 | Fact | Expected value |
 |---|---|
 | Git tag | `v0.1.0a1` |
-| Tag commit | `82bab131ad292f4e5e036704c3a9e26de074d18d` |
+| Annotated tag object | `82bab131ad292f4e5e036704c3a9e26de074d18d` |
+| Peeled tag commit | `a72b24a2558c8b2aa48b05214588da4fc1a434db` |
 | Package version | `0.1.0a1` |
 | Wheel | `im_agent_sdk-0.1.0a1-py3-none-any.whl` |
 | Wheel SHA-256 | `123ebe9c7b086c9187bc05ce961f4942a6f8664de6a752f4e289d761c4e98d76` |
@@ -57,10 +58,19 @@ default.
 
 ## Verify the installed packet
 
-Record the tag target independently from the wheel:
+Record both the annotated tag object and its peeled commit independently from
+the wheel. The unpeeled ref identifies the tag object, not the source commit:
 
 ```sh
-git ls-remote --tags https://github.com/albert-zen/im-agent-sdk.git refs/tags/v0.1.0a1
+git ls-remote --tags https://github.com/albert-zen/im-agent-sdk.git \
+  refs/tags/v0.1.0a1 'refs/tags/v0.1.0a1^{}'
+```
+
+Require both exact object/ref pairs before installation:
+
+```text
+82bab131ad292f4e5e036704c3a9e26de074d18d refs/tags/v0.1.0a1
+a72b24a2558c8b2aa48b05214588da4fc1a434db refs/tags/v0.1.0a1^{}
 ```
 
 Then run this inside the target environment with `WHEEL_PATH` set to the exact

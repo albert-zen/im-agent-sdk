@@ -85,8 +85,14 @@ class OperationalDocumentationTests(unittest.TestCase):
             encoding="utf-8"
         )
         expected_hash = "123ebe9c7b086c9187bc05ce961f4942a6f8664de6a752f4e289d761c4e98d76"
+        tag_object = "82bab131ad292f4e5e036704c3a9e26de074d18d"
+        peeled_commit = "a72b24a2558c8b2aa48b05214588da4fc1a434db"
         self.assertIn("v0.1.0a1", text)
-        self.assertIn("82bab131ad292f4e5e036704c3a9e26de074d18d", text)
+        self.assertIn(f"| Annotated tag object | `{tag_object}` |", text)
+        self.assertIn(f"| Peeled tag commit | `{peeled_commit}` |", text)
+        self.assertIn("'refs/tags/v0.1.0a1^{}'", text)
+        self.assertIn(f"{tag_object} refs/tags/v0.1.0a1", text)
+        self.assertIn(f"{peeled_commit} refs/tags/v0.1.0a1^{{}}", text)
         self.assertIn(expected_hash, text)
         self.assertIn("direct_url.json", text)
         self.assertIn("github.com/albert-zen/im-agent-sdk/releases/download/", text)
