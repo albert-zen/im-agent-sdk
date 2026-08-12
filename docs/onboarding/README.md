@@ -22,28 +22,34 @@ and authoritative history truth. It does not infer a default workspace or
 auto-create on first ordinary input; all Project/Thread creation uses scoped
 public actions.
 
+## Fast path
+
+For a 10–20 minute installed-release walkthrough, start with the
+[Quickstart](quickstart.md). It uses the one packaged reference consumer and
+explains the POSIX full-vertical boundary plus Windows install/import
+limitation.
+
 Read the guides in this order:
 
-1. [Applications](applications.md) — implement the typed managed-resource and
+1. [Quickstart](quickstart.md) — install the release and run the canonical
+   inbound → Agent → outbound vertical.
+2. [Applications](applications.md) — implement the typed managed-resource and
    native execution boundary.
-2. [Interaction](interaction.md) — normalize Channel input and compose the
+3. [Interaction](interaction.md) — normalize Channel input and compose the
    local command registry.
-3. [Gateway](gateway.md) — assemble one store-backed graph and use scoped
+4. [Gateway](gateway.md) — assemble one store-backed graph and use scoped
    public actions.
-4. [Production checklist](production-checklist.md) — replace the local seams
+5. [Production checklist](production-checklist.md) — replace the local seams
    safely.
-5. [Troubleshooting](troubleshooting.md) — inspect routing, recovery, and
+6. [Troubleshooting](troubleshooting.md) — inspect routing, recovery, and
    shutdown failures.
 
-The complete flow is runnable with:
-
-```sh
-PYTHONPATH=src:. uv run python -m examples.reference_consumer.main
-```
-
-The same module is included in the base wheel, so a clean-installed consumer
-uses `python -m examples.reference_consumer.main` without a repository
-`PYTHONPATH`.
+The [Quickstart](quickstart.md) contains the authenticated GitHub Release
+download/checksum commands and the canonical installed command,
+`python -m examples.reference_consumer.main`. The complete vertical runs on
+POSIX platforms with the required safe-descriptor flags; Windows can verify
+and import the wheel, while the canonical consumer remains explicitly
+unsupported there until those flags are available.
 
 Its real test is
 [`tests/gateway/test_reference_consumer.py`](../../tests/gateway/test_reference_consumer.py).

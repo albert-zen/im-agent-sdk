@@ -10,6 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 QUICKSTART_DOC = ROOT / "docs" / "onboarding" / "quickstart.md"
+README_PATH = ROOT / "docs" / "onboarding" / "README.md"
 RELEASE_TAG = "gh release download v0.1.0a1 --repo albert-zen/im-agent-sdk"
 RELEASE_WHEEL = ".quickstart-download/im_agent_sdk-0.1.0a1-py3-none-any.whl"
 SUCCESS_LINE = (
@@ -91,6 +92,19 @@ class QuickstartTests(unittest.TestCase):
         self.assertEqual(
             set((ROOT / "examples").rglob("main.py")),
             {ROOT / "examples" / "reference_consumer" / "main.py"},
+        )
+
+    def test_onboarding_navigation_leads_to_quickstart(self) -> None:
+        document = README_PATH.read_text(encoding="utf-8")
+        quickstart_link = "[Quickstart](quickstart.md)"
+        applications_link = "[Applications](applications.md)"
+        self.assertIn(quickstart_link, document)
+        self.assertLess(document.index(quickstart_link), document.index(applications_link))
+        self.assertIn("python -m examples.reference_consumer.main", document)
+        self.assertIn("POSIX", document)
+        self.assertIn("Windows", document)
+        self.assertNotIn(
+            "PYTHONPATH=src:. uv run python -m examples.reference_consumer.main", document
         )
 
     def test_built_wheel_imports_canonical_consumer_without_repository_pythonpath(self) -> None:
