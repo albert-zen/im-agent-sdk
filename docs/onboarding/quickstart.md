@@ -37,20 +37,28 @@ These commands install the authenticated, checksummed
 [GitHub Release](https://github.com/albert-zen/im-agent-sdk/releases/tag/v0.1.0a1),
 not PyPI or an absolute machine-local wheel.
 
-## 2. Run the installed vertical
+## 2. Run the installed vertical on POSIX
 
-Stay in that working directory and run:
+The complete reference consumer currently requires POSIX descriptor flags
+(`O_NOFOLLOW` and `O_DIRECTORY`) for its consumer-owned artifact ledger. Run
+the vertical on Linux or macOS from the same working directory:
 
-```powershell
-.venv\Scripts\python -m examples.reference_consumer.main
+```sh
+.venv/bin/python -m examples.reference_consumer.main
 ```
 
-On macOS or Linux, use `.venv/bin/python`. A successful run prints exactly one
-bounded line:
+A successful run prints exactly one bounded line:
 
 ```text
 reference consumer OK: projects=1 threads=2 conversations=2 max_workers=1 diagnostics=bounded sqlite_recovery=true shutdown=true
 ```
+
+Windows can download, verify, install, and import the wheel, but it cannot run
+this canonical vertical yet because Python on Windows does not expose those
+descriptor flags. The consumer fails closed rather than weakening its
+filesystem trust boundary. Use WSL or another Linux/macOS environment for this
+step; do not treat an import-only Windows smoke as inbound -> Agent -> outbound
+evidence.
 
 This is the packaged release artifact, executed outside the SDK checkout with
 no repository `PYTHONPATH`. It constructs one explicit managed-CWD

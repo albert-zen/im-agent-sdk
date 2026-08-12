@@ -201,6 +201,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "tests/gateway/test_operations_integration.py": {"gateway"},
             "tests/gateway/test_vertical_slice.py": {"gateway"},
             "tests/gateway/test_reference_consumer.py": {"reference-consumer"},
+            "tests/engineering/test_quickstart.py": {"reference-consumer"},
             "tests/gateway/routing/__init__.py": {"gateway"},
             "tests/gateway/input/test_content_transformation.py": {"gateway"},
             "tests/gateway/input/test_dispatch.py": {"gateway"},
@@ -288,6 +289,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "docs/engineering/release/design.md": {"release"},
             "docs/engineering/reference-consumer/design.md": {"reference-consumer"},
             "docs/onboarding/README.md": {"reference-consumer"},
+            "docs/onboarding/quickstart.md": {"reference-consumer"},
         }
         for path, owners in expected.items():
             with self.subTest(path=path):

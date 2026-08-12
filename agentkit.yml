@@ -724,10 +724,12 @@ components:
       - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - examples/reference_consumer/**
       - tests/gateway/test_reference_consumer.py
+      - tests/engineering/test_quickstart.py
     docs:
       - docs/engineering/reference-consumer/design.md
       - docs/engineering/reference-consumer/testing.md
       - docs/onboarding/README.md
+      - docs/onboarding/quickstart.md
       - docs/onboarding/applications.md
       - docs/onboarding/gateway.md
       - docs/onboarding/interaction.md

@@ -18,6 +18,55 @@ SUCCESS_LINE = (
 )
 
 
+def _build_and_install_wheel(root: Path) -> tuple[Path, Path, dict[str, str]]:
+    uv = shutil.which("uv")
+    if uv is None:
+        raise unittest.SkipTest("uv is required for the clean-wheel smoke")
+    dist = root / "dist"
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    build = subprocess.run(
+        [uv, "build", "--wheel", "--out-dir", str(dist)],
+        cwd=ROOT,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if build.returncode != 0:
+        raise AssertionError(build.stderr)
+    wheels = tuple(dist.glob("*.whl"))
+    if len(wheels) != 1:
+        raise AssertionError(f"expected one wheel, found {len(wheels)}")
+
+    venv = root / "venv"
+    create = subprocess.run(
+        [uv, "venv", "--python", sys.executable, str(venv)],
+        cwd=root,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if create.returncode != 0:
+        raise AssertionError(create.stderr)
+    python = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    install = subprocess.run(
+        [uv, "pip", "install", "--python", str(python), str(wheels[0])],
+        cwd=root,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if install.returncode != 0:
+        raise AssertionError(install.stderr)
+    return venv, python, environment
+
+
 class QuickstartTests(unittest.TestCase):
     def test_documented_install_is_authenticated_checksummed_github_release(self) -> None:
         document = QUICKSTART_DOC.read_text(encoding="utf-8")
@@ -27,6 +76,9 @@ class QuickstartTests(unittest.TestCase):
         self.assertIn("Get-FileHash", document)
         self.assertIn("(cd .quickstart-download && sha256sum -c SHA256SUMS)", document)
         self.assertIn("repository read access", document)
+        self.assertIn("Run the installed vertical on POSIX", document)
+        self.assertIn("Windows can download, verify, install, and import", document)
+        self.assertIn("Use WSL", document)
         self.assertNotIn("pypi.org", document.casefold())
         self.assertNotIn("file://", document.casefold())
         self.assertNotRegex(document, r"[A-Za-z]:\\[^\n]*\.whl")
@@ -41,50 +93,10 @@ class QuickstartTests(unittest.TestCase):
             {ROOT / "examples" / "reference_consumer" / "main.py"},
         )
 
-    def test_built_wheel_uses_canonical_consumer_without_repository_pythonpath(self) -> None:
-        uv = shutil.which("uv")
-        if uv is None:
-            self.skipTest("uv is required for the clean-wheel smoke")
+    def test_built_wheel_imports_canonical_consumer_without_repository_pythonpath(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            dist = root / "dist"
-            environment = os.environ.copy()
-            environment.pop("PYTHONPATH", None)
-            build = subprocess.run(
-                [uv, "build", "--wheel", "--out-dir", str(dist)],
-                cwd=ROOT,
-                env=environment,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            self.assertEqual(build.returncode, 0, build.stderr)
-            wheels = tuple(dist.glob("*.whl"))
-            self.assertEqual(len(wheels), 1)
-
-            venv = root / "venv"
-            create = subprocess.run(
-                [uv, "venv", "--python", sys.executable, str(venv)],
-                cwd=root,
-                env=environment,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
-            self.assertEqual(create.returncode, 0, create.stderr)
-            python = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-            install = subprocess.run(
-                [uv, "pip", "install", "--python", str(python), str(wheels[0])],
-                cwd=root,
-                env=environment,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            self.assertEqual(install.returncode, 0, install.stderr)
+            venv, python, environment = _build_and_install_wheel(root)
             import_smoke = subprocess.run(
                 [
                     str(python),
@@ -104,11 +116,14 @@ class QuickstartTests(unittest.TestCase):
             self.assertTrue(imported_path.is_relative_to(venv.resolve()))
             self.assertFalse(imported_path.is_relative_to(ROOT.resolve()))
 
-            # The canonical artifact's descriptor-pinned ledger requires the
-            # POSIX no-follow directory flags. Its full installed execution is
-            # exercised here wherever that existing consumer is runnable.
-            if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
-                return
+    @unittest.skipUnless(
+        hasattr(os, "O_NOFOLLOW") and hasattr(os, "O_DIRECTORY"),
+        "canonical reference consumer requires POSIX descriptor flags",
+    )
+    def test_built_wheel_runs_canonical_vertical_on_posix(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _, python, environment = _build_and_install_wheel(root)
             run = subprocess.run(
                 [str(python), "-m", "examples.reference_consumer.main"],
                 cwd=root,

@@ -1692,9 +1692,9 @@ components:
     state_recovery: The example retains only bounded process-local deterministic adapter truth; every run starts fresh and shutdown closes all owned tasks, subscriptions, and store resources.
     current_code: [examples/reference_consumer/*.py]
     target_code: [examples/reference_consumer/*.py]
-    current_tests: [tests/gateway/test_reference_consumer.py]
-    target_tests: [tests/gateway/test_reference_consumer.py]
-    authoritative_docs: [docs/engineering/reference-consumer/design.md, docs/engineering/reference-consumer/testing.md]
+    current_tests: [tests/gateway/test_reference_consumer.py, tests/engineering/test_quickstart.py]
+    target_tests: [tests/gateway/test_reference_consumer.py, tests/engineering/test_quickstart.py]
+    authoritative_docs: [docs/engineering/reference-consumer/design.md, docs/engineering/reference-consumer/testing.md, docs/onboarding/quickstart.md]
     adrs: [docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
 
