@@ -1,7 +1,10 @@
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 import ast
 import copy
+import re
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -537,6 +540,65 @@ ENGINEERING_LEAVES = (
 )
 
 
+def _normalized_blocks(markdown: str) -> list[str]:
+    return [" ".join(block.split()) for block in re.split(r"\n\s*\n", markdown) if block.strip()]
+
+
+def _heading_section(markdown: str, heading: str) -> list[str]:
+    lines = markdown.splitlines()
+    start = lines.index(heading) + 1
+    end = next(
+        (index for index in range(start, len(lines)) if lines[index].startswith("### ")),
+        len(lines),
+    )
+    return _normalized_blocks("\n".join(lines[start:end]))
+
+
+def _table_rows(markdown: str, heading: str) -> list[tuple[str, str]]:
+    section = "\n".join(markdown.split(heading, 1)[1].split("\n### ", 1)[0].splitlines()[2:])
+    rows = []
+    for line in section.splitlines():
+        if line.startswith("|") and not line.startswith("|---"):
+            cells = [" ".join(cell.split()) for cell in line.strip("|").split("|")]
+            if len(cells) == 2 and cells[0] != "IMCodex source":
+                rows.append((cells[0], cells[1]))
+    return rows
+
+
+def _bullet_inventory(markdown: str, marker: str) -> list[str]:
+    section = markdown.split(marker, 1)[1]
+    bullets: list[str] = []
+    current = ""
+    for line in section.splitlines():
+        if line.startswith("-"):
+            if current:
+                bullets.append(" ".join(current.split()))
+            current = line[1:].strip()
+        elif current and line.strip():
+            current += " " + line.strip()
+        elif current and not line.strip():
+            break
+    if current:
+        bullets.append(" ".join(current.split()))
+    return bullets
+
+
+def _assert_complete_inventory(
+    test: unittest.TestCase, actual: list, expected: list, label: str
+) -> None:
+    test.assertEqual(len(expected), len(set(expected)), label)
+    test.assertEqual(actual, expected, label)
+    for index, item in enumerate(expected):
+        mutated = actual[:index] + actual[index + 1 :]
+        test.assertNotEqual(mutated, expected, f"{label} deletion {index} must fail")
+        wording_mutation = actual.copy()
+        if isinstance(item, tuple):
+            wording_mutation[index] = (item[0], item[1].replace(item[1].split()[0], "MUTATED", 1))
+        else:
+            wording_mutation[index] = item.replace(item.split()[0], "MUTATED", 1)
+        test.assertNotEqual(wording_mutation, expected, f"{label} wording loss {index} must fail")
+
+
 class DocumentationLinkTests(unittest.TestCase):
     def test_canonical_guidance_routes_engineering_support_changes(self) -> None:
         guidance = (
@@ -585,47 +647,139 @@ class DocumentationLinkTests(unittest.TestCase):
         channel_testing = (
             ROOT / "docs" / "components" / "interaction" / "channels" / "adapters" / "testing.md"
         ).read_text(encoding="utf-8")
-        canonical_channel_inventories = {
-            "design": (
-                "Only the authenticated native inbound path supplies a provider snapshot.",
-                "ordinary `TextFormat.PLAIN` content",
-                "The parsed shape never enters shared native models or runtime code",
-                "A caller may mimic the label only as ordinary untrusted text",
-                "it cannot forge a trusted snapshot",
-                "Metadata is ignored for this feature",
-                (
-                    "Authentication, reconnect, upload, reply-window, and unsupported "
-                    "group-file failures remain explicit."
-                ),
-                "Bot API descriptions may surface only without leaking tokens.",
-                (
-                    "The optional native SDK is constructed with strict transport security "
-                    "and bounded inbound buffering."
-                ),
+        channel_design_inventory = {
+            "### QQ": (
+                "QQ owns bot authentication, Gateway WebSocket reconnect state, stable C2C and group identities, passive-reply context, media staging, and native Markdown/file capabilities. C2C and group events retain native message and sender IDs; group mentions are stripped only after native targeting succeeds. Passive-reply context is bounded and degrades to proactive delivery when the native reply window cannot be proven.",
+                "QQ quote snapshots are bounded adapter-specific untrusted input. Parsing accepts only QQ evidence and bounds reference IDs, text, attachment counts, filenames, voice transcripts, and rendered text. Raw envelopes, URLs, bytes, and nested quote history are excluded. The adapter appends a labelled untrusted block after the current text before the common native boundary emits ordinary `TextFormat.PLAIN` content. The parsed shape never enters shared native models or runtime code and does not create a common quote contract, capability, or Metadata key.",
+                "The descriptive quote block grants no message, delivery, idempotency, binding, reply-target, request, or approval authority. Only the authenticated native inbound path supplies a provider snapshot. A caller may mimic the label only as ordinary untrusted text; it cannot forge a trusted snapshot, and Metadata is ignored for this feature.",
+                "Enabled instances require normalized `app_id` and `client_secret` values and an HTTP(S) API endpoint. Authentication, reconnect, upload, reply-window, and unsupported group-file failures remain explicit. Media is staged inside the Channel-owned bounded spool before crossing the attachment source boundary. Diagnostics expose only bounded lifecycle/worker facts and the fixed-capacity inbound queue depth/overflow count, never credentials, endpoint, identities, media paths, or exception text.",
             ),
-            "testing": (
-                "authenticated-native-only quote provenance",
-                "plain-text emission",
-                "shared-model exclusion",
-                "forged-label and Metadata non-authority",
-                "authentication/reconnect/upload/reply-window/unsupported-group-file failures",
-                "token-safe Bot API descriptions",
-                "strict transport-security construction",
-                "bounded inbound buffering",
+            "### Telegram": (
+                "Telegram owns Bot API polling offsets, bot identity, private/group/forum Conversation normalization, mention targeting, native reply IDs, and media transfer. Private chats, groups, and forum topics remain distinct routes; polling offsets are Channel reconnect state, not Agent cursors. Group input is admitted only after native mention/reply targeting. Enabled instances require a direct token or private token file and a credential-free HTTP(S) endpoint; corrupt offsets fail closed. Bot API descriptions may surface only without leaking tokens. Diagnostics expose bounded polling lifecycle facts without tokens, offsets, endpoints, native identities, or exception text.",
+            ),
+            "### Feishu/Lark": (
+                "Feishu/Lark owns App credentials, the official SDK connection, named domain selection, native chat/topic identity, mention targeting, resource transfer, and reconnect health. Direct chats and topics remain distinct Conversations; private resource references become content only through the bounded Channel spool. The optional native SDK is constructed with strict transport security and bounded inbound buffering. Only the named Feishu and Lark domains are accepted, credentials are required, and subscription, reconnect, token, resource, overflow, and delivery failures remain explicit. Diagnostics expose bounded lifecycle/worker and inbound queue facts without credentials, endpoints, identities, resource keys, paths, SDK snapshots, or exception text.",
+            ),
+            "### Weixin iLink": (
+                "Weixin owns consumer-enrolled iLink credentials, direct-message polling, native reply context tokens, bounded reconnect state, media crypto/transport, and credential-file protection. Only official direct-user identities are supported; group and bot messages are explicitly unsupported. Context tokens and update cursors are minimal Channel delivery/reconnect state. The transport accepts only the official HTTPS origin, and corrupt, overly permissive, wildcard-owner, or malformed credential state fails closed. Enrollment UX and stale-credential recovery remain consumer policy. Diagnostics expose bounded polling lifecycle facts without credentials, tokens, cursors, endpoints, identities, paths, or exception text.",
             ),
         }
-        canonical_channel_text = {
-            "design": " ".join(channel_design.split()),
-            "testing": " ".join(channel_testing.split()),
-        }
-        for owner, expected_rules in canonical_channel_inventories.items():
-            self.assertEqual(len(expected_rules), len(set(expected_rules)))
-            for rule in expected_rules:
-                with self.subTest(owner=owner, rule=rule):
-                    self.assertIn(rule, canonical_channel_text[owner])
+        for heading, expected in channel_design_inventory.items():
+            actual = _heading_section(channel_design, heading)
+            _assert_complete_inventory(self, actual, list(expected), f"design {heading}")
+
+        channel_testing_inventory = [
+            "QQ direct/group targeting, authenticated-native-only quote provenance, bounded parsing, plain-text emission, shared-model exclusion, forged-label and Metadata non-authority, passive-to-proactive fallback, explicit authentication/reconnect/upload/reply-window/unsupported-group-file failures, media staging, queue facts, and lazy facade;",
+            "Telegram private/group/forum routing, mention/reply targeting, private token files, corrupt-offset failure, token-safe Bot API descriptions, and credential-free diagnostics;",
+            "Feishu/Lark named-domain restriction, topic identity, bounded resource staging, strict transport-security construction, bounded inbound buffering, SDK queue overflow/reconnect, and redaction; and",
+            "Weixin direct-user-only support, official-origin enforcement, protected credential state, context/cursor ownership, and explicit unsupported group and bot input.",
+        ]
+        actual_testing = _bullet_inventory(
+            channel_testing, "Provider-focused suites additionally prove:"
+        )
+        _assert_complete_inventory(
+            self, actual_testing, channel_testing_inventory, "provider testing"
+        )
+        for omission in (
+            "native message and sender IDs",
+            "polling offsets are Channel reconnect state",
+            "named domain selection",
+            "Only official direct-user identities",
+        ):
+            self.assertNotEqual(
+                " ".join(channel_design.split()).replace(omission, ""),
+                " ".join(channel_design.split()),
+            )
 
         reuse = (ROOT / "docs" / "REUSE.md").read_text(encoding="utf-8")
         normalized_reuse = " ".join(reuse.split())
+        channel_rows = [
+            (
+                "`channels/access.py`",
+                "`interaction/channels/ingress.py`; stable-ID access policy only",
+            ),
+            (
+                "`channels/base.py`",
+                "`interaction/channels/adapters/base.py`; lifecycle/access base without product telemetry or a historical shim",
+            ),
+            (
+                "`channels/artifacts.py`",
+                "`interaction/channels/outbound_delivery.py`; one native attachment attempt, while consumers retain bytes/root/quota/ledger/sweep ownership",
+            ),
+            (
+                "`channels/media.py`",
+                "`interaction/channels/ingress_media.py`; bounded staging with its shared lock/quota/secure-create/cleanup/cancellation transaction boundary intact",
+            ),
+            (
+                "`channels/text.py`",
+                "`interaction/channels/outbound_delivery.py`; defensive native text splitting",
+            ),
+            (
+                "`channels/qq.py`, `channels/qq_media.py`",
+                "`interaction/channels/adapters/qq.py`, `qq_media.py`",
+            ),
+            ("`channels/telegram.py`", "`interaction/channels/adapters/telegram.py`"),
+            (
+                "`channels/feishu.py`",
+                "`interaction/channels/adapters/feishu.py`; optional SDK loading retained",
+            ),
+            (
+                "`channels/weixin_ilink.py`, `channels/weixin_state.py`, `channels/weixin.py`",
+                "matching Interaction adapter modules; credential/reconnect state stays Channel-owned and enrollment UX stays downstream",
+            ),
+            ("top-level `models.py`", "split into private ingress and outbound-delivery DTOs"),
+            (
+                "top-level `file_types.py`",
+                "`interaction/media.py`; shared generic-file byte validation",
+            ),
+            (
+                "top-level `windows_security.py`",
+                "`interaction/channels/ingress_security.py`; secure staging without a historical shim",
+            ),
+            (
+                "top-level `config.py`",
+                "only neutral endpoint validation moved to `interaction/channels/adapters/endpoints.py`; product configuration did not transfer",
+            ),
+        ]
+        appserver_rows = [
+            (
+                "`app_server_target.py`",
+                "`applications/adapters/appserver/client/target.py`; endpoint/ownership model with neutral configuration wording",
+            ),
+            ("`appserver/retry.py`", "`applications/adapters/appserver/client/retry.py`"),
+            ("`appserver/protocol_map.py`", "`applications/adapters/appserver/mapping.py`"),
+            (
+                "`appserver/diagnostics.py`",
+                "`applications/adapters/appserver/diagnostics.py`; fixed bounded redacted facts/helpers",
+            ),
+            (
+                "`appserver/client.py`",
+                "`applications/adapters/appserver/client/client.py`; JSON-RPC connection-epoch state machine kept coherent",
+            ),
+            (
+                "`appserver/supervisor.py`",
+                "`applications/adapters/appserver/client/supervisor.py`; product telemetry removed",
+            ),
+        ]
+        _assert_complete_inventory(
+            self,
+            _table_rows(reuse, "### Exact Channel source map"),
+            channel_rows,
+            "REUSE Channel map",
+        )
+        _assert_complete_inventory(
+            self,
+            _table_rows(reuse, "### Exact App Server source map"),
+            appserver_rows,
+            "REUSE App Server map",
+        )
+        provenance_blocks = (
+            "repository: https://github.com/albert-zen/imcodex transferred commit: 858398226e8f76e49f8259ae686939f209e1bb36",
+            "The transferred source repository and commit contained no `LICENSE` file or declared license. This record preserves provenance without inventing a license label or redistribution conclusion. Local changes are limited to the package namespace, removal of consumer observability/configuration/store/backend dependencies, neutral caller-provided or `.imagent` state paths, standard logging and explicit adapter errors, and translation only at Channel or Application boundaries. Product commands and Agent state were not copied.",
+        )
+        for block in provenance_blocks:
+            self.assertIn(block, normalized_reuse)
+            self.assertNotEqual(normalized_reuse.replace(block, ""), normalized_reuse)
         reuse_inventories = {
             "source_identity": (
                 "repository: https://github.com/albert-zen/imcodex",

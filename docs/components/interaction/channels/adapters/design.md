@@ -18,7 +18,8 @@ All built-ins implement the same Channel contract and call the shared
 ingress/delivery ordering and validation helpers. Shared leaves cover access
 evaluation, denial-report bounds, media/file validation, bounded
 text/artifact mechanics, stable receipt correlation, and runtime lifecycle
-where two or more real Channels prove the semantics. Concrete adapters exclusively own provider
+where two or more real Channels prove the semantics. Concrete adapters
+exclusively own provider
 authentication/signatures, API encoding/escaping, credentials, native
 upload/download/decryption/acknowledgement, URL rules, QR/token state, rate
 limit/response mapping, and diagnostic worker facts.
