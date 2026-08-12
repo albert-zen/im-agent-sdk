@@ -24,6 +24,11 @@ Every adapter should prove:
   stopped/reset, epoch/session/non-authorized-revision-changed,
   same-ID-recreated, evicted, reconstructed, and
   later history failures remain strict;
+- the exact first-input evidence generation is revalidated after the
+  asynchronous pre-dispatch hook: reset/reconnect, an allowlisted Turn
+  notification, a supported turn-bearing server request, and same-ID
+  replacement all prevent native start, and ABA-safe retirement leaves newer
+  same-ID evidence usable;
 - concrete per-call App Server creation can select a native profile without
   mutating the configured default or widening the common `CreateThread`;
 - Thread lookup independent from native activation;

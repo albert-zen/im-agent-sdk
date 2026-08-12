@@ -309,6 +309,13 @@ Focused tests enter only through Channel ingress and prove:
   request turn-bearing continuation state before that input, then retires
   that evidence at the native dispatch fence so the first live output is
   delivered once and later observation uses normal authoritative history;
+- the first-input start plan holds the exact create-evidence generation, not a
+  native Thread snapshot; after the asynchronous dispatch fence it revalidates
+  current connection epoch, native session, authorized revision, and evidence
+  identity immediately before `turn/start`, failing without native mutation
+  when a reset/reconnect, allowlisted Turn notification/request, or same-ID
+  replacement invalidates the plan, and identity-specific retirement cannot
+  delete newer same-ID evidence;
 - new-Thread evidence is bound to the current native connection epoch, stable
   native session identity, and finite revisions authorized only by create or
   allowlisted non-Turn initialization facts; stop, reset, foreign activity or

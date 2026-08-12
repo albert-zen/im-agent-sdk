@@ -67,6 +67,13 @@ even if reply-correlation or buffered projection draining later fails. Started
 input creates Turn reply correlation; steered input preserves the existing Turn
 policy defined by ADR 0012.
 
+An adapter may still invalidate a generation-specific native start plan after
+the asynchronous hook and prove that it did not issue the mutation. The
+adapter reports that strict local failure, but Gateway does not reverse its
+already-entered durable fence: the claim retains the same conservative
+`side_effect_started`/non-redelivery treatment. Plan revalidation therefore
+cannot weaken commit fencing or become automatic retry authority.
+
 The distinct acceptance-ordering gate and finite FIFO begin before the
 Application call. While acceptance is pending, the single observation worker
 forwards normalized events for that Thread into this FIFO. On every final

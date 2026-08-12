@@ -34,6 +34,14 @@ The formal contracts are `PendingAppServerRequest` and
 `UnsupportedAppServerRequest` are internal typed positions. The historical
 modules are removed, preserving exact objects and no second request contract.
 
+A supported request with typed Thread and Turn identity is also authoritative
+Turn-materialization evidence. The request runtime reports that fact to the
+owning adapter before request mapping or native scope admission, so even a
+later mapping/scope failure cannot leave exact pre-input evidence eligible.
+When such a request arrives during the first-input dispatch hook, it
+invalidates that exact start generation before `turn/start`; unknown methods
+or requests without typed Turn identity do not gain this authority.
+
 ## Dependencies, state, and recovery
 
 The leaf depends on Applications contract/events/operations/requests, the App

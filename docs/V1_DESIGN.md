@@ -487,8 +487,15 @@ native history resource. A concrete adapter's first-input continuation check
 may likewise use the same evidence as an exact no-active-Turn result while its
 ordinary non-turn-bearing scope read remains required. Subscription still
 precedes that empty baseline, and
-the route barrier still opens only after the baseline completes. The first
-dispatch fence or allowlisted turn-bearing native Thread event retires the
+the route barrier still opens only after the baseline completes. The
+first-input plan carries the exact evidence generation rather than a raw
+Thread snapshot. After the dispatch fence and immediately before native
+mutation, the adapter re-reads scope and requires that same connection,
+session, revision, and evidence generation; a reset, allowlisted turn-bearing
+event/request, or same-ID replacement during the fence fails explicitly before
+`turn/start`. Retirement is generation-specific and cannot remove successor
+evidence installed for the same Thread ID. The first successful native
+dispatch or an allowlisted turn-bearing native Thread event retires the
 evidence before later recovery. Stop, connection reset/epoch change, a native
 session or non-authorized revision change, same-ID recreation, missing
 evidence, eviction, and adapter

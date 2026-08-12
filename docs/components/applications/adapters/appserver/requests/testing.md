@@ -20,6 +20,10 @@ They also prove the mapping handoff: a valid unknown server request receives
 method-not-found without opening a request, while malformed supported requests
 receive the fixed redacted invalid-params response before any request event or
 pending state is created.
+Supported requests with typed Thread/Turn identity retire exact pre-input
+evidence before mapping and scope admission; the Codex first-input race test
+injects one during the asynchronous dispatch hook and proves no native start.
+Unknown or identity-incomplete requests do not acquire Turn-evidence authority.
 
 Fixed-workspace evidence verifies native Thread scope once before request
 admission or response mutation, reports transient ingress verification failure

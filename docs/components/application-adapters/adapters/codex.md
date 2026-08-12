@@ -112,6 +112,14 @@ same-ID recreation, evidence loss, reconstruction, all non-created Threads,
 and every later recovery use strict native history; provider error
 text is never treated as empty evidence.
 
+The first-input plan carries that exact evidence generation rather than a raw
+native Thread snapshot. After the asynchronous dispatch hook, Codex re-reads
+scope and validates the same epoch/session/authorized revision/generation at
+the `turn/start` boundary. Reset/reconnect, an allowlisted Turn notification or
+supported server request, and same-ID replacement invalidate the plan before
+native mutation. Retirement is generation-specific, so an older plan cannot
+remove newer evidence for a reused Thread ID.
+
 Interactive requests use the locally installed Codex App Server generated
 schema and SDK-owned transport tests as the wire authority. The common mapping
 supports command/file approval choices, structured tool user input, and

@@ -172,6 +172,40 @@ class _InputClient:
         return {"turnId": turn_id}
 
 
+class _InteractiveInputClient(_InputClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.server_request_handlers = []
+        self.connection_reset_handlers = []
+        self.request_replies: list[tuple[object, object, object]] = []
+        self.request_errors: list[tuple[object, object, object, object]] = []
+
+    def add_server_request_handler(self, handler) -> None:
+        self.server_request_handlers.append(handler)
+
+    def add_connection_reset_handler(self, handler) -> None:
+        self.connection_reset_handlers.append(handler)
+
+    async def reply_to_transport_request(
+        self,
+        request_id: object,
+        result: object,
+        *,
+        expected_connection_epoch: object = None,
+    ) -> None:
+        self.request_replies.append((request_id, result, expected_connection_epoch))
+
+    async def reply_error_to_transport_request(
+        self,
+        request_id: object,
+        *,
+        code: object,
+        message: object,
+        expected_connection_epoch: object = None,
+    ) -> None:
+        self.request_errors.append((request_id, code, message, expected_connection_epoch))
+
+
 class _StaleSteerClient(_InputClient):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -734,6 +768,230 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
             recreated_client.turn_list_calls,
             [recreated_result.thread.ref.thread_id],
         )
+
+    async def test_created_pre_input_dispatch_revalidates_after_connection_reset(self) -> None:
+        client = _InputClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        created = await adapter.execute(
+            CreateThread(
+                operation_id="create-before-dispatch-reset",
+                application_ref=adapter.summary.ref,
+                project_ref=ProjectRef("codex-main", "workspace"),
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(created, ThreadCreated)
+        assert isinstance(created, ThreadCreated)
+
+        async def reset_before_dispatch(dispatch: ApplicationInputDispatch) -> None:
+            del dispatch
+            client.connection_epoch = 2
+            client.active_turn_id = "replacement-turn"
+            await adapter._handle_event_connection_reset(1)
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "pre-input evidence changed before native dispatch",
+        ):
+            await adapter.send_input(
+                created.thread.ref,
+                AgentInput(
+                    client_message_id="input-racing-reset",
+                    content=(TextContent("must not start a second Turn"),),
+                ),
+                before_dispatch=reset_before_dispatch,
+            )
+
+        self.assertEqual(
+            client.read_calls,
+            [
+                (created.thread.ref.thread_id, False),
+                (created.thread.ref.thread_id, False),
+            ],
+        )
+        self.assertEqual(client.started, [])
+        self.assertEqual(client.steered, [])
+
+    async def test_created_pre_input_dispatch_is_invalidated_by_turn_notification(
+        self,
+    ) -> None:
+        client = _InputClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        created = await adapter.execute(
+            CreateThread(
+                operation_id="create-before-turn-notification",
+                application_ref=adapter.summary.ref,
+                project_ref=ProjectRef("codex-main", "workspace"),
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(created, ThreadCreated)
+        assert isinstance(created, ThreadCreated)
+
+        async def notify_before_dispatch(dispatch: ApplicationInputDispatch) -> None:
+            del dispatch
+            client.active_turn_id = "native-turn-racing"
+            for handler in tuple(client.notification_handlers):
+                handled = handler(
+                    {
+                        "method": "turn/started",
+                        "params": {
+                            "threadId": created.thread.ref.thread_id,
+                            "turnId": "native-turn-racing",
+                        },
+                    }
+                )
+                if inspect.isawaitable(handled):
+                    await handled
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "pre-input evidence changed before native dispatch",
+        ):
+            await adapter.send_input(
+                created.thread.ref,
+                AgentInput(
+                    client_message_id="input-racing-notification",
+                    content=(TextContent("must not start a second Turn"),),
+                ),
+                before_dispatch=notify_before_dispatch,
+            )
+
+        self.assertEqual(client.started, [])
+        self.assertEqual(client.steered, [])
+        self.assertNotIn((created.thread.ref.thread_id, True), client.read_calls)
+
+    async def test_created_pre_input_dispatch_is_invalidated_by_supported_request(
+        self,
+    ) -> None:
+        client = _InteractiveInputClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        created = await adapter.execute(
+            CreateThread(
+                operation_id="create-before-turn-request",
+                application_ref=adapter.summary.ref,
+                project_ref=ProjectRef("codex-main", "workspace"),
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(created, ThreadCreated)
+        assert isinstance(created, ThreadCreated)
+        self.assertEqual(len(client.server_request_handlers), 1)
+
+        async def request_before_dispatch(dispatch: ApplicationInputDispatch) -> None:
+            del dispatch
+            for handler in tuple(client.server_request_handlers):
+                handled = handler(
+                    {
+                        "id": 7,
+                        "method": "item/commandExecution/requestApproval",
+                        "_connection_epoch": client.connection_epoch,
+                        "params": {
+                            "threadId": created.thread.ref.thread_id,
+                            "turnId": "native-request-turn",
+                            "itemId": "native-request-item",
+                            "command": "git status",
+                        },
+                    }
+                )
+                if inspect.isawaitable(handled):
+                    await handled
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "pre-input evidence changed before native dispatch",
+        ):
+            await adapter.send_input(
+                created.thread.ref,
+                AgentInput(
+                    client_message_id="input-racing-request",
+                    content=(TextContent("must not start a second Turn"),),
+                ),
+                before_dispatch=request_before_dispatch,
+            )
+
+        self.assertEqual(client.started, [])
+        self.assertEqual(client.steered, [])
+        self.assertEqual(client.request_errors, [])
+
+    async def test_created_pre_input_dispatch_does_not_retire_same_id_successor(
+        self,
+    ) -> None:
+        client = _InputClient()
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            workspace_id="workspace",
+            cwd="/repo",
+        )
+        project_ref = ProjectRef("codex-main", "workspace")
+        created = await adapter.execute(
+            CreateThread(
+                operation_id="create-before-same-id-dispatch-race",
+                application_ref=adapter.summary.ref,
+                project_ref=project_ref,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(created, ThreadCreated)
+        assert isinstance(created, ThreadCreated)
+
+        async def recreate_before_dispatch(dispatch: ApplicationInputDispatch) -> None:
+            del dispatch
+            replacement = await adapter.execute(
+                CreateThread(
+                    operation_id="replace-same-id-during-dispatch",
+                    application_ref=adapter.summary.ref,
+                    project_ref=project_ref,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            self.assertIsInstance(replacement, ThreadCreated)
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "pre-input evidence changed before native dispatch",
+        ):
+            await adapter.send_input(
+                created.thread.ref,
+                AgentInput(
+                    client_message_id="input-racing-same-id-replacement",
+                    content=(TextContent("must not consume successor evidence"),),
+                ),
+                before_dispatch=recreate_before_dispatch,
+            )
+
+        history = await adapter.execute(
+            GetThreadHistory(
+                operation_id="successor-still-has-empty-baseline",
+                application_ref=adapter.summary.ref,
+                thread_ref=created.thread.ref,
+                limit=3,
+                page=1,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.assertIsInstance(history, ThreadHistoryRead)
+        assert isinstance(history, ThreadHistoryRead)
+        self.assertEqual(history.history.turns, ())
+        self.assertEqual(client.turn_list_calls, [])
+        self.assertEqual(client.started, [])
+        self.assertEqual(client.steered, [])
 
     async def test_inflight_empty_baseline_survives_allowlisted_turn_event_race(self) -> None:
         client = _InputClient()

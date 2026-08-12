@@ -44,6 +44,11 @@ also proves retirement precedes a failing event scope read. Stop/reset, native
 epoch, session, or non-authorized revision change, foreign activity, same-ID recreation,
 non-created Threads, bounded evidence eviction, adapter reconstruction,
 checkpointed recovery, and unrelated native history failures remain explicit.
+The first-input race matrix injects reset/reconnect, an allowlisted Turn
+notification, a supported turn-bearing server request, and same-ID replacement
+inside the asynchronous pre-dispatch hook. Every case must prevent native
+start, and the replacement case must prove identity-specific retirement leaves
+the newer generation usable for its own exact empty baseline.
 
 ## Target evidence and verification
 

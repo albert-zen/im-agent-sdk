@@ -85,6 +85,18 @@ non-created Threads, and every later
 or checkpointed recovery use strict native history. Neither native error text
 nor Codex-specific Gateway policy participates.
 
+For the first input, Codex passes the exact evidence object as a generation
+token; it never passes the preceding native Thread mapping as mutation
+authority. After the asynchronous pre-dispatch hook, the shared owner performs
+a fresh non-turn-bearing scope read and requires the same current connection
+epoch, native session, authorized revision, and evidence-object identity at
+the `turn/start` boundary. Reset/reconnect, an allowlisted Turn notification,
+a supported turn-bearing server request, or same-ID replacement during the
+hook invalidates that start and fails before native mutation. Successful
+dispatch retirement names the expected object, so a stale plan cannot erase a
+new same-ID generation. This does not authorize fallback start, retargeting, or
+automatic retry, and it leaves Gateway's durable commit fence conservative.
+
 ## Current, target, and structural gap
 
 Current code is `src/imagent/applications/adapters/codex.py` plus the explicitly

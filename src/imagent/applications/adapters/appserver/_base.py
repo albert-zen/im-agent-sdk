@@ -997,10 +997,22 @@ class _AppServerApplicationAdapter:
         prepared: _PreparedAppServerInput,
         before_dispatch: Callable[[ApplicationInputDispatch], Awaitable[None]] | None,
         *,
-        verified_native_scope: Mapping[str, object] | None = None,
+        expected_pre_input_evidence: _CreatedPreInputEvidence | None = None,
     ) -> AcceptedTurn:
-        if verified_native_scope is None:
-            await self._require_native_thread_scope(thread_ref)
+        dispatch_evidence = expected_pre_input_evidence
+        if dispatch_evidence is None:
+            candidate = self._created_pre_input_evidence(thread_ref)
+            if candidate is None:
+                await self._require_native_thread_scope(thread_ref)
+            else:
+                _native_thread, exact_pre_input = await self._read_created_pre_input_scope(
+                    thread_ref,
+                    expected_evidence=candidate,
+                )
+                if exact_pre_input:
+                    dispatch_evidence = candidate
+        elif self._thread_baseline_evidence.get(thread_ref) is not dispatch_evidence:
+            raise RuntimeError("new Thread pre-input evidence changed before native dispatch")
         expected_local_image_epoch = (
             await self._verified_local_image_epoch() if prepared.input_items is not None else None
         )
@@ -1014,7 +1026,11 @@ class _AppServerApplicationAdapter:
                     expected_turn_ref=None,
                 )
             )
-        self._retire_created_pre_input(thread_ref)
+        if dispatch_evidence is not None:
+            await self._validate_pre_input_dispatch_evidence(
+                thread_ref,
+                dispatch_evidence,
+            )
         result = await self._start_input(
             thread_id=thread_ref.thread_id,
             prepared=prepared,
@@ -1446,8 +1462,9 @@ class _AppServerApplicationAdapter:
         thread_ref: ThreadRef,
         *,
         allow_retired_snapshot: bool = False,
+        expected_evidence: _CreatedPreInputEvidence | None = None,
     ) -> tuple[Mapping[str, object], bool]:
-        evidence = self._created_pre_input_evidence(thread_ref)
+        evidence = expected_evidence or self._created_pre_input_evidence(thread_ref)
         if evidence is None:
             return await self._require_native_thread_scope(thread_ref), False
         async with evidence.validation_lock:
@@ -1458,6 +1475,21 @@ class _AppServerApplicationAdapter:
                 native_thread,
                 allow_retired_snapshot=allow_retired_snapshot,
             )
+
+    async def _validate_pre_input_dispatch_evidence(
+        self,
+        thread_ref: ThreadRef,
+        evidence: _CreatedPreInputEvidence,
+    ) -> None:
+        async with evidence.validation_lock:
+            native_thread = await self._require_native_thread_scope(thread_ref)
+            if not self._matches_created_pre_input_evidence(
+                thread_ref,
+                evidence,
+                native_thread,
+            ):
+                raise RuntimeError("new Thread pre-input evidence changed before native dispatch")
+            self._retire_created_pre_input(thread_ref, expected=evidence)
 
     def _current_connection_epoch(self) -> int | None:
         value = getattr(self._client, "connection_epoch", None)

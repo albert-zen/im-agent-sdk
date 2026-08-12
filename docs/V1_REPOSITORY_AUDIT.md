@@ -347,7 +347,12 @@ allowlisted typed turn-bearing native event. Stop/reset, foreign activity, or
 same-ID recreation restores strict recovery. Thread-only/unknown notifications
 with extraneous Turn IDs do not retire it, and Codex skips only the unavailable
 turn-bearing continuation read
-before first input while retaining ordinary Thread scope validation. Gateway
+before first input while retaining ordinary Thread scope validation. The
+first-input plan carries the exact create-evidence generation and revalidates
+its connection/session/revision/identity after the asynchronous dispatch fence;
+reset, a supported turn-bearing notification/request, or same-ID replacement
+therefore stops before native mutation, and generation-specific retirement
+cannot erase successor evidence. Gateway
 therefore keeps subscribe-before-baseline and delivers the
 first live output once, while non-created routes, checkpoints, evidence loss,
 restart after dispatch, and unrelated history failures retain F's strict

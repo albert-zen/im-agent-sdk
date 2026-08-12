@@ -259,6 +259,17 @@ invalidates it. Thread-only,
 unknown, or forward-compatible notifications are not Turn materialization
 evidence merely because they carry a Turn ID. The same record selects no active Turn for the first
 input without a turn-bearing read, while ordinary scope validation still runs.
+That selection is an identity-bearing evidence generation, not authority from
+a raw native Thread snapshot. After the asynchronous pre-dispatch hook, the
+adapter re-reads native scope and validates the exact same connection epoch,
+session, authorized revision, and generation immediately before `turn/start`.
+A reset/reconnect, allowlisted Turn notification or supported server request,
+or same-ID replacement during the hook invalidates the plan and fails before
+native mutation. Dispatch retirement names the expected generation, so an ABA
+replacement cannot cause an older plan to delete newer same-ID evidence. The
+Gateway's already-entered durable dispatch/claim fence keeps its existing
+conservative failure classification; this adapter validation does not weaken
+commit fencing or authorize retry.
 No error matching, Gateway Application-kind branch, persisted Agent
 truth, or weakening of ordinary/checkpointed history recovery is permitted.
 

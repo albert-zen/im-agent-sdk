@@ -45,6 +45,9 @@ Tests must prove:
 - pre-native-side-effect-fence failure releases; post-native-fence
   cancellation/response loss remains `side_effect_started`; accepted input
   remains terminal across later failures;
+- generation-specific adapter invalidation after the asynchronous fence issues
+  no native mutation but retains Gateway's conservative
+  `side_effect_started`/non-redelivery claim treatment;
 - started/steered reply correlation remains Turn- and destination-safe across
   restart and two Conversations;
 - bounded acceptance buffering closes synchronous event races without a second

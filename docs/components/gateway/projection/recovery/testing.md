@@ -18,6 +18,9 @@ Recovery conformance must prove:
   strict recovery; a racing event does not invalidate the captured baseline
   and remains queued behind it; first input avoids only the unavailable turn-bearing
   continuation read while retaining ordinary Thread scope validation;
+  its exact evidence generation is revalidated after the dispatch fence, so a
+  reset/reconnect, allowlisted Turn notification/request, or same-ID
+  replacement prevents native start and cannot retire successor evidence;
   non-new, reconstructed, ambiguous, and
   checkpointed history failures stay explicit;
 - baseline/recovery completes before that route drains live events, and a
