@@ -101,8 +101,17 @@ class OperationalDocumentationTests(unittest.TestCase):
         self.assertIn(remote_command, text)
         self.assertIn(local_tag_command, text)
         self.assertIn(local_peeled_command, text)
-        self.assertIn(f"{tag_object} refs/tags/v0.1.0a1", text)
-        self.assertIn(f"{peeled_commit} refs/tags/v0.1.0a1^{{}}", text)
+        expected_remote_output = (
+            f"{tag_object} refs/tags/v0.1.0a1\n{peeled_commit} refs/tags/v0.1.0a1^{{}}"
+        )
+        self.assertIn(expected_remote_output, text)
+        expected_local_assertions = (
+            "test \"$(git rev-parse 'refs/tags/v0.1.0a1')\" = \\\n"
+            f"  '{tag_object}'\n"
+            "test \"$(git rev-parse 'refs/tags/v0.1.0a1^{}')\" = \\\n"
+            f"  '{peeled_commit}'"
+        )
+        self.assertIn(expected_local_assertions, text)
         self.assertRegex(
             text,
             rf"role order:\s+first the\s+annotated tag object `{tag_object}`, then the\s+"
