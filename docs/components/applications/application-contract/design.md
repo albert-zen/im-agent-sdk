@@ -101,7 +101,7 @@ The conformance suite remains affected evidence for all concrete adapters.
 
 - [Vision](../../../VISION.md)
 - [Architecture](../../../ARCHITECTURE.md)
-- [Ports design](../../ports/design.md)
+- [Channel contract](../../interaction/channels/channel-contract/design.md)
 - [ADR 0001](../../../decisions/0001-contract-and-resource-foundations.md)
 - [ADR 0002](../../../decisions/0002-design-authority-and-control-boundaries.md)
 - [ADR 0012](../../../decisions/0012-input-continuation-and-reply-correlation.md)

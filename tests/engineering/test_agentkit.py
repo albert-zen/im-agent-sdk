@@ -309,14 +309,13 @@ class AgentKitMappingTests(unittest.TestCase):
             {"schema-conformance", "agentkit", "release"} <= _components_for("docs/ARCHITECTURE.md")
         )
         self.assertEqual(
-            _components_for("docs/migrations/imcodex-followup-blockers.md"),
+            _components_for("docs/REUSE.md"),
             {
                 "application-adapters-appserver",
                 "application-adapters-t3",
                 "attachments-and-media",
                 "channel-adapters",
-                "gateway",
-                "projections-and-recovery",
+                "release",
                 "repository-maintainability",
             },
         )

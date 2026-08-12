@@ -41,4 +41,4 @@ diagnostic enum and fact values are owned by
 
 - [Architecture](../../../../ARCHITECTURE.md)
 - [ADR 0015](../../../../decisions/0015-typed-extension-seams-and-composition.md)
-- [Historical aggregate delivery design](../../../delivery-planning-and-coordination/design.md)
+- [Delivery navigation](../README.md)

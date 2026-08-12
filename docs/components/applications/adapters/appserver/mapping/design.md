@@ -129,7 +129,6 @@ Gateway.
 ## Authority
 
 - [App Server block](../README.md)
-- [Applications adapter overview](../../../../application-adapters/design.md)
 - [ADR 0001](../../../../../decisions/0001-contract-and-resource-foundations.md)
 - [ADR 0015](../../../../../decisions/0015-typed-extension-seams-and-composition.md)
 - [ADR 0016](../../../../../decisions/0016-uniform-workspace-and-consumer-actions.md)

@@ -82,7 +82,5 @@ client has no synthetic long-lived connection epoch, and its bounded process
 state recovers through authoritative native history rather than a local
 transcript or spool.
 
-The cross-adapter overview remains available as [transition design
-context](../../application-adapters/design.md) and [cross-adapter testing
-context](../../application-adapters/testing.md); the leaf pages above are the
-authoritative ownership and structural-gap records for this block.
+The leaf pages above are the sole ownership and structural-gap records for this
+block.

@@ -52,12 +52,9 @@ real current implementation, exact target package, public contracts,
 dependencies, state/recovery semantics, tests, accepted decisions, and
 structural gap before physical reorganization.
 
-The older aggregate [Application adapter design](../application-adapters/design.md)
-and [testing guide](../application-adapters/testing.md) remain cross-adapter
-transition context. They do not replace the leaf ownership records in the
-adapter subtree. The App Server, Codex, Zen, and T3 leaves now use their
-focused target owners; the historical paths are not retained as internal
-compatibility implementations.
+The App Server, Codex, Zen, and T3 leaves use their focused owners; historical
+aggregate pages and implementation paths are not retained as compatibility
+surfaces.
 
 ## Shared constraints
 

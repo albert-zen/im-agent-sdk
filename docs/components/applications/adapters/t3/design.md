@@ -95,8 +95,6 @@ rules are the finite capacities and explicit active-authority behavior above.
 ## Authority
 
 - [Adapter block](../README.md)
-- [T3 transition page](../../../application-adapters/adapters/t3.md)
-- [Applications adapter overview](../../../application-adapters/design.md)
 - [ADR 0003](../../../../decisions/0003-attachment-sources-and-trust.md)
 - [ADR 0004](../../../../decisions/0004-event-fanout-and-recovery.md)
 - [ADR 0012](../../../../decisions/0012-input-continuation-and-reply-correlation.md)

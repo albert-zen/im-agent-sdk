@@ -59,4 +59,3 @@ exception.
 
 - [Architecture](../../../../ARCHITECTURE.md)
 - [ADR 0010](../../../../decisions/0010-capability-driven-delivery-coordination.md)
-- [Historical aggregate delivery design](../../../delivery-planning-and-coordination/design.md)

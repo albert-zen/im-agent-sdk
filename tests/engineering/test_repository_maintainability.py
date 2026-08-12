@@ -492,12 +492,12 @@ class ComponentMapTests(unittest.TestCase):
                     "--with",
                     "httpx>=0.28,<1",
                     "python",
-                    "/repository/scripts/validate_component_map.py",
+                    str(Path("/repository") / "scripts" / "validate_component_map.py"),
                 ],
             )
             self.assertEqual(
                 invocation.kwargs["env"]["PYTHONPATH"],
-                "/repository/src",
+                str(Path("/repository") / "src"),
             )
 
     def test_component_map_gate_does_not_use_the_caller_python(self) -> None:
@@ -558,16 +558,26 @@ class DocumentationLinkTests(unittest.TestCase):
                     self.assertTrue(content.startswith("# "))
                     self.assertIn("## ", content)
 
-    def test_transitional_broad_pages_point_to_engineering_authority(self) -> None:
-        transitional = (
-            ROOT / "docs" / "components" / "testing-and-conformance",
-            ROOT / "docs" / "components" / "repository-maintainability",
+    def test_retired_pre_three_layer_and_consumer_status_docs_are_absent(self) -> None:
+        retired_component_directories = (
+            "application-adapters",
+            "attachments-and-media",
+            "channel-adapters",
+            "controllers",
+            "delivery-planning-and-coordination",
+            "persistence",
+            "ports",
+            "projections-and-recovery",
+            "repository-maintainability",
+            "testing-and-conformance",
         )
-        for directory in transitional:
-            for page in ("design.md", "testing.md"):
-                path = directory / page
-                with self.subTest(path=path):
-                    self.assertIn("../../engineering/", path.read_text(encoding="utf-8"))
+        for directory in retired_component_directories:
+            path = ROOT / "docs" / "components" / directory
+            with self.subTest(path=path):
+                self.assertFalse(any(candidate.is_file() for candidate in path.rglob("*")))
+
+        migrations = ROOT / "docs" / "migrations"
+        self.assertFalse(any(candidate.is_file() for candidate in migrations.rglob("*")))
 
     def test_markdown_inventory_includes_engineering_tree(self) -> None:
         files = set(markdown_files())

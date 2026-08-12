@@ -68,5 +68,5 @@ positions.
 ## Authority
 
 - [Architecture](../../../../ARCHITECTURE.md)
-- [Application adapter design](../../../application-adapters/design.md)
+- [Applications adapter block](../../adapters/README.md)
 - [ADR 0015](../../../../decisions/0015-typed-extension-seams-and-composition.md)

@@ -76,8 +76,6 @@ evidence. Zen owns the concrete facade and has no dependency on Codex.
 ## Authority
 
 - [Adapter block](../README.md)
-- [Zen transition page](../../../application-adapters/adapters/zen.md)
-- [Applications adapter overview](../../../application-adapters/design.md)
 - [ADR 0008](../../../../decisions/0008-interactive-request-routing.md)
 - [ADR 0012](../../../../decisions/0012-input-continuation-and-reply-correlation.md)
 - [ADR 0015](../../../../decisions/0015-typed-extension-seams-and-composition.md)

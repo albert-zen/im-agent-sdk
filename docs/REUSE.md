@@ -63,19 +63,41 @@ endpoint validator now live under `src/imagent/interaction/channels/adapters/`.
 Shared access, inbound staging, and Windows path security live with the
 Interaction ingress owner, and shared generic-file validation lives with
 the Interaction media owner. Shared defensive text splitting lives with
-Interaction Channel outbound delivery. Exact source-to-destination decisions,
-exclusions, local modifications, and test proof are recorded in the
-[Issue #9 transfer map](migrations/issue-9-imcodex-owner-transfer.md). Product middleware,
-registry, commands, login UX, configured allowlist values and UX, bot policy,
-and deployment configuration were deliberately excluded.
+Interaction Channel outbound delivery. Product middleware, registry, commands,
+login UX, configured allowlist values and UX, bot policy, and deployment
+configuration were deliberately excluded.
 
 Provider-private transport DTOs are split between the Interaction Channel
 ingress and outbound-delivery owners; they are leaf-internal values, not common
 Message or Operation contracts.
 
-The SDK no longer imports the consumer package. The later IMCodex migration
-must consume these SDK APIs and delete its duplicated production copies before
-Issue #9 can close.
+The SDK no longer imports the consumer package. Downstream adoption status is
+tracked on [GitHub issue #9](https://github.com/albert-zen/im-agent-sdk/issues/9),
+not in SDK product documentation.
+
+### Exact Channel source map
+
+| IMCodex source | SDK destination or decision |
+|---|---|
+| `channels/access.py` | `interaction/channels/ingress.py`; stable-ID access policy only |
+| `channels/base.py` | `interaction/channels/adapters/base.py`; lifecycle/access base without product telemetry or a historical shim |
+| `channels/artifacts.py` | `interaction/channels/outbound_delivery.py`; one native attachment attempt, while consumers retain bytes/root/quota/ledger/sweep ownership |
+| `channels/media.py` | `interaction/channels/ingress_media.py`; bounded staging with its shared lock/quota/secure-create/cleanup/cancellation transaction boundary intact |
+| `channels/text.py` | `interaction/channels/outbound_delivery.py`; defensive native text splitting |
+| `channels/qq.py`, `channels/qq_media.py` | `interaction/channels/adapters/qq.py`, `qq_media.py` |
+| `channels/telegram.py` | `interaction/channels/adapters/telegram.py` |
+| `channels/feishu.py` | `interaction/channels/adapters/feishu.py`; optional SDK loading retained |
+| `channels/weixin_ilink.py`, `channels/weixin_state.py`, `channels/weixin.py` | matching Interaction adapter modules; credential/reconnect state stays Channel-owned and enrollment UX stays downstream |
+| top-level `models.py` | split into private ingress and outbound-delivery DTOs |
+| top-level `file_types.py` | `interaction/media.py`; shared generic-file byte validation |
+| top-level `windows_security.py` | `interaction/channels/ingress_security.py`; secure staging without a historical shim |
+| top-level `config.py` | only neutral endpoint validation moved to `interaction/channels/adapters/endpoints.py`; product configuration did not transfer |
+
+`channels/api.py`, `channels/middleware.py`, `channels/outbound.py`,
+`channels/registry.py`, `channels/weixin_login.py`, and the product
+`channels/__init__.py` were deliberately excluded because they own product
+HTTP/composition, bridge workflow, configuration, registry, enrollment UX, or
+exports rather than reusable Channel semantics.
 
 ## Codex App Server client transfer
 
@@ -124,6 +146,38 @@ with attribution over rebuilding Codex App Server framing and lifecycle.
 
 The IM Agent SDK adapter translates Codex resources and events into common
 contracts. It does not make Codex an execution backend inside Zen.
+
+### Exact App Server source map
+
+| IMCodex source | SDK destination or decision |
+|---|---|
+| `app_server_target.py` | `applications/adapters/appserver/client/target.py`; endpoint/ownership model with neutral configuration wording |
+| `appserver/retry.py` | `applications/adapters/appserver/client/retry.py` |
+| `appserver/protocol_map.py` | `applications/adapters/appserver/mapping.py` |
+| `appserver/diagnostics.py` | `applications/adapters/appserver/diagnostics.py`; fixed bounded redacted facts/helpers |
+| `appserver/client.py` | `applications/adapters/appserver/client/client.py`; JSON-RPC connection-epoch state machine kept coherent |
+| `appserver/supervisor.py` | `applications/adapters/appserver/client/supervisor.py`; product telemetry removed |
+
+`appserver/backend*.py`, `settings_backend.py`, `thread_backend.py`,
+`thread_dynamic_tools.py`, and `schema_drift.py` were excluded as consumer
+workflow, backend composition, or development tooling. The public factory is
+`codex_app_server_client`; the IMCodex-named dynamic import was deleted.
+
+The transferred source repository and commit contained no `LICENSE` file or
+declared license. This record preserves provenance without inventing a license
+label or redistribution conclusion. Local changes are limited to the package
+namespace, removal of consumer observability/configuration/store/backend
+dependencies, neutral caller-provided or `.imagent` state paths, standard
+logging and explicit adapter errors, and translation only at Channel or
+Application boundaries. Product commands and Agent state were not copied.
+
+Transfer evidence came from focused App Server target/stdio tests, common
+Channel/access/media tests, and QQ, Telegram, Feishu, Weixin/iLink, and QQ
+media suites. Tests were retained only where behavior belongs to the SDK
+boundary; product CLI, HTTP API, registry, webhook composition, and
+configuration tests were excluded. Base imports remain independent of native
+extras, and provider/App Server extras are verified through clean-install
+construction without the consumer package.
 
 ## Zen and T3 proof sources
 

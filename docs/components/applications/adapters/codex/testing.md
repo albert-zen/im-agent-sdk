@@ -71,11 +71,9 @@ uv run python -m unittest tests.applications.adapters.appserver.test_requests -v
 uv run python -m unittest tests.applications.adapters.appserver.test_gateway_request_integration -v
 ```
 
-Later physical movement must run full unittest discovery, all AGENTS gates,
-AgentKit checks, and clean-wheel smoke.
+Changes must run full unittest discovery, all AGENTS gates, AgentKit checks,
+and clean-wheel smoke.
 
 ## Authority
 
 - [Codex design](design.md)
-- [Codex transition page](../../../application-adapters/adapters/codex.md)
-- [Adapter testing context](../../../application-adapters/testing.md)

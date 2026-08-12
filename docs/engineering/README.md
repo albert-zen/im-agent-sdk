@@ -35,12 +35,5 @@ authority for ownership and invariants; the testing page is the authority for
 repeatable evidence. A leaf may point to runtime component docs for semantic
 details, but it must not duplicate their ownership authority.
 
-## Transitional navigation
-
-The former broad pages remain at their old paths so existing links continue to
-resolve. They are navigation only and contain no separate design authority:
-
-- [transitional testing-and-conformance page](../components/testing-and-conformance/design.md);
-- [transitional repository-maintainability page](../components/repository-maintainability/design.md).
-
-The component map and AgentKit routing point to the focused leaves above.
+The component map and AgentKit routing point directly to the focused leaves
+above; retired pre-three-layer compatibility pages are not authority.

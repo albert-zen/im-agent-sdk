@@ -59,8 +59,19 @@ middleware, outbound route-user overrides remain lazy, and policy-raised
 native Channel, access-policy, diagnostics, ingress, outbound, and Gateway
 vertical tests remain the behavior-preservation suite for the mechanical move.
 Runtime parity also proves that route-context updates remain adapter-runtime
-Runtime parity also proves that the Base adapter retains bounded route-context
-state, the ingress middleware records it at the established point, and
+state, the ingress middleware records them at the established point, and
 complete inbound content and envelope normalization is delegated to the
 Interaction ingress owner. Runtime contains no duplicate middleware,
 normalizer, admission transaction, or outbound receipt helper.
+
+Provider-focused suites additionally prove:
+
+- QQ direct/group targeting, bounded quote parsing and anti-forgery,
+  passive-to-proactive fallback, media staging, queue facts, and lazy facade;
+- Telegram private/group/forum routing, mention/reply targeting, private token
+  files, corrupt-offset failure, and credential-free diagnostics;
+- Feishu/Lark named-domain restriction, topic identity, bounded resource
+  staging, SDK queue overflow/reconnect, and redaction; and
+- Weixin direct-user-only support, official-origin enforcement, protected
+  credential state, context/cursor ownership, and explicit unsupported group
+  and bot input.

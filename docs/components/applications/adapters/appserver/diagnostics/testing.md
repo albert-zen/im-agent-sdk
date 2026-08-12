@@ -61,4 +61,3 @@ smoke.
 - [Diagnostics design](design.md)
 - [Interaction diagnostics design](../../../../interaction/diagnostics/design.md)
 - [Gateway diagnostics design](../../../../gateway/diagnostics/design.md)
-- [App Server testing context](../../../../application-adapters/testing.md)

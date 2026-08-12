@@ -127,8 +127,6 @@ facade; Zen has no dependency on this module.
 ## Authority
 
 - [Adapter block](../README.md)
-- [Codex transition page](../../../application-adapters/adapters/codex.md)
-- [Applications adapter overview](../../../application-adapters/design.md)
 - [ADR 0003](../../../../decisions/0003-attachment-sources-and-trust.md)
 - [ADR 0008](../../../../decisions/0008-interactive-request-routing.md)
 - [ADR 0012](../../../../decisions/0012-input-continuation-and-reply-correlation.md)

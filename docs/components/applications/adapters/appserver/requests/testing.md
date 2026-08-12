@@ -48,4 +48,3 @@ smoke for the complete adapter block before committing a later move.
 
 - [Requests design](design.md)
 - [Applications requests design](../../../requests/design.md)
-- [Cross-adapter testing context](../../../../application-adapters/testing.md)
