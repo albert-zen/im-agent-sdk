@@ -106,8 +106,8 @@ before publication, the authenticated workflow resolves the fixed GitHub tag
 reference, peels a bounded chain of annotated tags to its final commit, and
 requires that commit to equal the workflow's original source commit exactly.
 A missing, moved, over-nested, or non-commit tag fails closed without relying
-on checkout-persisted Git credentials. The build
-backend and its transitive graph are pinned with hashes in
+on checkout-persisted Git credentials. The build backend and its transitive
+graph are pinned with hashes in
 `build-constraints.txt`; both CI and release assembly require those hashes.
 Their initial dependency sync skips installing the local project, and later
 repository commands run without automatic synchronization, so no unconstrained
@@ -116,3 +116,19 @@ local PEP 517 backend executes before the constrained wheel build.
 Creating the tag remains the explicit publishing approval. A passing build or
 pull request cannot infer that approval, publish a future version, announce a
 release, modify a downstream repository, or approve consumer migration.
+
+## v0.1.0a1 artifact provenance
+
+The first `v0.1.0a1` artifact (SHA-256 prefix `123ebe9c`) was published
+manually from a CRLF-contaminated working tree: every source member of the
+published wheel carries CRLF terminators while the canonical repository
+source is LF.
+That artifact is therefore not reproducible from the pinned dependency and
+build-constraint graph, and it will be replaced by exactly one workflow-built
+publication after a human-approved tag move to a merged commit and deletion of
+the manual release. A clean constrained rebuild of the original source commit
+produces SHA-256 prefix `e160c31d`, which is the reproducibility evidence for
+the replacement artifact. The tag move and the release deletion remain explicit
+human publishing approvals; recording this provenance does not authorize
+either, and the replacement publication stays GitHub-only with no PyPI
+publication.

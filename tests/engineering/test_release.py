@@ -14,7 +14,7 @@ from textwrap import dedent
 
 import yaml
 
-from scripts.prepare_github_release import prepare_release
+from scripts.prepare_github_release import AUTHORIZED_REPOSITORY, prepare_release
 
 ROOT = Path(__file__).resolve().parents[2]
 DEPENDENCY_BOUNDARY_PATHS = (
@@ -30,6 +30,15 @@ DEPENDENCY_BOUNDARY_TEXT_SUFFIXES = {".py", ".yaml", ".yml"}
 
 def _is_dependency_boundary_text(path: Path) -> bool:
     return path.suffix in DEPENDENCY_BOUNDARY_TEXT_SUFFIXES or path.name == "py.typed"
+
+
+def _agentkit_gate_runs(workflow: dict) -> list[str]:
+    steps = workflow["jobs"][next(iter(workflow["jobs"]))]["steps"]
+    return [
+        step["run"].strip()
+        for step in steps
+        if "run" in step and step["run"].strip().startswith("./scripts/agentkit")
+    ]
 
 
 class PackageIndependenceTests(unittest.TestCase):
@@ -180,6 +189,25 @@ assert not any(
             "--prerelease",
         ):
             self.assertIn(fragment, commands)
+        ci_workflow = yaml.load(
+            (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"),
+            Loader=yaml.BaseLoader,
+        )
+        ci_gates = _agentkit_gate_runs(ci_workflow)
+        self.assertEqual(
+            ci_gates,
+            [
+                "./scripts/agentkit doctor",
+                "./scripts/agentkit lint-architecture",
+                "./scripts/agentkit check",
+            ],
+        )
+        self.assertEqual(_agentkit_gate_runs(workflow), ci_gates)
+        runs = [step.get("run", "") for step in steps]
+        pyright_index = runs.index("uv run --no-sync pyright src tests scripts")
+        build_index = next(index for index, run in enumerate(runs) if run.startswith("uv build"))
+        self.assertLess(pyright_index, runs.index(ci_gates[0]))
+        self.assertLess(runs.index(ci_gates[-1]), build_index)
         uv_run_lines = [line.strip() for line in commands.splitlines() if "uv run" in line]
         self.assertTrue(uv_run_lines)
         self.assertTrue(all("uv run --no-sync" in line for line in uv_run_lines))
@@ -203,10 +231,13 @@ assert not any(
         self.assertEqual(checkout["with"]["fetch-depth"], "0")
 
         later_commands = "\n".join(step.get("run", "") for step in steps[checkout_index + 1 :])
-        self.assertIsNone(
-            re.search(r"(?im)^\s*git\s+fetch(?:\s|$)", later_commands),
-            "persist-credentials: false leaves a later git fetch without checkout authentication",
-        )
+        for operation in ("fetch", "push"):
+            with self.subTest(operation=operation):
+                self.assertIsNone(
+                    re.search(rf"(?im)^\s*git\s+{operation}(?:\s|$)", later_commands),
+                    f"persist-credentials: false leaves a later git {operation} "
+                    "without checkout authentication",
+                )
         self.assertIn(
             'git merge-base --is-ancestor "$GITHUB_SHA" origin/main',
             later_commands,
@@ -487,6 +518,58 @@ assert not any(
                         repository="albert-zen/im-agent-sdk",
                         output_directory=root / label.replace(" ", "-"),
                     )
+
+    def test_repository_authorization_is_bound_to_the_one_owner(self) -> None:
+        self.assertEqual(AUTHORIZED_REPOSITORY, "albert-zen/im-agent-sdk")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wheel = root / "im_agent_sdk-0.1.0a1-py3-none-any.whl"
+            with zipfile.ZipFile(wheel, "w") as archive:
+                archive.writestr(
+                    "im_agent_sdk-0.1.0a1.dist-info/METADATA",
+                    "Metadata-Version: 2.4\nName: im-agent-sdk\nVersion: 0.1.0a1\n",
+                )
+                archive.writestr("imagent/py.typed", "")
+                archive.writestr("examples/reference_consumer/main.py", "")
+
+            checksum, notes = prepare_release(
+                wheel=wheel,
+                tag="v0.1.0a1",
+                source_commit="a" * 40,
+                repository=AUTHORIZED_REPOSITORY,
+                output_directory=root / "authorized",
+            )
+            self.assertTrue(checksum.is_file())
+            self.assertTrue(notes.is_file())
+
+            for foreign in (
+                "evil-fork/im-agent-sdk",
+                "albert-zen/im-agent-sdk-mirror",
+                "im-agent-sdk",
+            ):
+                with (
+                    self.subTest(repository=foreign),
+                    self.assertRaisesRegex(ValueError, "authorized publication repository"),
+                ):
+                    prepare_release(
+                        wheel=wheel,
+                        tag="v0.1.0a1",
+                        source_commit="a" * 40,
+                        repository=foreign,
+                        output_directory=root / "foreign",
+                    )
+
+    def test_missing_wheel_path_is_rejected_with_an_explicit_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaisesRegex(ValueError, "wheel does not exist"):
+                prepare_release(
+                    wheel=root / "im_agent_sdk-0.1.0a1-py3-none-any.whl",
+                    tag="v0.1.0a1",
+                    source_commit="a" * 40,
+                    repository=AUTHORIZED_REPOSITORY,
+                    output_directory=root / "missing-wheel",
+                )
 
     def test_top_level_facade_is_finite_lazy_and_exact_in_a_clean_process(self) -> None:
         environment = os.environ.copy()

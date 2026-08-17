@@ -74,13 +74,38 @@ type error, or failed clean profile blocks the candidate. Fix the owning leaf;
 do not add an import shim, duplicate model, service locator, consumer policy,
 transcript store, or hidden runtime dependency.
 
+## Build-constraint rotation
+
+`build-constraints.txt` pins the complete build closure of the one authorized
+backend, `hatchling==1.32.0`, with SHA-256 hashes. Rotate it by resolving that
+build closure with hashes via uv and replacing the file with the result:
+
+```sh
+printf 'hatchling==1.32.0\n' > build-constraints.in
+uv pip compile build-constraints.in --generate-hashes --no-header --no-annotate \
+  -o build-constraints.txt
+rm build-constraints.in
+```
+
+A yanked or otherwise unavailable pinned build artifact is the only expected
+maintenance trigger, and the response is this re-resolution plus the resulting
+digest changes. Rotating the closure does not authorize a new backend version
+by itself: the `pyproject.toml` `build-system.requires` pin, the release
+mirror's exact-graph assertions, and a clean constrained rebuild must all move
+together.
+
 ## GitHub prerelease evidence
 
-For the authorized tag `v0.1.0a1`, `.github/workflows/release.yml` repeats every
-repository and clean-wheel gate from the tagged commit. It must prove the tag
-commit is reachable from `main`, reject an existing release, validate the wheel
-metadata and required packaged files, generate `SHA256SUMS` and source-bound
-release notes, then create a GitHub prerelease with `--verify-tag`.
+For the authorized tag `v0.1.0a1`, `.github/workflows/release.yml` repeats
+every post-test repository gate that `ci.yml` runs — including the three
+AgentKit gates `./scripts/agentkit doctor`,
+`./scripts/agentkit lint-architecture`, and `./scripts/agentkit check` — plus
+the hash-constrained wheel build and the clean-install smoke, all from the
+tagged commit. It must prove the tag commit is reachable from `main` using
+only the checkout-fetched history, reject an existing release, validate the
+wheel metadata and required packaged files, generate `SHA256SUMS` and
+source-bound release notes, then create a GitHub prerelease with
+`--verify-tag`.
 
 The focused release mirror rejects a workflow that omits tag/main/version
 fencing, overwrite protection, checksum generation, prerelease marking, or the
@@ -88,11 +113,15 @@ explicit absence of a package-registry publish step. The workflow actions use
 immutable full commit SHAs, checkout does not persist credentials, and the
 dependency sync skips the local project while later commands disable automatic
 sync; the wheel build is the only local backend execution and consumes the
-hashed build constraint graph. Immediately before `gh release create`, the
-workflow uses the authenticated GitHub API to resolve the fixed tag, handles
-both lightweight and bounded annotated tags, and requires the peeled commit to
-equal the source `$GITHUB_SHA` exactly. Focused static evidence locks that
-ordering and rejects a removed or weakened comparison. Publication is verified
-afterward by downloading the private asset through an authenticated GitHub
-session, checking its digest, installing it in a fresh Python 3.13 environment,
-and comparing `imagent.__version__` with the release version.
+hashed build constraint graph. Because credential persistence is disabled, the
+workflow performs no `git fetch` or `git push` at all: any later remote Git
+operation would run unauthenticated against this private repository, so every
+history proof must consume the refs the checkout already fetched. Immediately
+before `gh release create`, the workflow uses the authenticated GitHub API to
+resolve the fixed tag, handles both lightweight and bounded annotated tags,
+and requires the peeled commit to equal the source `$GITHUB_SHA` exactly.
+Focused static and behavior evidence locks that ordering and rejects a removed
+or weakened comparison. Publication is verified afterward by downloading the
+private asset through an authenticated GitHub session, checking its digest,
+installing it in a fresh Python 3.13 environment, and comparing
+`imagent.__version__` with the release version.

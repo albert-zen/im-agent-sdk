@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FULL_COMMIT_PATTERN = re.compile(r"[0-9a-f]{40}")
 AUTHORIZED_VERSION = "0.1.0a1"
+AUTHORIZED_REPOSITORY = "albert-zen/im-agent-sdk"
 
 
 def prepare_release(
@@ -36,6 +37,11 @@ def prepare_release(
         raise ValueError(f"tag {tag!r} does not match package version tag {expected_tag!r}")
     if FULL_COMMIT_PATTERN.fullmatch(source_commit) is None:
         raise ValueError("source commit must be a lowercase full 40-character Git commit")
+    if repository != AUTHORIZED_REPOSITORY:
+        raise ValueError(
+            f"repository {repository!r} is not the authorized publication repository "
+            f"{AUTHORIZED_REPOSITORY!r}; refusing to prepare release evidence for it"
+        )
     if repository.count("/") != 1 or any(part == "" for part in repository.split("/")):
         raise ValueError("repository must use owner/name form")
     if wheel.name != expected_wheel_name:
