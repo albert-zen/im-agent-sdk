@@ -295,7 +295,7 @@ assert not any(
             """
         )
 
-        self.assertEqual(publish_index, len(steps) - 1)
+        self.assertLess(publish_index, len(steps) - 1)
         self.assertEqual(publish_step["env"], {"GH_TOKEN": "${{ github.token }}"})
         self.assertEqual(publish_step["run"], expected_publish)
         self.assertLess(
@@ -379,6 +379,131 @@ assert not any(
         self.assertNotEqual(moved.returncode, 0)
         self.assertNotIn("published", moved.stdout)
         self.assertIn(f"Release tag moved from {source_commit} to {moved_commit}", moved.stderr)
+
+    def test_github_release_verifies_downloaded_asset_after_publish(self) -> None:
+        workflow = yaml.load(
+            (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"),
+            Loader=yaml.BaseLoader,
+        )
+        steps = workflow["jobs"]["release"]["steps"]
+        setup_python_index, setup_python = next(
+            (index, step)
+            for index, step in enumerate(steps)
+            if step.get("uses", "").startswith("actions/setup-python@")
+        )
+        publish_index = next(
+            index
+            for index, step in enumerate(steps)
+            if step.get("name") == "Publish GitHub prerelease"
+        )
+        verification_index, verification_step = next(
+            (index, step)
+            for index, step in enumerate(steps)
+            if step.get("name") == "Verify published release assets"
+        )
+        expected_verification = dedent(
+            """\
+            set -euo pipefail
+            verification_root="$(mktemp -d)"
+            trap 'rm -rf "$verification_root"' EXIT
+            asset_dir="$verification_root/assets"
+            mkdir "$asset_dir"
+
+            gh release download "$GITHUB_REF_NAME" \\
+              --repo "$GITHUB_REPOSITORY" \\
+              --dir "$asset_dir" \\
+              --pattern '*.whl' \\
+              --pattern 'SHA256SUMS'
+
+            test -f "$asset_dir/SHA256SUMS"
+            downloaded_wheel="$(find "$asset_dir" -maxdepth 1 -type f -name '*.whl' -print -quit)"
+            test -n "$downloaded_wheel"
+            test "$(find "$asset_dir" -maxdepth 1 -type f -name '*.whl' | wc -l)" -eq 1
+            test "$(wc -l < "$asset_dir/SHA256SUMS")" -eq 1
+            test "$(awk '{print $2}' "$asset_dir/SHA256SUMS")" = "$(basename "$downloaded_wheel")"
+            (
+              cd "$asset_dir"
+              sha256sum --check --strict SHA256SUMS
+            )
+
+            python -m venv "$verification_root/venv"
+            verification_python="$verification_root/venv/bin/python"
+            (
+              cd "$verification_root"
+              "$verification_python" -I -m pip install --no-index --no-deps "$downloaded_wheel"
+              "$verification_python" -I - "$downloaded_wheel" <<'PY'
+            import json
+            import sys
+            from importlib import metadata
+            from pathlib import Path
+
+            import imagent
+
+            expected_version = "0.1.0a1"
+            expected_wheel = Path(sys.argv[1]).resolve()
+            environment = Path(sys.prefix).resolve()
+            distribution = metadata.distribution("im-agent-sdk")
+            direct_url_text = distribution.read_text("direct_url.json")
+
+            if Path(sys.base_prefix).resolve() == environment:
+                raise SystemExit("release verification did not run in a virtual environment")
+            if imagent.__version__ != expected_version or distribution.version != expected_version:
+                raise SystemExit("installed release version does not match 0.1.0a1")
+            if not Path(imagent.__file__).resolve().is_relative_to(environment):
+                raise SystemExit("imagent was not imported from the fresh virtual environment")
+            if direct_url_text is None:
+                raise SystemExit("installed wheel has no direct-url provenance")
+            direct_url = json.loads(direct_url_text)
+            if direct_url.get("url") != expected_wheel.as_uri():
+                raise SystemExit("installed distribution did not come from the downloaded wheel")
+            PY
+            )
+            """
+        )
+
+        self.assertLess(setup_python_index, publish_index)
+        self.assertEqual(setup_python["with"]["python-version"], "3.13")
+        self.assertEqual(verification_index, publish_index + 1)
+        self.assertEqual(verification_index, len(steps) - 1)
+        self.assertEqual(verification_step["env"], {"GH_TOKEN": "${{ github.token }}"})
+        self.assertEqual(verification_step["run"], expected_verification)
+        ordered_fragments = (
+            'verification_root="$(mktemp -d)"',
+            'gh release download "$GITHUB_REF_NAME"',
+            "sha256sum --check --strict SHA256SUMS",
+            'python -m venv "$verification_root/venv"',
+            '"$verification_python" -I -m pip install --no-index --no-deps "$downloaded_wheel"',
+            (
+                "if imagent.__version__ != expected_version "
+                "or distribution.version != expected_version:"
+            ),
+            "if not Path(imagent.__file__).resolve().is_relative_to(environment):",
+            'if direct_url.get("url") != expected_wheel.as_uri():',
+        )
+        offsets = [expected_verification.index(fragment) for fragment in ordered_fragments]
+        self.assertEqual(offsets, sorted(offsets))
+        self.assertNotIn("PYTHONPATH", expected_verification)
+        self.assertNotIn("dist/", expected_verification)
+
+        bash = shutil.which("bash")
+        if os.name == "nt":
+            git = shutil.which("git")
+            if git is None:
+                self.fail("git is required to locate Git Bash")
+            git_bash = Path(git).resolve().parents[1] / "bin" / "bash.exe"
+            self.assertTrue(git_bash.is_file())
+            bash = str(git_bash)
+        if bash is None:
+            self.fail("bash is required to validate the release workflow")
+        syntax = subprocess.run(
+            [bash, "-n"],
+            input=expected_verification,
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
 
     def test_ci_workflow_actions_are_pinned_to_full_commit_shas(self) -> None:
         workflow = yaml.load(

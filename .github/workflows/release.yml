@@ -109,3 +109,63 @@ jobs:
             --prerelease \
             --title "IM Agent SDK ${GITHUB_REF_NAME#v}" \
             --notes-file dist/RELEASE_NOTES.md
+
+      - name: Verify published release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          verification_root="$(mktemp -d)"
+          trap 'rm -rf "$verification_root"' EXIT
+          asset_dir="$verification_root/assets"
+          mkdir "$asset_dir"
+
+          gh release download "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$asset_dir" \
+            --pattern '*.whl' \
+            --pattern 'SHA256SUMS'
+
+          test -f "$asset_dir/SHA256SUMS"
+          downloaded_wheel="$(find "$asset_dir" -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          test -n "$downloaded_wheel"
+          test "$(find "$asset_dir" -maxdepth 1 -type f -name '*.whl' | wc -l)" -eq 1
+          test "$(wc -l < "$asset_dir/SHA256SUMS")" -eq 1
+          test "$(awk '{print $2}' "$asset_dir/SHA256SUMS")" = "$(basename "$downloaded_wheel")"
+          (
+            cd "$asset_dir"
+            sha256sum --check --strict SHA256SUMS
+          )
+
+          python -m venv "$verification_root/venv"
+          verification_python="$verification_root/venv/bin/python"
+          (
+            cd "$verification_root"
+            "$verification_python" -I -m pip install --no-index --no-deps "$downloaded_wheel"
+            "$verification_python" -I - "$downloaded_wheel" <<'PY'
+          import json
+          import sys
+          from importlib import metadata
+          from pathlib import Path
+
+          import imagent
+
+          expected_version = "0.1.0a1"
+          expected_wheel = Path(sys.argv[1]).resolve()
+          environment = Path(sys.prefix).resolve()
+          distribution = metadata.distribution("im-agent-sdk")
+          direct_url_text = distribution.read_text("direct_url.json")
+
+          if Path(sys.base_prefix).resolve() == environment:
+              raise SystemExit("release verification did not run in a virtual environment")
+          if imagent.__version__ != expected_version or distribution.version != expected_version:
+              raise SystemExit("installed release version does not match 0.1.0a1")
+          if not Path(imagent.__file__).resolve().is_relative_to(environment):
+              raise SystemExit("imagent was not imported from the fresh virtual environment")
+          if direct_url_text is None:
+              raise SystemExit("installed wheel has no direct-url provenance")
+          direct_url = json.loads(direct_url_text)
+          if direct_url.get("url") != expected_wheel.as_uri():
+              raise SystemExit("installed distribution did not come from the downloaded wheel")
+          PY
+          )
