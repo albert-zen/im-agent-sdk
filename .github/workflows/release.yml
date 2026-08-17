@@ -33,7 +33,6 @@ jobs:
 
       - name: Verify the release tag is on main
         run: |
-          git fetch --no-tags origin main
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
 
       - name: Reject an existing release

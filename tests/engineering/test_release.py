@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -183,6 +184,50 @@ assert not any(
         self.assertNotIn("pypi", commands.casefold())
         self.assertNotIn("uv publish", commands.casefold())
         self.assertNotIn("twine", commands.casefold())
+
+    def test_github_release_checkout_is_complete_and_needs_no_later_fetch(self) -> None:
+        workflow = yaml.load(
+            (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"),
+            Loader=yaml.BaseLoader,
+        )
+        steps = workflow["jobs"]["release"]["steps"]
+        checkout_index, checkout = next(
+            (index, step)
+            for index, step in enumerate(steps)
+            if step.get("uses", "").startswith("actions/checkout@")
+        )
+
+        self.assertEqual(checkout["with"]["persist-credentials"], "false")
+        self.assertEqual(checkout["with"]["fetch-depth"], "0")
+
+        later_commands = "\n".join(step.get("run", "") for step in steps[checkout_index + 1 :])
+        self.assertIsNone(
+            re.search(r"(?im)^\s*git\s+fetch(?:\s|$)", later_commands),
+            "persist-credentials: false leaves a later git fetch without checkout authentication",
+        )
+        self.assertIn(
+            'git merge-base --is-ancestor "$GITHUB_SHA" origin/main',
+            later_commands,
+        )
+
+    def test_ci_workflow_actions_are_pinned_to_full_commit_shas(self) -> None:
+        workflow = yaml.load(
+            (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"),
+            Loader=yaml.BaseLoader,
+        )
+        steps = workflow["jobs"]["validate"]["steps"]
+        used_actions = [step["uses"] for step in steps if "uses" in step]
+        self.assertEqual(
+            used_actions,
+            [
+                "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+                "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065",
+                "astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e",
+            ],
+        )
+        for action in used_actions:
+            with self.subTest(action=action):
+                self.assertRegex(action, r"^[^@]+@[0-9a-f]{40}$")
 
     def test_build_backend_graph_is_exact_and_hash_constrained(self) -> None:
         metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
