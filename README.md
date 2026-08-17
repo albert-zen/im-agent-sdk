@@ -30,8 +30,11 @@ turns, approvals, and execution status.
 ## Install the alpha release
 
 Version `0.1.0a1` is distributed as a GitHub prerelease, not through PyPI.
-Because this repository is private, download requires an authenticated GitHub
-session with repository read access:
+The published `v0.1.0a1` artifact will be the workflow-built replacement of
+the initial manual publication (see the
+[release design provenance note](docs/engineering/release/design.md)). Because
+this repository is private, download requires an authenticated GitHub session
+with repository read access:
 
 ```sh
 gh release download v0.1.0a1 \

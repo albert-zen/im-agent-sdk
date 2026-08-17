@@ -32,9 +32,7 @@ jobs:
           version: "0.12.0"
 
       - name: Verify the release tag is on main
-        run: |
-          git fetch --no-tags origin main
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
 
       - name: Reject an existing release
         env:
@@ -53,7 +51,9 @@ jobs:
       - run: uv run --no-sync ruff check src tests scripts
       - run: uv run --no-sync ruff format --check src tests scripts
       - run: uv run --no-sync pyright src tests scripts
-      - run: python scripts/agentkit.py check
+      - run: ./scripts/agentkit doctor
+      - run: ./scripts/agentkit lint-architecture
+      - run: ./scripts/agentkit check
       - run: uv build --wheel --out-dir dist --build-constraint build-constraints.txt --require-hashes
       - run: uv run --no-sync python scripts/smoke_clean_install.py
 
