@@ -46,11 +46,9 @@ uv run python -m unittest tests.conformance.test_adapter_contracts -v
 uv run python -m unittest tests.gateway.test_vertical_slice -v
 ```
 
-Later physical reorganization must run full unittest discovery, all AGENTS
-gates, AgentKit checks, and clean-wheel smoke.
+Changes must run full unittest discovery, all AGENTS gates, AgentKit checks,
+and clean-wheel smoke.
 
 ## Authority
 
 - [T3 design](design.md)
-- [T3 transition page](../../../application-adapters/adapters/t3.md)
-- [Adapter testing context](../../../application-adapters/testing.md)

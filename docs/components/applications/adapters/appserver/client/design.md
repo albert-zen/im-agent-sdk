@@ -76,7 +76,6 @@ and remains unchanged in this physical move.
 ## Authority
 
 - [App Server adapter block](../README.md)
-- [Applications adapter overview](../../../../application-adapters/design.md)
 - [ADR 0004](../../../../../decisions/0004-event-fanout-and-recovery.md)
 - [ADR 0013](../../../../../decisions/0013-bounded-application-event-admission.md)
 - [ADR 0015](../../../../../decisions/0015-typed-extension-seams-and-composition.md)

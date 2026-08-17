@@ -551,7 +551,7 @@ components:
     target_code: [src/imagent/channels/__init__.py, src/imagent/interaction/channels/adapters/**]
     current_tests: [tests/interaction/channels/adapters/test_base_owner.py, tests/interaction/channels/adapters/test_diagnostics_owner.py, tests/interaction/channels/adapters/test_endpoints.py, tests/interaction/channels/adapters/test_native_channels.py, tests/interaction/channels/adapters/test_runtime_facade.py, tests/interaction/channels/adapters/test_qq.py, tests/interaction/channels/adapters/test_qq_facade.py, tests/interaction/channels/adapters/test_telegram.py, tests/interaction/channels/adapters/test_feishu.py, tests/interaction/channels/adapters/test_weixin.py]
     target_tests: [tests/interaction/channels/adapters/**]
-    authoritative_docs: [docs/components/interaction/channels/adapters/design.md, docs/components/interaction/channels/adapters/testing.md, docs/components/channel-adapters/adapters/qq.md, docs/components/channel-adapters/adapters/telegram.md, docs/components/channel-adapters/adapters/feishu.md, docs/components/channel-adapters/adapters/weixin.md]
+    authoritative_docs: [docs/components/interaction/channels/adapters/design.md, docs/components/interaction/channels/adapters/testing.md]
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0010-capability-driven-delivery-coordination.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0014-read-only-diagnostics-surface.md, docs/decisions/0015-typed-extension-seams-and-composition.md]
     gaps: []
 
@@ -705,7 +705,7 @@ components:
     target_code: [src/imagent/gateway/admission.py]
     current_tests: [tests/gateway/test_admission.py, tests/gateway/test_package_root.py, tests/interaction/channels/adapters/test_native_channels.py]
     target_tests: [tests/gateway/test_admission.py, tests/gateway/test_package_root.py]
-    authoritative_docs: [docs/components/gateway/admission/design.md, docs/components/gateway/admission/testing.md, docs/components/gateway/design.md, docs/components/persistence/design.md]
+    authoritative_docs: [docs/components/gateway/admission/design.md, docs/components/gateway/admission/testing.md, docs/components/gateway/design.md, docs/components/gateway/persistence/state-contracts/design.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
     gaps: []
 
@@ -727,7 +727,7 @@ components:
     target_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/bindings.py]
     current_tests: [tests/gateway/routing/test_bindings.py, tests/gateway/test_operations_integration.py, tests/gateway/routing/test_projection_integration.py]
     target_tests: [tests/gateway/routing/test_bindings.py, tests/gateway/test_operations_integration.py, tests/gateway/routing/test_projection_integration.py]
-    authoritative_docs: [docs/components/gateway/routing/bindings/design.md, docs/components/gateway/routing/bindings/testing.md, docs/components/gateway/design.md, docs/components/persistence/design.md, docs/components/projections-and-recovery/design.md]
+    authoritative_docs: [docs/components/gateway/routing/bindings/design.md, docs/components/gateway/routing/bindings/testing.md, docs/components/gateway/design.md, docs/components/gateway/persistence/state-contracts/design.md]
     adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
 
@@ -771,7 +771,7 @@ components:
     target_code: [schemas/v1/operations.schema.json, src/imagent/gateway/routing/projection_routes.py]
     current_tests: [tests/gateway/routing/test_projection_routes.py, tests/gateway/routing/test_projection_integration.py, tests/gateway/projection/test_hardening.py, tests/gateway/test_operations_integration.py]
     target_tests: [tests/gateway/routing/test_projection_routes.py]
-    authoritative_docs: [docs/components/gateway/routing/projection-routes/design.md, docs/components/gateway/routing/projection-routes/testing.md, docs/components/projections-and-recovery/design.md, docs/components/gateway/design.md]
+    authoritative_docs: [docs/components/gateway/routing/projection-routes/design.md, docs/components/gateway/routing/projection-routes/testing.md, docs/components/gateway/projection/README.md, docs/components/gateway/design.md]
     adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
 
@@ -815,7 +815,7 @@ components:
     target_code: [src/imagent/gateway/input/dispatch.py]
     current_tests: [tests/gateway/input/test_dispatch.py, tests/gateway/input/test_policy_free_ordinary_input.py]
     target_tests: [tests/gateway/input/test_dispatch.py, tests/gateway/input/test_policy_free_ordinary_input.py]
-    authoritative_docs: [docs/components/gateway/input/dispatch/design.md, docs/components/gateway/input/dispatch/testing.md, docs/components/gateway/design.md, docs/components/projections-and-recovery/design.md]
+    authoritative_docs: [docs/components/gateway/input/dispatch/design.md, docs/components/gateway/input/dispatch/testing.md, docs/components/gateway/design.md, docs/components/gateway/projection/observation/design.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0013-bounded-application-event-admission.md]
     gaps: []
 
@@ -837,7 +837,7 @@ components:
     target_code: [src/imagent/gateway/input/__init__.py, src/imagent/gateway/input/failure_presentation.py]
     current_tests: [tests/gateway/input/test_failure_presentation.py, tests/gateway/persistence/test_sqlite.py]
     target_tests: [tests/gateway/input/test_failure_presentation.py]
-    authoritative_docs: [docs/components/gateway/input/failure-presentation/design.md, docs/components/gateway/input/failure-presentation/testing.md, docs/components/gateway/design.md, docs/components/persistence/design.md]
+    authoritative_docs: [docs/components/gateway/input/failure-presentation/design.md, docs/components/gateway/input/failure-presentation/testing.md, docs/components/gateway/design.md, docs/components/gateway/persistence/idempotency/design.md]
     adrs: [docs/decisions/0015-typed-extension-seams-and-composition.md]
     gaps: []
 
@@ -1145,7 +1145,7 @@ components:
     target_code: [schemas/v1/bindings.schema.json, schemas/v1/deliveries.schema.json, schemas/v1/messages.schema.json, schemas/v1/projections.schema.json, src/imagent/gateway/persistence/state_contracts.py]
     current_tests: [tests/interaction/test_contracts.py, tests/gateway/persistence/test_memory.py, tests/gateway/routing/test_projection_integration.py, tests/gateway/persistence/test_sqlite.py, tests/gateway/persistence/test_state_contracts.py]
     target_tests: [tests/gateway/persistence/test_state_contracts.py]
-    authoritative_docs: [docs/components/gateway/persistence/state-contracts/design.md, docs/components/gateway/persistence/state-contracts/testing.md, docs/components/contracts/protocol.md, docs/components/persistence/design.md, docs/components/projections-and-recovery/design.md]
+    authoritative_docs: [docs/components/gateway/persistence/state-contracts/design.md, docs/components/gateway/persistence/state-contracts/testing.md, docs/components/contracts/protocol.md]
     adrs: [docs/decisions/0005-input-activation-and-projection.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: [state-contract extraction is complete; remaining routing/projection slices may remove their mixed operation and orchestration owners]
 
@@ -1167,7 +1167,7 @@ components:
     target_code: [src/imagent/gateway/persistence/repository_contracts.py, src/imagent/gateway/persistence/submission_identity.py]
     current_tests: [tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_repository_contracts.py, tests/gateway/persistence/test_sqlite.py, tests/conformance/test_adapter_contracts.py, tests/gateway/persistence/test_submission_identity.py]
     target_tests: [tests/gateway/persistence/test_repository_contracts.py, tests/gateway/persistence/test_submission_identity.py]
-    authoritative_docs: [docs/components/gateway/persistence/repository-contracts/design.md, docs/components/gateway/persistence/repository-contracts/testing.md, docs/components/ports/design.md, docs/components/persistence/design.md]
+    authoritative_docs: [docs/components/gateway/persistence/repository-contracts/design.md, docs/components/gateway/persistence/repository-contracts/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
     gaps: []
 
@@ -1189,7 +1189,7 @@ components:
     target_code: [src/imagent/gateway/persistence/memory.py]
     current_tests: [tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_repository_contracts.py, tests/gateway/persistence/test_sqlite.py, tests/gateway/routing/test_projection_integration.py]
     target_tests: [tests/gateway/persistence/test_memory.py, tests/gateway/persistence/test_repository_contracts.py]
-    authoritative_docs: [docs/components/gateway/persistence/memory/design.md, docs/components/gateway/persistence/memory/testing.md, docs/components/persistence/design.md, docs/components/persistence/testing.md]
+    authoritative_docs: [docs/components/gateway/persistence/memory/design.md, docs/components/gateway/persistence/memory/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
     gaps: []
 
@@ -1211,7 +1211,7 @@ components:
     target_code: [src/imagent/gateway/persistence/idempotency.py]
     current_tests: [tests/gateway/persistence/test_idempotency.py]
     target_tests: [tests/gateway/persistence/test_idempotency.py]
-    authoritative_docs: [docs/components/gateway/persistence/idempotency/design.md, docs/components/gateway/persistence/idempotency/testing.md, docs/components/persistence/design.md, docs/components/persistence/testing.md]
+    authoritative_docs: [docs/components/gateway/persistence/idempotency/design.md, docs/components/gateway/persistence/idempotency/testing.md]
     adrs: [docs/decisions/0006-core-admission-and-policy-ownership.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0011-durable-inbound-admission-before-media.md]
     gaps: []
 
@@ -1233,7 +1233,7 @@ components:
     target_code: [src/imagent/gateway/persistence/sqlite.py]
     current_tests: [tests/gateway/persistence/test_sqlite.py, tests/gateway/persistence/test_submission_identity.py]
     target_tests: [tests/gateway/persistence/test_sqlite.py, tests/gateway/persistence/test_submission_identity.py]
-    authoritative_docs: [docs/components/gateway/persistence/sqlite/design.md, docs/components/gateway/persistence/sqlite/testing.md, docs/components/persistence/design.md, docs/components/persistence/testing.md]
+    authoritative_docs: [docs/components/gateway/persistence/sqlite/design.md, docs/components/gateway/persistence/sqlite/testing.md]
     adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0011-durable-inbound-admission-before-media.md, docs/decisions/0012-input-continuation-and-reply-correlation.md]
     gaps: []
 
@@ -1255,7 +1255,7 @@ components:
     target_code: [src/imagent/gateway/persistence/row_mapping.py]
     current_tests: [tests/gateway/persistence/test_row_mapping.py]
     target_tests: [tests/gateway/persistence/test_row_mapping.py]
-    authoritative_docs: [docs/components/gateway/persistence/row-mapping/design.md, docs/components/gateway/persistence/row-mapping/testing.md, docs/components/persistence/design.md, docs/engineering/repository-maintainability/design.md]
+    authoritative_docs: [docs/components/gateway/persistence/row-mapping/design.md, docs/components/gateway/persistence/row-mapping/testing.md, docs/engineering/repository-maintainability/design.md]
     adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0009-proactive-delivery-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
 
@@ -1299,7 +1299,7 @@ components:
     target_code: [src/imagent/gateway/persistence/__init__.py, src/imagent/gateway/persistence/store.py, src/imagent/gateway/persistence/memory_store.py, src/imagent/gateway/persistence/sqlite_store.py]
     current_tests: [tests/gateway/persistence/test_gateway_store.py, tests/gateway/persistence/test_sqlite_gateway_fencing.py]
     target_tests: [tests/gateway/persistence/test_gateway_store.py, tests/gateway/persistence/test_sqlite_gateway_fencing.py]
-    authoritative_docs: [docs/components/gateway/persistence/gateway-store/design.md, docs/components/gateway/persistence/gateway-store/testing.md, docs/components/persistence/design.md, docs/components/persistence/testing.md]
+    authoritative_docs: [docs/components/gateway/persistence/gateway-store/design.md, docs/components/gateway/persistence/gateway-store/testing.md]
     adrs: [docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: [Block C consumes only GatewayEffectExecutor; later composition replaces the retiring public repository bundle]
 
@@ -1693,9 +1693,9 @@ components:
     state_recovery: The example retains only bounded process-local deterministic adapter truth; every run starts fresh and shutdown closes all owned tasks, subscriptions, and store resources.
     current_code: [examples/reference_consumer/*.py]
     target_code: [examples/reference_consumer/*.py]
-    current_tests: [tests/gateway/test_reference_consumer.py]
-    target_tests: [tests/gateway/test_reference_consumer.py]
-    authoritative_docs: [docs/engineering/reference-consumer/design.md, docs/engineering/reference-consumer/testing.md]
+    current_tests: [tests/gateway/test_reference_consumer.py, tests/engineering/test_quickstart.py, tests/engineering/test_operational_docs.py]
+    target_tests: [tests/gateway/test_reference_consumer.py, tests/engineering/test_quickstart.py, tests/engineering/test_operational_docs.py]
+    authoritative_docs: [docs/engineering/reference-consumer/design.md, docs/engineering/reference-consumer/testing.md, docs/onboarding/README.md, docs/onboarding/quickstart.md, docs/onboarding/capability-matrix.md, docs/onboarding/applications.md, docs/onboarding/gateway.md, docs/onboarding/interaction.md, docs/onboarding/production-checklist.md, docs/onboarding/troubleshooting.md, docs/recipes/bindings.md, docs/recipes/restart-and-replay.md, docs/recipes/interactive-requests.md, docs/recipes/media-and-artifacts.md, docs/recipes/proactive-delivery.md, docs/recipes/diagnostics.md]
     adrs: [docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
 
@@ -1805,7 +1805,7 @@ components:
     target_code: [.github/workflows/release.yml, build-constraints.txt, pyproject.toml, scripts/prepare_github_release.py, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/py.typed]
     current_tests: [tests/engineering/test_release.py]
     target_tests: [tests/engineering/test_release.py]
-    authoritative_docs: [docs/engineering/release/design.md, docs/engineering/release/testing.md, README.md, docs/REUSE.md]
+    authoritative_docs: [docs/engineering/release/design.md, docs/engineering/release/testing.md, README.md, docs/REUSE.md, docs/onboarding/upgrade-and-rollback.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md]
     gaps: []
 
@@ -1817,11 +1817,7 @@ structural_status:
   retired_application_public_exports:
     current: []
     target: []
-  temporary_external_docs:
-    - path: docs/migrations/issue-9-imcodex-owner-transfer.md
-      disposition: Remove after downstream ownership evidence is recorded in GitHub issues/PRs.
-    - path: docs/migrations/imcodex-followup-blockers.md
-      disposition: Remove after the component rollout and final IMCodex migration replace this temporary status evidence.
+  temporary_external_docs: []
   formal_facades:
     - path: src/imagent/__init__.py
       owner: engineering.release

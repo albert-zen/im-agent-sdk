@@ -6,8 +6,8 @@ by Contracts, component docs, accepted ADRs, code, and tests.
 ## Issue #9: finish downstream consumer migration
 
 The SDK owner-side transfer is represented by code, component docs, tests, and
-the [transfer map](migrations/issue-9-imcodex-owner-transfer.md). The remaining
-future work is an isolated IMCodex migration:
+the durable source record in [Reuse](REUSE.md). Remaining consumer work is
+tracked on [GitHub issue #9](https://github.com/albert-zen/im-agent-sdk/issues/9):
 
 - depend on and compose the SDK-owned Channel/App Server APIs;
 - retain product configuration, commands, branding, launchers, and policy;

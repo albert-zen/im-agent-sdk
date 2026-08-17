@@ -99,4 +99,4 @@ implementation is retained.
 - [ADR 0009](../../../../decisions/0009-proactive-delivery-routing.md)
 - [ADR 0010](../../../../decisions/0010-capability-driven-delivery-coordination.md)
 - [Gateway design](../../design.md)
-- [Persistence design](../../../persistence/design.md)
+- [Gateway persistence](../../persistence/README.md)

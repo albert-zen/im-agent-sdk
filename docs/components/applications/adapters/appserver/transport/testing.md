@@ -50,4 +50,3 @@ clean-wheel smoke from the parent adapter block.
 
 - [Transport design](design.md)
 - [Client design](../client/design.md)
-- [App Server testing context](../../../../application-adapters/testing.md)

@@ -27,6 +27,13 @@ base, QQ, Telegram, Feishu, Weixin, and App Server. Every profile runs the same
 public fingerprint and the same installed executable from a temporary working
 directory without repository `PYTHONPATH`.
 
+The profile matrix verifies that `appserver` supplies remote App Server
+WebSocket support, each named Channel extra supplies only its protocol's native
+dependencies, and `channels` remains their declared union. Clean import and
+construction must succeed without `imcodex`, network connection, or real
+credential validation; any installation-time I/O is a release-boundary
+failure.
+
 The fingerprint must prove:
 
 - exact owner identity for the finite top-level values and `imagent.gateway`

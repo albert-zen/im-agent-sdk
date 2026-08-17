@@ -29,9 +29,9 @@ authoritative.
 `REUSE.md` owns source provenance and extraction rules. `ROADMAP.md` contains
 future or unresolved work and is not authority for current runtime behavior.
 JSON Schema under `schemas/v1/` is the language-neutral contract surface.
-Active ownership migrations use explicit maps under `docs/migrations/`; the
-current [Issue #9 SDK-side transfer map](migrations/issue-9-imcodex-owner-transfer.md)
-separates SDK ownership work from the later IMCodex consumer migration.
+Landed source-transfer provenance belongs in [Reuse](REUSE.md). Downstream
+consumer adoption status belongs on the applicable GitHub issue rather than in
+SDK product documentation.
 
 ## Change navigation
 
@@ -40,7 +40,7 @@ separates SDK ownership work from the later IMCodex consumer migration.
 | Interaction message values in `contracts/**`, `schemas/v1/messages.schema.json` | [messages design](components/interaction/messages/design.md), [testing](components/interaction/messages/testing.md), [protocol](components/contracts/protocol.md#message-envelopes) | `tests/interaction/test_messages.py`, schema validator |
 | Common operation values in `contracts/**`, `schemas/v1/operations.schema.json` | [operations design](components/interaction/operations/design.md), [testing](components/interaction/operations/testing.md), [protocol](components/contracts/protocol.md#typed-operations) | `test_contracts.py`, schema validator |
 | Remaining unsplit `contracts/**` and contract schemas | [contracts design](components/contracts/design.md), [protocol](components/contracts/protocol.md), [testing](components/contracts/testing.md) | `test_contracts.py`, schema validator |
-| `adapters.py` | [ports design](components/ports/design.md), [testing](components/ports/testing.md) | adapter contract kit and static typing |
+| Application or Channel adapter contracts | [Application contract](components/applications/application-contract/design.md), [Channel contract](components/interaction/channels/channel-contract/design.md), and their testing pages | adapter contract kit and static typing |
 | `interaction/media.py` and media schemas | [media design](components/interaction/media/design.md), [testing](components/interaction/media/testing.md) | Interaction media, contract, and vertical-slice tests |
 | `interaction/client_tools/**` and the `imagent-send` entry point | [client-tools design](components/interaction/client-tools/design.md), [testing](components/interaction/client-tools/testing.md) | focused client-tool tests, Gateway ingress integration, release metadata, and six clean-wheel negative smokes |
 | `gateway/delivery/planning.py` | [planning design](components/gateway/delivery/planning/design.md), [testing](components/gateway/delivery/planning/testing.md) | deterministic planning golden tests |
@@ -57,7 +57,7 @@ separates SDK ownership work from the later IMCodex consumer migration.
 | `gateway/input/content_transformation.py`, `gateway/input/dispatch.py`, and `gateway/input/failure_presentation.py` | [Gateway input subtree](components/gateway/input/README.md) and the affected leaf design/testing docs | I1 replay/identity, canonical dispatch fence/correlation, or I2 phase/claim tests |
 | Gateway package root (`gateway/__init__.py`), `gateway/routing/operations.py`, and `gateway/routing/projection_routes.py` | [gateway design](components/gateway/design.md), [Gateway operations design](components/gateway/routing/gateway-operations/design.md), [projection routes design](components/gateway/routing/projection-routes/design.md), and their testing docs | focused routing-owner tests plus Gateway operation and vertical-slice tests |
 | `events.py`, `gateway/projection/observation.py`, `gateway/projection/checkpoints.py`, `gateway/projection/request_correlation.py`, `gateway/projection/recovery.py` | [Gateway projection](components/gateway/projection/README.md): [observation](components/gateway/projection/observation/design.md), [checkpoints](components/gateway/projection/checkpoints/design.md), [request correlation](components/gateway/projection/request-correlation/design.md), and [recovery](components/gateway/projection/recovery/design.md) | fan-out, projection routing, request correlation, recovery tests |
-| `gateway/persistence/repository_contracts.py`, `gateway/persistence/memory.py`, `gateway/persistence/row_mapping.py`, `gateway/persistence/sqlite.py` | [Gateway persistence](components/gateway/persistence/README.md), [persistence design](components/persistence/design.md), [testing](components/persistence/testing.md), [row-mapping design](components/gateway/persistence/row-mapping/design.md) | Gateway persistence memory, row-mapping, SQLite-owner, and submission tests |
+| `gateway/persistence/repository_contracts.py`, `gateway/persistence/memory.py`, `gateway/persistence/row_mapping.py`, `gateway/persistence/sqlite.py` | [Gateway persistence](components/gateway/persistence/README.md) and the affected repository, memory, row-mapping, or SQLite leaf | Gateway persistence memory, row-mapping, SQLite-owner, and submission tests |
 | `gateway/outcomes.py`, `gateway/effect_execution.py`, `gateway/persistence/{effects,store,memory_store,sqlite_store}.py` | [outcome algebra](components/gateway/outcomes/design.md), [effect execution](components/gateway/effect-execution/design.md), [effect contracts](components/gateway/persistence/effects/design.md), and [Gateway store](components/gateway/persistence/gateway-store/design.md) | outcome/effect contracts, memory/SQLite store parity, native/workflow fencing, restart/ABA/capacity/lease tests |
 | `controllers/**` | [Controller subtree](components/interaction/controllers/README.md) and the affected leaf design/testing docs | Controller contract, registry, common-command, or request-presentation focused tests, including formal-facade identity and absent historical-path import-order evidence |
 | `channels/**` | [Interaction Channel subtree](components/interaction/channels/README.md), affected leaf design/testing docs, and applicable native adapter page | Channel contract, ingress, outbound-delivery, diagnostics, and native seam tests |

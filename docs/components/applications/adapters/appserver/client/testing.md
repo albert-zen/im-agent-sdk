@@ -57,4 +57,3 @@ AgentKit, and clean-wheel checks recorded by the parent navigation and
 
 - [Client design](design.md)
 - [App Server block](../README.md)
-- [Cross-adapter testing context](../../../../application-adapters/testing.md)

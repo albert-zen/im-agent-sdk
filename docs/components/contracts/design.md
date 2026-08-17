@@ -71,8 +71,8 @@ capabilities require typed fields.
 
 Contracts import no Python runtime port, Gateway orchestration, Controller,
 persistence, or concrete adapter implementation. There is no cross-layer
-`imagent.contracts` Python facade; Python values are imported from their
-focused owners. [Python Ports](../ports/design.md) depend on contract types.
+`imagent.contracts` Python facade; Python values and protocols are imported
+from their focused Interaction, Applications, or Gateway owners.
 
 ## Common-abstraction threshold
 

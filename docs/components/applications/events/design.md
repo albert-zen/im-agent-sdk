@@ -69,7 +69,7 @@ no duplicate `AgentMessage` or resource model.
 ## Authority
 
 - [Architecture](../../../ARCHITECTURE.md)
-- [Projection/recovery design](../../projections-and-recovery/design.md)
+- [Gateway projection navigation](../../gateway/projection/README.md)
 - [ADR 0004](../../../decisions/0004-event-fanout-and-recovery.md)
 - [ADR 0013](../../../decisions/0013-bounded-application-event-admission.md)
 - [ADR 0016](../../../decisions/0016-uniform-workspace-and-consumer-actions.md)

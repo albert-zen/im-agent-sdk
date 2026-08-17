@@ -42,5 +42,4 @@ ruff/format/pyright, component-map, AgentKit, and clean-wheel verification.
 ## Authority
 
 - [Mapping design](design.md)
-- [App Server testing context](../../../../application-adapters/testing.md)
 - [Application events design](../../../events/design.md)

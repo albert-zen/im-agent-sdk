@@ -71,6 +71,6 @@ consumer policy implemented by constructor-injected typed services.
 
 - [Vision](../../../../VISION.md)
 - [Architecture](../../../../ARCHITECTURE.md)
-- [Persistence design](../../../persistence/design.md)
+- [Idempotency design](../../persistence/idempotency/design.md)
 - [ADR 0012](../../../../decisions/0012-input-continuation-and-reply-correlation.md)
 - [ADR 0015](../../../../decisions/0015-typed-extension-seams-and-composition.md)

@@ -65,4 +65,4 @@ coherent Gateway store.
 
 - [ADR 0009](../../../../decisions/0009-proactive-delivery-routing.md)
 - [Gateway design](../../design.md)
-- [Ports design](../../../ports/design.md)
+- [Channel contract](../../../interaction/channels/channel-contract/design.md)

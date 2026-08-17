@@ -78,6 +78,5 @@ first-writer behavior.
 
 - [App Server block](../README.md)
 - [Applications request design](../../../requests/design.md)
-- [Applications adapter overview](../../../../application-adapters/design.md)
 - [ADR 0008](../../../../../decisions/0008-interactive-request-routing.md)
 - [ADR 0016](../../../../../decisions/0016-uniform-workspace-and-consumer-actions.md)

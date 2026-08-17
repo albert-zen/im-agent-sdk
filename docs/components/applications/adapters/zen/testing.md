@@ -47,5 +47,3 @@ and clean-wheel smoke.
 ## Authority
 
 - [Zen design](design.md)
-- [Zen transition page](../../../application-adapters/adapters/zen.md)
-- [Adapter testing context](../../../application-adapters/testing.md)
