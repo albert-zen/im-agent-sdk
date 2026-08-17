@@ -661,6 +661,34 @@ components:
       - adapter
       - t3
 
+  application-adapters-deepseek-harness:
+    description: DeepSeek Harness Web Host workspace/session, input, polling, event, history, and recovery translation.
+    code:
+      - docs/VISION.md
+      - docs/ARCHITECTURE.md
+      - docs/V1_DESIGN.md
+      - docs/V1_EXECUTABLE_SPEC.md
+      - src/imagent/applications/__init__.py
+      - src/imagent/applications/adapters/deepseek_harness.py
+      - tests/applications/adapters/test_deepseek_harness.py
+    docs:
+      - docs/components/applications/adapters/README.md
+      - docs/components/applications/adapters/deepseek-harness/design.md
+      - docs/components/applications/adapters/deepseek-harness/testing.md
+      - docs/components/application-adapters/design.md
+      - docs/components/application-adapters/testing.md
+    required_docs:
+      - design
+      - testing
+    keywords:
+      - application
+      - adapter
+      - deepseek
+      - harness
+      - polling
+      - session
+      - workspace
+
   applications-common:
     description: Typed Application contract, capability, event, operation, request, and adapter-owned A1 presentation boundaries.
     code:
@@ -927,6 +955,7 @@ maintainability:
       paths:
         - src/imagent/applications/adapters/appserver/_base.py
         - src/imagent/applications/adapters/codex.py
+        - src/imagent/applications/adapters/deepseek_harness.py
         - src/imagent/applications/adapters/zen.py
         - src/imagent/applications/adapters/t3.py
       max_lines: 1800

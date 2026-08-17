@@ -23,6 +23,7 @@ PRODUCT_COMPONENTS = {
     "controllers",
     "channel-adapters",
     "application-adapters-appserver",
+    "application-adapters-deepseek-harness",
     "application-adapters-t3",
     "applications-common",
     "testing-and-conformance",
@@ -46,6 +47,7 @@ SHARED_PATH_OWNERS = {
     },
     "src/imagent/applications/__init__.py": {
         "application-adapters-appserver",
+        "application-adapters-deepseek-harness",
         "application-adapters-t3",
         "applications-common",
     },
