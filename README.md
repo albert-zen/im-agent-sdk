@@ -27,6 +27,37 @@ The SDK is not an Agent runtime and does not own a second transcript. Each
 Agent application remains authoritative for its projects, threads, history,
 turns, approvals, and execution status.
 
+## Install the alpha release
+
+Version `0.1.0a1` is distributed as a GitHub prerelease, not through PyPI.
+The published `v0.1.0a1` artifact will be the workflow-built replacement of
+the initial manual publication (see the
+[release design provenance note](docs/engineering/release/design.md)). Because
+this repository is private, download requires an authenticated GitHub session
+with repository read access:
+
+```sh
+gh release download v0.1.0a1 \
+  --repo albert-zen/im-agent-sdk \
+  --pattern "*.whl" \
+  --pattern SHA256SUMS \
+  --dir im-agent-sdk-0.1.0a1
+cd im-agent-sdk-0.1.0a1
+sha256sum --check SHA256SUMS
+uv pip install im_agent_sdk-0.1.0a1-py3-none-any.whl
+```
+
+Verify the downloaded wheel against `SHA256SUMS` before installing it. The
+stable authenticated asset URL is:
+
+```text
+https://github.com/albert-zen/im-agent-sdk/releases/download/v0.1.0a1/im_agent_sdk-0.1.0a1-py3-none-any.whl
+```
+
+A bare requirement such as `im-agent-sdk==0.1.0a1` does not discover GitHub
+Release assets because GitHub Releases is not a Python package index. A
+consumer must download the wheel or use the authenticated asset URL explicitly.
+
 The first formal SDK is governed by the
 [v1 architecture and consumer contract](docs/V1_DESIGN.md) and its
 [executable specification](docs/V1_EXECUTABLE_SPEC.md). The
@@ -88,15 +119,15 @@ Python 3.13 or newer and
 CI pins uv 0.12.0; use that version when regenerating `uv.lock`.
 
 ```sh
-uv sync --extra dev --extra channels --extra appserver --locked
-PYTHONPATH=src uv run python -m unittest discover -s tests -v
-uv run python -m compileall -q src tests scripts
-uv run python scripts/validate_schemas.py
-uv run python scripts/check_doc_links.py
-uv run ruff check src tests scripts
-uv run ruff format --check src tests scripts
-uv run pyright src tests scripts
-uv build --wheel
-uv run python scripts/smoke_clean_install.py
+uv sync --extra dev --extra channels --extra appserver --locked --no-install-project
+PYTHONPATH=src uv run --no-sync python -m unittest discover -s tests -v
+uv run --no-sync python -m compileall -q src tests scripts
+uv run --no-sync python scripts/validate_schemas.py
+uv run --no-sync python scripts/check_doc_links.py
+uv run --no-sync ruff check src tests scripts
+uv run --no-sync ruff format --check src tests scripts
+uv run --no-sync pyright src tests scripts
+uv build --wheel --build-constraint build-constraints.txt --require-hashes
+uv run --no-sync python scripts/smoke_clean_install.py
 python scripts/agentkit.py check
 ```

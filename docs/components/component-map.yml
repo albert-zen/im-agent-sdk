@@ -18,6 +18,7 @@ inventory:
     - plugins/agentkit/**/*
     - .agents/plugins/*
     - pyproject.toml
+    - build-constraints.txt
     - .github/workflows/*.yml
 layers:
   interaction:
@@ -1790,18 +1791,18 @@ components:
     id: engineering.release
     parent: engineering
     purpose: Own package facade/version/typing marker, build metadata, clean-install smoke, and release documentation.
-    owns: [package facade, py.typed marker, optional extras, clean-wheel verification]
+    owns: [package facade, py.typed marker, optional extras, clean-wheel verification, GitHub prerelease assembly and immutable asset evidence]
     does_not_own: [runtime component behavior, compatibility implementations]
     inputs: [three-layer public exports and package metadata]
-    outputs: [installable typed wheel]
+    outputs: [installable typed wheel, source-bound GitHub prerelease assets and SHA-256 manifest]
     public_contracts: [__version__]
     public_exports:
       current: [imagent:__version__]
       target: [imagent:__version__]
     dependencies: [interaction.messages, interaction.client-tools, interaction.channels.channel-contract, gateway.composition, gateway.delivery.planning, gateway.delivery.coordination, gateway.projection.observation, gateway.projection.recovery, gateway.diagnostics, applications.application-contract, applications.events]
     state_recovery: Stateless packaging; build must not import optional native dependencies in the base install.
-    current_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/py.typed]
-    target_code: [pyproject.toml, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/py.typed]
+    current_code: [.github/workflows/release.yml, build-constraints.txt, pyproject.toml, scripts/prepare_github_release.py, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/py.typed]
+    target_code: [.github/workflows/release.yml, build-constraints.txt, pyproject.toml, scripts/prepare_github_release.py, scripts/smoke_clean_install.py, src/imagent/__init__.py, src/imagent/py.typed]
     current_tests: [tests/engineering/test_release.py]
     target_tests: [tests/engineering/test_release.py]
     authoritative_docs: [docs/engineering/release/design.md, docs/engineering/release/testing.md, README.md, docs/REUSE.md, docs/onboarding/upgrade-and-rollback.md]
