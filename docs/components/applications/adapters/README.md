@@ -64,6 +64,31 @@ connection epochs, and explicit outcome/gap discriminants drive idempotency
 and recovery. Raw native payloads stop inside the adapter normalization path;
 Gateway sees only Applications contracts and canonical events.
 
+## Native Thread-start option seam
+
+An App Server adapter may receive an immutable, deployment-supplied native
+Thread-start option mapping through its `thread_start_options` construction
+argument. This is an adapter configuration seam for native sandbox/approval
+defaults, not a common policy contract: the common `CreateThread` operation
+keeps the shared control intent and is not widened with a native option
+vocabulary. The adapter validates and deep-copies the configured default and
+every per-call mapping before use: keys must be non-empty strings, the
+adapter-owned `cwd` and the reserved native client
+`params` field cannot be overridden, evidenced snake/camel aliases
+(`approval_policy`/`approvalPolicy`, `approvals_reviewer`/
+`approvalsReviewer`, `sandbox_policy`/`sandboxPolicy`, `service_name`/
+`serviceName`, `thread_id`/`threadId`) normalize to one native field, and
+aliases that collide after normalization fail before any native creation. The
+native client receives a fresh deep copy of the validated mapping. The
+mapping is neither persisted nor exposed as Agent state.
+
+A consumer whose conversation UX selects among several native profiles may
+call the concrete adapter's `create_thread_with_options` seam, then bind the
+returned authoritative `ThreadSummary` through the ordinary Gateway
+operation. This remains outside the common Application Port because the
+option vocabulary is native and the selection policy belongs to the consumer;
+adapters without evidenced native options expose no synthetic profile API.
+
 ## Current and target layout
 
 Issue #240 established this documentation authority before mechanical moves.
@@ -82,7 +107,5 @@ client has no synthetic long-lived connection epoch, and its bounded process
 state recovers through authoritative native history rather than a local
 transcript or spool.
 
-The cross-adapter overview remains available as [transition design
-context](../../application-adapters/design.md) and [cross-adapter testing
-context](../../application-adapters/testing.md); the leaf pages above are the
-authoritative ownership and structural-gap records for this block.
+The leaf pages above are the sole ownership and structural-gap records for this
+block.

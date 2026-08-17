@@ -73,7 +73,7 @@ retains no artifact record, spool, cleanup job, or path.
 ## Authority
 
 - [Architecture](../../../../ARCHITECTURE.md)
-- [Attachment/media design](../../../attachments-and-media/design.md)
-- [Application adapter design](../../../application-adapters/design.md)
+- [Interaction media design](../../../interaction/media/design.md)
+- [Applications adapter block](../../adapters/README.md)
 - [ADR 0003](../../../../decisions/0003-attachment-sources-and-trust.md)
 - [ADR 0015](../../../../decisions/0015-typed-extension-seams-and-composition.md)

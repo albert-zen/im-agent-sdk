@@ -179,4 +179,4 @@ are rejected as malformed current state rather than repaired.
 - [V1 design](../../../../V1_DESIGN.md)
 - [V1 executable specification](../../../../V1_EXECUTABLE_SPEC.md)
 - [ADR 0016](../../../../decisions/0016-uniform-workspace-and-consumer-actions.md)
-- [Persistence design](../../../persistence/design.md)
+- [Gateway persistence](../README.md)

@@ -36,6 +36,17 @@ authoritative native read supplies the same Thread ID and matching canonical
 `cwd`; missing or foreign scope evidence fails closed, including live and
 interactive-request publication.
 
+Deployment-owned `thread_start_options` may provide App Server-native
+sandbox/approval defaults for newly created Threads. The adapter copies the
+mapping, rejects ambiguous aliases and attempts to replace its adapter-owned
+`cwd` or the reserved native client `params` field, and does not persist the
+mapping as SDK Thread state. A consumer whose conversation UX selects among
+native profiles may call the concrete `create_thread_with_options` seam and
+bind the returned authoritative `ThreadSummary` through the ordinary Gateway
+operation; the profile remains client selection/configuration, not Codex or
+SDK runtime state. The common `CreateThread` operation keeps the shared
+control intent unchanged.
+
 The current formal export is `CodexApplicationAdapter` from the lazy
 `imagent.applications` facade, implemented at the exact target
 `imagent.applications.adapters.codex:CodexApplicationAdapter`; the top facade
@@ -127,8 +138,6 @@ facade; Zen has no dependency on this module.
 ## Authority
 
 - [Adapter block](../README.md)
-- [Codex transition page](../../../application-adapters/adapters/codex.md)
-- [Applications adapter overview](../../../application-adapters/design.md)
 - [ADR 0003](../../../../decisions/0003-attachment-sources-and-trust.md)
 - [ADR 0008](../../../../decisions/0008-interactive-request-routing.md)
 - [ADR 0012](../../../../decisions/0012-input-continuation-and-reply-correlation.md)

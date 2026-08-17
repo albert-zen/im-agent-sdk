@@ -73,6 +73,6 @@ native events, or execution/recovery behavior.
 ## Authority
 
 - [Architecture](../../../ARCHITECTURE.md)
-- [Application adapter design](../../application-adapters/design.md)
+- [Applications adapter block](../adapters/README.md)
 - [ADR 0008](../../../decisions/0008-interactive-request-routing.md)
 - [ADR 0016](../../../decisions/0016-uniform-workspace-and-consumer-actions.md)

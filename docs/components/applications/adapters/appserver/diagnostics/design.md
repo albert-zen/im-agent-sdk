@@ -114,5 +114,4 @@ unbounded troubleshooting surface.
 - [App Server block](../README.md)
 - [Interaction diagnostics design](../../../../interaction/diagnostics/design.md)
 - [Gateway diagnostics design](../../../../gateway/diagnostics/design.md)
-- [Applications adapter overview](../../../../application-adapters/design.md)
 - [ADR 0014](../../../../../decisions/0014-read-only-diagnostics-surface.md)

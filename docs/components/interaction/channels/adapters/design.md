@@ -18,7 +18,8 @@ All built-ins implement the same Channel contract and call the shared
 ingress/delivery ordering and validation helpers. Shared leaves cover access
 evaluation, denial-report bounds, media/file validation, bounded
 text/artifact mechanics, stable receipt correlation, and runtime lifecycle
-where two or more real Channels prove the semantics. Concrete adapters exclusively own provider
+where two or more real Channels prove the semantics. Concrete adapters
+exclusively own provider
 authentication/signatures, API encoding/escaping, credentials, native
 upload/download/decryption/acknowledgement, URL rules, QR/token state, rate
 limit/response mapping, and diagnostic worker facts.
@@ -89,3 +90,75 @@ another provider does not load QQ; resolving one of those exact names loads
 the target QQ owner and preserves object identity. The three historical QQ
 native module paths are deleted without compatibility shims. No other
 provider-private symbol is promoted.
+
+## Provider-specific boundaries
+
+### QQ
+
+QQ owns bot authentication, Gateway WebSocket reconnect state, stable C2C and
+group identities, passive-reply context, media staging, and native
+Markdown/file capabilities. C2C and group events retain native message and
+sender IDs; group mentions are stripped only after native targeting succeeds.
+Passive-reply context is bounded and degrades to proactive delivery when the
+native reply window cannot be proven.
+
+QQ quote snapshots are bounded adapter-specific untrusted input. Parsing
+accepts only QQ evidence and bounds reference IDs, text, attachment counts,
+filenames, voice transcripts, and rendered text. Raw envelopes, URLs, bytes,
+and nested quote history are excluded. The adapter appends a labelled
+untrusted block after the current text before the common native boundary emits
+ordinary `TextFormat.PLAIN` content. The parsed shape never enters shared
+native models or runtime code and does not create a common quote contract,
+capability, or Metadata key.
+
+The descriptive quote block grants no message, delivery, idempotency, binding,
+reply-target, request, or approval authority. Only the authenticated native
+inbound path supplies a provider snapshot. A caller may mimic the label only
+as ordinary untrusted text; it cannot forge a trusted snapshot, and Metadata
+is ignored for this feature.
+
+Enabled instances require normalized `app_id` and `client_secret` values and
+an HTTP(S) API endpoint. Authentication, reconnect, upload, reply-window, and
+unsupported group-file failures remain explicit. Media is staged inside the
+Channel-owned bounded spool before crossing the attachment source boundary.
+Diagnostics expose only bounded lifecycle/worker facts and the fixed-capacity
+inbound queue depth/overflow count, never credentials, endpoint, identities,
+media paths, or exception text.
+
+### Telegram
+
+Telegram owns Bot API polling offsets, bot identity, private/group/forum
+Conversation normalization, mention targeting, native reply IDs, and media
+transfer. Private chats, groups, and forum topics remain distinct routes;
+polling offsets are Channel reconnect state, not Agent cursors. Group input is
+admitted only after native mention/reply targeting. Enabled instances require
+a direct token or private token file and a credential-free HTTP(S) endpoint;
+corrupt offsets fail closed. Bot API descriptions may surface only without
+leaking tokens. Diagnostics expose bounded polling lifecycle facts without
+tokens, offsets, endpoints, native identities, or exception text.
+
+### Feishu/Lark
+
+Feishu/Lark owns App credentials, the official SDK connection, named domain
+selection, native chat/topic identity, mention targeting, resource transfer,
+and reconnect health. Direct chats and topics remain distinct Conversations;
+private resource references become content only through the bounded Channel
+spool. The optional native SDK is constructed with strict transport security
+and bounded inbound buffering. Only the named Feishu and Lark domains are
+accepted, credentials are required, and subscription, reconnect, token,
+resource, overflow, and delivery failures remain explicit. Diagnostics expose
+bounded lifecycle/worker and inbound queue facts without credentials,
+endpoints, identities, resource keys, paths, SDK snapshots, or exception text.
+
+### Weixin iLink
+
+Weixin owns consumer-enrolled iLink credentials, direct-message polling,
+native reply context tokens, bounded reconnect state, media crypto/transport,
+and credential-file protection. Only official direct-user identities are
+supported; group and bot messages are explicitly unsupported. Context tokens
+and update cursors are minimal Channel delivery/reconnect state. The transport
+accepts only the official HTTPS origin, and corrupt, overly permissive,
+wildcard-owner, or malformed credential state fails closed. Enrollment UX and
+stale-credential recovery remain consumer policy. Diagnostics expose bounded
+polling lifecycle facts without credentials, tokens, cursors, endpoints,
+identities, paths, or exception text.

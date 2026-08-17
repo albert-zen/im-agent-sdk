@@ -37,10 +37,9 @@ The durable authority chain is:
 - [Reuse](../../REUSE.md) for source provenance and extraction; and
 - [Roadmap](../../ROADMAP.md) for future or unresolved work only.
 
-Focused pages are authoritative. Transitional broad pages may remain as
-navigation while links migrate, but copied behavioral truth must not create a
-second authority. Removing a broad page is safe only after every unique landed
-rule has moved to an authoritative leaf.
+Focused pages are authoritative. Retired pre-three-layer pages are not kept as
+compatibility navigation; every unique landed rule moves to an authoritative
+leaf before the aggregate page is removed.
 
 ## Mapping and AgentKit boundary
 

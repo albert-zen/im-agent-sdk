@@ -71,8 +71,12 @@ components:
       - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
     docs:
-      - docs/components/ports/design.md
-      - docs/components/ports/testing.md
+      - docs/components/applications/application-contract/design.md
+      - docs/components/applications/application-contract/testing.md
+      - docs/components/interaction/channels/channel-contract/design.md
+      - docs/components/interaction/channels/channel-contract/testing.md
+      - docs/components/gateway/persistence/repository-contracts/design.md
+      - docs/components/gateway/persistence/repository-contracts/testing.md
     required_docs:
       - design
       - testing
@@ -92,10 +96,10 @@ components:
       - docs/decisions/README.md
       - docs/decisions/0003-attachment-sources-and-trust.md
       - docs/decisions/0006-core-admission-and-policy-ownership.md
-      - docs/migrations/imcodex-followup-blockers.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
       - docs/decisions/0014-read-only-diagnostics-surface.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
+      - docs/REUSE.md
       - src/imagent/interaction/media.py
       - src/imagent/interaction/media_staging.py
       - tests/interaction/test_media.py
@@ -103,9 +107,7 @@ components:
     docs:
       - docs/components/interaction/media/design.md
       - docs/components/interaction/media/testing.md
-      - docs/components/attachments-and-media/design.md
-      - docs/components/attachments-and-media/testing.md
-      - docs/migrations/imcodex-followup-blockers.md
+      - docs/REUSE.md
     required_docs:
       - design
       - testing
@@ -178,8 +180,6 @@ components:
       - docs/components/gateway/delivery/proactive-delivery/testing.md
       - docs/components/gateway/presentation/design.md
       - docs/components/gateway/presentation/testing.md
-      - docs/components/delivery-planning-and-coordination/design.md
-      - docs/components/delivery-planning-and-coordination/testing.md
     required_docs:
       - design
       - testing
@@ -207,7 +207,6 @@ components:
       - docs/decisions/0009-proactive-delivery-routing.md
       - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
-      - docs/migrations/imcodex-followup-blockers.md
       - docs/decisions/0011-durable-inbound-admission-before-media.md
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/decisions/0013-bounded-application-event-admission.md
@@ -280,7 +279,6 @@ components:
       - docs/components/gateway/routing/gateway-operations/testing.md
       - docs/components/gateway/routing/projection-routes/design.md
       - docs/components/gateway/routing/projection-routes/testing.md
-      - docs/migrations/imcodex-followup-blockers.md
     required_docs:
       - design
       - testing
@@ -311,7 +309,6 @@ components:
       - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - docs/decisions/0010-capability-driven-delivery-coordination.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
-      - docs/migrations/imcodex-followup-blockers.md
       - src/imagent/gateway/projection/observation.py
       - src/imagent/gateway/projection/__init__.py
       - src/imagent/gateway/projection/checkpoints.py
@@ -333,10 +330,6 @@ components:
       - docs/components/gateway/projection/request-correlation/testing.md
       - docs/components/gateway/projection/recovery/design.md
       - docs/components/gateway/projection/recovery/testing.md
-      # Current aggregate evidence remains relevant until focused code/test moves.
-      - docs/components/projections-and-recovery/design.md
-      - docs/components/projections-and-recovery/testing.md
-      - docs/migrations/imcodex-followup-blockers.md
     required_docs:
       - design
       - testing
@@ -425,8 +418,6 @@ components:
       - docs/components/gateway/persistence/sqlite/testing.md
       - docs/components/gateway/persistence/state-contracts/design.md
       - docs/components/gateway/persistence/state-contracts/testing.md
-      - docs/components/persistence/design.md
-      - docs/components/persistence/testing.md
     required_docs:
       - design
       - testing
@@ -462,8 +453,6 @@ components:
       - docs/components/interaction/controllers/common-commands/testing.md
       - docs/components/interaction/controllers/request-presentation/design.md
       - docs/components/interaction/controllers/request-presentation/testing.md
-      - docs/components/controllers/design.md
-      - docs/components/controllers/testing.md
     required_docs:
       - design
       - testing
@@ -490,8 +479,7 @@ components:
       - docs/decisions/0014-read-only-diagnostics-surface.md
       - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
-      - docs/migrations/issue-9-imcodex-owner-transfer.md
-      - docs/migrations/imcodex-followup-blockers.md
+      - docs/REUSE.md
       # Issue #293 closes the historical Channel runtime split: contract,
       # ingress, and outbound leaves own semantics; adapters/runtime composes
       # only native transport and the approved facades.
@@ -528,14 +516,7 @@ components:
       - docs/components/interaction/channels/outbound-delivery/testing.md
       - docs/components/interaction/channels/adapters/design.md
       - docs/components/interaction/channels/adapters/testing.md
-      - docs/components/channel-adapters/design.md
-      - docs/components/channel-adapters/testing.md
-      - docs/components/channel-adapters/adapters/qq.md
-      - docs/components/channel-adapters/adapters/telegram.md
-      - docs/components/channel-adapters/adapters/feishu.md
-      - docs/components/channel-adapters/adapters/weixin.md
-      - docs/migrations/issue-9-imcodex-owner-transfer.md
-      - docs/migrations/imcodex-followup-blockers.md
+      - docs/REUSE.md
     required_docs:
       - design
       - testing
@@ -568,8 +549,7 @@ components:
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/decisions/0013-bounded-application-event-admission.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
-      - docs/migrations/issue-9-imcodex-owner-transfer.md
-      - docs/migrations/imcodex-followup-blockers.md
+      - docs/REUSE.md
       - src/imagent/applications/__init__.py
       - src/imagent/applications/adapters/appserver/_base.py
       - src/imagent/applications/adapters/codex.py
@@ -600,12 +580,7 @@ components:
       - docs/components/applications/adapters/codex/testing.md
       - docs/components/applications/adapters/zen/design.md
       - docs/components/applications/adapters/zen/testing.md
-      - docs/components/application-adapters/design.md
-      - docs/components/application-adapters/testing.md
-      - docs/components/application-adapters/adapters/codex.md
-      - docs/components/application-adapters/adapters/zen.md
-      - docs/migrations/issue-9-imcodex-owner-transfer.md
-      - docs/migrations/imcodex-followup-blockers.md
+      - docs/REUSE.md
     required_docs:
       - design
       - testing
@@ -641,7 +616,7 @@ components:
       - docs/decisions/0012-input-continuation-and-reply-correlation.md
       - docs/decisions/0013-bounded-application-event-admission.md
       - docs/decisions/0015-typed-extension-seams-and-composition.md
-      - docs/migrations/imcodex-followup-blockers.md
+      - docs/REUSE.md
       - src/imagent/applications/__init__.py
       - src/imagent/applications/adapters/t3.py
       - tests/applications/adapters/test_t3.py
@@ -649,10 +624,7 @@ components:
       - docs/components/applications/adapters/README.md
       - docs/components/applications/adapters/t3/design.md
       - docs/components/applications/adapters/t3/testing.md
-      - docs/components/application-adapters/design.md
-      - docs/components/application-adapters/testing.md
-      - docs/components/application-adapters/adapters/t3.md
-      - docs/migrations/imcodex-followup-blockers.md
+      - docs/REUSE.md
     required_docs:
       - design
       - testing
@@ -724,15 +696,25 @@ components:
       - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
       - examples/reference_consumer/**
       - tests/gateway/test_reference_consumer.py
+      - tests/engineering/test_quickstart.py
+      - tests/engineering/test_operational_docs.py
     docs:
       - docs/engineering/reference-consumer/design.md
       - docs/engineering/reference-consumer/testing.md
       - docs/onboarding/README.md
+      - docs/onboarding/quickstart.md
+      - docs/onboarding/capability-matrix.md
       - docs/onboarding/applications.md
       - docs/onboarding/gateway.md
       - docs/onboarding/interaction.md
       - docs/onboarding/production-checklist.md
       - docs/onboarding/troubleshooting.md
+      - docs/recipes/bindings.md
+      - docs/recipes/restart-and-replay.md
+      - docs/recipes/interactive-requests.md
+      - docs/recipes/media-and-artifacts.md
+      - docs/recipes/proactive-delivery.md
+      - docs/recipes/diagnostics.md
     required_docs:
       - design
       - testing
@@ -769,8 +751,6 @@ components:
     docs:
       - docs/engineering/testing-and-conformance/design.md
       - docs/engineering/testing-and-conformance/testing.md
-      - docs/components/testing-and-conformance/design.md
-      - docs/components/testing-and-conformance/testing.md
     required_docs:
       - design
       - testing
@@ -796,10 +776,8 @@ components:
       - docs/V1_REPOSITORY_AUDIT.md
       - docs/REUSE.md
       - docs/ROADMAP.md
-      - docs/migrations/**
       - docs/decisions/**
       - docs/architecture/**
-      - docs/components/repository-maintainability/**
       - docs/components/README.md
       - docs/components/component-map.yml
       - docs/engineering/README.md
@@ -809,9 +787,6 @@ components:
       - docs/engineering/repository-maintainability/design.md
       - docs/engineering/repository-maintainability/testing.md
       - docs/engineering/README.md
-      - docs/components/repository-maintainability/design.md
-      - docs/components/repository-maintainability/testing.md
-      - docs/migrations/imcodex-followup-blockers.md
     required_docs:
       - design
       - testing
@@ -890,6 +865,7 @@ components:
       - docs/engineering/release/testing.md
       - README.md
       - docs/REUSE.md
+      - docs/onboarding/upgrade-and-rollback.md
     required_docs:
       - design
       - testing

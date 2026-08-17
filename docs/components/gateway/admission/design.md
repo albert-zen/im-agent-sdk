@@ -65,6 +65,6 @@ Channel adapter dependency is allowed.
 
 - [Vision](../../../VISION.md)
 - [Architecture](../../../ARCHITECTURE.md)
-- [Persistence design](../../persistence/design.md)
+- [Idempotency design](../persistence/idempotency/design.md)
 - [ADR 0006](../../../decisions/0006-core-admission-and-policy-ownership.md)
 - [ADR 0011](../../../decisions/0011-durable-inbound-admission-before-media.md)

@@ -154,9 +154,7 @@ designs for [the Application contract](applications/application-contract/design.
 the [presentation subtree](applications/presentation/README.md), and the
 complete [Applications adapter subtree](applications/adapters/README.md).
 The adapter subtree is the documentation authority for App Server client,
-transport, mapping, requests, diagnostics, Codex, Zen, and T3 boundaries;
-the App Server transport is now physically moved, while the remaining current
-code stays in historical paths until focused mechanical slices move it.
+transport, mapping, requests, diagnostics, Codex, Zen, and T3 boundaries.
 
 ## Engineering support
 
@@ -175,9 +173,8 @@ engineering
 Every engineering leaf has a meaningful `design.md` and `testing.md`. The
 focused pages own repository support mechanics; runtime contract semantics
 remain with the Interaction, Gateway, or Applications leaf named by the
-component map. The old broad testing-and-conformance and
-repository-maintainability pages remain navigation-only during the link
-convergence.
+component map. Retired compatibility pages are not a second navigation or
+authority surface.
 
 ## Leaf documentation rule
 

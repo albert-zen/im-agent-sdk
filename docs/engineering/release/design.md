@@ -38,6 +38,20 @@ silently import them or require a consumer package. The wheel contains the
 typed SDK package and its marker; it does not contain transcripts, credentials,
 bridge state, delivery jobs, or consumer configuration.
 
+One distribution owns the exact protocol extras rather than separate adapter
+packages:
+
+- `appserver` adds WebSocket support for remote Codex App Server endpoints;
+- `qq`, `telegram`, `feishu`, and `weixin` each add only that protocol's
+  optional native dependencies; and
+- `channels` is the union for deployments using all four Channel protocols.
+
+Base Contracts, Ports, and Gateway imports require none of these extras.
+Installing one relevant extra must allow its adapter to import and construct
+in a clean environment with no `imcodex` package. Installation and import do
+not connect to a network or perform real credential validation; those remain
+explicit deployment smoke activities rather than package side effects.
+
 The wheel also contains the one product-neutral executable acceptance consumer
 under `examples/reference_consumer/`. It is installed so the base clean-wheel
 case can run `python -m examples.reference_consumer.main` outside the source

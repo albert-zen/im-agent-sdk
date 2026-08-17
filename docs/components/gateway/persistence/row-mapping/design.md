@@ -95,7 +95,7 @@ not change the validation or compatibility decision above.
 
 - [Vision](../../../../VISION.md)
 - [Architecture](../../../../ARCHITECTURE.md)
-- [Persistence design](../../../persistence/design.md)
+- [Gateway persistence](../README.md)
 - [Repository maintainability](../../../../engineering/repository-maintainability/design.md)
 - [ADR 0007](../../../../decisions/0007-projection-lifecycle-and-delivery-boundaries.md)
 - [ADR 0008](../../../../decisions/0008-interactive-request-routing.md)

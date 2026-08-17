@@ -48,10 +48,13 @@ facts, rendered output, identity, and exception text are not persisted.
 
 Codex activity is live-only: it emits `message.created`, may be lost across a
 gap/reconnect, and never advances a completion checkpoint. T3 activity is
-recoverable only because polling, catch-up, and authoritative history reproduce
-the same stable association; replay-safe presenters may be reinvoked after a
-finite process-local dedupe window expires. An absent presenter preserves
-native adapter behavior exactly.
+recoverable only because polling, catch-up, and authoritative history
+reproduce the same stable association. The adapter fixes the stable activity
+identity as `AgentMessage.agent_item_id` — the native activity ID without a
+configured presenter, and the namespaced `imagent:t3-activity:{activity_id}`
+form with one — and emits `message.completed`. Replay-safe presenters may be
+reinvoked after a finite process-local dedupe window expires. An absent
+presenter preserves native adapter behavior exactly.
 
 ## Current and target structure
 
@@ -68,5 +71,5 @@ positions.
 ## Authority
 
 - [Architecture](../../../../ARCHITECTURE.md)
-- [Application adapter design](../../../application-adapters/design.md)
+- [Applications adapter block](../../adapters/README.md)
 - [ADR 0015](../../../../decisions/0015-typed-extension-seams-and-composition.md)

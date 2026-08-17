@@ -74,5 +74,4 @@ buffer, or product-owned framing path.
 ## Authority
 
 - [App Server block](../README.md)
-- [Applications adapter overview](../../../../application-adapters/design.md)
 - [ADR 0004](../../../../../decisions/0004-event-fanout-and-recovery.md)
