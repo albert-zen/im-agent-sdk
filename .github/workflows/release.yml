@@ -73,6 +73,34 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           wheel="$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          test "$GITHUB_REF_NAME" = "v0.1.0a1"
+          read -r object_type object_sha < <(
+            gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v0.1.0a1" \
+              --jq '.object.type + " " + .object.sha'
+          )
+          for _ in 1 2 3 4 5 6 7 8; do
+            case "$object_type" in
+              commit)
+                break
+                ;;
+              tag)
+                read -r object_type object_sha < <(
+                  gh api "repos/$GITHUB_REPOSITORY/git/tags/$object_sha" \
+                    --jq '.object.type + " " + .object.sha'
+                )
+                ;;
+              *)
+                echo "Release tag resolved to unsupported object type: $object_type" >&2
+                exit 1
+                ;;
+            esac
+          done
+          test "$object_type" = "commit"
+          if [ "$object_sha" != "$GITHUB_SHA" ]; then
+            echo "Release tag moved from $GITHUB_SHA to $object_sha; refusing to publish." >&2
+            exit 1
+          fi
+
           gh release create "$GITHUB_REF_NAME" \
             "$wheel" dist/SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" \

@@ -81,7 +81,11 @@ explicit absence of a package-registry publish step. The workflow actions use
 immutable full commit SHAs, checkout does not persist credentials, and the
 dependency sync skips the local project while later commands disable automatic
 sync; the wheel build is the only local backend execution and consumes the
-hashed build constraint graph. Publication is verified
+hashed build constraint graph. Immediately before `gh release create`, the
+workflow uses the authenticated GitHub API to resolve the fixed tag, handles
+both lightweight and bounded annotated tags, and requires the peeled commit to
+equal the source `$GITHUB_SHA` exactly. Focused static evidence locks that
+ordering and rejects a removed or weakened comparison. Publication is verified
 afterward by downloading the private asset through an authenticated GitHub
 session, checking its digest, installing it in a fresh Python 3.13 environment,
 and comparing `imagent.__version__` with the release version.

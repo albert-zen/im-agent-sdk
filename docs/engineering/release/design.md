@@ -87,7 +87,12 @@ reachable from `main`. The
 release attaches exactly one universal wheel plus `SHA256SUMS`; its notes fix
 the full source commit, package version, wheel filename, digest, and stable
 asset URL. The repository-owned tag workflow refuses to overwrite an existing
-release and never publishes to PyPI or another package registry. The build
+release and never publishes to PyPI or another package registry. Immediately
+before publication, the authenticated workflow resolves the fixed GitHub tag
+reference, peels a bounded chain of annotated tags to its final commit, and
+requires that commit to equal the workflow's original source commit exactly.
+A missing, moved, over-nested, or non-commit tag fails closed without relying
+on checkout-persisted Git credentials. The build
 backend and its transitive graph are pinned with hashes in
 `build-constraints.txt`; both CI and release assembly require those hashes.
 Their initial dependency sync skips installing the local project, and later

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -9,6 +10,7 @@ import tomllib
 import unittest
 import zipfile
 from pathlib import Path
+from textwrap import dedent
 
 import yaml
 
@@ -209,6 +211,143 @@ assert not any(
             'git merge-base --is-ancestor "$GITHUB_SHA" origin/main',
             later_commands,
         )
+
+    def test_github_release_revalidates_peeled_tag_commit_before_publish(self) -> None:
+        workflow = yaml.load(
+            (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"),
+            Loader=yaml.BaseLoader,
+        )
+        steps = workflow["jobs"]["release"]["steps"]
+        publish_index, publish_step = next(
+            (index, step)
+            for index, step in enumerate(steps)
+            if step.get("name") == "Publish GitHub prerelease"
+        )
+        expected_publish = dedent(
+            """\
+            wheel="$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)"
+            test "$GITHUB_REF_NAME" = "v0.1.0a1"
+            read -r object_type object_sha < <(
+              gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v0.1.0a1" \\
+                --jq '.object.type + " " + .object.sha'
+            )
+            for _ in 1 2 3 4 5 6 7 8; do
+              case "$object_type" in
+                commit)
+                  break
+                  ;;
+                tag)
+                  read -r object_type object_sha < <(
+                    gh api "repos/$GITHUB_REPOSITORY/git/tags/$object_sha" \\
+                      --jq '.object.type + " " + .object.sha'
+                  )
+                  ;;
+                *)
+                  echo "Release tag resolved to unsupported object type: $object_type" >&2
+                  exit 1
+                  ;;
+              esac
+            done
+            test "$object_type" = "commit"
+            if [ "$object_sha" != "$GITHUB_SHA" ]; then
+              echo "Release tag moved from $GITHUB_SHA to $object_sha; refusing to publish." >&2
+              exit 1
+            fi
+
+            gh release create "$GITHUB_REF_NAME" \\
+              "$wheel" dist/SHA256SUMS \\
+              --repo "$GITHUB_REPOSITORY" \\
+              --verify-tag \\
+              --prerelease \\
+              --title "IM Agent SDK ${GITHUB_REF_NAME#v}" \\
+              --notes-file dist/RELEASE_NOTES.md
+            """
+        )
+
+        self.assertEqual(publish_index, len(steps) - 1)
+        self.assertEqual(publish_step["env"], {"GH_TOKEN": "${{ github.token }}"})
+        self.assertEqual(publish_step["run"], expected_publish)
+        self.assertLess(
+            expected_publish.index('if [ "$object_sha" != "$GITHUB_SHA" ]; then'),
+            expected_publish.index('gh release create "$GITHUB_REF_NAME"'),
+        )
+
+        bash = shutil.which("bash")
+        if os.name == "nt":
+            git = shutil.which("git")
+            if git is None:
+                self.fail("git is required to locate Git Bash")
+            git_bash = Path(git).resolve().parents[1] / "bin" / "bash.exe"
+            self.assertTrue(git_bash.is_file())
+            bash = str(git_bash)
+        if bash is None:
+            self.fail("bash is required to validate the release workflow")
+
+        source_commit = "a" * 40
+        annotated_tag = "b" * 40
+        moved_commit = "c" * 40
+        fake_commands = dedent(
+            f"""\
+            set -euo pipefail
+            find() {{
+              printf '%s\\n' 'dist/im_agent_sdk-0.1.0a1-py3-none-any.whl'
+            }}
+            gh() {{
+              case "$1:$TAG_SCENARIO:$2" in
+                api:lightweight:repos/*/git/ref/tags/v0.1.0a1)
+                  printf '%s\\n' 'commit {source_commit}'
+                  ;;
+                api:annotated:repos/*/git/ref/tags/v0.1.0a1)
+                  printf '%s\\n' 'tag {annotated_tag}'
+                  ;;
+                api:annotated:repos/*/git/tags/{annotated_tag})
+                  printf '%s\\n' 'commit {source_commit}'
+                  ;;
+                api:moved:repos/*/git/ref/tags/v0.1.0a1)
+                  printf '%s\\n' 'commit {moved_commit}'
+                  ;;
+                release:*:create)
+                  printf '%s\\n' published
+                  ;;
+                *)
+                  return 97
+                  ;;
+              esac
+            }}
+            """
+        )
+        environment = {
+            **os.environ,
+            "GITHUB_REF_NAME": "v0.1.0a1",
+            "GITHUB_REPOSITORY": "albert-zen/im-agent-sdk",
+            "GITHUB_SHA": source_commit,
+        }
+        for scenario in ("lightweight", "annotated"):
+            with self.subTest(scenario=scenario):
+                completed = subprocess.run(
+                    [bash],
+                    input=fake_commands + publish_step["run"],
+                    cwd=ROOT,
+                    env={**environment, "TAG_SCENARIO": scenario},
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertEqual(completed.stdout, "published\n")
+
+        moved = subprocess.run(
+            [bash],
+            input=fake_commands + publish_step["run"],
+            cwd=ROOT,
+            env={**environment, "TAG_SCENARIO": "moved"},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(moved.returncode, 0)
+        self.assertNotIn("published", moved.stdout)
+        self.assertIn(f"Release tag moved from {source_commit} to {moved_commit}", moved.stderr)
 
     def test_ci_workflow_actions_are_pinned_to_full_commit_shas(self) -> None:
         workflow = yaml.load(
