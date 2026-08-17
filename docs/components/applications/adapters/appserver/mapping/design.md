@@ -101,6 +101,30 @@ payloads. A configured A1 fact that would drive outbound idempotency uses its
 required native stable event ID; it never uses a UUID or other process-local
 substitute.
 
+## Outbound-projection Metadata keys
+
+Metadata intended for outbound projection contains only bounded non-secret
+scalar presentation facts. Before an App Server resource, history item,
+notification, or server request can create those facts, this single mapping
+owner validates finite native text/collections/keys/content aggregation and
+the method-required stable identity. The owner copies only validated values;
+oversize or malformed input cannot be truncated into a different identity or
+reach canonical events, history, request mapping, or A1 consumer code.
+
+Current App Server `AgentMessage` Metadata keys are `phase`,
+`native_application`, the fixed `native_method`/`kind`, and the fixed
+`live_only` marker. `phase` and `native_application` label history item
+messages; live `item/completed` messages carry `phase` plus the fixed
+`native_method`; Codex live-activity messages carry `native_application` plus
+the fixed `native_method`/`kind` classification and the fixed `live_only`
+marker; artifact-materialization fallback messages carry `native_application`
+and a fixed `kind`. App Server server requests carry the fixed
+`native_method`. Thread/Turn/item IDs remain in canonical fields, not
+Metadata. Raw native payloads, credentials, paths, content copies, sender
+identity, and exception text are excluded before the canonical `AgentMessage`
+crosses the adapter boundary. T3 owns its separate Metadata key vocabulary in
+its own adapter leaf.
+
 ## Dependencies, state, and recovery
 
 The target mapping position feeds the Application contract, capabilities,

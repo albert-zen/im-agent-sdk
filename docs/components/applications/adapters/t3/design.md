@@ -82,6 +82,17 @@ immediately. It does not synchronously publish or invoke presentation; the
 existing sole subscription poll/history path performs recoverable observation.
 There is no long-lived connection diagnostic or synthetic connection epoch.
 
+T3 outbound-projection `AgentMessage` Metadata contains only bounded
+non-secret scalar facts: current keys are `kind`, `native_application`,
+`source`, and `streaming`; messages carry `native_application` and
+`streaming`, while activity projections add the native activity `kind` and
+the fixed `source` marker. Native Thread/Turn/message/activity IDs remain in
+canonical fields, not Metadata. Recoverable activity projection fixes the
+stable activity identity as `AgentMessage.agent_item_id`: the native activity
+ID when no presenter is configured, and the namespaced
+`imagent:t3-activity:{activity_id}` form when one is, so polling, catch-up,
+and authoritative history reproduce the same association.
+
 ## Current, target, and structural gap
 
 The implementation and focused owner evidence are now co-located at

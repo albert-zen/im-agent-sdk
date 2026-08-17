@@ -34,6 +34,13 @@ authoritative native read supplies the same Thread ID and matching canonical
 `cwd`; missing or foreign scope evidence fails closed, including live and
 interactive-request publication.
 
+Deployment-owned `thread_start_options` may supply Zen-native sandbox and
+approval defaults for new Threads; the adapter copies them, owns `cwd`, and
+does not persist them as SDK Thread state. A consumer with per-Conversation
+presets may use the concrete `create_thread_with_options` seam and bind its
+returned native Thread through Gateway; the preset remains client
+selection/configuration, not Zen or SDK runtime state.
+
 The current formal export is `ZenApplicationAdapter` from the lazy
 `imagent.applications` facade, implemented at the exact target
 `imagent.applications.adapters.zen:ZenApplicationAdapter`; the top facade
