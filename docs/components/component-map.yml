@@ -1537,8 +1537,8 @@ components:
       target: [imagent.applications.adapters.appserver.transport:AppServerTransport]
     dependencies: []
     state_recovery: Transport lifecycle is per connection; an oversized frame clears buffered bytes and poisons that instance until client-owned reset, with no replay or cursor semantics claimed.
-    current_code: [src/imagent/applications/adapters/appserver/__init__.py, src/imagent/applications/adapters/appserver/transport.py]
-    target_code: [src/imagent/applications/adapters/appserver/__init__.py, src/imagent/applications/adapters/appserver/transport.py]
+    current_code: [src/imagent/applications/adapters/appserver/__init__.py, src/imagent/applications/adapters/appserver/_errors.py, src/imagent/applications/adapters/appserver/transport.py]
+    target_code: [src/imagent/applications/adapters/appserver/__init__.py, src/imagent/applications/adapters/appserver/_errors.py, src/imagent/applications/adapters/appserver/transport.py]
     current_tests: [tests/applications/adapters/appserver/test_transport.py]
     target_tests: [tests/applications/adapters/appserver/test_transport.py]
     authoritative_docs: [docs/components/applications/adapters/appserver/transport/design.md, docs/components/applications/adapters/appserver/transport/testing.md]

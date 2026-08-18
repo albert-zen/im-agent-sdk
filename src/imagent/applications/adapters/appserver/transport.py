@@ -4,6 +4,8 @@ import inspect
 import json
 from typing import Any, Protocol, cast
 
+from ._errors import AppServerError as _AppServerError
+
 JsonDict = dict[str, Any]
 _DEFAULT_MAX_INBOUND_FRAME_BYTES = 64 * 1024 * 1024
 _OVERSIZED_INBOUND_FRAME_MESSAGE = "app-server inbound frame exceeds configured byte limit"
@@ -17,14 +19,7 @@ def _validated_max_inbound_frame_bytes(value: int) -> int:
 
 def _raise_if_poisoned(poisoned: bool) -> None:
     if poisoned:
-        raise AppServerError(_OVERSIZED_INBOUND_FRAME_MESSAGE)
-
-
-class AppServerError(RuntimeError):
-    def __init__(self, message: str, *, code: int | None = None, data: Any | None = None) -> None:
-        super().__init__(message)
-        self.code = code
-        self.data = data
+        raise _AppServerError(_OVERSIZED_INBOUND_FRAME_MESSAGE)
 
 
 class AppServerTransport(Protocol):
@@ -50,7 +45,7 @@ class StdioAppServerTransport:
         self._buffer = bytearray()
         self._poisoned = False
         if self._stdin is None or self._stdout is None:
-            raise AppServerError("stdio app-server process missing stdin/stdout pipes")
+            raise _AppServerError("stdio app-server process missing stdin/stdout pipes")
 
     async def send_json(self, payload: JsonDict) -> None:
         _raise_if_poisoned(self._poisoned)
@@ -79,11 +74,11 @@ class StdioAppServerTransport:
             chunk = await self._read_chunk()
             if not chunk:
                 if not self._buffer:
-                    raise AppServerError("app-server connection closed")
+                    raise _AppServerError("app-server connection closed")
                 raw = bytes(self._buffer)
                 self._buffer.clear()
                 if not raw.strip():
-                    raise AppServerError("app-server connection closed")
+                    raise _AppServerError("app-server connection closed")
                 return json.loads(raw.decode("utf-8"))
             self._buffer.extend(chunk)
 
@@ -97,7 +92,7 @@ class StdioAppServerTransport:
     def _reject_oversized_frame(self) -> None:
         self._buffer.clear()
         self._poisoned = True
-        raise AppServerError(_OVERSIZED_INBOUND_FRAME_MESSAGE)
+        raise _AppServerError(_OVERSIZED_INBOUND_FRAME_MESSAGE)
 
     async def _read_chunk(self) -> bytes:
         read = getattr(self._stdout, "read", None)
@@ -131,11 +126,11 @@ class WebSocketAppServerTransport:
         try:
             raw = await self._websocket.recv()
         except Exception as exc:
-            raise AppServerError("app-server connection closed") from exc
+            raise _AppServerError("app-server connection closed") from exc
         frame_size = len(raw) if isinstance(raw, bytes) else len(raw.encode("utf-8"))
         if frame_size > self._max_inbound_frame_bytes:
             self._poisoned = True
-            raise AppServerError(_OVERSIZED_INBOUND_FRAME_MESSAGE)
+            raise _AppServerError(_OVERSIZED_INBOUND_FRAME_MESSAGE)
         return json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
 
     async def close(self) -> None:
