@@ -25,8 +25,8 @@ PYTHONPATH=src uv run python -m unittest \
 ```
 
 The focused suite also proves that every artifact contract has one identity
-through `imagent.applications`, `imagent.applications.presentation`, and the
-owner module; the historical `imagent.applications.appserver_artifacts`
+through `imagent.applications.presentation` and the owner module; the
+historical `imagent.applications.appserver_artifacts`
 module cannot be found or imported; a clean subprocess can import the nested
 presentation facade without loading adapters; and `typing.get_type_hints`
 resolves the owner protocol/runtime annotations without a historical-module

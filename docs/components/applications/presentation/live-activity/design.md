@@ -32,11 +32,11 @@ The leaf depends on Interaction messages, Application contract/event values,
 and the direct canonical `applications.diagnostics` owner for its typed
 presentation fact and failure-code diagnostics. The separate App Server
 adapter diagnostics leaf remains the owner of mutable native connection
-state; this presentation leaf does not depend on that state. Current exports
-are from `imagent.applications`; the exact finite
+state; this presentation leaf does not depend on that state. The exact finite
 `imagent.applications.presentation` package facade is authoritative for this
 leaf and the sibling artifact-materialization leaf, backed for live activity
-by `src/imagent/applications/presentation/live_activity.py`.
+by `src/imagent/applications/presentation/live_activity.py`. The historical
+`imagent.applications` root aliases are retired.
 
 ## State and recovery
 

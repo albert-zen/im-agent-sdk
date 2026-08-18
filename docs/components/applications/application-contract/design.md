@@ -47,12 +47,11 @@ The owner contracts/exports are the complete family listed below, plus
 `fingerprint_canonical_workspace_root`, and the Application/Project/Thread/
 Turn/workspace validators.
 
-The finite `imagent.applications` facade exposes those exact objects. The
+The finite `imagent.applications` facade exposes only those exact objects. The
 historical cross-layer `imagent.contracts` module is absent. Capabilities,
-operations, and requests are owner-only
-surfaces in their respective Applications modules. The root facade does not
-eagerly import concrete adapters; explicit named concrete exports remain a
-finite facade behavior.
+operations, requests, concrete adapters, the App Server client, and
+presentation are owner-only surfaces in their respective Applications
+modules; the root facade no longer exposes them.
 The historical `imagent.contracts` and `imagent.adapters` modules are absent;
 their imports fail in clean processes regardless of owner import order.
 
@@ -91,10 +90,11 @@ focused ownership evidence in `tests/applications/test_contract.py`. Shared
 JSON Schemas remain cross-owner language-neutral documents; their Python
 reference values are not duplicated in a contracts model module or
 Interaction. `imagent.applications` directly exposes the complete contract
-family. Its finite named lazy facade is limited
-to explicit concrete adapter/presentation exports and cannot hide ownership or
-solve an import cycle. Capabilities, operations, and requests are not
-package-root exports. `src/imagent/adapters.py` is absent.
+family and nothing else; concrete adapter and presentation exports live only
+in their canonical owner modules and cannot hide ownership or solve an import
+cycle through a root alias. Capabilities, operations, requests, concrete
+adapters, the App Server client, and presentation are not package-root
+exports. `src/imagent/adapters.py` is absent.
 The conformance suite remains affected evidence for all concrete adapters.
 
 ## Authority

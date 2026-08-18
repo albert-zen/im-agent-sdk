@@ -41,10 +41,12 @@ presets may use the concrete `create_thread_with_options` seam and bind its
 returned native Thread through Gateway; the preset remains client
 selection/configuration, not Zen or SDK runtime state.
 
-The current formal export is `ZenApplicationAdapter` from the lazy
-`imagent.applications` facade, implemented at the exact target
-`imagent.applications.adapters.zen:ZenApplicationAdapter`; the top facade
-preserves the same object identity and lazy import behavior. The private
+The exact formal export is `ZenApplicationAdapter` from the canonical
+`imagent.applications.adapters.zen` facade, implemented at the exact
+`imagent.applications.adapters.zen:ZenApplicationAdapter` position. The
+historical `imagent.applications` root alias is retired and no compatibility
+re-export remains; the top facade exposes only the Application contract
+family. The private
 shared App Server base is an explicitly mapped two-owner split candidate under
 `imagent.applications.adapters.appserver._base`; it is not a public aggregate
 adapter API. Its input path is truthful start-only behavior: the shared base

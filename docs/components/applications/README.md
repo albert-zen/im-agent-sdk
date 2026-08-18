@@ -37,10 +37,13 @@ policy into the common contract.
 The common adapter Protocol and its pre-dispatch callback are owned by the
 `applications.application-contract` leaf in
 `src/imagent/applications/contract.py`. The finite `imagent.applications`
-facade exposes the complete Application contract family as exact objects and
-resolves explicitly named concrete adapter/presentation exports without
-eagerly importing concrete adapters. Capabilities, operations, and requests
-remain available only from their canonical owner modules. The historical
+facade exposes only the complete Application contract family as exact eager
+objects; it no longer re-exports concrete adapter, App Server client, or
+presentation values. Capabilities, operations, requests, concrete adapters,
+the App Server client, and presentation are available only from their
+canonical owner modules (`imagent.applications.capabilities`, `.operations`,
+`.requests`, `.adapters.codex`, `.adapters.zen`, `.adapters.t3`,
+`.adapters.appserver.client`, and `.presentation`). The historical
 cross-layer `imagent.adapters` module is absent.
 
 ## Adapters

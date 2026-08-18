@@ -47,10 +47,12 @@ operation; the profile remains client selection/configuration, not Codex or
 SDK runtime state. The common `CreateThread` operation keeps the shared
 control intent unchanged.
 
-The current formal export is `CodexApplicationAdapter` from the lazy
-`imagent.applications` facade, implemented at the exact target
-`imagent.applications.adapters.codex:CodexApplicationAdapter`; the top facade
-preserves object identity and lazy cold-import behavior. The private shared
+The exact formal export is `CodexApplicationAdapter` from the canonical
+`imagent.applications.adapters.codex` facade, implemented at the exact
+`imagent.applications.adapters.codex:CodexApplicationAdapter` position. The
+historical `imagent.applications` root alias is retired and no compatibility
+re-export remains; the top facade exposes only the Application contract
+family. The private shared
 App Server base is an explicitly mapped two-owner split candidate under
 `imagent.applications.adapters.appserver._base`; it is not a public aggregate
 adapter API. That base owns typed text/image preparation, verified local-image
