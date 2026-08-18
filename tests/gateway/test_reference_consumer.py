@@ -37,7 +37,7 @@ from imagent import (
     ProjectionPolicy,
     Succeeded,
 )
-from imagent.applications import CodexApplicationAdapter
+from imagent.applications.adapters.codex import CodexApplicationAdapter
 from imagent.applications.capabilities import SupportLevel
 from imagent.applications.contract import (
     AgentInput,

@@ -1815,7 +1815,48 @@ structural_status:
   # current-to-target delta is intentionally explicit so tests can derive the
   # complete negative import set rather than maintain a second hand list.
   retired_application_public_exports:
-    current: []
+    current:
+      - imagent.applications.adapters.appserver.client.client:AppServerClient
+      - imagent.applications.adapters.appserver.client.handoff:APP_SERVER_DISPATCH_POSITION_KEY
+      - imagent.applications.adapters.appserver.client.handoff:AppServerDispatchPosition
+      - imagent.applications.adapters.appserver.client.handoff:AppServerResponse
+      - imagent.applications.adapters.appserver.client.supervisor:AppServerSupervisor
+      - imagent.applications.adapters.appserver.transport:AppServerError
+      - imagent.applications:AppServerArtifactCandidate
+      - imagent.applications:AppServerArtifactMaterializationLimits
+      - imagent.applications:AppServerArtifactMaterializer
+      - imagent.applications:AppServerArtifactSourceKind
+      - imagent.applications:AppServerCompletedItemFacts
+      - imagent.applications:AppServerCompletedItemKind
+      - imagent.applications:AppServerCompletedItemPhase
+      - imagent.applications:AppServerTurnTerminalFacts
+      - imagent.applications:AppServerTurnTerminalStatus
+      - imagent.applications:ApplicationArtifactMaterialization
+      - imagent.applications:ApplicationArtifactMaterializationCancelled
+      - imagent.applications:ApplicationArtifactMaterializationCapacityError
+      - imagent.applications:ApplicationArtifactMaterializationError
+      - imagent.applications:ApplicationArtifactMaterializationFailed
+      - imagent.applications:ApplicationArtifactMaterializationTimeout
+      - imagent.applications:ApplicationPresentationCancelled
+      - imagent.applications:ApplicationPresentationCapacityError
+      - imagent.applications:ApplicationPresentationError
+      - imagent.applications:ApplicationPresentationFailed
+      - imagent.applications:ApplicationPresentationLimits
+      - imagent.applications:ApplicationPresentationTimeout
+      - imagent.applications:ApplicationTextPresentation
+      - imagent.applications:CodexApplicationAdapter
+      - imagent.applications:CodexLiveActivityFacts
+      - imagent.applications:CodexLiveActivityKind
+      - imagent.applications:CodexLiveActivityMethod
+      - imagent.applications:CodexLiveActivityPresenter
+      - imagent.applications:CodexPlanStep
+      - imagent.applications:HttpT3Client
+      - imagent.applications:T3ActivityFacts
+      - imagent.applications:T3ActivityPresenter
+      - imagent.applications:T3ApplicationAdapter
+      - imagent.applications:T3ClientError
+      - imagent.applications:ZenApplicationAdapter
+      - imagent.applications:codex_app_server_client
     target: []
   temporary_external_docs: []
   formal_facades:

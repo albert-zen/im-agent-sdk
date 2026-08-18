@@ -120,7 +120,7 @@ class InteractionDiagnosticsOwnershipTests(unittest.TestCase):
             "src/imagent/applications/adapters/appserver/diagnostics.py": {
                 "imagent.interaction.diagnostics",
             },
-            "src/imagent/applications/adapters/appserver/client/client.py": {
+            "src/imagent/applications/adapters/appserver/client/_client.py": {
                 "imagent.interaction.diagnostics",
             },
             "src/imagent/applications/adapters/appserver/_base.py": {

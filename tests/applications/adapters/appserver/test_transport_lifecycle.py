@@ -8,14 +8,13 @@ from pathlib import Path
 from typing import Any, cast
 from unittest.mock import patch
 
-from imagent.applications import ZenApplicationAdapter
 from imagent.applications.adapters.appserver.client import (
     APP_SERVER_DISPATCH_POSITION_KEY,
     AppServerClient,
     AppServerDispatchPosition,
     AppServerError,
 )
-from imagent.applications.adapters.appserver.client.supervisor import (
+from imagent.applications.adapters.appserver.client._supervisor import (
     AppServerSupervisor,
     MissingAppServerDependencyError,
 )
@@ -24,6 +23,7 @@ from imagent.applications.adapters.appserver.mapping import (
     AppServerMappingError,
     normalize_appserver_message,
 )
+from imagent.applications.adapters.zen import ZenApplicationAdapter
 from imagent.applications.contract import ApplicationInputOutcomeUnknown, ProjectRef
 from imagent.applications.operations import CreateThread, ThreadCreated
 from imagent.interaction.diagnostics import (
@@ -285,7 +285,7 @@ class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "imagent.applications.adapters.appserver.client.supervisor._websocket_module",
+                "imagent.applications.adapters.appserver.client._supervisor._websocket_module",
                 side_effect=MissingAppServerDependencyError(
                     "install the appserver optional dependency"
                 ),

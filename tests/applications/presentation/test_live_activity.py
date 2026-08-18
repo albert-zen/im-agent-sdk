@@ -7,22 +7,10 @@ from pathlib import Path
 from typing import Any, cast
 
 import imagent.applications as applications
-from imagent.applications import (
-    ApplicationPresentationCancelled,
-    ApplicationPresentationCapacityError,
-    ApplicationPresentationError,
-    ApplicationPresentationLimits,
-    ApplicationPresentationTimeout,
-    ApplicationTextPresentation,
-    CodexApplicationAdapter,
-    CodexLiveActivityFacts,
-    CodexLiveActivityKind,
-    CodexLiveActivityMethod,
-    T3ActivityFacts,
-    T3ApplicationAdapter,
-    ZenApplicationAdapter,
-    presentation,
-)
+from imagent.applications import presentation
+from imagent.applications.adapters.codex import CodexApplicationAdapter
+from imagent.applications.adapters.t3 import T3ApplicationAdapter
+from imagent.applications.adapters.zen import ZenApplicationAdapter
 from imagent.applications.contract import (
     AgentInput,
     AgentMessage,
@@ -32,7 +20,17 @@ from imagent.applications.contract import (
 from imagent.applications.diagnostics import ApplicationPresentationFailureCode
 from imagent.applications.events import AgentEventType, EventStreamReset
 from imagent.applications.presentation import (
+    ApplicationPresentationCancelled,
+    ApplicationPresentationCapacityError,
+    ApplicationPresentationError,
+    ApplicationPresentationLimits,
     ApplicationPresentationRuntime,
+    ApplicationPresentationTimeout,
+    ApplicationTextPresentation,
+    CodexLiveActivityFacts,
+    CodexLiveActivityKind,
+    CodexLiveActivityMethod,
+    T3ActivityFacts,
     artifact_materialization,
     live_activity,
 )
@@ -258,9 +256,9 @@ class ApplicationPresentationTests(unittest.IsolatedAsyncioTestCase):
             )
 
         for name in live_exports - {"ApplicationPresentationRuntime"}:
-            self.assertIs(getattr(applications, name), getattr(live_activity, name))
+            self.assertFalse(hasattr(applications, name))
         for name in artifact_exports:
-            self.assertIs(getattr(applications, name), getattr(artifact_materialization, name))
+            self.assertFalse(hasattr(applications, name))
 
         package_path = Path(presentation.__file__ or "")
         self.assertEqual(package_path.name, "__init__.py")

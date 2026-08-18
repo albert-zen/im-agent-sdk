@@ -4,7 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from imagent.applications import CodexApplicationAdapter, ZenApplicationAdapter
+from imagent.applications.adapters.codex import CodexApplicationAdapter
+from imagent.applications.adapters.zen import ZenApplicationAdapter
 from imagent.applications.contract import AgentInput, ProjectRef, ThreadRef
 from imagent.interaction.media import AttachmentContent, LocalPath
 from imagent.interaction.messages import TextContent

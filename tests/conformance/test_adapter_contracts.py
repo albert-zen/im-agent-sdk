@@ -8,11 +8,9 @@ from datetime import UTC, datetime
 
 import imagent.interaction.testing as testing_owner
 import imagent.testing as testing_facade
-from imagent.applications import (
-    CodexApplicationAdapter,
-    T3ApplicationAdapter,
-    ZenApplicationAdapter,
-)
+from imagent.applications.adapters.codex import CodexApplicationAdapter
+from imagent.applications.adapters.t3 import T3ApplicationAdapter
+from imagent.applications.adapters.zen import ZenApplicationAdapter
 from imagent.applications.capabilities import ProjectMode
 from imagent.applications.operations import CreateProject, ProjectCreated
 from imagent.channels import channel_from_config

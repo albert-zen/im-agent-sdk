@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
-from imagent.applications import ZenApplicationAdapter
+from imagent.applications.adapters.zen import ZenApplicationAdapter
 from imagent.applications.adapters.zen import ZenApplicationAdapter as ZenApplicationAdapterOwner
 from imagent.applications.contract import (
     AgentInput,

@@ -11,21 +11,21 @@ from unittest.mock import AsyncMock, patch
 import imagent.applications as applications_facade
 import imagent.applications.adapters.appserver.client as client_facade
 from imagent import __version__
-from imagent.applications import codex_app_server_client
-from imagent.applications.adapters.appserver.client.client import AppServerClient
-from imagent.applications.adapters.appserver.client.handoff import (
+from imagent.applications.adapters.appserver._errors import AppServerError
+from imagent.applications.adapters.appserver.client import codex_app_server_client
+from imagent.applications.adapters.appserver.client._client import AppServerClient
+from imagent.applications.adapters.appserver.client._handoff import (
     APP_SERVER_DISPATCH_POSITION_KEY,
     AppServerDispatchPosition,
     AppServerResponse,
 )
+from imagent.applications.adapters.appserver.client._supervisor import AppServerSupervisor
 from imagent.applications.adapters.appserver.client.retry import RetryBackoff
-from imagent.applications.adapters.appserver.client.supervisor import AppServerSupervisor
 from imagent.applications.adapters.appserver.client.target import (
     AppServerTargetConfigError,
     parse_app_server_target,
     resolve_app_server_target,
 )
-from imagent.applications.adapters.appserver.transport import AppServerError
 
 
 class _BlockingWebSocket:
@@ -67,10 +67,8 @@ class AppServerClientFacadeTests(unittest.TestCase):
         for name, owner in owners.items():
             with self.subTest(name=name):
                 self.assertIs(getattr(client_facade, name), owner)
-        self.assertIs(
-            applications_facade.codex_app_server_client,
-            client_facade.codex_app_server_client,
-        )
+        self.assertNotIn("codex_app_server_client", applications_facade.__all__)
+        self.assertFalse(hasattr(applications_facade, "codex_app_server_client"))
         self.assertIsNone(importlib.util.find_spec("imagent.applications.appserver_client"))
 
 
@@ -98,7 +96,7 @@ class AppServerClientTests(unittest.IsolatedAsyncioTestCase):
         supervisor = AppServerSupervisor(app_server_url="ws://127.0.0.1:8765")
 
         with patch(
-            "imagent.applications.adapters.appserver.client.supervisor._websocket_module",
+            "imagent.applications.adapters.appserver.client._supervisor._websocket_module",
             return_value=SimpleNamespace(connect=connect),
         ):
             actual = await supervisor.connect_external(max_inbound_frame_bytes=123)
@@ -117,7 +115,7 @@ class AppServerClientTests(unittest.IsolatedAsyncioTestCase):
         supervisor = AppServerSupervisor(app_server_url="unix:///tmp/im-agent-sdk-test.sock")
 
         with patch(
-            "imagent.applications.adapters.appserver.client.supervisor._websocket_module",
+            "imagent.applications.adapters.appserver.client._supervisor._websocket_module",
             return_value=SimpleNamespace(unix_connect=unix_connect),
         ):
             actual = await supervisor.connect_external(max_inbound_frame_bytes=456)

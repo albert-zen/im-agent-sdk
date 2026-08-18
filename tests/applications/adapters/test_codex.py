@@ -9,9 +9,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from imagent.applications import CodexApplicationAdapter
 from imagent.applications.adapters.appserver.client import AppServerError
 from imagent.applications.adapters.appserver.mapping import APP_SERVER_MAPPING_ERROR_MESSAGE
+from imagent.applications.adapters.codex import (
+    CodexApplicationAdapter,
+)
 from imagent.applications.adapters.codex import (
     CodexApplicationAdapter as CodexApplicationAdapterOwner,
 )

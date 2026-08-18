@@ -163,7 +163,7 @@ CASES = {
     "appserver": (
         "appserver",
         "import importlib.util\n"
-        "from imagent.applications import codex_app_server_client\n"
+        "from imagent.applications.adapters.appserver.client import codex_app_server_client\n"
         "client = codex_app_server_client(codex_bin='codex', endpoint='stdio://')\n"
         "assert type(client).__name__ == 'AppServerClient'\n"
         "assert importlib.util.find_spec('websockets') is not None\n",

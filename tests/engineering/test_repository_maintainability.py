@@ -146,8 +146,12 @@ class ComponentMapTests(unittest.TestCase):
     def test_dunder_all_exports_must_have_component_ownership(self) -> None:
         component_map = copy.deepcopy(load_component_map())
         component = component_map["components"]["applications.adapters.appserver.client"]
-        component["public_exports"]["current"].remove(
-            "imagent.applications.adapters.appserver.client:AppServerClient"
+        # Relocate the facade declaration to the private implementation module so
+        # the real client/__init__.py __all__ entry becomes unmapped while the
+        # symbol set still binds the public contracts invariants.
+        exports = component["public_exports"]["current"]
+        exports[exports.index("imagent.applications.adapters.appserver.client:AppServerClient")] = (
+            "imagent.applications.adapters.appserver.client._client:AppServerClient"
         )
 
         with self.assertRaisesRegex(ComponentMapError, "unmapped __all__ public exports"):
@@ -754,11 +758,11 @@ class DocumentationLinkTests(unittest.TestCase):
             ),
             (
                 "`appserver/client.py`",
-                "`applications/adapters/appserver/client/client.py`; JSON-RPC connection-epoch state machine kept coherent",
+                "`applications/adapters/appserver/client/_client.py`; JSON-RPC connection-epoch state machine kept coherent",
             ),
             (
                 "`appserver/supervisor.py`",
-                "`applications/adapters/appserver/client/supervisor.py`; product telemetry removed",
+                "`applications/adapters/appserver/client/_supervisor.py`; product telemetry removed",
             ),
         ]
         _assert_complete_inventory(
