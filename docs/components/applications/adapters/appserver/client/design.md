@@ -41,13 +41,15 @@ vocabulary. The client never forwards its endpoint-bearing connection facts,
 native callback mappings, exception text, or arbitrary health kwargs to the
 logger; unknown helper fields collapse to a bounded count.
 
-The exact target facade exports `AppServerClient`,
+The exact facade exports `AppServerClient`,
 `AppServerDispatchPosition`, `AppServerError`, `AppServerResponse`,
 `AppServerSupervisor`, `APP_SERVER_DISPATCH_POSITION_KEY`, and
 `codex_app_server_client` from `imagent.applications.adapters.appserver.client`.
-The lazy `imagent.applications` facade exposes the same factory object. The
-historical `imagent.applications.appserver_client` package is removed; no
-second client or compatibility implementation is present.
+The lazy `imagent.applications` facade no longer exposes the factory, and the
+noncanonical `client.client`, `client.handoff`, `client.supervisor`, and
+`transport.AppServerError` deep paths are private. The historical
+`imagent.applications.appserver_client` package is removed; no second client
+or compatibility implementation is present.
 
 ## Dependencies, state, and recovery
 

@@ -5,9 +5,9 @@ import unittest
 from typing import cast
 from unittest.mock import patch
 
+from imagent.applications.adapters.appserver._errors import AppServerError
 from imagent.applications.adapters.appserver.client import AppServerError as FacadeAppServerError
 from imagent.applications.adapters.appserver.transport import (
-    AppServerError,
     StdioAppServerTransport,
     WebSocketAppServerTransport,
 )

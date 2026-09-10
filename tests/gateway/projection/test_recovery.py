@@ -8,7 +8,7 @@ from subprocess import run
 from sys import executable
 from typing import cast
 
-from imagent.applications import CodexApplicationAdapter
+from imagent.applications.adapters.codex import CodexApplicationAdapter
 from imagent.applications.capabilities import ProjectMode
 from imagent.applications.contract import AgentInput, ProjectRef, ThreadRef
 from imagent.applications.events import (

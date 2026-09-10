@@ -5,10 +5,6 @@ import unittest
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from imagent.applications import (
-    CodexApplicationAdapter,
-    ZenApplicationAdapter,
-)
 from imagent.applications.adapters.appserver.mapping import APP_SERVER_MAPPING_ERROR_MESSAGE
 from imagent.applications.adapters.appserver.requests import (
     build_appserver_response,
@@ -16,6 +12,8 @@ from imagent.applications.adapters.appserver.requests import (
     map_appserver_request,
     map_zen_appserver_request,
 )
+from imagent.applications.adapters.codex import CodexApplicationAdapter
+from imagent.applications.adapters.zen import ZenApplicationAdapter
 from imagent.applications.capabilities import SupportLevel
 from imagent.applications.contract import ApplicationRef, ProjectRef, ThreadRef, TurnRef
 from imagent.applications.events import AgentEventType, EventStreamReset

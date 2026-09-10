@@ -3,14 +3,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..... import __version__
-from ..transport import _DEFAULT_MAX_INBOUND_FRAME_BYTES, AppServerError
-from .client import AppServerClient
-from .handoff import (
+from .._errors import AppServerError
+from ..transport import _DEFAULT_MAX_INBOUND_FRAME_BYTES
+from ._client import AppServerClient
+from ._handoff import (
     APP_SERVER_DISPATCH_POSITION_KEY,
     AppServerDispatchPosition,
     AppServerResponse,
 )
-from .supervisor import AppServerSupervisor
+from ._supervisor import AppServerSupervisor
 
 
 def codex_app_server_client(

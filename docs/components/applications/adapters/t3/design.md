@@ -26,12 +26,13 @@ receipts, canonical `AgentEvent` values, and optional bounded recoverable
 Interactive requests remain an explicit unsupported capability.
 
 The stable formal exports are `T3ApplicationAdapter`, `HttpT3Client`, and
-`T3ClientError` through `imagent.applications`. Their one implementation owner
-is `imagent.applications.adapters.t3`, backed by the single source file
+`T3ClientError` through the canonical `imagent.applications.adapters.t3`
+facade. Their one implementation owner is `imagent.applications.adapters.t3`,
+backed by the single source file
 `src/imagent/applications/adapters/t3.py`. The historical `t3.py` and
-`t3_client.py` modules are absent; the package facade resolves the exact
-objects from the target module and does not retain an internal import shim or
-duplicate HTTP client.
+`t3_client.py` modules and the `imagent.applications` root aliases are
+absent; the canonical facade resolves the exact objects from the target
+module and does not retain an internal import shim or duplicate HTTP client.
 
 ## Dependencies, state, and recovery
 

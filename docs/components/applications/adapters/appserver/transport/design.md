@@ -26,9 +26,11 @@ connection has an explicit bound. Outputs are decoded JSON mappings,
 successful close completion, or `AppServerError`.
 The target formal export owned here is `AppServerTransport` from
 `imagent.applications.adapters.appserver.transport`; concrete transport classes
-remain implementation positions. `AppServerError` is defined by this transport
-module and re-exported by the historical client facade; that exact object
-remains stable without creating a second exception hierarchy.
+remain implementation positions. `AppServerError` is defined by the private
+`imagent.applications.adapters.appserver._errors` owner under this leaf and
+exported only through the canonical `imagent.applications.adapters.appserver.client`
+facade; that exact object remains stable without creating a second exception
+hierarchy.
 
 ## Dependencies, state, and recovery
 

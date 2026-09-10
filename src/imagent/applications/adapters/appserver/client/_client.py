@@ -12,6 +12,7 @@ from .....interaction.diagnostics import (
     QueueDiagnosticName,
 )
 from ....contract import ApplicationInputOutcomeUnknown
+from .._errors import AppServerError
 from ..diagnostics import (
     AppServerDiagnosticState,
     emit_event,
@@ -21,13 +22,12 @@ from ..diagnostics import (
 )
 from ..transport import (
     _DEFAULT_MAX_INBOUND_FRAME_BYTES,
-    AppServerError,
     AppServerTransport,
     StdioAppServerTransport,
     WebSocketAppServerTransport,
     _validated_max_inbound_frame_bytes,
 )
-from .handoff import (
+from ._handoff import (
     APP_SERVER_DISPATCH_POSITION_KEY,
     AppServerDispatchPosition,
     AppServerResponse,

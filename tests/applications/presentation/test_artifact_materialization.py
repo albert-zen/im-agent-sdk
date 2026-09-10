@@ -11,21 +11,10 @@ from typing import Any, cast, get_type_hints
 from unittest.mock import patch
 
 import imagent.applications as applications
-from imagent.applications import (
-    ApplicationArtifactMaterialization,
-    ApplicationArtifactMaterializationCapacityError,
-    ApplicationArtifactMaterializationError,
-    ApplicationArtifactMaterializationTimeout,
-    AppServerArtifactMaterializationLimits,
-    AppServerArtifactSourceKind,
-    AppServerCompletedItemFacts,
-    AppServerCompletedItemPhase,
-    AppServerTurnTerminalFacts,
-    CodexApplicationAdapter,
-    ZenApplicationAdapter,
-    presentation,
-)
+from imagent.applications import presentation
 from imagent.applications.adapters.appserver.client import AppServerClient as NativeAppServerClient
+from imagent.applications.adapters.codex import CodexApplicationAdapter
+from imagent.applications.adapters.zen import ZenApplicationAdapter
 from imagent.applications.contract import (
     AgentMessage,
     ApplicationRef,
@@ -39,7 +28,18 @@ from imagent.applications.operations import (
     GetThreadHistory,
     ThreadHistoryRead,
 )
-from imagent.applications.presentation import artifact_materialization
+from imagent.applications.presentation import (
+    ApplicationArtifactMaterialization,
+    ApplicationArtifactMaterializationCapacityError,
+    ApplicationArtifactMaterializationError,
+    ApplicationArtifactMaterializationTimeout,
+    AppServerArtifactMaterializationLimits,
+    AppServerArtifactSourceKind,
+    AppServerCompletedItemFacts,
+    AppServerCompletedItemPhase,
+    AppServerTurnTerminalFacts,
+    artifact_materialization,
+)
 from imagent.applications.presentation.artifact_materialization import (
     AppServerArtifactMaterializationRuntime,
     appserver_completed_item_facts,
@@ -182,7 +182,7 @@ class ApplicationArtifactFacadeTests(unittest.TestCase):
         )
         for name in artifact_exports:
             with self.subTest(name=name):
-                self.assertIs(getattr(applications, name), getattr(presentation, name))
+                self.assertFalse(hasattr(applications, name))
                 self.assertIs(
                     getattr(presentation, name),
                     getattr(artifact_materialization, name),
@@ -216,7 +216,7 @@ class ApplicationArtifactFacadeTests(unittest.TestCase):
                 "-c",
                 "import sys; "
                 "import imagent.applications.presentation as presentation; "
-                "from imagent.applications import AppServerArtifactCandidate as top; "
+                "from imagent.applications.presentation import AppServerArtifactCandidate as top; "
                 "assert top is presentation.AppServerArtifactCandidate; "
                 "assert 'imagent.applications.adapters.codex' not in sys.modules; "
                 "assert 'imagent.applications.adapters.zen' not in sys.modules; "

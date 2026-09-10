@@ -33,10 +33,10 @@ Turn, terminal status, recovery/checkpoint behavior, or destination. This leaf
 depends on Interaction media, the Application contract/events leaves, the
 direct canonical `applications.diagnostics` owner for its typed artifact
 diagnostics, and App Server mapping. App Server adapter diagnostics remains a
-separate owner of mutable native connection state. Current exact facades are
-`imagent.applications` and
-`imagent.applications.presentation`, both backed by
-`src/imagent/applications/presentation/artifact_materialization.py`.
+separate owner of mutable native connection state. The one exact facade is
+`imagent.applications.presentation`, backed by
+`src/imagent/applications/presentation/artifact_materialization.py`; the
+`imagent.applications` root aliases are retired.
 
 ## State and recovery
 

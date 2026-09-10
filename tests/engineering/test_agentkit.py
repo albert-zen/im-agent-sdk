@@ -171,7 +171,7 @@ class AgentKitMappingTests(unittest.TestCase):
             "src/imagent/applications/adapters/appserver/diagnostics.py": {
                 "application-adapters-appserver"
             },
-            "src/imagent/applications/adapters/appserver/client/client.py": {
+            "src/imagent/applications/adapters/appserver/client/_client.py": {
                 "application-adapters-appserver"
             },
             "src/imagent/applications/adapters/appserver/requests.py": {

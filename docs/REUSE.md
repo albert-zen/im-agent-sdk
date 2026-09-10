@@ -155,8 +155,8 @@ contracts. It does not make Codex an execution backend inside Zen.
 | `appserver/retry.py` | `applications/adapters/appserver/client/retry.py` |
 | `appserver/protocol_map.py` | `applications/adapters/appserver/mapping.py` |
 | `appserver/diagnostics.py` | `applications/adapters/appserver/diagnostics.py`; fixed bounded redacted facts/helpers |
-| `appserver/client.py` | `applications/adapters/appserver/client/client.py`; JSON-RPC connection-epoch state machine kept coherent |
-| `appserver/supervisor.py` | `applications/adapters/appserver/client/supervisor.py`; product telemetry removed |
+| `appserver/client.py` | `applications/adapters/appserver/client/_client.py`; JSON-RPC connection-epoch state machine kept coherent |
+| `appserver/supervisor.py` | `applications/adapters/appserver/client/_supervisor.py`; product telemetry removed |
 
 `appserver/backend*.py`, `settings_backend.py`, `thread_backend.py`,
 `thread_dynamic_tools.py`, and `schema_drift.py` were excluded as consumer

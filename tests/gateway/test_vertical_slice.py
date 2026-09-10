@@ -11,12 +11,9 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import patch
 
-from imagent.applications import (
-    CodexApplicationAdapter,
-    T3ApplicationAdapter,
-    ZenApplicationAdapter,
-)
-from imagent.applications.adapters.t3 import _encode_t3_attachments
+from imagent.applications.adapters.codex import CodexApplicationAdapter
+from imagent.applications.adapters.t3 import T3ApplicationAdapter, _encode_t3_attachments
+from imagent.applications.adapters.zen import ZenApplicationAdapter
 from imagent.applications.contract import AgentInput, ApplicationRef, ProjectRef, ThreadRef
 from imagent.applications.events import EventStreamOverflow
 from imagent.applications.operations import ActivateNativeThread, CreateThread, ThreadCreated

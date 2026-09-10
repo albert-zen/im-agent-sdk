@@ -52,7 +52,8 @@ class ApplicationCapabilitiesTests(unittest.TestCase):
                 "assert not any(name.startswith('imagent.gateway') for name in sys.modules); "
                 "assert 'imagent.applications.adapters.codex' not in sys.modules; "
                 "assert 'imagent.applications.adapters.zen' not in sys.modules; "
-                "from imagent.applications import CodexApplicationAdapter; "
+                "from imagent.applications.adapters.codex import "
+                "CodexApplicationAdapter; "
                 "from imagent.applications.adapters.codex import "
                 "CodexApplicationAdapter as owner; "
                 "assert CodexApplicationAdapter is owner",

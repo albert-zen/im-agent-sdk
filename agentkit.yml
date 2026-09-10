@@ -970,7 +970,7 @@ maintainability:
       guidance: Keep each proven native transport cohesive; split protocol-neutral media or transport mechanics before adding product composition or policy.
     - name: appserver-client-transport
       paths:
-        - src/imagent/applications/adapters/appserver/client/client.py
+        - src/imagent/applications/adapters/appserver/client/_client.py
       max_lines: 1750
       max_functions: 95
       max_classes: 2

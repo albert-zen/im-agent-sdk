@@ -10,8 +10,11 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from imagent.applications import HttpT3Client
-from imagent.applications.adapters.t3 import T3ApplicationAdapter, _T3StateCapacityError
+from imagent.applications.adapters.t3 import (
+    HttpT3Client,
+    T3ApplicationAdapter,
+    _T3StateCapacityError,
+)
 from imagent.applications.contract import (
     AgentInput,
     ApplicationInputOutcomeUnknown,

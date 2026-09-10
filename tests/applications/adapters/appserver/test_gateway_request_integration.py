@@ -5,10 +5,10 @@ import unittest
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from imagent.applications import ZenApplicationAdapter
 from imagent.applications.adapters.appserver.requests import (
     derive_appserver_request_ref,
 )
+from imagent.applications.adapters.zen import ZenApplicationAdapter
 from imagent.applications.contract import ProjectRef, ThreadRef
 from imagent.applications.requests import ApprovalResponse
 from imagent.gateway import GatewayExtensions

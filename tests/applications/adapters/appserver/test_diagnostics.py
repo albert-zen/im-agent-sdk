@@ -6,7 +6,7 @@ from collections.abc import Iterator, Mapping
 from typing import cast
 from unittest.mock import patch
 
-from imagent.applications import codex_app_server_client
+from imagent.applications.adapters.appserver.client import codex_app_server_client
 from imagent.applications.adapters.appserver.diagnostics import (
     DEBUG_SCHEMA,
     MAX_DEBUG_COLLECTION_COUNT,

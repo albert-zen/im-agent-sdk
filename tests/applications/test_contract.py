@@ -28,6 +28,7 @@ from imagent.applications.operations import ApplicationOperation, ApplicationOpe
 from imagent.applications.requests import InteractiveRequest
 from imagent.interaction.messages import MessageRole, TextContent
 from imagent.interaction.operations import ContractViolation
+from scripts.validate_component_map import load_component_map
 
 _APPLICATION_MODEL_FAMILY = (
     "Page",
@@ -400,6 +401,61 @@ assert importlib.util.find_spec('imagent.adapters') is None
                     text=True,
                 )
                 self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_retired_facade_exports_are_absent_from_the_root_facade(self) -> None:
+        for module, symbol in _retired_facade_exports():
+            if module != "imagent.applications":
+                continue
+            with self.subTest(name=symbol):
+                self.assertNotIn(symbol, facade.__all__)
+                self.assertFalse(hasattr(facade, symbol))
+
+    def test_every_retired_export_fails_source_import_in_a_clean_process(self) -> None:
+        retired = _retired_facade_exports()
+        self.assertTrue(retired)
+        source = [
+            "import importlib.util",
+            "import sys",
+        ]
+        for module, symbol in retired:
+            source.append(
+                "try:\n"
+                f"    from {module} import {symbol}\n"
+                "except ImportError:\n"
+                "    pass\n"
+                "else:\n"
+                f"    raise AssertionError('{module}:{symbol} is still source-importable')\n"
+            )
+        repository_root = Path(__file__).resolve().parents[2]
+        environment = os.environ.copy()
+        source_root = str(repository_root / "src")
+        existing_pythonpath = environment.get("PYTHONPATH")
+        environment["PYTHONPATH"] = (
+            source_root
+            if not existing_pythonpath
+            else os.pathsep.join((source_root, existing_pythonpath))
+        )
+        completed = subprocess.run(
+            [sys.executable, "-c", "\n".join(source)],
+            check=False,
+            cwd=repository_root,
+            env=environment,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+
+def _retired_facade_exports() -> list[tuple[str, str]]:
+    """Return the map-declared retired Applications exports as (module, symbol) pairs."""
+    declared = load_component_map()["structural_status"]["retired_application_public_exports"]
+    references = set(declared["current"]) - set(declared["target"])
+    retired: set[tuple[str, str]] = set()
+    for reference in references:
+        module, separator, symbol = reference.partition(":")
+        if separator and module and symbol:
+            retired.add((module, symbol))
+    return sorted(retired)
 
 
 if __name__ == "__main__":

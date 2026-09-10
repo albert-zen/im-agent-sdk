@@ -9,7 +9,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from typing import cast
 
-from imagent.applications import CodexApplicationAdapter
+from imagent.applications.adapters.codex import CodexApplicationAdapter
 from imagent.applications.capabilities import ProjectMode, SupportLevel
 from imagent.applications.contract import (
     AgentMessage,
