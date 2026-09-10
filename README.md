@@ -46,11 +46,12 @@ gh release download v0.1.0a1 \
   --pattern SHA256SUMS \
   --dir im-agent-sdk-0.1.0a1
 cd im-agent-sdk-0.1.0a1
-shasum -a 256 --check SHA256SUMS
+tr -d '\r' < SHA256SUMS | shasum -a 256 --check
 uv pip install im_agent_sdk-0.1.0a1-py3-none-any.whl
 ```
 
-Verify the downloaded wheel against `SHA256SUMS` before installing it. The
+The command normalizes CRLF in the historical checksum manifest before
+verification. Verify the downloaded wheel against `SHA256SUMS` before installing it. The
 stable asset URL is:
 
 ```text

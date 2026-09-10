@@ -32,7 +32,7 @@ their directory:
 python3.13 -m venv .venv
 mkdir -p .quickstart-download
 gh release download v0.1.0a1 --repo albert-zen/im-agent-sdk --pattern '*.whl' --pattern SHA256SUMS --dir .quickstart-download
-(cd .quickstart-download && shasum -a 256 -c SHA256SUMS)
+(cd .quickstart-download && tr -d '\r' < SHA256SUMS | shasum -a 256 --check)
 .venv/bin/python -m pip install .quickstart-download/im_agent_sdk-0.1.0a1-py3-none-any.whl
 ```
 
