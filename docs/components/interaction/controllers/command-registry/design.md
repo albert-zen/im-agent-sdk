@@ -118,6 +118,40 @@ unknown command is a consumed, bounded presentation result only when the
 configured Controller grammar recognizes it as command input. Non-command
 messages return the Controller's unconsumed marker.
 
+### Optional unique prefixes
+
+`CommandRegistry(..., allow_unique_prefix=True)` opts this instance into unique
+prefix lookup. The default is `False`; the Boolean is fixed at construction
+and exposed as a read-only property. It does not change parsing or arguments.
+Exact normalized canonical names and aliases always win. Only when exact
+lookup fails and the option is enabled are names and aliases matched by prefix.
+Candidates are deduplicated by final canonical command identity and sorted.
+One candidate proceeds through the same argument checks, canonical invocation
+ID, capacity admission, and effect fence as an exact command. Zero candidates
+remain unknown. Multiple candidates produce an `AMBIGUOUS_COMMAND` diagnostic
+and bounded candidate-name presentation without admitting or invoking a handler
+or entering its effect fence. The total match count precedes the candidate
+list, so even a truncated list does not imply uniqueness.
+
+The public stdlib-only `command_names.resolve_command_name(name, names,
+allow_unique_prefix=False)` function owns this lookup rule. It returns an
+immutable tuple of zero, one, or multiple canonical candidates. Callers provide
+an already normalized name and a trusted, bounded name-to-canonical mapping;
+the mapping must cover the entire dispatch namespace and remain fixed during
+lookup. Empty input yields no candidates. The function owns neither Slash
+parsing nor authorization, execution, registration, or mutation of input.
+The Controllers facade re-exports this same implementation.
+
+This is optional Controller grammar, not new Core control semantics. A concrete
+counterexample is a product whose exact `/model` coexists with another
+`/models` command: exact meaning must survive, while a prefix matching aliases
+of only one final command must not become spuriously ambiguous. Serial product
+and common dispatchers must compose a complete name table before resolving;
+resolving only the fallback table cannot prove namespace-wide uniqueness.
+Product authorization and command visibility remain consumer-owned. This
+capability does not reinstate retired SlashController or v1 compatibility
+facades, require a whole consumer migration, or interpret fuzzy spelling.
+
 Exactly one definition matches one invocation. The registry never fan-outs a
 command to multiple handlers and never falls through to another alias after a
 handler starts.

@@ -18,6 +18,7 @@ from ..messages import (
     TextContent,
     TextFormat,
 )
+from .command_names import resolve_command_name
 from .contract import _derive_command_invocation_id
 
 if TYPE_CHECKING:
@@ -39,6 +40,7 @@ class CommandResultStatus(StrEnum):
 class CommandRegistryFailureCode(StrEnum):
     INVALID_INPUT = "invalid_input"
     UNKNOWN_COMMAND = "unknown_command"
+    AMBIGUOUS_COMMAND = "ambiguous_command"
     CAPACITY_EXHAUSTED = "capacity_exhausted"
     HANDLER_TIMED_OUT = "handler_timed_out"
     HANDLER_FAILED = "handler_failed"
@@ -217,7 +219,12 @@ class _ParsedCommand:
 class CommandRegistry:
     """One explicit, frozen, bounded command composition."""
 
-    def __init__(self, limits: CommandLimits | None = None) -> None:
+    def __init__(
+        self, limits: CommandLimits | None = None, *, allow_unique_prefix: bool = False
+    ) -> None:
+        if type(allow_unique_prefix) is not bool:
+            raise CommandRegistryError("allow_unique_prefix must be a Boolean")
+        self._allow_unique_prefix = allow_unique_prefix
         self._limits = limits or CommandLimits()
         self._definitions: dict[str, CommandDefinition] = {}
         self._names: dict[str, str] = {}
@@ -233,6 +240,10 @@ class CommandRegistry:
         self._cancellation_overrun_count = 0
         self._capacity_rejection_count = 0
         self._last_failure_code: CommandRegistryFailureCode | None = None
+
+    @property
+    def allow_unique_prefix(self) -> bool:
+        return self._allow_unique_prefix
 
     @property
     def limits(self) -> CommandLimits:
@@ -314,13 +325,26 @@ class CommandRegistry:
         if parsed is None:
             return None
         self._invocation_count += 1
-        canonical = self._names.get(parsed.name)
-        if canonical is None:
+        candidates = resolve_command_name(
+            parsed.name, self._names, allow_unique_prefix=self._allow_unique_prefix
+        )
+        if len(candidates) == 0:
             self._record_failure(CommandRegistryFailureCode.UNKNOWN_COMMAND)
             return self._present(
                 message,
                 self._bounded_failure(f"Unknown command `/{parsed.name}`. Use `/help`."),
             )
+        if len(candidates) > 1:
+            self._record_failure(CommandRegistryFailureCode.AMBIGUOUS_COMMAND)
+            return self._present(
+                message,
+                self._bounded_failure(
+                    f"Ambiguous command ({len(candidates)} matches): "
+                    + ", ".join(f"/{candidate}" for candidate in candidates)
+                    + ". Use a full command name."
+                ),
+            )
+        canonical = candidates[0]
         definition = self._definitions[canonical]
         argument_error = _validate_argument_count(definition, parsed.arguments)
         if argument_error is not None:

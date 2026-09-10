@@ -3,6 +3,7 @@
 from importlib import import_module
 from typing import TYPE_CHECKING
 
+from .command_names import resolve_command_name
 from .contract import (
     CommandInvocationFacts,
     ControllerLifecycle,
@@ -62,6 +63,7 @@ __all__ = [
     "RequestPresentation",
     "RequestPresenter",
     "derive_command_invocation_id",
+    "resolve_command_name",
     "include_common_commands",
 ]
 

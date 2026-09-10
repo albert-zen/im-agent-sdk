@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
+import sys
 import unittest
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import cast
 
 from imagent.applications.capabilities import ProjectMode
@@ -27,6 +30,7 @@ from imagent.interaction.controllers import (
     CommandRegistryNotFrozenError,
     CommandResult,
     CommandResultError,
+    resolve_command_name,
 )
 from imagent.interaction.media import AttachmentContent, LocalPath
 from imagent.interaction.messages import (
@@ -79,6 +83,63 @@ def _surface(value: object) -> ConversationActions:
 
 
 class CommandRegistryDefinitionTests(unittest.TestCase):
+    def test_name_resolution_exact_aliases_deduplication_and_unknown(self) -> None:
+        names = {
+            "models": "models",
+            "model-list": "models",
+            "more": "models",
+            "monitor": "monitor",
+            "show": "status",
+            "showcase": "showcase",
+        }
+        for name, enabled, expected in (
+            ("model", False, ()),
+            ("models", False, ("models",)),
+            ("model", True, ("models",)),
+            ("mo", True, ("models", "monitor")),
+            ("show", True, ("status",)),
+            ("", True, ()),
+            ("missing", True, ()),
+        ):
+            with self.subTest(name=name, enabled=enabled):
+                self.assertEqual(
+                    resolve_command_name(name, names, allow_unique_prefix=enabled), expected
+                )
+        self.assertEqual(
+            resolve_command_name("model", {"model": "model", **names}, allow_unique_prefix=True),
+            ("model",),
+        )
+
+    def test_prefix_option_is_explicit_boolean_and_read_only(self) -> None:
+        default = CommandRegistry()
+        enabled = CommandRegistry(allow_unique_prefix=True)
+        self.assertFalse(default.allow_unique_prefix)
+        self.assertTrue(enabled.allow_unique_prefix)
+        with self.assertRaises(AttributeError):
+            setattr(enabled, "allow_unique_prefix", False)
+        for value in (1, "true", None):
+            with self.subTest(value=value), self.assertRaises(CommandRegistryError):
+                CommandRegistry(allow_unique_prefix=cast(bool, value))
+
+    def test_name_resolver_runs_without_sdk_or_site_packages(self) -> None:
+        source = (
+            Path(__file__).resolve().parents[3]
+            / "src/imagent/interaction/controllers/command_names.py"
+        )
+        probe = (
+            "import runpy,sys; "
+            "resolve=runpy.run_path(sys.argv[1])['resolve_command_name']; "
+            "assert resolve('mod', {'models':'models'}, allow_unique_prefix=True)==('models',); "
+            "assert not any(n=='imagent' or n.startswith('imagent.') for n in sys.modules)"
+        )
+        result = subprocess.run(
+            [sys.executable, "-I", "-S", "-c", probe, str(source)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_limits_reject_non_positive_and_non_finite_values(self) -> None:
         defaults = CommandLimits()
         invalid = {
@@ -183,6 +244,125 @@ class CommandRegistryDefinitionTests(unittest.TestCase):
 
 
 class CommandRegistryRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_ambiguity_is_bounded_and_never_enters_effect_or_handler(self) -> None:
+        calls: list[str] = []
+        actions = _Actions()
+
+        async def handler(
+            invocation: CommandInvocation, actions: ConversationActions
+        ) -> CommandResult:
+            calls.append(invocation.command_name)
+            return CommandResult.text("done")
+
+        registry = CommandRegistry(
+            CommandLimits(max_concurrency=1, max_result_text_characters=64),
+            allow_unique_prefix=True,
+        )
+        for name in ("monitor", "models"):
+            registry.register(
+                CommandDefinition(name, handler, safety=CommandExecutionSafety.EFFECTFUL)
+            )
+        registry.freeze()
+        output = await registry.handle(_message("/mo"), _surface(actions))
+        assert output is not None
+        text = _text(output)
+        self.assertIn("2 matches", text)
+        self.assertIn("/models, /monitor", text)
+        self.assertLessEqual(len(text), 64)
+        self.assertEqual(actions.events, [])
+        self.assertEqual(calls, [])
+        self.assertEqual(
+            registry.diagnostic_facts().last_failure_code,
+            CommandRegistryFailureCode.AMBIGUOUS_COMMAND,
+        )
+        await registry.handle(_message("/models"), _surface(actions))
+        self.assertEqual(calls, ["models"])
+        self.assertEqual(len(actions.events), 1)
+
+    async def test_prefix_disabled_and_exact_product_name_take_precedence(self) -> None:
+        seen: list[str] = []
+
+        async def handler(
+            invocation: CommandInvocation, actions: ConversationActions
+        ) -> CommandResult:
+            seen.append(invocation.command_name)
+            return CommandResult.text("ok")
+
+        default = CommandRegistry()
+        enabled = CommandRegistry(allow_unique_prefix=True)
+        for registry in (default, enabled):
+            registry.register(CommandDefinition("models", handler))
+        enabled.register(CommandDefinition("model", handler, aliases=("show",)))
+        enabled.register(CommandDefinition("showcase", handler))
+        for registry in (default, enabled):
+            registry.freeze()
+        output = await default.handle(_message("/model"), _surface(_Actions()))
+        assert output is not None
+        self.assertIn("Unknown command", _text(output))
+        await enabled.handle(_message("/model"), _surface(_Actions()))
+        await enabled.handle(_message("/show"), _surface(_Actions()))
+        self.assertEqual(seen, ["model", "model"])
+
+    async def test_prefix_preserves_argument_rejection_and_noncommand_handling(self) -> None:
+        actions = _Actions()
+
+        async def handler(
+            invocation: CommandInvocation, actions: ConversationActions
+        ) -> CommandResult:
+            self.fail("invalid arguments must not execute")
+
+        registry = CommandRegistry(allow_unique_prefix=True)
+        registry.register(
+            CommandDefinition(
+                "models",
+                handler,
+                arguments=CommandArgumentContract(1, 1),
+                safety=CommandExecutionSafety.EFFECTFUL,
+            )
+        )
+        registry.freeze()
+        for line in ("/mod", '/mod "unterminated'):
+            await registry.handle(_message(line), _surface(actions))
+            self.assertEqual(
+                registry.diagnostic_facts().last_failure_code,
+                CommandRegistryFailureCode.INVALID_INPUT,
+            )
+        self.assertIsNone(await registry.handle(_message("ordinary"), _surface(actions)))
+        self.assertEqual(actions.events, [])
+
+    async def test_unique_prefix_keeps_arguments_identity_and_effect_fence(self) -> None:
+        seen: list[CommandInvocation] = []
+        actions = _Actions()
+        expected_actions = actions
+
+        async def handler(
+            invocation: CommandInvocation, actions: ConversationActions
+        ) -> CommandResult:
+            self.assertEqual(expected_actions.events[-1], ("fence", invocation))
+            self.assertIs(actions, expected_actions)
+            seen.append(invocation)
+            return CommandResult.text("done")
+
+        registry = CommandRegistry(allow_unique_prefix=True)
+        registry.register(
+            CommandDefinition(
+                "models",
+                handler,
+                aliases=("model-list",),
+                arguments=CommandArgumentContract(2, 2),
+                safety=CommandExecutionSafety.EFFECTFUL,
+            )
+        )
+        registry.freeze()
+        for command in ("/MODEL", "/models"):
+            await registry.handle(
+                _message(command + ' "two words" literal\nignored context'), _surface(actions)
+            )
+        self.assertEqual(len(seen), 2)
+        self.assertEqual(seen[0].command_name, "models")
+        self.assertEqual(seen[0].arguments, ("two words", "literal"))
+        self.assertEqual(seen[0].invocation_id, seen[1].invocation_id)
+
     async def test_first_non_empty_line_alias_and_unknown_are_bounded(self) -> None:
         seen: list[CommandInvocation] = []
 
