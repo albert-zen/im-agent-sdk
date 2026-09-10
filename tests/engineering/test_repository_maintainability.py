@@ -367,7 +367,10 @@ class ComponentMapTests(unittest.TestCase):
         registry = component_map["components"]["interaction.controllers.command-registry"]
         self.assertEqual(
             registry["current_code"],
-            ["src/imagent/interaction/controllers/registry.py"],
+            [
+                "src/imagent/interaction/controllers/registry.py",
+                "src/imagent/interaction/controllers/command_names.py",
+            ],
         )
         self.assertNotIn("implementation absent", registry["gaps"])
 
