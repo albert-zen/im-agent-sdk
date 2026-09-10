@@ -856,6 +856,7 @@ components:
       - README.md
       - .github/workflows/release.yml
       - build-constraints.txt
+      - LICENSE
       - pyproject.toml
       - uv.lock
       - scripts/prepare_github_release.py

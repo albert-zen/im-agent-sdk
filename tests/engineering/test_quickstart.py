@@ -75,8 +75,11 @@ class QuickstartTests(unittest.TestCase):
         self.assertIn(RELEASE_WHEEL, document)
         self.assertIn("--pattern '*.whl' --pattern SHA256SUMS", document)
         self.assertIn("Get-FileHash", document)
-        self.assertIn("(cd .quickstart-download && sha256sum -c SHA256SUMS)", document)
-        self.assertIn("repository read access", document)
+        self.assertIn(
+            r"(cd .quickstart-download && tr -d '\r' < SHA256SUMS | shasum -a 256 --check)",
+            document,
+        )
+        self.assertRegex(document, r"repository read\s+access")
         self.assertIn("Run the installed vertical on POSIX", document)
         self.assertIn("Windows can download, verify, install, and import", document)
         self.assertIn("Use WSL", document)

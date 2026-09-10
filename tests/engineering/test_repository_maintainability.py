@@ -778,7 +778,7 @@ class DocumentationLinkTests(unittest.TestCase):
         )
         provenance_blocks = (
             "repository: https://github.com/albert-zen/imcodex transferred commit: 858398226e8f76e49f8259ae686939f209e1bb36",
-            "The transferred source repository and commit contained no `LICENSE` file or declared license. This record preserves provenance without inventing a license label or redistribution conclusion. Local changes are limited to the package namespace, removal of consumer observability/configuration/store/backend dependencies, neutral caller-provided or `.imagent` state paths, standard logging and explicit adapter errors, and translation only at Channel or Application boundaries. Product commands and Agent state were not copied.",
+            "The transferred source repository and commit contained no `LICENSE` file or declared license. That historical absence is preserved as provenance. The SDK code maintained here, including these transferred portions, is now provided under the repository's [MIT License](../LICENSE). Local changes are limited to the package namespace, removal of consumer observability/configuration/store/backend dependencies, neutral caller-provided or `.imagent` state paths, standard logging and explicit adapter errors, and translation only at Channel or Application boundaries. Product commands and Agent state were not copied.",
         )
         for block in provenance_blocks:
             self.assertIn(block, normalized_reuse)

@@ -124,11 +124,22 @@ manually from a CRLF-contaminated working tree: every source member of the
 published wheel carries CRLF terminators while the canonical repository
 source is LF.
 That artifact is therefore not reproducible from the pinned dependency and
-build-constraint graph, and it will be replaced by exactly one workflow-built
-publication after a human-approved tag move to a merged commit and deletion of
-the manual release. A clean constrained rebuild of the original source commit
+build-constraint graph, and remains the existing historical alpha asset.
+A workflow-built replacement
+was planned, but has not been published. Repository opening does not authorize
+moving the tag, deleting the release, or replacing its assets. Any replacement
+still requires the recorded human approvals. A clean constrained rebuild of
+the original source commit
 produces SHA-256 prefix `e160c31d`, which is the reproducibility evidence for
 the replacement artifact. The tag move and the release deletion remain explicit
 human publishing approvals; recording this provenance does not authorize
 either, and the replacement publication stays GitHub-only with no PyPI
 publication.
+
+## License metadata
+
+The repository is MIT-licensed. `pyproject.toml` records the SPDX expression
+`MIT` and explicitly packages the root `LICENSE`. Every newly built wheel must
+carry that notice in its dist-info licenses directory; no notice or metadata
+change replaces the historical alpha asset. Source-transfer origins and
+separately installed dependency notices remain in `docs/REUSE.md`.

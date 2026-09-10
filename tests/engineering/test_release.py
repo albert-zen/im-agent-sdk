@@ -45,6 +45,9 @@ class PackageIndependenceTests(unittest.TestCase):
     def test_version_typing_marker_and_profile_inventory_are_exact(self) -> None:
         metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
         init_source = (ROOT / "src" / "imagent" / "__init__.py").read_text(encoding="utf-8")
+        self.assertEqual(metadata["project"]["license"], "MIT")
+        self.assertEqual(metadata["project"]["license-files"], ["LICENSE"])
+        self.assertTrue((ROOT / "LICENSE").is_file())
         version = metadata["project"]["version"]
         self.assertIn(f'__version__ = "{version}"', init_source)
         self.assertTrue((ROOT / "src" / "imagent" / "py.typed").is_file())
