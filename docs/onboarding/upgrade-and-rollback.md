@@ -39,7 +39,7 @@ gh release download v0.1.0a1 \
   --pattern 'im_agent_sdk-0.1.0a1-py3-none-any.whl' \
   --pattern 'SHA256SUMS' \
   --dir "$download_dir"
-(cd "$download_dir" && sha256sum --check SHA256SUMS)
+(cd "$download_dir" && shasum -a 256 --check SHA256SUMS)
 
 python -m venv .venv-imagent-0.1.0a1
 .venv-imagent-0.1.0a1/bin/python -m pip install --upgrade pip
