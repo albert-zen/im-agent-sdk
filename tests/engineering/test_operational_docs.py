@@ -142,7 +142,7 @@ class OperationalDocumentationTests(unittest.TestCase):
         self.assertIn("GitHub authentication with read access", text)
         self.assertIn("gh release download v0.1.0a1", text)
         self.assertIn("--repo albert-zen/im-agent-sdk", text)
-        self.assertIn("browser asset URL is not an anonymously", text)
+        self.assertIn("While repository access is restricted", text)
         self.assertRegex(text, r"does not claim that the package is published\s+on PyPI")
         self.assertIsNone(re.search(r"pip install\s+im-agent-sdk(?:\s|$)", text))
         self.assertNotIn('pip install "im-agent-sdk @ https://github.com/', text)

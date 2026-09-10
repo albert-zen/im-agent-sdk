@@ -7,6 +7,8 @@ name = "im-agent-sdk"
 version = "0.1.0a1"
 description = "Unified contracts between IM channels and Agent applications"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.13"
 authors = [{ name = "Albert Zen" }]
 dependencies = ["httpx>=0.28"]

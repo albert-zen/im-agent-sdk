@@ -164,8 +164,9 @@ workflow, backend composition, or development tooling. The public factory is
 `codex_app_server_client`; the IMCodex-named dynamic import was deleted.
 
 The transferred source repository and commit contained no `LICENSE` file or
-declared license. This record preserves provenance without inventing a license
-label or redistribution conclusion. Local changes are limited to the package
+declared license. That historical absence is preserved as provenance. The SDK
+code maintained here, including these transferred portions, is now provided
+under the repository's [MIT License](../LICENSE). Local changes are limited to the package
 namespace, removal of consumer observability/configuration/store/backend
 dependencies, neutral caller-provided or `.imagent` state paths, standard
 logging and explicit adapter errors, and translation only at Channel or
@@ -185,6 +186,9 @@ the transferred boundary. Product CLI, HTTP API, registry, webhook
 composition, and IMCodex configuration tests were excluded. Base imports
 remain independent of native extras, and provider/App Server extras are
 verified through clean-install construction without the consumer package.
+
+The historical source transfer does not create a runtime or release dependency
+on IMCodex; these are separately maintained projects.
 
 ## Zen and T3 proof sources
 
@@ -208,3 +212,24 @@ semantics remain outside the shared SDK.
 5. Remove unrelated product dependencies incrementally.
 6. Add shared contract tests before changing semantics.
 7. Document intentional divergence from the source.
+
+## Installed dependency notices
+
+The SDK wheel does not vendor its Python dependencies. Package managers install
+these separately; their distributions carry their own notices and licenses.
+The locked runtime dependency metadata currently declares:
+
+| Dependency | Version in `uv.lock` | Declared license |
+|---|---|---|
+| httpx | 0.28.1 | BSD-3-Clause |
+| websockets | 15.0.1 | BSD-3-Clause |
+| Pillow | 12.3.0 | MIT-CMU |
+| lark-channel-sdk | 1.2.0 | MIT AND BSD-3-Clause |
+| pycryptodome | 3.23.0 | BSD and Public Domain |
+
+This table records upstream package metadata, not a replacement for each
+package's full license files or a license grant over the migrated source above.
+When redistributing a combined environment, preserve the dependencies' notices
+and review their bundled third-party notices as well as their top-level license.
+The repository's development launcher obtains AgentKit separately at its pinned
+Git revision; AgentKit is MIT-licensed and is not included in the SDK wheel.
