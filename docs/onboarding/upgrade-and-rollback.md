@@ -9,10 +9,11 @@ backup until the new deployment passes its vertical checks.
 
 `v0.1.0a1` is distributed from
 [GitHub Releases](https://github.com/albert-zen/im-agent-sdk/releases/tag/v0.1.0a1).
-The repository is private: GitHub authentication with read access to the
-repository is required, and the browser asset URL is not an anonymously
-pip-installable URL. This guide does not claim that the package is published
-on PyPI.
+While repository access is restricted, GitHub authentication with read access
+is required. This guide does not claim that the package is published on PyPI.
+This packet identifies the historical manual alpha, not current `main`.
+Opening the repository does not change its tag or asset bytes; see the
+[provenance note](../engineering/release/design.md#v010a1-artifact-provenance).
 
 The exact released packet is:
 
@@ -26,7 +27,7 @@ The exact released packet is:
 | Wheel SHA-256 | `123ebe9c7b086c9187bc05ce961f4942a6f8664de6a752f4e289d761c4e98d76` |
 | Wheel URL | `https://github.com/albert-zen/im-agent-sdk/releases/download/v0.1.0a1/im_agent_sdk-0.1.0a1-py3-none-any.whl` |
 
-Download the GitHub asset with authenticated GitHub CLI into a temporary
+Download the GitHub asset with GitHub CLI into a temporary
 directory, verify it, and then install it into a fresh Python 3.13+
 environment:
 
@@ -134,7 +135,7 @@ Compare the output with both the value above and the authenticated release's
 resolved local `file:` URL and archive hash. Retain the GitHub asset URL, tag
 commit, authenticated download command, and checksum in the deployment
 manifest. Do not substitute the browser asset URL as an anonymous pip source;
-it returns 404 for callers without repository access.
+while the repository is restricted, it returns 404 for callers without access.
 
 ## Upgrade procedure
 

@@ -30,11 +30,14 @@ turns, approvals, and execution status.
 ## Install the alpha release
 
 Version `0.1.0a1` is distributed as a GitHub prerelease, not through PyPI.
-The published `v0.1.0a1` artifact will be the workflow-built replacement of
-the initial manual publication (see the
-[release design provenance note](docs/engineering/release/design.md)). Because
-this repository is private, download requires an authenticated GitHub session
-with repository read access:
+The existing asset was built manually from `a72b24a`, not the current `main`.
+Its bytes and checksum remain unchanged; see the
+[release provenance](docs/engineering/release/design.md#v010a1-artifact-provenance).
+For the current source and reproducible wheel, use the development commands
+below. Repository visibility does not replace or rebuild a release asset.
+
+Download the historical alpha with GitHub CLI (authentication is required
+while repository access is restricted):
 
 ```sh
 gh release download v0.1.0a1 \
@@ -43,12 +46,12 @@ gh release download v0.1.0a1 \
   --pattern SHA256SUMS \
   --dir im-agent-sdk-0.1.0a1
 cd im-agent-sdk-0.1.0a1
-sha256sum --check SHA256SUMS
+shasum -a 256 --check SHA256SUMS
 uv pip install im_agent_sdk-0.1.0a1-py3-none-any.whl
 ```
 
 Verify the downloaded wheel against `SHA256SUMS` before installing it. The
-stable authenticated asset URL is:
+stable asset URL is:
 
 ```text
 https://github.com/albert-zen/im-agent-sdk/releases/download/v0.1.0a1/im_agent_sdk-0.1.0a1-py3-none-any.whl
@@ -56,7 +59,8 @@ https://github.com/albert-zen/im-agent-sdk/releases/download/v0.1.0a1/im_agent_s
 
 A bare requirement such as `im-agent-sdk==0.1.0a1` does not discover GitHub
 Release assets because GitHub Releases is not a Python package index. A
-consumer must download the wheel or use the authenticated asset URL explicitly.
+consumer must download the wheel or use the asset URL explicitly (with access
+credentials when required).
 
 The first formal SDK is governed by the
 [v1 architecture and consumer contract](docs/V1_DESIGN.md) and its
@@ -65,6 +69,15 @@ The first formal SDK is governed by the
 must be reused, rewritten, or removed.
 
 ## Status
+
+This is an alpha SDK. The implemented contracts and executable acceptance
+consumer are covered by repository tests; they are not a claim that every
+Channel/Application combination has passed a live production acceptance.
+Consumers still supply credentials, access policy, and native services.
+Start with the [quickstart](docs/onboarding/quickstart.md), then check the
+[production checklist](docs/onboarding/production-checklist.md) for your pairing.
+The full reference consumer currently runs on Linux/macOS; Windows users need
+WSL for that acceptance scenario.
 
 The accepted design now has runnable vertical slices:
 

@@ -8,9 +8,12 @@ public SDK surfaces and needs no product credentials or native service.
 
 ## 1. Download and verify v0.1.0a1
 
-Python 3.13 or newer and the GitHub CLI are required. The repository is
-private, so first confirm that `gh auth status` shows an account with
-repository read access. Then, from an empty working directory:
+Python 3.13 or newer and the GitHub CLI are required. While repository access
+is restricted, `gh auth status` must show an account with repository read
+access. The existing alpha is the historical `a72b24a` artifact, not current
+`main`; see [release provenance](../engineering/release/design.md#v010a1-artifact-provenance).
+For a current-source build, follow the [development commands](../../README.md#development).
+From an empty working directory:
 
 ```powershell
 py -3.13 -m venv .venv
@@ -29,11 +32,11 @@ their directory:
 python3.13 -m venv .venv
 mkdir -p .quickstart-download
 gh release download v0.1.0a1 --repo albert-zen/im-agent-sdk --pattern '*.whl' --pattern SHA256SUMS --dir .quickstart-download
-(cd .quickstart-download && sha256sum -c SHA256SUMS)
+(cd .quickstart-download && shasum -a 256 -c SHA256SUMS)
 .venv/bin/python -m pip install .quickstart-download/im_agent_sdk-0.1.0a1-py3-none-any.whl
 ```
 
-These commands install the authenticated, checksummed
+These commands install the checksummed
 [GitHub Release](https://github.com/albert-zen/im-agent-sdk/releases/tag/v0.1.0a1),
 not PyPI or an absolute machine-local wheel.
 
