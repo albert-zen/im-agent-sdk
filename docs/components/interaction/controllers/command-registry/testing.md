@@ -62,3 +62,17 @@ PYTHONPATH=src python -m unittest \
   tests.interaction.controllers.test_optional_controller \
   tests.gateway.test_vertical_slice -v
 ```
+
+## Unique-prefix lookup
+
+Exercise exact-first canonical/alias matching, prefix candidates deduplicated
+by canonical identity, stable ambiguity ordering, empty/unknown names, and the
+default-disabled option through the public resolver and registry handle path.
+A unique effectful prefix must preserve parsed arguments, canonical invocation
+identity, and the existing fence-before-handler order. Ambiguity must call no
+handler or fence, leave admission capacity available, and remain bounded with
+its total candidate count visible. Independent registries keep independent
+immutable options. Invalid non-Boolean options fail at construction. Ordinary
+content, malformed arguments, and trailing contextual lines retain the parser
+contract. Verify the helper imports in isolation with only the standard library
+so a consumer need not import a Gateway or another SDK runtime to reuse lookup.
