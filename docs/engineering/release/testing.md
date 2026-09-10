@@ -125,3 +125,11 @@ or weakened comparison. Publication is verified afterward by downloading the
 private asset through an authenticated GitHub session, checking its digest,
 installing it in a fresh Python 3.13 environment, and comparing
 `imagent.__version__` with the release version.
+
+## License notice
+
+A current wheel must report `License-Expression: MIT` and `License-File: LICENSE`
+in METADATA and contain the exact root notice at
+`im_agent_sdk-<version>.dist-info/licenses/LICENSE`. Check the archive bytes
+against the tracked file. Historical released assets are not rewritten by a
+repository license/visibility change.

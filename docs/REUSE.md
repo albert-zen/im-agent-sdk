@@ -164,8 +164,9 @@ workflow, backend composition, or development tooling. The public factory is
 `codex_app_server_client`; the IMCodex-named dynamic import was deleted.
 
 The transferred source repository and commit contained no `LICENSE` file or
-declared license. This record preserves provenance without inventing a license
-label or redistribution conclusion. Local changes are limited to the package
+declared license. That historical absence is preserved as provenance. The SDK
+code maintained here, including these transferred portions, is now provided
+under the repository's [MIT License](../LICENSE). Local changes are limited to the package
 namespace, removal of consumer observability/configuration/store/backend
 dependencies, neutral caller-provided or `.imagent` state paths, standard
 logging and explicit adapter errors, and translation only at Channel or
@@ -185,6 +186,9 @@ the transferred boundary. Product CLI, HTTP API, registry, webhook
 composition, and IMCodex configuration tests were excluded. Base imports
 remain independent of native extras, and provider/App Server extras are
 verified through clean-install construction without the consumer package.
+
+The historical source transfer does not create a runtime or release dependency
+on IMCodex; these are separately maintained projects.
 
 ## Zen and T3 proof sources
 

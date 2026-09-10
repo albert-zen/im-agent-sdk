@@ -145,3 +145,8 @@ uv build --wheel --build-constraint build-constraints.txt --require-hashes
 uv run --no-sync python scripts/smoke_clean_install.py
 python scripts/agentkit.py check
 ```
+
+## License
+
+[MIT](LICENSE). Historical code-transfer provenance and separately installed
+dependency notices are documented in [Reuse](docs/REUSE.md).
