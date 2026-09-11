@@ -47,6 +47,10 @@ from .contract import (
 if TYPE_CHECKING:
     from .adapters.appserver.client import codex_app_server_client
     from .adapters.codex import CodexApplicationAdapter
+    from .adapters.deepseek_harness import (
+        DeepSeekHarnessApplicationAdapter,
+        HttpDeepSeekHarnessClient,
+    )
     from .adapters.t3 import HttpT3Client, T3ApplicationAdapter, T3ClientError
     from .adapters.zen import ZenApplicationAdapter
     from .presentation import (
@@ -119,6 +123,8 @@ __all__ = [
     "CodexLiveActivityMethod",
     "CodexLiveActivityPresenter",
     "CodexPlanStep",
+    "DeepSeekHarnessApplicationAdapter",
+    "HttpDeepSeekHarnessClient",
     "HttpT3Client",
     "InputContinuationPreference",
     "InputDisposition",
@@ -196,6 +202,8 @@ _PRESENTATION_EXPORTS = frozenset(
 )
 _T3_EXPORTS = frozenset({"T3ApplicationAdapter"})
 _T3_CLIENT_EXPORTS = frozenset({"HttpT3Client", "T3ClientError"})
+_DSH_EXPORTS = frozenset({"DeepSeekHarnessApplicationAdapter"})
+_DSH_CLIENT_EXPORTS = frozenset({"HttpDeepSeekHarnessClient"})
 
 
 def __getattr__(name: str) -> object:
@@ -203,6 +211,8 @@ def __getattr__(name: str) -> object:
         module = import_module("imagent.applications.adapters.codex")
     elif name == "ZenApplicationAdapter":
         module = import_module("imagent.applications.adapters.zen")
+    elif name in _DSH_EXPORTS | _DSH_CLIENT_EXPORTS:
+        module = import_module("imagent.applications.adapters.deepseek_harness")
     elif name in _ARTIFACT_EXPORTS:
         module = import_module("imagent.applications.presentation")
     elif name in _PRESENTATION_EXPORTS:

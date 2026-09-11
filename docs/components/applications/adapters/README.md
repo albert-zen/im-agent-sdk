@@ -24,6 +24,7 @@ destination policy, and consumer materialization remain outside this block.
 | `applications.adapters.appserver.diagnostics` | redacted bounded connection, queue, and protocol diagnostics | [design](appserver/diagnostics/design.md) | [testing](appserver/diagnostics/testing.md) |
 | `applications.adapters.codex` | Codex native Application resources, input, events, history, and live facts | [design](codex/design.md) | [testing](codex/testing.md) |
 | `applications.adapters.zen` | Zen native Application resources, input, events, history, and evidenced requests | [design](zen/design.md) | [testing](zen/testing.md) |
+| `applications.adapters.deepseek-harness` | DeepSeek Harness Web Host workspaces/sessions, input, polling, events, and history | [design](deepseek-harness/design.md) | [testing](deepseek-harness/testing.md) |
 | `applications.adapters.t3` | T3 HTTP resources, dispatch, polling, events, and history | [design](t3/design.md) | [testing](t3/testing.md) |
 
 ## Fixed ownership and dependency order

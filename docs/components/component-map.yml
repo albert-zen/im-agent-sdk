@@ -1677,6 +1677,28 @@ components:
     adrs: [docs/decisions/0003-attachment-sources-and-trust.md, docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
 
+  applications.adapters.deepseek-harness:
+    id: applications.adapters.deepseek-harness
+    parent: applications.adapters
+    purpose: Map DeepSeek Harness Web Host workspaces/sessions/input/history/events and recover live Turn identity through native history polling.
+    owns: [DeepSeekHarnessApplicationAdapter, HttpDeepSeekHarnessClient, native workspace/session mapping, turn-start recovery]
+    does_not_own: [DSH bundled runtime or product policy, Web Host network policy, interactive request response, attachment handling]
+    inputs: [DeepSeek Harness Web Host RPC client and native resources]
+    outputs: [common Application contract behavior]
+    public_contracts: [DeepSeekHarnessApplicationAdapter, HttpDeepSeekHarnessClient]
+    public_exports:
+      current: [imagent.applications:DeepSeekHarnessApplicationAdapter, imagent.applications:HttpDeepSeekHarnessClient, imagent.applications.adapters.deepseek_harness:DeepSeekHarnessApplicationAdapter, imagent.applications.adapters.deepseek_harness:HttpDeepSeekHarnessClient]
+      target: [imagent.applications.adapters.deepseek_harness:DeepSeekHarnessApplicationAdapter, imagent.applications.adapters.deepseek_harness:HttpDeepSeekHarnessClient]
+    dependencies: [interaction.messages, interaction.operations, applications.application-contract, applications.capabilities, applications.events, applications.operations]
+    state_recovery: Stable native workspace/session/event identities recover live state; seen-event baselines and poll tasks are process-local and rebuildable, never a second transcript.
+    current_code: [src/imagent/applications/adapters/deepseek_harness.py]
+    target_code: [src/imagent/applications/adapters/deepseek_harness.py]
+    current_tests: [tests/applications/adapters/test_deepseek_harness.py]
+    target_tests: [tests/applications/adapters/test_deepseek_harness.py]
+    authoritative_docs: [docs/components/applications/adapters/deepseek-harness/design.md, docs/components/applications/adapters/deepseek-harness/testing.md]
+    adrs: [docs/decisions/0004-event-fanout-and-recovery.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0015-typed-extension-seams-and-composition.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
+    gaps: []
+
   engineering.reference-consumer:
     id: engineering.reference-consumer
     parent: engineering
