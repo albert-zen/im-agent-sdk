@@ -40,8 +40,11 @@ continuation returns `started`; it does not imitate another protocol.
 An adapter may report an ordinary failure only while it knows native input was
 not dispatched. After dispatch, an absent acceptance response is an
 `ApplicationInputOutcomeUnknown` unless the native API proves retries
-idempotent. This is transport outcome classification, not bridge-owned Turn
-truth.
+idempotent. A definitive App Server negative response may be typed as not
+accepted only for a method/code pair whose native implementation rejects
+before appending input; an arbitrary `AppServerError`, transport failure, or
+unrelated `zenCode` never qualifies. This is transport outcome classification,
+not bridge-owned Turn truth.
 
 The common continuation preference is an SDK input rule; the native mechanism
 remains adapter-specific. Codex `turn/steer` is an optional native capability

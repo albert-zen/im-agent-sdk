@@ -13,6 +13,7 @@ from imagent.bindings import InMemoryBindingRepository
 from imagent.contracts import (
     AcceptedTurn,
     ApplicationInputOutcomeUnknown,
+    ApplicationInputRejected,
     AttachmentContent,
     Content,
     ConversationRef,
@@ -159,6 +160,35 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self._reclaim(repository, claimed), IdempotencyClaimStatus.IN_FLIGHT)
         self.assertEqual(deliveries[0].content, (TextContent("bounded outcome_unknown"),))
         self._assert_stable_delivery(claimed.message, deliveries[0])
+
+    async def test_proven_negative_response_after_fence_is_terminal_and_deduplicated(self) -> None:
+        for reason, phase in (
+            ("turn_ended", InboundFailurePhase.TURN_ENDED),
+            ("thread_busy", InboundFailurePhase.THREAD_BUSY),
+        ):
+            with self.subTest(reason=reason):
+                repository, claimed = await self._claim(f"rejected-{reason}")
+                presenter = _RecordingPresenter()
+                deliveries: list[OutboundMessage] = []
+
+                async def process(before_application_send) -> None:
+                    await before_application_send()
+                    raise ApplicationInputRejected(reason)
+
+                await handle_claimed_inbound(
+                    claimed,
+                    process=process,
+                    idempotency=repository,
+                    presentation=self._runtime(presenter),
+                    deliver=self._deliveries(deliveries),
+                )
+                self.assertEqual([facts.phase for facts in presenter.presented], [phase])
+                self.assertEqual(len(deliveries), 1)
+                self._assert_stable_delivery(claimed.message, deliveries[0])
+                self.assertEqual(
+                    await self._reclaim(repository, claimed),
+                    IdempotencyClaimStatus.ALREADY_COMPLETED,
+                )
 
     async def test_untyped_failure_after_dispatch_fence_is_outcome_unknown(self) -> None:
         repository, claimed = await self._claim("untyped-after-dispatch")

@@ -7,7 +7,7 @@ import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
-from ...contracts import ApplicationInputOutcomeUnknown
+from ...contracts import ApplicationInputOutcomeUnknown, ApplicationInputRejected
 from ...diagnostics import (
     ConnectionDiagnosticFacts,
     QueueDiagnosticName,
@@ -987,7 +987,23 @@ class AppServerClient:
                 await self._sleep_for_retry(delay_s)
                 attempt += 1
                 continue
-            raise self._error_from_response(method, error)
+            native_error = self._error_from_response(method, error)
+            # Only a received negative response for a proven pre-append Zen
+            # input path can overrule the earlier conservative dispatch fence.
+            rejection_reason = None
+            if outcome_unknown_on_dispatch and native_error.code == -32000:
+                zen_code = (
+                    native_error.data.get("zenCode")
+                    if isinstance(native_error.data, dict)
+                    else None
+                )
+                if (method, zen_code) == ("turn/steer", "turn_not_running"):
+                    rejection_reason = "turn_ended"
+                elif (method, zen_code) == ("turn/start", "thread_busy"):
+                    rejection_reason = "thread_busy"
+            if rejection_reason is not None:
+                raise ApplicationInputRejected(rejection_reason) from native_error
+            raise native_error
 
     async def _request_once_without_initialize(
         self,

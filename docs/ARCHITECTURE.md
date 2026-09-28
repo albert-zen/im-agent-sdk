@@ -119,6 +119,10 @@ I1 runs only after that lease is refreshed and the optional Controller has
 declined the input. Its result is process-local and is never persisted: a
 confirmed pre-dispatch release or restart may invoke it again for the same
 stable inbound identity, so consumer implementations must be replay-safe.
+A typed proven-negative input response identifies only an allowlisted native
+mutation error that the App Server proves occurs before appending input; it
+completes the inbound claim even after the dispatch fence and never authorizes
+automatic resend.
 With I2 configured, a known pre-acceptance failure is completed before stable
 error presentation. An unknown dispatch outcome stays `side_effect_started`
 and a post-acceptance failure stays terminal. Presenter or Channel failure

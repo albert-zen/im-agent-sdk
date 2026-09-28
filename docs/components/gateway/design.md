@@ -14,6 +14,7 @@ The Gateway owns:
 - executing typed Gateway operations atomically per Conversation;
 - routing typed Application operations without reinterpreting them;
 - inbound idempotency and outbound delivery correlation;
+- a proven-native-input-rejection boundary: complete its inbound claim and present a bounded reason without exposing the native exception or resending input;
 - scoped proactive text/artifact delivery and immutable route snapshots;
 - establishing Thread observation before input delivery;
 - composing the projection runtime with Application execution and Channel

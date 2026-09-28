@@ -24,6 +24,7 @@
 - configured I2 completes a fenced `pre_acceptance` claim before presentation,
   while absent I2 releases and re-raises; original cancellation also releases
   without presentation;
+- a proven pre-append native rejection after the dispatch fence completes and deduplicates the inbound claim, while all untyped/transport failures retain the unknown fence;
 - `outcome_unknown` remains `side_effect_started` and `post_acceptance` remains
   terminal across presenter validation/failure/timeout/cancellation, Channel
   failure, duplicate delivery, and restart;

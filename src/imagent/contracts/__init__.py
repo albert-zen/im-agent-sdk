@@ -33,6 +33,9 @@ from .errors import (
     ApplicationInputOutcomeUnknown as ApplicationInputOutcomeUnknown,
 )
 from .errors import (
+    ApplicationInputRejected as ApplicationInputRejected,
+)
+from .errors import (
     OperationErrorCode,
     RequestDuplicateError,
     RequestResolvedError,

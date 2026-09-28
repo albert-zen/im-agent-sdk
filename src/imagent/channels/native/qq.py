@@ -418,6 +418,7 @@ class QQChannelAdapter(BaseChannelAdapter):
                     part_index=index,
                 ),
                 reply_to=chunk_reply_to,
+                markdown_enabled=(self.markdown_enabled and message.message_type == "markdown"),
             )
             try:
                 await self._post_message(path=path, token=token, body=body)

@@ -313,6 +313,46 @@ class QQChannelTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, r"HTTP\(S\) URL"):
             self._adapter(api_base="ftp://api.sgroup.qq.com").validate_startup_configuration()
 
+    async def test_explicit_plain_is_not_markdown_even_with_global_markdown_on(self) -> None:
+        class CapturingQQ(QQChannelAdapter):
+            def __init__(self, enabled: bool) -> None:
+                super().__init__(
+                    enabled=True,
+                    app_id="app",
+                    client_secret="secret",
+                    middleware=object(),
+                    http_client=cast(Any, object()),
+                    markdown_enabled=enabled,
+                )
+                self.bodies: list[dict[str, Any]] = []
+
+            async def _get_access_token(self) -> str:
+                return "synthetic-token"
+
+            async def _post_message(self, *, path: str, token: str, body: dict[str, Any]) -> None:
+                self.bodies.append(body)
+
+        for enabled in (True, False):
+            adapter = CapturingQQ(enabled)
+            for message_type in ("text", "markdown"):
+                message = OutboundMessage(
+                    channel_id="qq",
+                    conversation_id="c2c:synthetic",
+                    message_type=message_type,
+                    text="**synthetic**",
+                    metadata={"delivery_id": f"synthetic-{enabled}-{message_type}"},
+                )
+                await adapter.send_message(message)
+            plain, agent_markdown = adapter.bodies
+            self.assertEqual(plain["msg_type"], 0)
+            self.assertEqual(plain["content"], "**synthetic**")
+            self.assertNotIn("markdown", plain)
+            self.assertEqual(agent_markdown["msg_type"], 2 if enabled else 0)
+            if enabled:
+                self.assertEqual(agent_markdown["markdown"]["content"], "**synthetic**")
+            else:
+                self.assertEqual(agent_markdown["content"], "**synthetic**")
+
     async def test_long_outbound_text_is_segmented_in_order_with_stable_ids(self) -> None:
         class CapturingQQ(QQChannelAdapter):
             def __init__(self) -> None:

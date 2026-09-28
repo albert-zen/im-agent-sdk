@@ -12,6 +12,7 @@ from imagent.applications.appserver_client import AppServerError
 from imagent.contracts import (
     AgentInput,
     ApplicationInputOutcomeUnknown,
+    ApplicationInputRejected,
     AttachmentContent,
     CreateThread,
     InputContinuationPreference,
@@ -137,6 +138,18 @@ class _StaleSteerClient(_InputClient):
     ) -> dict[str, object]:
         self.steered.append({"thread_id": thread_id, "turn_id": turn_id, "text": text, **kwargs})
         raise self.steer_error
+
+
+class _ProvenStaleSteerClient(_InputClient):
+    async def steer_turn(
+        self,
+        thread_id: str,
+        turn_id: str,
+        text: str | None = None,
+        **kwargs,
+    ) -> dict[str, object]:
+        self.steered.append({"thread_id": thread_id, "turn_id": turn_id, "text": text, **kwargs})
+        raise ApplicationInputRejected("turn_ended")
 
 
 class _ReplacedTurnClient(_InputClient):
@@ -536,6 +549,31 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
             client.read_calls,
             [("thread-1", True)],
         )
+        self.assertEqual(len(client.steered), 1)
+        self.assertEqual(client.started, [])
+
+    async def test_proven_stale_steer_does_not_fallback_to_start(self) -> None:
+        client = _ProvenStaleSteerClient(active_turn_id="turn-stale")
+        adapter = CodexApplicationAdapter(
+            application_instance_id="codex-main",
+            client=client,
+            cwd="/repo",
+            steer_active_turn=True,
+        )
+        dispatches = []
+
+        async def before_dispatch(plan):
+            dispatches.append(plan)
+
+        with self.assertRaises(ApplicationInputRejected) as rejected:
+            await adapter.send_input(
+                ThreadRef("codex-main", "thread-1"),
+                AgentInput(client_message_id="raced-input", content=(TextContent("continue"),)),
+                before_dispatch=before_dispatch,
+            )
+        self.assertEqual(rejected.exception.reason, "turn_ended")
+        self.assertEqual(len(dispatches), 1)
+        self.assertEqual(dispatches[0].expected_turn_id, "turn-stale")
         self.assertEqual(len(client.steered), 1)
         self.assertEqual(client.started, [])
 

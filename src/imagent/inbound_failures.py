@@ -11,6 +11,7 @@ from typing import Protocol
 from .adapters import IdempotencyRepository
 from .contracts import (
     ApplicationInputOutcomeUnknown,
+    ApplicationInputRejected,
     ConversationRef,
     InboundMessage,
     OutboundMessage,
@@ -28,6 +29,8 @@ from .projection_runtime import InputPostAcceptanceError
 class InboundFailurePhase(StrEnum):
     PRE_ACCEPTANCE = "pre_acceptance"
     OUTCOME_UNKNOWN = "outcome_unknown"
+    TURN_ENDED = "turn_ended"
+    THREAD_BUSY = "thread_busy"
     POST_ACCEPTANCE = "post_acceptance"
 
 
@@ -248,6 +251,26 @@ async def handle_claimed_inbound(
         await _present_failure(
             claimed.message,
             InboundFailurePhase.POST_ACCEPTANCE,
+            presentation,
+            deliver,
+        )
+    except ApplicationInputRejected as error:
+        # The App Server returned a trusted, method-specific pre-append rejection.
+        # The dispatch fence cannot infer this from an arbitrary exception.
+        await idempotency.complete(
+            claimed.scope,
+            claimed.key,
+            owner_token=claimed.owner_token,
+        )
+        if presentation is None:
+            raise
+        await _present_failure(
+            claimed.message,
+            (
+                InboundFailurePhase.TURN_ENDED
+                if error.reason == "turn_ended"
+                else InboundFailurePhase.THREAD_BUSY
+            ),
             presentation,
             deliver,
         )

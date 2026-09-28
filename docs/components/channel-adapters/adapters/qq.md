@@ -53,3 +53,5 @@ Changes to `native/qq.py` or `native/qq_media.py` require
 the adapter contract suite. Quote changes additionally require direct/group,
 missing, malformed, oversized, nested-payload, anti-forgery, and Gateway
 vertical-slice coverage.
+
+An explicit plain-text outbound message uses QQ text even when the global Markdown capability is enabled; Markdown messages retain the configured Markdown/fallback behavior.

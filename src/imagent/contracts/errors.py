@@ -29,6 +29,16 @@ class RequestStaleError(RuntimeError):
     pass
 
 
+class ApplicationInputRejected(RuntimeError):
+    """Native input was definitively rejected before its canonical append."""
+
+    def __init__(self, reason: str) -> None:
+        if reason not in {"turn_ended", "thread_busy"}:
+            raise ValueError("unknown proven input rejection reason")
+        super().__init__(reason)
+        self.reason = reason
+
+
 class ApplicationInputOutcomeUnknown(RuntimeError):
     """Native input dispatch may have succeeded, so automatic retry is unsafe."""
 
