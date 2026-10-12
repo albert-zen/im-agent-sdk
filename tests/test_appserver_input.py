@@ -5,7 +5,7 @@ import unittest
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from imagent.applications import CodexApplicationAdapter, ZenApplicationAdapter
 from imagent.applications.appserver_client import AppServerError
@@ -666,15 +666,94 @@ class AppServerApplicationInputTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(client.started), 1)
         self.assertEqual(client.steered, [])
 
-    async def test_zen_does_not_expose_codex_active_turn_policy(self) -> None:
-        zen_factory = cast(Any, ZenApplicationAdapter)
-        with self.assertRaisesRegex(TypeError, "steer_active_turn"):
-            zen_factory(
+    async def test_active_zen_turn_is_steered_before_starting_another_turn(self) -> None:
+        client = _InputClient(active_turn_id="turn-active")
+        adapter = ZenApplicationAdapter(
+            application_instance_id="zen-main",
+            client=client,
+            cwd="/repo",
+        )
+
+        accepted = await adapter.send_input(
+            ThreadRef("zen-main", "thread-1"),
+            AgentInput(
+                client_message_id="message-followup",
+                content=(TextContent("continue"),),
+            ),
+        )
+
+        self.assertEqual(client.read_calls, [("thread-1", True)])
+        self.assertEqual(
+            client.steered,
+            [
+                {
+                    "thread_id": "thread-1",
+                    "turn_id": "turn-active",
+                    "text": "continue",
+                }
+            ],
+        )
+        self.assertEqual(client.started, [])
+        self.assertEqual(accepted.turn_id, "turn-active")
+        self.assertEqual(accepted.client_message_id, "message-followup")
+        self.assertIs(accepted.disposition, InputDisposition.STEERED)
+        self.assertIs(
+            accepted.correlation_policy,
+            TurnReplyCorrelationPolicy.PRESERVE_EXISTING,
+        )
+
+    async def test_zen_active_turn_steering_can_be_disabled_by_deployment(self) -> None:
+        client = _InputClient(active_turn_id="turn-active")
+        adapter = ZenApplicationAdapter(
+            application_instance_id="zen-main",
+            client=client,
+            cwd="/repo",
+            steer_active_turn=False,
+        )
+
+        await adapter.send_input(
+            ThreadRef("zen-main", "thread-1"),
+            AgentInput(
+                client_message_id="message-default-start",
+                content=(TextContent("continue"),),
+            ),
+        )
+
+        self.assertEqual(client.read_calls, [])
+        self.assertEqual(client.steered, [])
+        self.assertEqual(len(client.started), 1)
+
+    async def test_zen_local_image_steer_uses_verified_connection_epoch(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "image.png")
+            path.write_bytes(b"png")
+            client = _InputClient(active_turn_id="turn-active", local_image_epoch=23)
+            adapter = ZenApplicationAdapter(
                 application_instance_id="zen-main",
-                client=_InputClient(active_turn_id="turn-active"),
-                cwd="/repo",
-                steer_active_turn=True,
+                client=client,
+                cwd=directory,
+                shared_filesystem_root=directory,
             )
+
+            accepted = await adapter.send_input(
+                ThreadRef("zen-main", "thread-1"),
+                AgentInput(
+                    client_message_id="message-zen-steered-image",
+                    content=(
+                        AttachmentContent(
+                            attachment_id="image-1",
+                            media_type="image/png",
+                            source=LocalPath(str(path)),
+                            filename="image.png",
+                            size_bytes=3,
+                        ),
+                    ),
+                ),
+            )
+
+        self.assertEqual(client.started, [])
+        self.assertEqual(client.steered[0]["expected_local_image_epoch"], 23)
+        self.assertEqual(accepted.turn_id, "turn-active")
 
     async def test_generic_file_is_explicitly_unsupported_without_consumer_encoding(
         self,

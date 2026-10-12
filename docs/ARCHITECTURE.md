@@ -262,9 +262,8 @@ contains no transcript or Turn truth.
   Application acceptance and execution ordering remains authoritative.
 - The default input preference is to continue an active Turn. Every
   Application adapter reports whether the native result was actually
-  `started` or `steered`; Codex may use native steer, while T3 and Zen
-  currently start because their evidenced protocols do not provide that
-  mutation.
+  `started` or `steered`; Codex and Zen use native steer, while T3 currently
+  starts because its evidenced protocol does not provide that mutation.
 - native event publication fans out without awaiting Channel delivery.
 - independent subscriber queues prevent observers from stealing events.
 - Gateway stores durable routes and uses delivery idempotency.

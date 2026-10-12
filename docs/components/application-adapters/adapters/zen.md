@@ -27,10 +27,14 @@ history, and retention.
   Gateway; the preset remains client selection/configuration, not Zen or SDK
   runtime state.
 
-Zen accepts the SDK's default continuation preference but truthfully returns
-`started/create_new`. Codex active-Turn steering is not inferred for Zen from a
-shared transport; Zen remains start-only until its own native behavior proves
-an equivalent native policy.
+Zen accepts the SDK's default continuation preference and continues an active
+Turn through the native `turn/steer` mutation, returning the truthful
+`steered/preserve_existing` or `started/create_new` disposition. The Zen App
+Server natively implements `turn/steer` with expected-Turn validation and
+`turn_not_running` rejection, and its `thread/read` exposes running Turns with
+identities; that evidenced native policy is what enables steering here, not the
+shared transport alone. Deployments may opt out with
+`steer_active_turn=False`, restoring start-only behavior.
 
 ## Recovery guarantees
 

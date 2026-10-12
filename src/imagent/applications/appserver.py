@@ -1268,6 +1268,7 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
         cwd: str,
         shared_filesystem_root: str | Path | None = None,
         event_buffer_max_pending: int = 1024,
+        steer_active_turn: bool = True,
         thread_start_options: Mapping[str, object] | None = None,
         artifact_materializer: AppServerArtifactMaterializer | None = None,
         artifact_materialization_limits: AppServerArtifactMaterializationLimits = (
@@ -1283,6 +1284,7 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
             shared_filesystem_root=shared_filesystem_root,
             server_request_mapper=map_zen_appserver_request,
             event_buffer_max_pending=event_buffer_max_pending,
+            steer_active_turn=steer_active_turn,
             thread_start_options=thread_start_options,
             artifact_materializer=artifact_materializer,
             artifact_materialization_limits=artifact_materialization_limits,
