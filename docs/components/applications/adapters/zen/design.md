@@ -131,3 +131,61 @@ Profile definitions are complete per-call options rather than merged mutable
 defaults. They are copied, limited to 32 profiles/128-character IDs/64 KiB of
 canonical JSON per profile, and reject non-JSON/NaN/reserved workspace overrides.
 The selected profile does not mutate an existing Thread.
+
+## Staged native queued-input contract
+
+The Zen-owned `zen_queue.py` translates strict native admission and bounded
+canonical Items into `QueuedInputReceipt`. `read_queued_input_receipt` validates
+workspace/Thread and scans at most 10,000 items from the full `zen/thread/read`
+snapshot; it never resends, calls Resume, or fabricates a past queue failure.
+Host/Agent items cannot prove human input even when client IDs collide. Conflicting
+lineage, terminal state, delivery mode, scope or a truncated/oversized response
+fails closed. The real original `user_message.turnId` is execution authority.
+
+Direct adapter queue input negotiates `zen/initialize.capabilities` each attempt,
+requires `queued-input-admission-v1` and image-specific `inline-image-input-v1`,
+and fences the resulting connection epoch across the pre-dispatch callback.
+Rooted input preparation is reused; canonical data-URI bytes become explicit
+wire-only `image_bytes` fields with no path transfer. The fingerprint binds the
+ordered canonical prepared envelope (including the exact encoded acquired bytes).
+Native `queue_zen_input` has no automatic retry, including overload responses.
+A missing/conflicting successful receipt is unknown. Until native negative codes
+are independently proved, response errors remain conservative unknown.
+
+The minimum native protocol in [ADR 0019](../../../../decisions/0019-queued-input-admission.md)
+is agreed but is not implemented on the verified old Host. Its capability gate
+therefore rejects before mutation. This slice has protocol-fixture positive
+tests and real-Host negative/recovery tests only; it does not claim a usable
+Gateway queue feature or complete native image queue acceptance.
+
+### Recoverable input fingerprint
+
+The receipt carries the original admitted payload fingerprint, not content.
+Hash domain is UTF-8 `imagent:zen-queued-input:v1` followed by one NUL byte, then
+UTF-8 canonical JSON (sorted object keys, no extra separators/whitespace, no
+Unicode normalization) of the ordered typed-part array. Text parts preserve
+exact text and boundaries. Image parts normalize to `type=image`, lowercase
+actual byte `sha256`, exact closed `mediaType` and integer `byteLength`.
+Acquired inline bytes and canonical AttachmentRef therefore yield the same
+digest; path, base64 spelling and derived dimensions are excluded. Changed
+order, text boundary, bytes, MIME or length changes identity. Recovery always
+hashes the original `user_message_queued.input`, even after an edit or admission
+whose execution content differs. The future Gateway receipt owner compares
+this evidence with its original pre-dispatch fingerprint; it does not reopen
+input or create a new receipt when the native queue is edited.
+
+The staged `read_queued_input_receipt` uses the read-only native
+`zen/thread/read` boundary through the existing client connection. It does not
+call Codex `thread/resume`, create a subscription, or activate/drain the queue.
+The later live recovery owner must coordinate native `zen/thread/resume`'s
+subscription snapshot barrier with same-Thread public resume ownership and
+connection shutdown. It must not bypass the consumer's non-reentrant resume
+serialization or infer that the Codex and native barriers are interchangeable.
+
+Core verification: native `zen/thread/resume` owns a per-Thread non-reentrant
+NativeConnection barrier, subscribes/buffers first, then builds a
+Core.readThread + watermark/tail recovery snapshot. Native `zen/thread/read`
+is only a Core snapshot and does not occupy that barrier. Neither is a shared
+Core-wide lock with Codex `thread/resume`. Future recovery must use existing
+client lifecycle ownership, prohibit concurrent second native resume, and
+never present a bare read as an installed live subscription.

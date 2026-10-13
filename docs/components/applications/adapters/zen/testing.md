@@ -80,3 +80,29 @@ both concrete Zen and Codex adapters: configuration snapshot, concurrent
 Conversation selection, default preservation, same-action replay, changed-profile
 conflict, explicit unsupported selection, Python/schema bounds, and same-ID
 changed-configuration conflict after SQLite restart without duplicate creation.
+
+## Queued admission thin slice
+
+`tests/applications/adapters/test_zen_queue.py` proves capability absence,
+connection-epoch fencing, strict protocol-fixture receipt decoding, no overload
+retry/fallback start, and bounded human-only canonical recovery.
+`tests/integration/test_zen_queue_native_interop.py` uses the same authenticated
+real-native fixture, synthetic model/channel and fresh SQLite as the steering
+interop suite. On an older Host, it proves capability rejection before its
+pre-dispatch callback and unchanged Items, then seeds a native human queue to
+verify pending/original-Turn recovery with a fresh client. This native seed is
+not the ordinary Gateway queue path. The complete positive Gateway/image/
+restart/cancel/approval matrix remains blocked on independent native delivery
+and coherent Gateway queue admission persistence.
+
+The later Gateway integration must include same-Thread concurrent native read,
+Codex/public resume, native subscription recovery, stop and process restart.
+The staged read-only adapter test is not evidence that those lifecycle owners
+already share a barrier. Rooted-byte tests verify missing image capability
+before file access and that post-fence file replacement cannot change the sent
+bytes, text boundaries/order or admission digest.
+
+The actual client/scripted transport boundary must return typed unknown for
+null, array, string, number and empty-object successful queue replies, with
+exactly one native send in every case; a valid receipt remains accepted. An
+invalid alternate client result must receive the same adapter classification.

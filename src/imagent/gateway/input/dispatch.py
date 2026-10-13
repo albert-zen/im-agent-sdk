@@ -14,7 +14,9 @@ from ...applications.contract import (
     AcceptedTurn,
     AgentApplicationAdapter,
     AgentInput,
+    ApplicationInputAcceptance,
     ApplicationInputDispatch,
+    ApplicationInputPlan,
     InputContinuationPreference,
     ThreadRef,
 )
@@ -159,11 +161,8 @@ class InputDispatchCorrelator(Protocol):
 class InputPostAcceptanceError(RuntimeError):
     """Bridge post-processing failed after the Application accepted input."""
 
-    def __init__(self, accepted_turn: AcceptedTurn, cause: BaseException) -> None:
-        super().__init__(
-            "Agent input was accepted before bridge post-processing failed: "
-            f"{accepted_turn.turn_ref.turn_id}"
-        )
+    def __init__(self, accepted_turn: ApplicationInputAcceptance, cause: BaseException) -> None:
+        super().__init__("Agent input was accepted before bridge post-processing failed")
         self.accepted_turn = accepted_turn
         self.cause = cause
 
@@ -354,8 +353,10 @@ class InputDispatchRuntime:
         authorized_dispatch: ApplicationInputDispatch | None = None
         primary_error: BaseException | None = None
 
-        async def authorize_dispatch(dispatch: ApplicationInputDispatch) -> None:
+        async def authorize_dispatch(dispatch: ApplicationInputPlan) -> None:
             nonlocal authorized_dispatch
+            if not isinstance(dispatch, ApplicationInputDispatch):
+                raise InputDispatchRejected("ordinary Gateway queue admission is not enabled")
             if authorized_dispatch is not None:
                 raise InputDispatchRejected("Application input dispatch was declared twice")
             try:
@@ -371,12 +372,17 @@ class InputDispatchRuntime:
                 await before_application_send()
 
         try:
-            accepted = await application.send_input(
+            acceptance = await application.send_input(
                 thread_ref,
                 agent_input,
                 continuation=InputContinuationPreference.PREFER_ACTIVE_TURN,
                 before_dispatch=authorize_dispatch,
             )
+            if not isinstance(acceptance, AcceptedTurn):
+                raise InputPostAcceptanceError(
+                    acceptance, RuntimeError("unexpected queued acceptance")
+                )
+            accepted = acceptance
             if authorized_dispatch is None:
                 raise RuntimeError("Application accepted input without declaring dispatch")
             await self._correlator.correlate_accepted_turn(

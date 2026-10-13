@@ -13,9 +13,11 @@ from imagent.applications.capabilities import (
     validate_application_capabilities,
 )
 from imagent.applications.contract import (
+    AcceptedTurn,
     AgentApplicationAdapter,
     AgentInput,
     ApplicationInputDispatch,
+    ApplicationInputPlan,
     InputContinuationPreference,
     InputDisposition,
     TurnReplyCorrelationPolicy,
@@ -294,7 +296,9 @@ async def verify_application_adapter(
     second_events = adapter.subscribe_thread(created.ref)
     dispatches: list[ApplicationInputDispatch] = []
 
-    async def record_dispatch(dispatch: ApplicationInputDispatch) -> None:
+    async def record_dispatch(dispatch: ApplicationInputPlan) -> None:
+        if not isinstance(dispatch, ApplicationInputDispatch):
+            raise AssertionError("default continuation returned a queued dispatch")
         dispatches.append(dispatch)
 
     accepted = await adapter.send_input(
@@ -306,6 +310,8 @@ async def verify_application_adapter(
         continuation=InputContinuationPreference.PREFER_ACTIVE_TURN,
         before_dispatch=record_dispatch,
     )
+    if not isinstance(accepted, AcceptedTurn):
+        raise AssertionError("default continuation returned a queued receipt")
     if accepted.turn_ref.thread_ref != created.ref:
         raise AssertionError("accepted turn belongs to a different thread")
     if accepted.client_message_id != client_message_id:

@@ -15,6 +15,7 @@ from unittest.mock import patch
 from imagent.applications import ZenApplicationAdapter
 from imagent.applications.adapters.zen import ZenApplicationAdapter as ZenApplicationAdapterOwner
 from imagent.applications.contract import (
+    AcceptedTurn,
     AgentInput,
     ApplicationInputDispatch,
     InputContinuationPreference,
@@ -238,6 +239,7 @@ class ZenApplicationAdapterTests(unittest.IsolatedAsyncioTestCase):
                 AgentInput(client_message_id="explicit-start", content=(TextContent("begin"),)),
                 continuation=preference,
             )
+            assert isinstance(accepted, AcceptedTurn)
             self.assertIs(accepted.disposition, InputDisposition.STARTED)
             self.assertEqual(client.read_calls, [("thread-1", False)])
             self.assertEqual(client.steered, [])

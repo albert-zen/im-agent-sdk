@@ -644,6 +644,52 @@ class AppServerClient:
             outcome_unknown_on_dispatch=True,
         )
 
+    async def queue_zen_input(
+        self,
+        thread_id: str,
+        client_message_id: str,
+        *,
+        input_items: list[JsonDict],
+        expected_connection_epoch: int,
+    ) -> JsonDict:
+        """Dispatch one negotiated native queue input, without automatic retries."""
+
+        await self._ensure_ready()
+        if self.connection_epoch != expected_connection_epoch:
+            raise AppServerError("native queue capability epoch changed before dispatch")
+        method = "zen/turn/send"
+        response, _position = await self._request_once_without_initialize(
+            method,
+            {
+                "threadId": thread_id,
+                "mode": "queue",
+                "clientUserMessageId": client_message_id,
+                "input": input_items,
+            },
+            outcome_unknown_on_dispatch=True,
+        )
+        if "error" not in response:
+            try:
+                result = response["result"]
+                if not isinstance(result, dict):
+                    raise TypeError("native queue acknowledgement must be an object")
+                normalized = self._normalize_result(method, result)
+                if not isinstance(normalized, dict):
+                    raise TypeError("native queue acknowledgement must be an object")
+                return normalized
+            except (KeyError, TypeError, ValueError) as cause:
+                raise ApplicationInputOutcomeUnknown(
+                    "native queue received an invalid successful response",
+                    cause,
+                ) from cause
+        if not self._valid_error_response(response):
+            cause = AppServerError("native queue received an invalid error response")
+        else:
+            cause = self._error_from_response(method, response["error"])
+        # Native negative-code classification is intentionally not inferred from
+        # error text. The full native protocol slice will prove its allowlist.
+        raise ApplicationInputOutcomeUnknown("native queued input outcome is unknown", cause)
+
     @staticmethod
     def _resolve_turn_input(
         *,

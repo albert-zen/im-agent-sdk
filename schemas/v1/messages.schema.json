@@ -156,7 +156,7 @@
       "additionalProperties": false
     },
     "InputContinuationPreference": {
-      "enum": ["prefer_active_turn", "start_new_turn"]
+      "enum": ["prefer_active_turn", "start_new_turn", "queue"]
     },
     "InputDisposition": {
       "enum": ["started", "steered"]
@@ -299,6 +299,121 @@
         "metadata": { "$ref": "common.schema.json#/$defs/Metadata" }
       },
       "additionalProperties": false
+    },
+    "QueuedInputState": {
+      "enum": [
+        "queued",
+        "admitted",
+        "cancelled"
+      ]
+    },
+    "QueuedInputDispatch": {
+      "type": "object",
+      "required": [
+        "threadRef",
+        "clientMessageId",
+        "inputFingerprint"
+      ],
+      "properties": {
+        "threadRef": {
+          "$ref": "resources.schema.json#/$defs/ThreadRef"
+        },
+        "clientMessageId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "inputFingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "QueuedInputReceipt": {
+      "type": "object",
+      "required": [
+        "threadRef",
+        "clientMessageId",
+        "queuedItemId",
+        "state",
+        "inputFingerprint"
+      ],
+      "properties": {
+        "inputFingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "threadRef": {
+          "$ref": "resources.schema.json#/$defs/ThreadRef"
+        },
+        "clientMessageId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "queuedItemId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "state": {
+          "$ref": "#/$defs/QueuedInputState"
+        },
+        "turnRef": {
+          "oneOf": [
+            {
+              "$ref": "resources.schema.json#/$defs/TurnRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "admitted"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "required": [
+              "turnRef"
+            ],
+            "properties": {
+              "turnRef": {
+                "$ref": "resources.schema.json#/$defs/TurnRef"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "turnRef": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "ApplicationInputPlan": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ApplicationInputDispatch"
+        },
+        {
+          "$ref": "#/$defs/QueuedInputDispatch"
+        }
+      ]
+    },
+    "ApplicationInputAcceptance": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/AcceptedTurn"
+        },
+        {
+          "$ref": "#/$defs/QueuedInputReceipt"
+        }
+      ]
     }
   }
 }

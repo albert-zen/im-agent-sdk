@@ -529,6 +529,8 @@ class FakeAgentApplicationAdapter:
         ),
         before_dispatch: ApplicationInputDispatchHandler | None = None,
     ) -> AcceptedTurn:
+        if continuation is InputContinuationPreference.QUEUE:
+            raise NotImplementedError("reference Application does not support queued input")
         if not isinstance(continuation, InputContinuationPreference):
             raise ValueError("unknown input continuation preference")
         if before_dispatch is not None:

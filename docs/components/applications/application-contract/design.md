@@ -114,3 +114,25 @@ canonical input append. Generic exceptions, message-text matches, connection
 loss, and mismatched native codes remain unknown after dispatch. Gateway
 completes this rejected claim even without an I2 presenter; the original
 message is never replayed automatically and a user retry is a new message.
+
+## Optional queued input admission
+
+`InputContinuationPreference.QUEUE` explicitly requests a native queue and must
+never fall through to start or steer. `ApplicationInputPlan` is the union of the
+unchanged `ApplicationInputDispatch` and `QueuedInputDispatch`; the latter binds
+the prepared payload fingerprint before native mutation. `ApplicationInputAcceptance`
+unites unchanged `AcceptedTurn` with `QueuedInputReceipt`. Only an admitted queue
+receipt has a real same-Thread Turn. Queued/cancelled receipts require canonical
+queued item identity and forbid a placeholder Turn. The separate optional
+`QueuedInputRecovery` Port reads canonical positive receipts or absence; absence
+cannot authorize a second native call. These types/validators have exact aliases
+in the Applications facade and schemas. See [ADR 0019](../../../decisions/0019-queued-input-admission.md).
+
+This adapter-contract slice does not enable the ordinary Gateway queue route.
+That still requires coherent admission/correlation persistence and scoped
+consumer read/cancel operations. Default input remains prefer-active-turn.
+Concrete Zen call overloads preserve `AcceptedTurn` for the default or explicit
+start-new preference and expose `QueuedInputReceipt` for literal queue. Generic
+adapter callers use the declared plan/acceptance unions and narrow before
+applying Turn-only semantics. Unsupported Codex/T3 queue input remains a
+pre-dispatch rejection with their existing real-Turn callback contract.

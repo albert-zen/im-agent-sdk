@@ -5,7 +5,7 @@ import inspect
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Any, Literal, Protocol, cast, overload
 
 from ...interaction.media import (
     AttachmentContent,
@@ -17,21 +17,27 @@ from ...interaction.messages import TextContent
 from ..contract import (
     AcceptedTurn,
     AgentInput,
+    ApplicationInputAcceptance,
     ApplicationInputDispatch,
     ApplicationInputOutcomeUnknown,
+    ApplicationInputPlanHandler,
     InputContinuationPreference,
     InputDisposition,
+    QueuedInputDispatch,
+    QueuedInputReceipt,
     ThreadRef,
     ThreadStatus,
     TurnRef,
     TurnReplyCorrelationPolicy,
     TurnStatus,
+    validate_queued_input_dispatch,
 )
 from ..presentation.artifact_materialization import (
     AppServerArtifactMaterializationLimits,
     AppServerArtifactMaterializer,
 )
 from .appserver._base import AppServerClient, _AppServerApplicationAdapter, _PreparedAppServerInput
+from .appserver.client.handoff import AppServerResponse
 from .appserver.mapping import (
     AppServerMappingError as _AppServerMappingError,
 )
@@ -48,6 +54,14 @@ from .appserver.mapping import (
     turn_status as _turn_status,
 )
 from .appserver.requests import map_zen_appserver_request
+from .zen_queue import (
+    _INLINE_IMAGE_CAPABILITY,
+    _QUEUE_CAPABILITY,
+    _native_input_capabilities,
+    _queued_admission_receipt,
+    _queued_input_fingerprint,
+    _queued_receipt_from_items,
+)
 
 __all__ = ["ZenApplicationAdapter"]
 
@@ -65,6 +79,25 @@ class _ZenSteerClient(Protocol):
         text: str | None = None,
         **kwargs: object,
     ) -> Awaitable[Mapping[str, object]] | Mapping[str, object]: ...
+
+
+class _ZenQueueClient(Protocol):
+    async def call(self, method: str, params: dict[str, Any]) -> dict[str, Any]: ...
+
+    async def call_with_dispatch_position(
+        self,
+        method: str,
+        params: dict[str, Any],
+    ) -> AppServerResponse: ...
+
+    async def queue_zen_input(
+        self,
+        thread_id: str,
+        client_message_id: str,
+        *,
+        input_items: list[dict[str, Any]],
+        expected_connection_epoch: int,
+    ) -> Mapping[str, object]: ...
 
 
 class ZenApplicationAdapter(_AppServerApplicationAdapter):
@@ -151,6 +184,39 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
                 )
         return _PreparedAppServerInput(text="", input_items=tuple(items))
 
+    @overload
+    async def send_input(
+        self,
+        thread_ref: ThreadRef,
+        message: AgentInput,
+        *,
+        continuation: Literal[InputContinuationPreference.QUEUE],
+        before_dispatch: Callable[[QueuedInputDispatch], Awaitable[None]] | None = None,
+    ) -> QueuedInputReceipt: ...
+
+    @overload
+    async def send_input(
+        self,
+        thread_ref: ThreadRef,
+        message: AgentInput,
+        *,
+        continuation: Literal[
+            InputContinuationPreference.PREFER_ACTIVE_TURN,
+            InputContinuationPreference.START_NEW_TURN,
+        ] = InputContinuationPreference.PREFER_ACTIVE_TURN,
+        before_dispatch: Callable[[ApplicationInputDispatch], Awaitable[None]] | None = None,
+    ) -> AcceptedTurn: ...
+
+    @overload
+    async def send_input(
+        self,
+        thread_ref: ThreadRef,
+        message: AgentInput,
+        *,
+        continuation: InputContinuationPreference = InputContinuationPreference.PREFER_ACTIVE_TURN,
+        before_dispatch: ApplicationInputPlanHandler | None = None,
+    ) -> ApplicationInputAcceptance: ...
+
     async def send_input(
         self,
         thread_ref: ThreadRef,
@@ -159,9 +225,22 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
         continuation: InputContinuationPreference = (
             InputContinuationPreference.PREFER_ACTIVE_TURN
         ),
-        before_dispatch: Callable[[ApplicationInputDispatch], Awaitable[None]] | None = None,
-    ) -> AcceptedTurn:
+        before_dispatch: (
+            Callable[[ApplicationInputDispatch], Awaitable[None]]
+            | Callable[[QueuedInputDispatch], Awaitable[None]]
+            | None
+        ) = None,
+    ) -> ApplicationInputAcceptance:
         self._require_own_thread(thread_ref)
+        if continuation is InputContinuationPreference.QUEUE:
+            return await self._send_queued_input(
+                thread_ref,
+                message,
+                cast(Callable[[QueuedInputDispatch], Awaitable[None]] | None, before_dispatch),
+            )
+        turn_dispatch = cast(
+            Callable[[ApplicationInputDispatch], Awaitable[None]] | None, before_dispatch
+        )
         prepared = self._prepare_input(message)
         if not isinstance(continuation, InputContinuationPreference):
             raise ValueError("unknown input continuation preference")
@@ -188,15 +267,15 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
                 thread_ref,
                 message,
                 prepared,
-                before_dispatch,
+                turn_dispatch,
                 expected_pre_input_evidence=expected_pre_input_evidence,
             )
         expected_local_image_epoch = (
             await self._verified_local_image_epoch() if prepared.uses_local_image_paths else None
         )
         steer_client = self._steer_client()
-        if before_dispatch is not None:
-            await before_dispatch(
+        if turn_dispatch is not None:
+            await turn_dispatch(
                 ApplicationInputDispatch(
                     thread_ref=thread_ref,
                     client_message_id=message.client_message_id,
@@ -231,6 +310,86 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
             disposition=InputDisposition.STEERED,
             correlation_policy=TurnReplyCorrelationPolicy.PRESERVE_EXISTING,
         )
+
+    def _queue_client(self) -> _ZenQueueClient:
+        for name in ("call", "call_with_dispatch_position", "queue_zen_input"):
+            if not callable(getattr(self._client, name, None)):
+                raise NotImplementedError("configured client does not support native queued input")
+        return cast(_ZenQueueClient, self._client)
+
+    async def _send_queued_input(
+        self,
+        thread_ref: ThreadRef,
+        message: AgentInput,
+        before_dispatch: Callable[[QueuedInputDispatch], Awaitable[None]] | None,
+    ) -> QueuedInputReceipt:
+        client = self._queue_client()
+        features = await client.call_with_dispatch_position("zen/initialize", {})
+        capabilities = _native_input_capabilities(features.result)
+        if _QUEUE_CAPABILITY not in capabilities:
+            raise NotImplementedError("native Host does not support queued-input-admission-v1")
+        has_images = any(isinstance(part, AttachmentContent) for part in message.content)
+        if has_images and _INLINE_IMAGE_CAPABILITY not in capabilities:
+            raise NotImplementedError("native Host does not support inline-image-input-v1")
+        await self._require_native_thread_scope(thread_ref)
+        prepared = self._prepare_input(message)
+        items: list[dict[str, Any]] = []
+        native_parts = prepared.input_items or tuple(
+            {"type": "text", "text": part.text}
+            for part in message.content
+            if isinstance(part, TextContent)
+        )
+        for item in native_parts:
+            if item.get("type") == "text":
+                items.append(dict(item))
+            elif item.get("type") == "image":
+                url = item.get("url")
+                if not isinstance(url, str) or not url.startswith("data:"):
+                    raise ValueError("queued images require acquired inline bytes")
+                header, encoded = url[5:].split(";base64,", 1)
+                items.append({"type": "image_bytes", "mediaType": header, "dataBase64": encoded})
+            else:
+                raise ValueError("unsupported native queued input part")
+        fingerprint = _queued_input_fingerprint(items)
+        plan = QueuedInputDispatch(thread_ref, message.client_message_id, fingerprint)
+        validate_queued_input_dispatch(plan)
+        if before_dispatch is not None:
+            await before_dispatch(plan)
+        self._retire_created_pre_input(thread_ref)
+        result = await client.queue_zen_input(
+            thread_ref.thread_id,
+            message.client_message_id,
+            input_items=items,
+            expected_connection_epoch=features.dispatch_position.connection_epoch,
+        )
+        try:
+            return _queued_admission_receipt(
+                result, thread_ref, message.client_message_id, fingerprint
+            )
+        except Exception as cause:
+            # A parser failure after one native send cannot prove no admission.
+            raise ApplicationInputOutcomeUnknown(
+                "native queue response lacked valid canonical receipt evidence", cause
+            ) from cause
+
+    async def read_queued_input_receipt(
+        self,
+        thread_ref: ThreadRef,
+        client_message_id: str,
+    ) -> QueuedInputReceipt | None:
+        """Read canonical evidence; this never resends input or resumes its queue."""
+
+        self._require_own_thread(thread_ref)
+        client = self._queue_client()
+        result = await client.call("zen/thread/read", {"threadId": thread_ref.thread_id})
+        thread = result.get("thread")
+        if (
+            not isinstance(thread, Mapping)
+            or thread.get("id") != thread_ref.thread_id
+            or not self._native_thread_matches_workspace(thread)
+        ):
+            raise ValueError("native queued input snapshot belongs to a different workspace")
+        return _queued_receipt_from_items(thread.get("items"), thread_ref, client_message_id)
 
     async def _read_active_turn_id(self, thread_ref: ThreadRef) -> str | None:
         thread = await self._require_native_thread_scope(

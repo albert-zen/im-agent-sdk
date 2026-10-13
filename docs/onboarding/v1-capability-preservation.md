@@ -120,3 +120,11 @@ The reverse audit found 152 main non-private top-level definition names absent f
 
 See [the v1 executable specification](../V1_EXECUTABLE_SPEC.md) and
 [Zen adapter testing](../components/applications/adapters/zen/testing.md).
+
+## Explicit IM queue follow-on
+
+The queued-input adapter/model slice adds `QueuedInputReceipt`, a capability
+gate and canonical read-only recovery. It is not a start-new opt-out and is not
+yet a production Gateway queue setting. Independent native receipt/inline-image
+capabilities plus coherent Gateway admission persistence, scoped cancellation
+and delayed Turn correlation remain required before consumer migration/pinning.

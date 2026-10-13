@@ -59,3 +59,15 @@ repository verification required by `AGENTS.md`.
 `ApplicationInputRejected` has one canonical owner/facade identity and accepts
 only `turn_ended` or `thread_busy`; client and I2 suites verify authoritative
 negative acceptance versus ambiguous outcomes and terminal claim behavior.
+
+Queued model/union evidence lives in `tests/applications/test_queued_input.py`: real
+queued item identity, no placeholder Turn, admitted same-Thread Turn constraints,
+closed states, SHA-256 dispatch fingerprints and exact facade identity. Existing
+protocol reflection tests preserve the default while intentionally widening the
+acceptance family. The queued implementation slice is not full Gateway support.
+
+Type-check protocol-typed unchanged consumers, not only concrete adapters:
+omitted continuation, both explicit ordinary enum literals, the historical
+narrow callback alias, and the distinct dynamic-plan callback must retain their
+intended result types. `_check_public_protocol_input_typing` in the queued model
+tests is an executable pyright assertion set.

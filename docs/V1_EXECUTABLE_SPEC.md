@@ -503,3 +503,14 @@ the descriptor before durable native fencing; adapters verify exact support.
 Native policy/configuration content stays outside common Operations and receipts.
 Unknown profiles never fall back, and changed configuration under the same ID
 cannot replay a different effect. The absent profile preserves default semantics.
+
+## Queued native admission acceptance
+
+The optional capability must prove bounded durable admission without inventing
+a Turn or contaminating the active Turn, both event/response orders, original
+client-ID recovery after lost acknowledgement/restart, no automatic resend or
+Resume, explicit cancellation versus live startup failure, stable image bytes
+and conflicting input/mode rejection. The final ordinary-Gateway scenario also
+proves binding/lease fencing and original-Turn approval/final reply routing.
+The current adapter-model thin slice is partial evidence, not completion of
+this scenario; see [ADR 0019](decisions/0019-queued-input-admission.md).
