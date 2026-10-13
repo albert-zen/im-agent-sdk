@@ -40,8 +40,8 @@ policy it actually performed.
 
 The suite distinguishes a known pre-dispatch rejection from a dispatched
 unknown outcome using the canonical Applications exception. It covers Codex
-native steer where supported and truthful
-`started/create_new` behavior for Zen/T3, including correlation authorization
+and Zen native steer where supported and truthful
+`started/create_new` behavior for T3, including correlation authorization
 and a post-acceptance mismatch that cannot retarget or retry native input.
 It also checks that subscriptions are Application-owned and that no contract
 adds Gateway/product-command authority.
@@ -55,3 +55,7 @@ PYTHONPATH=src uv run python -m unittest tests.applications.test_contract tests.
 Changes to this public Port also require every affected native adapter,
 contract/schema validation, static typing, component-map checks, and the full
 repository verification required by `AGENTS.md`.
+
+`ApplicationInputRejected` has one canonical owner/facade identity and accepts
+only `turn_ended` or `thread_busy`; client and I2 suites verify authoritative
+negative acceptance versus ambiguous outcomes and terminal claim behavior.

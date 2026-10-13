@@ -6,7 +6,7 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from imagent.applications import ZenApplicationAdapter
 from imagent.applications.adapters.appserver.client import (
@@ -24,7 +24,11 @@ from imagent.applications.adapters.appserver.mapping import (
     AppServerMappingError,
     normalize_appserver_message,
 )
-from imagent.applications.contract import ApplicationInputOutcomeUnknown, ProjectRef
+from imagent.applications.contract import (
+    ApplicationInputOutcomeUnknown,
+    ApplicationInputRejected,
+    ProjectRef,
+)
 from imagent.applications.operations import CreateThread, ThreadCreated
 from imagent.interaction.diagnostics import (
     ConnectionDiagnosticState,
@@ -162,6 +166,127 @@ def _client(
 
 
 class AppServerTransportLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_input_rejection_requires_an_unambiguous_valid_wire_error(self) -> None:
+        for method, zen_code in (("turn/start", "thread_busy"), ("turn/steer", "turn_not_running")):
+            variants = (
+                ({}, -32000, "rejected", True),
+                ({"jsonrpc": "2.0"}, -32000, "rejected", True),
+                ({}, "-32000", "rejected", False),
+                ({}, -32000.7, "rejected", False),
+                ({}, -32000.0, "rejected", False),
+                ({}, float("inf"), "rejected", False),
+                ({}, -32000, {"secret": "not a string"}, False),
+                ({"result": {"turnId": "possibly-accepted"}}, -32000, "rejected", False),
+                ({"jsonrpc": "invalid"}, -32000, "rejected", False),
+            )
+            for extra, code, message, proven in variants:
+                with self.subTest(method=method, extra=extra, code=code, message=message):
+                    process = _ScriptedProcess(
+                        {
+                            "initialize": [{"result": {"ok": True}}],
+                            method: [
+                                {
+                                    **extra,
+                                    "error": {
+                                        "code": code,
+                                        "message": message,
+                                        "data": {"zenCode": zen_code},
+                                    },
+                                }
+                            ],
+                        }
+                    )
+                    client = _client(process)
+                    try:
+                        expected = (
+                            ApplicationInputRejected if proven else ApplicationInputOutcomeUnknown
+                        )
+                        with self.assertRaises(expected):
+                            if method == "turn/start":
+                                await client.start_turn("thread", "input")
+                            else:
+                                await client.steer_turn("thread", "turn", "input")
+                        self.assertEqual(
+                            sum(item.get("method") == method for item in process.sent), 1
+                        )
+                    finally:
+                        await client.close()
+
+    async def test_coerced_response_identity_cannot_prove_input_rejection(self) -> None:
+        class CoercedIdentityProcess(_ScriptedProcess):
+            def __init__(self, convert):
+                super().__init__(
+                    {
+                        "initialize": [{"result": {}}],
+                        "turn/start": [
+                            {
+                                "error": {
+                                    "code": -32000,
+                                    "message": "busy",
+                                    "data": {"zenCode": "thread_busy"},
+                                }
+                            }
+                        ],
+                    }
+                )
+                self.convert = convert
+
+            def on_input(self, raw):
+                super().on_input(raw)
+                if json.loads(raw).get("method") == "turn/start":
+                    response = json.loads(self.stdout.lines.get_nowait())
+                    response["id"] = self.convert(response["id"])
+                    self.stdout.lines.put_nowait((json.dumps(response) + "\n").encode())
+
+        for convert in (str, lambda value: value + 0.7):
+            client = _client(CoercedIdentityProcess(convert))
+            try:
+                with self.assertRaises(ApplicationInputOutcomeUnknown):
+                    await client.start_turn("thread", "input")
+            finally:
+                await client.close()
+
+    async def test_valid_native_overload_retries_then_accepts_once(self) -> None:
+        class OnceOverloaded(_ScriptedProcess):
+            def on_input(self, raw):
+                request = json.loads(raw)
+                if request.get("method") == "turn/start":
+                    attempted = any(item.get("method") == "turn/start" for item in self.sent)
+                    self.scripts["turn/start"] = [
+                        {"result": {"turn": {"id": "accepted"}}}
+                        if attempted
+                        else {
+                            "error": {"code": -32001, "message": "Server overloaded; retry later"}
+                        }
+                    ]
+                super().on_input(raw)
+
+        process = OnceOverloaded({"initialize": [{"result": {}}]})
+        client = _client(process)
+        try:
+            with patch.object(client, "_sleep_for_retry", AsyncMock()):
+                result = await client.start_turn("thread", "input")
+            self.assertEqual(result, {"turn": {"id": "accepted"}})
+            self.assertEqual(sum(item.get("method") == "turn/start" for item in process.sent), 2)
+        finally:
+            await client.close()
+
+    async def test_malformed_overload_response_never_retries_input(self) -> None:
+        for response in (
+            {"error": {"code": "-32001", "message": "Server overloaded; retry later"}},
+            {"result": {"turnId": "accepted"}, "error": {"code": -32001, "message": "busy"}},
+        ):
+            process = _ScriptedProcess({"initialize": [{"result": {}}], "turn/start": [response]})
+            client = _client(process)
+            try:
+                with self.assertRaises(ApplicationInputOutcomeUnknown):
+                    await client.start_turn("thread", "input")
+                self.assertEqual(
+                    sum(item.get("method") == "turn/start" for item in process.sent), 1
+                )
+            finally:
+                await client.close()
+
     async def test_zen_thread_profiles_reach_native_wire_with_camel_case_policy(
         self,
     ) -> None:

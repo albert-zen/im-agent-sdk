@@ -225,6 +225,10 @@ class _PreparedAppServerInput:
     text: str
     input_items: tuple[Mapping[str, object], ...] | None
 
+    @property
+    def uses_local_image_paths(self) -> bool:
+        return any(item.get("type") == "localImage" for item in self.input_items or ())
+
 
 @dataclass(slots=True)
 class _CreatedPreInputEvidence:
@@ -245,7 +249,11 @@ class AppServerClient(Protocol):
     async def list_thread_turns(
         self,
         thread_id: str,
-        **params,
+        *,
+        limit: int | None = None,
+        cursor: str | None = None,
+        items_view: str | None = None,
+        sort_direction: str | None = None,
     ) -> Mapping[str, object]: ...
 
     async def start_thread(self, **params) -> Mapping[str, object]: ...
@@ -1016,7 +1024,7 @@ class _AppServerApplicationAdapter:
         elif self._thread_baseline_evidence.get(thread_ref) is not dispatch_evidence:
             raise RuntimeError("new Thread pre-input evidence changed before native dispatch")
         expected_local_image_epoch = (
-            await self._verified_local_image_epoch() if prepared.input_items is not None else None
+            await self._verified_local_image_epoch() if prepared.uses_local_image_paths else None
         )
         if before_dispatch is not None:
             await before_dispatch(
@@ -1087,10 +1095,12 @@ class _AppServerApplicationAdapter:
     ) -> tuple[str | None, dict[str, object]]:
         if prepared.input_items is None:
             return prepared.text, {}
-        return None, {
+        kwargs: dict[str, object] = {
             "input_items": [dict(item) for item in prepared.input_items],
-            "expected_local_image_epoch": expected_local_image_epoch,
         }
+        if prepared.uses_local_image_paths:
+            kwargs["expected_local_image_epoch"] = expected_local_image_epoch
+        return None, kwargs
 
     async def _start_input(
         self,

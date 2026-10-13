@@ -57,3 +57,12 @@ AgentKit, and clean-wheel checks recorded by the parent navigation and
 
 - [Client design](design.md)
 - [App Server block](../README.md)
+
+Input rejection tests allowlist exact method/code pairs and preserve generic
+errors for mismatched methods, native codes, or JSON-RPC codes. Real Zen
+interoperability verifies busy and expected-Turn rejection without append.
+
+Wire-level start/steer regressions reject string/fractional/coerced error codes,
+non-string messages, contradictory result/error payloads, malformed version/ID
+fields, and malformed overload responses. Valid native negative and overload
+responses retain their existing behavior, including omitted JSON-RPC version.

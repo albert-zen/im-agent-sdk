@@ -15,7 +15,7 @@ it never grants permission to retry native input.
 This leaf owns `InboundFailurePhase`, `InboundFailurePresenter`, the bounded
 render runtime, output validation, and phase-specific claim ordering. The
 presenter receives only `pre_acceptance`, `outcome_unknown`, or
-`post_acceptance` plus the original Conversation, reply ID, and Gateway-derived
+`post_acceptance`, or proven-rejection `turn_ended`/`thread_busy` plus the original Conversation, reply ID, and Gateway-derived
 stable delivery ID. It receives no exception, message content, free-form SDK
 error text, claim handle, repository, callback, Gateway, or native event.
 
@@ -40,6 +40,10 @@ facts are owned by `src/imagent/gateway/diagnostics.py`.
 - `outcome_unknown` remains protected as `side_effect_started`; I2 never
   completes or releases it.
 - `post_acceptance` is terminal before presentation and remains terminal.
+- A typed authoritative `ApplicationInputRejected` completes the owned claim
+  before presentation, including when I2 is absent. Only its closed reason is
+  presented; native error text never crosses this seam. Failure or cancellation
+  in later presentation does not reopen the claim.
 - Original cancellation before the dispatch fence releases and does not invent
   presentation; cancellation racing after the fence stays protected.
 

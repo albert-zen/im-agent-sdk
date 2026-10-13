@@ -155,7 +155,7 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
                 expected_pre_input_evidence=expected_pre_input_evidence,
             )
         expected_local_image_epoch = (
-            await self._verified_local_image_epoch() if prepared.input_items is not None else None
+            await self._verified_local_image_epoch() if prepared.uses_local_image_paths else None
         )
         steer_client = self._steer_client()
         if before_dispatch is not None:

@@ -12,7 +12,7 @@ the scoped `ConversationActions` or `ApplicationActions` surfaces; they do not
 depend directly on an adapter.
 It owns `AgentApplicationAdapter`, `ApplicationSummary`, typed input dispatch
 facts/results, the complete Project/Thread/Turn/resource/history model family,
-`AgentMessage`, `ApplicationInputOutcomeUnknown`, `validate_thread_ref`, and
+`AgentMessage`, `ApplicationInputOutcomeUnknown`, `ApplicationInputRejected`, `validate_thread_ref`, and
 the classification of a native input outcome as known or unknown.
 
 It does not own Gateway admission, Conversation binding, projection routes,
@@ -106,3 +106,11 @@ The conformance suite remains affected evidence for all concrete adapters.
 - [ADR 0002](../../../decisions/0002-design-authority-and-control-boundaries.md)
 - [ADR 0012](../../../decisions/0012-input-continuation-and-reply-correlation.md)
 - [ADR 0016](../../../decisions/0016-uniform-workspace-and-consumer-actions.md)
+
+`ApplicationInputRejected(reason)` is a closed proven-absent input outcome.
+Its only reasons are `turn_ended` and `thread_busy`. An adapter may emit it
+only from authoritative, method-specific negative acceptance evidence before
+canonical input append. Generic exceptions, message-text matches, connection
+loss, and mismatched native codes remain unknown after dispatch. Gateway
+completes this rejected claim even without an I2 presenter; the original
+message is never replayed automatically and a user retry is a new message.

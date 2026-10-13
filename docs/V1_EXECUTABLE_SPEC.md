@@ -384,8 +384,9 @@ run:
   trust are preflighted before native side effects; rooted `LocalPath` bytes
   are acquired through a no-follow descriptor chain so the bytes hashed are
   the bytes submitted even if the pathname is swapped; every SDK-owned native
-  Channel and T3 exercise this boundary, while App Server path-only image input
-  is explicitly unsupported before native dispatch;
+  Channel and T3 exercise this boundary; Zen reads bounded bytes and sends
+  inline data-URI images through its real native protocol, while Codex path-only
+  image input remains explicitly unsupported before native dispatch;
 - recoverable presentation is identical in live and history normalization;
 - live-only presentation never advances a completion checkpoint; and
 - artifact materialization uses a consumer-owned bounded, fsync-backed ledger

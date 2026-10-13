@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,6 +22,31 @@ from imagent.interaction.media import (
 
 
 class InteractionMediaTests(unittest.TestCase):
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "requires a FIFO-capable platform")
+    def test_rooted_reader_rejects_fifo_without_blocking(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "image.png")
+            os.mkfifo(path)
+            script = """
+from pathlib import Path
+from imagent.interaction.media import LocalPath, read_local_attachment
+import sys
+try:
+    read_local_attachment(LocalPath(sys.argv[1]), shared_filesystem_root=Path(sys.argv[2]),
+                          consumer="test", expected_size=1, max_bytes=10)
+except ValueError as error:
+    assert "regular file" in str(error), error
+else:
+    raise AssertionError("FIFO was accepted")
+"""
+            result = subprocess.run(
+                [sys.executable, "-c", script, str(path), directory],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_generic_utf8_text_uses_the_explicit_extension_media_type(self) -> None:
         self.assertEqual(
             detect_generic_file("notes.MD", b"# Notes\n"),

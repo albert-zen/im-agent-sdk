@@ -558,6 +558,9 @@ components:
       - tests/applications/adapters/appserver/test_input_integration.py
       - tests/applications/adapters/test_codex.py
       - tests/applications/adapters/test_zen.py
+      - tests/integration/test_zen_native_interop.py
+      - tests/integration/zen_native_server.mjs
+      - tests/integration/__init__.py
       - tests/applications/adapters/_appserver_fakes.py
       - tests/applications/adapters/appserver/test_gateway_request_integration.py
       - tests/applications/adapters/appserver/test_transport_lifecycle.py
@@ -704,6 +707,7 @@ components:
       - docs/onboarding/README.md
       - docs/onboarding/quickstart.md
       - docs/onboarding/capability-matrix.md
+      - docs/onboarding/v1-capability-preservation.md
       - docs/onboarding/applications.md
       - docs/onboarding/gateway.md
       - docs/onboarding/interaction.md

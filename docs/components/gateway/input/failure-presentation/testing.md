@@ -30,3 +30,7 @@ Run:
 ```sh
 PYTHONPATH=src uv run python -m unittest tests.gateway.input.test_failure_presentation tests.gateway.persistence.test_sqlite -v
 ```
+
+Proven native rejection tests cover both fixed phases, terminal claims with
+and without I2, presenter failure, and no retry permission. Real-Zen interop
+additionally verifies the native codes correspond to no canonical append.

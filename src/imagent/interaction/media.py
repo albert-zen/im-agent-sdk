@@ -226,7 +226,8 @@ def read_local_attachment(
         raise ValueError(f"{consumer} LocalPath contains an unsafe path component")
     no_follow = getattr(os, "O_NOFOLLOW", None)
     directory = getattr(os, "O_DIRECTORY", None)
-    if no_follow is None or directory is None:
+    nonblocking = getattr(os, "O_NONBLOCK", None)
+    if no_follow is None or directory is None or nonblocking is None:
         raise NotImplementedError(f"{consumer} cannot safely acquire rooted LocalPath bytes")
     descriptors: list[int] = []
     try:
@@ -241,7 +242,9 @@ def read_local_attachment(
             descriptors.append(current)
         payload_fd = os.open(
             relative.parts[-1],
-            os.O_RDONLY | no_follow,
+            # A FIFO must not block the event loop before fstat can reject it.
+            # O_NONBLOCK leaves regular-file acquisition unchanged.
+            os.O_RDONLY | no_follow | nonblocking,
             dir_fd=current,
         )
         descriptors.append(payload_fd)
