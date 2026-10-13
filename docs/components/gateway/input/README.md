@@ -10,6 +10,9 @@ and optional classified failure presentation independent:
 - [dispatch](dispatch/design.md) and [testing](dispatch/testing.md) — stable
   client identity, prefer-active-Turn behavior, the native side-effect fence,
   and truthful acceptance/correlation;
+- [queued admission](queued-admission/design.md) and
+  [testing](queued-admission/testing.md) — original scoped queued receipts,
+  canonical read/cancel and bounded product feedback;
 - [failure presentation](failure-presentation/design.md) and
   [testing](failure-presentation/testing.md) — I2 phase classification and one
   optional terminal error delivery without retry authority.
@@ -26,4 +29,5 @@ input identity, the typed native side-effect pre-dispatch fence, the distinct
 acceptance-ordering gate, and accepted-Turn correlation; it does not create another Conversation
 registry. I2 wraps the owned claimed-input outcome and applies phase-specific
 claim rules. These leaves do not create another Channel admission path,
-Application subscription, transcript, runtime, spool, or outbox.
+Application transcript, execution runtime, spool, or outbox. Queue observation
+uses the explicit Application-owned optional subscription port.

@@ -103,6 +103,23 @@ class _Runtime:
     def list_applications(self):
         return self.application_summaries
 
+    async def read_queued_input(
+        self, conversation_ref: ConversationRef, actor: str, message_id: str
+    ) -> Failed[ActionError]:
+        del conversation_ref, actor, message_id
+        return Failed(ActionError(ActionErrorCode.UNSUPPORTED))
+
+    async def cancel_queued_input(
+        self,
+        conversation_ref: ConversationRef,
+        actor: str,
+        message_id: str,
+        *,
+        reconcile_only: bool,
+    ) -> KnownNativeOutcome | None:
+        del conversation_ref, actor, message_id, reconcile_only
+        return Failed(ActionError(ActionErrorCode.UNSUPPORTED))
+
     async def execute_application(self, operation: ApplicationOperation):
         self.operations.append(operation)
         if self.forced_operation_error is not None:

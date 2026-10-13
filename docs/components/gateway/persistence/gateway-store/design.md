@@ -180,3 +180,49 @@ are rejected as malformed current state rather than repaired.
 - [V1 executable specification](../../../../V1_EXECUTABLE_SPEC.md)
 - [ADR 0016](../../../../decisions/0016-uniform-workspace-and-consumer-actions.md)
 - [Gateway persistence](../README.md)
+
+## Queued-input receipt correlation
+
+The private session has one queue-admission seam, `fence_queued_input`, joined
+atomically to the existing inbound claim. It validates the exact derived inbound
+scope/key and its current `in_flight` owner, the runtime lease, and the current
+Conversation binding Thread/generation, then records an immutable
+`QueuedInputOrigin` with unknown receipt and changes that same claim to
+`side_effect_started`. A repeated origin is a `QueuedInputFenceConflict`, even
+if it is otherwise identical. Neither a receipt read nor a missing native read
+result authorizes another dispatch. Legacy protected inbound claims do not gain
+inferred queue metadata when an old database is opened.
+
+These correlations count against the same finite `max_effect_receipts` budget
+as Gateway, native, request-response, and workflow effects. Every new reservation
+checks both collections; existing reads and canonical merges remain possible at
+capacity. All unknown and terminal queue rows are retained, without a TTL,
+eviction, deletion API, scheduler, or replayable input.
+
+`merge_queued_input_receipt` compares the exact immutable origin and native
+Thread/client/input fingerprint. Unknown can become queued, admitted, or
+cancelled; queued can become admitted or cancelled. A late queued snapshot
+cannot replace terminal evidence. A conflicting queued-item identity, original
+Turn, terminal fact, or destination is an explicit conflict. An admitted
+candidate requires the matching original `TurnReplyCorrelation`; evidence and
+correlation commit in one lease-fenced transaction. A matching repeat may restore
+that correlation after normal projection cleanup. Its stable owner ID is
+supplied by the existing Turn-correlation owner. The transaction does not recheck
+binding generation after native acceptance: current delivery policy still gates
+whether the original destination may receive output.
+
+The two stores use the same pure merge rules in `queue_receipts.py`. Memory
+stages complete replacement mappings before a no-await publication under its
+store lock. SQLite uses `BEGIN IMMEDIATE`, the existing connection lock, an
+explicit fresh lease check even for a converged merge, and three runtime-fence
+triggers on the new additive `queued_input_correlations` table. A second-write
+failure rolls back the admission pair or evidence/Turn pair; lost commit
+acknowledgement leaves the complete pair durable. No native call runs inside
+these transactions.
+
+Queue fence methods distinguish proven rejection (`EffectReceiptCapacityError`,
+`QueuedInputFenceConflict`, `StaleRuntimeFence`) from unknown commit failures.
+Those typed exceptions may only escape when no queue origin/claim transition
+committed; post-commit acknowledgement failure must remain an unclassified store
+error. The inbound owner uses this distinction for pre-acceptance versus unknown
+feedback, without adding another claim owner or retry authority.

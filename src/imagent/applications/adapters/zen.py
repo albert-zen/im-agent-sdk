@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import inspect
 from collections.abc import Awaitable, Callable, Mapping
@@ -14,6 +15,7 @@ from ...interaction.media import (
     read_local_attachment,
 )
 from ...interaction.messages import TextContent
+from ...interaction.operations import ContractViolation
 from ..contract import (
     AcceptedTurn,
     AgentInput,
@@ -25,17 +27,20 @@ from ..contract import (
     InputDisposition,
     QueuedInputDispatch,
     QueuedInputReceipt,
+    QueuedInputState,
     ThreadRef,
     ThreadStatus,
     TurnRef,
     TurnReplyCorrelationPolicy,
     TurnStatus,
     validate_queued_input_dispatch,
+    validate_queued_input_receipt,
 )
 from ..presentation.artifact_materialization import (
     AppServerArtifactMaterializationLimits,
     AppServerArtifactMaterializer,
 )
+from ..queued_input import MAX_QUEUED_INPUT_READ_IDS, QueuedInputSubscription
 from .appserver._base import AppServerClient, _AppServerApplicationAdapter, _PreparedAppServerInput
 from .appserver.client.handoff import AppServerResponse
 from .appserver.mapping import (
@@ -57,11 +62,13 @@ from .appserver.requests import map_zen_appserver_request
 from .zen_queue import (
     _INLINE_IMAGE_CAPABILITY,
     _QUEUE_CAPABILITY,
+    _identifier,
     _native_input_capabilities,
     _queued_admission_receipt,
     _queued_input_fingerprint,
-    _queued_receipt_from_items,
+    _queued_receipts_from_items,
 )
+from .zen_queue_observation import _ObservationClient, _ZenQueueObservation
 
 __all__ = ["ZenApplicationAdapter"]
 
@@ -100,6 +107,17 @@ class _ZenQueueClient(Protocol):
     ) -> Mapping[str, object]: ...
 
 
+class _ZenQueueControlClient(_ZenQueueClient, Protocol):
+    async def cancel_zen_queued_input(
+        self,
+        thread_id: str,
+        client_message_id: str,
+        queued_item_id: str,
+        *,
+        expected_connection_epoch: int,
+    ) -> Mapping[str, object]: ...
+
+
 class ZenApplicationAdapter(_AppServerApplicationAdapter):
     def __init__(
         self,
@@ -118,6 +136,9 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
             AppServerArtifactMaterializationLimits()
         ),
     ) -> None:
+        self._queue_observation: _ZenQueueObservation | None = None
+        self._queue_observation_capacity = event_buffer_max_pending
+        self._queue_stopping = False
         self._steer_active_turn = steer_active_turn
         super().__init__(
             application_instance_id=application_instance_id,
@@ -372,24 +393,150 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
                 "native queue response lacked valid canonical receipt evidence", cause
             ) from cause
 
-    async def read_queued_input_receipt(
-        self,
-        thread_ref: ThreadRef,
-        client_message_id: str,
-    ) -> QueuedInputReceipt | None:
-        """Read canonical evidence; this never resends input or resumes its queue."""
-
-        self._require_own_thread(thread_ref)
-        client = self._queue_client()
-        result = await client.call("zen/thread/read", {"threadId": thread_ref.thread_id})
-        thread = result.get("thread")
+    def _validate_queue_thread(self, thread_ref: ThreadRef, thread: object) -> Mapping[str, object]:
         if (
             not isinstance(thread, Mapping)
             or thread.get("id") != thread_ref.thread_id
             or not self._native_thread_matches_workspace(thread)
         ):
             raise ValueError("native queued input snapshot belongs to a different workspace")
-        return _queued_receipt_from_items(thread.get("items"), thread_ref, client_message_id)
+        if any(
+            thread.get(key) not in (None, False)
+            for key in ("hasMore", "truncated", "partial", "nextCursor")
+        ):
+            raise ContractViolation("native queued input snapshot is incomplete")
+        return thread
+
+    async def read_queued_input_receipts(
+        self, thread_ref: ThreadRef, client_message_ids: tuple[str, ...]
+    ) -> tuple[QueuedInputReceipt | None, ...]:
+        """One complete canonical read; never install observation or resume execution."""
+        self._require_own_thread(thread_ref)
+        if (
+            not isinstance(client_message_ids, tuple)
+            or len(client_message_ids) > MAX_QUEUED_INPUT_READ_IDS
+        ):
+            raise ContractViolation("queued snapshot IDs exceed their finite tuple bound")
+        for client_id in client_message_ids:
+            _identifier(client_id)
+        result = await self._queue_client().call(
+            "zen/thread/read", {"threadId": thread_ref.thread_id}
+        )
+        if any(
+            result.get(key) not in (None, False)
+            for key in ("hasMore", "truncated", "partial", "nextCursor")
+        ):
+            raise ContractViolation("native queued input snapshot is incomplete")
+        thread = self._validate_queue_thread(thread_ref, result.get("thread"))
+        return _queued_receipts_from_items(thread.get("items"), thread_ref, client_message_ids)
+
+    async def read_queued_input_receipt(
+        self, thread_ref: ThreadRef, client_message_id: str
+    ) -> QueuedInputReceipt | None:
+        return (await self.read_queued_input_receipts(thread_ref, (client_message_id,)))[0]
+
+    async def cancel_queued_input_receipt(self, receipt: QueuedInputReceipt) -> QueuedInputReceipt:
+        validate_queued_input_receipt(receipt)
+        self._require_own_thread(receipt.thread_ref)
+        if not callable(getattr(self._client, "cancel_zen_queued_input", None)):
+            raise NotImplementedError(
+                "configured client does not support native queue cancellation"
+            )
+        client = cast(_ZenQueueControlClient, self._queue_client())
+        features = await client.call_with_dispatch_position("zen/initialize", {})
+        if _QUEUE_CAPABILITY not in _native_input_capabilities(features.result):
+            raise NotImplementedError("native Host does not support queue cancellation")
+        current = await self.read_queued_input_receipt(
+            receipt.thread_ref, receipt.client_message_id
+        )
+        self._require_same_queue_identity(receipt, current)
+        assert current is not None
+        if current.state is not QueuedInputState.QUEUED:
+            return current
+        try:
+            result = await client.cancel_zen_queued_input(
+                receipt.thread_ref.thread_id,
+                receipt.client_message_id,
+                receipt.queued_item_id,
+                expected_connection_epoch=features.dispatch_position.connection_epoch,
+            )
+            if not isinstance(result, Mapping):
+                raise ContractViolation("native cancellation response is malformed")
+            results = result.get("results")
+            if not isinstance(results, list) or len(results) != 1:
+                raise ContractViolation("native cancellation response has no exact outcome")
+            outcome = results[0]
+            if (
+                not isinstance(outcome, Mapping)
+                or outcome.get("clientId") != receipt.client_message_id
+                or outcome.get("queuedItemId") != receipt.queued_item_id
+                or outcome.get("status")
+                not in {"cancelled", "already_cancelled", "already_started"}
+            ):
+                raise ContractViolation("native cancellation response is unconfirmed")
+            current = await self.read_queued_input_receipt(
+                receipt.thread_ref, receipt.client_message_id
+            )
+            self._require_same_queue_identity(receipt, current)
+            if current is None or current.state is QueuedInputState.QUEUED:
+                raise ContractViolation("native cancellation has no canonical terminal evidence")
+            return current
+        except (Exception, asyncio.CancelledError) as cause:
+            raise ApplicationInputOutcomeUnknown(
+                "native queue cancellation outcome is unknown", cause
+            ) from cause
+
+    @staticmethod
+    def _require_same_queue_identity(
+        expected: QueuedInputReceipt, actual: QueuedInputReceipt | None
+    ) -> None:
+        if (
+            actual is None
+            or actual.thread_ref != expected.thread_ref
+            or actual.client_message_id != expected.client_message_id
+            or actual.queued_item_id != expected.queued_item_id
+            or actual.input_fingerprint != expected.input_fingerprint
+        ):
+            raise ContractViolation("canonical queued input identity changed or is absent")
+
+    async def subscribe_queued_inputs(self, thread_ref: ThreadRef) -> QueuedInputSubscription:
+        self._require_own_thread(thread_ref)
+        if self._queue_stopping:
+            raise RuntimeError("queued input observation is closed")
+        for name in ("resume_zen_thread", "call_with_dispatch_position"):
+            if not callable(getattr(self._client, name, None)):
+                raise NotImplementedError(
+                    "configured client does not support native queue observation"
+                )
+        if self._queue_observation is None:
+            self._queue_observation = _ZenQueueObservation(
+                cast(_ObservationClient, self._client),
+                self._validate_queue_thread,
+                max_pending=self._queue_observation_capacity,
+            )
+        return await self._queue_observation.subscribe(thread_ref)
+
+    async def _handle_notification(self, notification: dict) -> None:
+        if notification.get("method") == "zen/thread/event":
+            if self._queue_observation is not None:
+                self._queue_observation.notification(notification)
+            return
+        await super()._handle_notification(notification)
+
+    async def _handle_event_connection_reset(self, connection_epoch: int) -> None:
+        if self._queue_observation is not None:
+            self._queue_observation.reset()
+        await super()._handle_event_connection_reset(connection_epoch)
+
+    async def stop(self) -> None:
+        self._queue_stopping = True
+        if self._queue_observation is not None:
+            self._queue_observation.begin_close()
+        try:
+            await super().stop()
+        finally:
+            if self._queue_observation is not None:
+                await self._queue_observation.wait_closed()
 
     async def _read_active_turn_id(self, thread_ref: ThreadRef) -> str | None:
         thread = await self._require_native_thread_scope(

@@ -144,11 +144,21 @@ owner because they classify entry into the one ordinary-input dispatch path.
 - [ADR 0012](../../../../decisions/0012-input-continuation-and-reply-correlation.md)
 - [ADR 0013](../../../../decisions/0013-bounded-application-event-admission.md)
 
-## Staged queued-input boundary
+## Explicit queued Gateway admission
 
-The Application plan/result unions now distinguish queued admission from real
-Turn acceptance. This Gateway slice still dispatches only prefer-active-turn: it
-rejects a queued pre-dispatch plan before native mutation. An adapter violating
-that authorization and returning a queued receipt is post-acceptance failure;
-it cannot be correlated to a placeholder Turn or reopen input. The ordinary
-queue policy and durable correlation record are pending the full ADR 0019 slice.
+The full Gateway slice adds immutable `input_continuation`, defaulting to
+prefer-active-turn, and permits explicit QUEUE only for Controller-declined
+ordinary messages. A typed queue plan must match the original Thread/client and
+prepared payload fingerprint. The inbound wrapper provides a queue fence that
+atomically inserts the bounded origin correlation and marks its existing claim
+side-effect-started in the coherent store. There is no second claim owner.
+Queued acceptance ends the finite acceptance gate immediately and never waits
+for execution; only canonical admitted evidence may create a Turn correlation.
+Unknown outcomes retain the same protected claim and original origin.
+
+The queue correlation owner reconciles canonical evidence before any uncertain
+Turn projection or request is routed. Receipt merge and the original Turn reply
+correlation commit atomically; event/response reordering cannot regress admission.
+Startup restores these associations before delivery readiness. Native queue
+observation is explicit, bounded and separately lifecycle-owned; a canonical read
+is never described as a subscription or execution Resume.

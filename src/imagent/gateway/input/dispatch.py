@@ -8,7 +8,7 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from ...applications.contract import (
     AcceptedTurn,
@@ -18,6 +18,8 @@ from ...applications.contract import (
     ApplicationInputDispatch,
     ApplicationInputPlan,
     InputContinuationPreference,
+    QueuedInputDispatch,
+    QueuedInputReceipt,
     ThreadRef,
 )
 from ...applications.events import AgentEvent, EventBufferOverflow
@@ -38,6 +40,10 @@ from ...interaction.operations import (
     require_identifier,
 )
 from ..diagnostics import _bounded_cleanup_error_summary
+from ..persistence.state_contracts import QueuedInputOrigin
+
+if TYPE_CHECKING:
+    from .queue_runtime import QueuedInputRuntime
 
 logger = logging.getLogger(__name__)
 
@@ -325,7 +331,9 @@ class InputDispatchRuntime:
         correlator: InputDispatchCorrelator,
         acceptance_gate: TurnAcceptanceOrderingGate,
         event_applier: OrderedProjectionEventApplier,
+        queued_inputs: QueuedInputRuntime | None = None,
     ) -> None:
+        self._queued_inputs = queued_inputs
         self._correlator = correlator
         self._acceptance_gate = acceptance_gate
         self._event_applier = event_applier
@@ -338,7 +346,10 @@ class InputDispatchRuntime:
         *,
         content: tuple[Content, ...],
         before_application_send: NativeSideEffectFence | None = None,
-    ) -> AcceptedTurn:
+        before_queue_send: Callable[[QueuedInputOrigin], Awaitable[None]] | None = None,
+        continuation: InputContinuationPreference = InputContinuationPreference.PREFER_ACTIVE_TURN,
+        binding_generation: int = 0,
+    ) -> ApplicationInputAcceptance:
         client_message_id = derive_client_message_id(
             message.conversation_ref,
             message.message_id,
@@ -349,16 +360,36 @@ class InputDispatchRuntime:
             sender=message.sender,
         )
         self._acceptance_gate.begin_acceptance(thread_ref)
-        accepted: AcceptedTurn | None = None
-        authorized_dispatch: ApplicationInputDispatch | None = None
+        accepted: ApplicationInputAcceptance | None = None
+        authorized_dispatch: ApplicationInputPlan | None = None
+        queue_origin: QueuedInputOrigin | None = None
         primary_error: BaseException | None = None
 
         async def authorize_dispatch(dispatch: ApplicationInputPlan) -> None:
-            nonlocal authorized_dispatch
-            if not isinstance(dispatch, ApplicationInputDispatch):
-                raise InputDispatchRejected("ordinary Gateway queue admission is not enabled")
+            nonlocal authorized_dispatch, queue_origin
             if authorized_dispatch is not None:
                 raise InputDispatchRejected("Application input dispatch was declared twice")
+            if isinstance(dispatch, QueuedInputDispatch):
+                if (
+                    continuation is not InputContinuationPreference.QUEUE
+                    or self._queued_inputs is None
+                    or before_queue_send is None
+                ):
+                    raise InputDispatchRejected("ordinary Gateway queue admission is not enabled")
+                queue_origin = self._queued_inputs.origin(
+                    dispatch,
+                    message,
+                    thread_ref=thread_ref,
+                    binding_generation=binding_generation,
+                    client_message_id=client_message_id,
+                )
+                authorized_dispatch = dispatch
+                await before_queue_send(queue_origin)
+                return
+            if continuation is InputContinuationPreference.QUEUE:
+                raise InputDispatchRejected(
+                    "Application substituted a Turn dispatch for queued input"
+                )
             try:
                 await self._correlator.authorize_input_dispatch(
                     dispatch,
@@ -375,24 +406,27 @@ class InputDispatchRuntime:
             acceptance = await application.send_input(
                 thread_ref,
                 agent_input,
-                continuation=InputContinuationPreference.PREFER_ACTIVE_TURN,
+                continuation=continuation,
                 before_dispatch=authorize_dispatch,
             )
-            if not isinstance(acceptance, AcceptedTurn):
-                raise InputPostAcceptanceError(
-                    acceptance, RuntimeError("unexpected queued acceptance")
-                )
             accepted = acceptance
-            if authorized_dispatch is None:
-                raise RuntimeError("Application accepted input without declaring dispatch")
-            await self._correlator.correlate_accepted_turn(
-                accepted,
-                authorized_dispatch,
-                thread_ref=thread_ref,
-                client_message_id=agent_input.client_message_id,
-                conversation_ref=message.conversation_ref,
-                reply_to_message_id=message.message_id,
-            )
+            if isinstance(acceptance, QueuedInputReceipt):
+                if queue_origin is None or self._queued_inputs is None:
+                    raise RuntimeError("unexpected queued acceptance")
+                await self._queued_inputs.accept(queue_origin, acceptance)
+            else:
+                if not isinstance(authorized_dispatch, ApplicationInputDispatch):
+                    raise RuntimeError(
+                        "Application accepted input without declaring matching Turn dispatch"
+                    )
+                await self._correlator.correlate_accepted_turn(
+                    acceptance,
+                    authorized_dispatch,
+                    thread_ref=thread_ref,
+                    client_message_id=agent_input.client_message_id,
+                    conversation_ref=message.conversation_ref,
+                    reply_to_message_id=message.message_id,
+                )
         except BaseException as error:
             primary_error = error
         finally:
@@ -425,7 +459,7 @@ class InputDispatchRuntime:
                 raise InputPostAcceptanceError(accepted, primary_error) from primary_error
             raise primary_error
         if accepted is None:
-            raise RuntimeError("Application input completed without an AcceptedTurn")
+            raise RuntimeError("Application input completed without acceptance")
         return accepted
 
 

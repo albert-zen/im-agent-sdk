@@ -16,6 +16,9 @@ from .persistence.repository_contracts import (
     IdempotencyClaimStatus,
     IdempotencyRepository,
 )
+from .persistence.repository_contracts import (
+    _inbound_idempotency_identity as inbound_idempotency_identity,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,13 +166,3 @@ class _InboundAdmissionLease:
             self._state = "open"
             raise
         self._state = "released"
-
-
-def inbound_idempotency_identity(
-    conversation_ref: ConversationRef,
-    message_id: str,
-) -> tuple[str, str]:
-    return (
-        f"inbound:{conversation_ref.channel_instance_id}",
-        f"{conversation_ref.native_conversation_id}:{message_id}",
-    )

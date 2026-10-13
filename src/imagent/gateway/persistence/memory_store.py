@@ -11,8 +11,10 @@ from typing import TypeVar
 from ...applications.contract import (
     ApplicationRef,
     ProjectRef,
+    QueuedInputReceipt,
     ThreadRef,
     WorkspaceIdentity,
+    validate_thread_ref,
     validate_workspace_identity,
 )
 from ...applications.requests import RequestRef
@@ -48,11 +50,15 @@ from .memory import (
     InMemoryRequestCorrelationRepository,
     _merge_projection_route,
     _reject_conflicting_route_id,
+    _same_turn_reply_correlation,
 )
+from .queue_receipts import _merge_queued_receipt
 from .repository_contracts import (
     IdempotencyClaimStatus,
     ProjectionCheckpointConflict,
     ProjectionRouteConflict,
+    TurnReplyCorrelationConflict,
+    _inbound_idempotency_identity,
 )
 from .state_contracts import (
     ConversationBinding,
@@ -60,17 +66,24 @@ from .state_contracts import (
     DeliverySubmissionRecord,
     DeliverySubmissionState,
     DestinationDeliveryRecord,
+    QueuedInputCorrelation,
+    QueuedInputOrigin,
     RequestRouteCorrelation,
     RequestRouteState,
     ThreadProjectionRoute,
     TurnReplyCorrelation,
+    _require_queued_identifier,
+    _validate_queued_input_lookup,
     validate_binding,
     validate_projection_route,
+    validate_queued_input_correlation,
+    validate_queued_input_origin,
 )
 from .store import (
     EffectReceiptCapacityError,
     EffectReceiptConflict,
     GatewayNamespaceConflict,
+    QueuedInputFenceConflict,
     RuntimeLease,
     RuntimeLeaseUnavailable,
     StaleRuntimeFence,
@@ -116,6 +129,7 @@ class MemoryGatewayStore:
         )
         self._workspace_identities: dict[ProjectRef, str] = {}
         self._effect_receipts: dict[str, EffectReceipt] = {}
+        self._queued_inputs: dict[tuple[ConversationRef, str], QueuedInputCorrelation] = {}
 
     @property
     def max_effect_receipts(self) -> int:
@@ -236,6 +250,119 @@ class MemoryGatewayStore:
                 current.generation if current is not None else 0,
                 self._bindings._binding_generation_floors.get(conversation_ref, 0),
             )
+
+    async def _fence_queued_input(
+        self,
+        fence: RuntimeLease,
+        origin: QueuedInputOrigin,
+        *,
+        claim_scope: str,
+        claim_key: str,
+        owner_token: str,
+    ) -> QueuedInputCorrelation:
+        validate_queued_input_origin(origin)
+        _require_queued_identifier(owner_token, "owner_token")
+        if (claim_scope, claim_key) != _inbound_idempotency_identity(
+            origin.conversation_ref,
+            origin.message_id,
+        ):
+            raise QueuedInputFenceConflict("inbound claim does not match queued input origin")
+        async with self._lock:
+            self._assert_fence_locked(fence)
+            key = (origin.conversation_ref, origin.message_id)
+            if key in self._queued_inputs:
+                raise QueuedInputFenceConflict("queued input was already fenced")
+            claim = (claim_scope, claim_key)
+            if self._idempotency._records.get(claim) != ("in_flight", owner_token):
+                raise QueuedInputFenceConflict("inbound claim is not owned by caller")
+            binding = self._bindings._bindings.get(origin.conversation_ref)
+            if (
+                binding is None
+                or binding.thread_ref != origin.thread_ref
+                or binding.generation != origin.binding_generation
+                or self._bindings._binding_generation_floors.get(origin.conversation_ref, 0)
+                > origin.binding_generation
+            ):
+                raise QueuedInputFenceConflict("queued input binding changed")
+            self._reserve_capacity_locked()
+            now = self._now_locked()
+            record = QueuedInputCorrelation(origin, None, now, now)
+            validate_queued_input_correlation(record)
+            # Stage both writes before publishing. No await or external call can
+            # observe or interrupt the atomic publication under the store lock.
+            records = dict(self._queued_inputs)
+            claims = dict(self._idempotency._records)
+            records[key] = record
+            claims[claim] = ("side_effect_started", owner_token)
+            self._queued_inputs = records
+            self._idempotency._records = claims
+            return record
+
+    async def _get_queued_input(
+        self,
+        conversation_ref: ConversationRef,
+        message_id: str,
+    ) -> QueuedInputCorrelation | None:
+        _validate_queued_input_lookup(conversation_ref, message_id)
+        async with self._lock:
+            self._require_open_locked()
+            return self._queued_inputs.get((conversation_ref, message_id))
+
+    async def _list_queued_inputs(
+        self,
+        thread_ref: ThreadRef | None,
+    ) -> tuple[QueuedInputCorrelation, ...]:
+        if thread_ref is not None:
+            validate_thread_ref(thread_ref)
+        async with self._lock:
+            self._require_open_locked()
+            return tuple(
+                record
+                for record in self._queued_inputs.values()
+                if thread_ref is None or record.origin.thread_ref == thread_ref
+            )
+
+    async def _merge_queued_input_receipt(
+        self,
+        fence: RuntimeLease,
+        origin: QueuedInputOrigin,
+        receipt: QueuedInputReceipt,
+        *,
+        turn_correlation: TurnReplyCorrelation | None,
+    ) -> QueuedInputCorrelation:
+        validate_queued_input_origin(origin)
+        async with self._lock:
+            self._assert_fence_locked(fence)
+            key = (origin.conversation_ref, origin.message_id)
+            current = self._queued_inputs.get(key)
+            if current is None:
+                raise KeyError("queued input correlation does not exist")
+            merged = _merge_queued_receipt(
+                current, origin, receipt, turn_correlation, self._now_locked()
+            )
+            records = dict(self._queued_inputs)
+            turns = dict(self._projections._turn_correlations)
+            records[key] = merged
+            if turn_correlation is not None:
+                turn_key = (turn_correlation.turn_ref.thread_ref, turn_correlation.turn_ref.turn_id)
+                existing = turns.get(turn_key)
+                if existing is not None:
+                    if not _same_turn_reply_correlation(existing, turn_correlation):
+                        raise TurnReplyCorrelationConflict(
+                            "Turn reply correlation belongs to another input"
+                        )
+                else:
+                    if any(
+                        item.correlation_id == turn_correlation.correlation_id
+                        for item in turns.values()
+                    ):
+                        raise TurnReplyCorrelationConflict(
+                            "Turn reply correlation identity is already used"
+                        )
+                    turns[turn_key] = turn_correlation
+            self._queued_inputs = records
+            self._projections._turn_correlations = turns
+            return merged
 
     async def _get_effect_receipt(
         self,
@@ -647,7 +774,7 @@ class MemoryGatewayStore:
             )
 
     def _reserve_capacity_locked(self) -> None:
-        if len(self._effect_receipts) >= self._max_effect_receipts:
+        if len(self._effect_receipts) + len(self._queued_inputs) >= self._max_effect_receipts:
             raise EffectReceiptCapacityError("effect receipt capacity is exhausted")
 
     def _new_receipt_locked(
@@ -744,6 +871,53 @@ class _MemoryGatewayStoreSession:
 
     async def get_binding_generation(self, conversation_ref: ConversationRef) -> int:
         return await self._store._get_binding_generation(conversation_ref)
+
+    async def fence_queued_input(
+        self,
+        origin: QueuedInputOrigin,
+        *,
+        claim_scope: str,
+        claim_key: str,
+        owner_token: str,
+    ) -> QueuedInputCorrelation:
+        self._require_open()
+        return await self._store._fence_queued_input(
+            self._lease,
+            origin,
+            claim_scope=claim_scope,
+            claim_key=claim_key,
+            owner_token=owner_token,
+        )
+
+    async def get_queued_input(
+        self,
+        conversation_ref: ConversationRef,
+        message_id: str,
+    ) -> QueuedInputCorrelation | None:
+        self._require_open()
+        return await self._store._get_queued_input(conversation_ref, message_id)
+
+    async def list_queued_inputs(
+        self,
+        thread_ref: ThreadRef | None = None,
+    ) -> tuple[QueuedInputCorrelation, ...]:
+        self._require_open()
+        return await self._store._list_queued_inputs(thread_ref)
+
+    async def merge_queued_input_receipt(
+        self,
+        origin: QueuedInputOrigin,
+        receipt: QueuedInputReceipt,
+        *,
+        turn_correlation: TurnReplyCorrelation | None = None,
+    ) -> QueuedInputCorrelation:
+        self._require_open()
+        return await self._store._merge_queued_input_receipt(
+            self._lease,
+            origin,
+            receipt,
+            turn_correlation=turn_correlation,
+        )
 
     async def get_store_mutation_receipt(
         self,

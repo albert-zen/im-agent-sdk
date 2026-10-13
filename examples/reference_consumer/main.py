@@ -131,6 +131,24 @@ _SQLITE_SCHEMA: dict[str, tuple[_SQLiteColumn, ...]] = {
         ("owner_token", "TEXT", 0, 0),
         ("updated_at", "TEXT", 1, 0),
     ),
+    "queued_input_correlations": (
+        ("channel_instance_id", "TEXT", 1, 1),
+        ("native_conversation_id", "TEXT", 1, 2),
+        ("message_id", "TEXT", 1, 3),
+        ("actor_fingerprint", "TEXT", 1, 0),
+        ("application_instance_id", "TEXT", 1, 0),
+        ("project_id", "TEXT", 1, 0),
+        ("thread_id", "TEXT", 1, 0),
+        ("binding_generation", "INTEGER", 1, 0),
+        ("client_message_id", "TEXT", 1, 0),
+        ("input_fingerprint", "TEXT", 1, 0),
+        ("continuation", "TEXT", 1, 0),
+        ("receipt_state", "TEXT", 0, 0),
+        ("queued_item_id", "TEXT", 0, 0),
+        ("turn_id", "TEXT", 0, 0),
+        ("created_at", "TEXT", 1, 0),
+        ("updated_at", "TEXT", 1, 0),
+    ),
     "request_route_correlations": (
         ("correlation_id", "TEXT", 1, 1),
         ("application_instance_id", "TEXT", 1, 0),
@@ -183,6 +201,7 @@ _SQLITE_FINAL_ROW_COUNTS = {
     "gateway_schema_metadata": 1,
     "gateway_workspace_identities": 0,
     "idempotency_records": 29,
+    "queued_input_correlations": 0,
     "request_route_correlations": 4,
     "thread_projection_routes": 4,
     "turn_reply_correlations": 1,
@@ -211,6 +230,7 @@ _SQLITE_TABLE_SQL_DIGESTS = {
         "bd386fa4861cd1723d57f91aa8ba2f23eccca76e88a38d390f7a889ef2c95f5f"
     ),
     "idempotency_records": "ead8a5757ace8d30c65fc77537530d9bacaadd9cc60dfc13fb8ba385ec3ab719",
+    "queued_input_correlations": "3967d0cdd3b659b640ddca40f317bbfc68f6ed4dd6e046e258dbb87bef0971b4",
     "request_route_correlations": (
         "8499cf69cb36f55ca902f5d7ffa1c1ead16790fa5317976d32a8bdb7412e55d2"
     ),
@@ -218,6 +238,10 @@ _SQLITE_TABLE_SQL_DIGESTS = {
     "turn_reply_correlations": "704890148af16441e2cba877e3945bc533b0027e43b3d2488d0ce5a34cd70944",
 }
 _SQLITE_EXPLICIT_INDEX_SQL_DIGESTS = {
+    (
+        "queued_input_thread",
+        "queued_input_correlations",
+    ): "7ed83437000a0e3bc9f18eccc7a7da0d0acd24a4cad6e7f0973bae5ef6eabbfc",
     ("delivery_destinations_root", "delivery_submission_destinations"): (
         "9a3f9b434a29d3210b1edda70c70fe77d98a5bf2f6e46a49f92c825c1eef86f3"
     ),
@@ -226,6 +250,7 @@ _SQLITE_EXPLICIT_INDEX_SQL_DIGESTS = {
     ),
 }
 _SQLITE_AUTOINDEXES = (
+    ("sqlite_autoindex_queued_input_correlations_1", "queued_input_correlations"),
     ("sqlite_autoindex_conversation_binding_generations_1", "conversation_binding_generations"),
     ("sqlite_autoindex_conversation_bindings_1", "conversation_bindings"),
     ("sqlite_autoindex_delivery_submission_destinations_1", "delivery_submission_destinations"),
@@ -243,6 +268,7 @@ _SQLITE_AUTOINDEXES = (
     ("sqlite_autoindex_turn_reply_correlations_2", "turn_reply_correlations"),
 )
 _SQLITE_FENCED_TABLES = (
+    "queued_input_correlations",
     "conversation_bindings",
     "conversation_binding_generations",
     "idempotency_records",

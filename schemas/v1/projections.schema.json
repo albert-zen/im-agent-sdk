@@ -161,6 +161,110 @@
         }
       },
       "additionalProperties": false
+    },
+    "QueuedInputOrigin": {
+      "type": "object",
+      "required": [
+        "conversationRef",
+        "messageId",
+        "actorFingerprint",
+        "threadRef",
+        "bindingGeneration",
+        "clientMessageId",
+        "inputFingerprint",
+        "continuation"
+      ],
+      "properties": {
+        "conversationRef": {
+          "$ref": "messages.schema.json#/$defs/ConversationRef"
+        },
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "\\S"
+        },
+        "actorFingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "threadRef": {
+          "$ref": "resources.schema.json#/$defs/ThreadRef"
+        },
+        "bindingGeneration": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "clientMessageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "\\S"
+        },
+        "inputFingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "continuation": {
+          "const": "queue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "QueuedInputCorrelation": {
+      "type": "object",
+      "required": [
+        "origin",
+        "receipt",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "origin": {
+          "$ref": "#/$defs/QueuedInputOrigin"
+        },
+        "receipt": {
+          "oneOf": [
+            {
+              "$ref": "messages.schema.json#/$defs/QueuedInputReceipt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "updatedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        }
+      },
+      "additionalProperties": false
+    },
+    "QueuedInputStatus": {
+      "type": "object",
+      "required": [
+        "messageId",
+        "state"
+      ],
+      "properties": {
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "\\S"
+        },
+        "state": {
+          "enum": [
+            "unknown",
+            "pending",
+            "admitted",
+            "cancelled"
+          ]
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

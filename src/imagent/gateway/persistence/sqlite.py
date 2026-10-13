@@ -178,6 +178,31 @@ class SQLiteGatewayState:
                     native_conversation_id
                 )
             );
+            CREATE TABLE IF NOT EXISTS queued_input_correlations (
+                channel_instance_id TEXT NOT NULL,
+                native_conversation_id TEXT NOT NULL,
+                message_id TEXT NOT NULL,
+                actor_fingerprint TEXT NOT NULL,
+                application_instance_id TEXT NOT NULL,
+                project_id TEXT NOT NULL,
+                thread_id TEXT NOT NULL,
+                binding_generation INTEGER NOT NULL,
+                client_message_id TEXT NOT NULL,
+                input_fingerprint TEXT NOT NULL,
+                continuation TEXT NOT NULL CHECK (continuation = 'queue'),
+                receipt_state TEXT CHECK (receipt_state IN ('queued', 'admitted', 'cancelled')),
+                queued_item_id TEXT,
+                turn_id TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (channel_instance_id, native_conversation_id, message_id),
+                CHECK ((receipt_state IS NULL AND queued_item_id IS NULL AND turn_id IS NULL)
+                    OR (receipt_state IS NOT NULL AND queued_item_id IS NOT NULL
+                        AND ((receipt_state = 'admitted' AND turn_id IS NOT NULL)
+                          OR (receipt_state IN ('queued', 'cancelled') AND turn_id IS NULL))))
+            );
+            CREATE INDEX IF NOT EXISTS queued_input_thread
+                ON queued_input_correlations (application_instance_id, project_id, thread_id);
             CREATE TABLE IF NOT EXISTS turn_reply_correlations (
                 correlation_id TEXT NOT NULL PRIMARY KEY,
                 application_instance_id TEXT NOT NULL,

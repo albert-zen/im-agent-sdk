@@ -195,3 +195,12 @@ creation, input, arbitrary repository, or delivery authority crosses this seam.
 It does not revoke already-delivered request reply authority. Absence leaves
 existing lifecycle behavior unchanged. Public types live in
 `imagent.gateway.startup`, owned by the startup-preparation leaf.
+
+## Ordinary queue configuration
+
+`input_continuation` is an immutable ordinary-input constructor value: default
+PREFER_ACTIVE_TURN or explicit QUEUE only. Startup and scoped commands do not
+inherit it. Queued status presentation uses a separate optional typed extension
+and independent finite task, text, item and timeout limits. The coherent session
+is required for original-association fencing; loose private repository graphs
+never gain a queue dispatcher.

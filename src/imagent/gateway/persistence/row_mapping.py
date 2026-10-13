@@ -7,7 +7,15 @@ import sqlite3
 from collections.abc import Iterable
 from datetime import datetime
 
-from ...applications.contract import ApplicationRef, ProjectRef, ThreadRef, TurnRef
+from ...applications.contract import (
+    ApplicationRef,
+    InputContinuationPreference,
+    ProjectRef,
+    QueuedInputReceipt,
+    QueuedInputState,
+    ThreadRef,
+    TurnRef,
+)
 from ...applications.requests import (
     ApprovalResponseShape,
     RequestRef,
@@ -31,6 +39,8 @@ from .state_contracts import (
     DeliverySubmissionRecord,
     DeliverySubmissionState,
     DestinationDeliveryRecord,
+    QueuedInputCorrelation,
+    QueuedInputOrigin,
     RequestRouteCorrelation,
     RequestRouteState,
     ThreadProjectionRoute,
@@ -38,6 +48,7 @@ from .state_contracts import (
     validate_binding,
     validate_delivery_submission_record,
     validate_projection_route,
+    validate_queued_input_correlation,
     validate_request_route_correlation,
     validate_turn_reply_correlation,
 )
@@ -638,3 +649,69 @@ def _optional_route_scope_text(value: object, label: str) -> str | None:
     if value == "":
         return None
     return optional_text(value, label)
+
+
+def queued_input_correlation_to_row(record: QueuedInputCorrelation) -> tuple[object, ...]:
+    validate_queued_input_correlation(record)
+    origin, receipt = record.origin, record.receipt
+    return (
+        origin.conversation_ref.channel_instance_id,
+        origin.conversation_ref.native_conversation_id,
+        origin.message_id,
+        origin.actor_fingerprint,
+        *thread_storage_key(origin.thread_ref),
+        origin.binding_generation,
+        origin.client_message_id,
+        origin.input_fingerprint,
+        origin.continuation.value,
+        receipt.state.value if receipt is not None else None,
+        receipt.queued_item_id if receipt is not None else None,
+        receipt.turn_ref.turn_id if receipt is not None and receipt.turn_ref is not None else None,
+        record.created_at.isoformat(),
+        record.updated_at.isoformat(),
+    )
+
+
+def queued_input_correlation_from_row(row: sqlite3.Row) -> QueuedInputCorrelation:
+    thread_ref = ThreadRef(
+        ProjectRef(
+            required_text(row["application_instance_id"], "application_instance_id"),
+            required_text(row["project_id"], "project_id"),
+        ),
+        required_text(row["thread_id"], "thread_id"),
+    )
+    origin = QueuedInputOrigin(
+        ConversationRef(
+            required_text(row["channel_instance_id"], "channel_instance_id"),
+            required_text(row["native_conversation_id"], "native_conversation_id"),
+        ),
+        required_text(row["message_id"], "message_id"),
+        required_text(row["actor_fingerprint"], "actor_fingerprint"),
+        thread_ref,
+        required_integer(row["binding_generation"], "binding_generation"),
+        required_text(row["client_message_id"], "client_message_id"),
+        required_text(row["input_fingerprint"], "input_fingerprint"),
+        InputContinuationPreference(required_text(row["continuation"], "continuation")),
+    )
+    receipt = None
+    if row["receipt_state"] is None:
+        if row["queued_item_id"] is not None or row["turn_id"] is not None:
+            raise ValueError("unknown queued input cannot contain receipt lineage")
+    else:
+        turn_id = optional_text(row["turn_id"], "turn_id")
+        receipt = QueuedInputReceipt(
+            thread_ref,
+            origin.client_message_id,
+            required_text(row["queued_item_id"], "queued_item_id"),
+            QueuedInputState(required_text(row["receipt_state"], "receipt_state")),
+            TurnRef(thread_ref, turn_id) if turn_id is not None else None,
+            input_fingerprint=origin.input_fingerprint,
+        )
+    record = QueuedInputCorrelation(
+        origin,
+        receipt,
+        decode_datetime(row["created_at"], "created_at"),
+        decode_datetime(row["updated_at"], "updated_at"),
+    )
+    validate_queued_input_correlation(record)
+    return record

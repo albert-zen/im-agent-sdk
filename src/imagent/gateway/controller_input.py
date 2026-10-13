@@ -26,6 +26,7 @@ from .effect_execution import (
     StoreEffectPreflight,
     WorkflowEffectCommitFence,
 )
+from .input.queue_runtime import QueuedInputRuntime
 from .outcomes import Failed, Succeeded
 from .persistence.effects import (
     ActionError,
@@ -48,6 +49,7 @@ from .projection.request_correlation import (
     RequestResponseRouted,
     RespondToRequest,
 )
+from .queued_input import QueuedInputStatus
 
 ApplicationExecutor = Callable[[ApplicationOperation], Awaitable[ApplicationOperationResult]]
 BindingReader = Callable[[ConversationRef], Awaitable[ConversationBinding | None]]
@@ -148,6 +150,7 @@ class _ScopedControllerActionRuntime:
         abort_projection_route: ProjectionRouteBootstrapAbort,
         fence_projection_route_commit: ProjectionRouteCommitFence,
         request_projection: InteractiveRequestProjection,
+        queued_inputs: QueuedInputRuntime | None = None,
     ) -> None:
         self._gateway_id = gateway_id
         self._applications = applications
@@ -162,6 +165,30 @@ class _ScopedControllerActionRuntime:
         self._abort_projection_route = abort_projection_route
         self._fence_projection_route_commit = fence_projection_route_commit
         self._request_projection = request_projection
+        self._queued_inputs = queued_inputs
+
+    async def read_queued_input(
+        self, conversation_ref: ConversationRef, actor: str, message_id: str
+    ) -> Succeeded[QueuedInputStatus] | Failed[ActionError]:
+        self._require_active()
+        if self._queued_inputs is None:
+            return Failed(ActionError(ActionErrorCode.UNSUPPORTED))
+        return await self._queued_inputs.read(conversation_ref, actor, message_id)
+
+    async def cancel_queued_input(
+        self,
+        conversation_ref: ConversationRef,
+        actor: str,
+        message_id: str,
+        *,
+        reconcile_only: bool,
+    ) -> KnownNativeOutcome | None:
+        self._require_active()
+        if self._queued_inputs is None:
+            return Failed(ActionError(ActionErrorCode.UNSUPPORTED))
+        return await self._queued_inputs.cancel(
+            conversation_ref, actor, message_id, reconcile_only=reconcile_only
+        )
 
     def actions(
         self,

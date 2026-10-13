@@ -11,7 +11,7 @@ const { InMemoryThreadJournal } = await source("journal.ts");
 const { InMemoryThreadMetadataStore } = await source("thread-metadata.ts");
 const { StaticModelCatalog } = await source("model-catalog.ts");
 const { ProviderRegistry } = await source("provider-registry.ts");
-const { ToolEnvironment } = await source("tool.ts");
+const { ToolEnvironment, ShellToolRuntime } = await source("tool.ts");
 const { serveCodexWebSocket } = await source("protocol/codex/websocket.ts");
 const lines = createInterface({ input: process.stdin });
 const config = JSON.parse((await lines[Symbol.asyncIterator]().next()).value);
@@ -22,6 +22,8 @@ const deferred = () => {
 };
 const gates = new Map();
 let nextGate;
+let approvalNext = false;
+let failNextAdmission = false;
 const requests = [];
 const model = {
   provider: "fake",
@@ -34,13 +36,24 @@ const model = {
       await gate.release.promise;
     }
     if (request.signal.aborted) return;
+    if (approvalNext) {
+      approvalNext = false;
+      yield { type: "tool_call", callId: "synthetic-approval", name: "shell", arguments: { command: "exit 99" } };
+      return;
+    }
     yield { type: "text_delta", delta: "native SDK answer" };
   },
 };
+class FixtureRuntime extends AgentRuntime {
+  async runTurn(options) {
+    if (failNextAdmission) { failNextAdmission = false; throw new Error("synthetic startup failure"); }
+    return await super.runTurn(options);
+  }
+}
 const journal = new InMemoryThreadJournal();
 const appServer = new ZenAppServer({
   journal,
-  runtime: new AgentRuntime({ toolEnvironment: new ToolEnvironment({ runtimes: [] }) }),
+  runtime: new FixtureRuntime({ toolEnvironment: new ToolEnvironment({ runtimes: [new ShellToolRuntime()] }) }),
   providerRegistry: new ProviderRegistry([{
     providerProfileId: "fake", adapter: model,
     modelCatalog: new StaticModelCatalog([{
@@ -73,6 +86,12 @@ try {
         await gates.get(command.key).arrived.promise;
       } else if (command.action === "release") {
         gates.get(command.key).release.resolve();
+      } else if (command.action === "fail-next-admission") {
+        failNextAdmission = true;
+      } else if (command.action === "resume-queue") {
+        await appServer.resumeQueue(command.threadId);
+      } else if (command.action === "approval-next") {
+        approvalNext = true;
       } else if (command.action === "snapshot") {
         const snapshot = await appServer.readThread(command.threadId);
         result = {

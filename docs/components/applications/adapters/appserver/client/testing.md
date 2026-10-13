@@ -66,3 +66,18 @@ Wire-level start/steer regressions reject string/fractional/coerced error codes,
 non-string messages, contradictory result/error payloads, malformed version/ID
 fields, and malformed overload responses. Valid native negative and overload
 responses retain their existing behavior, including omitted JSON-RPC version.
+
+`tests/applications/adapters/test_zen_queue_lifecycle.py` also exercises the
+production client's native and CAS observation owners: generic and explicit
+entrypoints, distinct-Thread progress, fresh options, cancelled queued waiters,
+post-dispatch caller cancellation, timeout/reset, and repeatedly cancelled close
+while the connection lock is held. Actual authenticated Core coverage lives in
+`test_zen_queue_native_lifecycle.py` and the public queued Gateway native fixture.
+
+`test_resume_ownership.py` uses the public client/supervisor/WebSocket-factory
+boundary with an immediately answering synthetic wire. It covers every public
+CAS resume entrypoint inside a ready handler, an outer first resume triggering
+same-Thread and different-Thread ready callbacks, actual ready-handler RPC
+timeout, initializer cancellation, and close/reset after readiness while waiting
+for a Thread lock. No timing yield is used to make a deadlock pass; completed
+wire responses and explicit barriers establish progress and no cross-epoch resend.

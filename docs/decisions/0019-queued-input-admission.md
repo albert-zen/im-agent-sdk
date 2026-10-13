@@ -22,7 +22,7 @@ same-Thread Turn. Explicit unions represent the plan and acceptance families.
 
 `InputContinuationPreference.QUEUE` is explicit. Unsupported adapters reject
 before mutation rather than interpreting it as start-new. The default remains
-`PREFER_ACTIVE_TURN`. A later Gateway integration supplies one immutable typed
+`PREFER_ACTIVE_TURN`. Gateway integration supplies one immutable typed
 ordinary-input configuration; commands and approvals remain separate.
 
 Zen queue input requires `queued-input-admission-v1` and, for images,
@@ -58,14 +58,13 @@ later event may overtake that response; canonical receipt merging is monotonic.
 
 ## Gateway delivery dependency
 
-This first slice defines adapter/model boundaries and negative native support
-checks. It does not enable ordinary Gateway queue input or claim end-to-end
-support. That requires an additive lease-fenced correlation record linked
-atomically to the existing inbound claim (the sole retry authority), delayed real
-Turn correlation, scoped original-IM-identity read/cancel actions, bounded
-cross-lane event/request ordering and restart reconciliation before projection.
-No second scheduler, transcript, content persistence, or fallback dispatch is
-allowed. Old started/steered paths and fingerprints must stay unchanged.
+The adapter/model slice was reviewed independently. The Gateway follow-on uses
+an additive lease-fenced original correlation linked atomically to the existing
+inbound claim, delayed real-Turn correlation, original-IM-identity read/cancel,
+bounded separate queue observation, cross-lane request ordering and startup
+reconciliation before projection. [The focused Gateway authority](../components/gateway/input/queued-admission/design.md)
+defines its ownership. Default started/steered paths remain source-compatible.
+No second scheduler, transcript, content persistence or fallback dispatch exists.
 
 Before release, prove real production Gateway/client + authenticated native Zen
 with synthetic model/channel and disposable SQLite: both event/response orders,
@@ -85,7 +84,7 @@ Acquired inline bytes and canonical AttachmentRef therefore yield the same
 digest; path, base64 spelling and derived dimensions are excluded. Changed
 order, text boundary, bytes, MIME or length changes identity. Recovery always
 hashes the original `user_message_queued.input`, even after an edit or admission
-whose execution content differs. The future Gateway receipt owner compares
+whose execution content differs. The Gateway receipt owner compares
 this evidence with its original pre-dispatch fingerprint; it does not reopen
 input or create a new receipt when the native queue is edited.
 

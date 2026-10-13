@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol, TypeGuard, runtime_checkable
 
-from ...applications.contract import WorkspaceIdentity
+from ...applications.contract import QueuedInputReceipt, ThreadRef, WorkspaceIdentity
 from ...interaction.messages import ConversationRef
 from .effects import (
     ActionError,
@@ -26,7 +26,12 @@ from .repository_contracts import (
     ProjectionRouteRepository,
     RequestCorrelationRepository,
 )
-from .state_contracts import ThreadProjectionRoute
+from .state_contracts import (
+    QueuedInputCorrelation,
+    QueuedInputOrigin,
+    ThreadProjectionRoute,
+    TurnReplyCorrelation,
+)
 
 
 class GatewayStoreError(RuntimeError):
@@ -51,6 +56,14 @@ class EffectReceiptConflict(GatewayStoreError):
 
 class EffectReceiptCapacityError(GatewayStoreError):
     """A new effect identity exceeded the finite non-evicting receipt bound."""
+
+
+class QueuedInputFenceConflict(GatewayStoreError):
+    """Queue dispatch cannot be authorized by this origin, binding, or claim."""
+
+
+class QueuedInputReceiptConflict(GatewayStoreError):
+    """Canonical queue evidence conflicts with the immutable original input."""
 
 
 class WorkspaceIdentityConflict(GatewayStoreError):
@@ -149,6 +162,34 @@ class GatewayStoreSession(
         route: ThreadProjectionRoute | None,
     ) -> EffectReceipt: ...
 
+    async def fence_queued_input(
+        self,
+        origin: QueuedInputOrigin,
+        *,
+        claim_scope: str,
+        claim_key: str,
+        owner_token: str,
+    ) -> QueuedInputCorrelation: ...
+
+    async def get_queued_input(
+        self,
+        conversation_ref: ConversationRef,
+        message_id: str,
+    ) -> QueuedInputCorrelation | None: ...
+
+    async def list_queued_inputs(
+        self,
+        thread_ref: ThreadRef | None = None,
+    ) -> tuple[QueuedInputCorrelation, ...]: ...
+
+    async def merge_queued_input_receipt(
+        self,
+        origin: QueuedInputOrigin,
+        receipt: QueuedInputReceipt,
+        *,
+        turn_correlation: TurnReplyCorrelation | None = None,
+    ) -> QueuedInputCorrelation: ...
+
     async def close(self) -> None: ...
 
 
@@ -171,6 +212,10 @@ class GatewayStore(Protocol):
 
 
 _GATEWAY_STORE_SESSION_METHODS = (
+    "fence_queued_input",
+    "get_queued_input",
+    "list_queued_inputs",
+    "merge_queued_input_receipt",
     "renew",
     "release_runtime",
     "check_workspace_identities",
@@ -270,6 +315,8 @@ def validate_lease_duration(value: float) -> None:
 
 
 __all__ = [
+    "QueuedInputFenceConflict",
+    "QueuedInputReceiptConflict",
     "EffectReceiptCapacityError",
     "EffectReceiptConflict",
     "GatewayNamespaceConflict",

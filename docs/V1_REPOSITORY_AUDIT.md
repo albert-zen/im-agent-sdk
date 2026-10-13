@@ -6,6 +6,31 @@ This audit compares the repository with `V1_DESIGN.md`. Existing behavior is
 not retained merely because it has tests. Safety evidence is reused; conflicting
 semantics and public shapes are replaced without compatibility layers.
 
+## Explicit queued admission follow-on
+
+The optional native queue seam now extends through public Gateway composition.
+Default ordinary input remains prefer-active-turn; explicit QUEUE uses the same
+inbound claim with one atomic lease/generation-fenced original correlation.
+Admitted native receipt plus original TurnReplyCorrelation is atomic. Existing
+terminal projection cleanup removes the transient Turn row, while durable queued
+origin and receipt remain available for canonical recovery. Scoped original-ID
+read/cancel and bounded typed presentation contain no native-ID escape hatch.
+
+Application-owned bulk canonical recovery and native/CAS observation preserve
+original fingerprint after edits, request-first ordering and fresh-client final
+output. Central client ownership covers all same-Thread public resume calls and
+cancellation-safe close; consumers need no second owner. Queue failures remain
+live feedback and never become a stored retry schedule. No input/content/media
+payload is persisted, and the additive SQLite table leaves existing meanings
+unchanged. Actual pre-queue v1-source upgrade and authenticated Core fixtures
+provide separate migration/integration evidence.
+
+See [ADR 0019](decisions/0019-queued-input-admission.md) and
+[the queue owner](components/gateway/input/queued-admission/design.md). This
+Gateway layer requires its own independent review; earlier adapter-only approval
+does not substitute for it. Downstream opt-in controls/settings remain product
+work, with no implicit fallback when native capability is unavailable.
+
 ## Structural divergences
 
 ### Resolved in A: two resource trees instead of one

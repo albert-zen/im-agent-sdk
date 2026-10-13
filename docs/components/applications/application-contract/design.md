@@ -136,3 +136,26 @@ start-new preference and expose `QueuedInputReceipt` for literal queue. Generic
 adapter callers use the declared plan/acceptance unions and narrow before
 applying Turn-only semantics. Unsupported Codex/T3 queue input remains a
 pre-dispatch rejection with their existing real-Turn callback contract.
+
+## Optional queued lifecycle ports
+
+`applications.queued_input` owns additive, runtime-checkable snapshot, control,
+observer and subscription ports. Bulk reads accept a tuple of at most 4,096
+client IDs (duplicates count), return positional receipts/absence from one
+complete finite canonical snapshot, and run in O(items + IDs). No cached outcome
+is authoritative; multiple cohorts do not imply one shared snapshot revision.
+The historical single-receipt read remains read-only and source-compatible.
+Cancellation targets an exact receipt, including its original fingerprint and
+queued item ID. It returns only canonical cancelled/admitted evidence. An
+uncertain dispatched mutation raises `ApplicationInputOutcomeUnknown`, never
+permission to replay or interrupt a running Turn.
+
+Async `subscribe_queued_inputs` installs bounded local observation before the
+native resume barrier and returns only once its complete snapshot and epochs
+are verified. Notices contain only Thread/client/queued-item IDs, a stable
+bounded notice ID and `CHANGED` or live-only `ATTEMPT_FAILED`. They are wakeups,
+not persisted state or failure history. Consumers read canonical state after
+subscription and after notices. Overflow, reset and malformed ordering are
+explicit gaps. Closing one subscription removes only that observer. Same-Thread
+native resume ownership survives caller cancellation until the actual response
+or transport reset; adapter/client close fences entry and joins owned work.

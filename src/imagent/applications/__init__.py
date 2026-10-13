@@ -53,6 +53,15 @@ from .contract import (
     validate_turn_ref,
     validate_workspace_identity,
 )
+from .queued_input import (
+    MAX_QUEUED_INPUT_READ_IDS,
+    QueuedInputControl,
+    QueuedInputNotice,
+    QueuedInputNoticeKind,
+    QueuedInputObserver,
+    QueuedInputSnapshotReader,
+    QueuedInputSubscription,
+)
 
 if TYPE_CHECKING:
     from .adapters.appserver.client import codex_app_server_client
@@ -92,6 +101,13 @@ if TYPE_CHECKING:
     )
 
 __all__ = [
+    "MAX_QUEUED_INPUT_READ_IDS",
+    "QueuedInputControl",
+    "QueuedInputNotice",
+    "QueuedInputNoticeKind",
+    "QueuedInputObserver",
+    "QueuedInputSnapshotReader",
+    "QueuedInputSubscription",
     "QueuedInputRecovery",
     "validate_queued_input_receipt",
     "validate_queued_input_dispatch",

@@ -841,7 +841,7 @@ class ReferenceConsumerExampleTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(report.duplicate_input_suppressed)
         self.assertFalse(report.recovery_redispatched_input)
         self.assertGreaterEqual(report.sqlite_files_inspected, 3)
-        self.assertEqual(report.sqlite_table_count, 13)
+        self.assertEqual(report.sqlite_table_count, 14)
         self.assertTrue(report.sqlite_bridge_state_allowlisted)
         self.assertEqual(report.request_delivered_destinations, 2)
         self.assertTrue(report.request_nonrecipient_rejected)

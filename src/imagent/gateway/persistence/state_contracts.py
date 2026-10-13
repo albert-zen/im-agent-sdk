@@ -9,10 +9,15 @@ from typing import TYPE_CHECKING
 
 from ...applications.contract import (
     ApplicationRef,
+    InputContinuationPreference,
     ProjectRef,
+    QueuedInputDispatch,
+    QueuedInputReceipt,
     ThreadRef,
     TurnRef,
     validate_project_ref,
+    validate_queued_input_dispatch,
+    validate_queued_input_receipt,
     validate_thread_ref,
     validate_turn_ref,
 )
@@ -86,6 +91,101 @@ class TurnReplyCorrelation:
     conversation_ref: ConversationRef
     reply_to_message_id: str
     created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class QueuedInputOrigin:
+    """Immutable original IM/native identity, never replayable input content."""
+
+    conversation_ref: ConversationRef
+    message_id: str
+    actor_fingerprint: str
+    thread_ref: ThreadRef
+    binding_generation: int
+    client_message_id: str
+    input_fingerprint: str
+    continuation: InputContinuationPreference
+
+
+@dataclass(frozen=True, slots=True)
+class QueuedInputCorrelation:
+    """Bounded canonical receipt evidence; absence is sticky uncertainty."""
+
+    origin: QueuedInputOrigin
+    receipt: QueuedInputReceipt | None
+    created_at: datetime
+    updated_at: datetime
+
+
+def validate_queued_input_origin(origin: QueuedInputOrigin) -> None:
+    if type(origin) is not QueuedInputOrigin:
+        raise ContractViolation("queued input origin must be QueuedInputOrigin")
+    _validate_queued_input_lookup(origin.conversation_ref, origin.message_id)
+    if not isinstance(origin.thread_ref, ThreadRef) or not isinstance(
+        origin.thread_ref.project_ref, ProjectRef
+    ):
+        raise ContractViolation("queued input Thread must have a Project reference")
+    for value, label in (
+        (origin.thread_ref.project_ref.application_instance_id, "application_instance_id"),
+        (origin.thread_ref.project_ref.project_id, "project_id"),
+        (origin.thread_ref.thread_id, "thread_id"),
+        (origin.client_message_id, "client_message_id"),
+    ):
+        _require_queued_identifier(value, label)
+    fingerprint = origin.actor_fingerprint
+    if (
+        not isinstance(fingerprint, str)
+        or len(fingerprint) != 64
+        or any(character not in "0123456789abcdef" for character in fingerprint)
+    ):
+        raise ContractViolation("actor fingerprint must be lowercase SHA-256")
+    validate_queued_input_dispatch(
+        QueuedInputDispatch(
+            origin.thread_ref,
+            origin.client_message_id,
+            origin.input_fingerprint,
+        )
+    )
+    _validate_generation(origin.binding_generation, "binding generation", optional=False)
+    if origin.continuation is not InputContinuationPreference.QUEUE:
+        raise ContractViolation("queued input continuation must be QUEUE")
+
+
+def validate_queued_input_correlation(record: QueuedInputCorrelation) -> None:
+    if type(record) is not QueuedInputCorrelation:
+        raise ContractViolation("queued input correlation must be QueuedInputCorrelation")
+    validate_queued_input_origin(record.origin)
+    for value in (record.created_at, record.updated_at):
+        if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+            raise ContractViolation("queued input times must include a valid timezone")
+    if record.updated_at < record.created_at:
+        raise ContractViolation("queued input update precedes creation")
+    receipt = record.receipt
+    if receipt is not None:
+        validate_queued_input_receipt(receipt)
+        _require_queued_identifier(receipt.queued_item_id, "queued_item_id")
+        if receipt.turn_ref is not None:
+            _require_queued_identifier(receipt.turn_ref.turn_id, "turn_id")
+        if (
+            receipt.thread_ref != record.origin.thread_ref
+            or receipt.client_message_id != record.origin.client_message_id
+            or receipt.input_fingerprint != record.origin.input_fingerprint
+        ):
+            raise ContractViolation("queued input receipt does not match original input")
+
+
+def _require_queued_identifier(value: object, label: str) -> None:
+    if not isinstance(value, str):
+        raise ContractViolation(f"{label} must be a string")
+    require_identifier(value, label)
+
+
+def _validate_queued_input_lookup(conversation_ref: ConversationRef, message_id: str) -> None:
+    if not isinstance(conversation_ref, ConversationRef):
+        raise ContractViolation("queued input Conversation must be ConversationRef")
+    _require_queued_identifier(conversation_ref.channel_instance_id, "channel_instance_id")
+    _require_queued_identifier(conversation_ref.native_conversation_id, "native_conversation_id")
+    _require_queued_identifier(message_id, "message_id")
 
 
 MAX_DELIVERY_SUBMISSION_DESTINATIONS = 64
@@ -334,6 +434,10 @@ __all__ = [
     "DeliverySubmissionState",
     "DestinationDeliveryRecord",
     "MAX_DELIVERY_SUBMISSION_DESTINATIONS",
+    "QueuedInputOrigin",
+    "QueuedInputCorrelation",
+    "validate_queued_input_origin",
+    "validate_queued_input_correlation",
     "RequestRouteCorrelation",
     "RequestRouteState",
     "ThreadProjectionRoute",

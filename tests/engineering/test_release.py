@@ -15,6 +15,7 @@ from textwrap import dedent
 import yaml
 
 from scripts.prepare_github_release import AUTHORIZED_REPOSITORY, prepare_release
+from scripts.smoke_clean_install import PUBLIC_GOLDEN_CHECK
 
 ROOT = Path(__file__).resolve().parents[2]
 DEPENDENCY_BOUNDARY_PATHS = (
@@ -42,6 +43,20 @@ def _agentkit_gate_runs(workflow: dict) -> list[str]:
 
 
 class PackageIndependenceTests(unittest.TestCase):
+    def test_clean_install_public_golden_matches_current_facade(self) -> None:
+        environment = os.environ.copy()
+        environment["PYTHONPATH"] = str(ROOT / "src")
+        completed = subprocess.run(
+            [sys.executable, "-c", PUBLIC_GOLDEN_CHECK],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
     def test_version_typing_marker_and_profile_inventory_are_exact(self) -> None:
         metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
         init_source = (ROOT / "src" / "imagent" / "__init__.py").read_text(encoding="utf-8")

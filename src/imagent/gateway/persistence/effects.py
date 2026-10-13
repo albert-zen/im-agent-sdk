@@ -66,6 +66,7 @@ class ActionErrorCode(StrEnum):
     NATIVE_REJECTED = "native_rejected"
     NATIVE_OUTCOME_UNKNOWN = "native_outcome_unknown"
     STORE_FAILURE = "store_failure"
+    QUEUE_ALREADY_ADMITTED = "queue_already_admitted"
 
 
 @dataclass(frozen=True, slots=True)

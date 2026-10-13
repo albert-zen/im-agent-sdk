@@ -216,6 +216,9 @@ components:
       - src/imagent/gateway/controller_input.py
       - src/imagent/gateway/input/__init__.py
       - src/imagent/gateway/input/content_transformation.py
+      - src/imagent/gateway/queued_input.py
+      - src/imagent/gateway/input/queue_runtime.py
+      - src/imagent/gateway/input/queue_presentation.py
       - src/imagent/gateway/input/dispatch.py
       - src/imagent/gateway/input/failure_presentation.py
       - src/imagent/gateway/__init__.py
@@ -248,6 +251,9 @@ components:
       - tests/gateway/test_creation_profiles.py
       - tests/gateway/input/test_content_transformation.py
       - tests/gateway/input/test_dispatch.py
+      - tests/gateway/input/test_queued_gateway_fencing.py
+      - tests/gateway/input/test_queued_contract.py
+      - tests/integration/test_queued_gateway_native.py
       - tests/gateway/input/test_policy_free_ordinary_input.py
       - tests/gateway/input/test_failure_presentation.py
     docs:
@@ -274,6 +280,8 @@ components:
       - docs/components/gateway/input/content-transformation/design.md
       - docs/components/gateway/input/content-transformation/testing.md
       - docs/components/gateway/input/dispatch/design.md
+      - docs/components/gateway/input/queued-admission/design.md
+      - docs/components/gateway/input/queued-admission/testing.md
       - docs/components/gateway/input/dispatch/testing.md
       - docs/components/gateway/input/failure-presentation/design.md
       - docs/components/gateway/input/failure-presentation/testing.md
@@ -559,6 +567,7 @@ components:
       - src/imagent/applications/adapters/appserver/_base.py
       - src/imagent/applications/adapters/appserver/_creation_options.py
       - src/imagent/applications/adapters/codex.py
+      - src/imagent/applications/adapters/zen_queue_observation.py
       - src/imagent/applications/adapters/zen.py
       - src/imagent/applications/adapters/zen_queue.py
       - src/imagent/applications/adapters/appserver/**
@@ -566,8 +575,12 @@ components:
       - tests/applications/adapters/test_codex.py
       - tests/applications/adapters/test_zen.py
       - tests/applications/adapters/test_zen_queue.py
+      - tests/applications/adapters/test_zen_queue_bulk.py
+      - tests/applications/adapters/test_zen_queue_lifecycle.py
+      - tests/applications/adapters/test_zen_queue_native_lifecycle.py
       - tests/integration/test_zen_native_interop.py
       - tests/integration/test_zen_queue_native_interop.py
+      - tests/integration/test_queued_native_coexistence.py
       - tests/integration/zen_native_server.mjs
       - tests/integration/__init__.py
       - tests/applications/adapters/_appserver_fakes.py
@@ -654,6 +667,7 @@ components:
       - docs/V1_EXECUTABLE_SPEC.md
       - docs/decisions/README.md
       - docs/decisions/0016-uniform-workspace-and-consumer-actions.md
+      - src/imagent/applications/queued_input.py
       - src/imagent/applications/contract.py
       # The root facade and the formal cross-layer facade carry the
       # Applications edge of this public-surface slice.

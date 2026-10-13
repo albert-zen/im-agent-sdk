@@ -30,7 +30,8 @@ expected_root = [
 expected_gateway = [
     "ActionResult", "ActionValue", "ApplicationActions", "ConversationActions",
     "Gateway", "GatewayExtensions", "GatewayLimits", "MissingBindingError",
-    "ReadOutcome", "StaleBindingError",
+    "QueuedInputNoticeReason", "QueuedInputPresenter", "QueuedInputStatus",
+    "QueuedInputStatusKind", "ReadOutcome", "StaleBindingError",
 ]
 assert imagent.__all__ == expected_root
 assert gateway_facade.__all__ == expected_gateway
@@ -63,6 +64,14 @@ for name, module_name in value_exports.items():
     assert getattr(imagent, name) is owner
     if name in expected_gateway:
         assert getattr(gateway_facade, name) is owner
+
+queued_exports = (
+    "QueuedInputNoticeReason", "QueuedInputPresenter", "QueuedInputStatus",
+    "QueuedInputStatusKind",
+)
+queued_owner = importlib.import_module("imagent.gateway.queued_input")
+for name in queued_exports:
+    assert getattr(gateway_facade, name) is getattr(queued_owner, name)
 
 from imagent.gateway import GatewayExtensions, GatewayLimits
 from imagent.gateway.composition import _GatewayRuntimeDependencies
