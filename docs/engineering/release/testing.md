@@ -14,6 +14,15 @@ the finite value-only top-level facade, optional-dependency isolation, the
 typed marker, console entry point, the single packaged reference consumer, and
 the fail-closed GitHub-only release workflow.
 
+The release mirror also executes the clean-install script's literal public
+golden against the source facade, so an added public export cannot leave the
+six-profile smoke's finite inventory stale. The Gateway inventory includes
+the four queued-input status/presentation values and checks their exact
+`imagent.gateway.queued_input` owner identity. This source check does not
+replace installed-wheel evidence. The two quickstart wheel tests prove the
+packaged reference consumer; only the separate six-profile smoke below proves
+the complete installed public golden and optional-dependency matrix.
+
 ## Build and installed-wheel evidence
 
 ```sh
