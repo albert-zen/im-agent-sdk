@@ -209,6 +209,7 @@ class TypedGatewayOperationTests(unittest.IsolatedAsyncioTestCase):
                         replace(limits, **{name: invalid})
 
         positive_number_fields = (
+            "request_publication_wait_timeout_seconds",
             "turn_correlation_retention_seconds",
             "request_correlation_retention_seconds",
             "inbound_content_transform_timeout_seconds",

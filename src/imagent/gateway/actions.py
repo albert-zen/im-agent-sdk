@@ -1837,6 +1837,7 @@ def _action_error(operation_error_code: OperationErrorCode) -> ActionError:
     code = {
         OperationErrorCode.UNSUPPORTED: ActionErrorCode.UNSUPPORTED,
         OperationErrorCode.CONFLICT: ActionErrorCode.CONFLICT,
+        OperationErrorCode.REQUEST_DELIVERY_PENDING: ActionErrorCode.CONFLICT,
         OperationErrorCode.CAPACITY_EXHAUSTED: ActionErrorCode.CAPACITY_EXHAUSTED,
     }.get(operation_error_code, ActionErrorCode.NATIVE_REJECTED)
     return ActionError(code, operation_error_code)

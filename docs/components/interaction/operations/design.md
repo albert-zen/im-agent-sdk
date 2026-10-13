@@ -56,7 +56,12 @@ not grant the Controller access to Gateway or Application implementations.
 Stable error codes distinguish invalid, unsupported, missing resource,
 missing ordinary-input binding, stale ordinary-input binding, conflicting,
 adapter-failed, capacity-exhausted, unauthorized-destination, and
-request-lifecycle outcomes. `capacity_exhausted` is retryable only because it
+request-lifecycle outcomes. `request_delivery_pending` is a Gateway-owned
+pre-native publication-wait deadline, not native stale request truth. It grants
+no dispatch or automatic retry; a new explicit response may try again through
+ordinary authorization. It does not replace cancellation: native expiry can
+cancel an in-progress Channel send and its awaited callback, and caller/stop
+cancellation retains existing receipt recovery. `capacity_exhausted` is retryable only because it
 is emitted before the owning operation's side-effect boundary. Native
 exception types may be projected into that public vocabulary, but an error
 result does not otherwise invent support or retry permission.

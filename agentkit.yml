@@ -332,6 +332,8 @@ components:
       - tests/gateway/routing/test_projection_integration.py
       - tests/gateway/projection/test_checkpoints.py
       - tests/gateway/projection/test_request_correlation.py
+      - tests/gateway/projection/test_request_publication.py
+      - tests/gateway/test_request_publication_integration.py
       - tests/gateway/projection/test_recovery.py
     docs:
       - docs/components/gateway/projection/README.md

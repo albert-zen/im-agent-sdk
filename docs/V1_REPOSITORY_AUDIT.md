@@ -530,3 +530,24 @@ read/clear actions. Native next-Thread profiles now remain adapter configuration
 while ID/config fingerprints participate in ordinary scoped creation workflows.
 Neither requires private store/runtime access or resurrects the old aggregate.
 Legacy database migration and real product acceptance remain independent gates.
+
+## Immediate interactive-request publication ordering
+
+A delivered request can be replied to before its minimal destination
+correlation is committed. The request-correlation owner now orders each exact
+request/Conversation publication with response preflight and direct routing,
+then retains the existing request-wide native first-writer fence. This is
+process-local synchronization only: no schema, pending-request authority,
+retry queue, or consumer permission expansion. Event-gated unit and public
+SQLite tests cover acceptance, failure, unknown, cancellation, independent
+routes, reentrant callbacks and restart. A finite explicit publication wait
+limit caps waiting by native expiry and returns request_delivery_pending as
+pre-native conflict when its timeout wins. Existing native-expiry cancellation
+of Channel.send and awaited callbacks remains unchanged, as do caller/stop
+cancellation and reserved-receipt recovery. Review found the earlier promise
+of terminal pending for every expiry/callback intersection exceeded this
+scope; the design decision is to withdraw that promise, not add cross-owner
+cancellation protocols. Public SQLite tests prove explicit same-ID retry and
+fresh recovery of cancelled reserved actions reject expired requests without
+native effects, and completed pending failures remain terminal. The canonical
+native IMZen steering fixture supplies the original App Server counterexample.

@@ -6,7 +6,9 @@ import asyncio
 import hashlib
 import json
 import logging
-from collections.abc import Awaitable, Callable, Mapping
+import math
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 
@@ -192,6 +194,16 @@ def derive_request_delivery_id(
     return f"imagent:request-delivery:sha256:{digest}"
 
 
+@dataclass(slots=True)
+class _RequestPublication:
+    expires_at: datetime | None
+    completed: asyncio.Event = field(default_factory=asyncio.Event)
+
+
+class _RequestPublicationPending(_MappedOperationError):
+    operation_error_code = OperationErrorCode.REQUEST_DELIVERY_PENDING
+
+
 class InteractiveRequestProjection:
     """Own all Turn/request correlation decisions and persistence orchestration."""
 
@@ -206,7 +218,16 @@ class InteractiveRequestProjection:
         active_routes: ActiveRoutes,
         deliver_request_outbound: DeliverRequestOutbound,
         ensure_turn_correlation: Callable[[ThreadRef, str], Awaitable[None]] | None = None,
+        publication_wait_timeout_seconds: float = 5.0,
     ) -> None:
+        if (
+            not isinstance(publication_wait_timeout_seconds, (int, float))
+            or isinstance(publication_wait_timeout_seconds, bool)
+            or not math.isfinite(publication_wait_timeout_seconds)
+            or publication_wait_timeout_seconds <= 0
+        ):
+            raise ValueError("publication_wait_timeout_seconds must be a positive finite number")
+        self._publication_wait_timeout_seconds = publication_wait_timeout_seconds
         self._applications = applications
         self._projections = projections
         self._correlations = correlations
@@ -216,6 +237,8 @@ class InteractiveRequestProjection:
         self._deliver_request_outbound = deliver_request_outbound
         self._ensure_turn_correlation = ensure_turn_correlation
         self._request_locks = KeyedLockRegistry()
+        self._publication_locks = KeyedLockRegistry()
+        self._publications: dict[tuple[RequestRef, ConversationRef], _RequestPublication] = {}
 
     async def cleanup_correlations(
         self,
@@ -469,6 +492,21 @@ class InteractiveRequestProjection:
         route: ThreadProjectionRoute,
         request: InteractiveRequest,
     ) -> None:
+        key = (request.request_ref, route.conversation_ref)
+        async with self._publication_locks.hold(key):
+            publication = _RequestPublication(request.expires_at)
+            self._publications[key] = publication
+            try:
+                await self._publish_request(route, request)
+            finally:
+                self._publications.pop(key, None)
+                publication.completed.set()
+
+    async def _publish_request(
+        self,
+        route: ThreadProjectionRoute,
+        request: InteractiveRequest,
+    ) -> None:
         """Present one routed request and persist authority after accepted delivery."""
 
         if _request_expired(request):
@@ -544,7 +582,7 @@ class InteractiveRequestProjection:
         *,
         completed_at: datetime,
     ) -> RequestResponseRouted:
-        async with self._request_locks.hold(operation.request_ref):
+        async with self._response_fence(operation):
             return await self._respond_to_request(
                 operation,
                 completed_at=completed_at,
@@ -553,8 +591,40 @@ class InteractiveRequestProjection:
     async def authorize_response(self, operation: RespondToRequest) -> None:
         """Validate delivered-destination authority before a native effect fence."""
 
-        async with self._request_locks.hold(operation.request_ref):
+        async with self._response_fence(operation):
             await self._authorized_response_destination(operation)
+
+    @asynccontextmanager
+    async def _response_fence(self, operation: RespondToRequest) -> AsyncIterator[None]:
+        await self._await_publication(operation)
+        async with self._request_locks.hold(operation.request_ref):
+            yield
+
+    async def _await_publication(self, operation: RespondToRequest) -> None:
+        key = (operation.request_ref, operation.conversation_ref)
+        publication = self._publications.get(key)
+        if publication is None:
+            return
+        correlations = await self._correlations.list_request_correlations(
+            request_ref=operation.request_ref,
+        )
+        if any(row.conversation_ref == operation.conversation_ref for row in correlations):
+            # Existing durable authority is validated by the ordinary response
+            # fence. A repeated or slow publication cannot obstruct it.
+            return
+        timeout = self._publication_wait_timeout_seconds
+        if publication.expires_at is not None:
+            timeout = min(
+                timeout, max(0.0, (publication.expires_at - datetime.now(UTC)).total_seconds())
+            )
+        try:
+            async with asyncio.timeout(timeout):
+                await publication.completed.wait()
+        except TimeoutError:
+            raise _RequestPublicationPending(
+                "request delivery publication is still pending; "
+                "submit a new response after delivery completes"
+            ) from None
 
     async def _respond_to_request(
         self,

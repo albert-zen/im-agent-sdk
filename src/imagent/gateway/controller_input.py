@@ -394,6 +394,7 @@ def _request_action_error(error: _MappedOperationError) -> ActionError:
     action_code = {
         OperationErrorCode.UNSUPPORTED: ActionErrorCode.UNSUPPORTED,
         OperationErrorCode.CONFLICT: ActionErrorCode.CONFLICT,
+        OperationErrorCode.REQUEST_DELIVERY_PENDING: ActionErrorCode.CONFLICT,
         OperationErrorCode.CAPACITY_EXHAUSTED: ActionErrorCode.CAPACITY_EXHAUSTED,
     }.get(operation_code, ActionErrorCode.NATIVE_REJECTED)
     return ActionError(action_code, operation_code)

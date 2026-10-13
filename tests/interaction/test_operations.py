@@ -25,6 +25,9 @@ class CommonOperationVocabularyTests(unittest.TestCase):
             OperationErrorCode.CAPACITY_EXHAUSTED.value,
             "capacity_exhausted",
         )
+        self.assertEqual(
+            OperationErrorCode.REQUEST_DELIVERY_PENDING.value, "request_delivery_pending"
+        )
         self.assertEqual(OperationErrorCode.MISSING_BINDING.value, "missing_binding")
         self.assertEqual(OperationErrorCode.STALE_BINDING.value, "stale_binding")
         cases = (

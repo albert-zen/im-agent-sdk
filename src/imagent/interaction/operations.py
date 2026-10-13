@@ -43,6 +43,7 @@ class OperationErrorCode(StrEnum):
     REQUEST_DUPLICATE = "request_duplicate"
     REQUEST_RESOLVED = "request_resolved"
     REQUEST_STALE = "request_stale"
+    REQUEST_DELIVERY_PENDING = "request_delivery_pending"
 
 
 class _MappedOperationError(RuntimeError):
