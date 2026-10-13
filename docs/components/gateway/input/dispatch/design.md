@@ -143,3 +143,12 @@ owner because they classify entry into the one ordinary-input dispatch path.
 - [ADR 0006](../../../../decisions/0006-core-admission-and-policy-ownership.md)
 - [ADR 0012](../../../../decisions/0012-input-continuation-and-reply-correlation.md)
 - [ADR 0013](../../../../decisions/0013-bounded-application-event-admission.md)
+
+## Staged queued-input boundary
+
+The Application plan/result unions now distinguish queued admission from real
+Turn acceptance. This Gateway slice still dispatches only prefer-active-turn: it
+rejects a queued pre-dispatch plan before native mutation. An adapter violating
+that authorization and returning a queued receipt is post-acceptance failure;
+it cannot be correlated to a placeholder Turn or reopen input. The ordinary
+queue policy and durable correlation record are pending the full ADR 0019 slice.

@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Generic, Protocol, TypeVar
+from typing import Generic, Literal, Protocol, TypeAlias, TypeVar, overload
 
 from ..interaction.messages import Content, MessageRole, Metadata
 from ..interaction.operations import ContractViolation, require_identifier
@@ -77,6 +77,7 @@ def validate_workspace_identity(identity: WorkspaceIdentity) -> None:
 class InputContinuationPreference(StrEnum):
     PREFER_ACTIVE_TURN = "prefer_active_turn"
     START_NEW_TURN = "start_new_turn"
+    QUEUE = "queue"
 
 
 class ApplicationInputRejected(RuntimeError):
@@ -329,7 +330,86 @@ class ApplicationInputDispatch:
     expected_turn_ref: TurnRef | None = None
 
 
+class QueuedInputState(StrEnum):
+    QUEUED = "queued"
+    ADMITTED = "admitted"
+    CANCELLED = "cancelled"
+
+
+@dataclass(frozen=True, slots=True)
+class QueuedInputDispatch:
+    """Prepared queue input identity; no execution or reply Turn is invented."""
+
+    thread_ref: ThreadRef
+    client_message_id: str
+    input_fingerprint: str
+
+
+@dataclass(frozen=True, slots=True)
+class QueuedInputReceipt:
+    """Positive native canonical evidence for an original queued human input."""
+
+    thread_ref: ThreadRef
+    client_message_id: str
+    queued_item_id: str
+    state: QueuedInputState
+    turn_ref: TurnRef | None = None
+    input_fingerprint: str = field(kw_only=True)
+
+
+def validate_queued_input_dispatch(dispatch: QueuedInputDispatch) -> None:
+    if type(dispatch) is not QueuedInputDispatch:
+        raise ContractViolation("queued input dispatch must be QueuedInputDispatch")
+    validate_thread_ref(dispatch.thread_ref)
+    require_identifier(dispatch.client_message_id, "client_message_id")
+    fingerprint = dispatch.input_fingerprint
+    if (
+        not isinstance(fingerprint, str)
+        or len(fingerprint) != 64
+        or any(character not in "0123456789abcdef" for character in fingerprint)
+    ):
+        raise ContractViolation("input fingerprint must be lowercase SHA-256")
+
+
+def validate_queued_input_receipt(receipt: QueuedInputReceipt) -> None:
+    if type(receipt) is not QueuedInputReceipt:
+        raise ContractViolation("queued input receipt must be QueuedInputReceipt")
+    validate_thread_ref(receipt.thread_ref)
+    require_identifier(receipt.client_message_id, "client_message_id")
+    require_identifier(receipt.queued_item_id, "queued_item_id")
+    validate_queued_input_dispatch(
+        QueuedInputDispatch(
+            receipt.thread_ref,
+            receipt.client_message_id,
+            receipt.input_fingerprint,
+        )
+    )
+    if not isinstance(receipt.state, QueuedInputState):
+        raise ContractViolation("queued input state must be QueuedInputState")
+    if receipt.state is QueuedInputState.ADMITTED:
+        if receipt.turn_ref is None:
+            raise ContractViolation("admitted queued input requires its original Turn")
+        validate_turn_ref(receipt.turn_ref)
+        if receipt.turn_ref.thread_ref != receipt.thread_ref:
+            raise ContractViolation("queued input Turn belongs to a different Thread")
+    elif receipt.turn_ref is not None:
+        raise ContractViolation("pending or cancelled queued input cannot have a Turn")
+
+
+class QueuedInputRecovery(Protocol):
+    """Optional read-only canonical recovery, separate from input dispatch."""
+
+    async def read_queued_input_receipt(
+        self,
+        thread_ref: ThreadRef,
+        client_message_id: str,
+    ) -> QueuedInputReceipt | None: ...
+
+
+ApplicationInputPlan: TypeAlias = ApplicationInputDispatch | QueuedInputDispatch
+ApplicationInputAcceptance: TypeAlias = AcceptedTurn | QueuedInputReceipt
 ApplicationInputDispatchHandler = Callable[[ApplicationInputDispatch], Awaitable[None]]
+ApplicationInputPlanHandler = Callable[[ApplicationInputPlan], Awaitable[None]]
 
 
 class AgentApplicationAdapter(Protocol):
@@ -345,6 +425,29 @@ class AgentApplicationAdapter(Protocol):
         operation: ApplicationOperation,
     ) -> ApplicationOperationResult: ...
 
+    @overload
+    async def send_input(
+        self,
+        thread_ref: ThreadRef,
+        message: AgentInput,
+        *,
+        continuation: Literal[
+            InputContinuationPreference.PREFER_ACTIVE_TURN,
+            InputContinuationPreference.START_NEW_TURN,
+        ] = InputContinuationPreference.PREFER_ACTIVE_TURN,
+        before_dispatch: ApplicationInputDispatchHandler | None = None,
+    ) -> AcceptedTurn: ...
+
+    @overload
+    async def send_input(
+        self,
+        thread_ref: ThreadRef,
+        message: AgentInput,
+        *,
+        continuation: InputContinuationPreference,
+        before_dispatch: ApplicationInputPlanHandler | None = None,
+    ) -> ApplicationInputAcceptance: ...
+
     async def send_input(
         self,
         thread_ref: ThreadRef,
@@ -354,7 +457,7 @@ class AgentApplicationAdapter(Protocol):
             InputContinuationPreference.PREFER_ACTIVE_TURN
         ),
         before_dispatch: ApplicationInputDispatchHandler | None = None,
-    ) -> AcceptedTurn: ...
+    ) -> ApplicationInputAcceptance: ...
 
     async def list_pending_requests(self) -> tuple[InteractiveRequest, ...]: ...
 
@@ -376,12 +479,21 @@ from .operations import (  # noqa: E402
 from .requests import InteractiveRequest  # noqa: E402
 
 __all__ = [
+    "QueuedInputRecovery",
+    "validate_queued_input_receipt",
+    "validate_queued_input_dispatch",
+    "QueuedInputState",
+    "QueuedInputReceipt",
+    "QueuedInputDispatch",
+    "ApplicationInputAcceptance",
+    "ApplicationInputPlan",
     "AcceptedTurn",
     "AgentApplicationAdapter",
     "AgentInput",
     "AgentMessage",
     "ApplicationInputDispatch",
     "ApplicationInputDispatchHandler",
+    "ApplicationInputPlanHandler",
     "ApplicationInputOutcomeUnknown",
     "ApplicationRef",
     "ApplicationSummary",

@@ -8,6 +8,7 @@ import unittest
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import cast
+from unittest.mock import AsyncMock, patch
 
 from imagent.applications.capabilities import ProjectMode
 from imagent.applications.contract import (
@@ -19,6 +20,9 @@ from imagent.applications.contract import (
     InputContinuationPreference,
     InputDisposition,
     ProjectRef,
+    QueuedInputDispatch,
+    QueuedInputReceipt,
+    QueuedInputState,
     ThreadRef,
     TurnReplyCorrelationPolicy,
 )
@@ -174,6 +178,59 @@ class GatewayInputDispatchTests(unittest.IsolatedAsyncioTestCase):
             derive_client_message_id(message.conversation_ref, message.message_id),
         )
         self.assertEqual(application._inputs[0][1].content, (TextContent("transformed"),))
+
+    async def test_queue_plan_is_rejected_before_the_gateway_claim_fence(self) -> None:
+        application = _RecordingApplication()
+        thread = await application.create_thread(application.default_project_ref)
+        correlator = _RecordingCorrelator()
+        runtime = self._runtime(correlator, _RecordingEventApplier())
+        fence = AsyncMock()
+
+        async def send(thread_ref, message, *, continuation, before_dispatch):
+            self.assertIs(continuation, InputContinuationPreference.PREFER_ACTIVE_TURN)
+            await before_dispatch(
+                QueuedInputDispatch(
+                    thread_ref,
+                    message.client_message_id,
+                    "a" * 64,
+                )
+            )
+            raise AssertionError("queue plan passed the ordinary-input guard")
+
+        with patch.object(application, "send_input", side_effect=send):
+            with self.assertRaisesRegex(InputDispatchRejected, "queue admission is not enabled"):
+                await runtime.dispatch(
+                    application,
+                    thread.ref,
+                    self._message("queue-plan"),
+                    content=(TextContent("run"),),
+                    before_application_send=fence,
+                )
+        fence.assert_not_awaited()
+        self.assertEqual(correlator.authorized + correlator.correlated, [])
+
+    async def test_unexpected_queued_acceptance_is_postacceptance_without_a_fake_turn(self) -> None:
+        application = _RecordingApplication()
+        thread = await application.create_thread(application.default_project_ref)
+        correlator = _RecordingCorrelator()
+        runtime = self._runtime(correlator, _RecordingEventApplier())
+        receipt = QueuedInputReceipt(
+            thread.ref,
+            "client",
+            "queued",
+            QueuedInputState.QUEUED,
+            input_fingerprint="a" * 64,
+        )
+        with patch.object(application, "send_input", return_value=receipt):
+            with self.assertRaises(InputPostAcceptanceError) as raised:
+                await runtime.dispatch(
+                    application,
+                    thread.ref,
+                    self._message("queue-receipt"),
+                    content=(TextContent("run"),),
+                )
+        self.assertIs(raised.exception.accepted_turn, receipt)
+        self.assertEqual(correlator.correlated, [])
 
     async def test_duplicate_native_dispatch_fact_is_rejected_before_a_second_fence_entry(
         self,

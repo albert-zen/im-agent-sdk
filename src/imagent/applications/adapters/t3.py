@@ -734,6 +734,8 @@ class T3ApplicationAdapter:
     ) -> AcceptedTurn:
         if not isinstance(continuation, InputContinuationPreference):
             raise ValueError("unknown input continuation preference")
+        if continuation is InputContinuationPreference.QUEUE:
+            raise NotImplementedError("this Application does not support queued input")
         self._require_own_thread(thread_ref)
         async with self._hold_send_lock(thread_ref):
             return await self._send_input_locked(

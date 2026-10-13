@@ -560,11 +560,14 @@ components:
       - src/imagent/applications/adapters/appserver/_creation_options.py
       - src/imagent/applications/adapters/codex.py
       - src/imagent/applications/adapters/zen.py
+      - src/imagent/applications/adapters/zen_queue.py
       - src/imagent/applications/adapters/appserver/**
       - tests/applications/adapters/appserver/test_input_integration.py
       - tests/applications/adapters/test_codex.py
       - tests/applications/adapters/test_zen.py
+      - tests/applications/adapters/test_zen_queue.py
       - tests/integration/test_zen_native_interop.py
+      - tests/integration/test_zen_queue_native_interop.py
       - tests/integration/zen_native_server.mjs
       - tests/integration/__init__.py
       - tests/applications/adapters/_appserver_fakes.py
@@ -663,6 +666,7 @@ components:
       - tests/applications/__init__.py
       - tests/applications/test_capabilities.py
       - tests/applications/test_contract.py
+      - tests/applications/test_queued_input.py
       - tests/applications/test_events.py
       - tests/applications/test_operations.py
       - tests/applications/test_requests.py

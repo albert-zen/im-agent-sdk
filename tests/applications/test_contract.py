@@ -16,9 +16,8 @@ from typing import cast, get_type_hints
 import imagent.applications as facade
 from imagent.applications import contract as owner
 from imagent.applications.contract import (
-    AcceptedTurn,
     AgentInput,
-    ApplicationInputDispatch,
+    ApplicationInputAcceptance,
     ApplicationSummary,
     InputContinuationPreference,
     ThreadRef,
@@ -276,7 +275,7 @@ class ApplicationContractOwnershipTests(unittest.TestCase):
                 "continuation: 'InputContinuationPreference' = "
                 "<InputContinuationPreference.PREFER_ACTIVE_TURN: 'prefer_active_turn'>, "
                 "before_dispatch: 'ApplicationInputDispatchHandler | None' = None) "
-                "-> 'AcceptedTurn'"
+                "-> 'ApplicationInputAcceptance'"
             ),
             "list_pending_requests": "(self) -> 'tuple[InteractiveRequest, ...]'",
             "subscribe_thread": (
@@ -316,8 +315,9 @@ class ApplicationContractOwnershipTests(unittest.TestCase):
                 "thread_ref": ThreadRef,
                 "message": AgentInput,
                 "continuation": InputContinuationPreference,
-                "before_dispatch": Callable[[ApplicationInputDispatch], Awaitable[None]] | None,
-                "return": AcceptedTurn,
+                "before_dispatch": Callable[[owner.ApplicationInputDispatch], Awaitable[None]]
+                | None,
+                "return": ApplicationInputAcceptance,
             },
         )
         self.assertEqual(

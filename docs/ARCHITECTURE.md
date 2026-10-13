@@ -438,3 +438,18 @@ the descriptor before durable native fencing; adapters verify exact support.
 Native policy/configuration content stays outside common Operations and receipts.
 Unknown profiles never fall back, and changed configuration under the same ID
 cannot replay a different effect. The absent profile preserves default semantics.
+
+## Staged queued input capability
+
+[ADR 0019](decisions/0019-queued-input-admission.md) separates optional native queue
+admission from execution. Application input now has typed plan/acceptance unions
+without weakening `AcceptedTurn`. Zen has explicit native capability/connection
+epoch gates and bounded canonical human receipt recovery. An older Host rejects
+queue before dispatch; unsupported Applications never fall through to start.
+
+Ordinary Gateway input remains default soft steer. This first slice does not
+enable a Gateway queue setting, delayed correlation, or scoped queue cancellation.
+The remaining delivery needs one coherent lease-fenced admission/correlation
+record joined to the existing inbound claim, delayed real-Turn routing and the
+full native positive acceptance matrix. No consumer should claim complete queue
+support from the enum or adapter protocol fixtures alone.

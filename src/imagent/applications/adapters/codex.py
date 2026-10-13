@@ -127,9 +127,11 @@ class CodexApplicationAdapter(_AppServerApplicationAdapter):
         before_dispatch: Callable[[ApplicationInputDispatch], Awaitable[None]] | None = None,
     ) -> AcceptedTurn:
         self._require_own_thread(thread_ref)
-        prepared = self._prepare_input(message)
         if not isinstance(continuation, InputContinuationPreference):
             raise ValueError("unknown input continuation preference")
+        if continuation is InputContinuationPreference.QUEUE:
+            raise NotImplementedError("this Application does not support queued input")
+        prepared = self._prepare_input(message)
         active_turn_id = None
         expected_pre_input_evidence = None
         if (

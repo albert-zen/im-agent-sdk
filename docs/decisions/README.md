@@ -27,6 +27,8 @@ Unaccepted directions belong in `docs/ROADMAP.md`.
 
 | [0018](0018-explicit-thread-creation-profiles.md) | Accepted | explicit adapter-owned creation-profile identity and config-bound action fingerprints |
 
+| [0019](0019-queued-input-admission.md) | Accepted design, staged implementation | optional native queued admission, capability gating, canonical identity and delayed execution correlation |
+
 Reopening an accepted decision requires updating this index, the ADR, affected
 global/component docs, contracts/tests, and AgentKit mapping when paths or
 ownership change.
