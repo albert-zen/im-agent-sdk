@@ -9,7 +9,8 @@
 
 An IM Conversation can submit input while its bound native Thread already has
 an active Turn. Codex App Server can continue that Turn with `turn/steer`, while
-T3 and the currently evidenced Zen surface accept a new native Turn. The SDK
+Zen independently implements the same expected-Turn wire operation. T3
+accepts a new native Turn. The SDK
 needs one input contract without pretending those native protocols are
 identical.
 
@@ -26,11 +27,11 @@ default is `prefer_active_turn`. This is an SDK preference, not a promise that
 every native Application has a steer method. Every adapter returns the actual
 `started` or `steered` disposition:
 
-- Codex may map the default preference to native `turn/steer` when an active
+- Codex and Zen may map the default preference to native `turn/steer` when an active
   Turn is observed. Its concrete adapter can still disable that optional
   native capability for a deployment.
-- T3 and Zen currently map the preference to `started`; they must not invent a
-  native continuation operation without independent evidence.
+- T3 maps the preference to `started`; it must not invent a native continuation
+  operation without independent evidence.
 - `start_new_turn` explicitly requests the start path where a consumer needs
   it.
 
@@ -63,11 +64,13 @@ correlation is not changed, and automatic input retry remains forbidden.
 - Immutable per-Turn reply destination and pre-dispatch authorization: Core
   bridge invariant.
 - Native `turn/steer`, active-Turn discovery, and deployment disablement:
-  optional Codex adapter capability/policy.
+  optional concrete Codex/Zen adapter capability/policy.
 - Retargeting, fallback UX, and product retry messaging: consumer policy.
 
-This common contract is exercised by Codex steer plus T3 and Zen start
-behavior. It does not claim that T3 or Zen implement the Codex wire method.
+This common contract is exercised by Codex and independently evidenced Zen
+steer plus T3 start behavior. It does not claim that T3 implements steering.
+Zen protocol evidence and the required real-client interop scenario are
+recorded in the Zen adapter component docs.
 
 ## Consequences
 
@@ -85,8 +88,8 @@ remains authoritative.
 
 Tests cover:
 
-- default Codex continuation and explicit start-new mode;
-- T3 and Zen truthful `started` fallback;
+- default Codex/Zen continuation and explicit start-new mode;
+- T3 truthful `started` fallback and Codex/Zen deployment opt-out;
 - two Conversations targeting one Thread/Turn without destination overwrite;
 - a steer racing correlation creation and failing before native dispatch;
 - native replacement/mismatch after steer as post-acceptance degradation;

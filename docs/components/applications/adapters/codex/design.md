@@ -57,8 +57,8 @@ adapter API. That base owns typed text/image preparation, verified local-image
 epochs, the common typed pre-dispatch fence, `STARTED`/`CREATE_NEW` classification with
 no expected Turn ID, and native `turn/start` dispatch shared by both leaves. It
 does not own `steer_active_turn`, active-Turn selection, `STEERED`/
-`PRESERVE_EXISTING` classification, or native `turn/steer`. Those
-Codex-only positions live in this leaf.
+`PRESERVE_EXISTING` classification, or native `turn/steer`. Those Codex
+positions live in this leaf; Zen independently owns its evidenced counterpart.
 
 ## Dependencies, state, and recovery
 

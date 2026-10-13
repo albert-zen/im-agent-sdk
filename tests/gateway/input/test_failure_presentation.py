@@ -11,6 +11,7 @@ from pathlib import Path
 from imagent.applications.contract import (
     AcceptedTurn,
     ApplicationInputOutcomeUnknown,
+    ApplicationInputRejected,
     ProjectRef,
     ThreadRef,
     TurnRef,
@@ -46,6 +47,7 @@ from imagent.interaction.messages import (
     TextContent,
 )
 from imagent.testing import FakeChannelAdapter
+from tests.applications.adapters.appserver.test_transport_lifecycle import _client, _ScriptedProcess
 
 
 class _RecordingPresenter:
@@ -136,6 +138,95 @@ class InboundFailurePresenterTests(unittest.IsolatedAsyncioTestCase):
             await self._reclaim(repository, claimed), IdempotencyClaimStatus.ALREADY_COMPLETED
         )
         self._assert_stable_delivery(claimed.message, deliveries[0])
+
+    async def test_malformed_wire_rejection_keeps_gateway_claim_unknown(self) -> None:
+        for response in (
+            {"error": {"code": "-32000", "message": "busy", "data": {"zenCode": "thread_busy"}}},
+            {
+                "result": {"turnId": "accepted"},
+                "error": {"code": -32000, "message": "busy", "data": {"zenCode": "thread_busy"}},
+            },
+        ):
+            repository, claimed = await self._claim("malformed-native-rejection")
+            presenter = _RecordingPresenter()
+            native = _ScriptedProcess({"initialize": [{"result": {}}], "turn/start": [response]})
+            client = _client(native)
+
+            async def process(before_application_send):
+                await before_application_send()
+                await client.start_turn("thread", "input")
+
+            try:
+                await handle_claimed_inbound(
+                    claimed,
+                    process=process,
+                    idempotency=repository,
+                    presentation=self._runtime(presenter),
+                    deliver=self._deliveries([]),
+                )
+                self.assertEqual(
+                    [facts.phase for facts in presenter.presented],
+                    [InboundFailurePhase.OUTCOME_UNKNOWN],
+                )
+                self.assertEqual(
+                    await self._reclaim(repository, claimed), IdempotencyClaimStatus.IN_FLIGHT
+                )
+                self.assertEqual(sum(item.get("method") == "turn/start" for item in native.sent), 1)
+            finally:
+                await client.close()
+
+    async def test_proven_native_rejection_is_terminal_with_and_without_presenter(self) -> None:
+        for reason in ("turn_ended", "thread_busy"):
+            for configured in (False, True):
+                with self.subTest(reason=reason, configured=configured):
+                    repository, claimed = await self._claim(f"{reason}-{configured}")
+                    presenter = _RecordingPresenter()
+
+                    async def process(before_application_send) -> None:
+                        await before_application_send()
+                        raise ApplicationInputRejected(reason)
+
+                    operation = handle_claimed_inbound(
+                        claimed,
+                        process=process,
+                        idempotency=repository,
+                        presentation=self._runtime(presenter) if configured else None,
+                        deliver=self._deliveries([]),
+                    )
+                    if configured:
+                        await operation
+                        self.assertEqual(
+                            [facts.phase.value for facts in presenter.presented], [reason]
+                        )
+                    else:
+                        with self.assertRaises(ApplicationInputRejected):
+                            await operation
+                    self.assertEqual(
+                        await self._reclaim(repository, claimed),
+                        IdempotencyClaimStatus.ALREADY_COMPLETED,
+                    )
+
+    async def test_proven_rejection_stays_terminal_after_presenter_failure(self) -> None:
+        repository, claimed = await self._claim("rejection-presentation-failed")
+
+        async def process(before_application_send):
+            await before_application_send()
+            raise ApplicationInputRejected("turn_ended")
+
+        async def failed_presenter(_phase, **_identity):
+            raise RuntimeError("presentation failed")
+
+        with self.assertRaisesRegex(RuntimeError, "presentation failed"):
+            await handle_claimed_inbound(
+                claimed,
+                process=process,
+                idempotency=repository,
+                presentation=self._runtime(_FunctionPresenter(failed_presenter)),
+                deliver=self._deliveries([]),
+            )
+        self.assertEqual(
+            await self._reclaim(repository, claimed), IdempotencyClaimStatus.ALREADY_COMPLETED
+        )
 
     async def test_unknown_stays_side_effect_started_before_and_after_presentation(self) -> None:
         repository, claimed = await self._claim("presented-unknown")

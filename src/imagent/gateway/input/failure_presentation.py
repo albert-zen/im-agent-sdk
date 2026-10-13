@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
-from ...applications.contract import ApplicationInputOutcomeUnknown
+from ...applications.contract import ApplicationInputOutcomeUnknown, ApplicationInputRejected
 from ...interaction.messages import (
     ConversationRef,
     InboundMessage,
@@ -28,6 +28,8 @@ from .dispatch import InputPostAcceptanceError
 class InboundFailurePhase(StrEnum):
     PRE_ACCEPTANCE = "pre_acceptance"
     OUTCOME_UNKNOWN = "outcome_unknown"
+    TURN_ENDED = "turn_ended"
+    THREAD_BUSY = "thread_busy"
     POST_ACCEPTANCE = "post_acceptance"
 
 
@@ -248,6 +250,22 @@ async def handle_claimed_inbound(
         await _present_failure(
             claimed.message,
             InboundFailurePhase.POST_ACCEPTANCE,
+            presentation,
+            deliver,
+        )
+    except ApplicationInputRejected as error:
+        # Authoritative negative acceptance proves no canonical input append.
+        # Complete even without presentation; the same IM input is not replayed.
+        await idempotency.complete(
+            claimed.scope,
+            claimed.key,
+            owner_token=claimed.owner_token,
+        )
+        if presentation is None:
+            raise
+        await _present_failure(
+            claimed.message,
+            InboundFailurePhase(error.reason),
             presentation,
             deliver,
         )

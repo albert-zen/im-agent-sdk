@@ -25,7 +25,8 @@ from imagent.applications.adapters.appserver.client.target import (
     parse_app_server_target,
     resolve_app_server_target,
 )
-from imagent.applications.adapters.appserver.transport import AppServerError
+from imagent.applications.adapters.appserver.transport import AppServerError, AppServerTransport
+from imagent.applications.contract import ApplicationInputRejected
 
 
 class _BlockingWebSocket:
@@ -75,6 +76,60 @@ class AppServerClientFacadeTests(unittest.TestCase):
 
 
 class AppServerClientTests(unittest.IsolatedAsyncioTestCase):
+    async def test_only_proven_input_negative_responses_are_typed(self) -> None:
+        client = codex_app_server_client(endpoint="stdio://")
+        client.connection_epoch = 1
+        client._transport = cast(AppServerTransport, object())
+
+        async def connected():
+            return None
+
+        cases = (
+            ("turn/steer", "turn_not_running", -32000, "turn_ended"),
+            ("turn/start", "thread_busy", -32000, "thread_busy"),
+            ("turn/steer", "thread_busy", -32000, None),
+            ("turn/start", "turn_not_running", -32000, None),
+            ("thread/read", "turn_not_running", -32000, None),
+            ("turn/steer", "turn_not_running", -32001, None),
+            ("turn/steer", "arbitrary", -32000, None),
+        )
+        for method, zen_code, code, reason in cases:
+            with self.subTest(method=method, zen_code=zen_code, code=code):
+
+                async def responded(*_args, **_kwargs):
+                    return (
+                        {
+                            "id": 1,
+                            "error": {
+                                "code": code,
+                                "message": "untrusted **raw**",
+                                "data": {"zenCode": zen_code},
+                            },
+                        },
+                        None,
+                    )
+
+                with (
+                    patch.object(client, "_ensure_connected", connected),
+                    patch.object(
+                        client,
+                        "_request_once_without_initialize",
+                        responded,
+                    ),
+                ):
+                    expected = ApplicationInputRejected if reason else AppServerError
+                    with self.assertRaises(expected) as raised:
+                        await client._request_without_initialize_with_dispatch_position(
+                            method,
+                            {},
+                            outcome_unknown_on_dispatch=True,
+                        )
+                    if reason:
+                        rejected = cast(ApplicationInputRejected, raised.exception)
+                        self.assertEqual(rejected.reason, reason)
+                    else:
+                        self.assertIs(type(raised.exception), AppServerError)
+
     def test_inbound_frame_limit_flows_through_public_factory(self) -> None:
         default_client = codex_app_server_client(endpoint="stdio://")
         configured_client = codex_app_server_client(

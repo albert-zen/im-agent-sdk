@@ -26,6 +26,8 @@ Tests for `interaction.media` must prove:
 - a post-open symlink swap leaves the descriptor-bound trusted bytes unchanged,
   while escaped/symlinked acquisition and byte-ceiling violations fail before
   the native-send counter;
+- a rooted FIFO is rejected promptly in an isolated subprocess before reads or
+  native calls; the public Zen image path preserves event-loop responsiveness;
 - non-integer/bool declared sizes fail before acquisition and caller-owned
   attachment metadata cannot mutate a paused admitted attempt;
 - A1 candidates confer no trust, materialization is bounded and replay-safe,

@@ -74,6 +74,15 @@ def _summary_getter() -> Callable[..., object]:
 
 
 class ApplicationContractOwnershipTests(unittest.TestCase):
+    def test_proven_input_rejection_has_one_owner_and_closed_reasons(self) -> None:
+        self.assertIs(facade.ApplicationInputRejected, owner.ApplicationInputRejected)
+        for reason in ("turn_ended", "thread_busy"):
+            rejected = owner.ApplicationInputRejected(reason)
+            self.assertEqual(rejected.reason, reason)
+            self.assertEqual(str(rejected), reason)
+        with self.assertRaisesRegex(ValueError, "unknown proven input rejection"):
+            owner.ApplicationInputRejected("arbitrary native failure")
+
     def test_unknown_input_outcome_has_one_exact_owner_and_signature(self) -> None:
         owner_object = owner.ApplicationInputOutcomeUnknown
         cause = RuntimeError("native dispatch was ambiguous")

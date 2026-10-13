@@ -413,9 +413,11 @@ finite directory-entry bound before deleting any candidate.
 Pass-2 counterexamples wire the same descriptor-bound acquisition through the
 production Telegram, Feishu, Weixin, QQ, and T3 native submission paths. Each
 submits the bytes from the opened descriptor after a deterministic pathname
-swap; App Server advertises no attachment source and rejects its path-only
-image protocol before native dispatch because it cannot preserve descriptor
-identity. The reference consumer opens its ledger through one bounded,
+swap; Codex rejects its path-only image protocol before native dispatch
+because it cannot preserve descriptor identity. Zen now uses the same rooted
+byte acquisition and sends bounded inline data URIs, with real native interop
+evidence. The [capability-preservation ledger](onboarding/v1-capability-preservation.md)
+records the old-to-v1 capability audit and remaining consumer/state migration gates. The reference consumer opens its ledger through one bounded,
 no-follow descriptor beneath a pinned root and rejects ledger-file symlinks,
 pathname replacement, and growth during startup.
 

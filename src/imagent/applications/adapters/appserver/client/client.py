@@ -11,7 +11,7 @@ from .....interaction.diagnostics import (
     ConnectionDiagnosticFacts,
     QueueDiagnosticName,
 )
-from ....contract import ApplicationInputOutcomeUnknown
+from ....contract import ApplicationInputOutcomeUnknown, ApplicationInputRejected
 from ..diagnostics import (
     AppServerDiagnosticState,
     emit_event,
@@ -980,7 +980,8 @@ class AppServerClient:
                     dispatch_position=dispatch_position,
                 )
             error = response["error"]
-            if self._is_overload_error(error) and attempt < attempts:
+            valid_error_response = self._valid_error_response(response)
+            if valid_error_response and self._is_overload_error(error) and attempt < attempts:
                 delay_s = self._request_retry_policy.delay_after_failure(
                     attempt,
                     random_float=self._random_float,
@@ -1000,7 +1001,26 @@ class AppServerClient:
                 await self._sleep_for_retry(delay_s)
                 attempt += 1
                 continue
-            raise self._error_from_response(method, error)
+            if outcome_unknown_on_dispatch and not valid_error_response:
+                cause = AppServerError(f"{method} received an invalid native error response")
+                raise ApplicationInputOutcomeUnknown(
+                    f"{method} received a malformed response; its native outcome is unknown",
+                    cause,
+                ) from cause
+            native_error = self._error_from_response(method, error)
+            # Only method-specific negative acceptance can prove that native
+            # input was never appended after the conservative dispatch fence.
+            if outcome_unknown_on_dispatch and error["code"] == -32000:
+                zen_code = (
+                    native_error.data.get("zenCode")
+                    if isinstance(native_error.data, dict)
+                    else None
+                )
+                if (method, zen_code) == ("turn/steer", "turn_not_running"):
+                    raise ApplicationInputRejected("turn_ended") from native_error
+                if (method, zen_code) == ("turn/start", "thread_busy"):
+                    raise ApplicationInputRejected("thread_busy") from native_error
+            raise native_error
 
     async def _request_once_without_initialize(
         self,
@@ -1076,6 +1096,21 @@ class AppServerClient:
             and any(
                 isinstance(item, dict) and item.get("type") == "localImage" for item in input_items
             )
+        )
+
+    @staticmethod
+    def _valid_error_response(response: JsonDict) -> bool:
+        """Only unambiguous raw wire evidence may establish native rejection."""
+        error = response.get("error")
+        return (
+            type(response.get("id")) is int
+            and "result" not in response
+            and "method" not in response
+            and "params" not in response
+            and response.get("jsonrpc", "2.0") == "2.0"
+            and isinstance(error, dict)
+            and type(error.get("code")) is int
+            and type(error.get("message")) is str
         )
 
     def _is_overload_error(self, error: Any) -> bool:

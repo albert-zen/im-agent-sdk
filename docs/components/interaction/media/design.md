@@ -146,7 +146,9 @@ facts are planned before Channel execution. A configured consumer root and
 digest are then validated by the real Channel adapter before its native-send
 boundary. The shared rooted reader requires an explicit byte ceiling, opens
 every component relative to the configured root with no-follow semantics, and
-returns the exact regular-file bytes used for digest and upload. A `Message`
+opens the leaf nonblocking before descriptor-based regular-file validation
+(so a FIFO cannot stall the event loop), and returns the exact regular-file
+bytes used for digest and upload. A `Message`
 grants neither filesystem nor network authority, and a resolve/read pathname
 race cannot enlarge it.
 

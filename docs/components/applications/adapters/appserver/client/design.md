@@ -79,3 +79,20 @@ and remains unchanged in this physical move.
 - [ADR 0004](../../../../../decisions/0004-event-fanout-and-recovery.md)
 - [ADR 0013](../../../../../decisions/0013-bounded-application-event-admission.md)
 - [ADR 0015](../../../../../decisions/0015-typed-extension-seams-and-composition.md)
+
+## Authoritative negative input acceptance
+
+Only a received `-32000` response with exact `data.zenCode` maps the evidenced
+Zen pre-append outcomes: `turn/steer` + `turn_not_running` becomes
+`ApplicationInputRejected("turn_ended")`; `turn/start` + `thread_busy` becomes
+`ApplicationInputRejected("thread_busy")`. Classification requires the input
+mutation path. Wrong method/code, free-form text, malformed response, timeout,
+or transport failure cannot establish absence and never authorizes fallback.
+
+Negative acceptance and overload retry require an unambiguous raw response:
+an exact integer response ID (SDK requests use integer IDs), no simultaneous
+result or request fields, an absent or `2.0` JSON-RPC version, an exact integer
+error code, and a string message. Normalizing diagnostic error text/codes is
+never evidence of absence. A malformed input response is explicitly
+`ApplicationInputOutcomeUnknown`, cannot complete a rejection claim, and is
+never overload-retried.
