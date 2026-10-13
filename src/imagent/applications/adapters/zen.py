@@ -79,6 +79,7 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
         event_buffer_max_pending: int = 1024,
         steer_active_turn: bool = True,
         thread_start_options: Mapping[str, object] | None = None,
+        thread_creation_profiles: Mapping[str, Mapping[str, object]] | None = None,
         artifact_materializer: AppServerArtifactMaterializer | None = None,
         artifact_materialization_limits: AppServerArtifactMaterializationLimits = (
             AppServerArtifactMaterializationLimits()
@@ -96,6 +97,7 @@ class ZenApplicationAdapter(_AppServerApplicationAdapter):
             server_request_mapper=map_zen_appserver_request,
             event_buffer_max_pending=event_buffer_max_pending,
             thread_start_options=thread_start_options,
+            thread_creation_profiles=thread_creation_profiles,
             artifact_materializer=artifact_materializer,
             artifact_materialization_limits=artifact_materialization_limits,
         )

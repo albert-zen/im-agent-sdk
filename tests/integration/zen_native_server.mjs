@@ -74,7 +74,10 @@ try {
       } else if (command.action === "release") {
         gates.get(command.key).release.resolve();
       } else if (command.action === "snapshot") {
+        const snapshot = await appServer.readThread(command.threadId);
         result = {
+          approvalPolicy: snapshot.approvalPolicy,
+          sandbox: snapshot.sandbox,
           items: await journal.read(command.threadId),
           modelSawImage: requests.some((request) => request.messages.some((message) =>
             Array.isArray(message.content) && message.content.some((part) => part.type === "image"))),

@@ -9,7 +9,6 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from types import MappingProxyType
 from typing import Protocol, cast
 
 from ....interaction.diagnostics import ConnectionDiagnosticFacts
@@ -106,6 +105,7 @@ from ...presentation.artifact_materialization import (
     appserver_completed_item_facts,
 )
 from ...requests import InteractiveRequest
+from ._creation_options import _creation_profiles, _thread_start_options
 from .mapping import (
     AppServerEvent as _AppServerEvent,
 )
@@ -297,6 +297,7 @@ class _AppServerApplicationAdapter:
         server_request_mapper: ServerRequestMapper | None = None,
         event_buffer_max_pending: int = 1024,
         thread_start_options: Mapping[str, object] | None = None,
+        thread_creation_profiles: Mapping[str, Mapping[str, object]] | None = None,
         presentation_runtime: ApplicationPresentationRuntime | None = None,
         artifact_materializer: AppServerArtifactMaterializer | None = None,
         artifact_materialization_limits: AppServerArtifactMaterializationLimits = (
@@ -314,6 +315,9 @@ class _AppServerApplicationAdapter:
         )
         self._shared_filesystem_root = configure_shared_filesystem_root(shared_filesystem_root)
         self._thread_start_options = _thread_start_options(thread_start_options)
+        self._thread_creation_profiles, creation_profiles = _creation_profiles(
+            thread_creation_profiles
+        )
         self._events = EventBroadcaster[str, AgentEvent](max_pending=event_buffer_max_pending)
         self._presentation_runtime = presentation_runtime
         self._artifact_materializer = artifact_materializer
@@ -350,6 +354,7 @@ class _AppServerApplicationAdapter:
                 creation=SupportLevel.NATIVE,
                 reading=SupportLevel.NATIVE,
                 deletion=ThreadDeletionCapability.UNSUPPORTED,
+                creation_profiles=creation_profiles,
             ),
             runtime=RuntimeCapabilities(
                 history=SupportLevel.NATIVE,
@@ -505,10 +510,18 @@ class _AppServerApplicationAdapter:
             self._require_workspace_project(operation.project_ref)
             if operation.initial_context:
                 raise NotImplementedError("initial thread context is unsupported by App Server")
+            options = None
+            if operation.creation_profile is not None:
+                if (
+                    operation.creation_profile
+                    not in self.summary.capabilities.threads.creation_profiles
+                ):
+                    raise NotImplementedError("Thread creation profile is unsupported or changed")
+                options = self._thread_creation_profiles[operation.creation_profile.profile_id]
             return ThreadCreated(
                 operation_id=operation.operation_id,
                 completed_at=completed_at,
-                thread=await self.create_thread_with_options(),
+                thread=await self.create_thread_with_options(thread_start_options=options),
             )
         if isinstance(operation, (GetThread, GetThreadStatus)):
             thread = await self._require_native_thread_scope(operation.thread_ref)
@@ -1740,29 +1753,3 @@ def _canonical_workspace_root(root: str | Path) -> str:
     canonical = str(Path(raw).expanduser().resolve(strict=False))
     fingerprint_canonical_workspace_root(canonical)
     return canonical
-
-
-def _thread_start_options(
-    options: Mapping[str, object] | None,
-) -> Mapping[str, object]:
-    copied = deepcopy(dict(options or {}))
-    invalid_keys = [key for key in copied if not isinstance(key, str) or not key]
-    if invalid_keys:
-        raise ValueError("App Server thread_start_options keys must be non-empty strings")
-    reserved = sorted({"cwd", "params"}.intersection(copied))
-    if reserved:
-        raise ValueError(
-            "App Server thread_start_options cannot override adapter-owned fields: "
-            + ", ".join(reserved)
-        )
-    aliases = {
-        "approval_policy": "approvalPolicy",
-        "approvals_reviewer": "approvalsReviewer",
-        "sandbox_policy": "sandboxPolicy",
-        "service_name": "serviceName",
-        "thread_id": "threadId",
-    }
-    normalized_keys = [aliases.get(key, key) for key in copied]
-    if len(set(normalized_keys)) != len(normalized_keys):
-        raise ValueError("App Server thread_start_options contain duplicate native fields")
-    return MappingProxyType(copied)

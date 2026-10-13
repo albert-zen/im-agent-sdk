@@ -217,3 +217,14 @@ The composition refactor and every stage implementation must prove:
 - no socket-read-path callback work or second native event subscription;
 - fixed redacted diagnostics for extension failure/overflow; and
 - cross-Application or cross-Channel counterexamples required by ADR 0006.
+
+## Pre-recovery composition exception (ADR 0017)
+
+The later [startup preparation decision](0017-startup-conversation-preparation.md)
+adds one distinct lifecycle position outside the message pipeline. Unlike I1/I2/O1/O2,
+it can read and generation-guardedly clear the one explicitly configured
+Conversation's Thread binding through a narrow callback-task-owned action
+surface before any recovery/admission. It receives no general ConversationActions,
+Gateway, repository, native execution, or delivery authority. Lifecycle owns its
+finite capacity/deadline and fail-closed rollback. This does not weaken the
+no-binding-mutation contracts of the message-pipeline extensions above.

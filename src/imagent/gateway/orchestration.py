@@ -101,6 +101,7 @@ from .lifecycle import (
     _bounded_lifecycle_call,
     _detach_public_lifecycle_context,
     _public_lifecycle_error,
+    _run_startup_preparation,
 )
 from .persistence import BindingConflict, InMemoryIdempotencyRepository
 from .persistence.memory import (
@@ -214,6 +215,7 @@ class _GatewayRuntime:
         if request_correlations is None:
             request_correlations = InMemoryRequestCorrelationRepository()
         self._delivery_coordinator = delivery_coordinator or DeliveryCoordinator()
+        self._startup_preparations = extensions.startup_preparations
         self._controller = extensions.controller
         self._controller_action_runtime: _ScopedControllerActionRuntime | None = None
         self._inbound_content_transform_runtime = (
@@ -359,12 +361,21 @@ class _GatewayRuntime:
         if self._controller is not None and self._controller_action_runtime is None:
             raise RuntimeError("Controller composition requires one coherent GatewayStore session")
         self._starting = True
-        self._accepting_inbound = True
+        self._accepting_inbound = not self._startup_preparations
         self._startup_admission.reset()
         started_applications: list[AgentApplicationAdapter] = []
         started_channels: list[ChannelAdapter] = []
         startup_error: BaseException | None = None
         try:
+            for preparation in self._startup_preparations:
+                await _run_startup_preparation(
+                    preparation,
+                    self._conversation_actions(
+                        preparation.conversation_ref, actor=preparation.actor
+                    ),
+                    timeout_seconds=self._lifecycle_owner_timeout_seconds,
+                )
+            self._accepting_inbound = True
             self._delivery_coordinator.start()
             if self._delivery_outcome_observer_runtime is not None:
                 self._delivery_outcome_observer_runtime.start()

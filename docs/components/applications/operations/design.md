@@ -98,3 +98,24 @@ execution behavior.
 - [ADR 0006](../../../decisions/0006-core-admission-and-policy-ownership.md)
 - [ADR 0012](../../../decisions/0012-input-continuation-and-reply-correlation.md)
 - [ADR 0016](../../../decisions/0016-uniform-workspace-and-consumer-actions.md)
+
+## Explicit Thread creation profiles
+
+`ThreadCreationProfile` is an optional bounded capability descriptor containing
+only a profile ID and SHA-256 configuration fingerprint. Concrete App Server
+adapters freeze configured `thread_creation_profiles` JSON options and advertise
+their descriptors. Zen and Codex support this mapping; T3 does not silently
+accept profiles. Native policy names remain adapter/consumer-owned.
+
+Scoped `create_thread` and `create_and_bind_thread(creation_profile=...)` resolve
+the ID from validated capabilities and include the exact descriptor in both the
+`CreateThread` operation and durable action fingerprint. The adapter checks the
+exact descriptor before native creation. Unknown selections fail closed; same
+action ID with changed selection or changed configured content conflicts,
+including after SQLite reconstruction. No native options enter receipt storage.
+Omission preserves existing default behavior and legacy action fingerprints.
+
+Profile definitions are complete per-call options rather than merged mutable
+defaults. They are copied, limited to 32 profiles/128-character IDs/64 KiB of
+canonical JSON per profile, and reject non-JSON/NaN/reserved workspace overrides.
+The selected profile does not mutate an existing Thread.

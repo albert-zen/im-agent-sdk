@@ -41,6 +41,7 @@ from .persistence.store import (
     validate_runtime_lease,
 )
 from .routing.projection_routes import ProjectionPolicy
+from .startup import StartupPreparation
 
 _LEASE_DURATION_SECONDS = 30.0
 _LEASE_RENEWAL_SECONDS = 10.0
@@ -68,11 +69,22 @@ class Gateway:
             raise TypeError("limits must be GatewayLimits")
         if not isinstance(extensions, GatewayExtensions):
             raise TypeError("extensions must be GatewayExtensions")
+        if type(extensions.startup_preparations) is not tuple or any(
+            type(item) is not StartupPreparation for item in extensions.startup_preparations
+        ):
+            raise TypeError("startup_preparations must be a tuple of StartupPreparation")
+        if len(extensions.startup_preparations) > limits.startup_preparation_max_items:
+            raise ValueError("startup preparation capacity exceeded")
         if not channels:
             raise ValueError("Gateway requires at least one Channel")
         if not applications:
             raise ValueError("Gateway requires at least one Agent Application")
         channel_ids = _validate_channels(channels)
+        if any(
+            item.conversation_ref.channel_instance_id not in channel_ids
+            for item in extensions.startup_preparations
+        ):
+            raise ValueError("startup preparation references an unconfigured Channel")
         application_summaries = _validate_applications(applications)
         application_ids = tuple(
             summary.ref.application_instance_id for summary in application_summaries

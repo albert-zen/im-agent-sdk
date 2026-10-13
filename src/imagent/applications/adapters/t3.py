@@ -451,6 +451,8 @@ class T3ApplicationAdapter:
                 threads=Page(items=threads),
             )
         if isinstance(operation, CreateThread):
+            if operation.creation_profile is not None:
+                raise NotImplementedError("Thread creation profiles are unsupported by T3")
             project_ref = operation.project_ref
             if operation.initial_context:
                 raise NotImplementedError("initial thread context is unsupported by T3")

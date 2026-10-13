@@ -138,6 +138,15 @@
     "ThreadDeletionCapability": {
       "enum": ["unsupported", "archive", "permanent"]
     },
+    "ThreadCreationProfile": {
+      "type": "object",
+      "required": ["profileId", "fingerprint"],
+      "properties": {
+        "profileId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "fingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+      },
+      "additionalProperties": false
+    },
     "ThreadCapabilities": {
       "type": "object",
       "required": ["listing", "creation", "reading", "deletion"],
@@ -145,8 +154,17 @@
         "listing": { "$ref": "#/$defs/SupportLevel" },
         "creation": { "$ref": "#/$defs/SupportLevel" },
         "reading": { "$ref": "#/$defs/SupportLevel" },
-        "deletion": { "$ref": "#/$defs/ThreadDeletionCapability" }
+        "deletion": { "$ref": "#/$defs/ThreadDeletionCapability" },
+        "creationProfiles": {
+          "type": "array", "maxItems": 32, "uniqueItems": true,
+          "description": "Profile IDs must also be unique; enforce this semantic constraint after schema validation.",
+          "items": { "$ref": "#/$defs/ThreadCreationProfile" }
+        }
       },
+      "allOf": [{
+        "if": { "properties": { "creation": { "const": "unsupported" } } },
+        "then": { "properties": { "creationProfiles": { "maxItems": 0 } } }
+      }],
       "additionalProperties": false
     },
     "RuntimeCapabilities": {

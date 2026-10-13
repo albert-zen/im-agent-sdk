@@ -567,7 +567,7 @@ components:
     public_exports:
       current: [imagent:Gateway, imagent.gateway:Gateway, imagent.gateway.runtime:Gateway]
       target: [imagent:Gateway, imagent.gateway:Gateway, imagent.gateway.runtime:Gateway]
-    dependencies: [interaction.messages, interaction.operations, interaction.controllers.controller-contract, interaction.channels.channel-contract, applications.application-contract, gateway.actions, gateway.composition, gateway.orchestration, gateway.lifecycle, gateway.diagnostics, gateway.delivery.coordination, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.persistence.gateway-store, gateway.persistence.state-contracts, gateway.routing.projection-routes]
+    dependencies: [gateway.startup-preparation, interaction.messages, interaction.operations, interaction.controllers.controller-contract, interaction.channels.channel-contract, applications.application-contract, gateway.actions, gateway.composition, gateway.orchestration, gateway.lifecycle, gateway.diagnostics, gateway.delivery.coordination, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.persistence.gateway-store, gateway.persistence.state-contracts, gateway.routing.projection-routes]
     state_recovery: Gateway acquires one coherent store namespace and lease, reconstructs its private bridge runtime from durable bridge state, and becomes terminal after bounded close.
     current_code: [src/imagent/gateway/runtime.py]
     target_code: [src/imagent/gateway/runtime.py]
@@ -615,8 +615,8 @@ components:
     state_recovery: C persists nothing; every mutation delegates one prevalidated request to B's receipt/lease-fenced executor and preserves its closed outcome.
     current_code: [src/imagent/gateway/actions.py]
     target_code: [src/imagent/gateway/actions.py]
-    current_tests: [tests/gateway/test_actions.py, tests/interaction/controllers/test_common_commands.py]
-    target_tests: [tests/gateway/test_actions.py]
+    current_tests: [tests/gateway/test_creation_profiles.py, tests/gateway/test_actions.py, tests/interaction/controllers/test_common_commands.py]
+    target_tests: [tests/gateway/test_creation_profiles.py, tests/gateway/test_actions.py]
     authoritative_docs: [docs/components/gateway/actions/design.md, docs/components/gateway/actions/testing.md]
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []
@@ -633,7 +633,7 @@ components:
     public_exports:
       current: [imagent:GatewayLimits, imagent:GatewayExtensions, imagent.gateway:GatewayLimits, imagent.gateway:GatewayExtensions, imagent.gateway.composition:GatewayLimits, imagent.gateway.composition:GatewayExtensions]
       target: [imagent:GatewayLimits, imagent:GatewayExtensions, imagent.gateway:GatewayLimits, imagent.gateway:GatewayExtensions, imagent.gateway.composition:GatewayLimits, imagent.gateway.composition:GatewayExtensions]
-    dependencies: [interaction.messages, interaction.operations, interaction.controllers.controller-contract, interaction.controllers.request-presentation, interaction.channels.channel-contract, applications.application-contract, applications.operations, applications.requests, gateway.actions, gateway.effect-execution, gateway.outcomes, gateway.concurrency, gateway.admission, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.projection.observation, gateway.projection.request-correlation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.routing.gateway-operations, gateway.persistence.effects, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.gateway-store, gateway.persistence.memory, gateway.persistence.idempotency]
+    dependencies: [gateway.startup-preparation, interaction.messages, interaction.operations, interaction.controllers.controller-contract, interaction.controllers.request-presentation, interaction.channels.channel-contract, applications.application-contract, applications.operations, applications.requests, gateway.actions, gateway.effect-execution, gateway.outcomes, gateway.concurrency, gateway.admission, gateway.input.content-transformation, gateway.input.failure-presentation, gateway.projection.observation, gateway.projection.request-correlation, gateway.presentation, gateway.delivery.coordination, gateway.delivery.proactive-authorization, gateway.delivery.proactive-delivery, gateway.delivery.outcome-observation, gateway.routing.gateway-operations, gateway.persistence.effects, gateway.persistence.state-contracts, gateway.persistence.repository-contracts, gateway.persistence.gateway-store, gateway.persistence.memory, gateway.persistence.idempotency]
     state_recovery: Frozen construction values only; no runtime state or locator lookup.
     current_code: [src/imagent/gateway/composition.py, src/imagent/gateway/controller_input.py, src/imagent/gateway/__init__.py]
     target_code: [src/imagent/gateway/composition.py, src/imagent/gateway/controller_input.py, src/imagent/gateway/__init__.py]
@@ -677,7 +677,7 @@ components:
     public_exports:
       current: []
       target: []
-    dependencies: [interaction.messages, interaction.operations, interaction.controllers.controller-contract, interaction.channels.channel-contract, applications.application-contract, applications.operations, applications.requests, gateway.actions, gateway.effect-execution, gateway.outcomes, gateway.composition, gateway.diagnostics, gateway.admission, gateway.projection.observation, gateway.routing.projection-routes, gateway.persistence.gateway-store, gateway.persistence.effects, gateway.persistence.state-contracts]
+    dependencies: [gateway.startup-preparation, interaction.messages, interaction.operations, interaction.controllers.controller-contract, interaction.channels.channel-contract, applications.application-contract, applications.operations, applications.requests, gateway.actions, gateway.effect-execution, gateway.outcomes, gateway.composition, gateway.diagnostics, gateway.admission, gateway.projection.observation, gateway.routing.projection-routes, gateway.persistence.gateway-store, gateway.persistence.effects, gateway.persistence.state-contracts]
     state_recovery: Gateway validates immutable composition and stable identities before acquisition, serializes same-instance explicit/context/run transitions, owns one renewable store lease, cancels and joins a racing startup through its rollback owner, and closes each runtime, Controller, adapter, session, and store owner exactly once under the configured finite owner timeout; cleanup failures preserve the body or lifecycle primary and never skip later owners, the object is terminal after close, and bounded startup state is process-local.
     current_code: [src/imagent/gateway/lifecycle.py]
     target_code: [src/imagent/gateway/lifecycle.py]
@@ -1355,10 +1355,10 @@ components:
     does_not_own: [fallback policy, product configuration, synthetic support]
     inputs: [native integration evidence]
     outputs: [immutable ApplicationCapabilities]
-    public_contracts: [ApplicationCapabilities, ProjectCapabilities, ThreadCapabilities, RuntimeCapabilities, SupportLevel, ProjectMode, ThreadDeletionCapability, EventSequenceScope, validate_application_capabilities]
+    public_contracts: [ThreadCreationProfile, validate_thread_creation_profile, ApplicationCapabilities, ProjectCapabilities, ThreadCapabilities, RuntimeCapabilities, SupportLevel, ProjectMode, ThreadDeletionCapability, EventSequenceScope, validate_application_capabilities]
     public_exports:
-      current: [imagent.applications.capabilities:ApplicationCapabilities, imagent.applications.capabilities:ProjectCapabilities, imagent.applications.capabilities:ThreadCapabilities, imagent.applications.capabilities:RuntimeCapabilities, imagent.applications.capabilities:SupportLevel, imagent.applications.capabilities:ProjectMode, imagent.applications.capabilities:ThreadDeletionCapability, imagent.applications.capabilities:EventSequenceScope, imagent.applications.capabilities:validate_application_capabilities]
-      target: [imagent.applications.capabilities:ApplicationCapabilities, imagent.applications.capabilities:ProjectCapabilities, imagent.applications.capabilities:ThreadCapabilities, imagent.applications.capabilities:RuntimeCapabilities, imagent.applications.capabilities:SupportLevel, imagent.applications.capabilities:ProjectMode, imagent.applications.capabilities:ThreadDeletionCapability, imagent.applications.capabilities:EventSequenceScope, imagent.applications.capabilities:validate_application_capabilities]
+      current: [imagent.applications.capabilities:ThreadCreationProfile, imagent.applications.capabilities:validate_thread_creation_profile, imagent.applications.capabilities:ApplicationCapabilities, imagent.applications.capabilities:ProjectCapabilities, imagent.applications.capabilities:ThreadCapabilities, imagent.applications.capabilities:RuntimeCapabilities, imagent.applications.capabilities:SupportLevel, imagent.applications.capabilities:ProjectMode, imagent.applications.capabilities:ThreadDeletionCapability, imagent.applications.capabilities:EventSequenceScope, imagent.applications.capabilities:validate_application_capabilities]
+      target: [imagent.applications.capabilities:ThreadCreationProfile, imagent.applications.capabilities:validate_thread_creation_profile, imagent.applications.capabilities:ApplicationCapabilities, imagent.applications.capabilities:ProjectCapabilities, imagent.applications.capabilities:ThreadCapabilities, imagent.applications.capabilities:RuntimeCapabilities, imagent.applications.capabilities:SupportLevel, imagent.applications.capabilities:ProjectMode, imagent.applications.capabilities:ThreadDeletionCapability, imagent.applications.capabilities:EventSequenceScope, imagent.applications.capabilities:validate_application_capabilities]
     dependencies: [interaction.media, interaction.operations]
     state_recovery: Capability declaration is configured/static and must remain honest across restart.
     current_code: [schemas/v1/capabilities.schema.json, src/imagent/applications/capabilities.py]
@@ -1425,7 +1425,7 @@ components:
     public_exports:
       current: [imagent.applications.operations:ApplicationOperation, imagent.applications.operations:ApplicationOperationResult, imagent.applications.operations:ActivateNativeThread, imagent.applications.operations:ApplicationOperationFailed, imagent.applications.operations:ApplicationOperationType, imagent.applications.operations:CreateThread, imagent.applications.operations:DeleteThread, imagent.applications.operations:GetProject, imagent.applications.operations:GetThread, imagent.applications.operations:GetThreadHistory, imagent.applications.operations:GetThreadStatus, imagent.applications.operations:GetTurnCatchup, imagent.applications.operations:InterruptTurn, imagent.applications.operations:ListProjects, imagent.applications.operations:ListThreads, imagent.applications.operations:NativeThreadActivated, imagent.applications.operations:ProjectRead, imagent.applications.operations:ProjectsListed, imagent.applications.operations:RespondRequest, imagent.applications.operations:RequestResponded, imagent.applications.operations:ThreadCreated, imagent.applications.operations:ThreadDeleted, imagent.applications.operations:ThreadDeletionMode, imagent.applications.operations:ThreadHistoryRead, imagent.applications.operations:ThreadRead, imagent.applications.operations:ThreadsListed, imagent.applications.operations:ThreadStatusRead, imagent.applications.operations:TurnCatchupRead, imagent.applications.operations:TurnInterrupted, imagent.applications.operations:validate_application_operation, imagent.applications.operations:validate_application_operation_result, imagent.applications.operations:CreateProject, imagent.applications.operations:ProjectCreated, imagent.applications.operations:DeleteProject, imagent.applications.operations:ProjectDeleted, imagent.applications.operations:MAX_PROJECT_CWD_LENGTH, imagent.applications.operations:MAX_PROJECT_DISPLAY_NAME_LENGTH, imagent.applications.operations:MAX_LIST_QUERY_LENGTH, imagent.applications.operations:MAX_LIST_CURSOR_LENGTH, imagent.applications.operations:MAX_LIST_PAGE_ITEMS, imagent.applications.operations:MAX_THREAD_TITLE_LENGTH, imagent.applications.operations:MAX_THREAD_INITIAL_CONTEXT_ITEMS, imagent.applications.operations:MAX_THREAD_INITIAL_CONTEXT_TEXT_LENGTH, imagent.applications.operations:MAX_THREAD_INITIAL_CONTEXT_ATTACHMENT_FIELD_LENGTH, imagent.applications.operations:MAX_THREAD_INITIAL_CONTEXT_HANDLE_LENGTH, imagent.applications.operations:MAX_THREAD_INITIAL_CONTEXT_METADATA_ITEMS, imagent.applications.operations:MAX_THREAD_INITIAL_CONTEXT_METADATA_BYTES]
       target: [imagent.applications.operations:ApplicationOperation, imagent.applications.operations:ApplicationOperationResult, imagent.applications.operations:ActivateNativeThread, imagent.applications.operations:ApplicationOperationFailed, imagent.applications.operations:ApplicationOperationType, imagent.applications.operations:CreateThread, imagent.applications.operations:DeleteThread, imagent.applications.operations:GetProject, imagent.applications.operations:GetThread, imagent.applications.operations:GetThreadHistory, imagent.applications.operations:GetThreadStatus, imagent.applications.operations:GetTurnCatchup, imagent.applications.operations:InterruptTurn, imagent.applications.operations:ListProjects, imagent.applications.operations:ListThreads, imagent.applications.operations:NativeThreadActivated, imagent.applications.operations:ProjectRead, imagent.applications.operations:ProjectsListed, imagent.applications.operations:RespondRequest, imagent.applications.operations:RequestResponded, imagent.applications.operations:ThreadCreated, imagent.applications.operations:ThreadDeleted, imagent.applications.operations:ThreadDeletionMode, imagent.applications.operations:ThreadHistoryRead, imagent.applications.operations:ThreadRead, imagent.applications.operations:ThreadsListed, imagent.applications.operations:ThreadStatusRead, imagent.applications.operations:TurnCatchupRead, imagent.applications.operations:TurnInterrupted, imagent.applications.operations:validate_application_operation, imagent.applications.operations:validate_application_operation_result, imagent.applications.operations:CreateProject, imagent.applications.operations:ProjectCreated, imagent.applications.operations:DeleteProject, imagent.applications.operations:ProjectDeleted, imagent.applications.operations:MAX_PROJECT_CWD_LENGTH, imagent.applications.operations:MAX_PROJECT_DISPLAY_NAME_LENGTH, imagent.applications.operations:MAX_LIST_QUERY_LENGTH, imagent.applications.operations:MAX_LIST_CURSOR_LENGTH, imagent.applications.operations:MAX_LIST_PAGE_ITEMS, imagent.applications.operations:MAX_THREAD_TITLE_LENGTH, imagent.applications.operations:MAX_THREAD_INITIAL_CONTEXT_ITEMS, imagent.applications.operations:MAX_THREAD_INITIAL_CONTEXT_TEXT_LENGTH, imagent.applications.operations:MAX_THREAD_INITIAL_CONTEXT_ATTACHMENT_FIELD_LENGTH, imagent.applications.operations:MAX_THREAD_INITIAL_CONTEXT_HANDLE_LENGTH, imagent.applications.operations:MAX_THREAD_INITIAL_CONTEXT_METADATA_ITEMS, imagent.applications.operations:MAX_THREAD_INITIAL_CONTEXT_METADATA_BYTES]
-    dependencies: [interaction.messages, interaction.media, interaction.operations, applications.requests]
+    dependencies: [applications.capabilities, interaction.messages, interaction.media, interaction.operations, applications.requests]
     state_recovery: Operation ID is stable; adapters preserve ambiguous mutation outcomes and never silently retry.
     current_code: [schemas/v1/operations.schema.json, src/imagent/applications/operations.py]
     target_code: [schemas/v1/operations.schema.json, src/imagent/applications/operations.py]
@@ -1625,8 +1625,8 @@ components:
       target: [imagent.applications.adapters.codex:CodexApplicationAdapter]
     dependencies: [interaction.diagnostics, interaction.messages, interaction.operations, interaction.media, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, applications.diagnostics, applications.adapters.appserver.client, applications.adapters.appserver.mapping, applications.adapters.appserver.requests, applications.adapters.appserver.diagnostics, applications.presentation.live-activity, applications.presentation.artifact-materialization]
     state_recovery: Native history is authoritative; steer candidate read never authorizes fallback start; ambiguous dispatch is unknown.
-    current_code: [src/imagent/applications/adapters/codex.py, src/imagent/applications/adapters/appserver/_base.py]
-    target_code: [src/imagent/applications/adapters/codex.py, src/imagent/applications/adapters/appserver/_base.py]
+    current_code: [src/imagent/applications/adapters/codex.py, src/imagent/applications/adapters/appserver/_base.py, src/imagent/applications/adapters/appserver/_creation_options.py]
+    target_code: [src/imagent/applications/adapters/codex.py, src/imagent/applications/adapters/appserver/_base.py, src/imagent/applications/adapters/appserver/_creation_options.py]
     current_tests: [tests/applications/adapters/test_codex.py, tests/applications/adapters/appserver/test_client.py, tests/applications/adapters/appserver/test_input_integration.py, tests/applications/adapters/appserver/test_mapping.py, tests/applications/adapters/appserver/test_requests.py, tests/applications/adapters/appserver/test_gateway_request_integration.py, tests/applications/presentation/test_artifact_materialization.py, tests/applications/presentation/test_live_activity.py]
     target_tests: [tests/applications/adapters/test_codex.py]
     authoritative_docs: [docs/components/applications/adapters/codex/design.md, docs/components/applications/adapters/codex/testing.md]
@@ -1647,8 +1647,8 @@ components:
       target: [imagent.applications.adapters.zen:ZenApplicationAdapter]
     dependencies: [interaction.diagnostics, interaction.messages, interaction.operations, interaction.media, applications.application-contract, applications.capabilities, applications.events, applications.operations, applications.requests, applications.diagnostics, applications.adapters.appserver.client, applications.adapters.appserver.mapping, applications.adapters.appserver.requests, applications.adapters.appserver.diagnostics, applications.presentation.artifact-materialization]
     state_recovery: Zen native expected-Turn steering preserves correlation; trusted image bytes are inline; authoritative history handles gaps.
-    current_code: [src/imagent/applications/adapters/zen.py, src/imagent/applications/adapters/appserver/_base.py]
-    target_code: [src/imagent/applications/adapters/zen.py, src/imagent/applications/adapters/appserver/_base.py]
+    current_code: [src/imagent/applications/adapters/zen.py, src/imagent/applications/adapters/appserver/_base.py, src/imagent/applications/adapters/appserver/_creation_options.py]
+    target_code: [src/imagent/applications/adapters/zen.py, src/imagent/applications/adapters/appserver/_base.py, src/imagent/applications/adapters/appserver/_creation_options.py]
     current_tests: [tests/integration/test_zen_native_interop.py, tests/integration/zen_native_server.mjs, tests/applications/adapters/test_zen.py, tests/applications/adapters/appserver/test_client.py, tests/applications/adapters/appserver/test_input_integration.py, tests/applications/adapters/appserver/test_requests.py, tests/applications/adapters/appserver/test_gateway_request_integration.py, tests/applications/presentation/test_artifact_materialization.py, tests/gateway/test_vertical_slice.py]
     target_tests: [tests/applications/adapters/test_zen.py, tests/integration/test_zen_native_interop.py, tests/integration/zen_native_server.mjs]
     authoritative_docs: [docs/components/applications/adapters/zen/design.md, docs/components/applications/adapters/zen/testing.md]
@@ -1809,6 +1809,29 @@ components:
     adrs: [docs/decisions/0002-design-authority-and-control-boundaries.md]
     gaps: []
 
+  gateway.startup-preparation:
+    id: gateway.startup-preparation
+    parent: gateway
+    purpose: Provide one bounded task-owned Conversation read/clear scope before recovery.
+    owns: [StartupPreparation, StartupConversationActions, callback-task scope validation]
+    does_not_own: [startup sequencing, durable effect execution, product routing policy, native execution]
+    inputs: [fixed Conversation and actor, scoped ConversationActions]
+    outputs: [binding read or guarded Thread clear outcome]
+    public_contracts: [StartupPreparation, StartupConversationActions]
+    public_exports:
+      current: [imagent.gateway.startup:StartupPreparation, imagent.gateway.startup:StartupConversationActions]
+      target: [imagent.gateway.startup:StartupPreparation, imagent.gateway.startup:StartupConversationActions]
+    dependencies: [interaction.messages, interaction.operations, gateway.actions, gateway.persistence.state-contracts]
+    state_recovery: Invocation scopes are task-local and invalidated at callback completion or failure; durable clears use the existing receipt owner.
+    current_code: [src/imagent/gateway/startup.py]
+    target_code: [src/imagent/gateway/startup.py]
+    current_tests: [tests/gateway/test_startup_preparation.py]
+    target_tests: [tests/gateway/test_startup_preparation.py]
+    authoritative_docs: [docs/components/gateway/startup-preparation/design.md, docs/components/gateway/startup-preparation/testing.md]
+    adrs: [docs/decisions/0017-startup-conversation-preparation.md]
+    gaps: []
+
+
 structural_status:
   orphan_paths: []
   # Public names removed by the Applications facade convergence. The
@@ -1882,4 +1905,8 @@ structural_status:
       reason: Delivery identity, canonical metadata, and planning-facing helpers remain in delivery; SQLite SQL and schema now have one owner in gateway.persistence.sqlite.
     src/imagent/applications/adapters/appserver/_base.py:
       owners: [applications.adapters.codex, applications.adapters.zen]
-      reason: Private shared App Server base owns typed start/input preparation, verified local-image epochs, the common STARTED/CREATE_NEW fence with no expected Turn ID, native turn/start, and common ordered normalization; Codex alone owns steer enablement, active-Turn selection, STEERED/PRESERVE_EXISTING classification with the active Turn ID, and turn/steer, while Zen remains start-only. No public aggregate facade is exposed.
+      reason: Private shared App Server base owns typed start/input preparation, verified local-image epochs, the common STARTED/CREATE_NEW fence with no expected Turn ID, native turn/start, and common ordered normalization; Codex and Zen each own evidenced native steering; Zen additionally owns trusted inline-image encoding. No public aggregate facade is exposed.
+
+    src/imagent/applications/adapters/appserver/_creation_options.py:
+      owners: [applications.adapters.codex, applications.adapters.zen]
+      reason: Private shared App Server native creation configuration validation and immutable profile fingerprinting; no application execution, Gateway action, or persistence authority.

@@ -496,3 +496,12 @@ Existing tests are classified by semantic evidence, not by pass count:
   creation, manual Controller workflows, mixed durability, or internal API
   access;
 - remove import/facade tests for surfaces that do not belong to the final SDK.
+
+## Consumer preservation follow-on: startup and creation profiles
+
+The concrete IMZen migration exposed two additional public seams. Bounded
+per-Conversation preparations now run before recovery/owner startup using only
+read/clear actions. Native next-Thread profiles now remain adapter configuration
+while ID/config fingerprints participate in ordinary scoped creation workflows.
+Neither requires private store/runtime access or resurrects the old aggregate.
+Legacy database migration and real product acceptance remain independent gates.

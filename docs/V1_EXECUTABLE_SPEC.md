@@ -486,3 +486,20 @@ clean-wheel executions both pass.
 No pre-v1 test name, module boundary, or passing count is itself acceptance
 evidence. Evidence is retained only when it proves the semantics in
 `docs/V1_DESIGN.md` through the intended public path.
+
+### Scoped startup preparation
+
+Configured Conversation preparations may read/clear a foreground Thread binding
+after store/workspace validation and before recovery or adapter/admission startup.
+The bounded callback receives only a task-owned narrow scoped surface, never
+Gateway/repository/native execution authority. Failure keeps startup closed;
+consumer policy and previously delivered request authority remain unchanged.
+
+### Explicit native creation profiles
+
+An optional bounded adapter-owned profile descriptor (ID plus configuration
+fingerprint) may accompany Thread creation. Scoped actions resolve and fingerprint
+the descriptor before durable native fencing; adapters verify exact support.
+Native policy/configuration content stays outside common Operations and receipts.
+Unknown profiles never fall back, and changed configuration under the same ID
+cannot replay a different effect. The absent profile preserves default semantics.
