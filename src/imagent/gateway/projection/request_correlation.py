@@ -205,6 +205,7 @@ class InteractiveRequestProjection:
         execute_application: ExecuteApplication,
         active_routes: ActiveRoutes,
         deliver_request_outbound: DeliverRequestOutbound,
+        ensure_turn_correlation: Callable[[ThreadRef, str], Awaitable[None]] | None = None,
     ) -> None:
         self._applications = applications
         self._projections = projections
@@ -213,6 +214,7 @@ class InteractiveRequestProjection:
         self._execute_application = execute_application
         self._active_routes = active_routes
         self._deliver_request_outbound = deliver_request_outbound
+        self._ensure_turn_correlation = ensure_turn_correlation
         self._request_locks = KeyedLockRegistry()
 
     async def cleanup_correlations(
@@ -471,6 +473,10 @@ class InteractiveRequestProjection:
 
         if _request_expired(request):
             return
+        if self._ensure_turn_correlation is not None:
+            await self._ensure_turn_correlation(
+                request.turn_ref.thread_ref, request.turn_ref.turn_id
+            )
         presenter = self._request_presenter
         if presenter is None:
             raise RuntimeError("interactive request presenter is not configured")

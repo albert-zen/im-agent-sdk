@@ -253,3 +253,13 @@ __all__ = [
     "RequestCorrelationRepository",
     "TurnReplyCorrelationConflict",
 ]
+
+
+def _inbound_idempotency_identity(
+    conversation_ref: ConversationRef,
+    message_id: str,
+) -> tuple[str, str]:
+    return (
+        f"inbound:{conversation_ref.channel_instance_id}",
+        f"{conversation_ref.native_conversation_id}:{message_id}",
+    )

@@ -22,6 +22,13 @@ from ..diagnostics import (
     InboundFailurePresenterDiagnosticFacts,
 )
 from ..persistence.repository_contracts import IdempotencyRepository
+from ..persistence.state_contracts import QueuedInputOrigin, validate_queued_input_origin
+from ..persistence.store import (
+    EffectReceiptCapacityError,
+    GatewayStoreSession,
+    QueuedInputFenceConflict,
+    StaleRuntimeFence,
+)
 from .dispatch import InputPostAcceptanceError
 
 
@@ -210,32 +217,66 @@ class InboundFailurePresentationRuntime:
         self._last_failure_code = code
 
 
+class InboundEffectFence:
+    """One claim owner with an ordinary and an atomic queued transition."""
+
+    def __init__(
+        self,
+        claimed: ClaimedInbound,
+        repository: IdempotencyRepository,
+        session: GatewayStoreSession | None = None,
+    ) -> None:
+        self._claimed = claimed
+        self._repository = repository
+        self._session = session
+        self.entered = False
+        self.started = False
+        self.origin: QueuedInputOrigin | None = None
+
+    async def __call__(self) -> None:
+        self.entered = True
+        await self._repository.mark_side_effect_started(
+            self._claimed.scope, self._claimed.key, owner_token=self._claimed.owner_token
+        )
+        self.started = True
+
+    async def queue(self, origin: QueuedInputOrigin) -> None:
+        if self._session is None:
+            raise RuntimeError("queued input requires a coherent GatewayStore")
+        validate_queued_input_origin(origin)
+        self.origin = origin
+        self.entered = True
+        try:
+            await self._session.fence_queued_input(
+                origin,
+                claim_scope=self._claimed.scope,
+                claim_key=self._claimed.key,
+                owner_token=self._claimed.owner_token,
+            )
+        except (EffectReceiptCapacityError, QueuedInputFenceConflict, StaleRuntimeFence):
+            # These typed store outcomes prove the atomic fence was rejected.
+            # Generic failures/cancellation can lose a committed acknowledgement
+            # and must retain conservative unknown classification instead.
+            self.entered = False
+            self.origin = None
+            raise
+        self.started = True
+
+
 async def handle_claimed_inbound(
     claimed: ClaimedInbound,
     *,
-    process: Callable[[Callable[[], Awaitable[None]]], Awaitable[None]],
+    process: Callable[[InboundEffectFence], Awaitable[None]],
+    session: GatewayStoreSession | None = None,
+    on_queued_unknown: Callable[[QueuedInputOrigin], Awaitable[None]] | None = None,
     idempotency: IdempotencyRepository,
     presentation: InboundFailurePresentationRuntime | None,
     deliver: Callable[[OutboundMessage], Awaitable[object]],
 ) -> None:
-    dispatch_fence_entered = False
-    side_effect_started = False
-
-    async def mark_side_effect_started() -> None:
-        nonlocal dispatch_fence_entered, side_effect_started
-        # Once the durable fence transition begins, cancellation is no longer
-        # proof that native dispatch stayed absent. Be conservative even if a
-        # repository commit races cancellation before its await returns.
-        dispatch_fence_entered = True
-        await idempotency.mark_side_effect_started(
-            claimed.scope,
-            claimed.key,
-            owner_token=claimed.owner_token,
-        )
-        side_effect_started = True
+    fence = InboundEffectFence(claimed, idempotency, session)
 
     try:
-        await process(mark_side_effect_started)
+        await process(fence)
     except InputPostAcceptanceError as error:
         try:
             await idempotency.complete(
@@ -270,6 +311,9 @@ async def handle_claimed_inbound(
             deliver,
         )
     except ApplicationInputOutcomeUnknown as error:
+        if fence.origin is not None and on_queued_unknown is not None:
+            await on_queued_unknown(fence.origin)
+            return
         if presentation is None:
             raise error.cause.with_traceback(error.cause.__traceback__) from None
         await _present_failure(
@@ -279,7 +323,7 @@ async def handle_claimed_inbound(
             deliver,
         )
     except asyncio.CancelledError:
-        if not dispatch_fence_entered:
+        if not fence.entered:
             await idempotency.release(
                 claimed.scope,
                 claimed.key,
@@ -287,7 +331,14 @@ async def handle_claimed_inbound(
             )
         raise
     except BaseException as error:
-        if side_effect_started:
+        if fence.entered:
+            if (
+                fence.origin is not None
+                and on_queued_unknown is not None
+                and isinstance(error, Exception)
+            ):
+                await on_queued_unknown(fence.origin)
+                return
             if presentation is None or not isinstance(error, Exception):
                 raise
             await _present_failure(

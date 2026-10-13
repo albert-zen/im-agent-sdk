@@ -124,3 +124,8 @@ capability is absent.
 - [ADR 0012](../../../../decisions/0012-input-continuation-and-reply-correlation.md)
 - [ADR 0013](../../../../decisions/0013-bounded-application-event-admission.md)
 - [ADR 0016](../../../../decisions/0016-uniform-workspace-and-consumer-actions.md)
+
+Queued requests use the same canonical Turn guard before presentation, including
+the independent request lane and restored pending requests. A request arriving
+before its queue event or send acknowledgement cannot acquire a guessed reply
+identity. Original queued evidence is persisted before routing the request.

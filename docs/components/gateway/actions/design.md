@@ -262,3 +262,25 @@ The selected profile does not mutate an existing Thread.
 The schema requires creation support for any nonempty profile declaration.
 Unique profile IDs are additionally enforced by semantic capability validation;
 JSON Schema `uniqueItems` compares whole descriptors, not their IDs.
+
+## Original-message queued controls
+
+`ConversationActions.read_queued_input(message_id)` returns
+`ReadOutcome[QueuedInputStatus]`. `cancel_queued_input(message_id, *, action_id)`
+returns `Outcome[QueuedInputStatus, ActionError]`; only a canonical CANCELLED
+status is success. Already admitted input fails with QUEUE_ALREADY_ADMITTED and
+is never interrupted. Native outcome uncertainty is sticky OutcomeUnknown.
+Both methods require the exact frozen Conversation and original actor digest;
+message IDs are lookup keys only. They address the original Thread even after
+rebinding, without authorizing unsolicited output to an obsolete destination.
+Cancel uses the existing native-action receipt fence and shared finite effect
+capacity. Full capacity rejects before native mutation; read/reconciliation still
+work. No SDK scheduling, input resend, execution Resume or queue editing is added.
+
+Public QueuedInputStatus exposes only message_id and state (UNKNOWN, PENDING,
+ADMITTED, CANCELLED). No native identifier or stored body is exposed. A bounded
+QueuedInputPresenter optionally renders Gateway-fixed delivery identities with
+ADMISSION, STATE_CHANGED or ephemeral ATTEMPT_FAILED reason. Failure reasons and
+attempts are not durable state. Automatic notices honor current binding generation
+and the existing delivery authorization policy; explicit scoped controls remain
+available after a binding change.

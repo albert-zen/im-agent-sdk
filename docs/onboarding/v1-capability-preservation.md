@@ -123,8 +123,11 @@ See [the v1 executable specification](../V1_EXECUTABLE_SPEC.md) and
 
 ## Explicit IM queue follow-on
 
-The queued-input adapter/model slice adds `QueuedInputReceipt`, a capability
-gate and canonical read-only recovery. It is not a start-new opt-out and is not
-yet a production Gateway queue setting. Independent native receipt/inline-image
-capabilities plus coherent Gateway admission persistence, scoped cancellation
-and delayed Turn correlation remain required before consumer migration/pinning.
+The native and Gateway slices separate bounded queued admission from real Turn
+execution. `Gateway(input_continuation=QUEUE)` is explicit; omission stays soft
+steer. The original IM identity and prepared fingerprint share the existing
+inbound claim fence, and scoped read/cancel checks original actor/Conversation.
+A product must supply safe bounded queued-status presentation and controls,
+retain approval command behavior and independently configure each ingress.
+Consumer pinning follows full Gateway/native and product acceptance, not the
+presence of an enum. See the [queued Gateway design](../components/gateway/input/queued-admission/design.md).

@@ -102,3 +102,13 @@ compatibility copy remains.
 - [ADR 0009](../../../../decisions/0009-proactive-delivery-routing.md)
 - [ADR 0011](../../../../decisions/0011-durable-inbound-admission-before-media.md)
 - [ADR 0012](../../../../decisions/0012-input-continuation-and-reply-correlation.md)
+
+The coherent store adds `queued_input_correlations` without rewriting inbound
+claim states. Its primary key is the original Conversation/message; the row
+stores only bounded origin and canonical receipt evidence. A Thread index serves
+private reconciliation reads. Runtime INSERT/UPDATE/DELETE triggers and explicit
+transaction lease checks fence it identically to other bridge-state tables.
+Admission joins row insertion to the existing inbound claim transition, while
+admitted receipt merge joins evidence to the original Turn reply correlation.
+Opening an old schema creates an empty table and never infers queue metadata
+from existing protected claims.

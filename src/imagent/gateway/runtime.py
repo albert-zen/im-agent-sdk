@@ -15,6 +15,7 @@ from ..applications.contract import (
     AgentApplicationAdapter,
     ApplicationRef,
     ApplicationSummary,
+    InputContinuationPreference,
     validate_application_summary,
 )
 from ..interaction.channels.contract import ChannelAdapter, ChannelCapabilities
@@ -58,6 +59,9 @@ class Gateway:
         applications: list[AgentApplicationAdapter],
         store: GatewayStore,
         controller: InboundController | None = None,
+        input_continuation: InputContinuationPreference = (
+            InputContinuationPreference.PREFER_ACTIVE_TURN
+        ),
         projection_policy: ProjectionPolicy = ProjectionPolicy.REMEMBERED_LAST_RECIPIENT,
         limits: GatewayLimits = GatewayLimits(),
         extensions: GatewayExtensions = GatewayExtensions(),
@@ -65,6 +69,12 @@ class Gateway:
         delivery_coordinator: DeliveryCoordinator | None = None,
     ) -> None:
         require_identifier(gateway_id, "gateway_id")
+        if input_continuation not in (
+            InputContinuationPreference.PREFER_ACTIVE_TURN,
+            InputContinuationPreference.QUEUE,
+        ) or not isinstance(input_continuation, InputContinuationPreference):
+            raise ValueError("Gateway ordinary input requires PREFER_ACTIVE_TURN or QUEUE")
+        self._input_continuation = input_continuation
         if not isinstance(limits, GatewayLimits):
             raise TypeError("limits must be GatewayLimits")
         if not isinstance(extensions, GatewayExtensions):
@@ -223,6 +233,7 @@ class Gateway:
                     delivery_authorizer=self._delivery_authorizer,
                     delivery_coordinator=self._delivery_coordinator,
                     projection_policy=self._projection_policy,
+                    input_continuation=self._input_continuation,
                 )
                 self._runtime = runtime
                 await session.check_workspace_identities(identities)

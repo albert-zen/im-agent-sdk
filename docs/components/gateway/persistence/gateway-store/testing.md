@@ -59,3 +59,31 @@ Cancellation tests cover every await boundary before reservation, after
 reservation but before the native fence, after the native fence, after a known
 native result, and after the atomic terminal commit. Only the actual durable
 phase determines the returned outcome.
+
+## Queued-input conformance
+
+`tests/gateway/persistence/test_queued_input_store.py` exercises both coherent
+stores through the same private session contract. It covers exact inbound
+identity/owner linkage, one concurrent fence winner, strict bounded origin and
+receipt values, current binding generation/Thread and ABA rejection, shared
+capacity in both reservation directions, retained unknown and terminal rows,
+canonical monotonicity, original Turn/destination conflicts, atomic admission
+and receipt/Turn rollback, cancellation and commit acknowledgement loss, stale
+runtime owner/epoch/expiry, fresh SQLite restart, empty additive migration over
+old protected claims, structural session recognition, and schema/row inspection.
+
+The SQLite second-write failures are real aborting SQL triggers; Memory fails
+second-map staging before publication. SQLite commit-acknowledgement tests let
+`commit` succeed before raising, then verify both durable records. These tests
+use only temporary databases and synthetic identities. They do not claim live
+native acceptance or end-to-end Gateway projection evidence.
+
+```sh
+PYTHONPATH=src python -m unittest tests.gateway.persistence.test_queued_input_store -v
+```
+
+Actual old-v1 preservation is covered separately by
+`test_prior_v1_queue_upgrade.py`: a child interpreter imports the selected
+pre-queue SDK source and writes representative bridge state. Current opening
+must preserve every old row/schema while adding queued correlations and fencing
+triggers. This differs from a fresh same-version restart.

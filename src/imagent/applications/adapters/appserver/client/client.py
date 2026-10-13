@@ -6,6 +6,7 @@ import inspect
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
+from weakref import WeakValueDictionary
 
 from .....interaction.diagnostics import (
     ConnectionDiagnosticFacts,
@@ -112,6 +113,7 @@ class AppServerClient:
         self._initialize_lock_owner_task: asyncio.Task | None = None
         self._reconnect_task: asyncio.Task[None] | None = None
         self._closing = False
+        self._close_task: asyncio.Task[None] | None = None
         self._protocol_initialized = False
         self._initialize_owner_task: asyncio.Task | None = None
         self._initialize_owner_epoch: int | None = None
@@ -135,6 +137,9 @@ class AppServerClient:
         self._connection_ready_handlers: list[ConnectionReadyHandler] = []
         self.connection_mode = "disconnected"
         self.last_connection_mode = "disconnected"
+        self._zen_resume_tasks: dict[tuple[int, str], asyncio.Task[AppServerResponse]] = {}
+        self._codex_resume_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
+        self._codex_resume_tasks: set[asyncio.Task[AppServerResponse]] = set()
         self.connection_epoch = 0
         self.initialized = False
 
@@ -142,15 +147,39 @@ class AppServerClient:
         await self._ensure_connected()
 
     async def close(self) -> None:
+        # Close owns cleanup independently of every caller. Repeated cancellation
+        # cannot release an in-flight native observation barrier prematurely.
         self._closing = True
+        task = self._close_task
+        if task is None:
+            task = asyncio.create_task(self._close_owned(asyncio.current_task()))
+            self._close_task = task
+        cancelled = False
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                cancelled = True
+        try:
+            task.result()
+        except Exception:
+            if not cancelled:
+                raise
+        if cancelled:
+            raise asyncio.CancelledError
+
+    async def _close_owned(self, initiating_task: asyncio.Task | None) -> None:
         reconnect_task = self._reconnect_task
         self._reconnect_task = None
-        if reconnect_task is not None and reconnect_task is not asyncio.current_task():
+        if reconnect_task is not None and reconnect_task is not initiating_task:
             reconnect_task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await reconnect_task
         async with self._connect_lock:
-            await self._reset_connection(notify_handlers=False)
+            await self._reset_connection(notify_handlers=False, initiating_task=initiating_task)
+        tasks = (*self._zen_resume_tasks.values(), *self._codex_resume_tasks)
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     def add_notification_handler(self, handler: NotificationHandler) -> None:
         self._notification_handlers.append(handler)
@@ -404,6 +433,8 @@ class AppServerClient:
             return result
 
     async def call(self, method: str, params: JsonDict | None = None) -> JsonDict:
+        if method == "zen/thread/resume":
+            return (await self._resume_zen_params(params)).result
         return await self._request(method, dict(params or {}))
 
     async def call_with_dispatch_position(
@@ -413,6 +444,10 @@ class AppServerClient:
     ) -> AppServerResponse:
         """Call one method and return its exact epoch-scoped callback fence."""
 
+        if method == "zen/thread/resume":
+            return await self._resume_zen_params(params)
+        if method == "thread/resume":
+            return await self._resume_codex_owned(params)
         await self._ensure_ready()
         return await self._request_without_initialize_with_dispatch_position(
             method,
@@ -689,6 +724,146 @@ class AppServerClient:
         # Native negative-code classification is intentionally not inferred from
         # error text. The full native protocol slice will prove its allowlist.
         raise ApplicationInputOutcomeUnknown("native queued input outcome is unknown", cause)
+
+    async def cancel_zen_queued_input(
+        self,
+        thread_id: str,
+        client_message_id: str,
+        queued_item_id: str,
+        *,
+        expected_connection_epoch: int,
+    ) -> JsonDict:
+        """One mutation dispatch; no overload, timeout, or ambiguous-response retry."""
+        await self._ensure_ready()
+        if self.connection_epoch != expected_connection_epoch:
+            raise AppServerError("native queue capability epoch changed before cancellation")
+        method = "zen/thread/queue/cancel"
+        response, _position = await self._request_once_without_initialize(
+            method,
+            {
+                "threadId": thread_id,
+                "items": [
+                    {
+                        "clientId": client_message_id,
+                        "queuedItemId": queued_item_id,
+                    }
+                ],
+            },
+            outcome_unknown_on_dispatch=True,
+        )
+        result = response.get("result")
+        if "error" not in response and isinstance(result, dict):
+            return result
+        cause = AppServerError("native queue cancellation acknowledgement is unconfirmed")
+        if self._valid_error_response(response):
+            cause = self._error_from_response(method, response["error"])
+        raise ApplicationInputOutcomeUnknown("native queue cancellation outcome is unknown", cause)
+
+    async def _resume_codex_owned(self, params: JsonDict | None) -> AppServerResponse:
+        """Serialize fresh CAS observation barriers without orphaning cancelled RPCs."""
+        payload = dict(params or {})
+        thread_id = payload.get("threadId")
+        if not isinstance(thread_id, str) or not thread_id.strip():
+            raise ValueError("thread/resume requires a nonempty threadId")
+        if self._closing:
+            raise AppServerError("app-server client is closed")
+        # Readiness belongs to the original caller: initialize awaits ready
+        # handlers under its lock and recognizes that caller as its owner.
+        # Never hold a Thread barrier while entering those callbacks.
+        await self._ensure_ready()
+        epoch, transport = self.connection_epoch, self._transport
+        if transport is None:
+            raise AppServerError("thread/resume has no ready transport")
+
+        def require_origin_connection() -> None:
+            if (
+                self._closing
+                or self._resetting
+                or self.connection_epoch != epoch
+                or self._transport is not transport
+            ):
+                raise AppServerError("thread/resume connection changed before dispatch")
+
+        lock = self._codex_resume_locks.get(thread_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._codex_resume_locks[thread_id] = lock
+        await lock.acquire()
+        try:
+            require_origin_connection()
+        except BaseException:
+            lock.release()
+            raise
+
+        async def invoke() -> AppServerResponse:
+            require_origin_connection()
+            return await self._request_without_initialize_with_dispatch_position(
+                "thread/resume", payload, expected_connection_epoch=epoch
+            )
+
+        task = asyncio.create_task(invoke())
+        self._codex_resume_tasks.add(task)
+
+        def finished(done: asyncio.Task[AppServerResponse]) -> None:
+            lock.release()
+            self._codex_resume_tasks.discard(done)
+            if not done.cancelled():
+                done.exception()
+
+        task.add_done_callback(finished)
+        return await asyncio.shield(task)
+
+    async def _resume_zen_params(self, params: JsonDict | None) -> AppServerResponse:
+        if not isinstance(params, dict) or set(params) != {"threadId"}:
+            raise ValueError("native resume requires exactly one threadId")
+        thread_id = params["threadId"]
+        if not isinstance(thread_id, str) or not thread_id.strip() or len(thread_id) > 512:
+            raise ValueError("native resume requires a bounded threadId")
+        return await self.resume_zen_thread(thread_id)
+
+    async def resume_zen_thread(
+        self,
+        thread_id: str,
+        *,
+        expected_connection_epoch: int | None = None,
+    ) -> AppServerResponse:
+        """Share one native barrier until its actual response, even if callers cancel."""
+        await self._ensure_ready()
+        if self._closing:
+            raise AppServerError("app-server client is closed")
+        epoch = self.connection_epoch
+        if expected_connection_epoch is not None and epoch != expected_connection_epoch:
+            raise AppServerError("native resume capability epoch changed before dispatch")
+        key = (epoch, thread_id)
+        task = self._zen_resume_tasks.get(key)
+        if task is None:
+            task = asyncio.create_task(self._resume_zen_once(thread_id, epoch))
+            self._zen_resume_tasks[key] = task
+
+            def finished(done: asyncio.Task[AppServerResponse]) -> None:
+                if self._zen_resume_tasks.get(key) is done:
+                    self._zen_resume_tasks.pop(key, None)
+                if not done.cancelled():
+                    done.exception()
+
+            task.add_done_callback(finished)
+        return await asyncio.shield(task)
+
+    async def _resume_zen_once(self, thread_id: str, epoch: int) -> AppServerResponse:
+        if self._closing or self.connection_epoch != epoch:
+            raise AppServerError("native resume connection changed before dispatch")
+        response, position = await self._request_once_without_initialize(
+            "zen/thread/resume",
+            {"threadId": thread_id},
+        )
+        if "error" in response:
+            if self._valid_error_response(response):
+                raise self._error_from_response("zen/thread/resume", response["error"])
+            raise AppServerError("invalid native resume response")
+        result = response.get("result")
+        if not isinstance(result, dict):
+            raise AppServerError("native resume requires a complete snapshot object")
+        return AppServerResponse(result, position)
 
     @staticmethod
     def _resolve_turn_input(
@@ -970,6 +1145,8 @@ class AppServerClient:
         expected_local_image_epoch: int | None = None,
         outcome_unknown_on_dispatch: bool = False,
     ) -> JsonDict:
+        if method == "thread/resume":
+            return (await self._resume_codex_owned(params)).result
         await self._ensure_ready()
         return await self._request_without_initialize(
             method,
@@ -1000,9 +1177,20 @@ class AppServerClient:
         params: JsonDict | None,
         *,
         expected_local_image_epoch: int | None = None,
+        expected_connection_epoch: int | None = None,
         outcome_unknown_on_dispatch: bool = False,
     ) -> AppServerResponse:
+        if (
+            expected_connection_epoch is not None
+            and self.connection_epoch != expected_connection_epoch
+        ):
+            raise AppServerError(f"{method} connection changed before dispatch")
         await self._ensure_connected()
+        if (
+            expected_connection_epoch is not None
+            and self.connection_epoch != expected_connection_epoch
+        ):
+            raise AppServerError(f"{method} connection changed before dispatch")
         request_epoch = self.connection_epoch
         request_transport = self._transport
         if request_transport is None:
@@ -1454,8 +1642,10 @@ class AppServerClient:
             if pending_epoch == epoch and not future.done():
                 future.set_exception(error)
 
-    async def _reset_connection(self, *, notify_handlers: bool = True) -> None:
-        initiating_task = asyncio.current_task()
+    async def _reset_connection(
+        self, *, notify_handlers: bool = True, initiating_task: asyncio.Task | None = None
+    ) -> None:
+        initiating_task = initiating_task or asyncio.current_task()
         if self._resetting:
             if self._reset_owner_task is initiating_task:
                 return

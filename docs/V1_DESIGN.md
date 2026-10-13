@@ -627,7 +627,7 @@ The repository is transformed toward this design, not the reverse:
 6. judge completion from a clean installed wheel and the full consumer flow,
    not from file count, an isolated layer, or a passing import test.
 
-## Staged queued input capability
+## Optional queued input capability
 
 [ADR 0019](decisions/0019-queued-input-admission.md) separates optional native queue
 admission from execution. Application input now has typed plan/acceptance unions
@@ -635,9 +635,10 @@ without weakening `AcceptedTurn`. Zen has explicit native capability/connection
 epoch gates and bounded canonical human receipt recovery. An older Host rejects
 queue before dispatch; unsupported Applications never fall through to start.
 
-Ordinary Gateway input remains default soft steer. This first slice does not
-enable a Gateway queue setting, delayed correlation, or scoped queue cancellation.
-The remaining delivery needs one coherent lease-fenced admission/correlation
-record joined to the existing inbound claim, delayed real-Turn routing and the
-full native positive acceptance matrix. No consumer should claim complete queue
-support from the enum or adapter protocol fixtures alone.
+Ordinary Gateway input remains default soft steer. Explicit QUEUE now uses the
+same inbound claim's atomic lease-fenced origin association, bounded native queue
+observation, real-Turn correlation before message/request delivery and original
+actor/Conversation-scoped read/cancel. Canonical receipt recovery is read-only;
+unknown never resends or resumes execution. The full public Gateway/native matrix
+and independent review remain release gates. See the
+[queued Gateway authority](components/gateway/input/queued-admission/design.md).

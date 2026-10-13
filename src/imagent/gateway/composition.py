@@ -16,6 +16,7 @@ from .persistence.repository_contracts import (
     RequestCorrelationRepository,
 )
 from .presentation import OutboundPresentationPolicy
+from .queued_input import QueuedInputPresenter
 from .startup import StartupPreparation
 
 
@@ -53,6 +54,10 @@ class GatewayLimits:
     inbound_failure_present_max_items: int = 64
     inbound_failure_present_max_text_characters: int = 16_384
     inbound_failure_present_max_concurrency: int = 16
+    queued_input_present_timeout_seconds: float = 30.0
+    queued_input_present_max_items: int = 64
+    queued_input_present_max_text_characters: int = 16_384
+    queued_input_present_max_concurrency: int = 16
     outbound_presentation_timeout_seconds: float = 30.0
     outbound_presentation_max_items: int = 64
     outbound_presentation_max_text_characters: int = 16_384
@@ -84,6 +89,9 @@ class GatewayLimits:
             "inbound_failure_present_max_items",
             "inbound_failure_present_max_text_characters",
             "inbound_failure_present_max_concurrency",
+            "queued_input_present_max_items",
+            "queued_input_present_max_text_characters",
+            "queued_input_present_max_concurrency",
             "outbound_presentation_max_items",
             "outbound_presentation_max_text_characters",
             "outbound_presentation_max_concurrency",
@@ -101,6 +109,7 @@ class GatewayLimits:
             "request_correlation_retention_seconds",
             "inbound_content_transform_timeout_seconds",
             "inbound_failure_present_timeout_seconds",
+            "queued_input_present_timeout_seconds",
             "outbound_presentation_timeout_seconds",
             "delivery_outcome_observer_timeout_seconds",
             "lifecycle_owner_timeout_seconds",
@@ -129,6 +138,7 @@ class GatewayExtensions:
     outbound_presentation: OutboundPresentationPolicy | None = None
     delivery_outcome_observer: DeliveryOutcomeObserver | None = None
     startup_preparations: tuple[StartupPreparation, ...] = ()
+    queued_input_presenter: QueuedInputPresenter | None = None
 
 
 def _require_positive_integer(value: object, name: str) -> None:

@@ -71,3 +71,16 @@ omitted continuation, both explicit ordinary enum literals, the historical
 narrow callback alias, and the distinct dynamic-plan callback must retain their
 intended result types. `_check_public_protocol_input_typing` in the queued model
 tests is an executable pyright assertion set.
+
+
+## Queued lifecycle
+
+`tests/applications/adapters/test_zen_queue_bulk.py` proves mixed per-ID canonical
+states, independent absence, duplicate positions, global scope/identity checks,
+and original fingerprint retention after edits. `test_zen_queue_lifecycle.py`
+proves one read per cohort, bounded inputs, no cache/implicit resume, exact
+control identity, known cancellation/admission and reserved-input uncertainty.
+It also exercises event-before-response capture, concurrent same-Thread resume,
+caller cancellation, overflow, reset, snapshot tail/watermark ordering, and
+close joining owned work. Production client tests prove one-shot cancellation
+for malformed success, errors, timeout, cancellation and close.

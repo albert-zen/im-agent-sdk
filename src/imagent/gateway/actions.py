@@ -114,6 +114,7 @@ from .persistence.state_contracts import (
     validate_binding,
 )
 from .projection.request_correlation import RespondToRequest
+from .queued_input import QueuedInputStatus, QueuedInputStatusKind
 from .routing.bindings import (
     BindConversationToProject,
     BindConversationToThread,
@@ -154,6 +155,19 @@ ActionResult: TypeAlias = Outcome[ActionValue, ActionError]
 
 
 class _ActionRuntime(Protocol):
+    async def read_queued_input(
+        self, conversation_ref: ConversationRef, actor: str, message_id: str
+    ) -> ReadOutcome[QueuedInputStatus]: ...
+
+    async def cancel_queued_input(
+        self,
+        conversation_ref: ConversationRef,
+        actor: str,
+        message_id: str,
+        *,
+        reconcile_only: bool,
+    ) -> KnownNativeOutcome | None: ...
+
     def list_applications(self) -> tuple[ApplicationSummary, ...]: ...
 
     async def execute_application(
@@ -710,6 +724,55 @@ class ConversationActions:
         object.__setattr__(value, "actor", actor)
         object.__setattr__(value, "_context", context)
         return value
+
+    async def read_queued_input(self, message_id: str) -> ReadOutcome[QueuedInputStatus]:
+        require_identifier(message_id, "message_id")
+        return await self._context.runtime.read_queued_input(
+            self.conversation_ref, self.actor, message_id
+        )
+
+    async def cancel_queued_input(
+        self, message_id: str, *, action_id: str
+    ) -> Outcome[QueuedInputStatus, ActionError]:
+        require_identifier(message_id, "message_id")
+        fingerprint = _fingerprint(
+            self._context, "queued_input.cancel", action_id, (("message_id", message_id),)
+        )
+
+        async def preflight() -> ActionError | None:
+            read = await self.read_queued_input(message_id)
+            if isinstance(read, Failed):
+                return read.error
+            if read.value.state is QueuedInputStatusKind.UNKNOWN:
+                return ActionError(ActionErrorCode.NATIVE_OUTCOME_UNKNOWN)
+            if read.value.state is QueuedInputStatusKind.ADMITTED:
+                return ActionError(ActionErrorCode.QUEUE_ALREADY_ADMITTED)
+            return None
+
+        async def invoke(_phase_id: str) -> KnownNativeOutcome:
+            result = await self._context.runtime.cancel_queued_input(
+                self.conversation_ref, self.actor, message_id, reconcile_only=False
+            )
+            if result is None:
+                raise RuntimeError("queued cancellation did not establish a native result")
+            return result
+
+        async def reconcile(_phase_id: str) -> KnownNativeOutcome | None:
+            return await self._context.runtime.cancel_queued_input(
+                self.conversation_ref, self.actor, message_id, reconcile_only=True
+            )
+
+        result = await self._context.effects.execute_native_mutation(
+            NativeMutationRequest(fingerprint=fingerprint),
+            invoke=invoke,
+            preflight=preflight,
+            reconcile=reconcile,
+        )
+        if isinstance(result, Succeeded):
+            return Succeeded(QueuedInputStatus(message_id, QueuedInputStatusKind.CANCELLED))
+        if isinstance(result, Partial):
+            return OutcomeUnknown(result.error)
+        return result
 
     async def list_applications(self) -> ReadOutcome[tuple[ApplicationSummary, ...]]:
         operation = ListApplications(

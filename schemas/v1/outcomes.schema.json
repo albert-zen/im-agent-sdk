@@ -13,7 +13,8 @@
         "unsupported",
         "native_rejected",
         "native_outcome_unknown",
-        "store_failure"
+        "store_failure",
+        "queue_already_admitted"
       ]
     },
     "ActionError": {

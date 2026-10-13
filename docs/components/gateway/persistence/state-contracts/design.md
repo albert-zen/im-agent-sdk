@@ -125,3 +125,16 @@ focused persistence-state owner directly.
 - [ADR 0009](../../../../decisions/0009-proactive-delivery-routing.md)
 - [ADR 0012](../../../../decisions/0012-input-continuation-and-reply-correlation.md)
 - [ADR 0016](../../../../decisions/0016-uniform-workspace-and-consumer-actions.md)
+
+## Original queued-input identity
+
+`QueuedInputOrigin` is a frozen bounded record of original Conversation/message,
+actor SHA-256, Thread, binding generation, native client ID, original prepared
+input SHA-256, and the closed QUEUE mode. `QueuedInputCorrelation` adds only an
+optional canonical native receipt plus store-authored aware creation/update
+instants. A missing receipt means unknown; the native queued/admitted/cancelled
+state and original Turn remain canonical evidence rather than SDK execution
+truth. Validation rejects changed native scope/fingerprint, malformed identities,
+non-lowercase digests, Boolean/fractional/negative generations, open mode values,
+naive timestamps, and receipt lineage without its required canonical state.
+No body, artifact/path, raw actor, failure reason, attempt, or prompt is retained.

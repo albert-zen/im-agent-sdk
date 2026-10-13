@@ -78,3 +78,16 @@ consumer policy implemented by constructor-injected typed services.
 - [Idempotency design](../../persistence/idempotency/design.md)
 - [ADR 0012](../../../../decisions/0012-input-continuation-and-reply-correlation.md)
 - [ADR 0015](../../../../decisions/0015-typed-extension-seams-and-composition.md)
+
+## Queued atomic fence classification
+
+The private typed inbound fence keeps ordinary callable behavior and adds one
+queue entry that atomically links the exact owned claim to its original receipt
+association. Known capacity, stale-lease and claim/binding fence rejection are
+pre-acceptance: those typed store errors prove that transaction did not commit.
+Cancellation or any unclassified store/transport error after entering the fence
+remains conservative unknown, including committed acknowledgement loss. A queued
+status presenter may render the bounded current original-ID status instead of a
+duplicate I2 unknown error; it never completes or releases the input claim.
+Known admission followed by presentation failure uses POST_ACCEPTANCE and remains
+terminal. No exception body crosses either presentation contract.

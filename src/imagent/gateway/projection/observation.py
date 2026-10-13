@@ -175,6 +175,7 @@ async def deliver_projected_message(
     checkpoint_authority: _ProjectionCheckpointAuthority,
     authoritative: bool,
     validate_lifecycle: Callable[[], None] | None = None,
+    ensure_turn_correlation: Callable[[ThreadRef, str], Awaitable[None]] | None = None,
 ) -> ThreadProjectionRoute:
     """Make one ordered route decision without adding retry/backpressure."""
     if validate_lifecycle is not None:
@@ -198,6 +199,8 @@ async def deliver_projected_message(
         )
     reply_to = route.reply_to_message_id
     if projected.turn_id is not None:
+        if ensure_turn_correlation is not None:
+            await ensure_turn_correlation(route.thread_ref, projected.turn_id)
         correlation = await repository.get_turn_reply_correlation(
             route.thread_ref,
             projected.turn_id,
@@ -280,6 +283,7 @@ class ThreadProjectionRuntime:
         projection_item_limit: int = 20,
         request_delivery_max_pending: int = 256,
         acceptance_gate: TurnAcceptanceOrderingGate,
+        ensure_turn_correlation: Callable[[ThreadRef, str], Awaitable[None]] | None = None,
         max_active_threads: int = 4096,
         subscription_retry_initial_seconds: float = 0.05,
         subscription_retry_max_seconds: float = 2.0,
@@ -325,6 +329,7 @@ class ThreadProjectionRuntime:
             execute_application=execute_application,
             active_routes=self._active_routes,
             deliver_request_outbound=deliver_request_outbound,
+            ensure_turn_correlation=ensure_turn_correlation,
         )
         self._routes = _ProjectionRouteCoordinator(
             projections=projections,
@@ -334,6 +339,7 @@ class ThreadProjectionRuntime:
             wait_for_acceptance=self._acceptance_gate.wait_for_acceptance,
             record_delivery_failure=self._record_delivery_failure,
             request_delivery_max_pending=request_delivery_max_pending,
+            ensure_turn_correlation=ensure_turn_correlation,
         )
         from .recovery import _RecoverySupervisor
 
@@ -1312,6 +1318,7 @@ class _ProjectionRouteCoordinator:
         wait_for_acceptance: WaitForAcceptance,
         record_delivery_failure: RecordDeliveryFailure,
         request_delivery_max_pending: int,
+        ensure_turn_correlation: Callable[[ThreadRef, str], Awaitable[None]] | None = None,
     ) -> None:
         if request_delivery_max_pending < 1:
             raise ValueError("request_delivery_max_pending must be positive")
@@ -1327,6 +1334,7 @@ class _ProjectionRouteCoordinator:
         self._wait_for_acceptance = wait_for_acceptance
         self._record_delivery_failure = record_delivery_failure
         self._request_delivery_max_pending = request_delivery_max_pending
+        self._ensure_turn_correlation = ensure_turn_correlation
         self._request_capacity_changed = asyncio.Event()
         self._bootstrap: dict[str, asyncio.Event] = {}
         self._bootstrap_pending: set[str] = set()
@@ -1806,6 +1814,7 @@ class _ProjectionRouteCoordinator:
                         deliver_outbound=self._deliver_outbound,
                         checkpoint_authority=self._checkpoint_authority,
                         authoritative=False,
+                        ensure_turn_correlation=self._ensure_turn_correlation,
                     )
                 except _DestinationDecisionError as error:
                     self._block_route(current, error)
@@ -1841,6 +1850,7 @@ class _ProjectionRouteCoordinator:
                     deliver_outbound=self._deliver_outbound,
                     checkpoint_authority=self._checkpoint_authority,
                     authoritative=authoritative,
+                    ensure_turn_correlation=self._ensure_turn_correlation,
                     validate_lifecycle=validate_lifecycle,
                 )
             except _DestinationDecisionError as error:

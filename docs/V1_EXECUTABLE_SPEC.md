@@ -512,5 +512,8 @@ client-ID recovery after lost acknowledgement/restart, no automatic resend or
 Resume, explicit cancellation versus live startup failure, stable image bytes
 and conflicting input/mode rejection. The final ordinary-Gateway scenario also
 proves binding/lease fencing and original-Turn approval/final reply routing.
-The current adapter-model thin slice is partial evidence, not completion of
-this scenario; see [ADR 0019](decisions/0019-queued-input-admission.md).
+The adapter-model and Gateway slices have separate review gates. The public
+Gateway matrix lives in `tests/integration/test_queued_gateway_native.py`; the
+lease-fenced Memory/SQLite matrix is `test_queued_input_store.py`. Consumer
+setting/presentation/command acceptance is still a separate required integration;
+see [ADR 0019](decisions/0019-queued-input-admission.md).

@@ -16,6 +16,7 @@ from ..contract import (
     TurnRef,
     validate_queued_input_receipt,
 )
+from ..queued_input import MAX_QUEUED_INPUT_READ_IDS
 
 _QUEUE_CAPABILITY = "queued-input-admission-v1"
 _INLINE_IMAGE_CAPABILITY = "inline-image-input-v1"
@@ -144,7 +145,7 @@ def _queued_admission_receipt(
     return receipt
 
 
-def _queued_receipt_from_items(
+def _queued_receipt_for_items(
     items: object,
     thread_ref: ThreadRef,
     client_message_id: str,
@@ -216,3 +217,43 @@ def _queued_receipt_from_items(
         )
     validate_queued_input_receipt(receipt)
     return receipt
+
+
+def _queued_receipts_from_items(
+    items: object,
+    thread_ref: ThreadRef,
+    client_message_ids: tuple[str, ...],
+) -> tuple[QueuedInputReceipt | None, ...]:
+    """One complete snapshot pass, followed by independent per-ID lineage reads."""
+
+    if (
+        not isinstance(client_message_ids, tuple)
+        or len(client_message_ids) > MAX_QUEUED_INPUT_READ_IDS
+    ):
+        raise ContractViolation("queued snapshot IDs exceed their finite tuple bound")
+    for client_id in client_message_ids:
+        _identifier(client_id)
+    if not isinstance(items, list) or len(items) > _MAX_SNAPSHOT_ITEMS:
+        raise ContractViolation("native queue recovery requires a complete bounded item list")
+    requested: dict[str, list[Mapping[str, object]]] = {key: [] for key in client_message_ids}
+    identities: set[str] = set()
+    for item in items:
+        if not isinstance(item, Mapping) or item.get("threadId") != thread_ref.thread_id:
+            raise ContractViolation("native queue snapshot contains a foreign or invalid item")
+        item_id = _identifier(item.get("id"))
+        if item_id in identities:
+            raise ContractViolation("native queue snapshot repeats a canonical item")
+        identities.add(item_id)
+        client_id = item.get("clientId")
+        if isinstance(client_id, str) and client_id in requested:
+            requested[client_id].append(item)
+    results = {
+        key: _queued_receipt_for_items(group, thread_ref, key) for key, group in requested.items()
+    }
+    return tuple(results[key] for key in client_message_ids)
+
+
+def _queued_receipt_from_items(
+    items: object, thread_ref: ThreadRef, client_message_id: str
+) -> QueuedInputReceipt | None:
+    return _queued_receipts_from_items(items, thread_ref, (client_message_id,))[0]

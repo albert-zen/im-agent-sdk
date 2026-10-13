@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -17,6 +19,7 @@ from ..applications.contract import (
     AgentApplicationAdapter,
     ApplicationRef,
     ApplicationSummary,
+    InputContinuationPreference,
     ThreadRef,
     validate_application_summary,
 )
@@ -87,13 +90,20 @@ from .input import StaleBindingError as StaleBindingError
 from .input.content_transformation import InboundContentTransformRuntime
 from .input.dispatch import (
     InputDispatchRuntime,
+    InputPostAcceptanceError,
     TurnAcceptanceOrderingGate,
     derive_client_message_id,
     preflight_authoritative_binding,
 )
+from .input.failure_presentation import (
+    InboundEffectFence,
+    InboundFailurePresentationRuntime,
+    handle_claimed_inbound,
+)
 from .input.failure_presentation import InboundFailurePhase as InboundFailurePhase
-from .input.failure_presentation import InboundFailurePresentationRuntime, handle_claimed_inbound
 from .input.failure_presentation import InboundFailurePresenter as InboundFailurePresenter
+from .input.queue_presentation import QueuedInputPresentationRuntime
+from .input.queue_runtime import QueuedInputRuntime
 from .lifecycle import (
     GatewayLifecycleFailure,
     GatewayNotRunning,
@@ -117,6 +127,8 @@ from .persistence.repository_contracts import (
 from .persistence.state_contracts import (
     ConversationBinding,
     DeliverySubmissionState,
+    QueuedInputCorrelation,
+    QueuedInputOrigin,
     validate_binding,
 )
 from .persistence.store import GatewayStoreSession, _is_gateway_store_session
@@ -144,6 +156,7 @@ from .projection.observation import (
     _DestinationDecisionError,
     _ProjectionRecoveryRequired,
 )
+from .queued_input import QueuedInputNoticeReason
 from .routing import projection_routes as _projection_routes
 from .routing.bindings import (
     BindConversationToProject,
@@ -177,6 +190,9 @@ class _GatewayRuntime:
         channels: list[ChannelAdapter],
         applications: list[AgentApplicationAdapter],
         repositories: _GatewayRuntimeDependencies,
+        input_continuation: InputContinuationPreference = (
+            InputContinuationPreference.PREFER_ACTIVE_TURN
+        ),
         limits: GatewayLimits = GatewayLimits(),
         extensions: GatewayExtensions = GatewayExtensions(),
         delivery_authorizer: DeliveryAuthorizer | None = None,
@@ -200,6 +216,23 @@ class _GatewayRuntime:
         self._applications = dict(zip(application_ids, applications, strict=True))
         self._lifecycle_owner_timeout_seconds = limits.lifecycle_owner_timeout_seconds
         coherent_session = _coherent_store_session(repositories)
+        self._coherent_session = coherent_session
+        self._input_continuation = input_continuation
+        self._queued_inputs = (
+            QueuedInputRuntime(
+                coherent_session,
+                self._applications,
+                publish=self._present_queued_input,
+                max_threads=limits.projection_max_active_threads,
+                lifecycle_timeout=limits.lifecycle_owner_timeout_seconds,
+                retry_initial=limits.subscription_retry_initial_seconds,
+                retry_max=limits.subscription_retry_max_seconds,
+            )
+            if coherent_session is not None
+            else None
+        )
+        if input_continuation is InputContinuationPreference.QUEUE and self._queued_inputs is None:
+            raise ValueError("queued input requires a coherent GatewayStore")
         bindings = coherent_session if coherent_session is not None else repositories.bindings
         self._binding_runtime = _BindingRuntime(bindings)
         self._projection_policy = projection_policy
@@ -226,6 +259,17 @@ class _GatewayRuntime:
                 max_concurrency=limits.inbound_content_transform_max_concurrency,
             )
             if extensions.inbound_content_transformer is not None
+            else None
+        )
+        self._queued_presentation = (
+            QueuedInputPresentationRuntime(
+                extensions.queued_input_presenter,
+                timeout_seconds=limits.queued_input_present_timeout_seconds,
+                max_items=limits.queued_input_present_max_items,
+                max_text_characters=limits.queued_input_present_max_text_characters,
+                max_concurrency=limits.queued_input_present_max_concurrency,
+            )
+            if extensions.queued_input_presenter is not None
             else None
         )
         self._inbound_failure_presentation_runtime = (
@@ -298,6 +342,9 @@ class _GatewayRuntime:
             projection_item_limit=limits.projection_item_limit,
             request_delivery_max_pending=limits.request_delivery_max_pending,
             acceptance_gate=self._turn_acceptance_gate,
+            ensure_turn_correlation=(
+                self._queued_inputs.ensure_turn if self._queued_inputs is not None else None
+            ),
             max_active_threads=limits.projection_max_active_threads,
             subscription_retry_initial_seconds=limits.subscription_retry_initial_seconds,
             subscription_retry_max_seconds=limits.subscription_retry_max_seconds,
@@ -320,12 +367,14 @@ class _GatewayRuntime:
                 abort_projection_route=self._projection_runtime.abort_action_route,
                 fence_projection_route_commit=(self._projection_runtime.fence_action_route_commit),
                 request_projection=self._projection_runtime.request_projection,
+                queued_inputs=self._queued_inputs,
             )
         self._request_projection = self._projection_runtime.request_projection
         self._input_dispatch = InputDispatchRuntime(
             correlator=self._request_projection,
             acceptance_gate=self._turn_acceptance_gate,
             event_applier=self._projection_runtime,
+            queued_inputs=self._queued_inputs,
         )
         from .routing.operations import _GatewayOperationRuntime
 
@@ -415,6 +464,8 @@ class _GatewayRuntime:
                     raise start_error
                 started_channels.append(channel)
                 self._startup_admission.raise_if_overflowed()
+            if self._queued_inputs is not None:
+                await self._queued_inputs.restore()
             self._projection_runtime.mark_delivery_ready()
             await self._projection_runtime.reconcile_pending_requests(restart_open_requests)
             self._startup_admission.raise_if_overflowed()
@@ -445,6 +496,14 @@ class _GatewayRuntime:
                         )
                     )
             self._startup_admission.clear()
+            if self._queued_inputs is not None:
+                await self._cleanup_lifecycle_owner(
+                    error, "queued observation", self._queued_inputs.close
+                )
+            if self._queued_presentation is not None:
+                await self._cleanup_lifecycle_owner(
+                    error, "queued presentation", self._queued_presentation.close
+                )
             await self._cleanup_lifecycle_owner(
                 error,
                 "projection runtime",
@@ -512,6 +571,14 @@ class _GatewayRuntime:
             "projection runtime",
             self._projection_runtime.stop,
         )
+        if self._queued_inputs is not None:
+            error = await self._cleanup_lifecycle_owner(
+                error, "queued observation", self._queued_inputs.close
+            )
+        if self._queued_presentation is not None:
+            error = await self._cleanup_lifecycle_owner(
+                error, "queued presentation", self._queued_presentation.close
+            )
         if self._outbound_presentation_runtime is not None:
             error = await self._cleanup_lifecycle_owner(
                 error,
@@ -979,7 +1046,7 @@ class _GatewayRuntime:
             raise _GatewayActionError(error.error) from error
 
     async def _handle_claimed_message(self, claimed: ClaimedInbound) -> None:
-        async def process(before_application_send: Callable[[], Awaitable[None]]) -> None:
+        async def process(before_application_send: InboundEffectFence) -> None:
             await self._process_message(
                 claimed.message,
                 idempotency_owner_token=claimed.owner_token,
@@ -990,6 +1057,10 @@ class _GatewayRuntime:
             claimed,
             process=process,
             idempotency=self._idempotency,
+            session=self._coherent_session,
+            on_queued_unknown=self._queued_unknown
+            if self._queued_presentation is not None
+            else None,
             presentation=self._inbound_failure_presentation_runtime,
             deliver=self._deliver_outbound,
         )
@@ -1060,7 +1131,7 @@ class _GatewayRuntime:
         message: InboundMessage,
         *,
         idempotency_owner_token: str,
-        before_application_send: Callable[[], Awaitable[None]],
+        before_application_send: InboundEffectFence,
     ) -> None:
         async with self._gateway_operations.hold_conversation(message.conversation_ref):
             scope, key = inbound_idempotency_identity(
@@ -1141,13 +1212,72 @@ class _GatewayRuntime:
                 message.conversation_ref,
                 thread_was_created=False,
             )
-            await self._input_dispatch.dispatch(
+            if self._input_continuation is InputContinuationPreference.QUEUE:
+                assert self._queued_inputs is not None
+                await self._queued_inputs.ensure_observing(thread_ref)
+            accepted = await self._input_dispatch.dispatch(
                 application,
                 thread_ref,
                 message,
                 content=content,
                 before_application_send=before_application_send,
+                before_queue_send=before_application_send.queue,
+                continuation=self._input_continuation,
+                binding_generation=binding.generation,
             )
+            if before_application_send.origin is not None and self._queued_inputs is not None:
+                try:
+                    await self._queued_inputs.notify_admission(before_application_send.origin)
+                except BaseException as error:
+                    raise InputPostAcceptanceError(accepted, error) from error
+
+    async def _present_queued_input(
+        self, row: QueuedInputCorrelation, reason: QueuedInputNoticeReason, notice_id: str
+    ) -> None:
+        presentation = self._queued_presentation
+        if presentation is None or not self._accepting_inbound:
+            return
+        origin = row.origin
+
+        async def authorized() -> bool:
+            binding = await self._binding_runtime.current(origin.conversation_ref)
+            return (
+                binding is not None
+                and binding.thread_ref == origin.thread_ref
+                and binding.generation == origin.binding_generation
+                and any(
+                    route.conversation_ref == origin.conversation_ref
+                    for route in await self._projection_runtime.active_routes(origin.thread_ref)
+                )
+            )
+
+        if not await authorized():
+            return
+        digest = hashlib.sha256(
+            json.dumps(
+                [
+                    origin.conversation_ref.channel_instance_id,
+                    origin.conversation_ref.native_conversation_id,
+                    origin.message_id,
+                    reason.value,
+                    notice_id,
+                ],
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        output = await presentation.present(
+            QueuedInputRuntime.status(row),
+            reason=reason,
+            conversation_ref=origin.conversation_ref,
+            delivery_id=f"imagent:queued-notice:{digest}",
+        )
+        if await authorized() and self._accepting_inbound:
+            await self._deliver_outbound(output)
+
+    async def _queued_unknown(self, origin: QueuedInputOrigin) -> None:
+        if self._queued_inputs is not None:
+            await self._queued_inputs.notify_admission(origin)
 
     async def _deliver_outbound(
         self,

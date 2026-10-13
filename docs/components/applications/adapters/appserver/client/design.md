@@ -96,3 +96,28 @@ error code, and a string message. Normalizing diagnostic error text/codes is
 never evidence of absence. A malformed input response is explicitly
 `ApplicationInputOutcomeUnknown`, cannot complete a rejection claim, and is
 never overload-retried.
+
+## Observation RPC ownership and cancellation-safe shutdown
+
+All CAS `thread/resume` entrypoints (`resume_thread`,
+`resume_thread_for_recovery`, `call`, and `call_with_dispatch_position`) share a
+per-Thread owner. Readiness completes in the original caller before acquiring
+that barrier: connection-ready callbacks retain the initializer's task identity,
+and an outer first resume cannot hold the same-Thread barrier while awaiting its
+ready handler. The owned RPC captures the ready connection epoch/transport; a
+reset or close during lock wait rejects that invocation rather than dispatching
+on a replacement connection. The transport request rechecks the captured epoch
+after connection validation. Each admitted invocation gets a fresh snapshot with its exact
+options; distinct Threads progress independently. A cancelled waiter dispatches
+nothing. Once admitted, caller cancellation cannot release the barrier until the
+actual response or timeout/connection reset. Weak per-Thread lock entries are not
+a persistent Thread cache. Native `zen/thread/resume` instead shares one live
+read-only RPC per epoch/Thread and has a distinct Core barrier. Neither helper
+authorizes queue execution or replay.
+
+`close` synchronously fences entry and creates one shielded cleanup task shared
+by all callers. It stops reconnect, resets transport and joins all resume owners.
+Repeated caller cancellation is propagated only after cleanup; waiting resume
+calls fail without dispatch. Closing from a dispatch callback preserves the
+initiating task exclusion so cleanup cannot join its own caller. A closed client
+is not reopened; a new client owns a new lifecycle.

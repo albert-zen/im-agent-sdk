@@ -13,8 +13,10 @@ from typing import TypeVar, cast
 from ...applications.contract import (
     ApplicationRef,
     ProjectRef,
+    QueuedInputReceipt,
     ThreadRef,
     WorkspaceIdentity,
+    validate_thread_ref,
     validate_workspace_identity,
 )
 from ...interaction.messages import ConversationRef
@@ -44,19 +46,33 @@ from .effects import (
     validate_effect_receipt,
     validate_store_mutation_request,
 )
-from .repository_contracts import ProjectionCheckpointConflict, ProjectionRouteConflict
-from .sqlite import SQLiteGatewayState, merge_projection_route
+from .queue_receipts import _merge_queued_receipt
+from .repository_contracts import (
+    ProjectionCheckpointConflict,
+    ProjectionRouteConflict,
+    TurnReplyCorrelationConflict,
+    _inbound_idempotency_identity,
+)
+from .sqlite import SQLiteGatewayState, _same_turn_reply_correlation, merge_projection_route
 from .state_contracts import (
     ConversationBinding,
+    QueuedInputCorrelation,
+    QueuedInputOrigin,
     ThreadProjectionRoute,
+    TurnReplyCorrelation,
+    _require_queued_identifier,
+    _validate_queued_input_lookup,
     validate_binding,
     validate_projection_route,
+    validate_queued_input_correlation,
+    validate_queued_input_origin,
 )
 from .store import (
     EffectReceiptCapacityError,
     EffectReceiptConflict,
     GatewayNamespaceConflict,
     GatewayStoreSession,
+    QueuedInputFenceConflict,
     RuntimeLease,
     RuntimeLeaseUnavailable,
     StaleRuntimeFence,
@@ -78,6 +94,7 @@ _FENCED_TABLES = (
     "delivery_submission_destinations",
     "gateway_workspace_identities",
     "gateway_effect_receipts",
+    "queued_input_correlations",
 )
 _MUTATING_REPOSITORY_METHODS = frozenset(
     {
@@ -368,6 +385,164 @@ class SQLiteGatewayStore:
     ) -> int:
         async with self._state._lock:
             return _current_generation(self._state._connection, conversation_ref)
+
+    async def _fence_queued_input(
+        self,
+        fence: RuntimeLease,
+        origin: QueuedInputOrigin,
+        *,
+        claim_scope: str,
+        claim_key: str,
+        owner_token: str,
+    ) -> QueuedInputCorrelation:
+        validate_queued_input_origin(origin)
+        _require_queued_identifier(owner_token, "owner_token")
+        if (claim_scope, claim_key) != _inbound_idempotency_identity(
+            origin.conversation_ref,
+            origin.message_id,
+        ):
+            raise QueuedInputFenceConflict("inbound claim does not match queued input origin")
+        async with self._state._lock:
+            self._require_open()
+            connection = self._state._connection
+            token = self._fence_context.set(fence)
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                now = _database_now(connection)
+                self._assert_fence_sql(connection, fence, now=now)
+                if _read_queued_input(connection, origin.conversation_ref, origin.message_id):
+                    raise QueuedInputFenceConflict("queued input was already fenced")
+                claim = connection.execute(
+                    "SELECT status, owner_token FROM idempotency_records "
+                    "WHERE scope = ? AND record_key = ?",
+                    (claim_scope, claim_key),
+                ).fetchone()
+                if (
+                    claim is None
+                    or claim["status"] != "in_flight"
+                    or claim["owner_token"] != owner_token
+                ):
+                    raise QueuedInputFenceConflict("inbound claim is not owned by caller")
+                row = connection.execute(
+                    "SELECT * FROM conversation_bindings WHERE channel_instance_id = ? "
+                    "AND native_conversation_id = ?",
+                    (
+                        origin.conversation_ref.channel_instance_id,
+                        origin.conversation_ref.native_conversation_id,
+                    ),
+                ).fetchone()
+                binding = row_mapping.binding_from_row(row) if row is not None else None
+                if (
+                    binding is None
+                    or binding.thread_ref != origin.thread_ref
+                    or _current_generation(connection, origin.conversation_ref)
+                    != origin.binding_generation
+                ):
+                    raise QueuedInputFenceConflict("queued input binding changed")
+                self._assert_receipt_capacity(connection)
+                record = QueuedInputCorrelation(origin, None, now, now)
+                validate_queued_input_correlation(record)
+                connection.execute(
+                    "INSERT INTO queued_input_correlations "
+                    "(channel_instance_id, native_conversation_id, "
+                    "message_id, actor_fingerprint, application_instance_id, "
+                    "project_id, thread_id, "
+                    "binding_generation, client_message_id, input_fingerprint, continuation, "
+                    "receipt_state, queued_item_id, turn_id, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    row_mapping.queued_input_correlation_to_row(record),
+                )
+                cursor = connection.execute(
+                    "UPDATE idempotency_records SET status = 'side_effect_started', "
+                    "updated_at = ? "
+                    "WHERE scope = ? AND record_key = ? "
+                    "AND status = 'in_flight' AND owner_token = ?",
+                    (now.isoformat(), claim_scope, claim_key, owner_token),
+                )
+                if cursor.rowcount != 1:
+                    raise QueuedInputFenceConflict("inbound claim is not owned by caller")
+                connection.commit()
+                return record
+            except BaseException:
+                connection.rollback()
+                raise
+            finally:
+                self._fence_context.reset(token)
+
+    async def _get_queued_input(
+        self,
+        conversation_ref: ConversationRef,
+        message_id: str,
+    ) -> QueuedInputCorrelation | None:
+        _validate_queued_input_lookup(conversation_ref, message_id)
+        async with self._state._lock:
+            self._require_open()
+            return _read_queued_input(self._state._connection, conversation_ref, message_id)
+
+    async def _list_queued_inputs(
+        self,
+        thread_ref: ThreadRef | None,
+    ) -> tuple[QueuedInputCorrelation, ...]:
+        if thread_ref is not None:
+            validate_thread_ref(thread_ref)
+        async with self._state._lock:
+            self._require_open()
+            sql = "SELECT * FROM queued_input_correlations"
+            parameters: tuple[str, ...] = ()
+            if thread_ref is not None:
+                sql += " WHERE application_instance_id = ? AND project_id = ? AND thread_id = ?"
+                parameters = row_mapping.thread_storage_key(thread_ref)
+            rows = self._state._connection.execute(sql + " ORDER BY rowid", parameters).fetchall()
+            return tuple(row_mapping.queued_input_correlation_from_row(row) for row in rows)
+
+    async def _merge_queued_input_receipt(
+        self,
+        fence: RuntimeLease,
+        origin: QueuedInputOrigin,
+        receipt: QueuedInputReceipt,
+        *,
+        turn_correlation: TurnReplyCorrelation | None,
+    ) -> QueuedInputCorrelation:
+        validate_queued_input_origin(origin)
+        async with self._state._lock:
+            self._require_open()
+            connection = self._state._connection
+            token = self._fence_context.set(fence)
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                now = _database_now(connection)
+                self._assert_fence_sql(connection, fence, now=now)
+                current = _read_queued_input(connection, origin.conversation_ref, origin.message_id)
+                if current is None:
+                    raise KeyError("queued input correlation does not exist")
+                merged = _merge_queued_receipt(current, origin, receipt, turn_correlation, now)
+                if merged != current:
+                    evidence = merged.receipt
+                    assert evidence is not None
+                    connection.execute(
+                        "UPDATE queued_input_correlations SET receipt_state = ?, "
+                        "queued_item_id = ?, "
+                        "turn_id = ?, updated_at = ? WHERE channel_instance_id = ? "
+                        "AND native_conversation_id = ? AND message_id = ?",
+                        (
+                            evidence.state.value,
+                            evidence.queued_item_id,
+                            evidence.turn_ref.turn_id if evidence.turn_ref is not None else None,
+                            merged.updated_at.isoformat(),
+                            origin.conversation_ref.channel_instance_id,
+                            origin.conversation_ref.native_conversation_id,
+                            origin.message_id,
+                        ),
+                    )
+                if turn_correlation is not None:
+                    _put_queued_turn_correlation(connection, turn_correlation)
+                connection.commit()
+                return merged
+            except BaseException:
+                connection.rollback()
+                raise
+            finally:
+                self._fence_context.reset(token)
 
     async def _get_effect_receipt(
         self,
@@ -823,7 +998,10 @@ class SQLiteGatewayStore:
 
     def _assert_receipt_capacity(self, connection: sqlite3.Connection) -> None:
         count = int(
-            connection.execute("SELECT COUNT(*) FROM gateway_effect_receipts").fetchone()[0]
+            connection.execute(
+                "SELECT (SELECT COUNT(*) FROM gateway_effect_receipts) "
+                "+ (SELECT COUNT(*) FROM queued_input_correlations)"
+            ).fetchone()[0]
         )
         if count >= self._max_effect_receipts:
             raise EffectReceiptCapacityError("effect receipt capacity is exhausted")
@@ -963,6 +1141,53 @@ class _SQLiteGatewayStoreSession:
 
     async def get_binding_generation(self, conversation_ref: ConversationRef) -> int:
         return await self._store._get_binding_generation(conversation_ref)
+
+    async def fence_queued_input(
+        self,
+        origin: QueuedInputOrigin,
+        *,
+        claim_scope: str,
+        claim_key: str,
+        owner_token: str,
+    ) -> QueuedInputCorrelation:
+        self._require_open()
+        return await self._store._fence_queued_input(
+            self._lease,
+            origin,
+            claim_scope=claim_scope,
+            claim_key=claim_key,
+            owner_token=owner_token,
+        )
+
+    async def get_queued_input(
+        self,
+        conversation_ref: ConversationRef,
+        message_id: str,
+    ) -> QueuedInputCorrelation | None:
+        self._require_open()
+        return await self._store._get_queued_input(conversation_ref, message_id)
+
+    async def list_queued_inputs(
+        self,
+        thread_ref: ThreadRef | None = None,
+    ) -> tuple[QueuedInputCorrelation, ...]:
+        self._require_open()
+        return await self._store._list_queued_inputs(thread_ref)
+
+    async def merge_queued_input_receipt(
+        self,
+        origin: QueuedInputOrigin,
+        receipt: QueuedInputReceipt,
+        *,
+        turn_correlation: TurnReplyCorrelation | None = None,
+    ) -> QueuedInputCorrelation:
+        self._require_open()
+        return await self._store._merge_queued_input_receipt(
+            self._lease,
+            origin,
+            receipt,
+            turn_correlation=turn_correlation,
+        )
 
     async def get_store_mutation_receipt(
         self,
@@ -1419,3 +1644,50 @@ def _receipt_from_row(row: sqlite3.Row) -> EffectReceipt:
 
 
 __all__ = ["SQLiteGatewayStore"]
+
+
+def _read_queued_input(
+    connection: sqlite3.Connection,
+    conversation_ref: ConversationRef,
+    message_id: str,
+) -> QueuedInputCorrelation | None:
+    row = connection.execute(
+        "SELECT * FROM queued_input_correlations WHERE channel_instance_id = ? "
+        "AND native_conversation_id = ? AND message_id = ?",
+        (conversation_ref.channel_instance_id, conversation_ref.native_conversation_id, message_id),
+    ).fetchone()
+    return row_mapping.queued_input_correlation_from_row(row) if row is not None else None
+
+
+def _put_queued_turn_correlation(
+    connection: sqlite3.Connection,
+    correlation: TurnReplyCorrelation,
+) -> None:
+    row = connection.execute(
+        "SELECT * FROM turn_reply_correlations WHERE application_instance_id = ? "
+        "AND project_id = ? AND thread_id = ? AND turn_id = ?",
+        (
+            *row_mapping.thread_storage_key(correlation.turn_ref.thread_ref),
+            correlation.turn_ref.turn_id,
+        ),
+    ).fetchone()
+    if row is not None:
+        if not _same_turn_reply_correlation(
+            row_mapping.turn_reply_correlation_from_row(row), correlation
+        ):
+            raise TurnReplyCorrelationConflict("Turn reply correlation belongs to another input")
+        return
+    if (
+        connection.execute(
+            "SELECT 1 FROM turn_reply_correlations WHERE correlation_id = ?",
+            (correlation.correlation_id,),
+        ).fetchone()
+        is not None
+    ):
+        raise TurnReplyCorrelationConflict("Turn reply correlation identity is already used")
+    connection.execute(
+        "INSERT INTO turn_reply_correlations (correlation_id, application_instance_id, project_id, "
+        "thread_id, turn_id, client_message_id, channel_instance_id, native_conversation_id, "
+        "reply_to_message_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        row_mapping.turn_reply_correlation_to_row(correlation),
+    )

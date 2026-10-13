@@ -106,3 +106,41 @@ The actual client/scripted transport boundary must return typed unknown for
 null, array, string, number and empty-object successful queue replies, with
 exactly one native send in every case; a valid receipt remains accepted. An
 invalid alternate client result must receive the same adapter classification.
+
+
+## Native queue observation and cancellation
+
+`tests/applications/adapters/test_zen_queue_lifecycle.py` covers the production
+client resume owner and the adapter's optional typed lifecycle ports using
+controlled boundary responses. `test_zen_queue_bulk.py` covers complete snapshot
+cohort mapping. `test_zen_queue_native_lifecycle.py` is opt-in with
+`IMAGENT_ZEN_ROOT`: it runs the real authenticated native WebSocket protocol,
+synthetic model, temporary workspace and production SDK client. It proves
+installed observation, canonical queued/edit/cancel notices, unchanged original
+fingerprint across native edits, real admitted Turn identity, and cancellation
+of already-admitted input without interruption. It does not substitute for the
+separate Gateway persistence/restart/request-routing release gate.
+
+The verified native source is Core commit
+`b8d16bfed194e003bcf1238458f43c1cba365f95`, tree `71c1a6ff`; the fixture loads
+source via the existing tsx loader with Node capped at 256 MiB.
+
+### Coexistence with other native input surfaces
+
+The bulk and observer lifecycle suites mix SDK receipts with unrelated native
+`batch-next`, Host-prepared skill text, audio AttachmentRef, and 17-image
+canonical-only envelopes. These are canonical snapshot/notification boundary
+fixtures, not evidence of SDK skill/audio ingress. They prove identity-only
+observation, redacted live/tail wakeups, reinstallation, unchanged original
+fingerprints after edits, and strict requested-ID mode/content, scope, duplicate
+identity, same-client lineage, cancellation and Host/Agent-source fences.
+
+`tests/integration/test_queued_native_coexistence.py` reuses the authenticated
+real Core fixture and public Gateway/adapter/client with a disposable SQLite
+store. Real native `batch-next` admission and a 17-image canonical envelope
+using actual Host-imported image bytes coexist with SDK input. Fresh Gateway
+startup preserves pending reads, edit-before-restart original fingerprints,
+scoped cancellation, and the original final-reply identities, with no duplicate
+queue append or foreign queue notice. Native same-client mode conflicts still
+reject. This test does not claim a configured native skill loader or real audio
+execution; those shapes remain bounded snapshot evidence above.

@@ -185,3 +185,13 @@ neither collaboration permits a duplicate worker or second subscriber.
 - [ADR 0007](../../../../decisions/0007-projection-lifecycle-and-delivery-boundaries.md)
 - [ADR 0013](../../../../decisions/0013-bounded-application-event-admission.md)
 - [ADR 0015](../../../../decisions/0015-typed-extension-seams-and-composition.md)
+
+## Queued original Turn correlation
+
+Before delivering an otherwise uncorrelated live or authoritative Turn message,
+observation invokes the queue-owned canonical correlation guard. The guard may
+install original IM/Turn association atomically with an admitted receipt. Missing
+canonical evidence fails closed and uses existing projection recovery; it never
+borrows the current binding's reply identity. Existing terminal cleanup still
+removes transient TurnReplyCorrelation rows. Durable queued origin/receipt rows
+remain and can rebuild that correlation from canonical original Turn evidence.

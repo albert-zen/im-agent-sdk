@@ -488,3 +488,15 @@ for local tools: inline base64 artifacts are authorized before decoding,
 materialized beneath a configured private staging root, synchronously
 submitted as `LocalPath`, and then removed. Its response deliberately omits
 Channel-native Conversation IDs for Thread-scoped callers.
+
+## Queued Gateway projection and controls
+
+`projections.schema.json` includes bounded `QueuedInputOrigin`,
+`QueuedInputCorrelation`, and `QueuedInputStatus`. Origin stores exact original
+Conversation/message identity, actor digest, Thread, binding generation, stable
+client ID, QUEUE mode and admission-input digest; it contains no body, image path
+or execution failure. A null receipt means outcome unknown. Native positive
+receipt states use the Application receipt schema; the public product status
+uses unknown/pending/admitted/cancelled and exposes only the original IM ID.
+Cancellation success requires canonical cancelled evidence; admitted maps to
+`queue_already_admitted` in the existing ActionError vocabulary.
