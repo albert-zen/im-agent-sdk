@@ -84,8 +84,9 @@ runtimes retain their local defensive checks. The default
 process-local idempotency repository receives its positive record bound only
 from this group; an explicitly supplied repository remains unmodified. Invalid
 finite-capacity configuration fails explicitly. `GatewayExtensions` contains
-only the four Gateway-owned ADR 0015
-typed positions plus the Controller/request presenter composition points; A1
+the four Gateway-owned ADR 0015
+typed positions, Controller/request presenter composition, and the separate
+ADR 0017 pre-recovery Conversation preparations; A1
 stays Application-owned. The group is not an `Any` context, callback stage
 enum, or service bag.
 
@@ -173,3 +174,24 @@ composition or orchestration seam.
 - [Gateway aggregate](../design.md)
 - [ADR 0006](../../../decisions/0006-core-admission-and-policy-ownership.md)
 - [ADR 0015](../../../decisions/0015-typed-extension-seams-and-composition.md)
+
+## Pre-recovery Conversation preparation
+
+The optional immutable `GatewayExtensions.startup_preparations` tuple follows
+[ADR 0017](../../../decisions/0017-startup-conversation-preparation.md). Each
+`StartupPreparation` fixes one Conversation, actor, and async callback receiving
+only callback-task-bound `StartupConversationActions.get_binding/clear_thread`.
+It runs after lease/workspace validation and before any projection recovery,
+Application/Channel startup, or inbound admission. Public Gateway actions remain
+unavailable until full startup succeeds. Every callback is bounded by the
+existing lifecycle owner timeout, the tuple by `startup_preparation_max_items`;
+capacity rejects before I/O instead of truncating. Failure/cancellation/timeout
+invalidates issued scopes and uses the one rollback path. Successful prior
+clears remain durable. Retained or spawned-task surfaces are rejected.
+
+The consumer chooses conditional cleanup and stable action identity; SDK owns
+only ordered execution over existing scoped bridge-state actions. No native
+creation, input, arbitrary repository, or delivery authority crosses this seam.
+It does not revoke already-delivered request reply authority. Absence leaves
+existing lifecycle behavior unchanged. Public types live in
+`imagent.gateway.startup`, owned by the startup-preparation leaf.

@@ -223,6 +223,7 @@ components:
       - src/imagent/gateway/composition.py
       - src/imagent/gateway/runtime.py
       - src/imagent/gateway/lifecycle.py
+      - src/imagent/gateway/startup.py
       - src/imagent/gateway/outcomes.py
       - src/imagent/gateway/effect_execution.py
       - src/imagent/gateway/actions.py
@@ -231,6 +232,7 @@ components:
       - src/imagent/gateway/routing/operations.py
       - src/imagent/gateway/routing/projection_routes.py
       - tests/gateway/test_lifecycle.py
+      - tests/gateway/test_startup_preparation.py
       - tests/gateway/test_package_root.py
       - tests/gateway/routing/__init__.py
       - tests/gateway/routing/test_bindings.py
@@ -243,6 +245,7 @@ components:
       - tests/gateway/test_outcomes.py
       - tests/gateway/test_effect_execution.py
       - tests/gateway/test_actions.py
+      - tests/gateway/test_creation_profiles.py
       - tests/gateway/input/test_content_transformation.py
       - tests/gateway/input/test_dispatch.py
       - tests/gateway/input/test_policy_free_ordinary_input.py
@@ -254,6 +257,8 @@ components:
       - docs/components/gateway/composition/design.md
       - docs/components/gateway/composition/testing.md
       - docs/components/gateway/lifecycle/design.md
+      - docs/components/gateway/startup-preparation/design.md
+      - docs/components/gateway/startup-preparation/testing.md
       - docs/components/gateway/lifecycle/testing.md
       - docs/components/gateway/admission/design.md
       - docs/components/gateway/admission/testing.md
@@ -552,6 +557,7 @@ components:
       - docs/REUSE.md
       - src/imagent/applications/__init__.py
       - src/imagent/applications/adapters/appserver/_base.py
+      - src/imagent/applications/adapters/appserver/_creation_options.py
       - src/imagent/applications/adapters/codex.py
       - src/imagent/applications/adapters/zen.py
       - src/imagent/applications/adapters/appserver/**

@@ -45,3 +45,9 @@ PYTHONPATH=src uv run python -m unittest \
   tests.conformance.test_adapter_contracts tests.applications.adapters.appserver.test_input_integration -v
 uv run python scripts/validate_schemas.py
 ```
+
+`tests/gateway/test_creation_profiles.py` exercises public Gateway actions with
+both concrete Zen and Codex adapters: configuration snapshot, concurrent
+Conversation selection, default preservation, same-action replay, changed-profile
+conflict, explicit unsupported selection, Python/schema bounds, and same-ID
+changed-configuration conflict after SQLite restart without duplicate creation.

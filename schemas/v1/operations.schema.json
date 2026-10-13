@@ -224,6 +224,12 @@
               "minLength": 1,
               "maxLength": 512
             },
+            "creationProfile": {
+              "oneOf": [
+                { "type": "null" },
+                { "$ref": "capabilities.schema.json#/$defs/ThreadCreationProfile" }
+              ]
+            },
             "initialContext": {
               "type": "array",
               "maxItems": 32,

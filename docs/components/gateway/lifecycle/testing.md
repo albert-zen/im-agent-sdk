@@ -103,3 +103,9 @@ Run:
 ```sh
 PYTHONPATH=src uv run python -m unittest tests.gateway.test_reference_consumer tests.gateway.test_operations_integration tests.gateway.test_vertical_slice tests.gateway.test_diagnostics -v
 ```
+
+`tests/gateway/test_startup_preparation.py` exercises the public SQLite
+reconstruction: preparation clears a delegated room before owners start, while
+an unaffected foreground room still receives missed output and pending requests.
+It also covers ordered callbacks, explicit capacity, invalid/retained task
+scopes, failure, timeout, cancellation, and no premature owner startup.

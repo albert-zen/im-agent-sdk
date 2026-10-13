@@ -511,3 +511,11 @@ Changes to the Gateway package root require checking:
 - Controller design when the inbound extension seam changes;
 - Gateway operation and vertical-slice tests;
 - all fake, Codex, Zen, T3, and Channel seams affected by orchestration.
+
+### Scoped startup preparation
+
+Configured Conversation preparations may read/clear a foreground Thread binding
+after store/workspace validation and before recovery or adapter/admission startup.
+The bounded callback receives only a task-owned narrow scoped surface, never
+Gateway/repository/native execution authority. Failure keeps startup closed;
+consumer policy and previously delivered request authority remain unchanged.

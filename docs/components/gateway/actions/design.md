@@ -233,3 +233,32 @@ these surfaces.
 - [v1 executable specification](../../../V1_EXECUTABLE_SPEC.md)
 - [ADR 0016](../../../decisions/0016-uniform-workspace-and-consumer-actions.md)
 - [B effect execution](../effect-execution/design.md)
+
+## Explicit Thread creation profiles
+
+`ThreadCreationProfile` is an optional bounded capability descriptor containing
+only a profile ID and SHA-256 configuration fingerprint. Concrete App Server
+adapters freeze configured `thread_creation_profiles` JSON options and advertise
+their descriptors. Zen and Codex support this mapping; T3 does not silently
+accept profiles. Native policy names remain adapter/consumer-owned.
+
+Scoped `create_thread` and `create_and_bind_thread(creation_profile=...)` resolve
+the ID from validated capabilities and include the exact descriptor in both the
+`CreateThread` operation and durable action fingerprint. The adapter checks the
+exact descriptor before native creation. Unknown selections use the existing
+executor's terminal preflight-rejection receipt, fingerprinting the requested ID
+with a distinct unresolved configuration marker. Same-ID retries remain rejected
+or conflict after registration, with no native create or binding. For resolved
+profiles, same
+action ID with changed selection or changed configured content conflicts,
+including after SQLite reconstruction. No native options enter receipt storage.
+Omission preserves existing default behavior and legacy action fingerprints.
+
+Profile definitions are complete per-call options rather than merged mutable
+defaults. They are copied, limited to 32 profiles/128-character IDs/64 KiB of
+canonical JSON per profile, and reject non-JSON/NaN/reserved workspace overrides.
+The selected profile does not mutate an existing Thread.
+
+The schema requires creation support for any nonempty profile declaration.
+Unique profile IDs are additionally enforced by semantic capability validation;
+JSON Schema `uniqueItems` compares whole descriptors, not their IDs.

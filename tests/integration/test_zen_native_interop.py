@@ -84,6 +84,10 @@ class ZenNativeInteropTests(unittest.IsolatedAsyncioTestCase):
                     workspace_id="workspace",
                     cwd=directory,
                     shared_filesystem_root=directory,
+                    thread_creation_profiles={
+                        "ask": {"sandbox": "danger-full-access", "approval_policy": "on-request"},
+                        "full": {"sandbox": "danger-full-access", "approval_policy": "never"},
+                    },
                 )
                 channel = FakeChannelAdapter("im")
                 conversation = ConversationRef("im", "private")
@@ -100,11 +104,34 @@ class ZenNativeInteropTests(unittest.IsolatedAsyncioTestCase):
                 created = await gateway.actions(conversation, actor="owner").create_and_bind_thread(
                     ProjectRef("zen", "workspace"),
                     action_id="create-bind",
+                    creation_profile="ask",
                 )
                 self.assertIsInstance(created, Succeeded, created)
                 assert isinstance(created, Succeeded)
                 thread = created.value.ref
                 assert isinstance(thread, ThreadRef)
+                selected_profile = await command(
+                    {"action": "snapshot", "threadId": thread.thread_id}
+                )
+                self.assertEqual(selected_profile["approvalPolicy"], "always")
+                other_created = await gateway.application(
+                    application.summary.ref, principal="owner"
+                ).create_thread(
+                    ProjectRef("zen", "workspace"), action_id="create-full", creation_profile="full"
+                )
+                assert isinstance(other_created, Succeeded) and isinstance(
+                    other_created.value.ref, ThreadRef
+                )
+                other_profile = await command(
+                    {"action": "snapshot", "threadId": other_created.value.ref.thread_id}
+                )
+                self.assertEqual(other_profile["approvalPolicy"], "never")
+                self.assertEqual(
+                    (await command({"action": "snapshot", "threadId": thread.thread_id}))[
+                        "approvalPolicy"
+                    ],
+                    "always",
+                )
 
                 async def emit(message_id, *content):
                     await channel.emit_message(

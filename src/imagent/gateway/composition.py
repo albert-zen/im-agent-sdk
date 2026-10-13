@@ -16,6 +16,7 @@ from .persistence.repository_contracts import (
     RequestCorrelationRepository,
 )
 from .presentation import OutboundPresentationPolicy
+from .startup import StartupPreparation
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +66,7 @@ class GatewayLimits:
     idempotency_max_records: int = 4096
     projection_max_active_threads: int = 4096
     lifecycle_owner_timeout_seconds: float = 30.0
+    startup_preparation_max_items: int = 256
 
     def __post_init__(self) -> None:
         for name in (
@@ -75,6 +77,7 @@ class GatewayLimits:
             "projection_item_limit",
             "request_delivery_max_pending",
             "startup_buffer_max_pending",
+            "startup_preparation_max_items",
             "turn_acceptance_event_max_pending",
             "inbound_content_transform_max_items",
             "inbound_content_transform_max_concurrency",
@@ -125,6 +128,7 @@ class GatewayExtensions:
     inbound_failure_presenter: InboundFailurePresenter | None = None
     outbound_presentation: OutboundPresentationPolicy | None = None
     delivery_outcome_observer: DeliveryOutcomeObserver | None = None
+    startup_preparations: tuple[StartupPreparation, ...] = ()
 
 
 def _require_positive_integer(value: object, name: str) -> None:

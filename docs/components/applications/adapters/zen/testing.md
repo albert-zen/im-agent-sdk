@@ -74,3 +74,9 @@ and post-restart input/output. It does not prove old production DB migration.
 Image tests separately prove start and steer without a shared-filesystem epoch,
 byte snapshots surviving pathname replacement, symlink/root/size/source/type
 rejection before native I/O, and aggregate preflight before any acquisition.
+
+`tests/gateway/test_creation_profiles.py` exercises public Gateway actions with
+both concrete Zen and Codex adapters: configuration snapshot, concurrent
+Conversation selection, default preservation, same-action replay, changed-profile
+conflict, explicit unsupported selection, Python/schema bounds, and same-ID
+changed-configuration conflict after SQLite restart without duplicate creation.

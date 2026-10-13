@@ -15,6 +15,7 @@ from ..interaction.operations import (
     OperationResultStatus,
     require_identifier,
 )
+from .capabilities import ThreadCreationProfile, validate_thread_creation_profile
 from .requests import (
     ApprovalResponse,
     UserInputResponse,
@@ -109,6 +110,7 @@ class CreateThread(_ApplicationOperation):
     project_ref: ProjectRef
     title: str | None = None
     initial_context: tuple[Content, ...] = ()
+    creation_profile: ThreadCreationProfile | None = None
     type: ApplicationOperationType = field(
         init=False,
         default=ApplicationOperationType.THREAD_CREATE,
@@ -470,6 +472,8 @@ def validate_application_operation(operation: ApplicationOperation) -> None:
             MAX_LIST_CURSOR_LENGTH,
         )
     if isinstance(operation, CreateThread):
+        if operation.creation_profile is not None:
+            validate_thread_creation_profile(operation.creation_profile)
         if operation.title is not None:
             _require_bounded_text(
                 operation.title,

@@ -23,6 +23,10 @@ Unaccepted directions belong in `docs/ROADMAP.md`.
 | [0015](0015-typed-extension-seams-and-composition.md) | Accepted | typed pipeline positions, stage-specific failure/replay semantics, and grouped composition |
 | [0016](0016-uniform-workspace-and-consumer-actions.md) | Accepted | uniform workspace resources, scoped consumer actions, cross-authority workflows, and no hidden onboarding policy |
 
+| [0017](0017-startup-conversation-preparation.md) | Accepted | bounded scoped preparation before recovery and Channel admission |
+
+| [0018](0018-explicit-thread-creation-profiles.md) | Accepted | explicit adapter-owned creation-profile identity and config-bound action fingerprints |
+
 Reopening an accepted decision requires updating this index, the ADR, affected
 global/component docs, contracts/tests, and AgentKit mapping when paths or
 ownership change.

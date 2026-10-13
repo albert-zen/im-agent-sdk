@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -40,12 +41,40 @@ class ProjectCapabilities:
     deletion: SupportLevel = SupportLevel.UNSUPPORTED
 
 
+MAX_THREAD_CREATION_PROFILES = 32
+MAX_THREAD_CREATION_PROFILE_ID = 128
+
+
+@dataclass(frozen=True, slots=True)
+class ThreadCreationProfile:
+    """Adapter-owned creation policy identity without native configuration payload."""
+
+    profile_id: str
+    fingerprint: str
+
+
+def validate_thread_creation_profile(profile: ThreadCreationProfile) -> None:
+    if type(profile) is not ThreadCreationProfile:
+        raise ContractViolation("creation profile must be ThreadCreationProfile")
+    if (
+        not isinstance(profile.profile_id, str)
+        or not 1 <= len(profile.profile_id) <= MAX_THREAD_CREATION_PROFILE_ID
+    ):
+        raise ContractViolation("creation profile ID must be bounded non-empty text")
+    if (
+        not isinstance(profile.fingerprint, str)
+        or re.fullmatch(r"[0-9a-f]{64}", profile.fingerprint) is None
+    ):
+        raise ContractViolation("creation profile fingerprint must be lowercase SHA-256")
+
+
 @dataclass(frozen=True, slots=True)
 class ThreadCapabilities:
     listing: SupportLevel
     creation: SupportLevel
     reading: SupportLevel
     deletion: ThreadDeletionCapability = ThreadDeletionCapability.UNSUPPORTED
+    creation_profiles: tuple[ThreadCreationProfile, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +129,16 @@ def validate_application_capabilities(capabilities: ApplicationCapabilities) -> 
             raise ContractViolation(f"Thread {field_name} must be SupportLevel")
     if not isinstance(threads.deletion, ThreadDeletionCapability):
         raise ContractViolation("Thread deletion must be ThreadDeletionCapability")
+
+    profiles = threads.creation_profiles
+    if type(profiles) is not tuple or len(profiles) > MAX_THREAD_CREATION_PROFILES:
+        raise ContractViolation("Thread creation profiles must be a bounded tuple")
+    for profile in profiles:
+        validate_thread_creation_profile(profile)
+    if len({profile.profile_id for profile in profiles}) != len(profiles):
+        raise ContractViolation("Thread creation profile IDs must be unique")
+    if profiles and threads.creation is SupportLevel.UNSUPPORTED:
+        raise ContractViolation("Thread creation profiles require creation support")
 
     runtime = capabilities.runtime
     for field_name in (
@@ -157,6 +196,8 @@ __all__ = [
     "ApplicationCapabilities",
     "ProjectCapabilities",
     "ThreadCapabilities",
+    "ThreadCreationProfile",
+    "validate_thread_creation_profile",
     "RuntimeCapabilities",
     "SupportLevel",
     "ProjectMode",

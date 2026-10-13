@@ -14,7 +14,12 @@ from types import MappingProxyType
 from typing import Protocol, TypeAlias, TypeVar
 from uuid import uuid4
 
-from ..applications.capabilities import SupportLevel, ThreadDeletionCapability
+from ..applications.capabilities import (
+    MAX_THREAD_CREATION_PROFILE_ID,
+    SupportLevel,
+    ThreadCreationProfile,
+    ThreadDeletionCapability,
+)
 from ..applications.contract import (
     ApplicationRef,
     ApplicationSummary,
@@ -482,8 +487,17 @@ class ApplicationActions:
         action_id: str,
         title: str | None = None,
         initial_context: tuple[Content, ...] = (),
+        creation_profile: str | None = None,
     ) -> ActionResult:
         self._require_project(project_ref)
+        resolved_profile = _resolve_creation_profile(
+            self._context.runtime, _application_ref(project_ref), creation_profile
+        )
+        if isinstance(resolved_profile, ActionError):
+            profile_rejection = resolved_profile
+            resolved_profile = None
+        else:
+            profile_rejection = None
         validate_application_operation(
             CreateThread(
                 operation_id="imagent:validation",
@@ -491,6 +505,7 @@ class ApplicationActions:
                 project_ref=project_ref,
                 title=title,
                 initial_context=initial_context,
+                creation_profile=resolved_profile,
                 created_at=_now(),
             )
         )
@@ -499,6 +514,7 @@ class ApplicationActions:
             *_ref_payload(project_ref),
             ("title", title),
             ("initial_context", _content_fingerprint(initial_context)),
+            *_creation_profile_fingerprint(resolved_profile, creation_profile),
         )
         return await self._native(
             "thread.create",
@@ -510,9 +526,11 @@ class ApplicationActions:
                 project_ref=project_ref,
                 title=title,
                 initial_context=initial_context,
+                creation_profile=resolved_profile,
                 created_at=_now(),
             ),
             ThreadCreated,
+            preflight_rejection=profile_rejection,
         )
 
     async def activate_native_thread(
@@ -604,6 +622,8 @@ class ApplicationActions:
         payload: FingerprintPayload,
         operation: Callable[[str], ApplicationOperation],
         success_type: type[object],
+        *,
+        preflight_rejection: ActionError | None = None,
     ) -> ActionResult:
         validation_operation = operation("imagent:validation")
         validate_application_operation(validation_operation)
@@ -622,6 +642,8 @@ class ApplicationActions:
         request = NativeMutationRequest(fingerprint=fingerprint)
 
         async def preflight() -> ActionError | None:
+            if preflight_rejection is not None:
+                return preflight_rejection
             return await _preflight_application_mutation(
                 self._context.runtime,
                 validation_operation,
@@ -808,12 +830,14 @@ class ConversationActions:
         action_id: str,
         title: str | None = None,
         initial_context: tuple[Content, ...] = (),
+        creation_profile: str | None = None,
     ) -> ActionResult:
         return await self._application(_application_ref(project_ref)).create_thread(
             project_ref,
             action_id=action_id,
             title=title,
             initial_context=initial_context,
+            creation_profile=creation_profile,
         )
 
     async def activate_native_thread(
@@ -1260,8 +1284,17 @@ class ConversationActions:
         action_id: str,
         title: str | None = None,
         initial_context: tuple[Content, ...] = (),
+        creation_profile: str | None = None,
     ) -> ActionResult:
         validate_project_ref(project_ref)
+        resolved_profile = _resolve_creation_profile(
+            self._context.runtime, _application_ref(project_ref), creation_profile
+        )
+        if isinstance(resolved_profile, ActionError):
+            profile_rejection = resolved_profile
+            resolved_profile = None
+        else:
+            profile_rejection = None
         validate_application_operation(
             CreateThread(
                 operation_id="imagent:validation",
@@ -1269,6 +1302,7 @@ class ConversationActions:
                 project_ref=project_ref,
                 title=title,
                 initial_context=initial_context,
+                creation_profile=resolved_profile,
                 created_at=_now(),
             )
         )
@@ -1277,6 +1311,7 @@ class ConversationActions:
             *_ref_payload(project_ref),
             ("title", title),
             ("initial_context", _content_fingerprint(initial_context)),
+            *_creation_profile_fingerprint(resolved_profile, creation_profile),
             ("foreground_route", self._context.foreground_route),
         )
         request = CreateBindingWorkflowRequest(
@@ -1300,10 +1335,13 @@ class ConversationActions:
                 project_ref=project_ref,
                 title=title,
                 initial_context=initial_context,
+                creation_profile=resolved_profile,
                 created_at=_now(),
             )
 
-        return await self._workflow(request, operation, ThreadCreated)
+        return await self._workflow(
+            request, operation, ThreadCreated, preflight_rejection=profile_rejection
+        )
 
     async def _store_binding(
         self,
@@ -1366,11 +1404,15 @@ class ConversationActions:
         request: CreateBindingWorkflowRequest,
         operation: Callable[[str], ApplicationOperation],
         success_type: type[object],
+        *,
+        preflight_rejection: ActionError | None = None,
     ) -> ActionResult:
         validation_operation = operation("imagent:validation")
         validate_application_operation(validation_operation)
 
         async def preflight() -> ActionError | None:
+            if preflight_rejection is not None:
+                return preflight_rejection
             return await _preflight_application_mutation(
                 self._context.runtime,
                 validation_operation,
@@ -1942,6 +1984,11 @@ def _mutation_capability_error(
     elif isinstance(operation, DeleteProject):
         unsupported = capabilities.projects.deletion is SupportLevel.UNSUPPORTED
     elif isinstance(operation, CreateThread):
+        if (
+            operation.creation_profile is not None
+            and operation.creation_profile not in capabilities.threads.creation_profiles
+        ):
+            return _action_error(OperationErrorCode.UNSUPPORTED)
         unsupported = capabilities.threads.creation is SupportLevel.UNSUPPORTED or any(
             isinstance(item, AttachmentContent)
             and item.source.kind not in capabilities.attachment_sources
@@ -2125,3 +2172,44 @@ __all__ = [
     "ConversationActions",
     "ReadOutcome",
 ]
+
+
+def _resolve_creation_profile(
+    runtime: _ActionRuntime, application_ref: ApplicationRef, profile_id: str | None
+) -> ThreadCreationProfile | ActionError | None:
+    if profile_id is None:
+        return None
+    if (
+        not isinstance(profile_id, str)
+        or not 1 <= len(profile_id) <= MAX_THREAD_CREATION_PROFILE_ID
+    ):
+        raise ContractViolation("creation_profile must be bounded non-empty text")
+    summary = _preflight_application_summary(runtime, application_ref)
+    if isinstance(summary, ActionError):
+        return summary
+    return next(
+        (
+            profile
+            for profile in summary.capabilities.threads.creation_profiles
+            if profile.profile_id == profile_id
+        ),
+        _action_error(OperationErrorCode.UNSUPPORTED),
+    )
+
+
+def _creation_profile_fingerprint(
+    profile: ThreadCreationProfile | None, requested_profile_id: str | None
+) -> FingerprintPayload:
+    if requested_profile_id is None:
+        return ()
+    # An unsupported selection still has durable intent.  A later declaration
+    # changes this fingerprint, so the same action cannot turn rejection into create.
+    return (
+        (
+            "creation_profile",
+            (
+                ("profile_id", requested_profile_id),
+                ("fingerprint", profile.fingerprint if profile is not None else None),
+            ),
+        ),
+    )

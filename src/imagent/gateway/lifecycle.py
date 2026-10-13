@@ -6,6 +6,7 @@ from collections import deque
 from collections.abc import Awaitable, Callable
 from typing import Generic, TypeVar
 
+from .actions import ConversationActions
 from .diagnostics import (
     _CLEANUP_OWNER_MAX_CHARS,
     _CLEANUP_SUMMARY_MAX_CHARS,
@@ -13,6 +14,7 @@ from .diagnostics import (
     _bounded_cleanup_text,
     _bounded_lifecycle_error_summary,
 )
+from .startup import StartupConversationActions, StartupPreparation
 
 T = TypeVar("T")
 
@@ -248,3 +250,30 @@ class GatewayStartupAdmission(Generic[T]):
     @property
     def overflow_count(self) -> int:
         return self._overflow_count
+
+
+async def _run_startup_preparation(
+    preparation: StartupPreparation,
+    actions: ConversationActions,
+    *,
+    timeout_seconds: float,
+) -> None:
+    scope: StartupConversationActions | None = None
+
+    async def invoke() -> None:
+        nonlocal scope
+        scope = StartupConversationActions._create(actions)
+        try:
+            result = await preparation.prepare(scope)
+            if result is not None:
+                raise TypeError("startup preparation must return None")
+        finally:
+            scope._deactivate()
+
+    try:
+        error = await _bounded_lifecycle_call(invoke, timeout_seconds=timeout_seconds)
+    finally:
+        if scope is not None:
+            scope._deactivate()
+    if error is not None:
+        raise error
