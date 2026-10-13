@@ -923,8 +923,8 @@ components:
     state_recovery: Correlations are minimal, bounded, persisted, monotonic, and reconciled only from native authoritative facts.
     current_code: [src/imagent/gateway/projection/request_correlation.py]
     target_code: [src/imagent/gateway/projection/request_correlation.py]
-    current_tests: [tests/gateway/projection/test_request_correlation.py, tests/applications/adapters/appserver/test_gateway_request_integration.py, tests/gateway/test_operations_integration.py, tests/gateway/projection/test_hardening.py]
-    target_tests: [tests/gateway/projection/test_request_correlation.py]
+    current_tests: [tests/gateway/projection/test_request_correlation.py, tests/gateway/projection/test_request_publication.py, tests/gateway/test_request_publication_integration.py, tests/applications/adapters/appserver/test_gateway_request_integration.py, tests/gateway/test_operations_integration.py, tests/gateway/projection/test_hardening.py]
+    target_tests: [tests/gateway/projection/test_request_correlation.py, tests/gateway/projection/test_request_publication.py, tests/gateway/test_request_publication_integration.py]
     authoritative_docs: [docs/components/gateway/projection/request-correlation/design.md, docs/components/gateway/projection/request-correlation/testing.md, docs/components/gateway/persistence/state-contracts/design.md, docs/components/interaction/controllers/request-presentation/design.md]
     adrs: [docs/decisions/0007-projection-lifecycle-and-delivery-boundaries.md, docs/decisions/0008-interactive-request-routing.md, docs/decisions/0012-input-continuation-and-reply-correlation.md, docs/decisions/0016-uniform-workspace-and-consumer-actions.md]
     gaps: []

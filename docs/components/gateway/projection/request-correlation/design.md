@@ -73,6 +73,54 @@ operation has entered the configured finite active-Conversation registry, so
 the number of simultaneously active request keys is bounded by that enclosing
 admission even though the inner mechanics registry has no separate limit.
 
+## Publication and immediate responses
+
+A request prompt may reach its Conversation before the accepted Channel receipt
+and minimal correlation finish publication. A response without an existing
+durable correlation waits only for a known in-flight publication of the exact
+`(RequestRef, ConversationRef)`, then performs the existing durable
+destination/shape/state check under the request-wide native response lock.
+Existing durable destination evidence bypasses publication waiting, including
+while the same destination has a repeated publication. The wait grants no
+authority: failure, ambiguous delivery, cancellation or retired routing still
+leaves the response rejected. OPEN is never persisted before accepted/completed
+delivery, and no response or Channel send is retried.
+
+`GatewayLimits.request_publication_wait_timeout_seconds` is an explicit finite
+positive bound, defaulting to five seconds. A waiter uses the smaller of this
+bound and the request's remaining native expiry. When this wait times out, it
+returns the stable
+`request_delivery_pending` operation code, mapped to a pre-native `conflict`
+action failure. It does not claim that the native request is stale. A completed
+pre-native pending failure is terminal and cannot dispatch later; a user may
+submit a new response with a new action ID through ordinary authorization.
+Cancelling a waiter never cancels the existing managed publication.
+
+Publication completion signals are process-local and limited to admitted
+presentation jobs. The existing route coordinator and a waiter-counted exact-
+destination lock serialize duplicate publications; entries are removed on every
+exit. The response waits before taking the request-wide lock, and publication
+never takes that lock or awaits native response. Store insertion still inherits
+request-wide terminal state for late destinations. An unrelated or repeated
+slow delivery cannot obstruct an already authorized response.
+
+A synchronous callback or a Channel awaiting its response child receives a
+bounded pending outcome when the publication-wait timeout wins. The existing
+native-expiry fence can instead cancel the enclosing Channel.send and its
+awaited response; caller cancellation and Gateway.stop retain the same
+cancellation semantics. Cancellation, including while a failed preflight
+receipt is settling, is not converted into a new pending result. Existing
+receipt recovery returns a committed terminal outcome when available or leaves
+a pre-native RESERVED receipt retryable by an explicit same-ID call. That call
+rechecks current authority and expiry; no cancellation schedules later dispatch
+or automatic replay, and fresh startup does not re-present expired requests.
+
+A separately scheduled inbound child waits normally and may succeed once
+publication finishes, regardless of inherited context. No asyncio private task
+graph, ContextVar classification, cross-owner cancellation protocol, persistent
+pending state, durable retry queue, or new recovery authority is introduced.
+Existing managed presentation cancellation and Gateway shutdown own teardown.
+
 ## Restart and recovery
 
 Correlations are bounded durable bridge routing facts. They are reconciled

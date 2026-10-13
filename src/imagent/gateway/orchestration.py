@@ -341,6 +341,7 @@ class _GatewayRuntime:
             catchup_limit=limits.catchup_limit,
             projection_item_limit=limits.projection_item_limit,
             request_delivery_max_pending=limits.request_delivery_max_pending,
+            request_publication_wait_timeout_seconds=limits.request_publication_wait_timeout_seconds,
             acceptance_gate=self._turn_acceptance_gate,
             ensure_turn_correlation=(
                 self._queued_inputs.ensure_turn if self._queued_inputs is not None else None

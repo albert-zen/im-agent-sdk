@@ -282,6 +282,7 @@ class ThreadProjectionRuntime:
         catchup_limit: int = 10,
         projection_item_limit: int = 20,
         request_delivery_max_pending: int = 256,
+        request_publication_wait_timeout_seconds: float = 5.0,
         acceptance_gate: TurnAcceptanceOrderingGate,
         ensure_turn_correlation: Callable[[ThreadRef, str], Awaitable[None]] | None = None,
         max_active_threads: int = 4096,
@@ -330,6 +331,7 @@ class ThreadProjectionRuntime:
             active_routes=self._active_routes,
             deliver_request_outbound=deliver_request_outbound,
             ensure_turn_correlation=ensure_turn_correlation,
+            publication_wait_timeout_seconds=request_publication_wait_timeout_seconds,
         )
         self._routes = _ProjectionRouteCoordinator(
             projections=projections,

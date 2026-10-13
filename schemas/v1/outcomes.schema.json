@@ -38,7 +38,8 @@
                 "unauthorized_destination",
                 "request_duplicate",
                 "request_resolved",
-                "request_stale"
+                "request_stale",
+                "request_delivery_pending"
               ]
             },
             { "type": "null" }

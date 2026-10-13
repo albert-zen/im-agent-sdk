@@ -204,3 +204,12 @@ inherit it. Queued status presentation uses a separate optional typed extension
 and independent finite task, text, item and timeout limits. The coherent session
 is required for original-association fencing; loose private repository graphs
 never gain a queue dispatcher.
+
+Interactive request response admission uses the finite positive
+`request_publication_wait_timeout_seconds` limit (default `5.0`). It bounds only
+waiting for known exact request/Conversation publication, is capped by native
+expiry, and cannot delay a destination with existing durable authority. Its
+pre-dispatch `request_delivery_pending`/`conflict` result never grants retry or
+native mutation permission. This limit does not replace native-expiry, caller
+or stop cancellation; a cancelled response retains existing receipt recovery
+rather than a guaranteed new terminal pending result.

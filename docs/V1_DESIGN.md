@@ -557,7 +557,19 @@ sufficient recovery proof.
 Interactive requests remain Application truth. Gateway persists only minimal
 per-destination response-routing evidence after delivery; a Conversation that
 did not receive a request cannot respond. Product authorization remains
-outside that correlation check.
+outside that correlation check. An immediate response waits for any known
+in-flight publication to that exact request and Conversation, then undergoes
+the same accepted-delivery authorization check; failed/unknown publication
+never grants authority or causes automatic resend. The explicit finite
+publication wait bound is capped by native expiry. When that wait times out,
+`request_delivery_pending` is a pre-native conflict, never a fabricated stale
+request or a deferred mutation. This does not supersede existing cancellation:
+native expiry may cancel an in-progress Channel send and its awaited response,
+and caller/stop cancellation still propagates. A cancelled pre-native action
+may remain reserved; explicit same-ID retry revalidates current authority and
+expiry, while startup never automatically replays it. A completed pending
+failure remains terminal. Existing durable destination authority does not wait
+for another publication.
 
 Attachment sources are typed. A message never grants filesystem or network
 trust. Channel staging and Application materialization use configured bounds

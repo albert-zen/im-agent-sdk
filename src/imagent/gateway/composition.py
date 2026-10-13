@@ -72,6 +72,7 @@ class GatewayLimits:
     projection_max_active_threads: int = 4096
     lifecycle_owner_timeout_seconds: float = 30.0
     startup_preparation_max_items: int = 256
+    request_publication_wait_timeout_seconds: float = 5.0
 
     def __post_init__(self) -> None:
         for name in (
@@ -107,6 +108,7 @@ class GatewayLimits:
         for name in (
             "turn_correlation_retention_seconds",
             "request_correlation_retention_seconds",
+            "request_publication_wait_timeout_seconds",
             "inbound_content_transform_timeout_seconds",
             "inbound_failure_present_timeout_seconds",
             "queued_input_present_timeout_seconds",

@@ -73,6 +73,10 @@ honest adapter fallbacks while management is explicitly unsupported. Gateway
 bridge keys and rows use these stable nested IDs, never path, display text, or
 timestamps.
 
+Interactive-request publication and immediate response admission share a
+process-local request/Conversation ordering fence before existing durable
+destination authorization; it adds no pending-request authority or retry state.
+
 ## Product components
 
 The approved runtime architecture has three ownership layers. Existing broad

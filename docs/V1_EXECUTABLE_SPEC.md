@@ -378,6 +378,18 @@ run:
 
 - a request is delivered to two Conversations, one authorized response wins
   in the Application, and a non-recipient cannot respond;
+- an immediate response racing accepted-delivery correlation publication waits
+  only for its exact destination, then executes once; failed/unknown/cancelled
+  publication grants no authority, a slow other destination stays independent,
+  and shutdown plus fresh SQLite pending recovery neither deadlocks nor resends;
+- a configurable publication deadline is capped by native expiry and returns
+  explicit pre-native delivery-pending when the wait deadline wins; direct
+  callback and parent-await-child cycles terminate while independent ingress
+  waits normally. Existing native-expiry, caller and stop cancellation may
+  instead cancel the response. A cancelled reserved receipt is not replayed
+  automatically; same-ID retry, including after SQLite restart, rechecks
+  current authority and expiry. A terminal pending failure replays unchanged
+  and never dispatches later; a new explicit reply still needs valid authority;
 - reconnect without native pending-request evidence becomes stale rather than
   manufactured recovery;
 - attachment source support, scalar types, immutable metadata snapshots, and

@@ -455,13 +455,19 @@ Slash text and Channel-native actions submit
 or the public typed Gateway execution surface, never through Channel startup.
 Gateway then:
 
-1. finds all correlations for the application-scoped `RequestRef` under a
+1. first awaits only known unfinished publication for the exact request and
+   Conversation when no durable destination evidence exists, within the finite
+   configured/native-expiry bound; a wait timeout returns explicit
+   delivery-pending without dispatch, delayed execution or automatic replay.
+   Existing native-expiry/caller/stop cancellation may instead cancel the
+   response; reserved receipts retain ordinary explicit-retry recovery;
+2. finds all correlations for the application-scoped `RequestRef` under a
    request-scoped lock;
-2. rejects an unknown/stale request, an already responded/resolved request, or
+3. rejects an unknown/stale request, an already responded/resolved request, or
    a Conversation that never received it with distinct stable codes;
-3. calls Application `request.respond` using the stored
+4. calls Application `request.respond` using the stored
    Application/Thread scope;
-4. marks every destination correlation responded only after native success.
+5. marks every destination correlation responded only after native success.
 
 The later authoritative `request.resolved` event marks all correlations
 resolved or stale. Changing the Conversation's current input binding does not
